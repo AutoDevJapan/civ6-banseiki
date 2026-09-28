@@ -21,7 +21,7 @@ SSOT（[`documents/spec/ssot/`](../spec/ssot/)）と手元の Civ6 環境、Civ6
 |---|---|
 | Civ6 本体 | Steam 版（AppID 289070）。`C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI`。実行ファイルの版は 1.0.12.68（2024-06-26） |
 | 拡張・DLC | Rise and Fall（`Expansion1`）、Gathering Storm（`Expansion2`）、New Frontier Pass 系と各種シナリオ・リーダーパックを含む37件 |
-| 公式開発ツール（SDK、AppID 404350） | **未導入**（ModBuddy / FireTuner / WorldBuilder の単体ツール / Asset Editor） |
+| 公式開発ツール（SDK、AppID 404350） | 導入済み（2026-09-28 時点）。Cooker（`AssetModTools\Cooker`）をコマンドラインで動かして BLP を作れることを確認した（`tools/jac_art/build_art.py`） |
 | ユーザーデータ | `Documents\My Games\Sid Meier's Civilization VI\`（`Mods`・`Saves` あり。`Mods` は空） |
 | ログ・設定 | `%LOCALAPPDATA%\Firaxis Games\Sid Meier's Civilization VI\`（`Logs\`、`AppOptions.txt`、`Mods.sqlite`） |
 | デバッグ設定 | `AppOptions.txt` は `EnableTuner 0`、`EnableDebugMenu 0`、`EnableWorldBuilder 1` |
@@ -126,6 +126,8 @@ Web 上の資料にはログの場所を `Documents\My Games\...\Logs` とする
 3. MVP のデータ（勢力・城・武将）は、決まったものから SSOT に表として追加していく
 
 ## 調査の方法と限界
+
+この節は初回調査（2026-09-28）の時点の記述。その後、公式の開発ツールを導入し、実機で MOD の読み込みを確認した（[PoC の検証記録](../poc/README.md)）。
 
 - 手元の環境は、レジストリ・Steam のライブラリ・ゲームフォルダ・Workshop・`AppOptions.txt` を読み取って確認した。ゲームの起動や MOD の読み込みはまだ行っていない
 - Web の情報は2系統の調査を並列に行い、出典の URL を付けた。公式 SDK の同梱文書は SDK が未導入のため読めていない
