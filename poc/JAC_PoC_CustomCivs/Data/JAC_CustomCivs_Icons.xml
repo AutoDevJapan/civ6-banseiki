@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<IconDefinitions>
+		<!-- Base/Assets/UI/Icons: Japan=12, Hojo=8 in the existing atlases. -->
+		<Row Name="ICON_CIVILIZATION_JAC_ODA" Atlas="ICON_ATLAS_CIVILIZATIONS" Index="12"/>
+		<Row Name="ICON_CIVILIZATION_JAC_TAKEDA" Atlas="ICON_ATLAS_CIVILIZATIONS" Index="12"/>
+		<Row Name="ICON_LEADER_JAC_ODA_NOBUHIDE" Atlas="ICON_ATLAS_LEADERS" Index="8"/>
+		<Row Name="ICON_LEADER_JAC_TAKEDA_NOBUTORA" Atlas="ICON_ATLAS_LEADERS" Index="8"/>
+	</IconDefinitions>
+</GameInfo>

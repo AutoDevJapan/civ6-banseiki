@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" version="1">
+	<Properties>
+		<Name>LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME</Name>
+		<Teaser>LOC_JAC_POC_CUSTOM_CIVS_MOD_TEASER</Teaser>
+		<Description>LOC_JAC_POC_CUSTOM_CIVS_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<LocalizedText>
+		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME">
+			<en_US>JAC PoC: Custom Clans</en_US>
+			<ja_JP>JAC PoC：カスタム勢力</ja_JP>
+			<ru_RU>JAC PoC: кланы</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_TEASER">
+			<en_US>Playable Oda and Takeda clans for Gathering Storm.</en_US>
+			<ja_JP>Gathering Storm 用の織田家・武田家の検証MOD。</ja_JP>
+			<ru_RU>Играбельные кланы Ода и Такэда для Gathering Storm.</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_DESCRIPTION">
+			<en_US>Adds two separate civilizations and logs a turn-three clan rename attempt.</en_US>
+			<ja_JP>独立した2文明を追加し、3ターン目の家名変更をログで検証する。</ja_JP>
+			<ru_RU>Добавляет две цивилизации и проверяет смену названия клана на третьем ходу.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_CustomCivs_GatheringStorm">
+			<RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateArt id="JAC_CustomCivs_Art" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>JAC_PoC_CustomCivs.dep</File>
+		</UpdateArt>
+		<UpdateDatabase id="JAC_CustomCivs_Gameplay" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>Data/JAC_CustomCivs_Gameplay.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_CustomCivs_Text" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>Text/JAC_CustomCivs_Text.xml</File>
+		</UpdateText>
+		<UpdateColors id="JAC_CustomCivs_Colors" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>Data/JAC_CustomCivs_Colors.xml</File>
+		</UpdateColors>
+		<UpdateIcons id="JAC_CustomCivs_Icons" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>Data/JAC_CustomCivs_Icons.xml</File>
+		</UpdateIcons>
+		<AddGameplayScripts id="JAC_CustomCivs_Scripts" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>Scripts/JAC_CustomCivs.lua</File>
+		</AddGameplayScripts>
+	</InGameActions>
+	<FrontEndActions>
+		<UpdateArt id="JAC_CustomCivs_SettingsArt">
+			<File>JAC_PoC_CustomCivs.dep</File>
+		</UpdateArt>
+		<UpdateDatabase id="JAC_CustomCivs_Settings">
+			<File>Config/JAC_CustomCivs_Players.xml</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_CustomCivs_SettingsText">
+			<File>Text/JAC_CustomCivs_Text.xml</File>
+		</UpdateText>
+		<UpdateColors id="JAC_CustomCivs_SettingsColors">
+			<File>Data/JAC_CustomCivs_Colors.xml</File>
+		</UpdateColors>
+		<UpdateIcons id="JAC_CustomCivs_SettingsIcons">
+			<File>Data/JAC_CustomCivs_Icons.xml</File>
+		</UpdateIcons>
+	</FrontEndActions>
+	<Files>
+		<File>JAC_PoC_CustomCivs.dep</File>
+		<File>ArtDefs/Civilizations.artdef</File>
+		<File>ArtDefs/Cultures.artdef</File>
+		<File>ArtDefs/Leaders.artdef</File>
+		<File>ArtDefs/FallbackLeaders.artdef</File>
+		<File>Data/JAC_CustomCivs_Gameplay.sql</File>
+		<File>Data/JAC_CustomCivs_Colors.xml</File>
+		<File>Data/JAC_CustomCivs_Icons.xml</File>
+		<File>Config/JAC_CustomCivs_Players.xml</File>
+		<File>Text/JAC_CustomCivs_Text.xml</File>
+		<File>Scripts/JAC_CustomCivs.lua</File>
+	</Files>
+</Mod>
