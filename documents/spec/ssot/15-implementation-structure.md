@@ -48,6 +48,7 @@ japan-archipelago/
 │  ├─ companion-app/
 │  ├─ vercel-web/
 │  └─ railway-api/
+├─ poc/        # 16.1 の PoC 用の検証MOD（本番の構成とは分ける）
 ├─ tools/
 └─ docs/
 ```

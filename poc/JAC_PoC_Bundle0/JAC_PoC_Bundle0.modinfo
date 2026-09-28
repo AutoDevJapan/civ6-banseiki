@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="dfa0717e-4d0b-4370-b693-27fc6758571b" version="1">
+	<Properties>
+		<Name>LOC_JAC_POC_BUNDLE0_NAME</Name>
+		<Teaser>LOC_JAC_POC_BUNDLE0_TEASER</Teaser>
+		<Description>LOC_JAC_POC_BUNDLE0_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<LocalizedText>
+		<Text id="LOC_JAC_POC_BUNDLE0_NAME">
+			<en_US>JAC PoC Bundle 0: Load and Save</en_US>
+			<ja_JP>JAC PoC 束0：読み込みと保存</ja_JP>
+			<ru_RU>JAC PoC, блок 0: загрузка и сохранение</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_BUNDLE0_TEASER">
+			<en_US>Verification mod for loading and save/load persistence.</en_US>
+			<ja_JP>読み込みとセーブ・ロード後の状態保持を確かめる検証用MOD。</ja_JP>
+			<ru_RU>Проверочный мод загрузки и сохранения состояния.</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_BUNDLE0_DESCRIPTION">
+			<en_US>Adds one uniquely prefixed database row and a gameplay script that stores a turn counter in the save file.</en_US>
+			<ja_JP>固有の接頭辞を持つデータを1行追加し、ターンごとの記録をセーブデータに保存するゲームプレイ用スクリプトを動かす。</ja_JP>
+			<ru_RU>Добавляет одну строку базы данных с уникальным префиксом и скрипт, сохраняющий счётчик ходов в сохранении.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_GatheringStorm">
+			<RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateDatabase id="JAC_PoC_Bundle0_Gameplay" criteria="JAC_GatheringStorm">
+			<File>Data/JAC_PoC_Bundle0_Gameplay.sql</File>
+		</UpdateDatabase>
+		<AddGameplayScripts id="JAC_PoC_Bundle0_Scripts" criteria="JAC_GatheringStorm">
+			<File>Scripts/JAC_PoC_Bundle0.lua</File>
+		</AddGameplayScripts>
+	</InGameActions>
+	<Files>
+		<File>Data/JAC_PoC_Bundle0_Gameplay.sql</File>
+		<File>Scripts/JAC_PoC_Bundle0.lua</File>
+	</Files>
+</Mod>
