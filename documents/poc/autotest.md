@@ -29,7 +29,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 ## JSON 手順
 
-`scenarios/` に束0の保存・再読込、織田（人間）と武田（AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`manual` はこの期限の対象外で、`timeout` を指定できず、Enter が押されるまで待つ。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
+`scenarios/` に束0の保存・再読込、`clans-notebooks.json`（織田が人間・武田が AI）、`clans-both-ai.json`（公式の日本が人間・織田と武田が AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`manual` はこの期限の対象外で、`timeout` を指定できず、Enter が押されるまで待つ。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
 
 | action | 必要な値 | 動作 |
 |---|---|---|
@@ -43,6 +43,8 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
+
+`wait_for` の Lua 条件は繰り返し評価されるため、ゲーム状態を変更しない、副作用のない判定式に限定する。送信後に応答が失われて実行有無が不明な場合は、そのステップを直ちに失敗させ、再実行しない。`start_game` と `load` では、Lua コマンド送信前の接続・状態照会エラーをそのまま失敗として記録し、送信後の応答不明時だけ画面遷移を待つ。スクリーンショットの撮影もステップ期限の対象で、撮影完了時に期限を過ぎていれば失敗とする。
 
 `growth-notebooks.json` は `PartialScreenHooks` の `OnToggleNotebooks()` で Notebooks を開き、`JAC_Notebooks` 状態の `Controls.CharacterJournalButton:DoLeftClick()` で Character Journal に切り替える。Lua 状態とログを確認してから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
 
@@ -61,7 +63,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 別の Civ6 ビルドでウィンドウ宛てメッセージが無視される場合に備え、`click.py` には `SendInput` 方式も残す。切替前にロード画面で実機確認する。この方式は送信直前と直後に前景 HWND を照合し、変化すればシナリオを中止する。ただし照合と送信は OS 上で原子的ではなく、両者の間に前景が移るごく短い競合は残る。
 
-2026-09-29 の修正後確認では、オフライン単体テスト 37 件が成功した。実機で `clans-notebooks-run-18` は 17/17 ステップ・判定 2/2、`growth-run-19` は 41/41 ステップ・判定 13/13、`clans-house-names-run-20` は 102/102 ステップ・判定 2/2 を通過した。`AutoPlayEnd` がターン表示より先に届くことがあるため、自動進行の完了はイベント、実ターン数、停止、人間プレイヤーへの復帰を組み合わせて判定している。
+既存の実機記録では、`clans-notebooks-run-18` は 17/17 ステップ・判定 2/2、`clans-both-ai-run-02` は 41/41 ステップ・判定 2/2、`growth-run-19` は 41/41 ステップ・判定 13/13、`clans-house-names-run-20` は 102/102 ステップ・判定 2/2 を通過した。今回の修正後の 2026-09-29 には、オフライン単体テスト 49 件と実機 `clans-notebooks-run-21` の 17/17 ステップ・判定 2/2 が成功した。`AutoPlayEnd` がターン表示より先に届くことがあるため、自動進行の完了はイベント、実ターン数、停止、人間プレイヤーへの復帰を組み合わせて判定している。
 
 ## 根拠と注意
 

@@ -6,9 +6,10 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tuner import COMMAND, HANDSHAKE, TunerClient, TunerError, recv_frame, send_frame
+from tuner import COMMAND, HANDSHAKE, LuaResponseUnknown, TunerClient, TunerError, recv_frame, send_frame
 
 
 class FakeTuner:
@@ -92,9 +93,37 @@ class FramingTests(unittest.TestCase):
         fake = FakeTuner(no_ack=True)
         try:
             with TunerClient(port=fake.port, timeout=0.15) as client:
-                with self.assertRaisesRegex(TunerError, "may have run"):
+                with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
                     client.run_lua("InGame", "return true", timeout=0.1)
             self.assertEqual(sum(frame.tag == COMMAND for frame in fake.received), 1)
+        finally:
+            fake.close()
+
+    def test_missing_state_fails_before_lua_send(self):
+        fake = FakeTuner()
+        try:
+            with TunerClient(port=fake.port, timeout=1) as client:
+                with self.assertRaisesRegex(TunerError, "not uniquely available") as caught:
+                    client.run_lua("Missing", "return true")
+                self.assertNotIsInstance(caught.exception, LuaResponseUnknown)
+            self.assertEqual(sum(frame.tag == COMMAND for frame in fake.received), 0)
+        finally:
+            fake.close()
+
+    def test_send_failure_is_classified_as_unknown(self):
+        fake = FakeTuner()
+        original_send = send_frame
+
+        def fail_command_send(sock, tag, payload):
+            if tag == COMMAND:
+                raise OSError("send failed after possible partial write")
+            return original_send(sock, tag, payload)
+
+        try:
+            with patch("tuner.send_frame", side_effect=fail_command_send):
+                with TunerClient(port=fake.port, timeout=1) as client:
+                    with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
+                        client.run_lua("InGame", "return true")
         finally:
             fake.close()
 

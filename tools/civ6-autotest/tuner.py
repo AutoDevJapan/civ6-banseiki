@@ -24,6 +24,10 @@ class TunerError(RuntimeError):
     pass
 
 
+class LuaResponseUnknown(TunerError):
+    """A Lua send was attempted, but its execution/acknowledgment is unknown."""
+
+
 @dataclass(frozen=True)
 class Frame:
     tag: int
@@ -179,17 +183,21 @@ class TunerClient:
         if remaining <= 0:
             raise TunerError(f"No time left to send Lua command to {state_name!r}")
         sock.settimeout(remaining)
-        send_frame(sock, COMMAND, f"CMD:{index}:{wrapper}")
+        try:
+            send_frame(sock, COMMAND, f"CMD:{index}:{wrapper}")
+        except OSError as exc:
+            # sendall may have sent some or all bytes before reporting failure.
+            raise LuaResponseUnknown(f"Lua command to {state_name!r} may have run: {exc}") from exc
         lines: list[str] = []
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run. Inspect logs before retrying")
-            sock.settimeout(remaining)
+                raise LuaResponseUnknown(f"No Lua acknowledgment from {state_name!r}; command may have run. Inspect logs before retrying")
             try:
+                sock.settimeout(remaining)
                 frame = recv_frame(sock, deadline)
-            except TunerError as exc:
-                raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run: {exc}") from exc
+            except (TunerError, OSError) as exc:
+                raise LuaResponseUnknown(f"No Lua acknowledgment from {state_name!r}; command may have run: {exc}") from exc
             lines.append(frame.payload)
             for line in frame.payload.splitlines():
                 marker = token + "|"

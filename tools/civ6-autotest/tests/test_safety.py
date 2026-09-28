@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import click as civ_click
 from judge import snapshot_logs
 from scenario import Runner, ScenarioError, _safe_relative_path, validate_scenario
-from tuner import LuaResult
+from tuner import LuaResponseUnknown, LuaResult, TunerError
 
 
 class ScenarioSafetyTests(unittest.TestCase):
@@ -123,6 +123,26 @@ class ScenarioSafetyTests(unittest.TestCase):
                     runner._run_step({"action": "screenshot", "path": "link/shot.png"})
                 capture.assert_not_called()
 
+    def test_screenshot_fails_if_capture_finishes_after_deadline(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "output"
+            output.mkdir()
+            runner = Runner({}, output, Path(root), Path(root), 4318)
+            clock = [10.0]
+
+            def slow_capture(_path, _crop, *, deadline):
+                self.assertAlmostEqual(deadline, 10.01)
+                clock[0] = deadline + 0.01
+
+            with patch.object(runner, "_close_options_menu"), patch.object(
+                runner, "_dismiss_advisor"
+            ), patch("scenario.capture_civ_window", side_effect=slow_capture) as capture, patch(
+                "scenario.time.monotonic", side_effect=lambda: clock[0]
+            ):
+                with self.assertRaisesRegex(ScenarioError, "deadline expired"):
+                    runner._run_step({"action": "screenshot", "path": "shot.png", "timeout": 0.01})
+            capture.assert_called_once()
+
     def test_nonfinite_timeouts_are_rejected(self):
         for value in (json.loads("1e999"), float("-inf"), float("nan"), True, 10**400):
             data = {"name": "timeout", "steps": [{"action": "autoplay", "turns": 1,
@@ -157,6 +177,76 @@ class ScenarioSafetyTests(unittest.TestCase):
             self.assertLessEqual(call.kwargs["timeout"], 0.100001)
         self.assertGreater(client.run_lua.call_args.args[2], 0)
         self.assertLessEqual(client.run_lua.call_args.args[2], 0.100001)
+
+    def test_lua_wait_unknown_reply_fails_without_reexecution(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        condition = {"type": "lua", "state_name": "InGame", "code": "return true"}
+        with patch.object(runner, "_lua", side_effect=LuaResponseUnknown("command may have run")) as run_lua, patch(
+            "scenario.time.sleep"
+        ) as sleep:
+            with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
+                runner._wait(condition, 30)
+        run_lua.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_transition_pre_send_failure_is_logged_without_waiting(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            logs = base / "logs"
+            logs.mkdir()
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            (base / "existing.Civ6Save").write_bytes(b"save")
+            for action in ("start_game", "load"):
+                with self.subTest(action=action):
+                    step = {"action": action}
+                    if action == "load":
+                        step["name"] = "existing"
+                    runner = Runner({"name": action, "steps": [step]}, base / action, logs, base, 4318)
+                    with redirect_stdout(StringIO()), patch.object(runner, "_wait"), patch.object(
+                        runner, "_loadscreen_count", return_value=0
+                    ), patch.object(runner, "_lua", side_effect=TunerError("pre-send connection failed")) as run_lua, patch.object(
+                        runner, "_enter_game_after_loadscreen"
+                    ) as enter_game:
+                        self.assertEqual(runner.run(), 1)
+                    run_lua.assert_called_once()
+                    enter_game.assert_not_called()
+                    records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                        encoding="utf-8").splitlines()]
+                    self.assertEqual((records[-1]["status"], records[-1]["detail"]),
+                                     ("FAIL", "pre-send connection failed"))
+
+    def test_transition_waits_after_unknown_reply_without_resending(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            (base / "existing.Civ6Save").write_bytes(b"save")
+            for action in ("start_game", "load"):
+                with self.subTest(action=action):
+                    runner = Runner({}, base, base, base, 4318)
+                    step = {"action": action}
+                    if action == "load":
+                        step["name"] = "existing"
+                    with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
+                        runner, "_lua", side_effect=LuaResponseUnknown("command may have run")
+                    ) as run_lua, patch.object(runner, "_enter_game_after_loadscreen") as enter_game:
+                        runner._run_step(step)
+                    run_lua.assert_called_once()
+                    enter_game.assert_called_once()
+
+    def test_exit_to_menu_waits_for_state_before_lua_predicate(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        conditions = []
+
+        def record_wait(condition, _timeout):
+            conditions.append(condition["type"])
+
+        with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
+            runner, "_disconnect"
+        ) as disconnect, patch.object(runner, "_wait", side_effect=record_wait):
+            self.assertEqual(runner._run_step({"action": "exit_to_menu"}), "main menu reached")
+        run_lua.assert_called_once()
+        disconnect.assert_called_once()
+        self.assertEqual(conditions, ["state", "lua"])
 
     def test_log_wait_requires_new_line_and_does_not_reuse_a_match(self):
         with tempfile.TemporaryDirectory() as root:

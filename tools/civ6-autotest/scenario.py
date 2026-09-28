@@ -14,7 +14,7 @@ import time
 from capture import CaptureError, capture_civ_window
 from click import InputError, VK_ESCAPE, press_key
 from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
-from tuner import TunerClient, TunerError
+from tuner import LuaResponseUnknown, TunerClient, TunerError
 
 
 ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
@@ -292,6 +292,9 @@ class Runner:
                     if kind == "log_line":
                         self.log_matches_consumed[key] = self.log_matches_consumed.get(key, 0) + 1
                     return
+            except LuaResponseUnknown:
+                # This predicate may have executed; never poll it again.
+                raise
             except (TunerError, OSError) as exc:
                 last = str(exc)
             time.sleep(min(0.5, max(0.0, end - time.monotonic())))
@@ -495,9 +498,7 @@ class Runner:
             try:
                 self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true",
                           min(5, _remaining(deadline)))
-            except (TunerError, OSError) as exc:
-                if "Lua error" in str(exc):
-                    raise
+            except LuaResponseUnknown as exc:
                 print(f"HostGame response interrupted during transition: {exc}", flush=True)
             self._enter_game_after_loadscreen(before, timeout, deadline=deadline)
             return "single-player game reached InGame"
@@ -516,7 +517,8 @@ class Runner:
             self._close_options_menu(deadline)
             self._dismiss_advisor(deadline)
             _remaining(deadline)
-            capture_civ_window(target, step.get("crop"))
+            capture_civ_window(target, step.get("crop"), deadline=deadline)
+            _remaining(deadline)
             return str(target)
         if action == "save":
             name = step["name"]
@@ -547,6 +549,10 @@ class Runner:
             return str(target)
         if action == "exit_to_menu":
             self._lua("InGame", "Events.ExitToMainMenu()\nreturn true", min(5, _remaining(deadline)))
+            # The FrontEnd Lua state can appear while its Tuner socket is still changing.
+            # Wait for the state on a fresh connection before probing its Lua context.
+            self._disconnect()
+            self._wait({"type": "state", "name": "FrontEnd"}, _remaining(deadline))
             self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"},
                        _remaining(deadline))
             return "main menu reached"
@@ -565,9 +571,7 @@ class Runner:
             before = self._loadscreen_count()
             try:
                 self._lua("FrontEnd", code, min(5, _remaining(deadline)))
-            except (TunerError, OSError) as exc:
-                if "Lua error" in str(exc):
-                    raise
+            except LuaResponseUnknown as exc:
                 print(f"LoadGame response interrupted during transition: {exc}", flush=True)
             self._enter_game_after_loadscreen(before, timeout, deadline=deadline)
             return f"loaded {name}"

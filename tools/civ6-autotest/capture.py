@@ -7,11 +7,17 @@ from ctypes import wintypes
 from pathlib import Path
 import struct
 import sys
+import time
 import zlib
 
 
 class CaptureError(RuntimeError):
     pass
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise CaptureError("Screenshot deadline expired")
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -51,7 +57,8 @@ def _write_png(path: Path, width: int, height: int, bgra: bytes) -> None:
     path.write_bytes(png)
 
 
-def capture_civ_window(path: Path, crop: list[float] | None = None) -> None:
+def capture_civ_window(path: Path, crop: list[float] | None = None, *, deadline: float | None = None) -> None:
+    _check_deadline(deadline)
     if sys.platform != "win32":
         raise CaptureError("Window capture requires Windows")
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -154,10 +161,12 @@ def capture_civ_window(path: Path, crop: list[float] | None = None) -> None:
             return bytes(pixels)
 
         printed = bool(user32.PrintWindow(hwnd, memory, 2))
+        _check_deadline(deadline)
         raw = read_pixels() if printed else b""
         if not printed or not any(raw):
             if not gdi32.BitBlt(memory, 0, 0, width, height, source, 0, 0, 0x00CC0020):
                 raise CaptureError("PrintWindow and BitBlt both failed")
+            _check_deadline(deadline)
             raw = read_pixels()
         if not any(raw):
             raise CaptureError("Capture is blank; make the Civ VI window visible and unobscured")
@@ -169,7 +178,9 @@ def capture_civ_window(path: Path, crop: list[float] | None = None) -> None:
             raw = b"".join(raw[y * width * 4 + left * 4:y * width * 4 + right * 4]
                            for y in range(top, bottom))
             width, height = right - left, bottom - top
+        _check_deadline(deadline)
         _write_png(path, width, height, raw)
+        _check_deadline(deadline)
     finally:
         if previous:
             gdi32.SelectObject(memory, previous)
