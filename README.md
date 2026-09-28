@@ -11,7 +11,7 @@ Sid Meier's Civilization VI の周回育成型トータルコンバージョン 
 ## 動作環境（開発の基準）
 
 - Sid Meier's Civilization VI（Steam 版 1.0.12.68）
-- ルールセット：Gathering Storm
+- 必要な拡張：Gathering Storm（ゲームの作成時はルールセット「万世紀」を選ぶ）
 - 検証は当面シングルプレイで行う
 
 ## ディレクトリ構成

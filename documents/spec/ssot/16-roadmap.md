@@ -4,7 +4,7 @@
 
 MVPの前に、以下の全束（束0〜4）を通す。検証項目と成功条件はこの表に一本化する。
 
-- 基準環境は Steam 版 Civ6（1.0.12.68）と Gathering Storm のルールセットに固定する
+- 基準環境は Steam 版 Civ6（1.0.12.68）と Gathering Storm の導入に固定し、遊ぶときは独自ルールセット「万世紀」を選ぶ（2.2）
 - 検証はシングルプレイで行う。ただし、乱数とUI操作は最初からマルチプレイで同期ずれしない書き方に統一する
 - 公式の開発ツール（Sid Meier's Civilization VI Development Tools）を導入し、ModBuddyが動かない場合でもFireTuner（実行時のLuaコンソール）やAsset Editor（アイコン・肖像の変換）など使えるものを使う。導入はオーナーがSteamで行う
 - 着手は束0と束1から始める
