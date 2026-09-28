@@ -53,19 +53,24 @@ def snapshot_logs(log_dir: Path) -> dict:
     return {"created_at": datetime.now(timezone.utc).isoformat(), "log_dir": str(log_dir), "files": files}
 
 
-def slice_log_bytes(contents: bytes, mark: dict, inode: int) -> str:
-    """Return bytes after a marker, or all bytes if Civ recreated/truncated the log."""
+def log_marker_replaced(contents: bytes, mark: dict, inode: int) -> bool:
+    """Whether a log marker still refers to the same file contents and generation."""
     old_offset = mark["offset"]
     current_prefix = hashlib.sha256(contents[:mark.get("prefix_length", min(256, old_offset))]).hexdigest()
     tail_length = mark.get("tail_length", 0)
     current_tail = hashlib.sha256(contents[old_offset - tail_length:old_offset]).hexdigest()
-    replaced = (
+    return (
         old_offset > len(contents)
         or (mark["inode"] is not None and mark["inode"] != inode)
         or (mark["prefix_sha256"] is not None and mark["prefix_sha256"] != current_prefix)
         or (mark.get("tail_sha256") is not None and mark["tail_sha256"] != current_tail)
     )
-    return contents[0 if replaced else old_offset:].decode("utf-8-sig", "replace")
+
+
+def slice_log_bytes(contents: bytes, mark: dict, inode: int) -> str:
+    """Return bytes after a marker, or all bytes if Civ recreated/truncated the log."""
+    return contents[0 if log_marker_replaced(contents, mark, inode) else mark["offset"]:].decode(
+        "utf-8-sig", "replace")
 
 
 def read_since(log_dir: Path, baseline: dict) -> dict[str, str]:

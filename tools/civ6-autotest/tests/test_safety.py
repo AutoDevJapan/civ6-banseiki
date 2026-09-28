@@ -1,6 +1,7 @@
 import json
 from contextlib import redirect_stdout
 from io import StringIO
+import os
 import sys
 import tempfile
 import unittest
@@ -31,9 +32,16 @@ class ScenarioSafetyTests(unittest.TestCase):
 
     def test_load_wait_never_sends_escape_before_load_complete_log(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def advance(seconds):
+            clock[0] += seconds
+
         with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
             runner, "_states"
-        ) as states, patch("scenario.press_key") as press, patch("scenario.time.sleep"):
+        ) as states, patch("scenario.press_key") as press, patch(
+            "scenario.time.monotonic", side_effect=lambda: clock[0]
+        ), patch("scenario.time.sleep", side_effect=advance):
             with self.assertRaisesRegex(ScenarioError, "entering the game"):
                 runner._enter_game_after_loadscreen(0, 0.02)
         states.assert_not_called()
@@ -69,12 +77,112 @@ class ScenarioSafetyTests(unittest.TestCase):
 
     def test_load_wait_timeout_never_repeats_escape(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def advance(seconds):
+            clock[0] += seconds
+
         with patch.object(runner, "_states", return_value=[]), patch.object(
             runner, "_loadscreen_count", return_value=1
-        ), patch("scenario.press_key") as press, patch("scenario.time.sleep"):
+        ), patch("scenario.press_key") as press, patch(
+            "scenario.time.monotonic", side_effect=lambda: clock[0]
+        ), patch("scenario.time.sleep", side_effect=advance):
             with self.assertRaisesRegex(ScenarioError, "entering the game"):
                 runner._enter_game_after_loadscreen(0, 0.02)
         press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=unittest.mock.ANY)
+
+    def test_transition_lua_errors_stop_without_retrying_mutations(self):
+        for error in (LuaResponseUnknown("menu command may have run"),
+                      LuaExecutionError("Lua error in InGameTopOptionsMenu: boom")):
+            with self.subTest(error=type(error).__name__):
+                runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+                def run_lua(_state, code, _timeout=5.0):
+                    if "Game.GetLocalPlayer" in code:
+                        return "true"
+                    raise error
+
+                with patch.object(runner, "_states", return_value=["InGame", "InGameTopOptionsMenu"]), patch.object(
+                    runner, "_lua", side_effect=run_lua
+                ) as lua, patch.object(runner, "_loadscreen_count", return_value=1), patch(
+                    "scenario.press_key"
+                ) as press, patch("scenario.time.sleep") as sleep:
+                    with self.assertRaises(type(error)):
+                        runner._enter_game_after_loadscreen(0, 1)
+                self.assertEqual(lua.call_count, 2)
+                self.assertEqual(sum("CloseImmediately" in call.args[1] for call in lua.call_args_list), 1)
+                press.assert_called_once()
+                sleep.assert_not_called()
+
+    def test_transition_detects_lua_log_rotation_and_truncation_before_input(self):
+        for change in ("rotation", "truncation"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as root:
+                logs = Path(root)
+                for name in ("Lua.log", "Database.log", "Modding.log"):
+                    (logs / name).write_text("", encoding="utf-8")
+                lua = logs / "Lua.log"
+                lua.write_text("old loading history\n", encoding="utf-8")
+                runner = Runner({}, logs / "output", logs, logs, 4318)
+                runner.baseline = snapshot_logs(logs)
+                before = runner._loadscreen_count()
+
+                def replace_log(_seconds):
+                    if change == "rotation":
+                        replacement = logs / "replacement.log"
+                        replacement.write_text("fresh\n", encoding="utf-8")
+                        os.replace(replacement, lua)
+                    else:
+                        lua.write_text("fresh\n", encoding="utf-8")
+
+                with patch("scenario.time.sleep", side_effect=replace_log), patch(
+                    "scenario.press_key"
+                ) as press, patch.object(runner, "_states") as states:
+                    with self.assertRaisesRegex(ScenarioError, "rotated or truncated.*undecidable"):
+                        runner._enter_game_after_loadscreen(before, 1)
+                press.assert_not_called()
+                states.assert_not_called()
+
+    def test_transition_detects_lua_log_rotation_after_escape(self):
+        with tempfile.TemporaryDirectory() as root:
+            logs = Path(root)
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            lua = logs / "Lua.log"
+            lua.write_text("old loading history\n", encoding="utf-8")
+            runner = Runner({}, logs / "output", logs, logs, 4318)
+            runner.baseline = snapshot_logs(logs)
+            before = runner._loadscreen_count()
+            with lua.open("a", encoding="utf-8") as handle:
+                handle.write(runner.LOADSCREEN_READY + "\n")
+
+            def rotate_log(_seconds):
+                replacement = logs / "replacement.log"
+                replacement.write_text("fresh\n", encoding="utf-8")
+                os.replace(replacement, lua)
+
+            with patch.object(runner, "_states", return_value=[]), patch(
+                "scenario.press_key"
+            ) as press, patch("scenario.time.sleep", side_effect=rotate_log):
+                with self.assertRaisesRegex(ScenarioError, "rotated or truncated.*undecidable"):
+                    runner._enter_game_after_loadscreen(before, 1)
+            press.assert_called_once()
+
+    def test_transition_rejects_same_inode_rewrite_even_if_log_grows(self):
+        with tempfile.TemporaryDirectory() as root:
+            logs = Path(root)
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            lua = logs / "Lua.log"
+            lua.write_bytes(b"P" * 256 + b"M" * 256 + b"T" * 256)
+            runner = Runner({}, logs / "output", logs, logs, 4318)
+            runner.baseline = snapshot_logs(logs)
+            original_inode = lua.stat().st_ino
+            lua.write_bytes(b"P" * 256 + b"R" * 256 + b"U" * 256 +
+                            runner.LOADSCREEN_READY.encode("utf-8"))
+            self.assertEqual(lua.stat().st_ino, original_inode)
+            with patch("scenario.press_key") as press:
+                with self.assertRaisesRegex(ScenarioError, "rotated or truncated.*undecidable"):
+                    runner._enter_game_after_loadscreen(0, 1)
+            press.assert_not_called()
 
     def test_run_creates_missing_output_parents_but_rejects_existing_run(self):
         with tempfile.TemporaryDirectory() as root:
@@ -92,6 +200,24 @@ class ScenarioSafetyTests(unittest.TestCase):
                 with self.assertRaises(FileExistsError):
                     runner.run()
             self.assertTrue((output / "steps.jsonl").is_file())
+
+    def test_multiple_civ_processes_stop_run_before_tuner_access(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            logs = base / "logs"
+            logs.mkdir()
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            runner = Runner({"name": "one game", "steps": [{"action": "pause", "seconds": 0.1}]},
+                            base / "output", logs, base, 4318)
+            with redirect_stdout(StringIO()), patch(
+                "scenario.require_single_civ_process", side_effect=civ_click.InputError("Multiple Civ VI processes")
+            ), patch.object(runner, "_wait") as wait:
+                self.assertEqual(runner.run(), 1)
+            wait.assert_not_called()
+            records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                encoding="utf-8").splitlines()]
+            self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
 
     def test_screenshot_paths_reject_drives_absolute_and_parent_escape(self):
         rejected = (
@@ -295,6 +421,31 @@ class ScenarioSafetyTests(unittest.TestCase):
                     run_lua.assert_called_once()
                     enter_game.assert_called_once()
 
+    def test_unknown_transition_without_read_only_confirmation_is_undecidable(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_loadscreen_count", return_value=0), patch(
+            "scenario.time.sleep"
+        ), patch("scenario.press_key") as press:
+            with self.assertRaisesRegex(ScenarioError, "outcome undecidable"):
+                runner._enter_game_after_loadscreen(0, 0.02, response_unknown=True)
+        press.assert_not_called()
+
+    def test_confirmed_transition_lua_error_never_enters_wait(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            (base / "existing.Civ6Save").write_bytes(b"save")
+            for action in ("start_game", "load"):
+                with self.subTest(action=action):
+                    runner = Runner({}, base, base, base, 4318)
+                    step = {"action": action, **({"name": "existing"} if action == "load" else {})}
+                    with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
+                        runner, "_lua", side_effect=LuaExecutionError("Lua ERR")
+                    ) as lua, patch.object(runner, "_enter_game_after_loadscreen") as enter_game:
+                        with self.assertRaisesRegex(LuaExecutionError, "Lua ERR"):
+                            runner._run_step(step)
+                    lua.assert_called_once()
+                    enter_game.assert_not_called()
+
     def test_exit_to_menu_waits_for_state_before_lua_predicate(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         conditions = []
@@ -327,6 +478,17 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner._wait(condition, 0.1)
             with self.assertRaisesRegex(ScenarioError, "Timed out"):
                 runner._wait(condition, 0.02)
+
+    def test_log_wait_stops_if_generation_changes(self):
+        with tempfile.TemporaryDirectory() as root:
+            logs = Path(root)
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("old history\n", encoding="utf-8")
+            runner = Runner({}, logs / "output", logs, logs, 4318)
+            runner.log_step_baseline = snapshot_logs(logs)
+            (logs / "Lua.log").write_text("match\n", encoding="utf-8")
+            with self.assertRaisesRegex(ScenarioError, "rotated or truncated.*undecidable"):
+                runner._wait({"type": "log_line", "log": "Lua.log", "contains": "match"}, 1)
 
     def test_later_step_cannot_reuse_previous_steps_log_line(self):
         with tempfile.TemporaryDirectory() as root:
@@ -388,6 +550,31 @@ class ScenarioSafetyTests(unittest.TestCase):
                 runner._autoplay(3, 10)
         self.assertEqual(sum("AutoplayManager.SetActive(true)" in code for code in commands), 1)
         self.assertEqual(sum("AutoplayManager.SetActive(false)" in code for code in commands), 1)
+
+    def test_autoplay_lua_error_stops_without_cleanup_or_resend(self):
+        for fail_at in ("start", "status"):
+            for error in (LuaResponseUnknown("autoplay may have run"), LuaExecutionError("Lua ERR")):
+                with self.subTest(fail_at=fail_at, error=type(error).__name__):
+                    runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+                    commands = []
+
+                    def run_lua(_state, code, _timeout=5.0):
+                        commands.append(code)
+                        if fail_at == "start" and "SetActive(true)" in code:
+                            raise error
+                        if "return tostring(startTurn)" in code:
+                            return "1|0"
+                        if fail_at == "status" and "tostring(AutoplayManager.IsActive())" in code:
+                            raise error
+                        return "true"
+
+                    with patch.object(runner, "_lua", side_effect=run_lua), patch.object(
+                        runner, "_close_options_menu", return_value=False
+                    ), patch.object(runner, "_dismiss_advisor", return_value=False):
+                        with self.assertRaises(type(error)):
+                            runner._autoplay(3, 10)
+                    self.assertEqual(sum("SetActive(true)" in code for code in commands), 1)
+                    self.assertFalse(any("SetActive(false)" in code for code in commands))
 
     def test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
@@ -587,12 +774,12 @@ class InputSafetyTests(unittest.TestCase):
 
         user32.GetWindowTextW.side_effect = title
         user32.EnumWindows.side_effect = enumerate_windows
-        with patch.object(civ_click, "user32", user32), patch.object(
+        with patch.object(civ_click, "_civ_process_ids", return_value={123}), patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", side_effect=lambda hwnd: {
                 100: "civilizationvi_dx12.exe", 200: "civilizationvihelper.exe"}[hwnd]
         ):
             self.assertEqual(civ_click.find_civ_window(), 100)
-        with patch.object(civ_click, "user32", user32), patch.object(
+        with patch.object(civ_click, "_civ_process_ids", return_value={123}), patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", return_value="civilizationvihelper.exe"
         ):
             with self.assertRaisesRegex(civ_click.InputError, "found 0"):
@@ -600,11 +787,46 @@ class InputSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(civ_click.InputError, "found 0"):
                 civ_click.press_key(civ_click.VK_ESCAPE)
             user32.PostMessageW.assert_not_called()
-        with patch.object(civ_click, "user32", user32), patch.object(
+        with patch.object(civ_click, "_civ_process_ids", return_value={123}), patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", return_value="civilizationvi.exe"
         ):
             with self.assertRaisesRegex(RuntimeError, "found 2"):
                 civ_click.find_civ_window()
+
+    def test_hidden_second_civ_process_blocks_input_before_window_scan(self):
+        user32 = Mock()
+        with patch.object(civ_click, "_civ_process_ids", return_value={123, 456}), patch.object(
+            civ_click, "user32", user32
+        ):
+            with self.assertRaisesRegex(civ_click.InputError, "Multiple Civ VI processes"):
+                civ_click.press_key(civ_click.VK_ESCAPE)
+        user32.EnumWindows.assert_not_called()
+        user32.PostMessageW.assert_not_called()
+
+    def test_process_snapshot_counts_both_civ_executables(self):
+        import ctypes
+
+        kernel32 = Mock()
+        kernel32.CreateToolhelp32Snapshot.return_value = 99
+        kernel32.GetLastError.return_value = civ_click.ERROR_NO_MORE_FILES
+        entries = iter(((11, "CivilizationVI.exe"), (12, "CivilizationVI_DX12.exe"),
+                        (13, "CivilizationVIHelper.exe")))
+
+        def next_entry(_snapshot, pointer):
+            try:
+                pid, name = next(entries)
+            except StopIteration:
+                return False
+            entry = ctypes.cast(pointer, ctypes.POINTER(civ_click.PROCESSENTRY32W)).contents
+            entry.th32ProcessID = pid
+            entry.szExeFile = name
+            return True
+
+        kernel32.Process32FirstW.side_effect = next_entry
+        kernel32.Process32NextW.side_effect = next_entry
+        with patch.object(civ_click, "kernel32", kernel32):
+            self.assertEqual(civ_click._civ_process_ids(), {11, 12})
+        kernel32.CloseHandle.assert_called_once_with(99)
 
 
 if __name__ == "__main__":

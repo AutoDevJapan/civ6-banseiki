@@ -24,10 +24,22 @@ KEY_DELIVERY = "window"
 TITLE_PREFIX = "Sid Meier's Civilization VI"
 CIV_EXECUTABLES = {"civilizationvi.exe", "civilizationvi_dx12.exe"}
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+TH32CS_SNAPPROCESS = 0x00000002
+ERROR_NO_MORE_FILES = 18
 
 
 class InputError(RuntimeError):
     """The Civ VI window could not be verified or safely sent input."""
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+        ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+        ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+        ("dwFlags", wintypes.DWORD), ("szExeFile", wintypes.WCHAR * 260),
+    ]
 
 
 _enum_callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -68,6 +80,41 @@ kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
                                                 wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
 kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+kernel32.Process32FirstW.restype = wintypes.BOOL
+kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+kernel32.Process32NextW.restype = wintypes.BOOL
+
+
+def _civ_process_ids() -> set[int]:
+    """Include hidden game processes; a visible-window count alone is insufficient."""
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot is None or snapshot == wintypes.HANDLE(-1).value:
+        raise InputError("Could not enumerate Civ VI processes")
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(entry)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            raise InputError("Could not read Civ VI process list")
+        found = set()
+        while True:
+            if entry.szExeFile.casefold() in CIV_EXECUTABLES:
+                found.add(entry.th32ProcessID)
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                if kernel32.GetLastError() != ERROR_NO_MORE_FILES:
+                    raise InputError("Civ VI process list became unavailable")
+                break
+        return found
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+
+def require_single_civ_process() -> None:
+    count = len(_civ_process_ids())
+    if count > 1:
+        raise InputError(f"Multiple Civ VI processes found ({count}); driver requires one local game")
 
 
 def _process_name(hwnd: int) -> str:
@@ -88,6 +135,7 @@ def _process_name(hwnd: int) -> str:
 
 
 def find_civ_window() -> int:
+    require_single_civ_process()
     found: list[int] = []
     errors: list[Exception] = []
 

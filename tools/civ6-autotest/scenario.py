@@ -7,13 +7,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import math
+import os
 from pathlib import Path, PureWindowsPath
 import re
 import time
 
 from capture import CaptureError, capture_civ_window
-from click import InputError, VK_ESCAPE, press_key
-from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
+from click import InputError, VK_ESCAPE, press_key, require_single_civ_process
+from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
+                   slice_log_bytes, snapshot_logs)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
 
@@ -254,6 +256,7 @@ class Runner:
             self.client = None
 
     def _states(self, timeout: float = 5.0) -> list[str]:
+        require_single_civ_process()
         deadline = time.monotonic() + timeout
         try:
             return self._connect(_remaining(deadline)).list_states(timeout=_remaining(deadline))
@@ -267,6 +270,21 @@ class Runner:
         remaining = _remaining(deadline)
         result = self._connect(remaining).run_lua(state, code, remaining)
         return result.value
+
+    def _log_since_same_generation(self, name: str, baseline: dict) -> str:
+        path = self.logs / name
+        mark = baseline["files"][name]
+        try:
+            with path.open("rb") as handle:
+                content = handle.read()
+                inode = os.fstat(handle.fileno()).st_ino
+        except FileNotFoundError:
+            if mark["inode"] is None:
+                return ""
+            raise ScenarioError(f"{name} disappeared during wait; outcome undecidable") from None
+        if log_marker_replaced(content, mark, inode):
+            raise ScenarioError(f"{name} rotated or truncated during wait; outcome undecidable")
+        return slice_log_bytes(content, mark, inode)
 
     def _wait(self, condition: dict, timeout: float) -> None:
         end = time.monotonic() + timeout
@@ -293,7 +311,7 @@ class Runner:
                 else:
                     assert log_baseline is not None
                     key = (condition["log"], condition["contains"])
-                    content = read_since(self.logs, log_baseline)[condition["log"]]
+                    content = self._log_since_same_generation(condition["log"], log_baseline)
                     occurrences = sum(condition["contains"] in line for line in content.splitlines())
                     present = occurrences > self.log_matches_consumed.get(key, 0)
                 if present:
@@ -313,12 +331,10 @@ class Runner:
 
     def _loadscreen_count(self) -> int:
         assert self.baseline is not None
-        try:
-            return read_since(self.logs, self.baseline)["Lua.log"].count(self.LOADSCREEN_READY)
-        except (FileNotFoundError, KeyError):
-            return 0
+        return self._log_since_same_generation("Lua.log", self.baseline).count(self.LOADSCREEN_READY)
 
-    def _enter_game_after_loadscreen(self, before: int, timeout: float, *, deadline: float | None = None) -> None:
+    def _enter_game_after_loadscreen(self, before: int, timeout: float, *, deadline: float | None = None,
+                                     response_unknown: bool = False) -> None:
         """After HostGame/LoadGame the loading screen waits for Begin Game (verified live).
 
         Wait for a new "load view ready" line in Lua.log, then press Esc once
@@ -329,8 +345,9 @@ class Runner:
         begin_game_sent = False
         last = "loading screen not ready"
         while time.monotonic() < end:
+            loadscreen_count = self._loadscreen_count()  # Check the log generation until the transition ends.
             if not begin_game_sent:
-                if self._loadscreen_count() <= before:
+                if loadscreen_count <= before:
                     time.sleep(min(0.5, max(0, end - time.monotonic())))
                     continue
                 _remaining(end)
@@ -351,11 +368,14 @@ class Runner:
                 else:
                     last = "InGame state not available yet"
                     self._disconnect()
+            except (LuaResponseUnknown, LuaExecutionError):
+                raise
             except (TunerError, OSError) as exc:
                 last = str(exc)
                 self._disconnect()
             time.sleep(min(2, max(0, end - time.monotonic())))
-        raise ScenarioError(f"Timed out after {timeout}s entering the game; last: {last}")
+        uncertain = "; outcome undecidable after unknown Lua response" if response_unknown else ""
+        raise ScenarioError(f"Timed out after {timeout}s entering the game; last: {last}{uncertain}")
 
     def _save_path(self, name: str) -> Path:
         return self.saves / (name + ".Civ6Save")
@@ -457,8 +477,11 @@ class Runner:
                 time.sleep(min(0.5, max(0, deadline - time.monotonic())))
             else:
                 raise ScenarioError(f"Autoplay timed out at turn {status.turn if status else '?'} / {target}; last: {status}")
+        except (LuaResponseUnknown, LuaExecutionError):
+            # A chunk may have run, or Lua reported an ERR: stop without more Lua mutations.
+            raise
         except (ScenarioError, TunerError, OSError):
-            # The start command may have run even if its FireTuner acknowledgment was lost.
+            # A previously acknowledged start may still be active when later checks fail.
             try:
                 self._lua("InGame", "if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\n"
                           "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
@@ -504,12 +527,15 @@ class Runner:
             return f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, players={len(step['players'])}"
         if action == "start_game":
             before = self._loadscreen_count()
+            response_unknown = False
             try:
                 self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true",
                           min(5, _remaining(deadline)))
             except LuaResponseUnknown as exc:
                 print(f"HostGame response interrupted during transition: {exc}", flush=True)
-            self._enter_game_after_loadscreen(before, timeout, deadline=deadline)
+                response_unknown = True
+            self._enter_game_after_loadscreen(before, timeout, deadline=deadline,
+                                              response_unknown=response_unknown)
             return "single-player game reached InGame"
         if action == "autoplay":
             return self._autoplay(step["turns"], timeout, deadline=deadline)
@@ -519,6 +545,7 @@ class Runner:
             value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
             return f"ran Lua in {step['state_name']}; return={value}"
         if action == "screenshot":
+            require_single_civ_process()
             base = self.output.resolve()
             target = (base / _safe_relative_path(step["path"])).resolve()
             if not target.is_relative_to(base):
@@ -578,11 +605,14 @@ class Runner:
                 "if ok == false then error('Network.LoadGame returned false') end\nreturn true"
             )
             before = self._loadscreen_count()
+            response_unknown = False
             try:
                 self._lua("FrontEnd", code, min(5, _remaining(deadline)))
             except LuaResponseUnknown as exc:
                 print(f"LoadGame response interrupted during transition: {exc}", flush=True)
-            self._enter_game_after_loadscreen(before, timeout, deadline=deadline)
+                response_unknown = True
+            self._enter_game_after_loadscreen(before, timeout, deadline=deadline,
+                                              response_unknown=response_unknown)
             return f"loaded {name}"
         if action == "wait_for":
             self._wait(step["condition"], _remaining(deadline))
@@ -600,6 +630,7 @@ class Runner:
         (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
         self._log("start", "OK", self.scenario["name"])
         try:
+            require_single_civ_process()
             self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"}, 10)
             for index, step in enumerate(self.scenario["steps"], 1):
                 action = f"{index}/{len(self.scenario['steps'])} {step['action']}"
