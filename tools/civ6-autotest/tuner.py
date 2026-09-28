@@ -1,0 +1,185 @@
+"""Small, synchronous FireTuner client for a locally running Civ VI.
+
+Protocol reference: https://github.com/lmwilki/civ6-mcp/blob/main/src/civ_mcp/tuner_client.py
+This is an independent implementation of the documented framing and commands.
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+import socket
+import struct
+import time
+import uuid
+
+
+PORT = 4318
+MAX_FRAME = 2 * 1024 * 1024
+HANDSHAKE = 4
+COMMAND = 3
+
+
+class TunerError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class Frame:
+    tag: int
+    payload: str
+
+
+@dataclass(frozen=True)
+class LuaResult:
+    value: str
+    output: str
+
+
+def _read_exact(sock: socket.socket, count: int) -> bytes:
+    parts = bytearray()
+    while len(parts) < count:
+        try:
+            chunk = sock.recv(count - len(parts))
+        except socket.timeout as exc:
+            raise TunerError(f"FireTuner response timed out after {len(parts)}/{count} bytes") from exc
+        if not chunk:
+            raise TunerError("FireTuner closed the connection")
+        parts.extend(chunk)
+    return bytes(parts)
+
+
+def send_frame(sock: socket.socket, tag: int, payload: str) -> None:
+    if "\x00" in payload:
+        raise ValueError("NUL is not allowed in an outgoing FireTuner command")
+    body = payload.encode("utf-8") + b"\x00"
+    if len(body) > MAX_FRAME:
+        raise ValueError("FireTuner command is too large")
+    sock.sendall(struct.pack("<Ii", len(body), tag) + body)
+
+
+def recv_frame(sock: socket.socket) -> Frame:
+    size, tag = struct.unpack("<Ii", _read_exact(sock, 8))
+    if size < 1 or size > MAX_FRAME:
+        raise TunerError(f"Invalid FireTuner frame size: {size}")
+    return Frame(tag, _read_exact(sock, size).rstrip(b"\x00").decode("utf-8", "replace"))
+
+
+class TunerClient:
+    def __init__(self, port: int = PORT, timeout: float = 5.0):
+        if not 1 <= port <= 65535 or timeout <= 0:
+            raise ValueError("Invalid port or timeout")
+        self.port = port
+        self.timeout = timeout
+        self.sock: socket.socket | None = None
+        self.identity = ""
+
+    def __enter__(self) -> TunerClient:
+        try:
+            self.sock = socket.create_connection(("127.0.0.1", self.port), self.timeout)
+            self.sock.settimeout(self.timeout)
+            self.identity = self._request("APP:")
+            if not self.list_states():
+                raise TunerError("FireTuner returned no Lua states")
+        except (OSError, TunerError) as exc:
+            self.close()
+            raise TunerError(f"Cannot connect to local FireTuner: {exc}") from exc
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self.sock is not None:
+            self.sock.close()
+            self.sock = None
+
+    def _socket(self) -> socket.socket:
+        if self.sock is None:
+            raise TunerError("FireTuner is not connected")
+        return self.sock
+
+    def _request(self, payload: str) -> str:
+        sock = self._socket()
+        send_frame(sock, HANDSHAKE, payload)
+        return recv_frame(sock).payload
+
+    def list_states(self) -> list[str]:
+        raw = self._request("LSQ:")
+        if raw.startswith("LSQ:"):
+            raw = raw[4:]
+        return [part.strip() for part in raw.replace("\r", "\n").replace("\x00", "\n").split("\n") if part.strip()]
+
+    def state_index(self, name: str) -> int:
+        states = self.list_states()
+        matches = [i for i, state in enumerate(states) if state.casefold() == name.casefold()]
+        if len(matches) != 1:
+            raise TunerError(f"Lua state {name!r} not uniquely available; states: {states}")
+        return matches[0]
+
+    def run_lua(self, state_name: str, code: str, timeout: float | None = None) -> LuaResult:
+        """Run a chunk once and require its unique print acknowledgment.
+
+        Never replay a command on timeout: it may already have changed the game.
+        A Lua `return` in code becomes LuaResult.value; other print output is retained.
+        """
+        index = self.state_index(state_name)
+        token = "JAC_AUTOTEST_" + uuid.uuid4().hex
+        wrapper = (
+            "local __ok, __value = pcall(function()\n"
+            + code
+            + "\nend)\n"
+            + f'print("{token}|" .. (__ok and "OK|" or "ERR|") .. tostring(__value))'
+        )
+        sock = self._socket()
+        send_frame(sock, COMMAND, f"CMD:{index}:{wrapper}")
+        deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+        lines: list[str] = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run. Inspect logs before retrying")
+            sock.settimeout(remaining)
+            try:
+                frame = recv_frame(sock)
+            except TunerError as exc:
+                raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run: {exc}") from exc
+            lines.append(frame.payload)
+            for line in frame.payload.splitlines():
+                marker = token + "|"
+                if marker not in line:
+                    continue
+                status_and_value = line.split(marker, 1)[1]
+                status, separator, value = status_and_value.partition("|")
+                if not separator:
+                    continue
+                output = "\n".join(lines)
+                if status == "ERR":
+                    raise TunerError(f"Lua error in {state_name}: {value}")
+                if status == "OK":
+                    return LuaResult(value, output)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Inspect a running local Civ VI FireTuner")
+    parser.add_argument("command", choices=("states", "lua"))
+    parser.add_argument("--state", default="InGame")
+    parser.add_argument("--code", help="Lua chunk for the lua command")
+    parser.add_argument("--port", type=int, default=PORT)
+    args = parser.parse_args()
+    if args.command == "lua" and not args.code:
+        parser.error("lua requires --code")
+    try:
+        with TunerClient(port=args.port) as client:
+            if args.command == "states":
+                print(f"{client.identity}\n" + "\n".join(f"{i}: {name}" for i, name in enumerate(client.list_states())))
+            else:
+                result = client.run_lua(args.state, args.code)
+                print(result.output)
+    except TunerError as exc:
+        parser.exit(1, f"{exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

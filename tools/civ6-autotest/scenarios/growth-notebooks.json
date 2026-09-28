@@ -1,0 +1,25 @@
+{
+  "name": "Growth UI: Notebooks and Character Journal",
+  "judge_profile": "generic",
+  "steps": [
+    {"action": "enable_mods", "ids": ["7696e937-2044-4f3c-8e13-4e27632e2710"]},
+    {"action": "configure", "ruleset": "RULESET_EXPANSION_2", "map_size": "MAPSIZE_SMALL", "speed": "GAMESPEED_STANDARD", "seed": 620930, "players": [
+      {"leader": "LEADER_CLEOPATRA", "civ": "CIVILIZATION_EGYPT", "human": true},
+      {"leader": "LEADER_GILGAMESH", "civ": "CIVILIZATION_SUMERIA", "human": false}
+    ]},
+    {"action": "start_game", "timeout": 180},
+    {"action": "autoplay", "turns": 3, "timeout": 180},
+    {"action": "ui_lua", "state_name": "InGame", "code": "LuaEvents.JAC_Notebooks_Open(); return true"},
+    {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log", "contains": "[JAC_POC] notebooks opened"}, "timeout": 30},
+    {"action": "screenshot", "path": "notebooks.png"},
+    {"action": "manual", "prompt": "ゲーム画面の Notebooks 内にある Character Journal ボタンを1回押す"},
+    {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log", "contains": "[JAC_POC] character journal shown"}, "timeout": 30},
+    {"action": "screenshot", "path": "character-journal.png"},
+    {"action": "save", "name": "JAC-Autotest-Growth", "timeout": 60},
+    {"action": "exit_to_menu", "timeout": 60},
+    {"action": "load", "name": "JAC-Autotest-Growth", "timeout": 180},
+    {"action": "autoplay", "turns": 1, "timeout": 120},
+    {"action": "ui_lua", "state_name": "InGame", "code": "LuaEvents.JAC_Notebooks_Open(); return true"},
+    {"action": "screenshot", "path": "notebooks-after-load.png"}
+  ]
+}
