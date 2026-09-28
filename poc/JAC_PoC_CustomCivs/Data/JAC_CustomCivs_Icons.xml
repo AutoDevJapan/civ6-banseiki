@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<!-- BLP は tools/jac_art/build_art.py でローカル素材から作る。0番=織田、1番=武田。文明アイコンは全サイズ白＋透明。 -->
+	<IconTextureAtlases>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="45" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="48" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="50" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="55" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders55.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="64" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="80" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="256" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders256.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="22" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs22.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="30" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs30.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="36" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs36.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="44" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs44.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="45" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="48" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="50" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="64" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="80" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="128" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs128.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="200" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs200.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="256" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs256.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="22" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities22.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="30" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities30.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="32" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="36" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities36.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="44" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities44.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="45" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="48" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="50" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="64" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="80" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="128" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities128.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="200" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities200.dds"/>
+		<Row Name="ICON_ATLAS_JAC_ABILITIES" IconSize="256" IconsPerRow="4" IconsPerColumn="1" Filename="JAC_Abilities256.dds"/>
+	</IconTextureAtlases>
+	<IconDefinitions>
+		<Row Name="ICON_CIVILIZATION_JAC_ODA" Atlas="ICON_ATLAS_JAC_CIVILIZATIONS" Index="0"/>
+		<Row Name="ICON_CIVILIZATION_JAC_TAKEDA" Atlas="ICON_ATLAS_JAC_CIVILIZATIONS" Index="1"/>
+		<Row Name="ICON_LEADER_JAC_ODA_NOBUHIDE" Atlas="ICON_ATLAS_JAC_LEADERS" Index="0"/>
+		<Row Name="ICON_LEADER_JAC_TAKEDA_NOBUTORA" Atlas="ICON_ATLAS_JAC_LEADERS" Index="1"/>
+		<Row Name="ICON_TRAIT_JAC_ODA_CLAN" Atlas="ICON_ATLAS_JAC_ABILITIES" Index="0"/>
+		<Row Name="ICON_TRAIT_JAC_TAKEDA_CLAN" Atlas="ICON_ATLAS_JAC_ABILITIES" Index="1"/>
+		<Row Name="ICON_TRAIT_JAC_ODA_NOBUHIDE" Atlas="ICON_ATLAS_JAC_ABILITIES" Index="2"/>
+		<Row Name="ICON_TRAIT_JAC_TAKEDA_NOBUTORA" Atlas="ICON_ATLAS_JAC_ABILITIES" Index="3"/>
+	</IconDefinitions>
+</GameInfo>
