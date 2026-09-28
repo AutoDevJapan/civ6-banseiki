@@ -9,6 +9,8 @@
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
 | [`領土関係・タイル割当候補データ.json`](../領土関係・タイル割当候補データ.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
+| [`research/civ6-modding-readiness.md`](research/civ6-modding-readiness.md) | 実装着手の準備度調査。手元の Civ6 環境、Civ6 MOD の技術的制約、SSOT の不足 |
+| [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 
 仕様を変える場合は `spec/ssot/` の該当ファイルを更新する。変更の経緯は Git の履歴で管理する（旧「18 更新履歴」は廃止し、18番は欠番）。節番号（3.3、14.5 など）は分割後も変えない。SSOT 以外のドキュメントと SSOT が食い違ったら SSOT が正しい。
 
@@ -18,6 +20,7 @@
 
 | やりたいこと | 読むファイル |
 |---|---|
+| 実装に着手できるか・何が未決か | [準備度調査](research/civ6-modding-readiness.md)、[質問リスト](questions.md) |
 | 実装に着手する | [19](spec/ssot/19-agent-handover.md) → [15](spec/ssot/15-implementation-structure.md) → [16](spec/ssot/16-roadmap.md) → [17](spec/ssot/17-open-issues.md) |
 | ゲーム全体像を掴む | [1](spec/ssot/01-vision.md)、[2](spec/ssot/02-progression.md)、[16](spec/ssot/16-roadmap.md) |
 | 世界マップ・国の規模・領土の規則 | [3](spec/ssot/03-map-and-scale.md)（3.3） |
