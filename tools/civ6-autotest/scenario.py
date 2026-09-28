@@ -18,7 +18,7 @@ from tuner import TunerClient, TunerError
 
 
 ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
-           "screenshot", "save", "exit_to_menu", "load", "wait_for", "manual"}
+           "screenshot", "save", "exit_to_menu", "load", "wait_for", "pause", "manual"}
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 MOD_ID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 TYPE_ID = re.compile(r"^[A-Z][A-Z0-9_]+$")
@@ -135,6 +135,10 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: log wait needs log and contains")
             if condition["type"] == "state" and not isinstance(condition.get("name"), str):
                 raise ScenarioError(f"Step {number}: state wait needs name")
+        elif action == "pause":
+            seconds = step.get("seconds")
+            if type(seconds) not in (int, float) or not 0 < seconds <= 10 or not math.isfinite(seconds):
+                raise ScenarioError(f"Step {number}: pause seconds must be in (0, 10]")
         elif action == "manual":
             if not isinstance(step.get("prompt"), str) or not step["prompt"].strip():
                 raise ScenarioError(f"Step {number}: manual step needs prompt")
@@ -297,23 +301,27 @@ class Runner:
         """After HostGame/LoadGame the loading screen waits for Begin Game (verified live).
 
         The in-game Tuner states only exist after that, so we wait for a new "load view ready"
-        line in Lua.log, then press Esc (LoadScreen.lua maps Esc to Begin Game once loading is
-        complete) and retry every 10 s until the InGame Lua state answers.
+        line in Lua.log, then press Esc once (LoadScreen.lua maps Esc to Begin Game) and
+        wait until the InGame Lua state answers. Repeating Esc can open the options menu.
         """
         end = time.monotonic() + timeout
-        next_press = 0.0
+        begin_game_sent = False
         last = "loading screen not ready"
         while time.monotonic() < end:
+            in_game_state_present = False
             try:
-                if self._lua("InGame", "return Game ~= nil and Game.GetLocalPlayer() >= 0") == "true":
-                    self._close_options_menu()
-                    self._dismiss_advisor()
-                    return
+                in_game_state_present = "ingame" in (state.casefold() for state in self._states())
+                if in_game_state_present:
+                    if self._lua("InGame", "return Game ~= nil and Game.GetLocalPlayer() >= 0") == "true":
+                        self._close_options_menu()
+                        self._dismiss_advisor()
+                        return
+                    last = "InGame exists; waiting for the local player"
             except (TunerError, OSError) as exc:
                 last = str(exc)
-            if self._loadscreen_count() > before and time.monotonic() >= next_press:
+            if not begin_game_sent and not in_game_state_present and self._loadscreen_count() > before:
                 press_key(VK_ESCAPE)
-                next_press = time.monotonic() + 10
+                begin_game_sent = True
                 last = "Esc sent on loading screen"
             time.sleep(2)
         raise ScenarioError(f"Timed out after {timeout}s entering the game; last: {last}")
@@ -517,6 +525,9 @@ class Runner:
         if action == "wait_for":
             self._wait(step["condition"], timeout)
             return f"condition met: {step['condition']}"
+        if action == "pause":
+            time.sleep(step["seconds"])
+            return f"paused {step['seconds']}s for UI animation"
         if action == "manual":
             print("MANUAL / Computer Use: " + step["prompt"], flush=True)
             input("Press Enter after the action is complete: ")

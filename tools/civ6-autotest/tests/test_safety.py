@@ -15,6 +15,31 @@ from tuner import LuaResult
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def test_load_wait_does_not_send_escape_after_ingame_state_exists(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_states", return_value=["InGame"]), patch.object(
+            runner, "_lua", side_effect=["false", "true"]
+        ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
+            runner, "_close_options_menu"
+        ), patch.object(runner, "_dismiss_advisor"), patch(
+            "scenario.press_key"
+        ) as press, patch("scenario.time.sleep"):
+            runner._enter_game_after_loadscreen(0, 1)
+        self.assertEqual(run_lua.call_count, 2)
+        press.assert_not_called()
+
+    def test_load_wait_sends_begin_game_escape_only_once(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_states", side_effect=[[], [], ["InGame"]]), patch.object(
+            runner, "_lua", return_value="true"
+        ), patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
+            runner, "_close_options_menu"
+        ), patch.object(runner, "_dismiss_advisor"), patch(
+            "scenario.press_key"
+        ) as press, patch("scenario.time.sleep"):
+            runner._enter_game_after_loadscreen(0, 1)
+        press.assert_called_once_with(civ_click.VK_ESCAPE)
+
     def test_run_creates_missing_output_parents_but_rejects_existing_run(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)

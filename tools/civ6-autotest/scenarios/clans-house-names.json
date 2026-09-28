@@ -1,0 +1,592 @@
+{
+  "name": "Custom clans house-name display before/after turn 3 and after load",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_EXPANSION_2",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620931,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 360
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "civ=CIVILIZATION_JAC_ODA leader=LEADER_JAC_ODA_NOBUHIDE"
+      },
+      "timeout": 90
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "civ=CIVILIZATION_JAC_TAKEDA leader=LEADER_JAC_TAKEDA_NOBUTORA"
+      },
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if Game.GetCurrentGameTurn() ~= 1 then error(\"not turn 1\") end; Players[0]:GetDiplomacy():SetHasMet(1); Players[1]:GetDiplomacy():SetHasMet(0); return tostring(Players[0]:GetDiplomacy():HasMet(1))"
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyRibbon\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"; if key ~= expected or short ~= \"LOC_CIVILIZATION_JAC_TAKEDA_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyRibbon: \"..tostring(key)) end; if Game.GetCurrentGameTurn() ~= 1 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= nil then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn1 context=DiplomacyRibbon short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyActionView\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"; if key ~= expected or short ~= \"LOC_CIVILIZATION_JAC_TAKEDA_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyActionView: \"..tostring(key)) end; if Game.GetCurrentGameTurn() ~= 1 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= nil then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn1 context=DiplomacyActionView short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in WorldRankings\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"; if key ~= expected or short ~= \"LOC_CIVILIZATION_JAC_TAKEDA_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in WorldRankings: \"..tostring(key)) end; if Game.GetCurrentGameTurn() ~= 1 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= nil then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn1 context=WorldRankings short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in CityBannerManager\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"; if key ~= expected or short ~= \"LOC_CIVILIZATION_JAC_TAKEDA_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in CityBannerManager: \"..tostring(key)) end; if Game.GetCurrentGameTurn() ~= 1 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= nil then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn1 context=CityBannerManager short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "screenshot",
+      "path": "01-turn1-hud.png"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetDiplomacy():HasMet(1)"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "UpdateLeaders(); local ui=GetUILeadersByID()[1]; if not ui then error(\"Takeda missing from ribbon\") end; local tip=ui.Controls.Portrait:GetToolTipString(); local expected=Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"); if not tip or not string.find(tip,expected,1,true) then error(\"ribbon tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=turn2 screen=Ribbon tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "pause",
+      "seconds": 0.5
+    },
+    {
+      "action": "screenshot",
+      "path": "02-turn2-ribbon.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView(1); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return Controls.AlphaIn:IsStopped() and Controls.SlideIn:IsStopped()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "if ContextPtr:IsHidden() then error(\"diplomacy hidden\") end; local function find(x,depth) if depth>20 then return nil end; if x:GetID()==\"CivNameText\" then return x end; for _,child in ipairs(x:GetChildren() or {}) do local hit=find(child,depth+1); if hit then return hit end end end; local label=find(Controls.PlayerContainer,0); if not label then error(\"visible diplomacy civ label missing\") end; local shown=label:GetText(); local expected=Locale.ToUpper(Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\")); if not shown or not string.find(shown,expected,1,true) then error(\"diplomacy text: \"..tostring(shown)) end; print(\"[JAC_HOUSE] phase=turn2 screen=Diplomacy displayed=\"..shown); return shown"
+    },
+    {
+      "action": "screenshot",
+      "path": "02-turn2-diplomacy.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Open(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "if ContextPtr:IsHidden() then error(\"rankings hidden\") end; local wanted=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_NAME\")); local old=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_NAME\")); local count=0; local stale=0; local function scan(c,depth) if depth>25 then return end; if c:GetID()==\"VictoryLeading\" then local shown=c:GetText(); if shown==wanted then count=count+1 end; if shown==old then stale=stale+1 end end; for _,child in ipairs(c:GetChildren() or {}) do scan(child,depth+1) end end; scan(Controls.OverallViewStack,0); if count<1 then error(\"rankings overview missing \"..wanted) end; if false then error(\"rankings overview still shows \"..old) end; print(\"[JAC_HOUSE] phase=turn2 screen=WorldRankings summary=\"..wanted..\" count=\"..count); return wanted"
+    },
+    {
+      "action": "screenshot",
+      "path": "02-turn2-rankings.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent on turn 2\") end; local p=Map.GetPlot(c:GetX(),c:GetY()); PlayersVisibility[0]:ChangeVisibilityCount(p:GetIndex(),1); return tostring(PlayersVisibility[0]:IsRevealed(p:GetIndex()))"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "CityBannerManager",
+        "code": "local c=Players[1]:GetCities():GetCapitalCity(); return c ~= nil and GetCityBanner(1,c:GetID()) ~= nil"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; UI.LookAtPlot(c:GetX(),c:GetY()); return tostring(c:GetX())..\",\"..tostring(c:GetY())"
+    },
+    {
+      "action": "pause",
+      "seconds": 5
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in CityBannerManager\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"; if key ~= expected or short ~= \"LOC_CIVILIZATION_JAC_TAKEDA_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in CityBannerManager: \"..tostring(key)) end; if Game.GetCurrentGameTurn() ~= 2 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= nil then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn2 context=CityBannerManager short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; local b=GetCityBanner(1,c:GetID()); if not b or not b.m_Instance then error(\"Takeda city banner absent\") end; b:UpdateName(); local tip=b.m_Instance.CityBannerButton:GetToolTipString(); local expected=Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION\"); if not tip or not string.find(tip,expected,1,true) then error(\"city banner tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=turn2 screen=CityBanner tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "screenshot",
+      "path": "03-turn2-city-banner.png"
+    },
+    {
+      "action": "autoplay",
+      "turns": 2,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "rename turn=3 player=1 result=unavailable target=LOC_JAC_TAKEDA_RENAMED_NAME"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyRibbon\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyRibbon: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn4 context=DiplomacyRibbon short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyActionView\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyActionView: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn4 context=DiplomacyActionView short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in WorldRankings\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in WorldRankings: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn4 context=WorldRankings short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in CityBannerManager\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in CityBannerManager: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=turn4 context=CityBannerManager short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "UpdateLeaders(); local ui=GetUILeadersByID()[1]; if not ui then error(\"Takeda missing from ribbon\") end; local tip=ui.Controls.Portrait:GetToolTipString(); local expected=Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\"); if not tip or not string.find(tip,expected,1,true) then error(\"ribbon tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=turn4 screen=Ribbon tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "pause",
+      "seconds": 0.5
+    },
+    {
+      "action": "screenshot",
+      "path": "05-turn4-ribbon.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView(1); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return Controls.AlphaIn:IsStopped() and Controls.SlideIn:IsStopped()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "if ContextPtr:IsHidden() then error(\"diplomacy hidden\") end; local function find(x,depth) if depth>20 then return nil end; if x:GetID()==\"CivNameText\" then return x end; for _,child in ipairs(x:GetChildren() or {}) do local hit=find(child,depth+1); if hit then return hit end end end; local label=find(Controls.PlayerContainer,0); if not label then error(\"visible diplomacy civ label missing\") end; local shown=label:GetText(); local expected=Locale.ToUpper(Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\")); if not shown or not string.find(shown,expected,1,true) then error(\"diplomacy text: \"..tostring(shown)) end; print(\"[JAC_HOUSE] phase=turn4 screen=Diplomacy displayed=\"..shown); return shown"
+    },
+    {
+      "action": "screenshot",
+      "path": "05-turn4-diplomacy.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Open(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "if ContextPtr:IsHidden() then error(\"rankings hidden\") end; local wanted=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\")); local old=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_NAME\")); local count=0; local stale=0; local function scan(c,depth) if depth>25 then return end; if c:GetID()==\"VictoryLeading\" then local shown=c:GetText(); if shown==wanted then count=count+1 end; if shown==old then stale=stale+1 end end; for _,child in ipairs(c:GetChildren() or {}) do scan(child,depth+1) end end; scan(Controls.OverallViewStack,0); if count<1 then error(\"rankings overview missing \"..wanted) end; if stale>0 then error(\"rankings overview still shows \"..old) end; print(\"[JAC_HOUSE] phase=turn4 screen=WorldRankings summary=\"..wanted..\" count=\"..count); return wanted"
+    },
+    {
+      "action": "screenshot",
+      "path": "05-turn4-rankings.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; UI.LookAtPlot(c:GetX(),c:GetY()); return tostring(c:GetX())..\",\"..tostring(c:GetY())"
+    },
+    {
+      "action": "pause",
+      "seconds": 5
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; local b=GetCityBanner(1,c:GetID()); if not b or not b.m_Instance then error(\"Takeda city banner absent\") end; b:UpdateName(); local tip=b.m_Instance.CityBannerButton:GetToolTipString(); local expected=Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\"); if not tip or not string.find(tip,expected,1,true) then error(\"city banner tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=turn4 screen=CityBanner tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "screenshot",
+      "path": "05-turn4-city-banner.png"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-ClansHouseNames-20260929-4",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-ClansHouseNames-20260929-4",
+      "timeout": 360
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "renameState stage=load player=1 civ=CIVILIZATION_JAC_TAKEDA short=LOC_CIVILIZATION_JAC_TAKEDA_NAME target=LOC_JAC_TAKEDA_RENAMED_NAME attempted=true"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "uiRenameState stage=load player=1"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyRibbon\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyRibbon: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=load context=DiplomacyRibbon short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in DiplomacyActionView\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in DiplomacyActionView: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=load context=DiplomacyActionView short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in WorldRankings\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in WorldRankings: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=load context=WorldRankings short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=PlayerConfigurations[1]; if c:GetCivilizationTypeName() ~= \"CIVILIZATION_JAC_TAKEDA\" then error(\"Takeda missing\") end; local m=getmetatable(c); if type(m) ~= \"table\" or type(m.__index) ~= \"table\" or type(m.__index.JAC_NameOverrideContext) ~= \"string\" then error(\"override not installed in CityBannerManager\") end; local key=c:GetCivilizationDescription(); local short=c:GetCivilizationShortDescription(); local expected=\"LOC_JAC_TAKEDA_RENAMED_NAME\"; if key ~= expected or short ~= \"LOC_JAC_TAKEDA_RENAMED_NAME\" or Locale.Lookup(key) ~= Locale.Lookup(expected) then error(\"wrong house in CityBannerManager: \"..tostring(key)) end; if Game.GetCurrentGameTurn() < 3 then error(\"wrong turn\") end; local target=Game:GetProperty(\"JAC_POC_CUSTOM_CIVS_RENAMED_NAME\"); if target ~= expected then error(\"wrong rename property\") end; print(\"[JAC_HOUSE] phase=load context=CityBannerManager short=\"..tostring(short)..\" displayed=\"..Locale.Lookup(key)); return Locale.Lookup(key)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyRibbon",
+      "code": "UpdateLeaders(); local ui=GetUILeadersByID()[1]; if not ui then error(\"Takeda missing from ribbon\") end; local tip=ui.Controls.Portrait:GetToolTipString(); local expected=Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\"); if not tip or not string.find(tip,expected,1,true) then error(\"ribbon tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=load screen=Ribbon tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "pause",
+      "seconds": 0.5
+    },
+    {
+      "action": "screenshot",
+      "path": "09-load-ribbon.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView(1); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return Controls.AlphaIn:IsStopped() and Controls.SlideIn:IsStopped()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "if ContextPtr:IsHidden() then error(\"diplomacy hidden\") end; local function find(x,depth) if depth>20 then return nil end; if x:GetID()==\"CivNameText\" then return x end; for _,child in ipairs(x:GetChildren() or {}) do local hit=find(child,depth+1); if hit then return hit end end end; local label=find(Controls.PlayerContainer,0); if not label then error(\"visible diplomacy civ label missing\") end; local shown=label:GetText(); local expected=Locale.ToUpper(Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\")); if not shown or not string.find(shown,expected,1,true) then error(\"diplomacy text: \"..tostring(shown)) end; print(\"[JAC_HOUSE] phase=load screen=Diplomacy displayed=\"..shown); return shown"
+    },
+    {
+      "action": "screenshot",
+      "path": "09-load-diplomacy.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Open(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "if ContextPtr:IsHidden() then error(\"rankings hidden\") end; local wanted=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\")); local old=Locale.Lookup(\"LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE\",Locale.Lookup(\"LOC_CIVILIZATION_JAC_TAKEDA_NAME\")); local count=0; local stale=0; local function scan(c,depth) if depth>25 then return end; if c:GetID()==\"VictoryLeading\" then local shown=c:GetText(); if shown==wanted then count=count+1 end; if shown==old then stale=stale+1 end end; for _,child in ipairs(c:GetChildren() or {}) do scan(child,depth+1) end end; scan(Controls.OverallViewStack,0); if count<1 then error(\"rankings overview missing \"..wanted) end; if stale>0 then error(\"rankings overview still shows \"..old) end; print(\"[JAC_HOUSE] phase=load screen=WorldRankings summary=\"..wanted..\" count=\"..count); return wanted"
+    },
+    {
+      "action": "screenshot",
+      "path": "09-load-rankings.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; UI.LookAtPlot(c:GetX(),c:GetY()); return tostring(c:GetX())..\",\"..tostring(c:GetY())"
+    },
+    {
+      "action": "pause",
+      "seconds": 5
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityBannerManager",
+      "code": "local c=Players[1]:GetCities():GetCapitalCity(); if not c then error(\"Takeda capital absent\") end; local b=GetCityBanner(1,c:GetID()); if not b or not b.m_Instance then error(\"Takeda city banner absent\") end; b:UpdateName(); local tip=b.m_Instance.CityBannerButton:GetToolTipString(); local expected=Locale.Lookup(\"LOC_JAC_TAKEDA_RENAMED_NAME\"); if not tip or not string.find(tip,expected,1,true) then error(\"city banner tooltip: \"..tostring(tip)) end; print(\"[JAC_HOUSE] phase=load screen=CityBanner tooltip=\"..tip); return tip"
+    },
+    {
+      "action": "screenshot",
+      "path": "09-load-city-banner.png"
+    }
+  ]
+}

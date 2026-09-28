@@ -131,7 +131,7 @@ class JudgeTests(unittest.TestCase):
     def test_shipped_scenarios_validate_offline(self):
         folder = Path(__file__).resolve().parents[1] / "scenarios"
         names = {path.name for path in folder.glob("*.json")}
-        self.assertEqual(names, {"bundle0-load-save.json", "clans-notebooks.json", "custom-clans.json", "growth-notebooks.json"})
+        self.assertEqual(names, {"bundle0-load-save.json", "clans-notebooks.json", "clans-house-names.json", "custom-clans.json", "growth-notebooks.json"})
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):
                 validate_scenario(json.loads(path.read_text(encoding="utf-8")))
