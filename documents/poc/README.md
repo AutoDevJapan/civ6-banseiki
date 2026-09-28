@@ -64,15 +64,15 @@ MOD の内容：
 MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
-- `Players:Expansion2_Players` に両組を登録する。日本の既存アイコン・北条の指導者画像・ロード画像・色を流用し、色の組合せで両家を区別する
+- `Players:Expansion2_Players` に両組を登録する。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
-- ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に武田家だけ「甲斐武田家」への表示名変更を項目ごとに試し、変更前後と文明 ID を出力する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
+- ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、武田家の表示名がゲームプレイ側から変えられないことを項目ごとに1行ずつ記録し、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 
 手順：
 
 1. 共通の準備に従って `JAC_PoC_CustomCivs` を Mods に配置・有効化し、Gathering Storm の詳細設定で織田家を人間、武田家を AI に選んで開始する
-2. 3ターン目まで進め、`Lua.log` の `renameField`・`rename` と UI 側の `uiRenameState` を確認する。UI 側の観測が遅れた場合は次のターンも確認する
-3. 武田 AI を発見した後、標準 UI の家名表示と、都市建設・ユニット行動を画面で確認する。セーブしてメニューへ戻り、ロード後に同じ表示と `Lua.log` を確認する
+2. 3ターン目まで進め、`Lua.log` の `renameField`・`rename` と UI 側の `uiRenameState` を確認する
+3. 武田 AI を発見した後、都市建設・ユニット行動を画面で確認する。セーブしてメニューへ戻り、ロード後に `Lua.log` を確認する
 4. 別ゲームで既存の文明を人間にし、織田家と武田家をともに AI に指定する。両者を発見した後に行動を画面で確認し、`Lua.log` と照合する
 5. ゲーム言語を英語・日本語・ロシア語に切り替えて、新規ゲーム設定画面とゲーム中の両家の名前を確認する
 
@@ -82,13 +82,69 @@ MOD の内容：
 |---|---|
 | 同時参加 | 異なる `player=<id>` の `civ=CIVILIZATION_JAC_ODA leader=LEADER_JAC_ODA_NOBUHIDE alive=true` と `civ=CIVILIZATION_JAC_TAKEDA leader=LEADER_JAC_TAKEDA_NOBUTORA alive=true`、`customCivs oda=1 takeda=1` |
 | AI の独立性 | 両 AI を選んだゲームでも2行が別 ID で出る。`turn=… player=… civ=… cities=…` が各家で継続し、ゲーム画面で両者それぞれの都市建設・ユニット行動を確認できる |
-| 改名 API の試行結果 | 3ターン目の各 `renameField field=… api=… result=…` で3項目それぞれの専用セッターと、未対応・エラー時に試した `SetValue` の結果を記録する。`call_ok` は呼出し成功のみを示す。`rename turn=3 … result=attempted` で文明 ID が変わらないことを確認する。`unavailable`・`api_error`・`rejected` も結果として残す |
-| 画面反映 | UI 側の `uiRenameState stage=update` または `stage=turn` の `short`・`localized` と、武田家を発見した後の標準 UI の表示を照合する。表示が「甲斐武田家」（他言語では対応訳）になり、織田家は変わらないかを記録する。ゲッターの値だけでは画面反映済みと判定しない |
-| ロード後保持 | 再読込後の `renameState stage=load … attempted=true` と `uiRenameState stage=load …` を確認し、標準 UI の表示も再確認する。保存した `target` や `attempted` だけでなく、変更後の表示が残るかを記録する。両家の `player=` 行と文明 ID も照合する |
+| 改名不可の記録 | 3ターン目に `renameField field=… context=gameplay result=unavailable` が3項目1行ずつ、続けて `rename turn=3 … result=unavailable` が出る。以降のターン・ロード後には繰り返さない |
+| ロード後保持 | 再読込後の `renameState stage=load … attempted=true target=LOC_JAC_TAKEDA_RENAMED_NAME` と `uiRenameState stage=load …` を確認する。両家の `player=` 行と文明 ID も照合する |
 | 読み込み・翻訳 | `Database.log`・`Modding.log` にこの MOD 由来のエラーがなく、設定画面とゲーム中に日英露の名前・説明が表示される |
+| 実行時エラー | `Lua.log` に `JAC_CustomCivs` 由来の `bad argument` などのエラーがない |
 
-結果：**未実施**。
+結果：**一部実施**（2026-09-28、Steam 版 1.0.12.68、Gathering Storm、シングルプレイ。織田＝人間、武田＝AI の1ゲーム）
 
-実行時改名は、このインストールの公式 Lua/UI 例に `GetCivilizationShortDescription` と汎用の `PlayerConfigurations:SetValue` がある一方、`SetCivilizationName` の使用例は見つからなかった。ゲームプレイ Lua は項目ごとに専用セッターを試し、使えない項目だけ `SetValue` を試す。ゲームプレイ側でゲッターが使えなければ `renameRead … result=api_error` に残し、UI 側で同じ値を別に観測する。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)は、`SetValue` に加えてゲッターを独自に上書きしているため、標準 UI で同じ結果になる根拠にはならない。非対応と判明した項目・画面・ロード後の状態も検証結果として残す。
+| 確認 | 実際の結果 |
+|---|---|
+| 同時参加 | 成功。`CIVILIZATION_JAC_ODA`（player 0、人間）と `CIVILIZATION_JAC_TAKEDA`（player 1、AI）がともに参加し、2ターン目に両家が都市を建設した |
+| AI の独立性 | 武田 AI は独自に行動した。両家とも AI にするゲーム（手順4）は未実施 |
+| 改名 | 不可。ゲームプレイ側では `PlayerConfigurations[...]` の `GetValue`／`SetValue` が nil（`function expected instead of nil`）で、`SetCivilizationName`・`SetCivilizationShortDescription`・`SetCivilizationDescription` も無い。UI 側では `GetValue("CivilizationName")` が nil を返した |
+| 実行時エラー | `bad argument #1 to 'tostring' (value expected)` が `Scripts/JAC_CustomCivs.lua:88` と `UI/JAC_CustomCivs_Observe.lua:47` で出た。原因は未設定のキーで `Game:GetProperty` が値を1つも返さないこと。1値に直す関数を通すよう修正済み（修正後の実機確認は未実施） |
+| ロード後保持・翻訳 | 未実施 |
 
-将来のマルチプレイでは、各端末の `PlayerConfigurations:SetValue` を同期済みの改名状態として扱わない。この PoC は改名の目標名を `Game:SetProperty` にも保存し、UI 側の観測 Lua で読み取る。各端末での共有状態の同期と、文明名を読む UI での表示上書きは別途検証する。シングルプレイで画面反映やロード後保持に失敗した場合も、この方式を検討する。
+分かったこと：
+
+- ゲーム中に文明名を変える方法は、ゲームプレイ Lua には無い。これまで試していた専用セッターと `SetValue` の呼出しはやめ、3ターン目に「使えない」ことだけを記録する
+- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える方式を別途検証する。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
+- 将来のマルチプレイでは、目標名を各端末で同期済みの共有状態から読む。端末ごとの `PlayerConfigurations` の値は使わない
+
+### 画像
+
+2人の指導者と2つの文明に、北条・日本の流用ではなく自前の画像を割り当てた。
+
+| 画像 | テクスチャ名 | 使われる場所 |
+|---|---|---|
+| 指導者アイコン | `JAC_Leaders{32,45,48,50,55,64,80,256}`（2×1 のアトラス、0番＝織田、1番＝武田） | 設定画面、右上の指導者一覧、外交の一覧など |
+| 文明アイコン（家紋） | `JAC_Civs{22,30,32,36,44,45,48,50,64,80,128,200,256}`（45 だけ色付き、他は白＋透明） | 設定画面、都市の旗、文明一覧など |
+| ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`・`_BACKGROUND` | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
+| 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` から 3D の北条を外し、2D 画像を使う） | 外交画面 |
+| 外交画面の背景 | `DiplomacyInfo` にロード画面の背景を指定 | 外交画面 |
+
+作り方：`python tools/jac_art/build_art.py` を実行すると、`ArtSource/Originals/` の元画像から切り抜き・縮小し、SDK の Cooker をコマンドラインから呼んで `Platforms/Windows/BLPs/` に BLP を3つ作る（`JAC_CustomCivs_Icons`・`JAC_CustomCivs_Leaders`・`JAC_CustomCivs_Fallback`）。中間ファイルは `tools/jac_art/build/`（Git 管理外）に作る。家紋は伝統図案を Pillow で描いた（Commons の家紋 SVG は CC BY-SA／CC BY なので使わない）。
+
+画像の出典（いずれも Wikimedia Commons のファイルページでライセンスを確認した）：
+
+| 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 武田信虎の肖像・アイコン | 絹本著色武田信虎像 | 武田信廉、1574年 | 大泉寺（甲府） | パブリックドメイン（PD-Art・PD-old-auto-expired、平面作品の忠実な複製で、作者の没後70年以上） | [File:Takeda Nobutora by Takeda Nobukado (Daisenji Kofu).jpg](https://commons.wikimedia.org/wiki/File:Takeda_Nobutora_by_Takeda_Nobukado_(Daisenji_Kofu).jpg) |
+| 織田信秀の肖像・アイコン | 萬松寺の織田信秀木像の写真 | 撮影者不明、1934年刊 | 『郷土偉人展覧会図録』（国立国会図書館デジタルコレクション 1232545） | パブリックドメイン（PD-Japan-oldphoto、旧著作権法で保護期間が満了した日本の古い写真） | [File:Statue of Oda Nobuhide at Banshō-ji.jpg](https://commons.wikimedia.org/wiki/File:Statue_of_Oda_Nobuhide_at_Bansh%C5%8D-ji.jpg) |
+| 織田家の背景 | 冨嶽三十六景「尾州不二見原」 | 葛飾北斎、1830〜32年頃 | メトロポリタン美術館（Open Access） | CC0 | [File:冨嶽三十六景 尾州不二見原 …（MET DP140982）](https://commons.wikimedia.org/wiki/File:%E5%86%A8%E5%B6%BD%E4%B8%89%E5%8D%81%E5%85%AD%E6%99%AF_%E5%B0%BE%E5%B7%9E%E4%B8%8D%E4%BA%8C%E8%A6%8B%E5%8E%9F-Fujimigahara_in_Owari_Province_(Bish%C5%AB_Fujimigahara),_from_the_series_Thirty-six_Views_of_Mount_Fuji_(Fugaku_sanj%C5%ABrokkei)_MET_DP140982.jpg) |
+| 武田家の背景 | 「甲陽猿橋之図」 | 歌川広重、1841〜42年頃 | メトロポリタン美術館（Open Access） | CC0 | [File:「甲陽猿橋之図」…（MET DP335039）](https://commons.wikimedia.org/wiki/File:%E3%80%8C%E7%94%B2%E9%99%BD%E7%8C%BF%E6%A9%8B%E4%B9%8B%E5%9B%B3%E3%80%8D-The_Monkey_Bridge_in_Kai_Province_(K%C5%8Dy%C5%8D_Saruhashi_no_zu)_MET_DP335039.jpg) |
+| 家紋（織田木瓜・武田菱） | 伝統図案を単純化して新たに描画 | — | `tools/jac_art/build_art.py` | 自作 | — |
+
+武田信虎像は元が 358×864 と小さいため、アイコンは少しぼやける。見た目が足りなければ、この肖像を参考にした独自画像に差し替え、出典と作り方をここに追記する。
+
+画像の確認手順：
+
+1. 追加コンテンツで「JAC PoC：カスタム勢力」を有効にする
+2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・肖像のツールチップを確認する
+3. 開始してロード画面の肖像と背景を確認する
+4. ゲーム内で、右上の指導者アイコンと都市の旗の家紋を確認する
+5. 武田との外交画面を開き、2D の肖像と背景を確認する
+
+成功条件：
+
+| 確認 | 期待する結果 |
+|---|---|
+| 設定画面 | 織田は木像の丸いアイコンと木瓜の家紋、武田は肖像画の丸いアイコンと菱の家紋。ツールチップに各家の肖像と背景が出る |
+| ロード画面 | 織田は木像と北斎の尾張の図、武田は肖像画と広重の猿橋の図。北条の画像が出ない |
+| ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
+| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る |
+| ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
+
+未確認：ゲーム画面での表示はまだ確認していない。BLP は Cooker が成功を返し、中に全テクスチャ名があることまで確認した。外交画面で 3D の代わりに 2D 画像が出るかは、公開MOD（[Republic of Turkey](https://github.com/NerdByFate/Civilization-6-Republic-of-Turkey)）と同じ設定だが、この環境では未検証。

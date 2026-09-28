@@ -7,3 +7,7 @@
 /.godd/*
 /.cursor/rules/godd-stack.mdc
 # <<< GoDD managed local files <<<
+
+# tools/jac_art/build_art.py の中間ファイル
+/tools/jac_art/build/
+__pycache__/

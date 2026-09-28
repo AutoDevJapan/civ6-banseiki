@@ -1,10 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameInfo>
+	<!-- BLP は tools/jac_art/build_art.py で作る。0番=織田、1番=武田。文明の45pxだけ色付き。 -->
+	<IconTextureAtlases>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="45" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="48" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="50" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="55" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders55.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="64" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="80" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="256" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders256.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="22" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs22.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="30" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs30.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="36" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs36.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="44" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs44.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="45" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="48" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="50" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="64" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="80" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="128" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs128.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="200" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs200.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="256" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs256.dds"/>
+	</IconTextureAtlases>
 	<IconDefinitions>
-		<!-- Base/Assets/UI/Icons: Japan=12, Hojo=8 in the existing atlases. -->
-		<Row Name="ICON_CIVILIZATION_JAC_ODA" Atlas="ICON_ATLAS_CIVILIZATIONS" Index="12"/>
-		<Row Name="ICON_CIVILIZATION_JAC_TAKEDA" Atlas="ICON_ATLAS_CIVILIZATIONS" Index="12"/>
-		<Row Name="ICON_LEADER_JAC_ODA_NOBUHIDE" Atlas="ICON_ATLAS_LEADERS" Index="8"/>
-		<Row Name="ICON_LEADER_JAC_TAKEDA_NOBUTORA" Atlas="ICON_ATLAS_LEADERS" Index="8"/>
+		<Row Name="ICON_CIVILIZATION_JAC_ODA" Atlas="ICON_ATLAS_JAC_CIVILIZATIONS" Index="0"/>
+		<Row Name="ICON_CIVILIZATION_JAC_TAKEDA" Atlas="ICON_ATLAS_JAC_CIVILIZATIONS" Index="1"/>
+		<Row Name="ICON_LEADER_JAC_ODA_NOBUHIDE" Atlas="ICON_ATLAS_JAC_LEADERS" Index="0"/>
+		<Row Name="ICON_LEADER_JAC_TAKEDA_NOBUTORA" Atlas="ICON_ATLAS_JAC_LEADERS" Index="1"/>
 	</IconDefinitions>
 </GameInfo>

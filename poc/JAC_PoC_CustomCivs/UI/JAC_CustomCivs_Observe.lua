@@ -5,7 +5,13 @@ local TAKEDA_CIV = "CIVILIZATION_JAC_TAKEDA"
 local observedAttempt = false
 
 local function Log(message)
-	print("[JAC_POC] " .. message)
+	print("[JAC_POC] " .. tostring(message))
+end
+
+-- 未設定のキーでは GetProperty が値を1つも返さないため、ローカルへ代入して必ず1値にする。
+local function GetProp(key)
+	local value = Game:GetProperty(key)
+	return value
 end
 
 local function ReadConfig(config, field, getter, key)
@@ -15,13 +21,13 @@ local function ReadConfig(config, field, getter, key)
 	end)
 	if not ok or value == nil then
 		Log(string.format("uiRenameRead field=%s api=%s result=%s error=%s",
-			field, getter, ok and "nil" or "api_error", ok and "none" or tostring(value)))
+			tostring(field), tostring(getter), ok and "nil" or "api_error", ok and "none" or tostring(value)))
 	end
 	return ok and value or nil
 end
 
 local function Observe(stage)
-	local attempted = Game:GetProperty(RENAME_PROPERTY)
+	local attempted = GetProp(RENAME_PROPERTY)
 	if stage ~= "load" and not attempted then return end
 	if stage == "update" and observedAttempt then return end
 
@@ -42,15 +48,15 @@ local function Observe(stage)
 							ok and "nil" or "api_error", ok and "none" or tostring(value)))
 					end
 				end
-				Log(string.format("uiRenameState stage=%s player=%d civ=%s name=%s short=%s localized=%s target=%s attempted=%s",
-					stage, playerID, tostring(civ), tostring(name), tostring(short), tostring(localized),
-					tostring(Game:GetProperty(RENAME_NAME_PROPERTY)), tostring(attempted)))
+				Log(string.format("uiRenameState stage=%s player=%s civ=%s name=%s short=%s localized=%s target=%s attempted=%s",
+					tostring(stage), tostring(playerID), tostring(civ), tostring(name), tostring(short), tostring(localized),
+					tostring(GetProp(RENAME_NAME_PROPERTY)), tostring(attempted)))
 				observedAttempt = attempted == true
 				return
 			end
 		end
 	end
-	Log(string.format("uiRenameState stage=%s result=takeda_unavailable attempted=%s", stage, tostring(attempted)))
+	Log(string.format("uiRenameState stage=%s result=takeda_unavailable attempted=%s", tostring(stage), tostring(attempted)))
 end
 
 Events.LoadScreenClose.Add(function() Observe("load") end)

@@ -23,11 +23,11 @@
 							<m_ParamName text="Leader_Lightrig_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
-							<m_EntryName text="ART_LEADER_HOJO" />
-							<m_XLPClass text="Leader" />
-							<m_XLPPath text="Leader_Hojo.xlp" />
-							<m_BLPPackage text="leaders/leader_hojo" />
-							<m_LibraryName text="Leader" />
+							<m_EntryName text="LEADER_JAC_ODA_NOBUHIDE_BACKGROUND" />
+							<m_XLPClass text="UITexture" />
+							<m_XLPPath text="JAC_CustomCivs_Leaders.xlp" />
+							<m_BLPPackage text="JAC_CustomCivs_Leaders" />
+							<m_LibraryName text="UITexture" />
 							<m_ParamName text="Leader_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
@@ -39,11 +39,11 @@
 							<m_ParamName text="Leader_ColorKey_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
-							<m_EntryName text="" />
-							<m_XLPClass text="Leader" />
-							<m_XLPPath text="" />
-							<m_BLPPackage text="" />
-							<m_LibraryName text="Leader" />
+							<m_EntryName text="LEADER_JAC_ODA_NOBUHIDE_BACKGROUND" />
+							<m_XLPClass text="UITexture" />
+							<m_XLPPath text="JAC_CustomCivs_Leaders.xlp" />
+							<m_BLPPackage text="JAC_CustomCivs_Leaders" />
+							<m_LibraryName text="UITexture" />
 							<m_ParamName text="Leader_Background_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..StringValue">
@@ -72,11 +72,11 @@
 							<m_ParamName text="Leader_Lightrig_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
-							<m_EntryName text="ART_LEADER_HOJO" />
-							<m_XLPClass text="Leader" />
-							<m_XLPPath text="Leader_Hojo.xlp" />
-							<m_BLPPackage text="leaders/leader_hojo" />
-							<m_LibraryName text="Leader" />
+							<m_EntryName text="LEADER_JAC_TAKEDA_NOBUTORA_BACKGROUND" />
+							<m_XLPClass text="UITexture" />
+							<m_XLPPath text="JAC_CustomCivs_Leaders.xlp" />
+							<m_BLPPackage text="JAC_CustomCivs_Leaders" />
+							<m_LibraryName text="UITexture" />
 							<m_ParamName text="Leader_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
@@ -88,11 +88,11 @@
 							<m_ParamName text="Leader_ColorKey_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..BLPEntryValue">
-							<m_EntryName text="" />
-							<m_XLPClass text="Leader" />
-							<m_XLPPath text="" />
-							<m_BLPPackage text="" />
-							<m_LibraryName text="Leader" />
+							<m_EntryName text="LEADER_JAC_TAKEDA_NOBUTORA_BACKGROUND" />
+							<m_XLPClass text="UITexture" />
+							<m_XLPPath text="JAC_CustomCivs_Leaders.xlp" />
+							<m_BLPPackage text="JAC_CustomCivs_Leaders" />
+							<m_LibraryName text="UITexture" />
 							<m_ParamName text="Leader_Background_BLP_Entry" />
 						</Element>
 						<Element class="AssetObjects..StringValue">

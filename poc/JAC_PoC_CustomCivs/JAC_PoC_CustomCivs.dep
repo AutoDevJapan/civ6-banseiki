@@ -37,6 +37,12 @@
 			<LoadsLibraries>true</LoadsLibraries>
 		</Element>
 		<Element>
+			<ConsumerName text="UI"/>
+			<ArtDefDependencyPaths/>
+			<LibraryDependencies><Element text="UITexture"/></LibraryDependencies>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
 			<ConsumerName text="Units"/>
 			<ArtDefDependencyPaths><Element text="Cultures.artdef"/></ArtDefDependencyPaths>
 			<LibraryDependencies/>
@@ -55,5 +61,14 @@
 		<Element><ArtDefPath text="Leaders.artdef"/><ArtDefDependencyPaths/></Element>
 		<Element><ArtDefPath text="FallbackLeaders.artdef"/><ArtDefDependencyPaths/></Element>
 	</ArtDefDependencies>
-	<LibraryDependencies/>
+	<LibraryDependencies>
+		<Element>
+			<LibraryName text="UITexture"/>
+			<PackageDependencies><Element text="JAC_CustomCivs_Icons.blp"/><Element text="JAC_CustomCivs_Leaders.blp"/></PackageDependencies>
+		</Element>
+		<Element>
+			<LibraryName text="LeaderFallback"/>
+			<PackageDependencies><Element text="JAC_CustomCivs_Fallback.blp"/></PackageDependencies>
+		</Element>
+	</LibraryDependencies>
 </AssetObjects..GameDependencyData>

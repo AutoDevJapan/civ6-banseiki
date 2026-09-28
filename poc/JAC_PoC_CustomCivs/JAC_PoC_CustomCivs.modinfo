@@ -90,5 +90,8 @@
 		<File>Scripts/JAC_CustomCivs.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.xml</File>
+		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp</File>
+		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp</File>
+		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Fallback.blp</File>
 	</Files>
 </Mod>
