@@ -126,18 +126,20 @@ MOD の内容：
 
 #### 新しい画像の実機表示
 
-2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。画像の保存先は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-art-local/final-01/`（Git 管理外）。表中の `ingame/` から始まるパスはそこを基準とする。
+2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。初回に織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。修正後はゲームを再起動し、武田を人間／織田と公式クレオパトラを AI とするゲーム、および織田を人間／武田を AI とするゲームで再確認した。修正後の保存画像は 1456×939。画像の保存先は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-art-local/final-01/`（Git 管理外）。表中の `ingame/`・`ingame-v2/` から始まるパスはそこを基準とする。
 
 | 確認 | 実際の結果 |
 |---|---|
-| Mod と生成物 | Mods の `JAC_PoC_CustomCivs`／`JAC_PoC_GrowthUI` ジャンクションはそれぞれ `poc-civs`／`poc-growth-ui` worktree を指す。CustomCivs の BLP 3 個と `JAC_Notebooks_Hook.dds` が存在し、`Modding.log` で CustomCivs の `UpdateArt`・`UpdateIcons` 適用を確認した。 |
-| Esc 前のロード画面 | 織田・武田とも新規の人物と城内背景が表示された。武田は画面上端で髷の先が切れる。`ingame/08-loading-oda-before-esc.png`、`ingame/15-loading-takeda-before-esc.png` |
+| Mod と生成物 | Mods の `JAC_PoC_CustomCivs`／`JAC_PoC_GrowthUI` ジャンクションはそれぞれ `poc-civs`／`poc-growth-ui` worktree を指す。CustomCivs の BLP 3 個と `JAC_Notebooks_Hook.dds` が存在する。修正後 BLP 3 個は 03:24〜03:25 に再生成済み。ゲーム再起動後の `ArtDef.log` で3個の読み込み、両ゲームの `Modding.log` で `UpdateArt`・`UpdateIcons`・`JAC_CustomCivs_LeaderScene` の適用を確認した。 |
+| Esc 前のロード画面 | 初回は武田の髷が上端で切れた（`ingame/15-loading-takeda-before-esc.png`）。修正後はロード完了・Esc 前でも髷全体と上の余白が表示された（`ingame-v2/10-loading-takeda-before-esc.png`）。織田の初回画像は `ingame/08-loading-oda-before-esc.png`。 |
 | FrontEnd の選択・設定 | 両家の指導者アイコンと家紋が詳細設定で並び、各人の肖像も基本設定に表示された。`ingame/02-setup-oda-details.png`、`ingame/07-advanced-setup.png`、`ingame/14-setup-takeda.png` |
 | ゲーム中のアイコン | 織田・武田の指導者アイコンが右上に表示され、接触後の外交リボンにも武田の指導者アイコンが表示された。外交画面の左上には武田の家紋も表示された。`ingame/09-ingame-oda.png`、`ingame/11-diplomacy-ribbon.png`、`ingame/12-diplomacy-takeda.png`、`ingame/16-ingame-takeda.png` |
 | 手帳ボタン | 右上の List of Reports の隣に新規アイコンが表示され、開くと手帳メニューが出た。`ingame/10-notebooks-button-closeup.png`、`ingame/19-notebooks-open-clean.png` |
-| 武田との外交 | Gameplay Lua の `SetHasMet(1, true)` で接触させ、公式 UI の `DiplomacyRibbon_OpenDiplomacyActionView(1)` で開いた。新規フォールバック人物と背景を確認。背景の上下には黒い余白が見える。`ingame/12-diplomacy-takeda.png` |
+| 武田との外交 | 初回は新規フォールバック人物と背景の上下に黒帯が見えた（`ingame/12-diplomacy-takeda.png`）。修正後は織田を人間にして Gameplay Lua の `SetHasMet(1, true)` で接触させ、公式 UI の `DiplomacyRibbon_OpenDiplomacyActionView(1)` で開いた。人物と背景が上下まで表示され、黒帯は消えた。`LeaderScene` の上下レターボックスも `IsHidden()=true`。`ingame-v2/20-diplomacy-takeda.png` |
+| 織田との外交 | 武田を人間、織田を AI にして同じ方法で開いた。人物と背景が上下まで表示され、黒帯は無い。上下レターボックスは `IsHidden()=true`。`ingame-v2/11-diplomacy-oda.png` |
+| 公式指導者との外交 | 同じゲームでクレオパトラを AI に追加して開いた。公式の 3D 人物と標準の上下帯が表示され、上下レターボックスは `IsHidden()=false`。閉じて織田を開き直すと再び両方 `true` になった。`ingame-v2/12-diplomacy-cleopatra.png` |
 | 文明・指導者能力 | 両家の能力名・説明は設定画面に、武田の能力名・説明は百科事典にも表示された。ただし設定画面は標準 UI が指導者／文明アイコンを能力欄に再利用し、百科事典は能力をテキストのみで表示する。専用 `JAC_Abilities` の4絵柄は画面上では未確認。ゲーム内 `IconManager:FindIconAtlas` は4定義とも `JAC_Abilities50.dds` のオフセット 0・50・100・150 を返した。`ingame/02-setup-oda-details.png`、`ingame/14-setup-takeda.png`、`ingame/17-civilopedia-takeda.png`、`ingame/18-civilopedia-takeda-leader.png` |
-| 実行ログ | 今回の `Lua.log`・`Database.log`・`Modding.log` に CustomCivs／GrowthUI 由来のテクスチャ・ArtDef エラーは見当たらない。`ArtDef.log` では3つの BLP の読み込みを確認した。`Database.log` の `LocalizedText` 重複は `CurrentClickouts/…/ClickoutText_en_US.xml`、`Modding.log` の XML 警告は本体 DLC のファイルに対応する。 |
+| 実行ログ | 初回の `Lua.log`・`Database.log`・`Modding.log` に CustomCivs／GrowthUI 由来のテクスチャ・ArtDef エラーは見当たらない。修正後の `Lua.log` に `JAC_LeaderScene.lua`／`LeaderScene` の実行エラー、`Failed to load background image texture`、`We are lacking a texture` は無い。修正後のログは `ingame-v2/logs/` に保存した。初回の `Database.log` の `LocalizedText` 重複は `CurrentClickouts/…/ClickoutText_en_US.xml`、`Modding.log` の XML 警告は本体 DLC のファイルに対応する。 |
 
 `C:/Users/makhmeto/AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/ArtDef.log` のパッケージ解決記録（2026-09-29 02:53:59）は次のとおり。同ログには `Unable to resolve Package` と CustomCivs の BLP を含む行は無い。
 
@@ -147,7 +149,7 @@ MOD の内容：
 [2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp
 ```
 
-上記の表示・ログは今回の背景・肖像修正**前**の実機結果。修正後の髷の収まりと外交画面の黒帯解消は**未確認**。
+`ingame/` は背景・肖像修正前、`ingame-v2/` は修正後にゲームを再起動して撮影した結果。再起動前のセッションでは新しい `ReplaceUIScript` が未適用で黒帯が残ったため、修正後の判定には使っていない。
 
 再生成：`python tools/jac_art/build_art.py` を実行する。CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は `JAC_ART_LOCAL` で指定できる。GrowthUI が `<リポジトリ>/poc/JAC_PoC_GrowthUI` にある場合だけ、`civ6-art-local/JAC_PoC_GrowthUI/Originals/` から手帳 DDS を作る。別の場所にある GrowthUI は `JAC_GROWTH_MOD` で指定する。GrowthUI フォルダが無い場合は手帳工程をスキップし、CustomCivs 単独で完了する。Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は既存の対象 BLP 3個を除去してから新規出力し、更新時刻・容量・テクスチャ名を確認する。2026-09-29 のビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
 
@@ -192,7 +194,7 @@ MOD の内容：
 | ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
 | ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
 
-修正前の実機結果は上記「新しい画像の実機表示」を参照。`ArtDef.log` でも3つの BLP の読み込みが確認でき、CustomCivs のパッケージ解決失敗はない。外交画面の 2D 人物は `FallbackLeaders.artdef` の設定で表示された。修正後の新 BLP と `LeaderScene` 差し替えの実機表示、都市の旗、専用能力アイコン4絵柄の画面表示、1080p での端の表示は未確認。
+修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗、専用能力アイコン4絵柄の画面表示、1080p での端の表示は未確認。
 
 BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
 
