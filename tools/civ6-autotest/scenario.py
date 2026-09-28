@@ -6,7 +6,8 @@ import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-from pathlib import Path
+import math
+from pathlib import Path, PureWindowsPath
 import re
 import time
 
@@ -55,7 +56,9 @@ def _safe_relative_path(value: str) -> Path:
     if not isinstance(value, str):
         raise ScenarioError("Screenshot path must be a string")
     path = Path(value)
-    if path.is_absolute() or not path.parts or any(part in ("..", "") for part in path.parts):
+    windows_path = PureWindowsPath(value)
+    if (path.is_absolute() or windows_path.drive or windows_path.root or not path.parts
+            or ".." in path.parts or ".." in windows_path.parts):
         raise ScenarioError(f"Path must be relative to output directory: {value!r}")
     return path
 
@@ -128,8 +131,16 @@ def validate_scenario(data: dict) -> None:
         elif action == "manual":
             if not isinstance(step.get("prompt"), str) or not step["prompt"].strip():
                 raise ScenarioError(f"Step {number}: manual step needs prompt")
-        if "timeout" in step and (not isinstance(step["timeout"], (int, float)) or step["timeout"] <= 0):
-            raise ScenarioError(f"Step {number}: timeout must be positive")
+        if "timeout" in step:
+            timeout = step["timeout"]
+            if type(timeout) not in (int, float) or timeout <= 0:
+                raise ScenarioError(f"Step {number}: timeout must be a finite positive number")
+            try:
+                finite = math.isfinite(float(timeout))
+            except OverflowError:
+                finite = False
+            if not finite:
+                raise ScenarioError(f"Step {number}: timeout must be a finite positive number")
 
 
 def _enable_mods_code(ids: list[str], disable_ids: list[str] | None = None) -> str:
@@ -197,6 +208,8 @@ class Runner:
         self.port = port
         self.client: TunerClient | None = None
         self.baseline: dict | None = None
+        self.log_step_baseline: dict | None = None
+        self.log_matches_consumed: dict[tuple[str, str], int] = {}
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -227,6 +240,10 @@ class Runner:
     def _wait(self, condition: dict, timeout: float) -> None:
         end = time.monotonic() + timeout
         last = "not ready"
+        log_baseline = None
+        if condition["type"] == "log_line":
+            # Include output from the action that triggered this wait, but not older steps.
+            log_baseline = self.log_step_baseline or snapshot_logs(self.logs)
         while time.monotonic() < end:
             try:
                 kind = condition["type"]
@@ -237,10 +254,14 @@ class Runner:
                     present = value == str(condition.get("equals", "true")).lower()
                     last = f"Lua returned {value!r}"
                 else:
-                    assert self.baseline is not None
-                    content = read_since(self.logs, self.baseline)[condition["log"]]
-                    present = condition["contains"] in content
+                    assert log_baseline is not None
+                    key = (condition["log"], condition["contains"])
+                    content = read_since(self.logs, log_baseline)[condition["log"]]
+                    occurrences = sum(condition["contains"] in line for line in content.splitlines())
+                    present = occurrences > self.log_matches_consumed.get(key, 0)
                 if present:
+                    if kind == "log_line":
+                        self.log_matches_consumed[key] = self.log_matches_consumed.get(key, 0) + 1
                     return
             except (TunerError, OSError) as exc:
                 last = str(exc)
@@ -368,13 +389,13 @@ class Runner:
                 time.sleep(min(0.5, max(0, deadline - time.monotonic())))
             else:
                 raise ScenarioError(f"Autoplay timed out at turn {status.turn if status else '?'} / {target}; last: {status}")
-        except (ScenarioError, TunerError):
+        except (ScenarioError, TunerError, OSError):
             # The start command may have run even if its FireTuner acknowledgment was lost.
             try:
                 self._lua("InGame", "if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\n"
                           "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
                           "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true")
-            except TunerError as cleanup_error:
+            except (TunerError, OSError) as cleanup_error:
                 print(f"Autoplay cleanup failed: {cleanup_error}", flush=True)
             raise
         self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
@@ -421,7 +442,10 @@ class Runner:
         if action == "screenshot":
             self._close_options_menu()
             self._dismiss_advisor()
-            target = self.output / _safe_relative_path(step["path"])
+            base = self.output.resolve()
+            target = (base / _safe_relative_path(step["path"])).resolve()
+            if not target.is_relative_to(base):
+                raise ScenarioError(f"Screenshot path escapes output directory: {step['path']!r}")
             capture_civ_window(target, step.get("crop"))
             return str(target)
         if action == "save":
@@ -493,6 +517,9 @@ class Runner:
                 action = f"{index}/{len(self.scenario['steps'])} {step['action']}"
                 self._log(action, "START", json.dumps(step, ensure_ascii=False))
                 try:
+                    if step["action"] != "wait_for":
+                        self.log_step_baseline = snapshot_logs(self.logs)
+                        self.log_matches_consumed.clear()
                     detail = self._run_step(step)
                 except (ScenarioError, TunerError, CaptureError, OSError, EOFError) as exc:
                     self._log(action, "FAIL", str(exc))
