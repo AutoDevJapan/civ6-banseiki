@@ -3,10 +3,11 @@ import hashlib
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from judge import LOG_NAMES, judge, slice_log_bytes
-from scenario import validate_scenario
+from scenario import Runner, validate_scenario
 
 
 MODDING = """Target Mods (in no particular order):
@@ -78,10 +79,35 @@ class JudgeTests(unittest.TestCase):
     def test_shipped_scenarios_validate_offline(self):
         folder = Path(__file__).resolve().parents[1] / "scenarios"
         names = {path.name for path in folder.glob("*.json")}
-        self.assertEqual(names, {"bundle0-load-save.json", "custom-clans.json", "growth-notebooks.json"})
+        self.assertEqual(names, {"bundle0-load-save.json", "clans-notebooks.json", "custom-clans.json", "growth-notebooks.json"})
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):
                 validate_scenario(json.loads(path.read_text(encoding="utf-8")))
+
+
+class AutoplayTests(unittest.TestCase):
+    def test_event_and_transient_inactive_state_do_not_complete_or_restart_early(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        statuses = iter(("1|true|true|3|0", "2|false|true|0|0",
+                         "3|false|true|0|0", "4|false|false|0|0"))
+        commands = []
+
+        def fake_lua(state, code, timeout=5.0):
+            commands.append((state, code))
+            if "return tostring(startTurn)" in code:
+                return "1|0"
+            if "tostring(AutoplayManager.IsActive())" in code:
+                return next(statuses)
+            return "true"
+
+        with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(
+            runner, "_dismiss_advisor", return_value=False
+        ), patch.object(runner, "_close_options_menu", return_value=False), patch("scenario.time.sleep"):
+            detail = runner._autoplay(3, 10)
+
+        self.assertIn("1->4", detail)
+        self.assertEqual(sum("SetActive(true)" in code for _, code in commands), 1)
+        self.assertEqual(sum("tostring(AutoplayManager.IsActive())" in code for _, code in commands), 4)
 
 
 if __name__ == "__main__":

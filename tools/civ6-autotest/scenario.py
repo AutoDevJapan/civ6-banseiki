@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -10,6 +11,7 @@ import re
 import time
 
 from capture import CaptureError, capture_civ_window
+from click import VK_ESCAPE, press_key
 from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
 from tuner import TunerClient, TunerError
 
@@ -23,6 +25,26 @@ TYPE_ID = re.compile(r"^[A-Z][A-Z0-9_]+$")
 
 class ScenarioError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class AutoplayStatus:
+    turn: int
+    active: bool
+    event: bool
+    remaining: int
+    local_player: int
+
+
+def _parse_autoplay_status(value: str) -> AutoplayStatus:
+    parts = value.split("|")
+    if len(parts) != 5 or parts[1] not in ("true", "false") or parts[2] not in ("true", "false"):
+        raise ScenarioError(f"Unexpected autoplay status: {value!r}")
+    try:
+        return AutoplayStatus(int(parts[0]), parts[1] == "true", parts[2] == "true",
+                              int(parts[3]), int(parts[4]))
+    except ValueError as exc:
+        raise ScenarioError(f"Unexpected autoplay status: {value!r}") from exc
 
 
 def _lua_string(value: str) -> str:
@@ -175,7 +197,7 @@ class Runner:
     def _states(self) -> list[str]:
         try:
             return self._connect().list_states()
-        except TunerError:
+        except (TunerError, OSError):
             if self.client:
                 self.client.close()
                 self.client = None
@@ -204,13 +226,144 @@ class Runner:
                     present = condition["contains"] in content
                 if present:
                     return
-            except (TunerError, FileNotFoundError) as exc:
+            except (TunerError, OSError) as exc:
                 last = str(exc)
             time.sleep(min(0.5, max(0.0, end - time.monotonic())))
         raise ScenarioError(f"Timed out after {timeout}s waiting for {condition}; last: {last}")
 
+    LOADSCREEN_READY = "LoadScreen: OnLoadGameViewStateDone"
+
+    def _loadscreen_count(self) -> int:
+        assert self.baseline is not None
+        try:
+            return read_since(self.logs, self.baseline)["Lua.log"].count(self.LOADSCREEN_READY)
+        except (FileNotFoundError, KeyError):
+            return 0
+
+    def _enter_game_after_loadscreen(self, before: int, timeout: float) -> None:
+        """After HostGame/LoadGame the loading screen waits for Begin Game (verified live).
+
+        The in-game Tuner states only exist after that, so we wait for a new "load view ready"
+        line in Lua.log, then press Esc (LoadScreen.lua maps Esc to Begin Game once loading is
+        complete) and retry every 10 s until the InGame Lua state answers.
+        """
+        end = time.monotonic() + timeout
+        next_press = 0.0
+        last = "loading screen not ready"
+        while time.monotonic() < end:
+            try:
+                if self._lua("InGame", "return Game ~= nil and Game.GetLocalPlayer() >= 0") == "true":
+                    self._close_options_menu()
+                    self._dismiss_advisor()
+                    return
+            except (TunerError, OSError) as exc:
+                last = str(exc)
+            if self._loadscreen_count() > before and time.monotonic() >= next_press:
+                press_key(VK_ESCAPE)
+                next_press = time.monotonic() + 10
+                last = "Esc sent on loading screen"
+            time.sleep(2)
+        raise ScenarioError(f"Timed out after {timeout}s entering the game; last: {last}")
+
     def _save_path(self, name: str) -> Path:
         return self.saves / (name + ".Civ6Save")
+
+    def _close_options_menu(self) -> bool:
+        if "ingametopoptionsmenu" not in (state.casefold() for state in self._states()):
+            return False
+        closed = self._lua("InGameTopOptionsMenu", "if UIManager:IsInPopupQueue(ContextPtr) then OnReturn(); return true end\nreturn false") == "true"
+        if closed:
+            self._wait({"type": "lua", "state_name": "InGameTopOptionsMenu",
+                        "code": "return not UIManager:IsInPopupQueue(ContextPtr)"}, 5)
+            print("Closed in-game options menu", flush=True)
+        return closed
+
+    def _dismiss_advisor(self) -> bool:
+        # AdvisorPopup.lua's OnHideAdvisorDialog releases its tutorial input block.
+        if "advisorpopup" not in (state.casefold() for state in self._states()):
+            return False
+        dismissed = self._lua("AdvisorPopup", "if IsBlockingInput() then OnHideAdvisorDialog(); return true end\nreturn false") == "true"
+        if dismissed:
+            print("Dismissed blocking Advisor popup", flush=True)
+        return dismissed
+
+    def _autoplay_status(self) -> AutoplayStatus:
+        value = self._lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. "
+                          "tostring(AutoplayManager.IsActive()) .. '|' .. "
+                          "tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. "
+                          "tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())")
+        return _parse_autoplay_status(value)
+
+    def _autoplay(self, turns: int, timeout: float) -> str:
+        deadline = time.monotonic() + timeout
+        # An open partial screen and the base game's advisor can both hold input.
+        self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true")
+        self._close_options_menu()
+        self._dismiss_advisor()
+        start_code = (
+            "if AutoplayManager.IsActive() then error('autoplay already active') end\n"
+            "local startTurn = Game.GetCurrentGameTurn()\n"
+            "local human = Game.GetLocalPlayer()\n"
+            "if human < 0 then error('no local human player to return to') end\n"
+            "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
+            "JAC_AUTOTEST_AUTO_DONE = false\n"
+            "JAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\n"
+            "LuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\n"
+            f"AutoplayManager.SetTurns({turns})\n"
+            "AutoplayManager.SetReturnAsPlayer(human)\n"
+            "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
+            "AutoplayManager.SetActive(true)\n"
+            "return tostring(startTurn) .. '|' .. tostring(human)"
+        )
+        try:
+            start_value = self._lua("InGame", start_code)
+            try:
+                start_turn, human = (int(part) for part in start_value.split("|"))
+            except ValueError as exc:
+                raise ScenarioError(f"Unexpected autoplay start: {start_value!r}") from exc
+            target = start_turn + turns
+            restarts = 0
+            inactive_since = None
+            status = None
+            while time.monotonic() < deadline:
+                status = self._autoplay_status()
+                if status.turn > target:
+                    raise ScenarioError(f"Autoplay overshot turn {target}: {status}")
+                if status.turn == target and not status.active and status.local_player == human:
+                    break
+                self._close_options_menu()
+                self._dismiss_advisor()
+                if not status.active and status.turn < target:
+                    if inactive_since is None:
+                        inactive_since = time.monotonic()
+                    elif time.monotonic() - inactive_since >= 5 and status.local_player == human:
+                        if restarts >= 2:
+                            raise ScenarioError(f"Autoplay stopped early at turn {status.turn}/{target}: {status}")
+                        remaining = target - status.turn
+                        self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
+                                  f"AutoplayManager.SetTurns({remaining})\n"
+                                  f"AutoplayManager.SetReturnAsPlayer({human})\n"
+                                  "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
+                                  "AutoplayManager.SetActive(true)\nreturn true")
+                        restarts += 1
+                        inactive_since = None
+                else:
+                    inactive_since = None
+                time.sleep(min(0.5, max(0, deadline - time.monotonic())))
+            else:
+                raise ScenarioError(f"Autoplay timed out at turn {status.turn if status else '?'} / {target}; last: {status}")
+        except (ScenarioError, TunerError):
+            # The start command may have run even if its FireTuner acknowledgment was lost.
+            try:
+                self._lua("InGame", "if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\n"
+                          "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
+                          "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true")
+            except TunerError as cleanup_error:
+                print(f"Autoplay cleanup failed: {cleanup_error}", flush=True)
+            raise
+        self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
+                  "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true")
+        return f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
 
     def _run_step(self, step: dict) -> str:
         action = step["action"]
@@ -222,28 +375,23 @@ class Runner:
             self._lua("FrontEnd", _configure_code(step))
             return f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, players={len(step['players'])}"
         if action == "start_game":
-            self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true")
-            self._wait({"type": "lua", "state_name": "InGame", "code": "return Game ~= nil and Game.GetLocalPlayer() >= 0"}, timeout)
+            before = self._loadscreen_count()
+            try:
+                self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true")
+            except (TunerError, OSError) as exc:
+                if "Lua error" in str(exc):
+                    raise
+                print(f"HostGame response interrupted during transition: {exc}", flush=True)
+            self._enter_game_after_loadscreen(before, timeout)
             return "single-player game reached InGame"
         if action == "autoplay":
-            code = (
-                "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
-                "JAC_AUTOTEST_AUTO_DONE = false\n"
-                "JAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\n"
-                "LuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\n"
-                f"AutoplayManager.SetTurns({step['turns']})\n"
-                "AutoplayManager.SetReturnAsPlayer(0)\n"
-                "AutoplayManager.SetObserveAsPlayer(0)\n"
-                "AutoplayManager.SetActive(true)\nreturn true"
-            )
-            self._lua("InGame", code)
-            self._wait({"type": "lua", "state_name": "InGame", "code": "return JAC_AUTOTEST_AUTO_DONE == true"}, timeout)
-            self._lua("InGame", "LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER)\nJAC_AUTOTEST_AUTO_HANDLER = nil\nAutoplayManager.SetActive(false)\nreturn true")
-            return f"autoplay completed {step['turns']} turns"
+            return self._autoplay(step["turns"], timeout)
         if action == "ui_lua":
             value = self._lua(step["state_name"], step["code"], timeout)
             return f"ran Lua in {step['state_name']}; return={value}"
         if action == "screenshot":
+            self._close_options_menu()
+            self._dismiss_advisor()
             target = self.output / _safe_relative_path(step["path"])
             capture_civ_window(target)
             return str(target)
@@ -259,16 +407,16 @@ class Runner:
                 "JAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\n"
                 "Events.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\n"
                 f"local result = Network.SaveGame({{Name={literal}, Location=SaveLocations.LOCAL_STORAGE, "
-                "Type=SaveTypes.SINGLE_PLAYER, IsAutosave=false, IsQuicksave=false}})\n"
+                "Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false})\n"
                 "if result == false then error('Network.SaveGame returned false') end\nreturn true"
             )
-            self._lua("InGame", code)
+            self._lua("InGame", code, min(timeout, 30))
             self._wait({"type": "lua", "state_name": "InGame", "code": "return JAC_AUTOTEST_SAVE_DONE == true"}, timeout)
             self._lua("InGame", "Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER)\nJAC_AUTOTEST_SAVE_HANDLER = nil\nreturn true")
             until = time.monotonic() + min(timeout, 5)
             while not target.is_file() and time.monotonic() < until:
                 time.sleep(0.2)
-            if not target.is_file():
+            if not target.is_file() or target.stat().st_size == 0:
                 raise ScenarioError(f"SaveComplete fired but save not found at {target}; check --saves")
             return str(target)
         if action == "exit_to_menu":
@@ -284,11 +432,17 @@ class Runner:
                 "if not UI.IsInFrontEnd() then error('main menu required') end\n"
                 f"local ok = Network.LoadGame({{Name={literal}, Location=SaveLocations.LOCAL_STORAGE, "
                 "Type=SaveTypes.SINGLE_PLAYER, Directory=SaveDirectories.DEFAULT, "
-                "IsAutosave=false, IsQuicksave=false}}, ServerType.SERVER_TYPE_NONE)\n"
+                "IsAutosave=false, IsQuicksave=false}, ServerType.SERVER_TYPE_NONE)\n"
                 "if ok == false then error('Network.LoadGame returned false') end\nreturn true"
             )
-            self._lua("FrontEnd", code)
-            self._wait({"type": "lua", "state_name": "InGame", "code": "return Game ~= nil and Game.GetLocalPlayer() >= 0"}, timeout)
+            before = self._loadscreen_count()
+            try:
+                self._lua("FrontEnd", code)
+            except (TunerError, OSError) as exc:
+                if "Lua error" in str(exc):
+                    raise
+                print(f"LoadGame response interrupted during transition: {exc}", flush=True)
+            self._enter_game_after_loadscreen(before, timeout)
             return f"loaded {name}"
         if action == "wait_for":
             self._wait(step["condition"], timeout)

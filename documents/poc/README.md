@@ -56,3 +56,11 @@ MOD の内容：
 - `Documents\My Games\...\Mods` に置いたジャンクション経由でも MOD は読み込まれる
 - `Game:SetProperty` に保存した Lua のテーブルは、セーブ・ロードをまたいで復元される（シングルプレイで確認。マルチプレイでの同期・決定性は未検証で、本番で採用する前に確かめる）
 - `print` の出力は `Lua.log` に `<MOD名>: ` 付きで記録される（束4「外部とゲームの経路」で、ゲームから外へ渡す経路の候補になる。外部プロセスからの読み取りは未検証）
+
+## カスタム氏族と手帳 UI：自動シナリオ
+
+結果：**成功**（2026-09-29、Gathering Storm、シングルプレイ）。`tools/civ6-autotest` で `python scenario.py scenarios/clans-notebooks.json --output artifacts/clans-notebooks-run-09` を実行し、17/17 ステップとログ判定 2/2 件が通過した。
+
+織田氏族を人間、武田氏族を AI に設定し、両氏族の読み込みを `Lua.log` で確認した。手帳を開いた記録と画面を確認した後、autoplay でターン1から4へ進めて保存した。メインメニューに戻って同じセーブを読み込み、さらにターン4から5へ進め、手帳を再表示した。スクリーンショットは実行フォルダ内の `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。
+
+ゲーム内メニューと Advisor ダイアログはターン進行を止めるため、ドライバーが閉じてから autoplay を開始する。終了イベントがターン表示より先に届く場合があるため、完了時は実際のターン数と autoplay の停止、人間プレイヤーへの復帰も確認する。

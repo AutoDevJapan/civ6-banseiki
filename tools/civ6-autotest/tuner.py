@@ -100,21 +100,54 @@ class TunerClient:
         return self.sock
 
     def _request(self, payload: str) -> str:
+        """Send a query and return its reply, skipping asynchronous game output frames.
+
+        While a game is running, Lua print output arrives on the same socket as frames whose
+        payload starts with "O " or "O\\x00" (verified live); those are not the reply.
+        """
         sock = self._socket()
         send_frame(sock, HANDSHAKE, payload)
-        return recv_frame(sock).payload
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TunerError(f"No reply to {payload!r} from FireTuner")
+            sock.settimeout(remaining)
+            frame = recv_frame(sock)
+            if frame.payload[:2] in ("O ", "O\x00"):
+                continue
+            sock.settimeout(self.timeout)
+            return frame.payload
 
-    def list_states(self) -> list[str]:
+    def list_state_pairs(self) -> list[tuple[int, str]]:
+        """Return (state index, state name) pairs.
+
+        The game answers LSQ with alternating fields "<index>", "<name>", ... and CMD
+        needs that index, not the position of the name in the reply.
+        """
         raw = self._request("LSQ:")
         if raw.startswith("LSQ:"):
             raw = raw[4:]
-        return [part.strip() for part in raw.replace("\r", "\n").replace("\x00", "\n").split("\n") if part.strip()]
+        parts = [part.strip() for part in raw.replace("\r", "\n").replace("\x00", "\n").split("\n") if part.strip()]
+        if len(parts) >= 2 and not parts[0].lstrip("-").isdigit():
+            # Older/fake servers that send names only: fall back to positions.
+            return list(enumerate(parts))
+        pairs: list[tuple[int, str]] = []
+        for i in range(0, len(parts) - 1, 2):
+            try:
+                pairs.append((int(parts[i]), parts[i + 1]))
+            except ValueError as exc:
+                raise TunerError(f"unexpected LSQ reply near {parts[i:i + 2]!r}") from exc
+        return pairs
+
+    def list_states(self) -> list[str]:
+        return [name for _, name in self.list_state_pairs()]
 
     def state_index(self, name: str) -> int:
-        states = self.list_states()
-        matches = [i for i, state in enumerate(states) if state.casefold() == name.casefold()]
+        pairs = self.list_state_pairs()
+        matches = [index for index, state in pairs if state.casefold() == name.casefold()]
         if len(matches) != 1:
-            raise TunerError(f"Lua state {name!r} not uniquely available; states: {states}")
+            raise TunerError(f"Lua state {name!r} not uniquely available; states: {[n for _, n in pairs]}")
         return matches[0]
 
     def run_lua(self, state_name: str, code: str, timeout: float | None = None) -> LuaResult:
@@ -172,7 +205,7 @@ def main() -> int:
     try:
         with TunerClient(port=args.port) as client:
             if args.command == "states":
-                print(f"{client.identity}\n" + "\n".join(f"{i}: {name}" for i, name in enumerate(client.list_states())))
+                print(f"{client.identity}\n" + "\n".join(f"{i}: {name}" for i, name in client.list_state_pairs()))
             else:
                 result = client.run_lua(args.state, args.code)
                 print(result.output)
