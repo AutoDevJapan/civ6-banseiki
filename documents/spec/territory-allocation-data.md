@@ -1,6 +1,6 @@
 # 領土関係・タイル割当候補データ（JSON）データ辞書
 
-対象: [`領土関係・タイル割当候補データ.json`](../../領土関係・タイル割当候補データ.json)（`schema_version: 1`）
+対象: [`documents/spec/data/territory-allocation-candidates.json`](data/territory-allocation-candidates.json)（旧名 `領土関係・タイル割当候補データ.json`）（`schema_version: 1`）
 
 このJSONは SSOT 14.4 / 14.5 の**派生データ**であり、仕様の正本ではない（SSOT 19.1）。規則の根拠は SSOT [3.3](ssot/03-map-and-scale.md)「領土主張と単一タイル所有の割当規則」と [14.5](ssot/14-5-territory-model.md) を参照する。本書はフィールドの意味・取りうる値・不変条件・既知の注意点だけを扱う。
 

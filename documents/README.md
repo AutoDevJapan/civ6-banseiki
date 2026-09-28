@@ -7,7 +7,7 @@
 | パス | 位置づけ |
 |---|---|
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
-| [`領土関係・タイル割当候補データ.json`](../領土関係・タイル割当候補データ.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
+| [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
 | [`research/civ6-modding-readiness.md`](research/civ6-modding-readiness.md) | 実装着手の準備度調査。手元の Civ6 環境、Civ6 MOD の技術的制約、SSOT の不足 |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
