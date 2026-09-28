@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AssetObjects..GameDependencyData>
+	<ID>
+		<name text="JAC_PoC_CustomCivs"/>
+		<id text="d7f5dbdf-6c77-4d16-9f1c-c5c47285e8af"/>
+	</ID>
+	<RequiredGameArtIDs/>
+	<SystemDependencies>
+		<Element>
+			<ConsumerName text="Audio"/>
+			<ArtDefDependencyPaths><Element text="Civilizations.artdef"/><Element text="Leaders.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="Civilizations"/>
+			<ArtDefDependencyPaths><Element text="Civilizations.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="Cultures"/>
+			<ArtDefDependencyPaths><Element text="Civilizations.artdef"/><Element text="Cultures.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="Leaders"/>
+			<ArtDefDependencyPaths><Element text="Leaders.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies><Element text="Leader"/></LibraryDependencies>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="LeaderFallback"/>
+			<ArtDefDependencyPaths><Element text="FallbackLeaders.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies><Element text="LeaderFallback"/></LibraryDependencies>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="UI"/>
+			<ArtDefDependencyPaths/>
+			<LibraryDependencies><Element text="UITexture"/></LibraryDependencies>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="Units"/>
+			<ArtDefDependencyPaths><Element text="Cultures.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="WorldView_Translate"/>
+			<ArtDefDependencyPaths><Element text="Civilizations.artdef"/><Element text="Cultures.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+	</SystemDependencies>
+	<ArtDefDependencies>
+		<Element><ArtDefPath text="Civilizations.artdef"/><ArtDefDependencyPaths/></Element>
+		<Element><ArtDefPath text="Cultures.artdef"/><ArtDefDependencyPaths><Element text="Civilizations.artdef"/></ArtDefDependencyPaths></Element>
+		<Element><ArtDefPath text="Leaders.artdef"/><ArtDefDependencyPaths/></Element>
+		<Element><ArtDefPath text="FallbackLeaders.artdef"/><ArtDefDependencyPaths/></Element>
+	</ArtDefDependencies>
+	<LibraryDependencies>
+		<Element>
+			<LibraryName text="UITexture"/>
+			<PackageDependencies><Element text="JAC_CustomCivs_Icons.blp"/><Element text="JAC_CustomCivs_Leaders.blp"/></PackageDependencies>
+		</Element>
+		<Element>
+			<LibraryName text="LeaderFallback"/>
+			<PackageDependencies><Element text="JAC_CustomCivs_Fallback.blp"/></PackageDependencies>
+		</Element>
+	</LibraryDependencies>
+</AssetObjects..GameDependencyData>

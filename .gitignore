@@ -8,5 +8,10 @@
 /.cursor/rules/godd-stack.mdc
 # <<< GoDD managed local files <<<
 
+# tools/jac_art/build_art.py の中間ファイル
+/tools/jac_art/build/
+/poc/JAC_PoC_CustomCivs/ArtSource/Originals/
+/poc/JAC_PoC_CustomCivs/Platforms/
+__pycache__/
 # Generated UI texture, rebuilt from civ6-art-local by tools/jac_art/build_art.py
 /poc/JAC_PoC_GrowthUI/UI/Textures/*.dds

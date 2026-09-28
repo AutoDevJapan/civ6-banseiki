@@ -1,0 +1,815 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+	<LocalizedText>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_NAME" Language="en_US">
+			<Text>Oda clan</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_NAME" Language="ja_JP">
+			<Text>織田家</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_NAME" Language="ru_RU">
+			<Text>Клан Ода</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_DESCRIPTION" Language="en_US">
+			<Text>Oda clan</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_DESCRIPTION" Language="ja_JP">
+			<Text>織田家</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_DESCRIPTION" Language="ru_RU">
+			<Text>Клан Ода</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_ADJECTIVE" Language="en_US">
+			<Text>Oda</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_ADJECTIVE" Language="ja_JP">
+			<Text>織田</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_ODA_ADJECTIVE" Language="ru_RU">
+			<Text>Ода</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_ODA_NOBUHIDE_NAME" Language="en_US">
+			<Text>Oda Nobuhide</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_ODA_NOBUHIDE_NAME" Language="ja_JP">
+			<Text>織田信秀</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_ODA_NOBUHIDE_NAME" Language="ru_RU">
+			<Text>Ода Нобухидэ</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_NAME" Language="en_US">
+			<Text>Takeda clan</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_NAME" Language="ja_JP">
+			<Text>武田家</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_NAME" Language="ru_RU">
+			<Text>Клан Такэда</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION" Language="en_US">
+			<Text>Takeda clan</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION" Language="ja_JP">
+			<Text>武田家</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_DESCRIPTION" Language="ru_RU">
+			<Text>Клан Такэда</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_ADJECTIVE" Language="en_US">
+			<Text>Takeda</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_ADJECTIVE" Language="ja_JP">
+			<Text>武田</Text>
+		</Row>
+		<Row Tag="LOC_CIVILIZATION_JAC_TAKEDA_ADJECTIVE" Language="ru_RU">
+			<Text>Такэда</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_TAKEDA_NOBUTORA_NAME" Language="en_US">
+			<Text>Takeda Nobutora</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_TAKEDA_NOBUTORA_NAME" Language="ja_JP">
+			<Text>武田信虎</Text>
+		</Row>
+		<Row Tag="LOC_LEADER_JAC_TAKEDA_NOBUTORA_NAME" Language="ru_RU">
+			<Text>Такэда Нобутора</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_CLAN_NAME" Language="en_US">
+			<Text>Oda clan (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_CLAN_NAME" Language="ja_JP">
+			<Text>織田家（PoC）</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_CLAN_NAME" Language="ru_RU">
+			<Text>Клан Ода (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_CLAN_NAME" Language="en_US">
+			<Text>Takeda clan (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_CLAN_NAME" Language="ja_JP">
+			<Text>武田家（PoC）</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_CLAN_NAME" Language="ru_RU">
+			<Text>Клан Такэда (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_NOBUHIDE_NAME" Language="en_US">
+			<Text>Oda Nobuhide (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_NOBUHIDE_NAME" Language="ja_JP">
+			<Text>織田信秀（PoC）</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_ODA_NOBUHIDE_NAME" Language="ru_RU">
+			<Text>Ода Нобухидэ (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_NOBUTORA_NAME" Language="en_US">
+			<Text>Takeda Nobutora (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_NOBUTORA_NAME" Language="ja_JP">
+			<Text>武田信虎（PoC）</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_TAKEDA_NOBUTORA_NAME" Language="ru_RU">
+			<Text>Такэда Нобутора (PoC)</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_CLAN_POC_DESCRIPTION" Language="en_US">
+			<Text>No gameplay effect in this proof of concept.</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_CLAN_POC_DESCRIPTION" Language="ja_JP">
+			<Text>このPoCではゲーム上の効果なし。</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_CLAN_POC_DESCRIPTION" Language="ru_RU">
+			<Text>В этой проверке нет игрового эффекта.</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_LEADER_POC_DESCRIPTION" Language="en_US">
+			<Text>No gameplay effect in this proof of concept.</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_LEADER_POC_DESCRIPTION" Language="ja_JP">
+			<Text>このPoCではゲーム上の効果なし。</Text>
+		</Row>
+		<Row Tag="LOC_TRAIT_JAC_LEADER_POC_DESCRIPTION" Language="ru_RU">
+			<Text>В этой проверке нет игрового эффекта.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITY_NAME_KOFU" Language="en_US">
+			<Text>Kofu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITY_NAME_KOFU" Language="ja_JP">
+			<Text>甲府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITY_NAME_KOFU" Language="ru_RU">
+			<Text>Кофу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_RENAMED_NAME" Language="en_US">
+			<Text>Kai Takeda clan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_RENAMED_NAME" Language="ja_JP">
+			<Text>甲斐武田家</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_RENAMED_NAME" Language="ru_RU">
+			<Text>Клан Такэда из Каи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_QUOTE" Language="en_US">
+			<Text>The Oda clan will endure.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_QUOTE" Language="ja_JP">
+			<Text>織田家は生き残る。</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_QUOTE" Language="ru_RU">
+			<Text>Клан Ода выстоит.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_QUOTE" Language="en_US">
+			<Text>The Takeda clan will endure.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_QUOTE" Language="ja_JP">
+			<Text>武田家は生き残る。</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_QUOTE" Language="ru_RU">
+			<Text>Клан Такэда выстоит.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_LOADING" Language="en_US">
+			<Text>Oda Nobuhide leads the Oda clan.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_LOADING" Language="ja_JP">
+			<Text>織田信秀が織田家を率いる。</Text>
+		</Row>
+		<Row Tag="LOC_JAC_ODA_NOBUHIDE_LOADING" Language="ru_RU">
+			<Text>Ода Нобухидэ возглавляет клан Ода.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_LOADING" Language="en_US">
+			<Text>Takeda Nobutora leads the Takeda clan.</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_LOADING" Language="ja_JP">
+			<Text>武田信虎が武田家を率いる。</Text>
+		</Row>
+		<Row Tag="LOC_JAC_TAKEDA_NOBUTORA_LOADING" Language="ru_RU">
+			<Text>Такэда Нобутора возглавляет клан Такэда.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us discuss this offer.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その提案について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обсудим это предложение.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us discuss this offer.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その提案について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обсудим это предложение.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_ACCEPT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Then we meet in battle.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>ならば戦場で会おう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Тогда встретимся в бою.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Then we meet in battle.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>ならば戦場で会おう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Тогда встретимся в бою.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Then we meet in battle.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>ならば戦場で会おう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Тогда встретимся в бою.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Then we meet in battle.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>ならば戦場で会おう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DECLARE_WAR_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Тогда встретимся в бою.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our struggle is over.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>我らの戦いは終わった。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наша борьба окончена.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our struggle is over.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>我らの戦いは終わった。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наша борьба окончена.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our struggle is over.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>我らの戦いは終わった。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наша борьба окончена.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our struggle is over.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>我らの戦いは終わった。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DEFEAT_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наша борьба окончена.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DELEGATION_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Your actions have lost our trust.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その行いで信を失った。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Ваши действия подорвали наше доверие.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Your actions have lost our trust.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その行いで信を失った。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Ваши действия подорвали наше доверие.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Your actions have lost our trust.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その行いで信を失った。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Ваши действия подорвали наше доверие.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Your actions have lost our trust.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その行いで信を失った。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_DENOUNCE_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Ваши действия подорвали наше доверие.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NEAR_INITIATOR_POSITIVE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_NO_MANS_INFO_EXCHANGE_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Our clans have met.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家の出会いだ。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_FIRST_MEET_VISIT_RECIPIENT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Наши кланы встретились.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>You are welcome to speak.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>話を聞こう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Я готов вас выслушать.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>You are welcome to speak.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>話を聞こう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_GREETING_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Я готов вас выслушать.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="en_US">
+			<Text>Your actions please us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="ja_JP">
+			<Text>その行いを喜ばしく思う。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_KUDO_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="ru_RU">
+			<Text>Ваши действия радуют нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us stand together.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>共に歩もう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте действовать вместе.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us stand together.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>共に歩もう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_ALLIANCE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте действовать вместе.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_ACCEPT_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_AI_REFUSE_DEAL_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us end this war.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>この戦を終わらせよう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_MAKE_PEACE_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте закончим эту войну.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_OPEN_BORDERS_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let our clans be friends.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>両家で友好を結ぼう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DECLARE_FRIEND_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Пусть наши кланы дружат.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us exchange envoys.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>使者を交わそう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_DELEGATION_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обменяемся посланниками.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us discuss this offer.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その提案について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обсудим это предложение.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us discuss this offer.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その提案について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_MAKE_DEAL_FROM_AI_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обсудим это предложение.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Let us discuss passage.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>通行について話そう。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_REJECT_OPEN_BORDERS_FROM_HUMAN_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Давайте обсудим проход.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_EXIT_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_AGENDA_TURTLER" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_AGENDA_TURTLER" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_ODA_NOBUHIDE_REASON_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_LEADER_JAC_TAKEDA_NOBUTORA_REASON_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_ODA_NOBUHIDE_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="en_US">
+			<Text>Your actions concern us.</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ja_JP">
+			<Text>その行いを案じている。</Text>
+		</Row>
+		<Row Tag="LOC_DIPLO_WARNING_TOO_MANY_TROOPS_NEAR_ME_LEADER_JAC_TAKEDA_NOBUTORA_ANY" Language="ru_RU">
+			<Text>Ваши действия тревожат нас.</Text>
+		</Row>
+	</LocalizedText>
+</GameData>
