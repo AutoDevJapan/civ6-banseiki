@@ -64,7 +64,7 @@ Web 上の資料にはログの場所を `Documents\My Games\...\Logs` とする
 - Civ6 の Lua はサンドボックスで、`io`・`os`・`require` が無効（[Lua Environment and Sandboxing](https://forums.civfanatics.com/resources/lua-environment-and-sandboxing.25425/)、[require の可否](https://forums.civfanatics.com/threads/require-a-lua-package.624171/)）
 - 実例がある回避策は、ゲーム外のアプリでセーブファイルを解析する方法だけ（[civ6-savegame-parser](https://github.com/bestander/civ6-savegame-parser)）
 
-**SSOT への影響**：15.1 の `services/vercel-web`・`railway-api`、16.1「外部保存」、2.4 の家名継承の共有は、ゲーム外の常駐アプリがセーブを読んで同期する構成でしか実現できない。MOD 本体とは別製品になる（[質問 Q3](../questions.md)）。
+**SSOT への影響**：15.1 の `services/vercel-web`・`railway-api`、15.2「メタ進行・友達間共有」、16.1「外部保存」、17.3 の接続と同期は、ゲーム外の常駐アプリがセーブを読んで同期する構成でしか実現できない。MOD 本体とは別製品になる（[質問 Q3](../questions.md)）。
 
 ### 2.4 ツールチェーン
 
@@ -76,7 +76,8 @@ Web 上の資料にはログの場所を `Documents\My Games\...\Logs` とする
 ### 2.5 保存・同期
 
 - `Game`・`Player`・`Unit`・`City`・`Plot` の `SetProperty` / `GetProperty` は、セーブ・ロードをまたいで値を保持する。表（テーブル）も保存できる。書き込めるのはゲームプレイ側のスクリプトだけで、キーは全 MOD 共通の名前空間（確認済み。[sukritact KB](https://sukritact.github.io/Civilization-VI-Modding-Knowledge-Base/About_Get-SetProperty)）
-- マルチプレイでは、Lua 内の `math.random` などが各端末でばらばらに評価されると同期ずれ（デシンク）が起きる。UI からの操作は `RequestPlayerOperation` 経由で渡す必要がある（確認済み。[CivFanatics](https://forums.civfanatics.com/threads/gameplay-related-lua-scripts-in-multiplayer.626600/)）
+- マルチプレイでは、Lua 内の `math.random` などが各端末でばらばらに評価されると同期ずれ（デシンク）が起きる（確認済み。[CivFanatics](https://forums.civfanatics.com/threads/gameplay-related-lua-scripts-in-multiplayer.626600/)）
+- UI からゲームの状態を変える操作は、`UI.RequestPlayerOperation(..., PlayerOperations.EXECUTE_SCRIPT, ...)` でゲームプレイ側へ渡し、`GameEvents` で受けるのが定石（手元の暗殺者 MOD 3662073624 の実装で確認。マルチプレイでの挙動は未検証）
 
 **SSOT への影響**：4〜5章の武将の成長データ（レベル・性格・特性・装備）は `Unit` / `Player` の Property で持てる見込み。マルチプレイに対応するかどうかで、乱数と操作の設計が変わる（[質問 Q5](../questions.md)）。
 
