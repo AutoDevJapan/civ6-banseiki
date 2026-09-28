@@ -45,7 +45,7 @@
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_EQUIPMENT"><Text>装備</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_EQUIPMENT"><Text>Снаряжение</Text></Row>
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>Artifact</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>Artifact</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>アーティファクト</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>Артефакт</Text></Row>
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_NONE"><Text>None</Text></Row>
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_NONE"><Text>なし</Text></Row>
