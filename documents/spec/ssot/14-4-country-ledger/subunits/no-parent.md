@@ -1,0 +1,7 @@
+# 14.4 国別台帳：no-parent（関連国の記載なし）の関連主体 3件
+
+| ID | 国・主体名（日本語 / English / Русский） | 面積 km² | 規模 | 史実に沿った初期関係 |
+|---|---|---:|---|---|
+| TWN | [台湾](https://www.congress.gov/crs-product/IF10275) / [Taiwan](https://www.congress.gov/crs-product/IF10275) / [Тайвань](https://www.unicode.org/cldr/charts/48/by_type/) | [36,197](https://www.taiwan.gov.tw/about.php) | 大国 | [独自に統治。中国との国家地位・主権をめぐる主張は係争として併記](https://www.congress.gov/crs-product/IF10275) / [局所所有候補：TWN（タイル未割当）](https://www.congress.gov/crs-product/IF10275) |
+| XKX | [コソボ](https://commonslibrary.parliament.uk/research-briefings/cbp-10012/) / [Kosovo](https://commonslibrary.parliament.uk/research-briefings/cbp-10012/) / [Косово](https://commonslibrary.parliament.uk/research-briefings/cbp-10012/) | [10,905.25](https://askapi.rks-gov.net/Custom/baa59b95-af3f-4117-8c84-edc9ef401bf7.pdf) | 大国 | [独立宣言あり。セルビアは独立を承認せず、関係は係争](https://commonslibrary.parliament.uk/research-briefings/cbp-10012/) / [局所所有候補：XKX（タイル未割当）](https://commonslibrary.parliament.uk/research-briefings/cbp-10012/) |
+| ESH | [西サハラ](https://www.unicode.org/cldr/charts/48/by_type/) / [Western Sahara](https://unstats.un.org/unsd/methodology/m49/) / [Западная Сахара](https://www.unicode.org/cldr/charts/48/by_type/) | [266,000](https://www.un.org/dppa/decolonization/en/nsgt/western-sahara) | 大国 | [国連の非自治地域。モロッコとサハラウィー側の統治・帰属主張が係争](https://minurso.unmissions.org/en/mandate) / [局所境界・所有候補を監査中（タイル未割当）](https://minurso.unmissions.org/en/mandate) |

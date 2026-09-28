@@ -1,0 +1,7 @@
+# 14.4 国別台帳：NZL（ニュージーランド）の関連主体 3件
+
+| ID | 国・主体名（日本語 / English / Русский） | 面積 km² | 規模 | 史実に沿った初期関係 |
+|---|---|---:|---|---|
+| COK | [クック諸島](https://www.unicode.org/cldr/charts/48/by_type/) / [Cook Islands](https://unstats.un.org/unsd/methodology/m49/) / [о-ва Кука](https://www.unicode.org/cldr/charts/48/by_type/) | [236](https://www.cia.gov/the-world-factbook/about/archives/2023/countries/cook-islands/summaries) | 小国 | [ニュージーランドと自由連合。独自の国際関係を持つ（関連国：NZL）](https://www.mfat.govt.nz/en/countries-and-regions/australia-and-pacific/cook-islands) / 初期協定：[COK-NZL](https://www.mfat.govt.nz/en/countries-and-regions/australia-and-pacific/cook-islands) |
+| NIU | [ニウエ](https://www.unicode.org/cldr/charts/48/by_type/) / [Niue](https://unstats.un.org/unsd/methodology/m49/) / [Ниуэ](https://www.unicode.org/cldr/charts/48/by_type/) | [260](https://www.cia.gov/the-world-factbook/about/archives/2023/countries/niue/summaries/) | 小国 | [ニュージーランドと自由連合（関連国：NZL）](https://www.mfat.govt.nz/en/countries-and-regions/australia-and-pacific/niue) / 初期協定：[NIU-NZL](https://www.mfat.govt.nz/en/countries-and-regions/australia-and-pacific/niue) |
+| TKL | [トケラウ](https://www.unicode.org/cldr/charts/48/by_type/) / [Tokelau](https://unstats.un.org/unsd/methodology/m49/) / [Токелау](https://www.unicode.org/cldr/charts/48/by_type/) | [12](https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_area) | 小国 | [ニュージーランド王国の非自治地域（関連国：NZL）](https://www.mfat.govt.nz/en/countries-and-regions/australia-and-pacific/tokelau) |

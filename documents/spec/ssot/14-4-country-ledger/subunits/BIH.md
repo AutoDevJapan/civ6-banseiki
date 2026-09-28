@@ -1,0 +1,7 @@
+# 14.4 国別台帳：BIH（ボスニア・ヘルツェゴビナ）の関連主体 3件
+
+| ID | 国・主体名（日本語 / English / Русский） | 面積 km² | 規模 | 史実に沿った初期関係 |
+|---|---|---:|---|---|
+| BA-FBIH | [ボスニア・ヘルツェゴビナ連邦](https://www.vijeceministara.gov.ba/en/o-bih) / [Federation of Bosnia and Herzegovina](https://www.vijeceministara.gov.ba/en/o-bih) / [Федерация Боснии и Герцеговины](https://www.vijeceministara.gov.ba/en/o-bih) | [26,110.5](https://en.wikipedia.org/wiki/Confederal_entities_of_Bosnia_and_Herzegovina) | 大国 | [ボスニア・ヘルツェゴビナの構成体。ブルチコ地区は地図上で別所有（関連国：BIH）](https://www.vijeceministara.gov.ba/en/o-bih) |
+| BA-RS | [スルプスカ共和国](https://www.vijeceministara.gov.ba/en/o-bih) / [Republika Srpska](https://www.vijeceministara.gov.ba/en/o-bih) / [Республика Сербская](https://www.vijeceministara.gov.ba/en/o-bih) | [24,532.8](https://en.wikipedia.org/wiki/Confederal_entities_of_Bosnia_and_Herzegovina) | 大国 | [ボスニア・ヘルツェゴビナの構成体。独立国ではない。ブルチコは別所有（関連国：BIH）](https://www.vijeceministara.gov.ba/en/o-bih) |
+| BA-BRC | [ブルチコ行政区](https://www.vijeceministara.gov.ba/en/o-bih) / [Brčko District](https://www.vijeceministara.gov.ba/en/o-bih) / [Округ Брчко](https://www.vijeceministara.gov.ba/en/o-bih) | [493](https://en.wikipedia.org/wiki/Confederal_entities_of_Bosnia_and_Herzegovina) | 小国 | [ボスニア・ヘルツェゴビナ主権下の自治地区。法的には両構成体の共同所有だがゲーム内では地区の単独タイル所有（関連国：BIH）](https://www.vijeceministara.gov.ba/en/o-bih) / [局所所有候補：BA-BRC（タイル未割当）](https://www.vijeceministara.gov.ba/en/o-bih) |

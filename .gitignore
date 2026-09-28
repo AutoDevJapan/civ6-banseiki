@@ -1,0 +1,9 @@
+# >>> GoDD managed local files >>>
+/AGENTS.md
+/CLAUDE.md
+/*.godd
+/GoDD-*
+/.godd-a/*
+/.godd/*
+/.cursor/rules/godd-stack.mdc
+# <<< GoDD managed local files <<<

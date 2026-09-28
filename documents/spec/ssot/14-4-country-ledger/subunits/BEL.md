@@ -1,0 +1,7 @@
+# 14.4 国別台帳：BEL（ベルギー）の関連主体 3件
+
+| ID | 国・主体名（日本語 / English / Русский） | 面積 km² | 規模 | 史実に沿った初期関係 |
+|---|---|---:|---|---|
+| BE-VLG | [フランデレン地域](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Flemish Region](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Фламандский регион](https://www.belgium.be/en/about_belgium/government/federale_staat) | [13,626](https://en.wikipedia.org/wiki/Communities,_regions,_and_language_areas_of_Belgium) | 大国 | [ベルギーの連邦構成地域。共同体の管轄は重複しても土地の所有権は重複しない（関連国：BEL）](https://www.belgium.be/en/about_belgium/government/federale_staat) |
+| BE-WAL | [ワロン地域](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Walloon Region](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Валлонский регион](https://www.belgium.be/en/about_belgium/government/federale_staat) | [16,901](https://en.wikipedia.org/wiki/Communities,_regions,_and_language_areas_of_Belgium) | 大国 | [ベルギーの連邦構成地域（関連国：BEL）](https://www.belgium.be/en/about_belgium/government/federale_staat) |
+| BE-BRU | [ブリュッセル首都圏地域](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Brussels-Capital Region](https://www.belgium.be/en/about_belgium/government/federale_staat) / [Брюссельский столичный регион](https://www.belgium.be/en/about_belgium/government/federale_staat) | [162](https://en.wikipedia.org/wiki/Communities,_regions,_and_language_areas_of_Belgium) | 小国 | [ベルギーの連邦構成地域。共同体の権限は重複してもタイル所有者はこの地域一つ（関連国：BEL）](https://www.belgium.be/en/about_belgium/government/federale_staat) |
