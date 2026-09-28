@@ -109,19 +109,33 @@ MOD の内容：
 
 ### 画像
 
-[リポジトリルール](../repository-rules.md)の「画像」に従い、2人の指導者と2つの文明に、北条・日本の流用ではなく自前の画像を割り当てた。
+[リポジトリルール](../repository-rules.md)の「画像」に従い、2人の指導者と2つの文明に新規生成した画像を割り当てた。2人の指導者は既存 Civ6 指導者画を画風だけの参照とし、同じ質感・照明の 3D 絵画調に揃えた。公式画像の人物や画素は MOD に含めない。
 
 | 画像 | テクスチャ名 | 使われる場所 |
 |---|---|---|
 | 指導者アイコン | `JAC_Leaders{32,45,48,50,55,64,80,256}`（2×1 のアトラス、0番＝織田、1番＝武田） | 設定画面、右上の指導者一覧、外交の一覧など |
-| 文明アイコン（家紋） | `JAC_Civs{22,30,32,36,44,45,48,50,64,80,128,200,256}`（45 だけ色付き、他は白＋透明） | 設定画面、都市の旗、文明一覧など |
+| 文明アイコン（家紋） | `JAC_Civs{22,30,32,36,44,45,48,50,64,80,128,200,256}`（全サイズ白＋透明のアルファマスク） | 設定画面、都市の旗、文明一覧など |
+| 文明・指導者の能力アイコン | `JAC_Abilities{22,30,32,36,44,45,48,50,64,80,128,200,256}`（4×1。0＝織田家、1＝武田家、2＝織田信秀、3＝武田信虎。全サイズ白＋透明） | 設定画面の各能力欄など |
 | ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024）・`_BACKGROUND`（1920×1080。`LoadScreen.xml` の帯の高さ 987 が切れず、1080p で上下に黒帯が出ない） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
 | 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
 | 外交画面の背景 | `DiplomacyInfo` にロード画面の背景を指定 | 外交画面 |
 
-作り方：`python tools/jac_art/build_art.py` を実行すると、`ArtSource/Originals/` の元画像から切り抜き・縮小し、SDK の Cooker をコマンドラインから呼んで `Platforms/Windows/BLPs/` に BLP を3つ作る（`JAC_CustomCivs_Icons`・`JAC_CustomCivs_Leaders`・`JAC_CustomCivs_Fallback`）。中間ファイルは `tools/jac_art/build/`（Git 管理外）に作る。家紋は伝統図案を Pillow で描いた（Commons の家紋 SVG は CC BY-SA／CC BY なので使わない）。
+再生成：両ワークツリーを並べて `python tools/jac_art/build_art.py` を実行する。入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/` と `civ6-art-local/JAC_PoC_GrowthUI/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は環境変数 `JAC_ART_LOCAL` で指定でき、GrowthUI の MOD 位置は `JAC_GROWTH_MOD` で指定できる。Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。SDK の Asset Cooker が CustomCivs の `Platforms/Windows/BLPs/` に BLP 3個を出力し、GrowthUI の `UI/Textures/JAC_Notebooks_Hook.dds` も作る。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
 
-画像の出典（いずれも Wikimedia Commons のファイルページでライセンスを確認した）：
+選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定する。OAuth のサブスクリプション枠だけを使い、API キーや従量課金 API は使わない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
+
+現行画像の出典（ローカル元ファイルは Git 管理外）：
+
+| 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス・利用条件 | 元ファイル |
+|---|---|---|---|---|---|
+| 織田信秀・武田信虎の指導者アイコン | 両名の新規生成肖像 | Gemini 3.1 Flash Image、2026年 | ローカル OpenCodex。公式 Civ6 指導者画は画風参照のみ | 生成サービスの利用条件を公開前に確認 | `oda_nobuhide_portrait.jpg`・`takeda_nobutora_portrait.jpg` |
+| ロード画面・外交画面の人物 | 単色背景で新規生成した両名の立ち姿 | 同上 | 同上。Pillow で透過 | 同上 | `oda_nobuhide_figure.png`・`takeda_nobutora_figure.png` |
+| ロード画面・外交画面の背景 | 尾張・甲斐の城内を新規生成 | 同上 | 同上 | 同上 | `oda_nobuhide_background.png`・`takeda_nobutora_background.png` |
+| 文明アイコン | 織田木瓜・武田菱を新規生成 | 同上 | 伝統家紋を参照し、新規に描画された画像をアルファマスク化 | 同上 | `oda_mokko_generated.png`・`takeda_bishi_generated.png` |
+| 能力アイコン | 織田の軍旗、武田の馬、信秀の軍配扇、信虎の兜を新規生成 | 同上 | 両家の家紋・人物像を参照し、各能力欄へ個別登録 | 同上 | `oda_clan_ability_generated.png`・`takeda_clan_ability_generated_v2.png`・`oda_nobuhide_ability_generated.png`・`takeda_nobutora_ability_generated.png` |
+| GrowthUI の手帳ボタン | 装丁された手帳の新規生成アイコン | 同上 | ローカル OpenCodex。公式 Civ6 は画風参照のみ | 同上 | `JAC_PoC_GrowthUI/Originals/notebooks_generated.png` |
+
+旧 PD 画像の出典（現行 MOD からは参照しない。Wikimedia Commons のファイルページでライセンスを確認した）：
 
 | 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス | 元ファイル |
 |---|---|---|---|---|---|
@@ -129,15 +143,12 @@ MOD の内容：
 | 織田信秀の肖像・アイコン | 萬松寺の織田信秀木像の写真 | 撮影者不明、1934年刊 | 『郷土偉人展覧会図録』（国立国会図書館デジタルコレクション 1232545） | パブリックドメイン（PD-Japan-oldphoto、旧著作権法で保護期間が満了した日本の古い写真） | [File:Statue of Oda Nobuhide at Banshō-ji.jpg](https://commons.wikimedia.org/wiki/File:Statue_of_Oda_Nobuhide_at_Bansh%C5%8D-ji.jpg) |
 | 織田家の背景 | 冨嶽三十六景「尾州不二見原」 | 葛飾北斎、1830〜32年頃 | メトロポリタン美術館（Open Access） | CC0 | [File:冨嶽三十六景 尾州不二見原 …（MET DP140982）](https://commons.wikimedia.org/wiki/File:%E5%86%A8%E5%B6%BD%E4%B8%89%E5%8D%81%E5%85%AD%E6%99%AF_%E5%B0%BE%E5%B7%9E%E4%B8%8D%E4%BA%8C%E8%A6%8B%E5%8E%9F-Fujimigahara_in_Owari_Province_(Bish%C5%AB_Fujimigahara),_from_the_series_Thirty-six_Views_of_Mount_Fuji_(Fugaku_sanj%C5%ABrokkei)_MET_DP140982.jpg) |
 | 武田家の背景 | 「甲陽猿橋之図」 | 歌川広重、1841〜42年頃 | メトロポリタン美術館（Open Access） | CC0 | [File:「甲陽猿橋之図」…（MET DP335039）](https://commons.wikimedia.org/wiki/File:%E3%80%8C%E7%94%B2%E9%99%BD%E7%8C%BF%E6%A9%8B%E4%B9%8B%E5%9B%B3%E3%80%8D-The_Monkey_Bridge_in_Kai_Province_(K%C5%8Dy%C5%8D_Saruhashi_no_zu)_MET_DP335039.jpg) |
-| 家紋（織田木瓜・武田菱） | 伝統図案を単純化して新たに描画 | — | `tools/jac_art/build_art.py` | 自作 | — |
-
-武田信虎像は元が 358×864 と小さいため、アイコンは少しぼやける。見た目が足りなければ、この肖像を参考にした独自画像に差し替え、出典と作り方をここに追記する。
 
 画像の確認手順：
 
 1. 追加コンテンツで「JAC PoC：カスタム勢力」を有効にする
-2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・肖像のツールチップを確認する
-3. 開始してロード画面の肖像と背景を確認する。武田を人間にした別ゲームも開始し、ロード画面の肖像画と猿橋の背景を確認する
+2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・4つの能力アイコン・肖像のツールチップを確認する
+3. 開始してロード画面の透過人物と新規生成背景を確認する。武田を人間にした別ゲームでも確認する
 4. ゲーム内で、右上の指導者アイコンと都市の旗の家紋を確認する
 5. 武田との外交画面を開き、2D の肖像と背景を確認する。`Lua.log` に `[JAC_POC] leaderScreen loaded` が出ることも確認する
 
@@ -145,8 +156,8 @@ MOD の内容：
 
 | 確認 | 期待する結果 |
 |---|---|
-| 設定画面 | 織田は木像の丸いアイコンと木瓜の家紋、武田は肖像画の丸いアイコンと菱の家紋。ツールチップに各家の肖像と背景が出る |
-| ロード画面 | 織田は木像と北斎の尾張の図、武田は肖像画と広重の猿橋の図。北条の画像が出ない |
+| 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、4つの固有能力アイコン。ツールチップに各家の新規生成肖像と背景が出る |
+| ロード画面 | 両名の新規生成人物と城内の背景が出る。紫色の縁や公式北条の人物が出ない |
 | ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
 | 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
 | ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
@@ -154,4 +165,8 @@ MOD の内容：
 
 未確認：ゲーム画面での表示はまだ確認していない。BLP は Cooker が成功を返し、中に全テクスチャ名があることまで確認した。外交画面の 2D 表示は、公式の WarMachineScenario と同じ設定（`Leaders.artdef` は空、肖像は `FallbackLeaders.artdef`）にした。以前は `Leader_BLP_Entry` に背景の UITexture を入れていたが、公式とも公開MOD（[Republic of Turkey](https://github.com/NerdByFate/Civilization-6-Republic-of-Turkey)）とも一致しないため戻した。肖像が出ない・読み込みが止まる場合は、Turkey と同じく `Leader_BLP_Entry` に 1920×1080 の UITexture を入れる形を試す。
 
-BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で作っており、3つで 26,963,968 バイト（`_Leaders` 21,383,168、`_Fallback` 4,705,792、`_Icons` 875,008）。肖像は `_Leaders` と `_Fallback` の両方に入る。作り直すたびに Git の履歴が同じくらい増えるため、実機で表示を確かめた後に、背景だけの圧縮形式・解像度の見直し・Git LFS かビルド時生成を試して容量を測り、決めた方針をここに書く。
+BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、今回の 3 個は合計 25,592,320 バイト（`_Leaders` 19,386,880、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
+
+## JAC_PoC_GrowthUI：手帳ボタンの画像
+
+`UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` は新規生成した `JAC_Notebooks_Hook.dds` を参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` にこの DDS を登録した。公式の History Timeline アイコンとの重複を解消する。表示寸法は `PartialScreenHooks.xml` の 26×26。再生成方法・入力先・出典は上記「画像」を参照。実機では右上の手帳ボタンに装丁された本が表示され、履歴タイムラインと区別できることを確認する。

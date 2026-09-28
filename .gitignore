@@ -10,4 +10,6 @@
 
 # tools/jac_art/build_art.py の中間ファイル
 /tools/jac_art/build/
+/poc/JAC_PoC_CustomCivs/ArtSource/Originals/
+/poc/JAC_PoC_CustomCivs/Platforms/
 __pycache__/

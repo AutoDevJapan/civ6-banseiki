@@ -1,52 +1,68 @@
-"""JAC_PoC_CustomCivs の指導者・文明の画像を作り、SDK の Cooker で BLP にする。
+"""Build both PoC mods' art from local originals using Pillow and the Civ6 SDK.
 
-使い方: python tools/jac_art/build_art.py
-入力: poc/JAC_PoC_CustomCivs/ArtSource/Originals/ の元画像（出典は documents/poc/README.md）
-出力: poc/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/ の BLP 3つと SHARED_DATA/
-中間ファイル（.dds / .tex / .xlp）は tools/jac_art/build/ に作る（Git 管理外）。
+Usage: python tools/jac_art/build_art.py
+Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>
 """
-import math
+import os
 import shutil
 import struct
 import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "poc" / "JAC_PoC_CustomCivs"
-ORIGINALS = MOD / "ArtSource" / "Originals"
 BUILD = Path(__file__).resolve().parent / "build"
 STEWPOT = MOD / "Platforms" / "Windows" / "BLPs"
 COOKER_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker")
 
-RED_DK = (120, 0, 1, 255)  # COLOR_STANDARD_RED_DK
-WHITE_LT = (249, 249, 249, 255)  # COLOR_STANDARD_WHITE_LT
-
 LEADER_ICON_SIZES = (32, 45, 48, 50, 55, 64, 80, 256)  # XP2 の ICON_ATLAS_LEADERS と同じ
 CIV_ICON_SIZES = (22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256)  # XP2 の文明アイコンと同じ
+ABILITY_ICON_SIZES = CIV_ICON_SIZES
 PORTRAIT_SIZE = (570, 1024)
 BACKGROUND_SIZE = (1920, 1080)  # LoadScreen.xml の帯（高さ987）が切れず、1080p で上下に黒帯が出ない
 
+
+def local_art_root():
+    override = os.environ.get("JAC_ART_LOCAL")
+    if override:
+        path = Path(override).expanduser()
+        return (path if path.is_absolute() else ROOT / path).resolve()
+    # Prefer ../civ6-art-local; this multi-worktree checkout uses ../../civ6-art-local.
+    for path in (ROOT.parent / "civ6-art-local", ROOT.parent.parent / "civ6-art-local"):
+        if path.is_dir():
+            return path.resolve()
+    return (ROOT.parent / "civ6-art-local").resolve()
+
+
+ART_LOCAL = local_art_root()
+ORIGINALS = ART_LOCAL / "JAC_PoC_CustomCivs" / "Originals"
+GROWTH_ORIGINALS = ART_LOCAL / "JAC_PoC_GrowthUI" / "Originals"
+FINAL = ART_LOCAL / "final-01"
+GROWTH_MOD = Path(os.environ.get("JAC_GROWTH_MOD", str(ROOT.parent / "poc-growth-ui" / "poc" / "JAC_PoC_GrowthUI"))).expanduser().resolve()
+
 LEADERS = {
-    # 0番: 織田。萬松寺の木像写真。帽子の上に余白が無いので上を足す。
     "ODA_NOBUHIDE": {
-        "file": "oda_nobuhide_statue.jpg",
-        "portrait": (478, 0, 1278, 1300),
-        "portrait_pad_top": 137,
-        "face": (608, 60, 1148, 600),
-        "background": ("owari_fujimigahara.jpg", (98, 178, 3826, 2275)),
+        "portrait": "oda_nobuhide_portrait.jpg",
+        "figure": "oda_nobuhide_figure.png",
+        "background": "oda_nobuhide_background.png",
+        "icon_crop": (235, 20, 815, 600),
     },
-    # 1番: 武田。大泉寺の肖像画。
     "TAKEDA_NOBUTORA": {
-        "file": "takeda_nobutora.jpg",
-        "portrait": (0, 200, 358, 843),
-        "portrait_pad_top": 0,
-        "face": (57, 300, 287, 530),
-        "background": ("kai_saruhashi.jpg", (887, 1121, 2103, 1805)),
+        "portrait": "takeda_nobutora_portrait.jpg",
+        "figure": "takeda_nobutora_figure.png",
+        "background": "takeda_nobutora_background.png",
+        "icon_crop": (230, 25, 810, 605),
     },
 }
+ABILITY_SOURCES = (
+    "oda_clan_ability_generated.png",
+    "takeda_clan_ability_generated_v2.png",
+    "oda_nobuhide_ability_generated.png",
+    "takeda_nobutora_ability_generated.png",
+)
 
 
 def write_dds(path, im):
@@ -55,6 +71,7 @@ def write_dds(path, im):
     w, h = im.size
     hdr = struct.pack("<4sIIIIIII44sIIIIIIIIIIIII", b"DDS ", 124, 0x100F, h, w, w * 4, 0, 1, b"\0" * 44,
                       32, 0x41, 0, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000, 0x1000, 0, 0, 0, 0)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(hdr + im.convert("RGBA").tobytes())
 
 
@@ -142,129 +159,160 @@ def write_xlp(package, cls, names):
 def texture(name, im, cls="UserInterface"):
     write_dds(BUILD / "Textures" / f"{name}.dds", im)
     write_tex(name, im.size, cls)
+    im.save(FINAL / f"{name}.png")
     return name
 
 
-def aa_mask(size, draw_fn, scale=4):
-    """draw_fn(draw, w, h) で白く塗った図形を scale 倍で描いて縮小したアンチエイリアス付きマスクにする。"""
-    big = Image.new("L", (size[0] * scale, size[1] * scale), 0)
-    draw_fn(ImageDraw.Draw(big), big.width, big.height)
-    return big.resize(size, Image.LANCZOS)
+def key_magenta(path):
+    """Extract a generated figure or UI icon from its flat magenta background."""
+    rgb = Image.open(path).convert("RGB")
+    r, g, b = rgb.split()
+    distance = ImageChops.lighter(ImageChops.lighter(ImageOps.invert(r), g), ImageOps.invert(b))
+    alpha = distance.point([max(0, min(255, round((value - 18) * 255 / 75))) for value in range(256)])
+    magenta = ImageChops.subtract(ImageChops.darker(r, b), g)
+    hue_alpha = magenta.point([max(0, min(255, round((100 - value) * 255 / 65))) for value in range(256)])
+    alpha = ImageChops.darker(alpha, hue_alpha).filter(ImageFilter.MinFilter(5))
+    out = rgb.convert("RGBA")
+    out.putalpha(alpha)
+    return out
 
 
-def portrait(key):
-    info = LEADERS[key]
-    src = Image.open(ORIGINALS / info["file"]).convert("RGB")
-    crop = src.crop(info["portrait"])
-    pad = info["portrait_pad_top"]
-    if pad:
-        # 上の余白は元画像の上端の色で埋める（縁はぼかして透明にするので継ぎ目は見えない）。
-        canvas = Image.new("RGB", (crop.width, crop.height + pad), crop.getpixel((crop.width // 2, 2)))
-        canvas.paste(crop, (0, pad))
-        crop = canvas
-    im = crop.resize(PORTRAIT_SIZE, Image.LANCZOS).convert("RGBA")
-    # 縁を透明にぼかし、ロード画面・外交画面の背景になじませる。
-    w, h = PORTRAIT_SIZE
-    fade = Image.new("L", PORTRAIT_SIZE, 0)
-    ImageDraw.Draw(fade).rounded_rectangle((40, 40, w - 40, h - 40), radius=60, fill=255)
-    im.putalpha(fade.filter(ImageFilter.GaussianBlur(28)))
-    return im
+def foreground(key):
+    keyed = key_magenta(ORIGINALS / LEADERS[key]["figure"])
+    bounds = keyed.getchannel("A").getbbox()
+    if not bounds:
+        raise ValueError(f"Empty keyed figure: {key}")
+    cut = keyed.crop(bounds)
+    cut.thumbnail((550, 1010), Image.Resampling.LANCZOS)
+    out = Image.new("RGBA", PORTRAIT_SIZE)
+    out.alpha_composite(cut, ((out.width - cut.width) // 2, out.height - cut.height))
+    return out
 
 
 def background(key):
-    file, box = LEADERS[key]["background"]
-    return Image.open(ORIGINALS / file).convert("RGB").crop(box).resize(BACKGROUND_SIZE, Image.LANCZOS).convert("RGBA")
+    src = Image.open(ORIGINALS / LEADERS[key]["background"]).convert("RGB")
+    return ImageOps.fit(src, BACKGROUND_SIZE, method=Image.Resampling.LANCZOS).convert("RGBA")
 
 
-def leader_icon_master(key, size=512):
-    face = Image.open(ORIGINALS / LEADERS[key]["file"]).convert("RGB").crop(LEADERS[key]["face"])
-    im = face.resize((size, size), Image.LANCZOS).convert("RGBA")
-    im.putalpha(aa_mask((size, size), lambda d, w, h: d.ellipse((0, 0, w - 1, h - 1), fill=255)))
+def leader_icon_master(key):
+    src = Image.open(ORIGINALS / LEADERS[key]["portrait"]).convert("RGB")
+    face = src.crop(LEADERS[key]["icon_crop"])
+    size = 512
+    im = face.resize((size, size), Image.Resampling.LANCZOS).convert("RGBA")
+    big = Image.new("L", (size * 4, size * 4))
+    ImageDraw.Draw(big).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
+    im.putalpha(big.resize((size, size), Image.Resampling.LANCZOS))
     return im
 
 
-def lobes(d, w, cx, cy, r, dist, count=5, fill=255):
-    for k in range(count):
-        a = math.radians(-90 + k * 360 / count)
-        x, y = cx + dist * w * math.cos(a), cy + dist * w * math.sin(a)
-        d.ellipse((x - r * w, y - r * w, x + r * w, y + r * w), fill=fill)
-
-
-def draw_oda_mokko(d, w, h):
-    """織田木瓜（五つ木瓜）を単純化したもの：外側の帯、内側の帯、中央の花。"""
-    cx, cy = w / 2, h / 2
-    lobes(d, w, cx, cy, 0.20, 0.25)
-    d.ellipse((cx - 0.25 * w, cy - 0.25 * w, cx + 0.25 * w, cy + 0.25 * w), fill=255)
-    lobes(d, w, cx, cy, 0.160, 0.25, fill=0)
-    d.ellipse((cx - 0.22 * w, cy - 0.22 * w, cx + 0.22 * w, cy + 0.22 * w), fill=0)
-    lobes(d, w, cx, cy, 0.105, 0.15)
-    lobes(d, w, cx, cy, 0.070, 0.15, fill=0)
-    d.ellipse((cx - 0.09 * w, cy - 0.09 * w, cx + 0.09 * w, cy + 0.09 * w), fill=0)
-    lobes(d, w, cx, cy, 0.045, 0.055)
-    d.ellipse((cx - 0.02 * w, cy - 0.02 * w, cx + 0.02 * w, cy + 0.02 * w), fill=0)
-
-
-def draw_takeda_bishi(d, w, h):
-    """武田菱（四つ割菱）：大きな菱を十字に割った4つの菱。"""
-    cx, cy = w / 2, h / 2
-    a, b, gap = 0.44 * w, 0.34 * h, 0.035 * w
-    for ox, oy in ((0, -b / 2), (0, b / 2), (-a / 2, 0), (a / 2, 0)):
-        sa, sb = a / 2 - gap, b / 2 - gap * b / a
-        x, y = cx + ox, cy + oy
-        d.polygon([(x - sa, y), (x, y - sb), (x + sa, y), (x, y + sb)], fill=255)
-
-
-def civ_icon_master(draw_fn, colored, fg, bg, size=1024):
-    mon = aa_mask((size, size), draw_fn, scale=1)
-    if not colored:
-        # 通常サイズは白い図形＋透明背景（UI 側で色を付ける）。
-        im = Image.new("RGBA", (size, size), (255, 255, 255, 0))
-        im.putalpha(mon)
-        return im
-    # 45px だけは色付き（公式の CivDefaults45 と同じ扱い）。
-    circle = aa_mask((size, size), lambda d, w, h: d.ellipse((0, 0, w - 1, h - 1), fill=255), scale=1)
-    im = Image.new("RGBA", (size, size), bg)
-    im.paste(Image.new("RGBA", (size, size), fg), (0, 0), mon)
-    im.putalpha(circle)
-    return im
+def symbol_icon_master(filename):
+    gray = ImageOps.grayscale(Image.open(ORIGINALS / filename).convert("RGB"))
+    # Generated black-on-white mon -> white symbol with transparent background.
+    alpha = gray.point([max(0, min(255, round((220 - value) * 255 / 170))) for value in range(256)])
+    bounds = alpha.point(lambda value: 255 if value > 100 else 0).getbbox()
+    if not bounds:
+        raise ValueError(f"Empty generated mon: {filename}")
+    symbol = alpha.crop(bounds)
+    symbol.thumbnail((460, 460), Image.Resampling.LANCZOS)
+    centered = Image.new("L", (512, 512))
+    centered.paste(symbol, ((512 - symbol.width) // 2, (512 - symbol.height) // 2))
+    white = Image.new("RGBA", (512, 512), "white")
+    white.putalpha(centered)
+    return white
 
 
 def atlas(masters, size):
-    """2列×1行のアトラス（0番=織田、1番=武田）。"""
-    out = Image.new("RGBA", (size * 2, size), (0, 0, 0, 0))
+    """Single-row atlas in source order."""
+    out = Image.new("RGBA", (size * len(masters), size), (0, 0, 0, 0))
     for i, m in enumerate(masters):
-        out.paste(m.resize((size, size), Image.LANCZOS), (i * size, 0))
+        out.alpha_composite(m.resize((size, size), Image.Resampling.LANCZOS), (i * size, 0))
     return out
+
+
+def growth_icon():
+    keyed = key_magenta(GROWTH_ORIGINALS / "notebooks_generated.png")
+    bounds = keyed.getchannel("A").getbbox()
+    if not bounds:
+        raise ValueError("Empty notebooks icon")
+    cut = keyed.crop(bounds)
+    cut.thumbnail((54, 54), Image.Resampling.LANCZOS)
+    out = Image.new("RGBA", (64, 64))
+    out.alpha_composite(cut, ((64 - cut.width) // 2, (64 - cut.height) // 2))
+    dest = GROWTH_MOD / "UI" / "Textures" / "JAC_Notebooks_Hook.dds"
+    write_dds(dest, out)
+    out.save(FINAL / "JAC_Notebooks_Hook.png")
+    print(f"OK {dest} {dest.stat().st_size} bytes")
+
+
+def contact_sheet():
+    names = [f"JAC_Leaders{size}" for size in LEADER_ICON_SIZES]
+    names += [f"JAC_Civs{size}" for size in CIV_ICON_SIZES]
+    names += [f"JAC_Abilities{size}" for size in ABILITY_ICON_SIZES]
+    for key in LEADERS:
+        names += [f"LEADER_JAC_{key}_NEUTRAL", f"LEADER_JAC_{key}_BACKGROUND",
+                  f"FALLBACK_NEUTRAL_JAC_{key}"]
+    names.append("JAC_Notebooks_Hook")
+    pngs = [FINAL / f"{name}.png" for name in names]
+    cols, cell_w, cell_h = 4, 420, 320
+    rows = (len(pngs) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * cell_w, rows * cell_h), (34, 39, 48))
+    draw = ImageDraw.Draw(sheet)
+    for index, path in enumerate(pngs):
+        x, y = (index % cols) * cell_w, (index // cols) * cell_h
+        draw.rounded_rectangle((x + 8, y + 8, x + cell_w - 8, y + cell_h - 8), radius=10, fill=(65, 72, 82))
+        draw.text((x + 18, y + 15), path.stem, fill="white")
+        image = Image.open(path).convert("RGBA")
+        image.thumbnail((cell_w - 36, cell_h - 55), Image.Resampling.LANCZOS)
+        pane = Image.new("RGBA", (cell_w - 36, cell_h - 55), (115, 123, 133, 255))
+        pane.alpha_composite(image, ((pane.width - image.width) // 2, (pane.height - image.height) // 2))
+        sheet.paste(pane.convert("RGB"), (x + 18, y + 43))
+    sheet.save(FINAL / "contact-sheet.png")
+    print(f"OK {FINAL / 'contact-sheet.png'}: {len(pngs)} final images")
 
 
 def cook(package):
     cmd = [str(COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe"), "--no_mt", "--mode", "XLP", "--platform", "Windows",
            "--pantry", str(BUILD), "--stewpot", str(STEWPOT), "--config", str(COOKER_DIR / "Civ6.cfg"),
            str(BUILD / "XLPs" / f"{package}.xlp")]
-    result = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    result = subprocess.run(cmd, cwd=BUILD, capture_output=True, text=True, errors="replace")
     print(result.stdout[-2000:], result.stderr[-2000:], sep="\n")
     if result.returncode != 0:
         sys.exit(f"Cooker failed for {package}: exit {result.returncode}")
 
 
 def main():
+    required = [ORIGINALS / value for leader in LEADERS.values()
+                for value in (leader["portrait"], leader["figure"], leader["background"])]
+    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png",
+                 GROWTH_ORIGINALS / "notebooks_generated.png"]
+    required += [ORIGINALS / name for name in ABILITY_SOURCES]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        sys.exit("Missing local originals:\n" + "\n".join(missing))
+    if not (COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe").is_file():
+        sys.exit(f"Missing Civ6 SDK Asset Cooker: {COOKER_DIR}")
+    if not (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file():
+        sys.exit(f"Missing GrowthUI mod: {GROWTH_MOD} (set JAC_GROWTH_MOD)")
+
     shutil.rmtree(BUILD, ignore_errors=True)
     (BUILD / "Textures").mkdir(parents=True)
     (BUILD / "XLPs").mkdir()
     STEWPOT.mkdir(parents=True, exist_ok=True)
+    FINAL.mkdir(parents=True, exist_ok=True)
 
     order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
     leader_masters = [leader_icon_master(k) for k in order]
-    civ_draw = (draw_oda_mokko, draw_takeda_bishi)
-    civ_colors = ((RED_DK, WHITE_LT), (WHITE_LT, RED_DK))  # (図形, 背景) = 各家の PlayerColors の (副色, 主色)
+    civ_masters = [symbol_icon_master(name) for name in ("oda_mokko_generated.png", "takeda_bishi_generated.png")]
+    ability_masters = [symbol_icon_master(name) for name in ABILITY_SOURCES]
     icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s)) for s in LEADER_ICON_SIZES]
     for s in CIV_ICON_SIZES:
-        masters = [civ_icon_master(fn, s == 45, fg, bg) for fn, (fg, bg) in zip(civ_draw, civ_colors)]
-        icons.append(texture(f"JAC_Civs{s}", atlas(masters, s)))
+        icons.append(texture(f"JAC_Civs{s}", atlas(civ_masters, s)))
+    for s in ABILITY_ICON_SIZES:
+        icons.append(texture(f"JAC_Abilities{s}", atlas(ability_masters, s)))
 
     leaders, fallbacks = [], []
     for key in order:
-        p = portrait(key)
+        p = foreground(key)
         leaders.append(texture(f"LEADER_JAC_{key}_NEUTRAL", p))
         leaders.append(texture(f"LEADER_JAC_{key}_BACKGROUND", background(key)))
         fallbacks.append(texture(f"FALLBACK_NEUTRAL_JAC_{key}", p, "Leader_Fallback"))
@@ -284,6 +332,9 @@ def main():
         missing = [n for n in names if n.encode() not in blp]
         assert not missing, f"{package}.blp lacks {missing}"
         print(f"OK {package}.blp {len(blp)} bytes, {len(names)} textures")
+
+    growth_icon()
+    contact_sheet()
 
 
 if __name__ == "__main__":
