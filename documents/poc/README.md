@@ -101,11 +101,11 @@ MOD の内容：
 | ロード後保持・翻訳 | 未実施 |
 | 表示の上書き | 未実施（UI 側の上書きを追加した。実機での確認待ち） |
 
-2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
+2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。手帳ボタンは PR #21（`feat/poc-growth-ui`）の GrowthUI を併用して確認したため、PR #20 単独ではこの表示を再現できない。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
 
 | 日付 | 検証 | 結果と画面記録 |
 |---|---|---|
-| 2026-09-29 | 家名表示の切替・ロード後保持 | **成功**（途中の手動入力なし）。[実行フォルダ](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/)の `steps.jsonl` で 102/102 ステップ、ログ判定 2/2 件。ターン1は4 UI コンテキストの原名、遭遇が UI に反映されたターン2は4画面の原名、ターン3の `rename` 後のターン4とセーブ／終了／ロード後は4画面の改名を確認した。画面記録：[T1 HUD](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/01-turn1-hud.png)、T2 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/03-turn2-city-banner.png)、T4 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-city-banner.png)、ロード後 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-city-banner.png)。 |
+| 2026-09-29 | 家名表示の切替・ロード後保持 | **成功**（途中の手動入力なし）。`steps.jsonl` で 102/102 ステップ、ログ判定 2/2 件。ターン1は4 UI コンテキストの原名、遭遇が UI に反映されたターン2は4画面の原名、ターン3の `rename` 後のターン4とセーブ／終了／ロード後は4画面の改名を確認した。証拠一式はローカルの `tools/civ6-autotest/artifacts/clans-house-names-run-08/`（PR #19 のドライバーが生成。Git 管理外のため GitHub からは参照不可）。`steps.jsonl`、`Lua.log` と画面記録（`01-turn1-hud.png`、ターン2の `02-turn2-*`・`03-turn2-city-banner.png`、ターン4の `05-turn4-*`、ロード後の `09-load-*`）を保存。 |
 
 切替前の外交画面は `TAKEDA CLAN`、ランキング概要は `Takeda clan leading`、都市バナーの実ツールチップは `Kofu (Takeda clan)`。切替後とロード後はそれぞれ `KAI TAKEDA CLAN`、`Kai Takeda clan leading`、`Kofu (Kai Takeda clan)`。外交リボンの実ツールチップも `Takeda clan` から `Kai Takeda clan` に変わった（値は同フォルダの `Lua.log` に `[JAC_HOUSE]` として記録）。都市バナーとリボンの家名は画面上のツールチップ値を UI Lua で読み、スクリーンショットには都市・アイコンの表示を記録した。遭遇状態を Gameplay Lua で設定した直後のターン1では UI のリボンにまだ武田が現れないため、実画面の切替前比較はターン2に行った。
 
@@ -136,7 +136,7 @@ MOD の内容：
 
 | 確認 | 実際の結果 |
 |---|---|
-| Mod と生成物 | Mods の `JAC_PoC_CustomCivs`／`JAC_PoC_GrowthUI` ジャンクションはそれぞれ `poc-civs`／`poc-growth-ui` worktree を指す。CustomCivs の BLP 3 個と `JAC_Notebooks_Hook.dds` が存在する。修正後 BLP 3 個は 03:24〜03:25 に再生成済み。ゲーム再起動後の `ArtDef.log` で3個の読み込み、両ゲームの `Modding.log` で `UpdateArt`・`UpdateIcons`・`JAC_CustomCivs_LeaderScene` の適用を確認した。 |
+| Mod と生成物 | 実機確認では `JAC_PoC_CustomCivs` と、PR #21（`feat/poc-growth-ui`）にある `JAC_PoC_GrowthUI` を併用した。CustomCivs の BLP 3 個に加え、GrowthUI 側の `JAC_Notebooks_Hook.dds` が存在した。GrowthUI とこの DDS は PR #21 の成果物で、PR #20 単独には含まれない。修正後 BLP 3 個は 03:24〜03:25 に再生成済み。ゲーム再起動後の `ArtDef.log` で3個の読み込み、両ゲームの `Modding.log` で `UpdateArt`・`UpdateIcons`・`JAC_CustomCivs_LeaderScene` の適用を確認した。 |
 | Esc 前のロード画面 | 初回は武田の髷が上端で切れた（`ingame/15-loading-takeda-before-esc.png`）。修正後はロード完了・Esc 前でも髷全体と上の余白が表示された（`ingame-v2/10-loading-takeda-before-esc.png`）。織田の初回画像は `ingame/08-loading-oda-before-esc.png`。 |
 | FrontEnd の選択・設定 | 両家の指導者アイコンと家紋が詳細設定で並び、各人の肖像も基本設定に表示された。`ingame/02-setup-oda-details.png`、`ingame/07-advanced-setup.png`、`ingame/14-setup-takeda.png` |
 | ゲーム中のアイコン | 織田・武田の指導者アイコンが右上に表示され、接触後の外交リボンにも武田の指導者アイコンが表示された。外交画面の左上には武田の家紋も表示された。`ingame/09-ingame-oda.png`、`ingame/11-diplomacy-ribbon.png`、`ingame/12-diplomacy-takeda.png`、`ingame/16-ingame-takeda.png` |
@@ -144,7 +144,7 @@ MOD の内容：
 | 武田との外交 | 初回は新規フォールバック人物と背景の上下に黒帯が見えた（`ingame/12-diplomacy-takeda.png`）。修正後は織田を人間にして Gameplay Lua の `SetHasMet(1, true)` で接触させ、公式 UI の `DiplomacyRibbon_OpenDiplomacyActionView(1)` で開いた。人物と背景が上下まで表示され、黒帯は消えた。`LeaderScene` の上下レターボックスも `IsHidden()=true`。`ingame-v2/20-diplomacy-takeda.png` |
 | 織田との外交 | 武田を人間、織田を AI にして同じ方法で開いた。人物と背景が上下まで表示され、黒帯は無い。上下レターボックスは `IsHidden()=true`。`ingame-v2/11-diplomacy-oda.png` |
 | 公式指導者との外交 | 同じゲームでクレオパトラを AI に追加して開いた。公式の 3D 人物と標準の上下帯が表示され、上下レターボックスは `IsHidden()=false`。閉じて織田を開き直すと再び両方 `true` になった。`ingame-v2/12-diplomacy-cleopatra.png` |
-| 文明・指導者能力 | 両家の能力名・説明は設定画面に、武田の能力名・説明は百科事典にも表示された。ただし設定画面は標準 UI が指導者／文明アイコンを能力欄に再利用し、百科事典は能力をテキストのみで表示する。専用 `JAC_Abilities` の4絵柄は画面上では未確認。ゲーム内 `IconManager:FindIconAtlas` は4定義とも `JAC_Abilities50.dds` のオフセット 0・50・100・150 を返した。`ingame/02-setup-oda-details.png`、`ingame/14-setup-takeda.png`、`ingame/17-civilopedia-takeda.png`、`ingame/18-civilopedia-takeda-leader.png` |
+| 文明・指導者能力 | 両家の能力名・説明は設定画面に、武田の能力名・説明は百科事典にも表示された。標準 UI は能力欄で文明／指導者アイコンを再利用するため、能力専用4絵柄の画面表示は対象外。PoC の成功条件である4点の登録と参照は検証済みで、ゲーム内 `IconManager:FindIconAtlas` は4定義とも `JAC_Abilities50.dds` のオフセット 0・50・100・150 を返した。製品版で専用絵柄を画面に表示するには能力用のカスタム UI が必要。`ingame/02-setup-oda-details.png`、`ingame/14-setup-takeda.png`、`ingame/17-civilopedia-takeda.png`、`ingame/18-civilopedia-takeda-leader.png` |
 | 実行ログ | 初回の `Lua.log`・`Database.log`・`Modding.log` に CustomCivs／GrowthUI 由来のテクスチャ・ArtDef エラーは見当たらない。修正後の `Lua.log` に `JAC_LeaderScene.lua`／`LeaderScene` の実行エラー、`Failed to load background image texture`、`We are lacking a texture` は無い。修正後のログは `ingame-v2/logs/` に保存した。初回の `Database.log` の `LocalizedText` 重複は `CurrentClickouts/…/ClickoutText_en_US.xml`、`Modding.log` の XML 警告は本体 DLC のファイルに対応する。 |
 
 `C:/Users/makhmeto/AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/ArtDef.log` のパッケージ解決記録（2026-09-29 02:53:59）は次のとおり。同ログには `Unable to resolve Package` と CustomCivs の BLP を含む行は無い。
@@ -198,16 +198,19 @@ Pillow で単色背景から人物・手帳を透過処理し、指導者の円�
 | 確認 | 期待する結果 |
 |---|---|
 | 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、能力名と説明、新規生成した肖像と背景が出る。標準 UI は専用能力アイコンを表示しない |
+| 能力アイコン | PoC の成功条件は、4点が登録され、能力定義から正しく参照できること。これは `IconManager:FindIconAtlas` の返り値で検証済み。標準 UI は能力欄で文明／指導者アイコンを再利用するため、専用絵柄の画面表示は対象外。製品版で表示するには能力用のカスタム UI が必要 |
 | ロード画面 | 両名の新規生成人物と城内の背景が出る。紫色の縁や公式北条の人物が出ない |
 | ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
 | 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。背景の上下に黒い余白が出ない。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
 | ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
 | ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
 
-修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗、専用能力アイコン4絵柄の画面表示、1080p での端の表示は未確認。
+修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗と1080pでの端の表示は未確認。能力専用アイコン4点は登録・参照を確認済みで、標準 UI が文明／指導者アイコンを再利用するため画面表示は PoC の対象外。製品版で専用絵柄を出すには能力用のカスタム UI が必要。
 
 BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
 
 ## JAC_PoC_GrowthUI：手帳ボタンの画像
 
-`UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` は新規生成した `JAC_Notebooks_Hook.dds` を参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` にこの DDS を登録した。公式の History Timeline アイコンとの重複を解消する。表示寸法は `PartialScreenHooks.xml` の 26×26。再生成方法・入力先・出典は上記「画像」を参照。実機では右上の手帳ボタンに装丁された本が表示され、履歴タイムラインと区別できることを確認する。
+`JAC_PoC_GrowthUI` MOD と `JAC_Notebooks_Hook.dds` は PR #21（`feat/poc-growth-ui`）にある。PR #20 単独には GrowthUI の MOD フォルダも DDS も含まれず、手帳ボタンのカスタム画像表示は再現できない。PR #20 単独で再現できるアート工程は CustomCivs 用の3個の BLP の生成・確認まで。
+
+この PR の `tools/jac_art/build_art.py` は、GrowthUI の MOD フォルダが存在する場合だけ手帳 DDS の生成を行う（既定の `poc/JAC_PoC_GrowthUI`、または `JAC_GROWTH_MOD` で指定した場所）。フォルダが無ければ手帳工程をスキップし、CustomCivs 単独で完了する。GrowthUI の `UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` は生成した `JAC_Notebooks_Hook.dds` を参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` に登録する。公式の History Timeline アイコンとの重複を解消する。表示寸法は `PartialScreenHooks.xml` の 26×26。PR #21 と併用した実機確認では、右上の手帳ボタンに装丁された本が表示され、履歴タイムラインと区別できた。再生成方法・入力先・出典は上記「画像」を参照。
