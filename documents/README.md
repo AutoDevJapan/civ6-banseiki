@@ -46,7 +46,7 @@
 | 6 | 国家運営・物流・輸送 | [06-nation-logistics.md](spec/ssot/06-nation-logistics.md) |
 | 7 | 航空と着陸場所 | [07-aviation.md](spec/ssot/07-aviation.md) |
 | 8 | 探索・装備・Artifact・英雄 | [08-exploration-artifacts.md](spec/ssot/08-exploration-artifacts.md) |
-| 9 | 勢力吸収と宗教（統治・正当性・自治、暗殺者Unitを含む） | [09-assimilation-religion.md](spec/ssot/09-assimilation-religion.md) |
+| 9 | 勢力吸収と宗教（統治・正当性・自治、暗殺者Unit、秘密結社を含む） | [09-assimilation-religion.md](spec/ssot/09-assimilation-religion.md) |
 | 10 | 暗号言語と異宇宙外交 | [10-cipher-language-diplomacy.md](spec/ssot/10-cipher-language-diplomacy.md) |
 | 11 | Notebooks、Next Action、Secretaries | [11-notebooks-secretaries.md](spec/ssot/11-notebooks-secretaries.md) |
 | 12 | 世界法律 | [12-world-laws.md](spec/ssot/12-world-laws.md) |
