@@ -12,7 +12,7 @@ import re
 import time
 
 from capture import CaptureError, capture_civ_window
-from click import VK_ESCAPE, press_key
+from click import InputError, VK_ESCAPE, press_key
 from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
 from tuner import TunerClient, TunerError
 
@@ -366,7 +366,8 @@ class Runner:
                 status = self._autoplay_status()
                 if status.turn > target:
                     raise ScenarioError(f"Autoplay overshot turn {target}: {status}")
-                if status.turn == target and not status.active and status.local_player == human:
+                if (status.event and status.turn == target and not status.active
+                        and status.local_player == human):
                     break
                 self._close_options_menu()
                 self._dismiss_advisor()
@@ -521,7 +522,7 @@ class Runner:
                         self.log_step_baseline = snapshot_logs(self.logs)
                         self.log_matches_consumed.clear()
                     detail = self._run_step(step)
-                except (ScenarioError, TunerError, CaptureError, OSError, EOFError) as exc:
+                except (ScenarioError, TunerError, CaptureError, InputError, OSError, EOFError) as exc:
                     self._log(action, "FAIL", str(exc))
                     return 1
                 self._log(action, "OK", detail)
@@ -531,7 +532,7 @@ class Runner:
             result = all(check.passed for check in checks)
             self._log("judge", "OK" if result else "FAIL", f"{sum(c.passed for c in checks)}/{len(checks)} checks passed")
             return 0 if result else 1
-        except (ScenarioError, TunerError, OSError, ValueError) as exc:
+        except (ScenarioError, TunerError, InputError, OSError, ValueError) as exc:
             self._log("run", "FAIL", str(exc))
             return 1
         finally:

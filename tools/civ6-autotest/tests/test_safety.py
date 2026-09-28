@@ -149,6 +149,38 @@ class InputSafetyTests(unittest.TestCase):
         user32.mouse_event.assert_not_called()
         user32.SetCursorPos.assert_not_called()
 
+    def test_focus_loss_after_keydown_still_releases_key(self):
+        user32 = Mock()
+        user32.SetForegroundWindow.return_value = 1
+        user32.GetForegroundWindow.side_effect = (100, 100, 999)
+        with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
+            civ_click, "user32", user32
+        ), patch.object(civ_click.time, "sleep"):
+            with self.assertRaisesRegex(civ_click.InputError, "foreground"):
+                civ_click.press_key(civ_click.VK_ESCAPE)
+        self.assertEqual(user32.keybd_event.call_args_list, [
+            unittest.mock.call(civ_click.VK_ESCAPE, 0, 0, 0),
+            unittest.mock.call(civ_click.VK_ESCAPE, 0, civ_click.KEYEVENTF_KEYUP, 0),
+        ])
+
+    def test_input_error_is_logged_as_step_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            logs = base / "logs"
+            logs.mkdir()
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            runner = Runner({"name": "input failure", "steps": [{"action": "start_game"}]},
+                            base / "output", logs, base, 4318)
+            with redirect_stdout(StringIO()), patch.object(runner, "_wait"), patch.object(
+                runner, "_run_step", side_effect=civ_click.InputError("foreground lost")
+            ):
+                self.assertEqual(runner.run(), 1)
+            records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                encoding="utf-8").splitlines()]
+            self.assertEqual((records[-1]["action"], records[-1]["status"], records[-1]["detail"]),
+                             ("1/1 start_game", "FAIL", "foreground lost"))
+
     def test_failed_foreground_activation_sends_no_input(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 0
@@ -175,9 +207,17 @@ class InputSafetyTests(unittest.TestCase):
         user32.EnumWindows.side_effect = enumerate_windows
         with patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", side_effect=lambda hwnd: {
-                100: "civilizationvi_dx12.exe", 200: "other.exe"}[hwnd]
+                100: "civilizationvi_dx12.exe", 200: "civilizationvihelper.exe"}[hwnd]
         ):
             self.assertEqual(civ_click.find_civ_window(), 100)
+        with patch.object(civ_click, "user32", user32), patch.object(
+            civ_click, "_process_name", return_value="civilizationvihelper.exe"
+        ):
+            with self.assertRaisesRegex(civ_click.InputError, "found 0"):
+                civ_click.find_civ_window()
+            with self.assertRaisesRegex(civ_click.InputError, "found 0"):
+                civ_click.press_key(civ_click.VK_ESCAPE)
+            user32.keybd_event.assert_not_called()
         with patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", return_value="civilizationvi.exe"
         ):

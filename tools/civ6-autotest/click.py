@@ -17,7 +17,13 @@ MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 VK_ESCAPE = 0x1B
 TITLE_PREFIX = "Sid Meier's Civilization VI"
+CIV_EXECUTABLES = {"civilizationvi.exe", "civilizationvi_dx12.exe"}
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+class InputError(RuntimeError):
+    """The Civ VI window could not be verified or safely sent input."""
+
 
 _enum_callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 user32.EnumWindows.argtypes = [_enum_callback, wintypes.LPARAM]
@@ -40,15 +46,15 @@ kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 def _process_name(hwnd: int) -> str:
     pid = wintypes.DWORD()
     if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) or not pid.value:
-        raise RuntimeError("Cannot identify Civ VI window process")
+        raise InputError("Cannot identify Civ VI window process")
     process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
     if not process:
-        raise RuntimeError("Cannot open Civ VI window process")
+        raise InputError("Cannot open Civ VI window process")
     try:
         executable = ctypes.create_unicode_buffer(32768)
         length = wintypes.DWORD(len(executable))
         if not kernel32.QueryFullProcessImageNameW(process, 0, executable, ctypes.byref(length)):
-            raise RuntimeError("Cannot read Civ VI window executable")
+            raise InputError("Cannot read Civ VI window executable")
         return Path(executable.value).name.casefold()
     finally:
         kernel32.CloseHandle(process)
@@ -71,7 +77,7 @@ def find_civ_window() -> int:
             if not title.value.startswith(TITLE_PREFIX):
                 return True
             name = _process_name(hwnd)
-            if name.startswith("civilizationvi") and name.endswith(".exe"):
+            if name in CIV_EXECUTABLES:
                 found.append(hwnd)
             return True
         except Exception as exc:
@@ -80,21 +86,21 @@ def find_civ_window() -> int:
 
     enumerated = user32.EnumWindows(enum, 0)
     if errors:
-        raise RuntimeError("Could not verify Civ VI windows") from errors[0]
+        raise InputError("Could not verify Civ VI windows") from errors[0]
     if not enumerated or len(found) != 1:
-        raise RuntimeError(f"Expected one visible CivilizationVI*.exe window; found {len(found)}")
+        raise InputError(f"Expected one visible Civ VI executable window; found {len(found)}")
     return found[0]
 
 
 def _require_foreground(hwnd: int) -> None:
     if find_civ_window() != hwnd or user32.GetForegroundWindow() != hwnd:
-        raise RuntimeError("Civ VI window is not the verified foreground window; input aborted")
+        raise InputError("Civ VI window is not the verified foreground window; input aborted")
 
 
 def _focus_civ_window(hwnd: int) -> None:
     user32.ShowWindow(hwnd, 9)  # SW_RESTORE
     if not user32.SetForegroundWindow(hwnd):
-        raise RuntimeError("Could not bring Civ VI window to foreground; input aborted")
+        raise InputError("Could not bring Civ VI window to foreground; input aborted")
     time.sleep(0.4)
     _require_foreground(hwnd)
 
@@ -106,20 +112,22 @@ def click_fraction(fx: float, fy: float) -> tuple[int, int]:
     _focus_civ_window(hwnd)
     rect = wintypes.RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-        raise RuntimeError("GetWindowRect failed")
+        raise InputError("GetWindowRect failed")
     if rect.right <= rect.left or rect.bottom <= rect.top:
-        raise RuntimeError("Civ VI window has no visible area")
+        raise InputError("Civ VI window has no visible area")
     x = rect.left + int((rect.right - rect.left) * fx)
     y = rect.top + int((rect.bottom - rect.top) * fy)
     _require_foreground(hwnd)
     if not user32.SetCursorPos(x, y):
-        raise RuntimeError("SetCursorPos failed")
+        raise InputError("SetCursorPos failed")
     time.sleep(0.2)
     _require_foreground(hwnd)
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.08)
-    _require_foreground(hwnd)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    try:
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        time.sleep(0.08)
+        _require_foreground(hwnd)
+    finally:
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
     return x, y
 
 
@@ -128,10 +136,12 @@ def press_key(vk: int) -> None:
     hwnd = find_civ_window()
     _focus_civ_window(hwnd)
     _require_foreground(hwnd)
-    user32.keybd_event(vk, 0, 0, 0)
-    time.sleep(0.08)
-    _require_foreground(hwnd)
-    user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+    try:
+        user32.keybd_event(vk, 0, 0, 0)
+        time.sleep(0.08)
+        _require_foreground(hwnd)
+    finally:
+        user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
 
 if __name__ == "__main__":

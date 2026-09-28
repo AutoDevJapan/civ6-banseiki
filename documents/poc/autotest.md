@@ -36,7 +36,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
 | `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players` | 既定のゲーム設定に戻し、ルールセット、マップ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する |
 | `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
-| `autoplay` | `turns` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` を待つ |
+| `autoplay` | `turns` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する |
 | `ui_lua` | `state_name`, `code` | 指定 Lua 状態で任意のコードを1回実行する |
 | `screenshot` | `path` | Civ6 のウィンドウだけを PNG に保存する。出力先からの相対パス |
 | `save` / `load` | `name` | 単独プレイのローカル保存。保存完了イベントとファイルを確認する |
@@ -44,7 +44,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、Enter 後に続行する |
 
-`growth-notebooks.json` は `LuaEvents.JAC_Notebooks_Open()` で Notebooks を開く。Character Journal の切替関数はその MOD の `JAC_Notebooks.lua` 内で `local` としてボタンに登録され、外部から呼ぶ Lua イベントがない。そのボタン操作だけ `manual` で止める。Computer Use でクリックしてもよい。再開後は `character journal shown` のログを待ってから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
+`growth-notebooks.json` は `PartialScreenHooks` の `OnToggleNotebooks()` で Notebooks を開き、`JAC_Notebooks` 状態の `Controls.CharacterJournalButton:DoLeftClick()` で Character Journal に切り替える。Lua 状態とログを確認してから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
 
 ## 判定内容
 
@@ -55,7 +55,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 - `Lua.log` に `loaded version=1`、新規ゲームの `no saved state (new game)`、進行に伴う `turnsSeen` の増加がある。
 - 読込後の `restored firstTurn/lastTurn/turnsSeen` が保存前最後の行と一致し、次のターンでターン番号と `turnsSeen` が1増える。
 
-クランと成長 UI はまだ [PoC 記録](README.md) に成功条件の節がないため、現時点の `generic` 判定はエラー不在だけを表す。シナリオ内の `wait_for` で所定のログを追加確認する。将来 PoC 記録に条件が増えたら `judge.py` に専用判定を追加する。
+クランの `generic` 判定はエラー不在を表し、シナリオ内の `wait_for` で所定のログを追加確認する。成長 UI の `growth` 判定は MOD の適用、成長ログ、保存・復元後の値と手帳表示などを検査する。画面の見た目はスクリーンショットで別途確認する。
 
 ## 根拠と注意
 

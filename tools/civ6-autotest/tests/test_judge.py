@@ -125,7 +125,8 @@ class AutoplayTests(unittest.TestCase):
     def test_event_and_transient_inactive_state_do_not_complete_or_restart_early(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         statuses = iter(("1|true|true|3|0", "2|false|true|0|0",
-                         "3|false|true|0|0", "4|false|false|0|0"))
+                         "3|false|true|0|0", "4|false|false|0|0",
+                         "4|false|true|0|0"))
         commands = []
 
         def fake_lua(state, code, timeout=5.0):
@@ -143,7 +144,7 @@ class AutoplayTests(unittest.TestCase):
 
         self.assertIn("1->4", detail)
         self.assertEqual(sum("SetActive(true)" in code for _, code in commands), 1)
-        self.assertEqual(sum("tostring(AutoplayManager.IsActive())" in code for _, code in commands), 4)
+        self.assertEqual(sum("tostring(AutoplayManager.IsActive())" in code for _, code in commands), 5)
 
 
 if __name__ == "__main__":
