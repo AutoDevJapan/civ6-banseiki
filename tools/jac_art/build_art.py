@@ -1,7 +1,8 @@
 """Build CustomCivs art, and GrowthUI art when its mod is present.
 
 Usage: python tools/jac_art/build_art.py
-Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>
+Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>,
+          JAC_COOKER_DIR=<Civ6 SDK AssetModTools/Cooker directory>
 """
 import hashlib
 import os
@@ -9,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -18,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "poc" / "JAC_PoC_CustomCivs"
 BUILD = Path(__file__).resolve().parent / "build"
 STEWPOT = MOD / "Platforms" / "Windows" / "BLPs"
-COOKER_DIR = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker")
+COOKER_DIR = Path(os.environ.get("JAC_COOKER_DIR", r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker")).expanduser().resolve()
 
 LEADER_ICON_SIZES = (32, 45, 48, 50, 55, 64, 80, 256)  # XP2 の ICON_ATLAS_LEADERS と同じ
 CIV_ICON_SIZES = (22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256)  # XP2 の文明アイコンと同じ
@@ -275,9 +277,9 @@ def contact_sheet(include_growth):
     print(f"OK {FINAL / 'contact-sheet.png'}: {len(pngs)} final images")
 
 
-def cook(package):
+def cook(package, stewpot):
     cmd = [str(COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe"), "--no_mt", "--mode", "XLP", "--platform", "Windows",
-           "--pantry", str(BUILD), "--stewpot", str(STEWPOT), "--config", str(COOKER_DIR / "Civ6.cfg"),
+           "--pantry", str(BUILD), "--stewpot", str(stewpot), "--config", str(COOKER_DIR / "Civ6.cfg"),
            str(BUILD / "XLPs" / f"{package}.xlp")]
     result = subprocess.run(cmd, cwd=BUILD, capture_output=True, text=True, errors="replace")
     print(result.stdout[-2000:], result.stderr[-2000:], sep="\n")
@@ -285,8 +287,8 @@ def cook(package):
         sys.exit(f"Cooker failed for {package}: exit {result.returncode}")
 
 
-def verify_blp(package, names, started_ns):
-    path = STEWPOT / f"{package}.blp"
+def verify_blp(package, names, started_ns, stewpot):
+    path = stewpot / f"{package}.blp"
     if not path.is_file():
         raise RuntimeError(f"Cooker did not create {path}")
     stat = path.stat()
@@ -311,7 +313,7 @@ def main():
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         sys.exit("Missing local originals:\n" + "\n".join(missing))
-    if not (COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe").is_file():
+    if not all((COOKER_DIR / name).is_file() for name in ("Civ6AssetCooker_FinalRelease.exe", "Civ6.cfg")):
         sys.exit(f"Missing Civ6 SDK Asset Cooker: {COOKER_DIR}")
     if not growth_available:
         print(f"SKIP GrowthUI DDS: mod folder absent at {GROWTH_MOD} (set JAC_GROWTH_MOD to override)")
@@ -319,7 +321,6 @@ def main():
     shutil.rmtree(BUILD, ignore_errors=True)
     (BUILD / "Textures").mkdir(parents=True)
     (BUILD / "XLPs").mkdir()
-    STEWPOT.mkdir(parents=True, exist_ok=True)
     FINAL.mkdir(parents=True, exist_ok=True)
 
     order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
@@ -346,13 +347,19 @@ def main():
         "JAC_CustomCivs_Leaders": ("UITexture", leaders),
         "JAC_CustomCivs_Fallback": ("LeaderFallback", fallbacks),
     }
-    for package in packages:
-        (STEWPOT / f"{package}.blp").unlink(missing_ok=True)
-    for package, (cls, names) in packages.items():
-        write_xlp(package, cls, names)
-        started_ns = time.time_ns()
-        cook(package)
-        verify_blp(package, names, started_ns)
+    with tempfile.TemporaryDirectory(prefix="blp-staging-", dir=BUILD) as staging_dir:
+        staging = Path(staging_dir)
+        for package, (cls, names) in packages.items():
+            write_xlp(package, cls, names)
+            started_ns = time.time_ns()
+            cook(package, staging)
+            verify_blp(package, names, started_ns, staging)
+
+        STEWPOT.mkdir(parents=True, exist_ok=True)
+        for package in packages:
+            destination = STEWPOT / f"{package}.blp"
+            (staging / destination.name).replace(destination)
+            print(f"Installed {destination}")
 
     if growth_available:
         growth_icon()
