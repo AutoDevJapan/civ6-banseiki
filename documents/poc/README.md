@@ -1,6 +1,6 @@
 # PoC の検証記録
 
-SSOT 16.1 の PoC を実機で検証した手順と結果。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
+SSOT 16.1 の PoC のうち、実機で検証した項目の手順と結果。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
 
 ## 共通の準備
 
@@ -19,12 +19,12 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 ## JAC_PoC_Bundle0：読み込みと保存
 
-対象の PoC：束0「起動と読み込み」、束1「読み込みと保存」
+対象の PoC：束0「起動と読み込み」、束1「読み込みと保存」の2項目（16.1 の他の項目は未検証）
 
 MOD の内容：
 
 - `GlobalParameters` に固有の接頭辞を持つ行 `JAC_POC_BUNDLE0_VERSION` を1行追加する
-- ゲームプレイ用の Lua が、ターンの開始ごとに `Game:SetProperty` で記録（初回ターン・最終ターン・経過ターン数）を保存し、ロード画面を閉じたときに読み戻して `Lua.log` に出力する
+- ゲームプレイ用の Lua が、ターンの開始ごとに `Game:SetProperty` で記録（初回ターン・最終ターン・観測したターン開始の回数）を保存し、ロード画面を閉じたときに読み戻して `Lua.log` に出力する
 
 手順：
 
@@ -37,7 +37,7 @@ MOD の内容：
 
 | 確認 | 期待する結果 |
 |---|---|
-| `Database.log` | `JAC_POC_BUNDLE0` に関するエラーがない |
+| `Database.log` | この MOD に起因するエラーがない（ゲーム本体・オンライン配信由来の既知のエラーは記録して許容） |
 | `Modding.log` | MOD が有効になり、各アクションが適用されている |
 | `Lua.log`（新規ゲーム） | `loaded version=1` と `no saved state (new game)`、以降ターンごとに `turnsSeen` が増える |
 | `Lua.log`（ロード後） | `restored firstTurn=… lastTurn=… turnsSeen=…` がセーブ時点の値と一致し、次のターンで `turnsSeen` が1増える |
@@ -55,4 +55,4 @@ MOD の内容：
 
 - `Documents\My Games\...\Mods` に置いたジャンクション経由でも MOD は読み込まれる
 - `Game:SetProperty` に保存した Lua のテーブルは、セーブ・ロードをまたいで復元される
-- `print` の出力は `Lua.log` に `<MOD名>: ` 付きで記録される（束4「外部とゲームの経路」のゲーム→外の経路として使える）
+- `print` の出力は `Lua.log` に `<MOD名>: ` 付きで記録される（束4「外部とゲームの経路」で、ゲームから外へ渡す経路の候補になる。外部プロセスからの読み取りは未検証）
