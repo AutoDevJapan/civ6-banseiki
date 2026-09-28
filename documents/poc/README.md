@@ -68,7 +68,7 @@ MOD の内容：
 - 右上のバーの List of Reports のすぐ左に「手帳」ボタンを置く（SSOT 11.1）。`ReplaceUIScript` で `PartialScreenHooks` を `UI/JAC_PartialScreenHooks.lua` に差し替え、XP2 版を include して `AddScreenHooks()` の Era と Reports の間に1件足す。アイコンは公式の `LaunchBar_Hook_Timeline` を流用する
 - 手帳は SSOT 11.1 の構成で、記録帳（人物帳・法律帳・宗教帳）と国家金庫（長官たち・宝物庫）を並べる。中身があるのは人物帳だけで、他は「（未実装）」付きの押せない項目。表示名は用語辞書（14-3）の3言語
 - 人物帳は生存中の武将ユニットの状態を直接 `Unit:GetProperty` から表示する（読み取り専用）。日本語・ロシア語・英語の固定テスト行を常時並べる。ESC、同じボタンの再クリック、他の画面（List of Reports など）を開くと手帳は閉じる
-- 以前の固定位置の「武将帳」ボタン（実機で表示されなかった）は削除した
+- 以前の固定位置の「人物帳」ボタン（実機で表示されなかった）は削除した
 
 手順：
 

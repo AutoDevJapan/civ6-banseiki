@@ -13,8 +13,8 @@
 	</References>
 	<LocalizedText>
 		<Text id="LOC_JAC_POC_GROWTHUI_MOD_NAME">
-			<en_US>JAC PoC: Growth and Warlord Ledger</en_US>
-			<ja_JP>JAC PoC：成長と武将帳</ja_JP>
+			<en_US>JAC PoC: Growth and Character Journal</en_US>
+			<ja_JP>JAC PoC：成長と人物帳</ja_JP>
 			<ru_RU>JAC PoC: развитие и журнал полководцев</ru_RU>
 		</Text>
 		<Text id="LOC_JAC_POC_GROWTHUI_MOD_TEASER">
@@ -24,7 +24,7 @@
 		</Text>
 		<Text id="LOC_JAC_POC_GROWTHUI_MOD_DESCRIPTION">
 			<en_US>Assigns up to three starting units warlord records and displays them in a read-only ledger.</en_US>
-			<ja_JP>開始時の最大3ユニットに武将記録を付け、読み取り専用の武将帳に表示する。</ja_JP>
+			<ja_JP>開始時の最大3ユニットに武将記録を付け、読み取り専用の人物帳に表示する。</ja_JP>
 			<ru_RU>Создаёт записи полководцев для трёх начальных юнитов и показывает их в журнале.</ru_RU>
 		</Text>
 	</LocalizedText>
