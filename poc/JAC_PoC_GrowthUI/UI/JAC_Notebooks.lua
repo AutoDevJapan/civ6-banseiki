@@ -1,5 +1,7 @@
 -- 束0・束1 PoC：手帳（Notebooks）画面。人物帳は Unit:GetProperty だけを読む。
 -- 開閉は ReportsList.lua、PartialScreens への移動は EraProgressPanel.lua と同じ型。
+include("SupportFunctions") -- TruncateStringWithTooltip
+
 local ID = "JAC_Notebooks" -- JAC_PartialScreenHooks.lua のフック名と揃える
 local WARLORD_KEY = "JAC_POC_GROWTHUI_WARLORD"
 local MENU_SIZE_PADDING = 54 -- ReportsList.lua の BACKGROUND_SIZE_PADDING
@@ -83,9 +85,14 @@ local function Open()
 		local partialScreens = ContextPtr:LookUpControl("/InGame/PartialScreens")
 		ContextPtr:ChangeParent(partialScreens)
 		partialScreens:AddChildAtIndex(ContextPtr, 6) -- PartialScreenHooks より下に置く
+		-- 公式の IsPartialScreenOpen() と同じパスで、移動後も見つかるかを実機で確かめる。
+		local found = ContextPtr:LookUpControl("/InGame/" .. ID) ~= nil
+			or ContextPtr:LookUpControl("/InGame/AdditionalUserInterfaces/" .. ID) ~= nil
+		print("[JAC_POC] notebooks path lookup found=" .. tostring(found))
 	end
 	Controls.MenuStack:CalculateSize()
 	Controls.MenuBackground:SetSizeY(Controls.MenuStack:GetSizeY() + MENU_SIZE_PADDING)
+	LuaEvents.MinimapPanel_CloseAllLenses()
 	ContextPtr:SetHide(false)
 	UI.PlaySound("CityStates_Panel_Open")
 	LuaEvents.JAC_Notebooks_Opened()
@@ -118,7 +125,12 @@ local function OnPlayerTurnActivated(playerID)
 end
 
 for _, placeholder in ipairs(PLACEHOLDERS) do
-	placeholder[1]:SetText(Locale.Lookup("LOC_JAC_NOTEBOOKS_NOT_YET", Locale.Lookup(placeholder[2])))
+	local button, key = placeholder[1], placeholder[2]
+	-- ボタン幅を超える表記（ロシア語など）は「…」で切り、実機で分かるようにログを出す。
+	local text = Locale.Lookup("LOC_JAC_NOTEBOOKS_NOT_YET", Locale.Lookup(key))
+	if TruncateStringWithTooltip(button, button:GetSizeX() - 12, text) then
+		print("[JAC_POC] notebooks label truncated key=" .. key)
+	end
 end
 Controls.CharacterJournalButton:RegisterCallback(Mouse.eLClick, ToggleCharacterJournal)
 Controls.CloseJournal:RegisterCallback(Mouse.eLClick, function() Controls.JournalPanel:SetHide(true) end)

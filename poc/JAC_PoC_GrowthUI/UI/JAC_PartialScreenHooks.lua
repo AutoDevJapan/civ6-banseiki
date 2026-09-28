@@ -30,10 +30,6 @@ function OnToggleNotebooks()
 end
 
 function AddNotebooksHook()
-	if Controls.ButtonStack == nil then
-		print("[JAC_POC] notebooks button attach failed: ButtonStack not found");
-		return;
-	end
 	AddScreenHook("JAC_Notebooks", "LaunchBar_Hook_Timeline", "LOC_JAC_NOTEBOOKS", OnToggleNotebooks);
 	-- Realize はターンごとに呼ばれるため、ログは最初の1回だけ出す。
 	if not m_isAttachLogged then

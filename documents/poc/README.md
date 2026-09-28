@@ -73,11 +73,12 @@ MOD の内容：
 手順：
 
 1. 共通の準備に従い `poc/JAC_PoC_GrowthUI` を `Mods/JAC_PoC_GrowthUI` へジャンクションで配置する。この検証中は `JAC_PoC_Bundle0` を無効にし、本MODを有効にする
-2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す
+2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す。アイコンが欠けていないか、左上の「歴史年表」（History Timeline）ボタンと見分けられるかも見る
 3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC で閉じることも確認する
-4. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
-5. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
-6. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言と固定3行を確認する
+4. 手帳をもう一度開き、開いたまま List of Reports を押す
+5. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
+6. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
+7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言と固定3行を確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
 
 成功条件：
 
@@ -85,10 +86,12 @@ MOD の内容：
 |---|---|
 | 読み込み | `Modding.log` に `JAC_GrowthUI_Text`・`JAC_GrowthUI_Gameplay`・`JAC_GrowthUI_InGameUI`・`JAC_GrowthUI_PartialScreenHooks`・`JAC_GrowthUI_UIFiles` の適用が記録され、`Database.log` に本MOD由来のエラーがない |
 | ボタンの位置 | `Lua.log` に `[JAC_POC] notebooks button attached parent=ButtonStack` が出て、ボタンが List of Reports のすぐ左にある。都市国家と出会った後も同じ位置にある。この行が出ないときは置換が効いていない（`ReplaceUIScript` の競合を疑う） |
+| アイコン | 欠けずに表示され、「歴史年表」ボタンと見分けられる。同じ `LaunchBar_Hook_Timeline` を流用しているため、紛らわしい・欠ける場合は 26x26 の専用 `.dds` を `ImportFiles` に追加し、`AddScreenHook` の第2引数に渡す |
+| 開き直しと切り替え | 手順4で手帳が閉じて List of Reports が開き、手順3〜4の間の `Lua.log` に `UI.DataError`（`Cannot determine if partial screen`）や `Runtime Error` がない。初回に開いたときの `[JAC_POC] notebooks path lookup found=<true/false>` も記録する（`false` なら、閉じた手帳を公式の `IsPartialScreenOpen()` がパスで探せず `UI.DataError` になる。公式の Era Progress と同じ作り） |
 | 手帳と人物帳 | 開くたびに `[JAC_POC] notebooks opened`、人物帳を出すたびに `[JAC_POC] character journal shown count=<n>` が出る。`n` は生存中の武将ユニット数（新規ゲームでは開始ユニット数に応じて1～3） |
 | 新規ゲームの `Lua.log` | `[JAC_POC] no saved state (new game)`、`[JAC_POC] assigned unit=...` が開始ユニット数に応じて1～3件、`[JAC_POC] initialized count=...` が出る。装備・Artifactの値も記録される |
 | 成長の `Lua.log` | `[JAC_POC] unit=<id> level=... xp=... personality=... trait=... equipment=... artifact=... player=... turn=...` がターンごとに出る。同じユニットで1ターンあたり20 XPを得る。Lv1の必要XPは30で、累計40 XPの時点ではLv2・残り10 XPとなる |
 | ロード後の `Lua.log` | `[JAC_POC] restored unit=...` の全項目がセーブ直前の記録と一致し、`restored count=...` と再表示時の `character journal shown count=` も一致する。ロード直後に `assigned unit=` は増えず、次ターンだけ経験値が増える |
-| 3言語 | 人物帳の表示が直近のログの記録と一致し、日本語・キリル文字・英語の固定3行に文字化けや欠落がない。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる |
+| 3言語 | 人物帳の表示が直近のログの記録と一致し、日本語・キリル文字・英語の固定3行に文字化けや欠落がない。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
 
-結果：**未実施**。前回の実機確認では、ゲームプレイ側の記録とレベルアップは動いたが、固定位置のボタンが表示されず UI は確認できなかった。今回ボタンをフックバーへ移したので、上の手順で再確認する。アイコン `LaunchBar_Hook_Timeline` が 26px の枠で欠けないかも実機で確認する。
+結果：**未実施**。前回の実機確認では、ゲームプレイ側の記録とレベルアップは動いたが、固定位置のボタンが表示されず UI は確認できなかった。今回ボタンをフックバーへ移したので、上の手順で再確認する。
