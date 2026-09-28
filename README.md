@@ -1,4 +1,4 @@
-# civ6-banseiki
+# Civ6用万世紀
 
 Sid Meier's Civilization VI の周回育成型トータルコンバージョン MOD「日本列島・世界・宇宙」の開発リポジトリ。
 
