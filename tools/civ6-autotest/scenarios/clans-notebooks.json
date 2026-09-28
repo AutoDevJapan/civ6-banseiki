@@ -1,0 +1,26 @@
+{
+  "name": "Custom clans + Notebooks (Oda human, Takeda AI)",
+  "judge_profile": "generic",
+  "steps": [
+    {"action": "enable_mods", "ids": ["ba3a1c58-9287-4654-a22f-85f9e6841e9b", "7696e937-2044-4f3c-8e13-4e27632e2710"]},
+    {"action": "configure", "ruleset": "RULESET_EXPANSION_2", "map_size": "MAPSIZE_SMALL", "speed": "GAMESPEED_STANDARD", "seed": 620931, "players": [
+      {"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": true},
+      {"leader": "LEADER_JAC_TAKEDA_NOBUTORA", "civ": "CIVILIZATION_JAC_TAKEDA", "human": false}
+    ]},
+    {"action": "start_game", "timeout": 240},
+    {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log", "contains": "civ=CIVILIZATION_JAC_ODA leader=LEADER_JAC_ODA_NOBUHIDE"}, "timeout": 90},
+    {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log", "contains": "civ=CIVILIZATION_JAC_TAKEDA leader=LEADER_JAC_TAKEDA_NOBUTORA"}, "timeout": 90},
+    {"action": "screenshot", "path": "01-start.png"},
+    {"action": "ui_lua", "state_name": "InGame", "code": "LuaEvents.JAC_Notebooks_Open(); return true"},
+    {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log", "contains": "[JAC_POC] notebooks opened"}, "timeout": 30},
+    {"action": "screenshot", "path": "02-notebooks.png"},
+    {"action": "autoplay", "turns": 3, "timeout": 300},
+    {"action": "screenshot", "path": "03-turn4.png"},
+    {"action": "save", "name": "JAC-Autotest-ClansNotebooks-1", "timeout": 90},
+    {"action": "exit_to_menu", "timeout": 90},
+    {"action": "load", "name": "JAC-Autotest-ClansNotebooks-1", "timeout": 240},
+    {"action": "autoplay", "turns": 1, "timeout": 180},
+    {"action": "ui_lua", "state_name": "InGame", "code": "LuaEvents.JAC_Notebooks_Open(); return true"},
+    {"action": "screenshot", "path": "04-after-load-notebooks.png"}
+  ]
+}

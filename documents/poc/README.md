@@ -129,6 +129,10 @@ python tools/jac_art/build_art.py
 | 保存・ロード | `restored count=2`。両ユニットの全記録と人物帳の表示が保存前の Lv2・70 XP に一致。追加の `assigned` はなく、次のターン6で Lv3・5 XP |
 | 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認 |
 
+
+このブランチの追加自動実行は `tools/civ6-autotest/scenarios/growth-notebooks.json` を使い、`tools/civ6-autotest/artifacts/growth-run-13/` に保存した（41/41 ステップ、ログ判定 13/13 件）。詳細な確認結果は本節の表を参照。
+
+
 要オーナー確認：表示言語 `ja_JP`・`ru_RU` での文言とロシア語項目名の収まり。Options の表示言語変更はアプリ再起動を要求し、現ドライバはゲームの再起動を扱わない。人物帳を開いた状態で ESC を押して手帳が閉じるかも実機確認が必要。自動入力では公式 Reports List でも ESC がゲーム全体のメニューを開いたため、閉鎖を判定できなかった。
 
 未検証：マルチプレイ。`LastXPTurn` で同じターンの二重加算は防いでいるが、`Unit:SetProperty` の同期とクライアント間の一致はシングルプレイの結果からは確認できない。マルチプレイで採用する前に、2人プレイで加算回数とロード後の一致を確認する。
@@ -187,6 +191,11 @@ MOD の内容：
 |---|---|---|
 | 2026-09-29 | 家名表示の切替・ロード後保持 | **成功**（途中の手動入力なし）。`steps.jsonl` で 102/102 ステップ、ログ判定 2/2 件。ターン1は4 UI コンテキストの原名、遭遇が UI に反映されたターン2は4画面の原名、ターン3の `rename` 後のターン4とセーブ／終了／ロード後は4画面の改名を確認した。証拠一式はローカルの `tools/civ6-autotest/artifacts/clans-house-names-run-08/`（PR #19 のドライバーが生成。Git 管理外のため GitHub からは参照不可）。`steps.jsonl`、`Lua.log` と画面記録（`01-turn1-hud.png`、ターン2の `02-turn2-*`・`03-turn2-city-banner.png`、ターン4の `05-turn4-*`、ロード後の `09-load-*`）を保存。 |
 | 2026-09-29 | 織田・武田の両方を AI にした実機検証 | **成功**。Steam 版 1.0.12.68、Gathering Storm、英語 UI、シングルプレイ。公式北条／日本を人間（player 0）、織田を AI（player 1）、武田を AI（player 2）にし、GrowthUI は無効化。`scenarios/clans-both-ai.json` の 41/41 ステップ、ログ判定 2/2 件が成功。`Lua.log` に別 ID の両家と `customCivs oda=1 takeda=1` を記録。両 AI はターン1に都市 0、ターン2に都市 1 となり、ターン4の Lua 照会では織田の首都が名古屋、武田の首都が甲府。家名は織田が `Oda clan` のまま、武田が3ターン目の切替後に `Takeda clan` から `Kai Takeda clan` となり、両都市バナーのツールチップでも一致。セーブ／メニューへ戻る／ロード後も両 AI と家名を確認し、ターン5まで進行した。ユニット移動の個別追跡は行わず、両者の都市建設を AI 行動の証拠とした。ローカル証拠は `tools/civ6-autotest/artifacts/clans-both-ai-run-02/` の `steps.jsonl`、`Lua.log`、`01-start.png`、`02-turn4-oda-capital.png`、`03-turn4-takeda-capital.png`、`04-after-load.png`、`05-turn5-after-load.png`（Git 管理外）。MOD 本体の修正は不要だった。 |
+
+
+自動シナリオの定義は `tools/civ6-autotest/scenarios/`（`clans-notebooks.json`、`clans-house-names.json`、`clans-both-ai.json`）、このブランチの実行成果物は `tools/civ6-autotest/artifacts/`（`clans-notebooks-run-09/`、`clans-house-names-run-08/`、`clans-both-ai-run-02/`）にある。各結果の詳細は本節の記録を参照。
+
+
 
 切替前の外交画面は `TAKEDA CLAN`、ランキング概要は `Takeda clan leading`、都市バナーの実ツールチップは `Kofu (Takeda clan)`。切替後とロード後はそれぞれ `KAI TAKEDA CLAN`、`Kai Takeda clan leading`、`Kofu (Kai Takeda clan)`。外交リボンの実ツールチップも `Takeda clan` から `Kai Takeda clan` に変わった（値は同フォルダの `Lua.log` に `[JAC_HOUSE]` として記録）。都市バナーとリボンの家名は画面上のツールチップ値を UI Lua で読み、スクリーンショットには都市・アイコンの表示を記録した。遭遇状態を Gameplay Lua で設定した直後のターン1では UI のリボンにまだ武田が現れないため、実画面の切替前比較はターン2に行った。
 
