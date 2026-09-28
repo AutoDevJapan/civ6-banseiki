@@ -185,7 +185,7 @@ def _bundle0_checks(logs: dict[str, str]) -> list[Check]:
     return checks
 
 
-def _growth_checks(logs: dict[str, str]) -> list[Check]:
+def _growth_checks(logs: dict[str, str], expected_units: int) -> list[Check]:
     lua, modding, database = (logs[name] for name in ("Lua.log", "Modding.log", "Database.log"))
     own = [line for line in lua.splitlines() if line.startswith("JAC_PoC_GrowthUI_Gameplay:")]
     parsed = [(i, match) for i, line in enumerate(own) if (match := GROWTH_RECORD.search(line))]
@@ -214,14 +214,15 @@ def _growth_checks(logs: dict[str, str]) -> list[Check]:
         Check("Growth: partial-screen errors", not ui_errors,
               f"JAC-related UI.DataError, partial-screen or Runtime Error: {len(ui_errors)}"),
         Check("Growth: new-game assignment", "[JAC_POC] no saved state (new game)" in "\n".join(own[:restore_at])
-              and initial_count is not None and 1 <= len(assigned) <= 3
+              and initial_count is not None and len(assigned) == expected_units
+              and len({(m["player"], m["unit"]) for m in assigned}) == expected_units
               and int(initial_count[1]) == len(assigned)
               and all(m["level"] == "1" and m["xp"] == "0" for m in assigned)
               and (not assigned or assigned[0]["equipment"] == "JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK"
                    and assigned[0]["artifact"] == "JAC_ARTIFACT_POC_RELIC")
               and (len(assigned) < 2 or assigned[1]["equipment"] == "JAC_ITEM_POC_BLADE"
                    and assigned[1]["artifact"] == "none"),
-              f"assigned={len(assigned)}, initialized={initial_count[1] if initial_count else '?'}"),
+              f"assigned={len(assigned)}, initialized={initial_count[1] if initial_count else '?'}, expected={expected_units}"),
     ]
 
     # Every surviving record must gain exactly 20 XP on each successive human turn.
@@ -256,7 +257,8 @@ def _growth_checks(logs: dict[str, str]) -> list[Check]:
     last_rows = {(m["player"], m["unit"]): m for m in before if int(m["turn"]) == last_turn}
     restored_rows = {(m["player"], m["unit"]): m for _, m in restores}
     fields = ("level", "xp", "personality", "trait", "equipment", "artifact")
-    same = bool(last_rows and last_rows.keys() == restored_rows.keys()
+    same = bool(len(last_rows) == len(restored_rows) == expected_units
+                and last_rows.keys() == restored_rows.keys()
                 and all(all(last_rows[key][field] == restored_rows[key][field] for field in fields)
                         for key in last_rows))
     journal_entries = [(m.start(), int(m[1])) for m in re.finditer(
@@ -264,12 +266,12 @@ def _growth_checks(logs: dict[str, str]) -> list[Check]:
     restore_position = lua.find("JAC_PoC_GrowthUI_Gameplay: [JAC_POC] restored unit=")
     before_journal = [count for position, count in journal_entries if position < restore_position]
     after_journal = [count for position, count in journal_entries if position > restore_position]
-    counts_ok = bool(restored_count and int(restored_count[1]) == len(restored_rows)
+    counts_ok = bool(restored_count and int(restored_count[1]) == expected_units
                      and before_journal and after_journal
-                     and before_journal[-1] == after_journal[0] == len(restored_rows))
+                     and all(count == expected_units for count in before_journal + after_journal))
     checks.append(Check("Growth: restored rows and journal", same and counts_ok,
                         f"pre-save={len(last_rows)}, restored={len(restored_rows)}, "
-                        f"journal={before_journal[-1:]}/{after_journal[:1]}"))
+                        f"journal={before_journal[-1:]}/{after_journal[:1]}, expected={expected_units}"))
     next_rows = {(m["player"], m["unit"]): m for m in after if int(m["turn"]) == last_turn + 1}
     post_ok = bool(same and next_rows.keys() == restored_rows.keys()
                    and all((int(next_rows[key]["level"]), int(next_rows[key]["xp"])) ==
@@ -292,7 +294,7 @@ def _growth_next(level: int, xp: int) -> tuple[int, int]:
     return level, xp
 
 
-def judge(logs: dict[str, str], profile: str = "bundle0") -> list[Check]:
+def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int | None = None) -> list[Check]:
     for name in LOG_NAMES:
         if name not in logs:
             raise ValueError(f"Missing log: {name}")
@@ -305,7 +307,9 @@ def judge(logs: dict[str, str], profile: str = "bundle0") -> list[Check]:
     if profile == "bundle0":
         checks.extend(_bundle0_checks(logs))
     elif profile == "growth":
-        checks.extend(_growth_checks(logs))
+        if type(expected_units) is not int or expected_units < 1:
+            raise ValueError("growth judge needs a positive expected_units count")
+        checks.extend(_growth_checks(logs, expected_units))
     elif profile != "generic":
         raise ValueError(f"Unknown judge profile: {profile}")
     return checks
@@ -324,6 +328,7 @@ def main() -> int:
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--snapshot", type=Path, help="Write baseline before a manual run, then exit")
     parser.add_argument("--profile", choices=("bundle0", "generic", "growth"), default="bundle0")
+    parser.add_argument("--expected-units", type=int, help="Required unit count for the growth profile")
     args = parser.parse_args()
     log_dir = args.logs or default_log_dir()
     if args.snapshot:
@@ -335,7 +340,7 @@ def main() -> int:
         parser.error("--baseline is required when judging")
     try:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
-        checks = judge(read_since(log_dir, baseline), args.profile)
+        checks = judge(read_since(log_dir, baseline), args.profile, expected_units=args.expected_units)
     except (OSError, KeyError, ValueError) as exc:
         parser.exit(2, f"Cannot judge logs: {exc}\n")
     print_table(checks)

@@ -58,6 +58,21 @@ JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=3 xp=5 personality=JAC_PERSONA
 """
 
 
+def two_unit_growth_logs():
+    rows = []
+    for line in GROWTH_LUA.splitlines():
+        if "initialized count=1" in line or "restored count=1" in line or "character journal shown count=1" in line:
+            line = line.replace("count=1", "count=2")
+        rows.append(line)
+        if "JAC_PoC_GrowthUI_Gameplay: [JAC_POC]" in line and "unit=1 " in line:
+            rows.append(line.replace("unit=1 ", "unit=2 ")
+                        .replace("JAC_PERSONALITY_BRAVE", "JAC_PERSONALITY_CALM")
+                        .replace("JAC_TRAIT_VALIANT", "JAC_TRAIT_FIERCE")
+                        .replace("JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK", "JAC_ITEM_POC_BLADE")
+                        .replace("JAC_ARTIFACT_POC_RELIC", "none"))
+    return {"Lua.log": "\n".join(rows) + "\n", "Modding.log": GROWTH_MODDING, "Database.log": ""}
+
+
 class JudgeTests(unittest.TestCase):
     def sample(self):
         return {"Lua.log": LUA, "Database.log": DATABASE, "Modding.log": MODDING}
@@ -97,12 +112,28 @@ class JudgeTests(unittest.TestCase):
 
     def test_growth_success_and_restored_mismatch(self):
         logs = {"Lua.log": GROWTH_LUA, "Modding.log": GROWTH_MODDING, "Database.log": ""}
-        checks = judge(logs, "growth")
+        checks = judge(logs, "growth", expected_units=1)
         self.assertGreaterEqual(len(checks), 12)
         self.assertTrue(all(c.passed for c in checks), checks)
         logs["Lua.log"] = GROWTH_LUA.replace("restored unit=1 level=2 xp=70", "restored unit=1 level=2 xp=50")
-        failed = {c.name for c in judge(logs, "growth") if not c.passed}
+        failed = {c.name for c in judge(logs, "growth", expected_units=1) if not c.passed}
         self.assertIn("Growth: restored rows and journal", failed)
+
+    def test_growth_expected_two_units_in_assignment_restore_and_journal(self):
+        logs = two_unit_growth_logs()
+        self.assertTrue(all(check.passed for check in judge(logs, "growth", expected_units=2)))
+        missing_assignment = {**logs, "Lua.log": logs["Lua.log"].replace(
+            next(line for line in logs["Lua.log"].splitlines() if "assigned unit=2 " in line) + "\n", "")}
+        self.assertIn("Growth: new-game assignment", {c.name for c in judge(
+            missing_assignment, "growth", expected_units=2) if not c.passed})
+        missing_restore = {**logs, "Lua.log": logs["Lua.log"].replace(
+            next(line for line in logs["Lua.log"].splitlines() if "restored unit=2 " in line) + "\n", "")}
+        self.assertIn("Growth: restored rows and journal", {c.name for c in judge(
+            missing_restore, "growth", expected_units=2) if not c.passed})
+        wrong_journal = {**logs, "Lua.log": logs["Lua.log"].replace(
+            "character journal shown count=2", "character journal shown count=1")}
+        self.assertIn("Growth: restored rows and journal", {c.name for c in judge(
+            wrong_journal, "growth", expected_units=2) if not c.passed})
 
     def test_growth_ignores_unrelated_game_error_and_catches_target_ui_error(self):
         logs = {"Lua.log": GROWTH_LUA +
@@ -112,12 +143,13 @@ class JudgeTests(unittest.TestCase):
                 "BaseGamePanel: Cannot determine if partial screen for BaseGamePanel\n"
                 "JAC_Notebooks: [JAC_POC] notebooks opened\n",
                 "Modding.log": GROWTH_MODDING, "Database.log": ""}
-        self.assertTrue(all(check.passed for check in judge(logs, "growth")), judge(logs, "growth"))
+        self.assertTrue(all(check.passed for check in judge(logs, "growth", expected_units=1)),
+                        judge(logs, "growth", expected_units=1))
         logs["Lua.log"] += "UI.DataError: Cannot determine if partial screen for JAC_Notebooks\n"
-        failed = {check.name for check in judge(logs, "growth") if not check.passed}
+        failed = {check.name for check in judge(logs, "growth", expected_units=1) if not check.passed}
         self.assertEqual(failed, {"Growth: partial-screen errors"})
         logs["Lua.log"] += "Runtime Error: JAC UI failure\n  Mods/JAC_PoC_GrowthUI/JAC_Notebooks.lua:4\n"
-        failed = {check.name for check in judge(logs, "growth") if not check.passed}
+        failed = {check.name for check in judge(logs, "growth", expected_units=1) if not check.passed}
         self.assertEqual(failed, {"Growth: partial-screen errors", "Generic: JAC Runtime Error"})
 
     def test_baseline_excludes_old_lines_and_handles_truncate(self):
@@ -135,6 +167,11 @@ class JudgeTests(unittest.TestCase):
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):
                 validate_scenario(json.loads(path.read_text(encoding="utf-8")))
+        growth = json.loads((folder / "growth-notebooks.json").read_text(encoding="utf-8"))
+        self.assertEqual(growth["expected_units"], 2)
+        del growth["expected_units"]
+        with self.assertRaisesRegex(RuntimeError, "expected_units"):
+            validate_scenario(growth)
 
 
 class AutoplayTests(unittest.TestCase):

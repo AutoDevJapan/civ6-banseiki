@@ -29,7 +29,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 ## JSON 手順
 
-`scenarios/` に束0の保存・再読込、織田（人間）と武田（AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能。
+`scenarios/` に束0の保存・再読込、織田（人間）と武田（AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
 
 | action | 必要な値 | 動作 |
 |---|---|---|
@@ -56,6 +56,12 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 - 読込後の `restored firstTurn/lastTurn/turnsSeen` が保存前最後の行と一致し、次のターンでターン番号と `turnsSeen` が1増える。
 
 クランの `generic` 判定はエラー不在を表し、シナリオ内の `wait_for` で所定のログを追加確認する。成長 UI の `growth` 判定は MOD の適用、成長ログ、保存・復元後の値と手帳表示などを検査する。画面の見た目はスクリーンショットで別途確認する。
+
+ロード画面の完了ログが出た後の Esc は1回だけ送る。以後は `InGame` の状態と操作可能な人間プレイヤーを期限まで問い合わせ、入れなければ追加のキー入力なしで失敗する。入力先は、ウィンドウ名と実行ファイル名（`CivilizationVI.exe` / `CivilizationVI_DX12.exe`）を照合した唯一の Civ6 HWND に限定する。2026-09-29 の実機ロード画面で、その HWND への `PostMessageW` による `WM_KEYDOWN/WM_KEYUP` 1組で `InGame` への移行を確認したため、この方式を使う。キー押下後の確認が失敗しても、解放メッセージを送る。
+
+別の Civ6 ビルドでウィンドウ宛てメッセージが無視される場合に備え、`click.py` には `SendInput` 方式も残す。切替前にロード画面で実機確認する。この方式は送信直前と直後に前景 HWND を照合し、変化すればシナリオを中止する。ただし照合と送信は OS 上で原子的ではなく、両者の間に前景が移るごく短い競合は残る。
+
+2026-09-29 の修正後確認では、オフライン単体テスト 37 件が成功した。実機で `clans-notebooks-run-18` は 17/17 ステップ・判定 2/2、`growth-run-19` は 41/41 ステップ・判定 13/13、`clans-house-names-run-20` は 102/102 ステップ・判定 2/2 を通過した。`AutoPlayEnd` がターン表示より先に届くことがあるため、自動進行の完了はイベント、実ターン数、停止、人間プレイヤーへの復帰を組み合わせて判定している。
 
 ## 根拠と注意
 

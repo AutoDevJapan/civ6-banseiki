@@ -16,6 +16,11 @@ MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 KEYEVENTF_KEYUP = 0x0002
 VK_ESCAPE = 0x1B
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+INPUT_KEYBOARD = 1
+# Confirm this mode on Civ VI's loading screen before changing it.
+KEY_DELIVERY = "window"
 TITLE_PREFIX = "Sid Meier's Civilization VI"
 CIV_EXECUTABLES = {"civilizationvi.exe", "civilizationvi_dx12.exe"}
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -35,6 +40,28 @@ user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 user32.SetForegroundWindow.restype = wintypes.BOOL
 user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
 user32.GetWindowRect.restype = wintypes.BOOL
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostMessageW.restype = wintypes.BOOL
+user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+user32.MapVirtualKeyW.restype = wintypes.UINT
+
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD),
+                ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD),
+                ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class INPUT_UNION(ctypes.Union):
+    _fields_ = [("ki", KEYBDINPUT), ("padding", ctypes.c_byte * 32)]
+
+
+class INPUT(ctypes.Structure):
+    _fields_ = [("type", wintypes.DWORD), ("data", INPUT_UNION)]
+
+
+user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+user32.SendInput.restype = wintypes.UINT
 kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
 kernel32.OpenProcess.restype = wintypes.HANDLE
 kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
@@ -132,16 +159,37 @@ def click_fraction(fx: float, fy: float) -> tuple[int, int]:
 
 
 def press_key(vk: int) -> None:
-    """Send one key press only while the unique Civ VI window has focus."""
+    """Send a key to the verified Civ VI window, releasing it on every error path."""
     hwnd = find_civ_window()
     _focus_civ_window(hwnd)
-    _require_foreground(hwnd)
-    try:
-        user32.keybd_event(vk, 0, 0, 0)
-        time.sleep(0.08)
+    if KEY_DELIVERY == "window":
+        scan = user32.MapVirtualKeyW(vk, 0)
+        down_param = 1 | (scan << 16)
         _require_foreground(hwnd)
-    finally:
-        user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+        if not user32.PostMessageW(hwnd, WM_KEYDOWN, vk, down_param):
+            raise InputError("Could not post Civ VI key down")
+        try:
+            time.sleep(0.08)
+            _require_foreground(hwnd)
+        finally:
+            if not user32.PostMessageW(hwnd, WM_KEYUP, vk, down_param | 0xC0000000):
+                raise InputError("Could not post Civ VI key up")
+    elif KEY_DELIVERY == "sendinput":
+        def send(flags: int) -> None:
+            key = INPUT(type=INPUT_KEYBOARD, data=INPUT_UNION(ki=KEYBDINPUT(vk, 0, flags, 0, 0)))
+            if user32.SendInput(1, ctypes.byref(key), ctypes.sizeof(key)) != 1:
+                raise InputError("Could not send Civ VI key input")
+
+        _require_foreground(hwnd)
+        send(0)
+        try:
+            _require_foreground(hwnd)
+            time.sleep(0.08)
+        finally:
+            send(KEYEVENTF_KEYUP)
+    else:
+        raise InputError(f"Unknown key delivery mode: {KEY_DELIVERY}")
+    _require_foreground(hwnd)
 
 
 if __name__ == "__main__":

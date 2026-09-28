@@ -15,7 +15,7 @@ from tuner import LuaResult
 
 
 class ScenarioSafetyTests(unittest.TestCase):
-    def test_load_wait_does_not_send_escape_after_ingame_state_exists(self):
+    def test_load_wait_sends_one_escape_even_if_ingame_state_exists(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         with patch.object(runner, "_states", return_value=["InGame"]), patch.object(
             runner, "_lua", side_effect=["false", "true"]
@@ -26,6 +26,16 @@ class ScenarioSafetyTests(unittest.TestCase):
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
         self.assertEqual(run_lua.call_count, 2)
+        press.assert_called_once_with(civ_click.VK_ESCAPE)
+
+    def test_load_wait_never_sends_escape_before_load_complete_log(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
+            runner, "_states"
+        ) as states, patch("scenario.press_key") as press, patch("scenario.time.sleep"):
+            with self.assertRaisesRegex(ScenarioError, "entering the game"):
+                runner._enter_game_after_loadscreen(0, 0.02)
+        states.assert_not_called()
         press.assert_not_called()
 
     def test_load_wait_sends_begin_game_escape_only_once(self):
@@ -38,6 +48,31 @@ class ScenarioSafetyTests(unittest.TestCase):
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
+        press.assert_called_once_with(civ_click.VK_ESCAPE)
+
+    def test_load_wait_reconnects_when_frontend_state_list_is_stale(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        client = Mock()
+        runner.client = client
+        with patch.object(runner, "_states", side_effect=[["FrontEnd"], ["InGame"]]), patch.object(
+            runner, "_lua", return_value="true"
+        ), patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
+            runner, "_close_options_menu"
+        ), patch.object(runner, "_dismiss_advisor"), patch(
+            "scenario.press_key"
+        ) as press, patch("scenario.time.sleep"):
+            runner._enter_game_after_loadscreen(0, 1)
+        press.assert_called_once_with(civ_click.VK_ESCAPE)
+        client.close.assert_called_once()
+        self.assertIsNone(runner.client)
+
+    def test_load_wait_timeout_never_repeats_escape(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_states", return_value=[]), patch.object(
+            runner, "_loadscreen_count", return_value=1
+        ), patch("scenario.press_key") as press, patch("scenario.time.sleep"):
+            with self.assertRaisesRegex(ScenarioError, "entering the game"):
+                runner._enter_game_after_loadscreen(0, 0.02)
         press.assert_called_once_with(civ_click.VK_ESCAPE)
 
     def test_run_creates_missing_output_parents_but_rejects_existing_run(self):
@@ -190,6 +225,27 @@ class ScenarioSafetyTests(unittest.TestCase):
         self.assertEqual(sum("AutoplayManager.SetActive(true)" in code for code in commands), 1)
         self.assertEqual(sum("AutoplayManager.SetActive(false)" in code for code in commands), 1)
 
+    def test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        commands = []
+
+        def slow_first_lua(_state, code, _timeout=5.0):
+            commands.append(code)
+            if "JAC_Notebooks_Close" in code:
+                import time
+                time.sleep(0.025)
+            return "true"
+
+        with patch.object(runner, "_lua", side_effect=slow_first_lua), patch.object(
+            runner, "_close_options_menu", return_value=False
+        ), patch.object(runner, "_dismiss_advisor", return_value=False):
+            with self.assertRaisesRegex(ScenarioError, "deadline"):
+                runner._autoplay(3, 0.01)
+            with self.assertRaisesRegex(ScenarioError, "deadline"):
+                runner._end_turn(0.01)
+        self.assertFalse(any("AutoplayManager.SetActive(true)" in code for code in commands))
+        self.assertFalse(any("UI.RequestAction" in code for code in commands))
+
 
 class InputSafetyTests(unittest.TestCase):
     def test_foreground_mismatch_sends_no_keys_or_clicks(self):
@@ -203,7 +259,8 @@ class InputSafetyTests(unittest.TestCase):
                 civ_click.press_key(civ_click.VK_ESCAPE)
             with self.assertRaisesRegex(RuntimeError, "foreground"):
                 civ_click.click_fraction(0.5, 0.5)
-        user32.keybd_event.assert_not_called()
+        user32.PostMessageW.assert_not_called()
+        user32.SendInput.assert_not_called()
         user32.mouse_event.assert_not_called()
         user32.SetCursorPos.assert_not_called()
 
@@ -211,15 +268,31 @@ class InputSafetyTests(unittest.TestCase):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1
         user32.GetForegroundWindow.side_effect = (100, 100, 999)
+        user32.MapVirtualKeyW.return_value = 1
+        user32.PostMessageW.return_value = 1
         with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
             civ_click, "user32", user32
         ), patch.object(civ_click.time, "sleep"):
             with self.assertRaisesRegex(civ_click.InputError, "foreground"):
                 civ_click.press_key(civ_click.VK_ESCAPE)
-        self.assertEqual(user32.keybd_event.call_args_list, [
-            unittest.mock.call(civ_click.VK_ESCAPE, 0, 0, 0),
-            unittest.mock.call(civ_click.VK_ESCAPE, 0, civ_click.KEYEVENTF_KEYUP, 0),
+        self.assertEqual(user32.PostMessageW.call_args_list, [
+            unittest.mock.call(100, civ_click.WM_KEYDOWN, civ_click.VK_ESCAPE, 1 | (1 << 16)),
+            unittest.mock.call(100, civ_click.WM_KEYUP, civ_click.VK_ESCAPE,
+                               1 | (1 << 16) | 0xC0000000),
         ])
+
+    def test_sendinput_fallback_checks_foreground_and_releases_key(self):
+        user32 = Mock()
+        user32.SetForegroundWindow.return_value = 1
+        user32.GetForegroundWindow.side_effect = (100, 100, 100, 999)
+        user32.SendInput.return_value = 1
+        with patch.object(civ_click, "KEY_DELIVERY", "sendinput"), patch.object(
+            civ_click, "find_civ_window", return_value=100
+        ), patch.object(civ_click, "user32", user32), patch.object(civ_click.time, "sleep"):
+            with self.assertRaisesRegex(civ_click.InputError, "foreground"):
+                civ_click.press_key(civ_click.VK_ESCAPE)
+        self.assertEqual(user32.SendInput.call_count, 2)
+        user32.PostMessageW.assert_not_called()
 
     def test_input_error_is_logged_as_step_failure(self):
         with tempfile.TemporaryDirectory() as root:
@@ -247,7 +320,7 @@ class InputSafetyTests(unittest.TestCase):
         ), patch.object(civ_click.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "Could not bring"):
                 civ_click.press_key(civ_click.VK_ESCAPE)
-        user32.keybd_event.assert_not_called()
+        user32.PostMessageW.assert_not_called()
 
     def test_window_must_have_unique_civ_executable(self):
         user32 = Mock()
@@ -275,7 +348,7 @@ class InputSafetyTests(unittest.TestCase):
                 civ_click.find_civ_window()
             with self.assertRaisesRegex(civ_click.InputError, "found 0"):
                 civ_click.press_key(civ_click.VK_ESCAPE)
-            user32.keybd_event.assert_not_called()
+            user32.PostMessageW.assert_not_called()
         with patch.object(civ_click, "user32", user32), patch.object(
             civ_click, "_process_name", return_value="civilizationvi.exe"
         ):
