@@ -1,15 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameData>
 	<LocalizedText>
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_OPEN"><Text>Warlord Ledger</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_OPEN"><Text>武将帳</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_OPEN"><Text>Журнал</Text></Row>
+		<!-- 手帳の表示名は用語辞書（14-3）に合わせる。 -->
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS"><Text>Notebooks</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS"><Text>手帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS"><Text>Записные книжки</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>Journals</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>記録帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>Журналы</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>Character Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>人物帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>Журнал персонажей</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>Law Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>法律帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>Журнал законов</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>Religion Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>宗教帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>Журнал религий</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>National Treasury</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>国家金庫</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>Государственная казна</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>Secretaries</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>長官たち</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>Министры</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>Vault</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>宝物庫</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>Хранилище</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name} (not yet)</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name}（未実装）</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name} (не готово)</Text></Row>
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Close</Text></Row>
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>閉じる</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Закрыть</Text></Row>
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TITLE"><Text>Warlord Ledger</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TITLE"><Text>武将帳</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TITLE"><Text>Журнал полководцев</Text></Row>
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Three-language glyph check</Text></Row>
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>3言語表示テスト</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Проверка трёх языков</Text></Row>

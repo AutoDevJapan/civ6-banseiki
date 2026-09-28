@@ -7,6 +7,10 @@
 		<Authors>civ6-banseiki</Authors>
 		<CompatibleVersions>2.0</CompatibleVersions>
 	</Properties>
+	<!-- XP2 の PartialScreenHooks 置換より後に適用させる（BarbarianClansMode.modinfo と同じ書き方）。 -->
+	<References>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+	</References>
 	<LocalizedText>
 		<Text id="LOC_JAC_POC_GROWTHUI_MOD_NAME">
 			<en_US>JAC PoC: Growth and Warlord Ledger</en_US>
@@ -40,17 +44,25 @@
 			<Properties>
 				<Context>InGame</Context>
 			</Properties>
-			<File>UI/JAC_PoC_GrowthUI.xml</File>
+			<File>UI/JAC_Notebooks.xml</File>
 		</AddUserInterfaces>
+		<ReplaceUIScript id="JAC_GrowthUI_PartialScreenHooks" criteria="JAC_GrowthUI_GatheringStorm">
+			<Properties>
+				<LuaContext>PartialScreenHooks</LuaContext>
+				<LuaReplace>UI/JAC_PartialScreenHooks.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
 		<ImportFiles id="JAC_GrowthUI_UIFiles" criteria="JAC_GrowthUI_GatheringStorm">
-			<File>UI/JAC_PoC_GrowthUI.xml</File>
-			<File>UI/JAC_PoC_GrowthUI.lua</File>
+			<File>UI/JAC_Notebooks.xml</File>
+			<File>UI/JAC_Notebooks.lua</File>
+			<File>UI/JAC_PartialScreenHooks.lua</File>
 		</ImportFiles>
 	</InGameActions>
 	<Files>
 		<File>Text/JAC_PoC_GrowthUI_Text.xml</File>
 		<File>Scripts/JAC_PoC_GrowthUI_Gameplay.lua</File>
-		<File>UI/JAC_PoC_GrowthUI.xml</File>
-		<File>UI/JAC_PoC_GrowthUI.lua</File>
+		<File>UI/JAC_Notebooks.xml</File>
+		<File>UI/JAC_Notebooks.lua</File>
+		<File>UI/JAC_PartialScreenHooks.lua</File>
 	</Files>
 </Mod>
