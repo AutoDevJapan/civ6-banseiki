@@ -180,9 +180,9 @@ Pillow で単色背景から人物・手帳を透過処理し、指導者の円�
 
 | 対象 | 生成器・経路 | 生成日 | 参照素材 | 規約・再配布 |
 |---|---|---|---|---|
-| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。生成物の再配布・公開の可否は未確定。この画像を含む PoC の公開・再配布は、[質問 D8](../questions.md) のオーナー判断が完了するまで保留する |
+| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。生成物の再配布・公開の可否は未確定。この画像を含む PoC の公開・再配布は、[質問 D11](../questions.md) のオーナー判断が完了するまで保留する |
 
-Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。OpenAI 利用規約も自動・プログラムによるデータまたは出力の抽出を禁止しているため、ChatGPT Web UI で出力取得をブラウザーエージェントに自動化する案にも規約上の懸念がある（[OpenAI 利用規約](https://openai.com/policies/row-terms-of-use/)）。いずれも規約解釈や生成経路の許可をここで確定せず、[質問 D8](../questions.md) のオーナー判断に残す。規約へのリンクは生成画像に再配布許諾があることを示すものではない。
+Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。OpenAI 利用規約も自動・プログラムによるデータまたは出力の抽出を禁止しているため、ChatGPT Web UI で出力取得をブラウザーエージェントに自動化する案にも規約上の懸念がある（[OpenAI 利用規約](https://openai.com/policies/row-terms-of-use/)）。いずれも規約解釈や生成経路の許可をここで確定せず、[質問 D11](../questions.md) のオーナー判断に残す。規約へのリンクは生成画像に再配布許諾があることを示すものではない。
 
 現行画像の出典（ローカル元ファイルは Git 管理外）：
 

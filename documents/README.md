@@ -44,7 +44,7 @@
 | 3 | マップとスケール | [03-map-and-scale.md](spec/ssot/03-map-and-scale.md) |
 | 4 | 勢力・人物・キャラクター | [04-factions-characters.md](spec/ssot/04-factions-characters.md) |
 | 5 | 成長・ビルド・コンボ | [05-growth-build-combo.md](spec/ssot/05-growth-build-combo.md) |
-| 6 | 国家運営・物流・輸送 | [06-nation-logistics.md](spec/ssot/06-nation-logistics.md) |
+| 6 | 国家運営・物流・輸送（建物を含む） | [06-nation-logistics.md](spec/ssot/06-nation-logistics.md) |
 | 7 | 航空と着陸場所 | [07-aviation.md](spec/ssot/07-aviation.md) |
 | 8 | 探索・装備・Artifact・英雄 | [08-exploration-artifacts.md](spec/ssot/08-exploration-artifacts.md) |
 | 9 | 勢力吸収と宗教（統治・正当性・自治、暗殺者Unit、秘密結社を含む） | [09-assimilation-religion.md](spec/ssot/09-assimilation-religion.md) |
