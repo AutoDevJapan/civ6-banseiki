@@ -29,6 +29,33 @@ DATABASE = """[3897835.363] [Localization] ERROR: UNIQUE constraint failed: Loca
 [3897835.363] from file CurrentClickouts/Text/ClickoutText_en_US.xml
 [3898056.334] [Configuration]: Passed Validation.
 """
+GROWTH_MODDING = """7696e937-2044-4f3c-8e13-4e27632e2710
+Applying Component - JAC_GrowthUI_Text (UpdateText)
+Applying Component - JAC_GrowthUI_Gameplay (AddGameplayScripts)
+Applying Component - JAC_GrowthUI_InGameUI (AddUserInterfaces)
+Applying Component - JAC_GrowthUI_PartialScreenHooks (ReplaceUIScript)
+Applying Component - JAC_GrowthUI_UIFiles (ImportFiles)
+"""
+GROWTH_LUA = """PartialScreenHooks: [JAC_POC] notebooks button attached parent=ButtonStack
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] no saved state (new game)
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] assigned unit=1 level=1 xp=0 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] initialized count=1
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=1 xp=20 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=1
+JAC_Notebooks: [JAC_POC] notebooks path lookup found=true
+JAC_Notebooks: [JAC_POC] notebooks opened
+JAC_Notebooks: [JAC_POC] character journal shown count=1
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=2 xp=10 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=2
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=2 xp=30 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=3
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=2 xp=50 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=4
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=2 xp=70 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=5
+JAC_Notebooks: [JAC_POC] notebooks opened
+JAC_Notebooks: [JAC_POC] character journal shown count=1
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] restored unit=1 level=2 xp=70 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] restored count=1
+JAC_Notebooks: [JAC_POC] notebooks opened
+JAC_Notebooks: [JAC_POC] character journal shown count=1
+JAC_PoC_GrowthUI_Gameplay: [JAC_POC] unit=1 level=3 xp=5 personality=JAC_PERSONALITY_BRAVE trait=JAC_TRAIT_VALIANT equipment=JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK artifact=JAC_ARTIFACT_POC_RELIC player=0 turn=6
+"""
 
 
 class JudgeTests(unittest.TestCase):
@@ -67,6 +94,15 @@ class JudgeTests(unittest.TestCase):
         logs = self.sample()
         logs["Database.log"] += "[100] ERROR: constraint failed\n[100] from file Mods/JAC_PoC_Bundle0/Data/a.sql\n"
         self.assertIn("Bundle0: database errors", {c.name for c in judge(logs) if not c.passed})
+
+    def test_growth_success_and_restored_mismatch(self):
+        logs = {"Lua.log": GROWTH_LUA, "Modding.log": GROWTH_MODDING, "Database.log": ""}
+        checks = judge(logs, "growth")
+        self.assertGreaterEqual(len(checks), 12)
+        self.assertTrue(all(c.passed for c in checks), checks)
+        logs["Lua.log"] = GROWTH_LUA.replace("restored unit=1 level=2 xp=70", "restored unit=1 level=2 xp=50")
+        failed = {c.name for c in judge(logs, "growth") if not c.passed}
+        self.assertIn("Growth: restored rows and journal", failed)
 
     def test_baseline_excludes_old_lines_and_handles_truncate(self):
         old = b"old error\n"

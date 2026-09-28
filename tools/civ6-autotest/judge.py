@@ -14,8 +14,14 @@ import re
 
 LOG_NAMES = ("Lua.log", "Database.log", "Modding.log")
 BUNDLE0_ID = "dfa0717e-4d0b-4370-b693-27fc6758571b"
+GROWTH_ID = "7696e937-2044-4f3c-8e13-4e27632e2710"
 TURN = re.compile(r"\bturn=(\d+)\s+firstTurn=(\d+)\s+turnsSeen=(\d+)")
 RESTORED = re.compile(r"\brestored firstTurn=(\d+) lastTurn=(\d+) turnsSeen=(\d+)")
+GROWTH_RECORD = re.compile(
+    r"\b(?P<kind>assigned |restored |)unit=(?P<unit>\d+) level=(?P<level>\d+) xp=(?P<xp>\d+) "
+    r"personality=(?P<personality>\S+) trait=(?P<trait>\S+) equipment=(?P<equipment>\S+) "
+    r"artifact=(?P<artifact>\S+) player=(?P<player>\d+)(?: turn=(?P<turn>\d+))?"
+)
 
 
 def default_log_dir() -> Path:
@@ -156,6 +162,113 @@ def _bundle0_checks(logs: dict[str, str]) -> list[Check]:
     return checks
 
 
+def _growth_checks(logs: dict[str, str]) -> list[Check]:
+    lua, modding, database = (logs[name] for name in ("Lua.log", "Modding.log", "Database.log"))
+    own = [line for line in lua.splitlines() if line.startswith("JAC_PoC_GrowthUI_Gameplay:")]
+    parsed = [(i, match) for i, line in enumerate(own) if (match := GROWTH_RECORD.search(line))]
+    restores = [(i, m) for i, m in parsed if m["kind"] == "restored "]
+    restore_at = restores[0][0] if restores else len(own)
+    assigned = [m for i, m in parsed if m["kind"] == "assigned " and i < restore_at]
+    before = [m for i, m in parsed if m["kind"] == "" and i < restore_at]
+    after = [m for i, m in parsed if m["kind"] == "" and i > restore_at]
+    initial_count = re.search(r"\binitialized count=(\d+)", "\n".join(own[:restore_at]))
+    restored_count = re.search(r"\brestored count=(\d+)", "\n".join(own[restore_at:]))
+    components = ("Text", "Gameplay", "InGameUI", "PartialScreenHooks", "UIFiles")
+    checks = [
+        Check("Growth: mod registered", GROWTH_ID in modding.lower(), "GrowthUI mod ID in Modding.log"),
+        Check("Growth: five actions", all(f"Applying Component - JAC_GrowthUI_{part} " in modding for part in components),
+              "UpdateText, AddGameplayScripts, AddUserInterfaces, ReplaceUIScript, ImportFiles"),
+        Check("Growth: database errors", not _database_errors(database),
+              f"JAC-related errors: {len(_database_errors(database))}"),
+        Check("Growth: button attached", "[JAC_POC] notebooks button attached parent=ButtonStack" in lua,
+              "parent=ButtonStack"),
+        Check("Growth: partial-screen path", "[JAC_POC] notebooks path lookup found=true" in lua
+              and "[JAC_POC] notebooks path lookup found=false" not in lua, "lookup true, never false"),
+        Check("Growth: open and journal", lua.count("[JAC_POC] notebooks opened") >= 3
+              and lua.count("[JAC_POC] character journal shown count=") >= 2,
+              f"opened={lua.count('[JAC_POC] notebooks opened')}, journal={lua.count('[JAC_POC] character journal shown count=')}"),
+        Check("Growth: partial-screen errors", "UI.DataError" not in lua
+              and "Cannot determine if partial screen" not in lua and "Runtime Error" not in lua,
+              "no UI.DataError or Runtime Error in run log"),
+        Check("Growth: new-game assignment", "[JAC_POC] no saved state (new game)" in "\n".join(own[:restore_at])
+              and initial_count is not None and 1 <= len(assigned) <= 3
+              and int(initial_count[1]) == len(assigned)
+              and all(m["level"] == "1" and m["xp"] == "0" for m in assigned)
+              and (not assigned or assigned[0]["equipment"] == "JAC_ITEM_POC_BLADE,JAC_ITEM_POC_CLOAK"
+                   and assigned[0]["artifact"] == "JAC_ARTIFACT_POC_RELIC")
+              and (len(assigned) < 2 or assigned[1]["equipment"] == "JAC_ITEM_POC_BLADE"
+                   and assigned[1]["artifact"] == "none"),
+              f"assigned={len(assigned)}, initialized={initial_count[1] if initial_count else '?'}"),
+    ]
+
+    # Every surviving record must gain exactly 20 XP on each successive human turn.
+    by_unit: dict[tuple[str, str], list[re.Match]] = {}
+    for match in before:
+        by_unit.setdefault((match["player"], match["unit"]), []).append(match)
+    growth_ok = bool(by_unit and len({int(m["turn"]) for m in before}) >= 4)
+    level_two_seen = False
+    for records in by_unit.values():
+        level, xp = 1, 0
+        previous_turn = None
+        for match in records:
+            turn = int(match["turn"])
+            if previous_turn is not None and turn != previous_turn + 1:
+                growth_ok = False
+            xp += 20
+            while level < 30:
+                needed = int(30 * level ** 1.5 + 0.5)
+                if xp < needed:
+                    break
+                xp -= needed
+                level += 1
+            if (int(match["level"]), int(match["xp"])) != (level, xp):
+                growth_ok = False
+            if level == 2 and xp == 10:
+                level_two_seen = True
+            previous_turn = turn
+    checks.append(Check("Growth: 20 XP each turn", growth_ok and level_two_seen,
+                        f"turns={len({m['turn'] for m in before})}, Lv2/10={level_two_seen}"))
+
+    last_turn = max((int(m["turn"]) for m in before), default=-1)
+    last_rows = {(m["player"], m["unit"]): m for m in before if int(m["turn"]) == last_turn}
+    restored_rows = {(m["player"], m["unit"]): m for _, m in restores}
+    fields = ("level", "xp", "personality", "trait", "equipment", "artifact")
+    same = bool(last_rows and last_rows.keys() == restored_rows.keys()
+                and all(all(last_rows[key][field] == restored_rows[key][field] for field in fields)
+                        for key in last_rows))
+    journal_entries = [(m.start(), int(m[1])) for m in re.finditer(
+        r"JAC_Notebooks: \[JAC_POC\] character journal shown count=(\d+)", lua)]
+    restore_position = lua.find("JAC_PoC_GrowthUI_Gameplay: [JAC_POC] restored unit=")
+    before_journal = [count for position, count in journal_entries if position < restore_position]
+    after_journal = [count for position, count in journal_entries if position > restore_position]
+    counts_ok = bool(restored_count and int(restored_count[1]) == len(restored_rows)
+                     and before_journal and after_journal
+                     and before_journal[-1] == after_journal[0] == len(restored_rows))
+    checks.append(Check("Growth: restored rows and journal", same and counts_ok,
+                        f"pre-save={len(last_rows)}, restored={len(restored_rows)}, "
+                        f"journal={before_journal[-1:]}/{after_journal[:1]}"))
+    next_rows = {(m["player"], m["unit"]): m for m in after if int(m["turn"]) == last_turn + 1}
+    post_ok = bool(same and next_rows.keys() == restored_rows.keys()
+                   and all((int(next_rows[key]["level"]), int(next_rows[key]["xp"])) ==
+                           _growth_next(int(restored_rows[key]["level"]), int(restored_rows[key]["xp"]))
+                           for key in next_rows)
+                   and not any(i > restore_at and m["kind"] == "assigned " for i, m in parsed))
+    checks.append(Check("Growth: one post-load turn", post_ok,
+                        f"turn={last_turn + 1}, rows={len(next_rows)}, no reassignment"))
+    return checks
+
+
+def _growth_next(level: int, xp: int) -> tuple[int, int]:
+    xp += 20
+    while level < 30:
+        needed = int(30 * level ** 1.5 + 0.5)
+        if xp < needed:
+            break
+        xp -= needed
+        level += 1
+    return level, xp
+
+
 def judge(logs: dict[str, str], profile: str = "bundle0") -> list[Check]:
     for name in LOG_NAMES:
         if name not in logs:
@@ -168,6 +281,8 @@ def judge(logs: dict[str, str], profile: str = "bundle0") -> list[Check]:
     ]
     if profile == "bundle0":
         checks.extend(_bundle0_checks(logs))
+    elif profile == "growth":
+        checks.extend(_growth_checks(logs))
     elif profile != "generic":
         raise ValueError(f"Unknown judge profile: {profile}")
     return checks
@@ -185,7 +300,7 @@ def main() -> int:
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--snapshot", type=Path, help="Write baseline before a manual run, then exit")
-    parser.add_argument("--profile", choices=("bundle0", "generic"), default="bundle0")
+    parser.add_argument("--profile", choices=("bundle0", "generic", "growth"), default="bundle0")
     args = parser.parse_args()
     log_dir = args.logs or default_log_dir()
     if args.snapshot:

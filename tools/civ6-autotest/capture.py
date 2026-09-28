@@ -51,7 +51,7 @@ def _write_png(path: Path, width: int, height: int, bgra: bytes) -> None:
     path.write_bytes(png)
 
 
-def capture_civ_window(path: Path) -> None:
+def capture_civ_window(path: Path, crop: list[float] | None = None) -> None:
     if sys.platform != "win32":
         raise CaptureError("Window capture requires Windows")
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -161,6 +161,14 @@ def capture_civ_window(path: Path) -> None:
             raw = read_pixels()
         if not any(raw):
             raise CaptureError("Capture is blank; make the Civ VI window visible and unobscured")
+        if crop is not None:
+            left, top, right, bottom = (int(crop[0] * width), int(crop[1] * height),
+                                        int(crop[2] * width), int(crop[3] * height))
+            if right <= left or bottom <= top:
+                raise CaptureError("Crop produced an empty image")
+            raw = b"".join(raw[y * width * 4 + left * 4:y * width * 4 + right * 4]
+                           for y in range(top, bottom))
+            width, height = right - left, bottom - top
         _write_png(path, width, height, raw)
     finally:
         if previous:

@@ -16,7 +16,7 @@ from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
 from tuner import TunerClient, TunerError
 
 
-ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "ui_lua",
+ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
            "screenshot", "save", "exit_to_menu", "load", "wait_for", "manual"}
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 MOD_ID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
@@ -63,8 +63,8 @@ def _safe_relative_path(value: str) -> Path:
 def validate_scenario(data: dict) -> None:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
         raise ScenarioError("Scenario needs a name")
-    if data.get("judge_profile", "generic") not in ("bundle0", "generic"):
-        raise ScenarioError("judge_profile must be bundle0 or generic")
+    if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth"):
+        raise ScenarioError("judge_profile must be bundle0, generic or growth")
     steps = data.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ScenarioError("Scenario needs a nonempty steps array")
@@ -77,6 +77,10 @@ def validate_scenario(data: dict) -> None:
                 not isinstance(item, str) or not MOD_ID.fullmatch(item) for item in step["ids"]
             ):
                 raise ScenarioError(f"Step {number}: ids must be mod UUIDs")
+            disabled = step.get("disable_ids", [])
+            if (not isinstance(disabled, list) or any(not isinstance(item, str) or not MOD_ID.fullmatch(item)
+                                                    for item in disabled) or set(disabled) & set(step["ids"])):
+                raise ScenarioError(f"Step {number}: invalid disable_ids")
         elif action == "configure":
             for key in ("ruleset", "map_size", "speed"):
                 if not isinstance(step.get(key), str) or not TYPE_ID.fullmatch(step[key]):
@@ -99,6 +103,11 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
         elif action == "screenshot":
             _safe_relative_path(step.get("path", ""))
+            crop = step.get("crop")
+            if crop is not None and (not isinstance(crop, list) or len(crop) != 4
+                                     or any(type(v) not in (int, float) or not 0 <= v <= 1 for v in crop)
+                                     or not crop[0] < crop[2] or not crop[1] < crop[3]):
+                raise ScenarioError(f"Step {number}: crop must be [left, top, right, bottom] fractions")
         elif action in ("save", "load"):
             if not isinstance(step.get("name"), str) or not SAFE_NAME.fullmatch(step["name"]):
                 raise ScenarioError(f"Step {number}: invalid save name")
@@ -123,8 +132,15 @@ def validate_scenario(data: dict) -> None:
             raise ScenarioError(f"Step {number}: timeout must be positive")
 
 
-def _enable_mods_code(ids: list[str]) -> str:
+def _enable_mods_code(ids: list[str], disable_ids: list[str] | None = None) -> str:
     lines = ["if not UI.IsInFrontEnd() then error('main menu required') end"]
+    for mod_id in disable_ids or []:
+        literal = _lua_string(mod_id)
+        lines += [
+            f"local disabledHandle = Modding.GetModHandle({literal})",
+            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then Modding.DisableMod(disabledHandle) end",
+            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then error('mod stayed enabled') end",
+        ]
     for mod_id in ids:
         literal = _lua_string(mod_id)
         lines += [
@@ -271,10 +287,10 @@ class Runner:
     def _close_options_menu(self) -> bool:
         if "ingametopoptionsmenu" not in (state.casefold() for state in self._states()):
             return False
-        closed = self._lua("InGameTopOptionsMenu", "if UIManager:IsInPopupQueue(ContextPtr) then OnReturn(); return true end\nreturn false") == "true"
+        closed = self._lua("InGameTopOptionsMenu", "if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false") == "true"
         if closed:
             self._wait({"type": "lua", "state_name": "InGameTopOptionsMenu",
-                        "code": "return not UIManager:IsInPopupQueue(ContextPtr)"}, 5)
+                        "code": "return ContextPtr:IsHidden()"}, 5)
             print("Closed in-game options menu", flush=True)
         return closed
 
@@ -365,11 +381,22 @@ class Runner:
                   "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true")
         return f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
 
+    def _end_turn(self, timeout: float) -> str:
+        self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true")
+        self._close_options_menu()
+        self._dismiss_advisor()
+        start = int(self._lua("InGame", "return Game.GetCurrentGameTurn()"))
+        self._lua("InGame", "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true")
+        self._wait({"type": "lua", "state_name": "InGame",
+                    "code": f"return Game.GetCurrentGameTurn() == {start + 1} and Game.GetLocalPlayer() >= 0"}, timeout)
+        self._dismiss_advisor()
+        return f"human turn {start}->{start + 1}"
+
     def _run_step(self, step: dict) -> str:
         action = step["action"]
         timeout = float(step.get("timeout", 120))
         if action == "enable_mods":
-            self._lua("FrontEnd", _enable_mods_code(step["ids"]))
+            self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")))
             return "enabled/verified " + ", ".join(step["ids"])
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step))
@@ -386,6 +413,8 @@ class Runner:
             return "single-player game reached InGame"
         if action == "autoplay":
             return self._autoplay(step["turns"], timeout)
+        if action == "end_turn":
+            return self._end_turn(timeout)
         if action == "ui_lua":
             value = self._lua(step["state_name"], step["code"], timeout)
             return f"ran Lua in {step['state_name']}; return={value}"
@@ -393,7 +422,7 @@ class Runner:
             self._close_options_menu()
             self._dismiss_advisor()
             target = self.output / _safe_relative_path(step["path"])
-            capture_civ_window(target)
+            capture_civ_window(target, step.get("crop"))
             return str(target)
         if action == "save":
             name = step["name"]
@@ -479,6 +508,12 @@ class Runner:
             self._log("run", "FAIL", str(exc))
             return 1
         finally:
+            if self.baseline is not None:
+                try:
+                    for name, content in read_since(self.logs, self.baseline).items():
+                        (self.output / name).write_text(content, encoding="utf-8")
+                except OSError as exc:
+                    print(f"Could not save run log slices: {exc}", flush=True)
             if self.client:
                 self.client.close()
 
