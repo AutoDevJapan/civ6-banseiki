@@ -168,15 +168,15 @@ CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Ori
 
 Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 のビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
 
-選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定する。OAuth のサブスクリプション枠だけを使い、API キーや従量課金 API は使わない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
+選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定し、Antigravity の OAuth サブスクリプション枠を使った（API キーや従量課金 API は不使用）。これは生成経路の事実を記録したもので、規約上この経路が許可されるという判断ではない。生成元画像と Cooker の画像出力はローカルの `civ6-art-local/` にのみ保存し、Git には含めていない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
 
 生成画像の来歴と利用条件（規約確認日：2026-09-29。下表の現行画像すべてに共通）：
 
 | 対象 | 生成器・経路 | 生成日 | 参照素材 | 規約・再配布 |
 |---|---|---|---|---|
-| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。[Google 生成 AI 追加規約](https://policies.google.com/terms/generative-ai)は一般には適用終了（下記）。生成物の再配布・公開の可否は確定しておらず、公開前にオーナーが確認する（[質問 D8](../questions.md)） |
+| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。生成物の再配布・公開の可否は確定しておらず、公開前にオーナーが確認する（[質問 D8](../questions.md)） |
 
-[Google の生成 AI 追加利用規約](https://policies.google.com/terms/generative-ai)には、2024-05-22 以降は同規約を参照する署名済み契約の事業パートナーを除き適用されない旨が記載されているため、現行の適用規約として扱わない。Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。上記の OpenCodex 経由で生成した事実とこの規約上の懸念を記録し、画像の再配布・公開条件および生成経路の扱いをオーナー確認事項とする。これらの規約へのリンクは生成画像に再配布許諾があることを示すものではない。
+Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。OpenAI 利用規約も自動・プログラムによるデータまたは出力の抽出を禁止しているため、ChatGPT Web UI で出力取得をブラウザーエージェントに自動化する案にも規約上の懸念がある（[OpenAI 利用規約](https://openai.com/policies/row-terms-of-use/)）。いずれも規約解釈や生成経路の許可をここで確定せず、[質問 D8](../questions.md) のオーナー判断に残す。規約へのリンクは生成画像に再配布許諾があることを示すものではない。
 
 現行画像の出典（ローカル元ファイルは Git 管理外）：
 
