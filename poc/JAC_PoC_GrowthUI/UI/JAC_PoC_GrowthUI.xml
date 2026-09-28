@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal16" FontStyle="Shadow">
+	<!-- ランチバー直下に独立した入口を置き、既存UIを置換しない。 -->
+	<GridButton ID="OpenLedger" Anchor="L,T" Offset="14,120" Size="168,30"
+		Style="ButtonControl" String="LOC_JAC_POC_GROWTHUI_OPEN"/>
+
+	<Grid ID="LedgerPanel" Anchor="L,T" Offset="14,158" Size="760,544"
+		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22"
+		Hidden="1" ConsumeAllMouse="1">
+		<Label Anchor="L,T" Offset="20,12" Style="FontFlair24"
+			String="LOC_JAC_POC_GROWTHUI_TITLE"/>
+		<GridButton ID="CloseLedger" Anchor="L,T" Offset="628,10" Size="110,28"
+			Style="ButtonControl" String="LOC_JAC_POC_GROWTHUI_CLOSE"/>
+		<Label Anchor="L,T" Offset="20,49" Style="FontNormal16"
+			String="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"/>
+		<Label Anchor="L,T" Offset="20,73" Style="FontNormal16"
+			String="LOC_JAC_POC_GROWTHUI_TEST_JA"/>
+		<Label Anchor="L,T" Offset="20,96" Style="FontNormal16"
+			String="LOC_JAC_POC_GROWTHUI_TEST_RU"/>
+		<Label Anchor="L,T" Offset="20,119" Style="FontNormal16"
+			String="LOC_JAC_POC_GROWTHUI_TEST_EN"/>
+		<Label ID="NoUnits" Anchor="L,T" Offset="20,166" Hidden="1"
+			String="LOC_JAC_POC_GROWTHUI_NO_UNITS"/>
+
+		<Container ID="UnitRow1" Anchor="L,T" Offset="20,155" Size="720,108" Hidden="1">
+			<Box Size="parent,parent" Color="0,0,0,110"/>
+			<Label ID="Unit1Title" Anchor="L,T" Offset="10,4" Style="FontNormal16"/>
+			<Label ID="Unit1Progress" Anchor="L,T" Offset="10,25" Style="FontNormal14"/>
+			<Label ID="Unit1Attributes" Anchor="L,T" Offset="10,46" Style="FontNormal14"/>
+			<Label ID="Unit1Equipment" Anchor="L,T" Offset="10,67" Style="FontNormal14"/>
+			<Label ID="Unit1Artifact" Anchor="L,T" Offset="10,88" Style="FontNormal14"/>
+		</Container>
+		<Container ID="UnitRow2" Anchor="L,T" Offset="20,269" Size="720,108" Hidden="1">
+			<Box Size="parent,parent" Color="0,0,0,110"/>
+			<Label ID="Unit2Title" Anchor="L,T" Offset="10,4" Style="FontNormal16"/>
+			<Label ID="Unit2Progress" Anchor="L,T" Offset="10,25" Style="FontNormal14"/>
+			<Label ID="Unit2Attributes" Anchor="L,T" Offset="10,46" Style="FontNormal14"/>
+			<Label ID="Unit2Equipment" Anchor="L,T" Offset="10,67" Style="FontNormal14"/>
+			<Label ID="Unit2Artifact" Anchor="L,T" Offset="10,88" Style="FontNormal14"/>
+		</Container>
+		<Container ID="UnitRow3" Anchor="L,T" Offset="20,383" Size="720,108" Hidden="1">
+			<Box Size="parent,parent" Color="0,0,0,110"/>
+			<Label ID="Unit3Title" Anchor="L,T" Offset="10,4" Style="FontNormal16"/>
+			<Label ID="Unit3Progress" Anchor="L,T" Offset="10,25" Style="FontNormal14"/>
+			<Label ID="Unit3Attributes" Anchor="L,T" Offset="10,46" Style="FontNormal14"/>
+			<Label ID="Unit3Equipment" Anchor="L,T" Offset="10,67" Style="FontNormal14"/>
+			<Label ID="Unit3Artifact" Anchor="L,T" Offset="10,88" Style="FontNormal14"/>
+		</Container>
+	</Grid>
+</Context>
