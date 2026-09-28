@@ -74,6 +74,8 @@ MOD の内容：
 
 右上の手帳ボタンは `UI/Textures/JAC_Notebooks_Hook.dds` を使う。`UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` から参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` に登録する。表示寸法は `PartialScreenHooks.xml` の 26×26。
 
+公式 `Base/Assets/UI/PartialScreenHooks.xml` では各フックの背景は `LaunchBar_Hook_ButtonSmall.dds` を使う 40×40 の `Button`、図柄はその子の 26×26 の `Image`（`Anchor="C,C"`、`Offset="0,-1"`）。`PartialScreenHooks.lua` の `AddScreenHook` は `ScreenHookImage:SetTexture(texture)` だけを行い、図柄のスプライト位置や状態オフセットを変えない。XP1/XP2 の `PartialScreenHooks_Expansion1.lua` が追加する Era も同じ関数を使う。ゲーム本体の図柄名は WorldRankings、CityStates、Trade、Espionage、Era、Reports の各 `LaunchBar_Hook_*`。SDK の `Civ6Docs.html` によれば、`Image` の既定の `StretchMode=None` は原寸表示して枠外を切り、`Button` 背景だけが状態に応じて縦方向へ 40px ずつずれる（通常、ホバー、押下、無効）。したがって手帳の DDS は状態ストリップではなく、26×26 の単一の透過画像として生成する。
+
 `tools/jac_art/build_art.py` は PR #20 で `main` に追加済みで、このリポジトリから実行できる。GrowthUI の MOD フォルダが存在すると手帳 DDS も生成し、フォルダが無い場合はその工程をスキップして CustomCivs のアート生成を続ける。
 
 ```powershell
@@ -85,6 +87,10 @@ python tools/jac_art/build_art.py
 このスクリプトは両 PoC のアートを生成する。Python の Pillow、ローカルアートストア内の各原本、および Civ6 SDK Asset Cooker が必要。`JAC_GROWTH_MOD` は GrowthUI の別配置先を使う場合に設定する。
 
 手帳アイコンの入力はローカルアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`（この PC では `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\JAC_PoC_GrowthUI\Originals\notebooks_generated.png`）、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。生成画像の来歴と利用条件は後段の CustomCivs 節「画像」に記録する。
+
+2026-09-29 の位置修正：従来は 54px 以内の本を 64×64 DDS の中央に配置していたため、26×26 の `Image` では左上だけが切り出され、本が右下へずれて見えた。原本の透過範囲を 24×24 以内に縮小し、26×26 の透明キャンバス中央へ配置する方式に変更した。再生成後の DDS は 26×26、アルファ範囲は `(1,1)-(24,25)`、四隅は完全透明。`Mods/JAC_PoC_GrowthUI` のジャンクションをこの `notebooks-icon` worktree に向け、`JAC_GROWTH_MOD` を指定して `build_art.py` を実行した。Civ6 の再起動後に Gathering Storm の新規ゲームで確認した（再起動前は旧 DDS が表示キャッシュに残った）。
+
+実機では公式アイコンと手帳の `Image` がすべて 26×26、縦の画面内オフセットが 39 で一致し、手帳は Era と Reports の間に表示された。`civ6-autotest` の開始シナリオ 4/4 手順と JAC エラー判定 2/2 件が成功。FireTuner から手帳ボタンの `DoLeftClick()` を2回呼び、手帳の開閉も確認した。右上バーを切り出して4倍に拡大した証跡は `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\final-01\ingame-v3\notebooks-normal-closeup-x4.png`、`notebooks-hover-offset40-closeup-x4.png`、`notebooks-pressed-offset80-closeup-x4.png`。後二者は入力ドライバのマウス移動が Civ6 のホバー判定に届かなかったため、ゲーム内の手帳 `Button` に背景テクスチャの縦オフセット 40px／80px を一時指定して撮影し、最後に 0px へ戻した。通常・ホバー・押下の背景表示で本の図柄は同じ中央位置を保った。実際のポインター入力によるホバー遷移はこの検証では確認できていない。
 
 ### 互換性
 

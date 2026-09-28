@@ -240,9 +240,11 @@ def growth_icon():
     if not bounds:
         raise ValueError("Empty notebooks icon")
     cut = keyed.crop(bounds)
-    cut.thumbnail((54, 54), Image.Resampling.LANCZOS)
-    out = Image.new("RGBA", (64, 64))
-    out.alpha_composite(cut, ((64 - cut.width) // 2, (64 - cut.height) // 2))
+    # PartialScreenHooks.xml renders this as a 26x26 Image with no sprite offset.
+    # Keep the artwork within that frame so the engine does not clip a 64x64 source.
+    cut.thumbnail((24, 24), Image.Resampling.LANCZOS)
+    out = Image.new("RGBA", (26, 26), (0, 0, 0, 0))
+    out.alpha_composite(cut, ((26 - cut.width) // 2, (26 - cut.height) // 2))
     dest = GROWTH_MOD / "UI" / "Textures" / "JAC_Notebooks_Hook.dds"
     write_dds(dest, out)
     out.save(FINAL / "JAC_Notebooks_Hook.png")
