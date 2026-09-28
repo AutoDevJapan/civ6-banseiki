@@ -30,7 +30,7 @@ function OnToggleNotebooks()
 end
 
 function AddNotebooksHook()
-	AddScreenHook("JAC_Notebooks", "LaunchBar_Hook_Timeline", "LOC_JAC_NOTEBOOKS", OnToggleNotebooks);
+	AddScreenHook("JAC_Notebooks", "JAC_Notebooks_Hook.dds", "LOC_JAC_NOTEBOOKS", OnToggleNotebooks);
 	-- Realize はターンごとに呼ばれるため、ログは最初の1回だけ出す。
 	if not m_isAttachLogged then
 		print("[JAC_POC] notebooks button attached parent=" .. Controls.ButtonStack:GetID());

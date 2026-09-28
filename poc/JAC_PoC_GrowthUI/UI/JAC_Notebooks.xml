@@ -27,7 +27,7 @@
 			Style="ButtonControl" String="LOC_JAC_POC_GROWTHUI_CLOSE"/>
 		<Label Anchor="L,T" Offset="20,49" Style="FontNormal16"
 			String="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"/>
-		<Label Anchor="L,T" Offset="20,73" Style="FontNormal16"
+		<Label Anchor="L,T" Offset="20,73" Style="FontNormal16" Font="NotoSansCJKjp-Medium.otf;NotoSans-Medium.ttf"
 			String="LOC_JAC_POC_GROWTHUI_TEST_JA"/>
 		<Label Anchor="L,T" Offset="20,96" Style="FontNormal16"
 			String="LOC_JAC_POC_GROWTHUI_TEST_RU"/>
