@@ -96,6 +96,9 @@
 		<UpdateArt id="JAC_CustomCivs_SettingsArt">
 			<File>JAC_PoC_CustomCivs.dep</File>
 		</UpdateArt>
+		<!-- Config/JAC_CustomCivs_Players.xml registers only in Players:Expansion2_Players.
+		     RULESET_EXPANSION_2 selects this domain via the official RulesetDomainOverrides.
+		     FrontEnd RuleSetInUse criteria would skip registration when switching from Standard to GS. -->
 		<UpdateDatabase id="JAC_CustomCivs_Settings">
 			<File>Config/JAC_CustomCivs_Players.xml</File>
 		</UpdateDatabase>

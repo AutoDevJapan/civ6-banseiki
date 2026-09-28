@@ -64,7 +64,7 @@ MOD の内容：
 MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
-- `Players:Expansion2_Players` に両組を登録する。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
+- `Players:Expansion2_Players` に両組だけを登録する。公式 GS の `RulesetDomainOverrides` が `RULESET_EXPANSION_2` の `PlayerLeader` をこのドメインに切り替えるため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
 - ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 - 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
@@ -102,6 +102,10 @@ MOD の内容：
 | 表示の上書き | 未実施（UI 側の上書きを追加した。実機での確認待ち） |
 
 2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。手帳ボタンは PR #21（`feat/poc-growth-ui`）の GrowthUI を併用して確認したため、PR #20 単独ではこの表示を再現できない。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
+
+2026-09-29 のルールセット境界の再確認：**成功**（Steam 版 1.0.12.68、MOD 有効、ゲーム再起動後）。FrontEnd Lua で `GameConfiguration.SetRuleSet` と `GameConfiguration.UpdateEnabledMods` を実行。さらに `HostGame` の Lua で公式 `CreatePlayerParameters(0, true)` と `Refresh()` を呼び、実際の `Parameters.PlayerLeader.Domain` と `Values` を照会した。標準 `RULESET_STANDARD` は `Players:StandardPlayers`、全57候補中 **JAC 0 件**。GS `RULESET_EXPANSION_2` は `Players:Expansion2_Players`、全82候補中 **JAC 2 件**（`LEADER_JAC_ODA_NOBUHIDE`・`LEADER_JAC_TAKEDA_NOBUTORA`）。FrontEnd の `DB.ConfigurationQuery` でも有効ドメインの JAC 行数は標準 0 件・GS 2 件で一致。設定 DB 全体には両行が登録されるが、標準ルールセットの選択候補には入らない。FrontEnd アクションに `RuleSetInUse` 条件を付ける試行では、標準で起動してから GS へ切り替えても両行が追加されなかったため、その条件は採用せず、公式 GS と同じドメイン方式を維持した。
+
+同じ再確認で既存の `scenarios/clans-notebooks.json` を変更せず実行し、**17/17 ステップ、ログ判定 2/2 件が成功**。織田＝人間・武田＝AI の起動、手帳表示、ターン4でのセーブ、ロード、ターン5と手帳の再表示を確認した。ローカル証拠は `civ6-autotest/tools/civ6-autotest/artifacts/clans-notebooks-round5-01/` の `steps.jsonl`・ログ・4枚のスクリーンショット（Git 管理外）。既存の同名セーブは実行前に退避し、実行後に元の場所へ戻した。
 
 | 日付 | 検証 | 結果と画面記録 |
 |---|---|---|
@@ -166,18 +170,26 @@ Pillow で単色背景から人物・手帳を透過処理し、指導者の円�
 
 選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定する。OAuth のサブスクリプション枠だけを使い、API キーや従量課金 API は使わない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
 
+生成画像の来歴と利用条件（規約確認日：2026-09-29。下表の現行画像すべてに共通）：
+
+| 対象 | 生成器・経路 | 生成日 | 参照素材 | 規約・再配布 |
+|---|---|---|---|---|
+| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。[Google 生成 AI 追加規約](https://policies.google.com/terms/generative-ai)は一般には適用終了（下記）。生成物の再配布・公開の可否は確定しておらず、公開前にオーナーが確認する（[質問 D8](../questions.md)） |
+
+[Google の生成 AI 追加利用規約](https://policies.google.com/terms/generative-ai)には、2024-05-22 以降は同規約を参照する署名済み契約の事業パートナーを除き適用されない旨が記載されているため、現行の適用規約として扱わない。Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。上記の OpenCodex 経由で生成した事実とこの規約上の懸念を記録し、画像の再配布・公開条件および生成経路の扱いをオーナー確認事項とする。これらの規約へのリンクは生成画像に再配布許諾があることを示すものではない。
+
 現行画像の出典（ローカル元ファイルは Git 管理外）：
 
 | 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス・利用条件 | 元ファイル |
 |---|---|---|---|---|---|
-| 織田信秀・武田信虎の指導者アイコン | 両名の新規生成肖像 | Gemini 3.1 Flash Image、2026年 | ローカル OpenCodex。公式 Civ6 指導者画は画風参照のみ | 生成サービスの利用条件を公開前に確認 | `oda_nobuhide_portrait.jpg`・`takeda_nobutora_portrait.jpg` |
+| 織田信秀・武田信虎の指導者アイコン | 両名の新規生成肖像 | Gemini 3.1 Flash Image、2026-09-29 | ローカル OpenCodex。公式 Civ6 指導者画は画風参照のみ | 上記の規約・公開条件 | `oda_nobuhide_portrait.jpg`・`takeda_nobutora_portrait.jpg` |
 | ロード画面・外交画面の人物 | 単色背景で新規生成した両名の立ち姿 | 同上 | 同上。Pillow で透過 | 同上 | `oda_nobuhide_figure.png`・`takeda_nobutora_figure.png` |
 | ロード画面・外交画面の背景 | 尾張・甲斐の城内を新規生成 | 同上 | 同上 | 同上 | `oda_nobuhide_background.png`・`takeda_nobutora_background.png` |
 | 文明アイコン | 織田木瓜・武田菱を新規生成 | 同上 | 伝統家紋を参照し、新規に描画された画像をアルファマスク化 | 同上 | `oda_mokko_generated.png`・`takeda_bishi_generated.png` |
 | 能力アイコン | 織田の軍旗、武田の馬、信秀の軍配扇、信虎の兜を新規生成 | 同上 | 両家の家紋・人物像を参照し、各能力欄へ個別登録 | 同上 | `oda_clan_ability_generated.png`・`takeda_clan_ability_generated_v2.png`・`oda_nobuhide_ability_generated.png`・`takeda_nobutora_ability_generated.png` |
 | GrowthUI の手帳ボタン | 装丁された手帳の新規生成アイコン | 同上 | ローカル OpenCodex。公式 Civ6 は画風参照のみ | 同上 | `JAC_PoC_GrowthUI/Originals/notebooks_generated.png` |
 
-旧 PD 画像の出典（現行 MOD からは参照しない。Wikimedia Commons のファイルページでライセンスを確認した）：
+旧 PD 画像4点の元ファイルはローカルストア `civ6-art-local/JAC_PoC_CustomCivs/Originals/_old_pd/` に残す（現行 MOD からは参照しない）。出典とライセンスは Wikimedia Commons のファイルページで確認した：
 
 | 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス | 元ファイル |
 |---|---|---|---|---|---|
