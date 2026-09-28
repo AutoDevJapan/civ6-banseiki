@@ -103,12 +103,18 @@ MOD の内容：
 
 2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
 
-両家を AI にするゲーム、3ターン目以降の家名を外交リボン・外交画面・ランキング・都市バナーで確認すること、ロード後の家名表示、日英露の切替表示は**未確認**。2026-09-28 のエラー修正後について、この自動シナリオが確認したのは参加・手帳・セーブ／ロードまでである。
+| 日付 | 検証 | 結果と画面記録 |
+|---|---|---|
+| 2026-09-29 | 家名表示の切替・ロード後保持 | **成功**（途中の手動入力なし）。[実行フォルダ](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/)の `steps.jsonl` で 102/102 ステップ、ログ判定 2/2 件。ターン1は4 UI コンテキストの原名、遭遇が UI に反映されたターン2は4画面の原名、ターン3の `rename` 後のターン4とセーブ／終了／ロード後は4画面の改名を確認した。画面記録：[T1 HUD](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/01-turn1-hud.png)、T2 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/02-turn2-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/03-turn2-city-banner.png)、T4 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/05-turn4-city-banner.png)、ロード後 [リボン](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-ribbon.png)・[外交](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-diplomacy.png)・[ランキング](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-rankings.png)・[都市](../../../civ6-autotest/tools/civ6-autotest/artifacts/clans-house-names-run-08/09-load-city-banner.png)。 |
+
+切替前の外交画面は `TAKEDA CLAN`、ランキング概要は `Takeda clan leading`、都市バナーの実ツールチップは `Kofu (Takeda clan)`。切替後とロード後はそれぞれ `KAI TAKEDA CLAN`、`Kai Takeda clan leading`、`Kofu (Kai Takeda clan)`。外交リボンの実ツールチップも `Takeda clan` から `Kai Takeda clan` に変わった（値は同フォルダの `Lua.log` に `[JAC_HOUSE]` として記録）。都市バナーとリボンの家名は画面上のツールチップ値を UI Lua で読み、スクリーンショットには都市・アイコンの表示を記録した。遭遇状態を Gameplay Lua で設定した直後のターン1では UI のリボンにまだ武田が現れないため、実画面の切替前比較はターン2に行った。
+
+実機で見つかった表示不具合を2点修正した。Gathering Storm の `ReplaceUIScript` が PoC の置換を後から上書きしていたため、3画面のアクションに `LoadOrder=100` を設定。ランキング概要行だけは `GameInfo.Civilizations` を直接読むため、該当行を UI 側で改名した。観測専用 `InGame` コンテキストの `uiRenameState.short/localized` は原名のままで、`target` と表示対象4コンテキストの実文字列で判定した。両家を AI にするゲームと日英露の切替表示は引き続き**未確認**。
 
 分かったこと：
 
 - ゲーム中に文明名を変える方法は、ゲームプレイ Lua には無い。これまで試していた専用セッターと `SetValue` の呼出しはやめ、3ターン目にその API があるかだけを調べて記録する
-- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える（上記の `JAC_CivNameOverride`。4画面の表示は未確認）。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
+- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える（上記の `JAC_CivNameOverride`）。ランキング概要行のようにゲッターを経由しない表示は個別に差し替える。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
 - 将来のマルチプレイでは、目標名を各端末で同期済みの共有状態から読む。端末ごとの `PlayerConfigurations` の値は使わない
 
 ### 画像

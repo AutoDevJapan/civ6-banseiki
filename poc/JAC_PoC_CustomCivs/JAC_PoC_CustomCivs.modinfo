@@ -56,18 +56,21 @@
 		</AddUserInterfaces>
 		<ReplaceUIScript id="JAC_CustomCivs_DiplomacyRibbon" criteria="JAC_CustomCivs_GatheringStorm">
 			<Properties>
+				<LoadOrder>100</LoadOrder>
 				<LuaContext>DiplomacyRibbon</LuaContext>
 				<LuaReplace>UI/JAC_DiplomacyRibbon.lua</LuaReplace>
 			</Properties>
 		</ReplaceUIScript>
 		<ReplaceUIScript id="JAC_CustomCivs_DiplomacyActionView" criteria="JAC_CustomCivs_GatheringStorm">
 			<Properties>
+				<LoadOrder>100</LoadOrder>
 				<LuaContext>DiplomacyActionView</LuaContext>
 				<LuaReplace>UI/JAC_DiplomacyActionView.lua</LuaReplace>
 			</Properties>
 		</ReplaceUIScript>
 		<ReplaceUIScript id="JAC_CustomCivs_WorldRankings" criteria="JAC_CustomCivs_GatheringStorm">
 			<Properties>
+				<LoadOrder>100</LoadOrder>
 				<LuaContext>WorldRankings</LuaContext>
 				<LuaReplace>UI/JAC_WorldRankings.lua</LuaReplace>
 			</Properties>
