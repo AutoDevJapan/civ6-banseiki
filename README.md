@@ -22,6 +22,7 @@ Sid Meier's Civilization VI の周回育成型トータルコンバージョン 
 | [`documents/spec/ssot/`](documents/spec/ssot/) | 仕様の正本（SSOT）。章・節ごとのファイルに分割している |
 | [`documents/spec/data/`](documents/spec/data/) | SSOT から作られるデータ（領土関係・タイル割当候補の JSON） |
 | [`documents/research/`](documents/research/) | 調査記録（実装の準備度、プレイヤー枠の候補など） |
+| [`poc/`](poc/) | PoC 用の検証 MOD（手順と結果は `documents/poc/README.md`） |
 | [`documents/questions.md`](documents/questions.md) | オーナーの判断が必要な事項 |
 | [`documents/repository-rules.md`](documents/repository-rules.md) | リポジトリルール |
 
