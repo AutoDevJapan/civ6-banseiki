@@ -65,16 +65,32 @@ MOD の内容：
 
 - 新規ゲームで人間プレイヤーの開始時ユニットをID順に最大3体選び、`Unit:SetProperty` にレベル・経験値・性格ID・特性ID・装備IDのリスト・Artifact IDを保存する。1体目は装備2件とArtifact 1件、2体目は装備1件を持つ。装備とArtifactは保存確認用の仮IDで、ゲーム内効果はない
 - 人間プレイヤーのターン開始時に固定20 XPを加え、必要XPを `floor(30 × 現レベル^1.5 + 0.5)` としてレベルアップする。通常上限30、同じゲームターンの二重加算は防ぐ。20 XPは検証用で報酬量の仕様ではない
-- 右上のバーの List of Reports のすぐ左に「手帳」ボタンを置く（SSOT 11.1）。`ReplaceUIScript` で `PartialScreenHooks` を `UI/JAC_PartialScreenHooks.lua` に差し替え、XP2 版を include して `AddScreenHooks()` の Era と Reports の間に1件足す。アイコンは公式の `LaunchBar_Hook_Timeline` を流用する
+- 右上のバーの List of Reports のすぐ左に「手帳」ボタンを置く（SSOT 11.1）。`ReplaceUIScript` で `PartialScreenHooks` を `UI/JAC_PartialScreenHooks.lua` に差し替え、XP2 版を include して `AddScreenHooks()` の Era と Reports の間に1件足す。専用アイコン `UI/Textures/JAC_Notebooks_Hook.dds` を使う
 - 手帳は SSOT 11.1 の構成で、記録帳（人物帳・法律帳・宗教帳）と国家金庫（長官たち・宝物庫）を並べる。中身があるのは人物帳だけで、他は「（未実装）」付きの押せない項目。表示名は用語辞書（14-3）の3言語
-- 人物帳は生存中の武将ユニットの状態を直接 `Unit:GetProperty` から表示する（読み取り専用）。日本語・ロシア語・英語の固定テスト行を常時並べる。ESC、同じボタンの再クリック、他の画面（List of Reports など）を開くと手帳は閉じる
+- 人物帳は生存中の武将ユニットの状態を直接 `Unit:GetProperty` から表示する（読み取り専用）。日本語・ロシア語・英語の固定テスト行を常時並べる。ESC による手帳の閉鎖は要実機確認。同じボタンの再クリックや他の画面（List of Reports など）を開くと手帳は閉じる
 - 以前の固定位置の「人物帳」ボタン（実機で表示されなかった）は削除した
+
+### アイコンの再生成
+
+この PR は、生成スクリプトを追加する PR #20（`feat/poc-custom-civs`）に依存する。#20 を先に取り込んだ後、リポジトリのルートで次を実行する。`tools/jac_art/build_art.py` は両 PoC のアートを生成するため、Python の Pillow、ローカルアートストア内の各原本、および Civ6 SDK Asset Cooker が必要。
+
+```powershell
+$env:JAC_ART_LOCAL = 'C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local'
+$env:JAC_GROWTH_MOD = (Join-Path (Get-Location) 'poc\JAC_PoC_GrowthUI')
+python tools/jac_art/build_art.py
+```
+
+手帳アイコンの入力はローカルアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`（この PC では `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\JAC_PoC_GrowthUI\Originals\notebooks_generated.png`）、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。
+
+### 互換性
+
+`ReplaceUIScript` は `PartialScreenHooks` を置換するため、同じスクリプトを置換する他 MOD との競合があり得る。動作確認はこの MOD 単独の有効化で行っており、競合する MOD との共存は未確認。製品版 MOD は総合改変 MOD として他 MOD を無効にする方針で、共存が必要になった場合は互換パッチを用意する。
 
 手順：
 
 1. 共通の準備に従い `poc/JAC_PoC_GrowthUI` を `Mods/JAC_PoC_GrowthUI` へジャンクションで配置する。この検証中は `JAC_PoC_Bundle0` を無効にし、本MODを有効にする
 2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す。アイコンが欠けていないか、左上の「歴史年表」（History Timeline）ボタンと見分けられるかも見る
-3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC で閉じることも確認する
+3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
 4. 手帳をもう一度開き、開いたまま List of Reports を押す
 5. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
 6. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
@@ -86,7 +102,7 @@ MOD の内容：
 |---|---|
 | 読み込み | `Modding.log` に `JAC_GrowthUI_Text`・`JAC_GrowthUI_Gameplay`・`JAC_GrowthUI_InGameUI`・`JAC_GrowthUI_PartialScreenHooks`・`JAC_GrowthUI_UIFiles` の適用が記録され、`Database.log` に本MOD由来のエラーがない |
 | ボタンの位置 | `Lua.log` に `[JAC_POC] notebooks button attached parent=ButtonStack` が出て、ボタンが List of Reports のすぐ左にある。都市国家と出会った後も同じ位置にある。この行が出ないときは置換が効いていない（`ReplaceUIScript` の競合を疑う） |
-| アイコン | 欠けずに表示され、「歴史年表」ボタンと見分けられる。同じ `LaunchBar_Hook_Timeline` を流用しているため、紛らわしい・欠ける場合は 26x26 の専用 `.dds` を `ImportFiles` に追加し、`AddScreenHook` の第2引数に渡す |
+| アイコン | 専用の `JAC_Notebooks_Hook.dds` が欠けずに表示され、「歴史年表」ボタンと見分けられる |
 | 開き直しと切り替え | 手順4で手帳が閉じて List of Reports が開き、手順3〜4の間の `Lua.log` に `UI.DataError`（`Cannot determine if partial screen`）や `Runtime Error` がない。初回に開いたときの `[JAC_POC] notebooks path lookup found=<true/false>` も記録する（`false` なら、閉じた手帳を公式の `IsPartialScreenOpen()` がパスで探せず `UI.DataError` になる。公式の Era Progress と同じ作り） |
 | 手帳と人物帳 | 開くたびに `[JAC_POC] notebooks opened`、人物帳を出すたびに `[JAC_POC] character journal shown count=<n>` が出る。`n` は生存中の武将ユニット数（新規ゲームでは開始ユニット数に応じて1～3） |
 | 新規ゲームの `Lua.log` | `[JAC_POC] no saved state (new game)`、`[JAC_POC] assigned unit=...` が開始ユニット数に応じて1～3件、`[JAC_POC] initialized count=...` が出る。装備・Artifactの値も記録される |
@@ -100,7 +116,7 @@ MOD の内容：
 |---|---|
 | 読み込み | `Modding.log` に5アクションの適用を確認。`Database.log` に JAC 由来のエラーなし |
 | ボタンの位置 | `parent=ButtonStack`。手帳は Reports の左。都市国家1件との遭遇後も同じ位置（`02-top-right-closeup.png`・`12-after-city-state-top-bar-clean.png`） |
-| アイコン | 欠けなし。画面上では左上の歴史年表の肖像アイコンと区別できた（`03-timeline-closeup.png`）。専用アイコンは未作成 |
+| アイコン | 専用の `JAC_Notebooks_Hook.dds` が欠けずに表示され、画面上でも左上の歴史年表の肖像アイコンと区別できた（`03-timeline-closeup.png`） |
 | 開き直しと切り替え | `notebooks path lookup found=true`。再クリックで閉じ、手帳から Reports に切り替わった。`UI.DataError`・`Runtime Error` なし |
 | 手帳と人物帳 | `notebooks opened` 5件、`character journal shown count=2` 4件。メニュー・人物帳・保存前後の画像あり。日本語の固定行に英語表示で欠字が出たため、同梱の NotoSansCJKjp をその行に指定して再検証し、日露英の固定3行を表示できた |
 | 新規ゲーム | `no saved state`、開始2ユニットへ `assigned`、`initialized count=2`。1体目の装備2件・Artifact、2体目の装備1件を確認 |
@@ -108,4 +124,4 @@ MOD の内容：
 | 保存・ロード | `restored count=2`。両ユニットの全記録と人物帳の表示が保存前の Lv2・70 XP に一致。追加の `assigned` はなく、次のターン6で Lv3・5 XP |
 | 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認 |
 
-要オーナー確認：表示言語 `ja_JP`・`ru_RU` での文言とロシア語項目名の収まり。Options の表示言語変更はアプリ再起動を要求し、現ドライバはゲームの再起動を扱わない。Esc による手帳の閉鎖も要確認。自動入力の Esc は公式 Reports List でもゲーム全体のメニューを開いたため、この入力方法では判定できなかった。
+要オーナー確認：表示言語 `ja_JP`・`ru_RU` での文言とロシア語項目名の収まり。Options の表示言語変更はアプリ再起動を要求し、現ドライバはゲームの再起動を扱わない。ESC による手帳の閉鎖は要実機確認。自動入力では公式 Reports List でも ESC がゲーム全体のメニューを開いたため、閉鎖を判定できなかった。
