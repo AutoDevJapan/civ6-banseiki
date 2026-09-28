@@ -95,7 +95,7 @@ MOD の内容：
 | 確認 | 実際の結果 |
 |---|---|
 | 同時参加 | 成功。`CIVILIZATION_JAC_ODA`（player 0、人間）と `CIVILIZATION_JAC_TAKEDA`（player 1、AI）がともに参加し、2ターン目に両家が都市を建設した |
-| AI の独立性 | 武田 AI は独自に行動した。両家とも AI にするゲーム（手順4）は未実施 |
+| AI の独立性 | 武田 AI は独自に行動した。両家とも AI にするゲームはこの時点では未実施（2026-09-29 に別ゲームで実施。下記参照） |
 | 改名 | 不可。ゲームプレイ側では `PlayerConfigurations[...]` の `GetValue`／`SetValue` が nil（`function expected instead of nil`）で、`SetCivilizationName`・`SetCivilizationShortDescription`・`SetCivilizationDescription` も無い。UI 側では `GetValue("CivilizationName")` が nil を返した |
 | 実行時エラー | `bad argument #1 to 'tostring' (value expected)` が `Scripts/JAC_CustomCivs.lua:88` と `UI/JAC_CustomCivs_Observe.lua:47` で出た。原因は未設定のキーで `Game:GetProperty` が値を1つも返さないこと。1値に直す関数を通すよう修正済み（修正後の実機確認は未実施） |
 | ロード後保持・翻訳 | 未実施 |
@@ -106,10 +106,11 @@ MOD の内容：
 | 日付 | 検証 | 結果と画面記録 |
 |---|---|---|
 | 2026-09-29 | 家名表示の切替・ロード後保持 | **成功**（途中の手動入力なし）。`steps.jsonl` で 102/102 ステップ、ログ判定 2/2 件。ターン1は4 UI コンテキストの原名、遭遇が UI に反映されたターン2は4画面の原名、ターン3の `rename` 後のターン4とセーブ／終了／ロード後は4画面の改名を確認した。証拠一式はローカルの `tools/civ6-autotest/artifacts/clans-house-names-run-08/`（PR #19 のドライバーが生成。Git 管理外のため GitHub からは参照不可）。`steps.jsonl`、`Lua.log` と画面記録（`01-turn1-hud.png`、ターン2の `02-turn2-*`・`03-turn2-city-banner.png`、ターン4の `05-turn4-*`、ロード後の `09-load-*`）を保存。 |
+| 2026-09-29 | 織田・武田の両方を AI にした実機検証 | **成功**。Steam 版 1.0.12.68、Gathering Storm、英語 UI、シングルプレイ。公式北条／日本を人間（player 0）、織田を AI（player 1）、武田を AI（player 2）にし、GrowthUI は無効化。`scenarios/clans-both-ai.json` の 41/41 ステップ、ログ判定 2/2 件が成功。`Lua.log` に別 ID の両家と `customCivs oda=1 takeda=1` を記録。両 AI はターン1に都市 0、ターン2に都市 1 となり、ターン4の Lua 照会では織田の首都が名古屋、武田の首都が甲府。家名は織田が `Oda clan` のまま、武田が3ターン目の切替後に `Takeda clan` から `Kai Takeda clan` となり、両都市バナーのツールチップでも一致。セーブ／メニューへ戻る／ロード後も両 AI と家名を確認し、ターン5まで進行した。ユニット移動の個別追跡は行わず、両者の都市建設を AI 行動の証拠とした。ローカル証拠は `tools/civ6-autotest/artifacts/clans-both-ai-run-02/` の `steps.jsonl`、`Lua.log`、`01-start.png`、`02-turn4-oda-capital.png`、`03-turn4-takeda-capital.png`、`04-after-load.png`、`05-turn5-after-load.png`（Git 管理外）。MOD 本体の修正は不要だった。 |
 
 切替前の外交画面は `TAKEDA CLAN`、ランキング概要は `Takeda clan leading`、都市バナーの実ツールチップは `Kofu (Takeda clan)`。切替後とロード後はそれぞれ `KAI TAKEDA CLAN`、`Kai Takeda clan leading`、`Kofu (Kai Takeda clan)`。外交リボンの実ツールチップも `Takeda clan` から `Kai Takeda clan` に変わった（値は同フォルダの `Lua.log` に `[JAC_HOUSE]` として記録）。都市バナーとリボンの家名は画面上のツールチップ値を UI Lua で読み、スクリーンショットには都市・アイコンの表示を記録した。遭遇状態を Gameplay Lua で設定した直後のターン1では UI のリボンにまだ武田が現れないため、実画面の切替前比較はターン2に行った。
 
-実機で見つかった表示不具合を2点修正した。Gathering Storm の `ReplaceUIScript` が PoC の置換を後から上書きしていたため、3画面のアクションに `LoadOrder=100` を設定。ランキング概要行だけは `GameInfo.Civilizations` を直接読むため、該当行を UI 側で改名した。観測専用 `InGame` コンテキストの `uiRenameState.short/localized` は原名のままで、`target` と表示対象4コンテキストの実文字列で判定した。両家を AI にするゲームと日英露の切替表示は引き続き**未確認**。
+実機で見つかった表示不具合を2点修正した。Gathering Storm の `ReplaceUIScript` が PoC の置換を後から上書きしていたため、3画面のアクションに `LoadOrder=100` を設定。ランキング概要行だけは `GameInfo.Civilizations` を直接読むため、該当行を UI 側で改名した。観測専用 `InGame` コンテキストの `uiRenameState.short/localized` は原名のままで、`target` と表示対象4コンテキストの実文字列で判定した。日英露の言語切替表示とマルチプレイ時の同期・決定性は、オーナー確認待ちの**未検証**項目として残す。
 
 分かったこと：
 
