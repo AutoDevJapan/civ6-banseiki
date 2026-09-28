@@ -108,21 +108,26 @@ local function OnTurnBegin(turn)
 		end
 	end
 	if turn ~= 3 or GetProp(RENAME_PROPERTY) then return end
-	local playerID = GetTakeda()
+	local playerID, _, config = GetTakeda()
 	if playerID == nil then
 		Log("rename turn=3 result=takeda_absent")
 		return
 	end
 	-- 実機確認済み（2026-09-28）：ゲームプレイ側の PlayerConfigurations には
 	-- SetCivilizationName 等の専用セッターも GetValue / SetValue も無い。
-	-- 毎回呼び直さず、項目ごとに使えないことだけを記録する。表示名の変更は UI 側で上書きする。
-	for _, field in ipairs({ "CivilizationName", "CivilizationShortDescription", "CivilizationDescription" }) do
-		Log(string.format("renameField field=%s context=gameplay result=unavailable", field))
+	-- 呼び出しはせず、関数があるかだけを API ごとに調べる（将来のパッチで増えたら function になる）。
+	local found = false
+	for _, api in ipairs({ "SetCivilizationName", "SetCivilizationShortDescription", "SetCivilizationDescription", "SetValue" }) do
+		local ok, f = pcall(function() return config[api] end)
+		local result = config == nil and "config_unavailable" or (ok and type(f) or "lookup_error")
+		if result == "function" then found = true end
+		Log(string.format("renameField api=%s context=gameplay result=%s", api, result))
 	end
-	-- 目標名は UI 側の表示上書きで読むため、共有状態として保存しておく。
+	-- 目標名は UI 側の表示上書き（UI/JAC_CivNameOverride.lua）が読むため、共有状態として保存しておく。
 	Game:SetProperty(RENAME_NAME_PROPERTY, NEW_NAME)
 	Game:SetProperty(RENAME_PROPERTY, true)
-	Log(string.format("rename turn=3 player=%s result=unavailable target=%s", tostring(playerID), NEW_NAME))
+	Log(string.format("rename turn=3 player=%s result=%s target=%s", tostring(playerID),
+		found and "setter_found" or "unavailable", NEW_NAME))
 end
 
 Events.LoadScreenClose.Add(OnLoadScreenClose)

@@ -19,9 +19,9 @@
 			<ru_RU>Играбельные кланы Ода и Такэда для Gathering Storm.</ru_RU>
 		</Text>
 		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_DESCRIPTION">
-			<en_US>Adds two separate civilizations and logs a turn-three clan rename attempt.</en_US>
-			<ja_JP>独立した2文明を追加し、3ターン目の家名変更をログで検証する。</ja_JP>
-			<ru_RU>Добавляет две цивилизации и проверяет смену названия клана на третьем ходу.</ru_RU>
+			<en_US>Adds two separate civilizations and tests a turn-three clan rename shown through UI overrides.</en_US>
+			<ja_JP>独立した2文明を追加し、3ターン目の家名変更を UI 側の表示上書きで検証する。</ja_JP>
+			<ru_RU>Добавляет две цивилизации и проверяет смену названия клана на третьем ходу через интерфейс.</ru_RU>
 		</Text>
 	</LocalizedText>
 	<ActionCriteria>
@@ -54,9 +54,32 @@
 			</Properties>
 			<File>UI/JAC_CustomCivs_Observe.xml</File>
 		</AddUserInterfaces>
+		<ReplaceUIScript id="JAC_CustomCivs_DiplomacyRibbon" criteria="JAC_CustomCivs_GatheringStorm">
+			<Properties>
+				<LuaContext>DiplomacyRibbon</LuaContext>
+				<LuaReplace>UI/JAC_DiplomacyRibbon.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
+		<ReplaceUIScript id="JAC_CustomCivs_DiplomacyActionView" criteria="JAC_CustomCivs_GatheringStorm">
+			<Properties>
+				<LuaContext>DiplomacyActionView</LuaContext>
+				<LuaReplace>UI/JAC_DiplomacyActionView.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
+		<ReplaceUIScript id="JAC_CustomCivs_WorldRankings" criteria="JAC_CustomCivs_GatheringStorm">
+			<Properties>
+				<LuaContext>WorldRankings</LuaContext>
+				<LuaReplace>UI/JAC_WorldRankings.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
 		<ImportFiles id="JAC_CustomCivs_UIFiles" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>UI/JAC_CustomCivs_Observe.lua</File>
 			<File>UI/JAC_CustomCivs_Observe.xml</File>
+			<File>UI/JAC_CivNameOverride.lua</File>
+			<File>UI/JAC_DiplomacyRibbon.lua</File>
+			<File>UI/JAC_DiplomacyActionView.lua</File>
+			<File>UI/JAC_WorldRankings.lua</File>
+			<File>UI/CityBannerManager_JAC_CivNames.lua</File>
 		</ImportFiles>
 	</InGameActions>
 	<FrontEndActions>
@@ -90,6 +113,11 @@
 		<File>Scripts/JAC_CustomCivs.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.xml</File>
+		<File>UI/JAC_CivNameOverride.lua</File>
+		<File>UI/JAC_DiplomacyRibbon.lua</File>
+		<File>UI/JAC_DiplomacyActionView.lua</File>
+		<File>UI/JAC_WorldRankings.lua</File>
+		<File>UI/CityBannerManager_JAC_CivNames.lua</File>
 		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp</File>
 		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp</File>
 		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Fallback.blp</File>

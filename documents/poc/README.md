@@ -66,15 +66,17 @@ MOD の内容：
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
 - `Players:Expansion2_Players` に両組を登録する。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
-- ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、武田家の表示名がゲームプレイ側から変えられないことを項目ごとに1行ずつ記録し、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
+- ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
+- 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
 
 手順：
 
 1. 共通の準備に従って `JAC_PoC_CustomCivs` を Mods に配置・有効化し、Gathering Storm の詳細設定で織田家を人間、武田家を AI に選んで開始する
-2. 3ターン目まで進め、`Lua.log` の `renameField`・`rename` と UI 側の `uiRenameState` を確認する
-3. 武田 AI を発見した後、都市建設・ユニット行動を画面で確認する。セーブしてメニューへ戻り、ロード後に `Lua.log` を確認する
-4. 別ゲームで既存の文明を人間にし、織田家と武田家をともに AI に指定する。両者を発見した後に行動を画面で確認し、`Lua.log` と照合する
-5. ゲーム言語を英語・日本語・ロシア語に切り替えて、新規ゲーム設定画面とゲーム中の両家の名前を確認する
+2. 3ターン目まで進め、`Lua.log` の `renameField`・`rename`・`nameOverride` と UI 側の `uiRenameState` を確認する
+3. 4ターン目に、武田家の名前を外交リボンのツールチップ・外交画面・ワールドランキング・武田の都市バナーのツールチップで確認する（日本語なら「甲斐武田家」）
+4. 武田 AI を発見した後、都市建設・ユニット行動を画面で確認する。セーブしてメニューへ戻り、ロード後に `Lua.log` と手順3の4画面を確認する
+5. 別ゲームで既存の文明を人間にし、織田家と武田家をともに AI に指定する。両者を発見した後に行動を画面で確認し、`Lua.log` と照合する
+6. ゲーム言語を英語・日本語・ロシア語に切り替えて、新規ゲーム設定画面とゲーム中の両家の名前を確認する
 
 成功条件（`Lua.log` の各行に `[JAC_POC]` が付く）：
 
@@ -82,8 +84,9 @@ MOD の内容：
 |---|---|
 | 同時参加 | 異なる `player=<id>` の `civ=CIVILIZATION_JAC_ODA leader=LEADER_JAC_ODA_NOBUHIDE alive=true` と `civ=CIVILIZATION_JAC_TAKEDA leader=LEADER_JAC_TAKEDA_NOBUTORA alive=true`、`customCivs oda=1 takeda=1` |
 | AI の独立性 | 両 AI を選んだゲームでも2行が別 ID で出る。`turn=… player=… civ=… cities=…` が各家で継続し、ゲーム画面で両者それぞれの都市建設・ユニット行動を確認できる |
-| 改名不可の記録 | 3ターン目に `renameField field=… context=gameplay result=unavailable` が3項目1行ずつ、続けて `rename turn=3 … result=unavailable` が出る。以降のターン・ロード後には繰り返さない |
-| ロード後保持 | 再読込後の `renameState stage=load … attempted=true target=LOC_JAC_TAKEDA_RENAMED_NAME` と `uiRenameState stage=load …` を確認する。両家の `player=` 行と文明 ID も照合する |
+| 改名 API の有無 | 3ターン目に `renameField api=… context=gameplay result=nil` が4つの API（`SetCivilizationName`・`SetCivilizationShortDescription`・`SetCivilizationDescription`・`SetValue`）で1行ずつ、続けて `rename turn=3 … result=unavailable` が出る。以降のターン・ロード後には繰り返さない。`result=function`（`setter_found`）が出たらパッチで API が増えたので、方式を見直す |
+| 表示の上書き | 各コンテキストの読み込み時に `nameOverride context=<名前> result=installed` が出る（`DiplomacyRibbon`・`DiplomacyActionView`・`WorldRankings`・`CityBannerManager`）。3ターン目以降に `result=applied … target=LOC_JAC_TAKEDA_RENAMED_NAME` が出て、手順3の4画面で武田家が目標名になる。ロード後も同じ。`installed` が出ないコンテキストは差し替えが効いていない（`ReplaceUIScript` の競合を疑う）。`shared_with_…` はゲッターの表がコンテキスト間で共有されている印で、上書きは効く。`no_method_table` なら方式を見直す |
+| ロード後保持 | 再読込後の `renameState stage=load … target=LOC_JAC_TAKEDA_RENAMED_NAME attempted=true` と `uiRenameState stage=load …` を確認する。両家の `player=` 行と文明 ID も照合する |
 | 読み込み・翻訳 | `Database.log`・`Modding.log` にこの MOD 由来のエラーがなく、設定画面とゲーム中に日英露の名前・説明が表示される |
 | 実行時エラー | `Lua.log` に `JAC_CustomCivs` 由来の `bad argument` などのエラーがない |
 
@@ -96,23 +99,24 @@ MOD の内容：
 | 改名 | 不可。ゲームプレイ側では `PlayerConfigurations[...]` の `GetValue`／`SetValue` が nil（`function expected instead of nil`）で、`SetCivilizationName`・`SetCivilizationShortDescription`・`SetCivilizationDescription` も無い。UI 側では `GetValue("CivilizationName")` が nil を返した |
 | 実行時エラー | `bad argument #1 to 'tostring' (value expected)` が `Scripts/JAC_CustomCivs.lua:88` と `UI/JAC_CustomCivs_Observe.lua:47` で出た。原因は未設定のキーで `Game:GetProperty` が値を1つも返さないこと。1値に直す関数を通すよう修正済み（修正後の実機確認は未実施） |
 | ロード後保持・翻訳 | 未実施 |
+| 表示の上書き | 未実施（UI 側の上書きを追加した。実機での確認待ち） |
 
 分かったこと：
 
-- ゲーム中に文明名を変える方法は、ゲームプレイ Lua には無い。これまで試していた専用セッターと `SetValue` の呼出しはやめ、3ターン目に「使えない」ことだけを記録する
-- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える方式を別途検証する。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
+- ゲーム中に文明名を変える方法は、ゲームプレイ Lua には無い。これまで試していた専用セッターと `SetValue` の呼出しはやめ、3ターン目にその API があるかだけを調べて記録する
+- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える（上記の `JAC_CivNameOverride`。実機は未確認）。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
 - 将来のマルチプレイでは、目標名を各端末で同期済みの共有状態から読む。端末ごとの `PlayerConfigurations` の値は使わない
 
 ### 画像
 
-2人の指導者と2つの文明に、北条・日本の流用ではなく自前の画像を割り当てた。
+[リポジトリルール](../repository-rules.md)の「画像」に従い、2人の指導者と2つの文明に、北条・日本の流用ではなく自前の画像を割り当てた。
 
 | 画像 | テクスチャ名 | 使われる場所 |
 |---|---|---|
 | 指導者アイコン | `JAC_Leaders{32,45,48,50,55,64,80,256}`（2×1 のアトラス、0番＝織田、1番＝武田） | 設定画面、右上の指導者一覧、外交の一覧など |
 | 文明アイコン（家紋） | `JAC_Civs{22,30,32,36,44,45,48,50,64,80,128,200,256}`（45 だけ色付き、他は白＋透明） | 設定画面、都市の旗、文明一覧など |
-| ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`・`_BACKGROUND` | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
-| 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` から 3D の北条を外し、2D 画像を使う） | 外交画面 |
+| ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024）・`_BACKGROUND`（1920×1080。`LoadScreen.xml` の帯の高さ 987 が切れず、1080p で上下に黒帯が出ない） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
+| 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
 | 外交画面の背景 | `DiplomacyInfo` にロード画面の背景を指定 | 外交画面 |
 
 作り方：`python tools/jac_art/build_art.py` を実行すると、`ArtSource/Originals/` の元画像から切り抜き・縮小し、SDK の Cooker をコマンドラインから呼んで `Platforms/Windows/BLPs/` に BLP を3つ作る（`JAC_CustomCivs_Icons`・`JAC_CustomCivs_Leaders`・`JAC_CustomCivs_Fallback`）。中間ファイルは `tools/jac_art/build/`（Git 管理外）に作る。家紋は伝統図案を Pillow で描いた（Commons の家紋 SVG は CC BY-SA／CC BY なので使わない）。
@@ -133,9 +137,9 @@ MOD の内容：
 
 1. 追加コンテンツで「JAC PoC：カスタム勢力」を有効にする
 2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・肖像のツールチップを確認する
-3. 開始してロード画面の肖像と背景を確認する
+3. 開始してロード画面の肖像と背景を確認する。武田を人間にした別ゲームも開始し、ロード画面の肖像画と猿橋の背景を確認する
 4. ゲーム内で、右上の指導者アイコンと都市の旗の家紋を確認する
-5. 武田との外交画面を開き、2D の肖像と背景を確認する
+5. 武田との外交画面を開き、2D の肖像と背景を確認する。`Lua.log` に `[JAC_POC] leaderScreen loaded` が出ることも確認する
 
 成功条件：
 
@@ -144,7 +148,10 @@ MOD の内容：
 | 設定画面 | 織田は木像の丸いアイコンと木瓜の家紋、武田は肖像画の丸いアイコンと菱の家紋。ツールチップに各家の肖像と背景が出る |
 | ロード画面 | 織田は木像と北斎の尾張の図、武田は肖像画と広重の猿橋の図。北条の画像が出ない |
 | ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
-| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る |
+| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
+| ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
 | ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
 
-未確認：ゲーム画面での表示はまだ確認していない。BLP は Cooker が成功を返し、中に全テクスチャ名があることまで確認した。外交画面で 3D の代わりに 2D 画像が出るかは、公開MOD（[Republic of Turkey](https://github.com/NerdByFate/Civilization-6-Republic-of-Turkey)）と同じ設定だが、この環境では未検証。
+未確認：ゲーム画面での表示はまだ確認していない。BLP は Cooker が成功を返し、中に全テクスチャ名があることまで確認した。外交画面の 2D 表示は、公式の WarMachineScenario と同じ設定（`Leaders.artdef` は空、肖像は `FallbackLeaders.artdef`）にした。以前は `Leader_BLP_Entry` に背景の UITexture を入れていたが、公式とも公開MOD（[Republic of Turkey](https://github.com/NerdByFate/Civilization-6-Republic-of-Turkey)）とも一致しないため戻した。肖像が出ない・読み込みが止まる場合は、Turkey と同じく `Leader_BLP_Entry` に 1920×1080 の UITexture を入れる形を試す。
+
+BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で作っており、3つで 26,963,968 バイト（`_Leaders` 21,383,168、`_Fallback` 4,705,792、`_Icons` 875,008）。肖像は `_Leaders` と `_Fallback` の両方に入る。作り直すたびに Git の履歴が同じくらい増えるため、実機で表示を確かめた後に、背景だけの圧縮形式・解像度の見直し・Git LFS かビルド時生成を試して容量を測り、決めた方針をここに書く。

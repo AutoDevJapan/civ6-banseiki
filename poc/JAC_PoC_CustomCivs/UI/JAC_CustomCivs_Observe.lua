@@ -62,3 +62,5 @@ end
 Events.LoadScreenClose.Add(function() Observe("load") end)
 Events.GameCoreEventPublishComplete.Add(function() Observe("update") end)
 Events.LocalPlayerTurnBegin.Add(function() Observe("turn") end)
+-- 外交画面の指導者（2D の肖像）の読み込みが終わったか。出なければ読み込みが止まっている。
+Events.LeaderScreenFinishedLoading.Add(function() Log("leaderScreen loaded") end)

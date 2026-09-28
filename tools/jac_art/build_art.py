@@ -27,7 +27,7 @@ WHITE_LT = (249, 249, 249, 255)  # COLOR_STANDARD_WHITE_LT
 LEADER_ICON_SIZES = (32, 45, 48, 50, 55, 64, 80, 256)  # XP2 の ICON_ATLAS_LEADERS と同じ
 CIV_ICON_SIZES = (22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256)  # XP2 の文明アイコンと同じ
 PORTRAIT_SIZE = (570, 1024)
-BACKGROUND_SIZE = (1920, 960)
+BACKGROUND_SIZE = (1920, 1080)  # LoadScreen.xml の帯（高さ987）が切れず、1080p で上下に黒帯が出ない
 
 LEADERS = {
     # 0番: 織田。萬松寺の木像写真。帽子の上に余白が無いので上を足す。
@@ -36,7 +36,7 @@ LEADERS = {
         "portrait": (478, 0, 1278, 1300),
         "portrait_pad_top": 137,
         "face": (608, 60, 1148, 600),
-        "background": ("owari_fujimigahara.jpg", (98, 294, 3826, 2158)),
+        "background": ("owari_fujimigahara.jpg", (98, 178, 3826, 2275)),
     },
     # 1番: 武田。大泉寺の肖像画。
     "TAKEDA_NOBUTORA": {
@@ -44,7 +44,7 @@ LEADERS = {
         "portrait": (0, 200, 358, 843),
         "portrait_pad_top": 0,
         "face": (57, 300, 287, 530),
-        "background": ("kai_saruhashi.jpg", (890, 1160, 2100, 1765)),
+        "background": ("kai_saruhashi.jpg", (887, 1121, 2103, 1805)),
     },
 }
 
