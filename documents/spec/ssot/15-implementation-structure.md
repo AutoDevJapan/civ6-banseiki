@@ -38,13 +38,14 @@ japan-archipelago/
 │  └─ universe/
 ├─ maps/
 │  ├─ japan-archipelago/
-│  ├─ ultra-world/
+│  ├─ asia-region/
 │  ├─ solar-system/
 │  ├─ milky-way/
 │  ├─ local-group/
 │  ├─ laniakea/
 │  └─ universe/
 ├─ services/
+│  ├─ companion-app/
 │  ├─ vercel-web/
 │  └─ railway-api/
 ├─ tools/
@@ -61,7 +62,7 @@ japan-archipelago/
 | 現行の関係宣言・小国懐柔・大国合併 | 外交画面、再利用する都市国家画面の枠、既存通知。新規の統治画面は作らない |
 | 旧9状態案の憲章・正当性・安定度・信頼 | 未採用。採用を決めるまで実装項目には含めない |
 | シナリオ内状態 | Game / Player / Unit Property |
-| メタ進行・友達間共有 | Vercel / RailwayのPoC後に判断 |
+| メタ進行・友達間共有 | Civ6のLuaは外部通信・ファイル書き込みができないため、ゲーム外の常駐アプリ（`services/companion-app/`、本リポジトリで開発）がセーブを読み、Vercel / Railwayと同期する |
 | 肖像、家紋、アイコン、地図 | ArtDef / XLP / DDS / Civ6Map |
 
 ### 15.3 ID命名規則
