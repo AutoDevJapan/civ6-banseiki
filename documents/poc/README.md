@@ -90,7 +90,7 @@ MOD の内容：
 | 読み込み・翻訳 | `Database.log`・`Modding.log` にこの MOD 由来のエラーがなく、設定画面とゲーム中に日英露の名前・説明が表示される |
 | 実行時エラー | `Lua.log` に `JAC_CustomCivs` 由来の `bad argument` などのエラーがない |
 
-結果：**一部実施**（2026-09-28、Steam 版 1.0.12.68、Gathering Storm、シングルプレイ。織田＝人間、武田＝AI の1ゲーム）
+2026-09-28 の結果：**一部実施**（Steam 版 1.0.12.68、Gathering Storm、シングルプレイ。織田＝人間、武田＝AI の1ゲーム）
 
 | 確認 | 実際の結果 |
 |---|---|
@@ -101,10 +101,14 @@ MOD の内容：
 | ロード後保持・翻訳 | 未実施 |
 | 表示の上書き | 未実施（UI 側の上書きを追加した。実機での確認待ち） |
 
+2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
+
+両家を AI にするゲーム、3ターン目以降の家名を外交リボン・外交画面・ランキング・都市バナーで確認すること、ロード後の家名表示、日英露の切替表示は**未確認**。2026-09-28 のエラー修正後について、この自動シナリオが確認したのは参加・手帳・セーブ／ロードまでである。
+
 分かったこと：
 
 - ゲーム中に文明名を変える方法は、ゲームプレイ Lua には無い。これまで試していた専用セッターと `SetValue` の呼出しはやめ、3ターン目にその API があるかだけを調べて記録する
-- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える（上記の `JAC_CivNameOverride`。実機は未確認）。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
+- 家名の変更を画面に出すには、UI 側で表示を上書きするしかない。文明名を表示する各 UI で、`Game:GetProperty` に保存した目標名を読んで差し替える（上記の `JAC_CivNameOverride`。4画面の表示は未確認）。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)もゲッターを独自に上書きしており、同じ方向になる
 - 将来のマルチプレイでは、目標名を各端末で同期済みの共有状態から読む。端末ごとの `PlayerConfigurations` の値は使わない
 
 ### 画像
@@ -115,12 +119,37 @@ MOD の内容：
 |---|---|---|
 | 指導者アイコン | `JAC_Leaders{32,45,48,50,55,64,80,256}`（2×1 のアトラス、0番＝織田、1番＝武田） | 設定画面、右上の指導者一覧、外交の一覧など |
 | 文明アイコン（家紋） | `JAC_Civs{22,30,32,36,44,45,48,50,64,80,128,200,256}`（全サイズ白＋透明のアルファマスク） | 設定画面、都市の旗、文明一覧など |
-| 文明・指導者の能力アイコン | `JAC_Abilities{22,30,32,36,44,45,48,50,64,80,128,200,256}`（4×1。0＝織田家、1＝武田家、2＝織田信秀、3＝武田信虎。全サイズ白＋透明） | 設定画面の各能力欄など |
-| ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024）・`_BACKGROUND`（1920×1080。`LoadScreen.xml` の帯の高さ 987 が切れず、1080p で上下に黒帯が出ない） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
+| 文明・指導者の能力アイコン | `JAC_Abilities{22,30,32,36,44,45,48,50,64,80,128,200,256}`（4×1。0＝織田家、1＝武田家、2＝織田信秀、3＝武田信虎。全サイズ白＋透明） | アイコン定義に登録済み。標準の設定画面・百科事典では専用絵柄は使われない（下記参照） |
+| ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024、髷の上に余白を確保）・`_BACKGROUND`（1920×1080） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
 | 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
-| 外交画面の背景 | `DiplomacyInfo` にロード画面の背景を指定 | 外交画面 |
+| 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。`LeaderScene` の標準レターボックスを両家で隠す | 外交画面 |
 
-再生成：両ワークツリーを並べて `python tools/jac_art/build_art.py` を実行する。入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/` と `civ6-art-local/JAC_PoC_GrowthUI/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は環境変数 `JAC_ART_LOCAL` で指定でき、GrowthUI の MOD 位置は `JAC_GROWTH_MOD` で指定できる。Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。SDK の Asset Cooker が CustomCivs の `Platforms/Windows/BLPs/` に BLP 3個を出力し、GrowthUI の `UI/Textures/JAC_Notebooks_Hook.dds` も作る。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
+#### 新しい画像の実機表示
+
+2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。画像の保存先は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-art-local/final-01/`（Git 管理外）。表中の `ingame/` から始まるパスはそこを基準とする。
+
+| 確認 | 実際の結果 |
+|---|---|
+| Mod と生成物 | Mods の `JAC_PoC_CustomCivs`／`JAC_PoC_GrowthUI` ジャンクションはそれぞれ `poc-civs`／`poc-growth-ui` worktree を指す。CustomCivs の BLP 3 個と `JAC_Notebooks_Hook.dds` が存在し、`Modding.log` で CustomCivs の `UpdateArt`・`UpdateIcons` 適用を確認した。 |
+| Esc 前のロード画面 | 織田・武田とも新規の人物と城内背景が表示された。武田は画面上端で髷の先が切れる。`ingame/08-loading-oda-before-esc.png`、`ingame/15-loading-takeda-before-esc.png` |
+| FrontEnd の選択・設定 | 両家の指導者アイコンと家紋が詳細設定で並び、各人の肖像も基本設定に表示された。`ingame/02-setup-oda-details.png`、`ingame/07-advanced-setup.png`、`ingame/14-setup-takeda.png` |
+| ゲーム中のアイコン | 織田・武田の指導者アイコンが右上に表示され、接触後の外交リボンにも武田の指導者アイコンが表示された。外交画面の左上には武田の家紋も表示された。`ingame/09-ingame-oda.png`、`ingame/11-diplomacy-ribbon.png`、`ingame/12-diplomacy-takeda.png`、`ingame/16-ingame-takeda.png` |
+| 手帳ボタン | 右上の List of Reports の隣に新規アイコンが表示され、開くと手帳メニューが出た。`ingame/10-notebooks-button-closeup.png`、`ingame/19-notebooks-open-clean.png` |
+| 武田との外交 | Gameplay Lua の `SetHasMet(1, true)` で接触させ、公式 UI の `DiplomacyRibbon_OpenDiplomacyActionView(1)` で開いた。新規フォールバック人物と背景を確認。背景の上下には黒い余白が見える。`ingame/12-diplomacy-takeda.png` |
+| 文明・指導者能力 | 両家の能力名・説明は設定画面に、武田の能力名・説明は百科事典にも表示された。ただし設定画面は標準 UI が指導者／文明アイコンを能力欄に再利用し、百科事典は能力をテキストのみで表示する。専用 `JAC_Abilities` の4絵柄は画面上では未確認。ゲーム内 `IconManager:FindIconAtlas` は4定義とも `JAC_Abilities50.dds` のオフセット 0・50・100・150 を返した。`ingame/02-setup-oda-details.png`、`ingame/14-setup-takeda.png`、`ingame/17-civilopedia-takeda.png`、`ingame/18-civilopedia-takeda-leader.png` |
+| 実行ログ | 今回の `Lua.log`・`Database.log`・`Modding.log` に CustomCivs／GrowthUI 由来のテクスチャ・ArtDef エラーは見当たらない。`ArtDef.log` では3つの BLP の読み込みを確認した。`Database.log` の `LocalizedText` 重複は `CurrentClickouts/…/ClickoutText_en_US.xml`、`Modding.log` の XML 警告は本体 DLC のファイルに対応する。 |
+
+`C:/Users/makhmeto/AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/ArtDef.log` のパッケージ解決記録（2026-09-29 02:53:59）は次のとおり。同ログには `Unable to resolve Package` と CustomCivs の BLP を含む行は無い。
+
+```text
+[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Fallback.blp
+[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp
+[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp
+```
+
+上記の表示・ログは今回の背景・肖像修正**前**の実機結果。修正後の髷の収まりと外交画面の黒帯解消は**未確認**。
+
+再生成：`python tools/jac_art/build_art.py` を実行する。CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は `JAC_ART_LOCAL` で指定できる。GrowthUI が `<リポジトリ>/poc/JAC_PoC_GrowthUI` にある場合だけ、`civ6-art-local/JAC_PoC_GrowthUI/Originals/` から手帳 DDS を作る。別の場所にある GrowthUI は `JAC_GROWTH_MOD` で指定する。GrowthUI フォルダが無い場合は手帳工程をスキップし、CustomCivs 単独で完了する。Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は既存の対象 BLP 3個を除去してから新規出力し、更新時刻・容量・テクスチャ名を確認する。2026-09-29 のビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
 
 選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定する。OAuth のサブスクリプション枠だけを使い、API キーや従量課金 API は使わない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
 
@@ -147,7 +176,7 @@ MOD の内容：
 画像の確認手順：
 
 1. 追加コンテンツで「JAC PoC：カスタム勢力」を有効にする
-2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・4つの能力アイコン・肖像のツールチップを確認する
+2. ゲーム設定で織田と武田を選び、指導者アイコン・家紋・肖像・能力名と説明を確認する
 3. 開始してロード画面の透過人物と新規生成背景を確認する。武田を人間にした別ゲームでも確認する
 4. ゲーム内で、右上の指導者アイコンと都市の旗の家紋を確認する
 5. 武田との外交画面を開き、2D の肖像と背景を確認する。`Lua.log` に `[JAC_POC] leaderScreen loaded` が出ることも確認する
@@ -156,16 +185,16 @@ MOD の内容：
 
 | 確認 | 期待する結果 |
 |---|---|
-| 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、4つの固有能力アイコン。ツールチップに各家の新規生成肖像と背景が出る |
+| 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、能力名と説明、新規生成した肖像と背景が出る。標準 UI は専用能力アイコンを表示しない |
 | ロード画面 | 両名の新規生成人物と城内の背景が出る。紫色の縁や公式北条の人物が出ない |
 | ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
-| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
+| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。背景の上下に黒い余白が出ない。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
 | ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
 | ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
 
-未確認：ゲーム画面での表示はまだ確認していない。BLP は Cooker が成功を返し、中に全テクスチャ名があることまで確認した。外交画面の 2D 表示は、公式の WarMachineScenario と同じ設定（`Leaders.artdef` は空、肖像は `FallbackLeaders.artdef`）にした。以前は `Leader_BLP_Entry` に背景の UITexture を入れていたが、公式とも公開MOD（[Republic of Turkey](https://github.com/NerdByFate/Civilization-6-Republic-of-Turkey)）とも一致しないため戻した。肖像が出ない・読み込みが止まる場合は、Turkey と同じく `Leader_BLP_Entry` に 1920×1080 の UITexture を入れる形を試す。
+修正前の実機結果は上記「新しい画像の実機表示」を参照。`ArtDef.log` でも3つの BLP の読み込みが確認でき、CustomCivs のパッケージ解決失敗はない。外交画面の 2D 人物は `FallbackLeaders.artdef` の設定で表示された。修正後の新 BLP と `LeaderScene` 差し替えの実機表示、都市の旗、専用能力アイコン4絵柄の画面表示、1080p での端の表示は未確認。
 
-BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、今回の 3 個は合計 25,592,320 バイト（`_Leaders` 19,386,880、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
+BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
 
 ## JAC_PoC_GrowthUI：手帳ボタンの画像
 

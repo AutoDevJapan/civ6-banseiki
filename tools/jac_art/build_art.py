@@ -1,13 +1,15 @@
-"""Build both PoC mods' art from local originals using Pillow and the Civ6 SDK.
+"""Build CustomCivs art, and GrowthUI art when its mod is present.
 
 Usage: python tools/jac_art/build_art.py
 Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>
 """
+import hashlib
 import os
 import shutil
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
@@ -22,7 +24,8 @@ LEADER_ICON_SIZES = (32, 45, 48, 50, 55, 64, 80, 256)  # XP2 の ICON_ATLAS_LEAD
 CIV_ICON_SIZES = (22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256)  # XP2 の文明アイコンと同じ
 ABILITY_ICON_SIZES = CIV_ICON_SIZES
 PORTRAIT_SIZE = (570, 1024)
-BACKGROUND_SIZE = (1920, 1080)  # LoadScreen.xml の帯（高さ987）が切れず、1080p で上下に黒帯が出ない
+BACKGROUND_SIZE = (1920, 1080)  # LoadScreen.xml は画面全体に表示
+DIPLOMACY_BACKGROUND_SIZE = (1600, 1000)  # LeaderScene.xml は画面全体へ Fill。実機の約16:10に合わせる
 
 
 def local_art_root():
@@ -41,7 +44,7 @@ ART_LOCAL = local_art_root()
 ORIGINALS = ART_LOCAL / "JAC_PoC_CustomCivs" / "Originals"
 GROWTH_ORIGINALS = ART_LOCAL / "JAC_PoC_GrowthUI" / "Originals"
 FINAL = ART_LOCAL / "final-01"
-GROWTH_MOD = Path(os.environ.get("JAC_GROWTH_MOD", str(ROOT.parent / "poc-growth-ui" / "poc" / "JAC_PoC_GrowthUI"))).expanduser().resolve()
+GROWTH_MOD = Path(os.environ.get("JAC_GROWTH_MOD", str(ROOT / "poc" / "JAC_PoC_GrowthUI"))).expanduser().resolve()
 
 LEADERS = {
     "ODA_NOBUHIDE": {
@@ -177,21 +180,21 @@ def key_magenta(path):
     return out
 
 
-def foreground(key):
+def foreground(key, max_height):
     keyed = key_magenta(ORIGINALS / LEADERS[key]["figure"])
     bounds = keyed.getchannel("A").getbbox()
     if not bounds:
         raise ValueError(f"Empty keyed figure: {key}")
     cut = keyed.crop(bounds)
-    cut.thumbnail((550, 1010), Image.Resampling.LANCZOS)
+    cut.thumbnail((550, max_height), Image.Resampling.LANCZOS)
     out = Image.new("RGBA", PORTRAIT_SIZE)
     out.alpha_composite(cut, ((out.width - cut.width) // 2, out.height - cut.height))
     return out
 
 
-def background(key):
+def background(key, size):
     src = Image.open(ORIGINALS / LEADERS[key]["background"]).convert("RGB")
-    return ImageOps.fit(src, BACKGROUND_SIZE, method=Image.Resampling.LANCZOS).convert("RGBA")
+    return ImageOps.fit(src, size, method=Image.Resampling.LANCZOS).convert("RGBA")
 
 
 def leader_icon_master(key):
@@ -244,14 +247,16 @@ def growth_icon():
     print(f"OK {dest} {dest.stat().st_size} bytes")
 
 
-def contact_sheet():
+def contact_sheet(include_growth):
     names = [f"JAC_Leaders{size}" for size in LEADER_ICON_SIZES]
     names += [f"JAC_Civs{size}" for size in CIV_ICON_SIZES]
     names += [f"JAC_Abilities{size}" for size in ABILITY_ICON_SIZES]
     for key in LEADERS:
         names += [f"LEADER_JAC_{key}_NEUTRAL", f"LEADER_JAC_{key}_BACKGROUND",
+                  f"LEADER_JAC_{key}_DIPLOMACY_BACKGROUND",
                   f"FALLBACK_NEUTRAL_JAC_{key}"]
-    names.append("JAC_Notebooks_Hook")
+    if include_growth:
+        names.append("JAC_Notebooks_Hook")
     pngs = [FINAL / f"{name}.png" for name in names]
     cols, cell_w, cell_h = 4, 420, 320
     rows = (len(pngs) + cols - 1) // cols
@@ -280,19 +285,36 @@ def cook(package):
         sys.exit(f"Cooker failed for {package}: exit {result.returncode}")
 
 
+def verify_blp(package, names, started_ns):
+    path = STEWPOT / f"{package}.blp"
+    if not path.is_file():
+        raise RuntimeError(f"Cooker did not create {path}")
+    stat = path.stat()
+    if stat.st_size < 1024 or stat.st_mtime_ns < started_ns:
+        raise RuntimeError(f"Cooker output is empty or stale: {path} ({stat.st_size} bytes, mtime={stat.st_mtime_ns})")
+    content = path.read_bytes()
+    missing = [name for name in names if name.encode("ascii") not in content]
+    if missing:
+        raise RuntimeError(f"{path} lacks {missing}")
+    digest = hashlib.sha256(content).hexdigest()
+    print(f"OK {path.name} {stat.st_size} bytes, {len(names)} textures, mtime_ns={stat.st_mtime_ns}, sha256={digest}")
+
+
 def main():
+    growth_available = (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file()
     required = [ORIGINALS / value for leader in LEADERS.values()
                 for value in (leader["portrait"], leader["figure"], leader["background"])]
-    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png",
-                 GROWTH_ORIGINALS / "notebooks_generated.png"]
+    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png"]
+    if growth_available:
+        required.append(GROWTH_ORIGINALS / "notebooks_generated.png")
     required += [ORIGINALS / name for name in ABILITY_SOURCES]
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         sys.exit("Missing local originals:\n" + "\n".join(missing))
     if not (COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe").is_file():
         sys.exit(f"Missing Civ6 SDK Asset Cooker: {COOKER_DIR}")
-    if not (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file():
-        sys.exit(f"Missing GrowthUI mod: {GROWTH_MOD} (set JAC_GROWTH_MOD)")
+    if not growth_available:
+        print(f"SKIP GrowthUI DDS: mod folder absent at {GROWTH_MOD} (set JAC_GROWTH_MOD to override)")
 
     shutil.rmtree(BUILD, ignore_errors=True)
     (BUILD / "Textures").mkdir(parents=True)
@@ -312,29 +334,29 @@ def main():
 
     leaders, fallbacks = [], []
     for key in order:
-        p = foreground(key)
+        # LoadScreen は肖像を上端で切り取るため、髷の上に余白を確保する。
+        p = foreground(key, 860)
         leaders.append(texture(f"LEADER_JAC_{key}_NEUTRAL", p))
-        leaders.append(texture(f"LEADER_JAC_{key}_BACKGROUND", background(key)))
-        fallbacks.append(texture(f"FALLBACK_NEUTRAL_JAC_{key}", p, "Leader_Fallback"))
+        leaders.append(texture(f"LEADER_JAC_{key}_BACKGROUND", background(key, BACKGROUND_SIZE)))
+        leaders.append(texture(f"LEADER_JAC_{key}_DIPLOMACY_BACKGROUND", background(key, DIPLOMACY_BACKGROUND_SIZE)))
+        fallbacks.append(texture(f"FALLBACK_NEUTRAL_JAC_{key}", foreground(key, 1010), "Leader_Fallback"))
 
     packages = {
         "JAC_CustomCivs_Icons": ("UITexture", icons),
         "JAC_CustomCivs_Leaders": ("UITexture", leaders),
         "JAC_CustomCivs_Fallback": ("LeaderFallback", fallbacks),
     }
+    for package in packages:
+        (STEWPOT / f"{package}.blp").unlink(missing_ok=True)
     for package, (cls, names) in packages.items():
         write_xlp(package, cls, names)
+        started_ns = time.time_ns()
         cook(package)
+        verify_blp(package, names, started_ns)
 
-    # 最低限の確認：BLP ができていて、各テクスチャ名が中に入っている。
-    for package, (_, names) in packages.items():
-        blp = (STEWPOT / f"{package}.blp").read_bytes()
-        missing = [n for n in names if n.encode() not in blp]
-        assert not missing, f"{package}.blp lacks {missing}"
-        print(f"OK {package}.blp {len(blp)} bytes, {len(names)} textures")
-
-    growth_icon()
-    contact_sheet()
+    if growth_available:
+        growth_icon()
+    contact_sheet(growth_available)
 
 
 if __name__ == "__main__":

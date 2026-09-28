@@ -72,6 +72,12 @@
 				<LuaReplace>UI/JAC_WorldRankings.lua</LuaReplace>
 			</Properties>
 		</ReplaceUIScript>
+		<ReplaceUIScript id="JAC_CustomCivs_LeaderScene" criteria="JAC_CustomCivs_GatheringStorm">
+			<Properties>
+				<LuaContext>LeaderScene</LuaContext>
+				<LuaReplace>UI/JAC_LeaderScene.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
 		<ImportFiles id="JAC_CustomCivs_UIFiles" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>UI/JAC_CustomCivs_Observe.lua</File>
 			<File>UI/JAC_CustomCivs_Observe.xml</File>
@@ -79,6 +85,7 @@
 			<File>UI/JAC_DiplomacyRibbon.lua</File>
 			<File>UI/JAC_DiplomacyActionView.lua</File>
 			<File>UI/JAC_WorldRankings.lua</File>
+			<File>UI/JAC_LeaderScene.lua</File>
 			<File>UI/CityBannerManager_JAC_CivNames.lua</File>
 		</ImportFiles>
 	</InGameActions>
@@ -117,6 +124,7 @@
 		<File>UI/JAC_DiplomacyRibbon.lua</File>
 		<File>UI/JAC_DiplomacyActionView.lua</File>
 		<File>UI/JAC_WorldRankings.lua</File>
+		<File>UI/JAC_LeaderScene.lua</File>
 		<File>UI/CityBannerManager_JAC_CivNames.lua</File>
 		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp</File>
 		<File>Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp</File>
