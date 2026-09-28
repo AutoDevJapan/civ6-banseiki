@@ -1,6 +1,7 @@
--- 16.1 束1：各プレイヤーの固有 ID と、ゲーム中の表示名変更の可否を記録する。
+-- 16.1 束1：生存中の主要文明の ID と、ゲーム中の表示名変更の可否を記録する。
 
 local RENAME_PROPERTY = "JAC_POC_CUSTOM_CIVS_RENAME_ATTEMPTED"
+local RENAME_NAME_PROPERTY = "JAC_POC_CUSTOM_CIVS_RENAMED_NAME"
 local TAKEDA_CIV = "CIVILIZATION_JAC_TAKEDA"
 local NEW_NAME = "LOC_JAC_TAKEDA_RENAMED_NAME"
 
@@ -15,25 +16,33 @@ end
 
 local function GetTypes(playerID, player)
 	local config = GetConfig(playerID)
+	local civType, leaderType
 	if config then
-		return config:GetCivilizationTypeName(), config:GetLeaderTypeName(), config
+		local civOk, civName = pcall(function() return config:GetCivilizationTypeName() end)
+		local leaderOk, leaderName = pcall(function() return config:GetLeaderTypeName() end)
+		if civOk then civType = civName end
+		if leaderOk then leaderType = leaderName end
 	end
 	-- Config が使えない実行環境でも、ゲーム内の型 ID を記録する。
-	local civOk, civIndex = pcall(function() return player:GetCivilizationType() end)
-	local leaderOk, leaderIndex = pcall(function() return player:GetLeaderType() end)
-	local civRow = civOk and GameInfo.Civilizations[civIndex]
-	local leaderRow = leaderOk and GameInfo.Leaders[leaderIndex]
-	return civRow and civRow.CivilizationType, leaderRow and leaderRow.LeaderType, nil
+	if not civType then
+		local ok, civIndex = pcall(function() return player:GetCivilizationType() end)
+		local row = ok and civIndex ~= nil and GameInfo.Civilizations[civIndex]
+		civType = row and row.CivilizationType
+	end
+	if not leaderType then
+		local ok, leaderIndex = pcall(function() return player:GetLeaderType() end)
+		local row = ok and leaderIndex ~= nil and GameInfo.Leaders[leaderIndex]
+		leaderType = row and row.LeaderType
+	end
+	return civType, leaderType, config
 end
 
 local function GetTakeda()
-	for playerID = 0, GameDefines.MAX_PLAYERS - 1 do
-		local player = Players[playerID]
-		if player then
-			local civType, _, config = GetTypes(playerID, player)
-			if civType == TAKEDA_CIV then
-				return playerID, player, config
-			end
+	for _, player in ipairs(PlayerManager.GetAliveMajors()) do
+		local playerID = player:GetID()
+		local civType, _, config = GetTypes(playerID, player)
+		if civType == TAKEDA_CIV then
+			return playerID, player, config
 		end
 	end
 	return nil, nil, nil
@@ -41,28 +50,42 @@ end
 
 local function LogPlayers()
 	local odaCount, takedaCount = 0, 0
-	for playerID = 0, GameDefines.MAX_PLAYERS - 1 do
-		local player = Players[playerID]
-		if player then
-			local civType, leaderType = GetTypes(playerID, player)
-			Log(string.format("player=%d civ=%s leader=%s alive=%s",
-				playerID, tostring(civType), tostring(leaderType), tostring(player:IsAlive())))
-			if civType == "CIVILIZATION_JAC_ODA" then odaCount = odaCount + 1 end
-			if civType == TAKEDA_CIV then takedaCount = takedaCount + 1 end
-		end
+	for _, player in ipairs(PlayerManager.GetAliveMajors()) do
+		local playerID = player:GetID()
+		local civType, leaderType = GetTypes(playerID, player)
+		Log(string.format("player=%d civ=%s leader=%s alive=%s",
+			playerID, tostring(civType), tostring(leaderType), tostring(player:IsAlive())))
+		if civType == "CIVILIZATION_JAC_ODA" then odaCount = odaCount + 1 end
+		if civType == TAKEDA_CIV then takedaCount = takedaCount + 1 end
 	end
 	Log(string.format("customCivs oda=%d takeda=%d", odaCount, takedaCount))
 end
 
+local function ReadConfig(config, stage, field, getter, key)
+	local ok, value = pcall(function()
+		if key then return config[getter](config, key) end
+		return config[getter](config)
+	end)
+	if not ok or value == nil then
+		Log(string.format("renameRead stage=%s field=%s api=%s result=%s error=%s",
+			stage, field, getter, ok and "nil" or "api_error", ok and "none" or tostring(value)))
+	end
+	return ok and value or nil
+end
+
 local function LogTakedaName(stage)
 	local playerID, _, config = GetTakeda()
-	if playerID and config then
-		local name = config:GetValue("CivilizationName")
-		local short = config:GetCivilizationShortDescription()
-		Log(string.format("renameState stage=%s player=%d civ=%s name=%s short=%s attempted=%s",
-			stage, playerID, tostring(config:GetCivilizationTypeName()),
-			tostring(name), tostring(short), tostring(Game:GetProperty(RENAME_PROPERTY))))
+	if playerID == nil or config == nil then
+		Log(string.format("renameState stage=%s result=%s", stage,
+			playerID == nil and "takeda_absent" or "config_unavailable"))
+		return
 	end
+	local civ = ReadConfig(config, stage, "CivilizationTypeName", "GetCivilizationTypeName")
+	local name = ReadConfig(config, stage, "CivilizationName", "GetValue", "CivilizationName")
+	local short = ReadConfig(config, stage, "CivilizationShortDescription", "GetCivilizationShortDescription")
+	Log(string.format("renameState stage=%s player=%d civ=%s name=%s short=%s target=%s attempted=%s",
+		stage, playerID, tostring(civ), tostring(name), tostring(short),
+		tostring(Game:GetProperty(RENAME_NAME_PROPERTY)), tostring(Game:GetProperty(RENAME_PROPERTY))))
 end
 
 local function OnLoadScreenClose()
@@ -72,15 +95,13 @@ local function OnLoadScreenClose()
 end
 
 local function OnTurnBegin(turn)
-	for playerID = 0, GameDefines.MAX_PLAYERS - 1 do
-		local player = Players[playerID]
-		if player then
-			local civType = GetTypes(playerID, player)
-			if civType == "CIVILIZATION_JAC_ODA" or civType == TAKEDA_CIV then
-				local cities = player:GetCities()
-				Log(string.format("turn=%d player=%d civ=%s cities=%d alive=%s",
-					turn, playerID, civType, cities and cities:GetCount() or 0, tostring(player:IsAlive())))
-			end
+	for _, player in ipairs(PlayerManager.GetAliveMajors()) do
+		local playerID = player:GetID()
+		local civType = GetTypes(playerID, player)
+		if civType == "CIVILIZATION_JAC_ODA" or civType == TAKEDA_CIV then
+			local cities = player:GetCities()
+			Log(string.format("turn=%d player=%d civ=%s cities=%d alive=%s",
+				turn, playerID, civType, cities and cities:GetCount() or 0, tostring(player:IsAlive())))
 		end
 	end
 	if turn ~= 3 or Game:GetProperty(RENAME_PROPERTY) then return end
@@ -89,40 +110,48 @@ local function OnTurnBegin(turn)
 		Log("rename turn=3 result=takeda_absent")
 		return
 	end
+	Game:SetProperty(RENAME_NAME_PROPERTY, NEW_NAME)
 	if config == nil then
 		Log(string.format("rename turn=3 player=%d result=config_unavailable", playerID))
 		Game:SetProperty(RENAME_PROPERTY, true)
 		return
 	end
 
-	local civBefore = config:GetCivilizationTypeName()
-	local nameBefore = config:GetValue("CivilizationName")
-	local shortBefore = config:GetCivilizationShortDescription()
-	local method = "PlayerConfig.SetValue"
-	local ok, err = pcall(function()
-		local setters = {}
-		for _, setterName in ipairs({ "SetCivilizationName", "SetCivilizationShortDescription", "SetCivilizationDescription" }) do
-			local found, setter = pcall(function() return config[setterName] end)
-			if found and type(setter) == "function" then
-				setter(config, NEW_NAME)
-				table.insert(setters, setterName)
-			end
-		end
-		if #setters > 0 then
-			method = "PlayerConfig." .. table.concat(setters, ",")
+	local civBefore = ReadConfig(config, "before", "CivilizationTypeName", "GetCivilizationTypeName")
+	local nameBefore = ReadConfig(config, "before", "CivilizationName", "GetValue", "CivilizationName")
+	local shortBefore = ReadConfig(config, "before", "CivilizationShortDescription", "GetCivilizationShortDescription")
+	for _, field in ipairs({
+		{ "CivilizationName", "SetCivilizationName" },
+		{ "CivilizationShortDescription", "SetCivilizationShortDescription" },
+		{ "CivilizationDescription", "SetCivilizationDescription" },
+	}) do
+		local key, setterName = field[1], field[2]
+		local found, setter = pcall(function() return config[setterName] end)
+		local accepted = false
+		if found and type(setter) == "function" then
+			local ok, result = pcall(setter, config, NEW_NAME)
+			accepted = ok and result ~= false
+			Log(string.format("renameField field=%s api=%s result=%s error=%s",
+				key, setterName, accepted and "call_ok" or (ok and "rejected" or "api_error"),
+				ok and "none" or tostring(result)))
 		else
-			-- 標準の SetValue は任意キーの保存。既定 UI の表示変更は別途確認する。
-			config:SetValue("CivilizationName", NEW_NAME)
-			config:SetValue("CivilizationShortDescription", NEW_NAME)
-			config:SetValue("CivilizationDescription", NEW_NAME)
+			Log(string.format("renameField field=%s api=%s result=%s error=%s",
+				key, setterName, found and "unavailable" or "lookup_error",
+				found and "none" or tostring(setter)))
 		end
-	end)
+		if not accepted then
+			local ok, result = pcall(function() return config:SetValue(key, NEW_NAME) end)
+			Log(string.format("renameField field=%s api=SetValue result=%s error=%s",
+				key, ok and (result == false and "rejected" or "call_ok") or "api_error",
+				ok and "none" or tostring(result)))
+		end
+	end
 	Game:SetProperty(RENAME_PROPERTY, true)
-	Log(string.format("rename turn=3 player=%d method=%s result=%s civBefore=%s civAfter=%s nameBefore=%s nameAfter=%s shortBefore=%s shortAfter=%s error=%s",
-		playerID, method, ok and "write_accepted" or "api_error", tostring(civBefore),
-		tostring(config:GetCivilizationTypeName()), tostring(nameBefore),
-		tostring(config:GetValue("CivilizationName")), tostring(shortBefore),
-		tostring(config:GetCivilizationShortDescription()), ok and "none" or tostring(err)))
+	Log(string.format("rename turn=3 player=%d result=attempted civBefore=%s civAfter=%s nameBefore=%s nameAfter=%s shortBefore=%s shortAfter=%s",
+		playerID, tostring(civBefore),
+		tostring(ReadConfig(config, "after", "CivilizationTypeName", "GetCivilizationTypeName")),
+		tostring(nameBefore), tostring(ReadConfig(config, "after", "CivilizationName", "GetValue", "CivilizationName")),
+		tostring(shortBefore), tostring(ReadConfig(config, "after", "CivilizationShortDescription", "GetCivilizationShortDescription"))))
 end
 
 Events.LoadScreenClose.Add(OnLoadScreenClose)

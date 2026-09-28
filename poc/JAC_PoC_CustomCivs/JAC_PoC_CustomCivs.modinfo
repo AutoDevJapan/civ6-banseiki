@@ -48,6 +48,16 @@
 		<AddGameplayScripts id="JAC_CustomCivs_Scripts" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Scripts/JAC_CustomCivs.lua</File>
 		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_CustomCivs_ObserveUI" criteria="JAC_CustomCivs_GatheringStorm">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/JAC_CustomCivs_Observe.xml</File>
+		</AddUserInterfaces>
+		<ImportFiles id="JAC_CustomCivs_UIFiles" criteria="JAC_CustomCivs_GatheringStorm">
+			<File>UI/JAC_CustomCivs_Observe.lua</File>
+			<File>UI/JAC_CustomCivs_Observe.xml</File>
+		</ImportFiles>
 	</InGameActions>
 	<FrontEndActions>
 		<UpdateArt id="JAC_CustomCivs_SettingsArt">
@@ -78,5 +88,7 @@
 		<File>Config/JAC_CustomCivs_Players.xml</File>
 		<File>Text/JAC_CustomCivs_Text.xml</File>
 		<File>Scripts/JAC_CustomCivs.lua</File>
+		<File>UI/JAC_CustomCivs_Observe.lua</File>
+		<File>UI/JAC_CustomCivs_Observe.xml</File>
 	</Files>
 </Mod>

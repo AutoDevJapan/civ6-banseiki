@@ -66,14 +66,15 @@ MOD の内容：
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
 - `Players:Expansion2_Players` に両組を登録する。日本の既存アイコン・北条の指導者画像・ロード画像・色を流用し、色の組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
-- ゲームプレイ Lua が全プレイヤーの ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に武田家だけ「甲斐武田家」への表示名変更を試し、変更前後と文明 ID を出力する
+- ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に武田家だけ「甲斐武田家」への表示名変更を項目ごとに試し、変更前後と文明 ID を出力する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 
 手順：
 
 1. 共通の準備に従って `JAC_PoC_CustomCivs` を Mods に配置・有効化し、Gathering Storm の詳細設定で織田家を人間、武田家を AI に選んで開始する
-2. 武田 AI の都市建設・ユニット行動を確認し、3ターン目を越えてセーブする。メニューへ戻り、ロード後の表示名と `Lua.log` を確認する
-3. 別ゲームで既存の文明を人間にし、織田家と武田家をともに AI に指定する。両者の行動と `Lua.log` を確認する
-4. ゲーム言語を英語・日本語・ロシア語に切り替えて、新規ゲーム設定画面とゲーム中の両家の名前を確認する
+2. 3ターン目まで進め、`Lua.log` の `renameField`・`rename` と UI 側の `uiRenameState` を確認する。UI 側の観測が遅れた場合は次のターンも確認する
+3. 武田 AI を発見した後、標準 UI の家名表示と、都市建設・ユニット行動を画面で確認する。セーブしてメニューへ戻り、ロード後に同じ表示と `Lua.log` を確認する
+4. 別ゲームで既存の文明を人間にし、織田家と武田家をともに AI に指定する。両者を発見した後に行動を画面で確認し、`Lua.log` と照合する
+5. ゲーム言語を英語・日本語・ロシア語に切り替えて、新規ゲーム設定画面とゲーム中の両家の名前を確認する
 
 成功条件（`Lua.log` の各行に `[JAC_POC]` が付く）：
 
@@ -81,10 +82,13 @@ MOD の内容：
 |---|---|
 | 同時参加 | 異なる `player=<id>` の `civ=CIVILIZATION_JAC_ODA leader=LEADER_JAC_ODA_NOBUHIDE alive=true` と `civ=CIVILIZATION_JAC_TAKEDA leader=LEADER_JAC_TAKEDA_NOBUTORA alive=true`、`customCivs oda=1 takeda=1` |
 | AI の独立性 | 両 AI を選んだゲームでも2行が別 ID で出る。`turn=… player=… civ=… cities=…` が各家で継続し、ゲーム画面で両者それぞれの都市建設・ユニット行動を確認できる |
-| 表示名変更 | `rename turn=3 … result=write_accepted … civBefore=CIVILIZATION_JAC_TAKEDA civAfter=CIVILIZATION_JAC_TAKEDA … shortAfter=LOC_JAC_TAKEDA_RENAMED_NAME`。画面では「甲斐武田家」（他言語では対応訳）に変わり、織田家は変わらない。`SetValue` 経由なら `nameAfter=LOC_JAC_TAKEDA_RENAMED_NAME` も確認する |
-| セーブ・ロード | 再読込後の `renameState stage=load … attempted=true` で変更後の `name` と `short` が残り、両家の `player=` 行と文明 ID が変わらない |
+| 改名 API の試行結果 | 3ターン目の各 `renameField field=… api=… result=…` で3項目それぞれの専用セッターと、未対応・エラー時に試した `SetValue` の結果を記録する。`call_ok` は呼出し成功のみを示す。`rename turn=3 … result=attempted` で文明 ID が変わらないことを確認する。`unavailable`・`api_error`・`rejected` も結果として残す |
+| 画面反映 | UI 側の `uiRenameState stage=update` または `stage=turn` の `short`・`localized` と、武田家を発見した後の標準 UI の表示を照合する。表示が「甲斐武田家」（他言語では対応訳）になり、織田家は変わらないかを記録する。ゲッターの値だけでは画面反映済みと判定しない |
+| ロード後保持 | 再読込後の `renameState stage=load … attempted=true` と `uiRenameState stage=load …` を確認し、標準 UI の表示も再確認する。保存した `target` や `attempted` だけでなく、変更後の表示が残るかを記録する。両家の `player=` 行と文明 ID も照合する |
 | 読み込み・翻訳 | `Database.log`・`Modding.log` にこの MOD 由来のエラーがなく、設定画面とゲーム中に日英露の名前・説明が表示される |
 
 結果：**未実施**。
 
-実行時改名は、このインストールの公式 Lua/UI 例に `GetCivilizationShortDescription` と汎用の `PlayerConfigurations:SetValue` がある一方、`SetCivilizationName` の使用例は見つからなかった。ゲームプレイ Lua は専用セッターが存在すればそれを試し、なければ `SetValue` で3つの表示名キーを書き込む。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)は、`SetValue` に加えてゲッターを独自に上書きしているため、標準UIで同じ結果になる根拠にはならない。`write_accepted` は書込みのみを表す。画面反映やセーブ後保持に失敗した場合は、変更後の家名をゲーム状態に保存し、文明名を読む各UIで表示を上書きする方式が必要。
+実行時改名は、このインストールの公式 Lua/UI 例に `GetCivilizationShortDescription` と汎用の `PlayerConfigurations:SetValue` がある一方、`SetCivilizationName` の使用例は見つからなかった。ゲームプレイ Lua は項目ごとに専用セッターを試し、使えない項目だけ `SetValue` を試す。ゲームプレイ側でゲッターが使えなければ `renameRead … result=api_error` に残し、UI 側で同じ値を別に観測する。公開MODの[動的表示名の実装](https://github.com/Gedemon/Civ6-GCO/blob/master/Scripts/GCO_PlayerConfig.lua)は、`SetValue` に加えてゲッターを独自に上書きしているため、標準 UI で同じ結果になる根拠にはならない。非対応と判明した項目・画面・ロード後の状態も検証結果として残す。
+
+将来のマルチプレイでは、各端末の `PlayerConfigurations:SetValue` を同期済みの改名状態として扱わない。この PoC は改名の目標名を `Game:SetProperty` にも保存し、UI 側の観測 Lua で読み取る。各端末での共有状態の同期と、文明名を読む UI での表示上書きは別途検証する。シングルプレイで画面反映やロード後保持に失敗した場合も、この方式を検討する。
