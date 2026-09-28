@@ -113,6 +113,8 @@ def _civ_process_ids() -> set[int]:
 
 def require_single_civ_process() -> None:
     count = len(_civ_process_ids())
+    if count == 0:
+        raise InputError("FireTuner に接続できません（Civ6 が起動していない可能性）")
     if count > 1:
         raise InputError(f"Multiple Civ VI processes found ({count}); driver requires one local game")
 
@@ -214,22 +216,24 @@ def click_fraction(fx: float, fy: float) -> tuple[int, int]:
 def press_key(vk: int, *, deadline: float | None = None) -> None:
     """Send a key to the verified Civ VI window, releasing it on every error path."""
     hwnd = find_civ_window()
-    _focus_civ_window(hwnd)
-    _require_before_deadline(deadline)
     if KEY_DELIVERY == "window":
+        # PostMessageW targets this HWND even when another app has focus.
         scan = user32.MapVirtualKeyW(vk, 0)
         down_param = 1 | (scan << 16)
-        _require_foreground(hwnd)
         _require_before_deadline(deadline)
+        if find_civ_window() != hwnd:
+            raise InputError("Civ VI window changed before key input")
         if not user32.PostMessageW(hwnd, WM_KEYDOWN, vk, down_param):
             raise InputError("Could not post Civ VI key down")
         try:
             time.sleep(0.08)
-            _require_foreground(hwnd)
         finally:
             if not user32.PostMessageW(hwnd, WM_KEYUP, vk, down_param | 0xC0000000):
                 raise InputError("Could not post Civ VI key up")
     elif KEY_DELIVERY == "sendinput":
+        _focus_civ_window(hwnd)
+        _require_before_deadline(deadline)
+
         def send(flags: int) -> None:
             key = INPUT(type=INPUT_KEYBOARD, data=INPUT_UNION(ki=KEYBDINPUT(vk, 0, flags, 0, 0)))
             if flags == 0:
@@ -246,7 +250,8 @@ def press_key(vk: int, *, deadline: float | None = None) -> None:
             send(KEYEVENTF_KEYUP)
     else:
         raise InputError(f"Unknown key delivery mode: {KEY_DELIVERY}")
-    _require_foreground(hwnd)
+    if KEY_DELIVERY == "sendinput":
+        _require_foreground(hwnd)
 
 
 if __name__ == "__main__":

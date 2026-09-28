@@ -247,7 +247,10 @@ class Runner:
 
     def _connect(self, timeout: float = 5.0) -> TunerClient:
         if self.client is None:
-            self.client = TunerClient(port=self.port, timeout=timeout).__enter__()
+            try:
+                self.client = TunerClient(port=self.port, timeout=timeout).__enter__()
+            except (TunerError, OSError) as exc:
+                raise TunerError(f"FireTuner に接続できません（Civ6 が起動していない可能性）: {exc}") from exc
         return self.client
 
     def _disconnect(self) -> None:
@@ -258,16 +261,29 @@ class Runner:
     def _states(self, timeout: float = 5.0) -> list[str]:
         require_single_civ_process()
         deadline = time.monotonic() + timeout
+
+        def fetch() -> list[str]:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TunerError("FireTuner に接続できません（応答待ちがタイムアウト）")
+            client = self._connect(remaining)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TunerError("FireTuner に接続できません（応答待ちがタイムアウト）")
+            return client.list_states(timeout=remaining)
+
         try:
-            return self._connect(_remaining(deadline)).list_states(timeout=_remaining(deadline))
+            return fetch()
         except (TunerError, OSError):
             self._disconnect()
-            return self._connect(_remaining(deadline)).list_states(timeout=_remaining(deadline))
+            return fetch()
 
     def _lua(self, state: str, code: str, timeout: float = 5.0) -> str:
         deadline = time.monotonic() + timeout
         self._states(_remaining(deadline))  # Reconnect before sending the command.
-        remaining = _remaining(deadline)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TunerError("FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です")
         result = self._connect(remaining).run_lua(state, code, remaining)
         return result.value
 

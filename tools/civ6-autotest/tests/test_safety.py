@@ -195,7 +195,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner = Runner({"name": "empty logs", "judge_profile": "generic", "steps": [
                 {"action": "wait_for", "condition": {"type": "state", "name": "FrontEnd"}}
             ]}, output, logs, base, 4318)
-            with redirect_stdout(StringIO()), patch.object(runner, "_wait"):
+            with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"):
                 self.assertEqual(runner.run(), 0)
                 with self.assertRaises(FileExistsError):
                     runner.run()
@@ -218,6 +218,34 @@ class ScenarioSafetyTests(unittest.TestCase):
             records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
                 encoding="utf-8").splitlines()]
             self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
+
+    def test_no_civ_process_reports_connection_failure_before_tuner_access(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            logs = base / "logs"
+            logs.mkdir()
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            runner = Runner({"name": "one game", "steps": [{"action": "pause", "seconds": 0.1}]},
+                            base / "output", logs, base, 4318)
+            with redirect_stdout(StringIO()), patch.object(civ_click, "_civ_process_ids", return_value=set()), patch.object(
+                runner, "_wait"
+            ) as wait:
+                self.assertEqual(runner.run(), 1)
+            wait.assert_not_called()
+            records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                encoding="utf-8").splitlines()]
+            self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
+            self.assertIn("FireTuner に接続できません（Civ6 が起動していない可能性）", records[-1]["detail"])
+            self.assertNotIn("Multiple", records[-1]["detail"])
+
+    def test_unreachable_tuner_reports_connection_failure(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch("scenario.require_single_civ_process"), patch("scenario.TunerClient") as tuner:
+            tuner.return_value.__enter__.side_effect = TunerError("connection refused")
+            with self.assertRaisesRegex(TunerError, "FireTuner に接続できません.*connection refused"):
+                runner._states(1)
+        self.assertEqual(tuner.call_count, 2)
 
     def test_screenshot_paths_reject_drives_absolute_and_parent_escape(self):
         rejected = (
@@ -367,7 +395,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                             return
                         return original_wait(condition, timeout)
 
-                    with redirect_stdout(StringIO()), patch.object(runner, "_wait", side_effect=wait_after_start), patch.object(
+                    with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait", side_effect=wait_after_start), patch.object(
                         runner, "_lua", side_effect=ValueError("FireTuner command is too large")
                     ) as run_lua:
                         self.assertEqual(runner.run(), 1)
@@ -391,7 +419,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                     if action == "load":
                         step["name"] = "existing"
                     runner = Runner({"name": action, "steps": [step]}, base / action, logs, base, 4318)
-                    with redirect_stdout(StringIO()), patch.object(runner, "_wait"), patch.object(
+                    with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
                         runner, "_loadscreen_count", return_value=0
                     ), patch.object(runner, "_lua", side_effect=TunerError("pre-send connection failed")) as run_lua, patch.object(
                         runner, "_enter_game_after_loadscreen"
@@ -523,7 +551,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                     return "triggered"
                 return original_run_step(step)
 
-            with redirect_stdout(StringIO()), patch.object(runner, "_wait", side_effect=fake_wait), patch.object(
+            with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait", side_effect=fake_wait), patch.object(
                 runner, "_run_step", side_effect=fake_step
             ):
                 self.assertEqual(runner.run(), 1)
@@ -600,26 +628,24 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 class InputSafetyTests(unittest.TestCase):
     def test_deadline_expiring_during_focus_sends_no_key(self):
-        for delivery in ("window", "sendinput"):
-            with self.subTest(delivery=delivery):
-                user32 = Mock()
-                user32.SetForegroundWindow.return_value = 1
-                user32.GetForegroundWindow.return_value = 100
-                clock = [0.0]
+        user32 = Mock()
+        user32.SetForegroundWindow.return_value = 1
+        user32.GetForegroundWindow.return_value = 100
+        clock = [0.0]
 
-                def sleep(seconds):
-                    clock[0] += seconds
+        def sleep(seconds):
+            clock[0] += seconds
 
-                with patch.object(civ_click, "KEY_DELIVERY", delivery), patch.object(
-                    civ_click, "find_civ_window", return_value=100
-                ), patch.object(civ_click, "user32", user32), patch.object(
-                    civ_click.time, "monotonic", side_effect=lambda: clock[0]
-                ), patch.object(civ_click.time, "sleep", side_effect=sleep):
-                    with self.assertRaisesRegex(civ_click.InputError, "deadline"):
-                        civ_click.press_key(civ_click.VK_ESCAPE, deadline=0.3)
-                user32.SetForegroundWindow.assert_called_once_with(100)
-                user32.PostMessageW.assert_not_called()
-                user32.SendInput.assert_not_called()
+        with patch.object(civ_click, "KEY_DELIVERY", "sendinput"), patch.object(
+            civ_click, "find_civ_window", return_value=100
+        ), patch.object(civ_click, "user32", user32), patch.object(
+            civ_click.time, "monotonic", side_effect=lambda: clock[0]
+        ), patch.object(civ_click.time, "sleep", side_effect=sleep):
+            with self.assertRaisesRegex(civ_click.InputError, "deadline"):
+                civ_click.press_key(civ_click.VK_ESCAPE, deadline=0.3)
+        user32.SetForegroundWindow.assert_called_once_with(100)
+        user32.PostMessageW.assert_not_called()
+        user32.SendInput.assert_not_called()
 
     def test_deadline_expiring_after_key_mapping_sends_no_window_key(self):
         user32 = Mock()
@@ -690,7 +716,7 @@ class InputSafetyTests(unittest.TestCase):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1
         user32.GetForegroundWindow.return_value = 999
-        with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
+        with patch.object(civ_click, "KEY_DELIVERY", "sendinput"), patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
             civ_click, "user32", user32
         ), patch.object(civ_click.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "foreground"):
@@ -702,22 +728,48 @@ class InputSafetyTests(unittest.TestCase):
         user32.mouse_event.assert_not_called()
         user32.SetCursorPos.assert_not_called()
 
-    def test_focus_loss_after_keydown_still_releases_key(self):
+    def test_window_key_releases_after_foreground_changes(self):
         user32 = Mock()
-        user32.SetForegroundWindow.return_value = 1
-        user32.GetForegroundWindow.side_effect = (100, 100, 999)
+        user32.GetForegroundWindow.return_value = 100
         user32.MapVirtualKeyW.return_value = 1
         user32.PostMessageW.return_value = 1
+
+        def change_focus(_seconds):
+            user32.GetForegroundWindow.return_value = 999
+
         with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
             civ_click, "user32", user32
-        ), patch.object(civ_click.time, "sleep"):
-            with self.assertRaisesRegex(civ_click.InputError, "foreground"):
-                civ_click.press_key(civ_click.VK_ESCAPE)
+        ), patch.object(civ_click.time, "sleep", side_effect=change_focus):
+            civ_click.press_key(civ_click.VK_ESCAPE)
         self.assertEqual(user32.PostMessageW.call_args_list, [
             unittest.mock.call(100, civ_click.WM_KEYDOWN, civ_click.VK_ESCAPE, 1 | (1 << 16)),
             unittest.mock.call(100, civ_click.WM_KEYUP, civ_click.VK_ESCAPE,
                                1 | (1 << 16) | 0xC0000000),
         ])
+        user32.SetForegroundWindow.assert_not_called()
+
+    def test_window_key_targets_verified_game_while_background(self):
+        user32 = Mock()
+        user32.GetForegroundWindow.return_value = 999
+        user32.MapVirtualKeyW.return_value = 1
+        user32.PostMessageW.return_value = 1
+        with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
+            civ_click, "user32", user32
+        ), patch.object(civ_click.time, "sleep"):
+            civ_click.press_key(civ_click.VK_ESCAPE)
+        self.assertEqual(user32.PostMessageW.call_count, 2)
+        user32.SetForegroundWindow.assert_not_called()
+        user32.SendInput.assert_not_called()
+
+    def test_window_key_rechecks_target_before_background_input(self):
+        user32 = Mock()
+        user32.MapVirtualKeyW.return_value = 1
+        with patch.object(civ_click, "find_civ_window", side_effect=(100, 200)), patch.object(
+            civ_click, "user32", user32
+        ):
+            with self.assertRaisesRegex(civ_click.InputError, "window changed"):
+                civ_click.press_key(civ_click.VK_ESCAPE)
+        user32.PostMessageW.assert_not_called()
 
     def test_sendinput_fallback_checks_foreground_and_releases_key(self):
         user32 = Mock()
@@ -741,7 +793,7 @@ class InputSafetyTests(unittest.TestCase):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "input failure", "steps": [{"action": "start_game"}]},
                             base / "output", logs, base, 4318)
-            with redirect_stdout(StringIO()), patch.object(runner, "_wait"), patch.object(
+            with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
                 runner, "_run_step", side_effect=civ_click.InputError("foreground lost")
             ):
                 self.assertEqual(runner.run(), 1)
@@ -753,7 +805,7 @@ class InputSafetyTests(unittest.TestCase):
     def test_failed_foreground_activation_sends_no_input(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 0
-        with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
+        with patch.object(civ_click, "KEY_DELIVERY", "sendinput"), patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
             civ_click, "user32", user32
         ), patch.object(civ_click.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "Could not bring"):
