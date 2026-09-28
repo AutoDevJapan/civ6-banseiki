@@ -145,6 +145,8 @@ def validate_scenario(data: dict) -> None:
         elif action == "manual":
             if not isinstance(step.get("prompt"), str) or not step["prompt"].strip():
                 raise ScenarioError(f"Step {number}: manual step needs prompt")
+            if "timeout" in step:
+                raise ScenarioError(f"Step {number}: manual waits for Enter and does not support timeout")
         if "timeout" in step:
             timeout = step["timeout"]
             if type(timeout) not in (int, float) or timeout <= 0:
@@ -320,7 +322,7 @@ class Runner:
                     time.sleep(min(0.5, max(0, end - time.monotonic())))
                     continue
                 _remaining(end)
-                press_key(VK_ESCAPE)
+                press_key(VK_ESCAPE, deadline=end)
                 begin_game_sent = True
                 last = "Esc sent on loading screen"
                 # The FrontEnd connection can keep its old state list across the transition.
@@ -475,6 +477,10 @@ class Runner:
 
     def _run_step(self, step: dict) -> str:
         action = step["action"]
+        if action == "manual":
+            print("MANUAL / Computer Use (no timeout; waits until Enter): " + step["prompt"], flush=True)
+            input("Press Enter after the action is complete: ")
+            return step["prompt"]
         timeout = float(step.get("timeout", 120))
         deadline = time.monotonic() + timeout
         if action == "enable_mods":
@@ -573,11 +579,6 @@ class Runner:
                 raise ScenarioError("Step deadline would expire during pause")
             time.sleep(step["seconds"])
             return f"paused {step['seconds']}s for UI animation"
-        if action == "manual":
-            _remaining(deadline)
-            print("MANUAL / Computer Use: " + step["prompt"], flush=True)
-            input("Press Enter after the action is complete: ")
-            return step["prompt"]
         raise AssertionError(action)
 
     def run(self) -> int:

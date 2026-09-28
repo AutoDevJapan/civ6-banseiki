@@ -17,6 +17,7 @@ from tuner import LuaResult
 class ScenarioSafetyTests(unittest.TestCase):
     def test_load_wait_sends_one_escape_even_if_ingame_state_exists(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        deadline = civ_click.time.monotonic() + 1
         with patch.object(runner, "_states", return_value=["InGame"]), patch.object(
             runner, "_lua", side_effect=["false", "true"]
         ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
@@ -24,9 +25,9 @@ class ScenarioSafetyTests(unittest.TestCase):
         ), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
-            runner._enter_game_after_loadscreen(0, 1)
+            runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
         self.assertEqual(run_lua.call_count, 2)
-        press.assert_called_once_with(civ_click.VK_ESCAPE)
+        press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=deadline)
 
     def test_load_wait_never_sends_escape_before_load_complete_log(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
@@ -48,7 +49,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
-        press.assert_called_once_with(civ_click.VK_ESCAPE)
+        press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=unittest.mock.ANY)
 
     def test_load_wait_reconnects_when_frontend_state_list_is_stale(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
@@ -62,7 +63,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
-        press.assert_called_once_with(civ_click.VK_ESCAPE)
+        press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=unittest.mock.ANY)
         client.close.assert_called_once()
         self.assertIsNone(runner.client)
 
@@ -73,7 +74,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         ), patch("scenario.press_key") as press, patch("scenario.time.sleep"):
             with self.assertRaisesRegex(ScenarioError, "entering the game"):
                 runner._enter_game_after_loadscreen(0, 0.02)
-        press.assert_called_once_with(civ_click.VK_ESCAPE)
+        press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=unittest.mock.ANY)
 
     def test_run_creates_missing_output_parents_but_rejects_existing_run(self):
         with tempfile.TemporaryDirectory() as root:
@@ -130,6 +131,17 @@ class ScenarioSafetyTests(unittest.TestCase):
                 validate_scenario(data)
         validate_scenario({"name": "timeout", "steps": [{"action": "autoplay", "turns": 1,
                                                           "timeout": 1.5}]})
+
+    def test_manual_wait_has_no_step_deadline_or_timeout_option(self):
+        step = {"action": "manual", "prompt": "Inspect the game"}
+        validate_scenario({"name": "manual", "steps": [step]})
+        with self.assertRaisesRegex(ScenarioError, "manual waits for Enter"):
+            validate_scenario({"name": "manual", "steps": [{**step, "timeout": 1}]})
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with redirect_stdout(StringIO()), patch("scenario.input", return_value=""), patch(
+            "scenario.time.monotonic", side_effect=AssertionError("manual has no deadline")
+        ):
+            self.assertEqual(runner._run_step(step), step["prompt"])
 
     def test_wait_caps_state_and_lua_queries_to_remaining_time(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
@@ -248,6 +260,93 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 
 class InputSafetyTests(unittest.TestCase):
+    def test_deadline_expiring_during_focus_sends_no_key(self):
+        for delivery in ("window", "sendinput"):
+            with self.subTest(delivery=delivery):
+                user32 = Mock()
+                user32.SetForegroundWindow.return_value = 1
+                user32.GetForegroundWindow.return_value = 100
+                clock = [0.0]
+
+                def sleep(seconds):
+                    clock[0] += seconds
+
+                with patch.object(civ_click, "KEY_DELIVERY", delivery), patch.object(
+                    civ_click, "find_civ_window", return_value=100
+                ), patch.object(civ_click, "user32", user32), patch.object(
+                    civ_click.time, "monotonic", side_effect=lambda: clock[0]
+                ), patch.object(civ_click.time, "sleep", side_effect=sleep):
+                    with self.assertRaisesRegex(civ_click.InputError, "deadline"):
+                        civ_click.press_key(civ_click.VK_ESCAPE, deadline=0.3)
+                user32.SetForegroundWindow.assert_called_once_with(100)
+                user32.PostMessageW.assert_not_called()
+                user32.SendInput.assert_not_called()
+
+    def test_deadline_expiring_after_key_mapping_sends_no_window_key(self):
+        user32 = Mock()
+        user32.SetForegroundWindow.return_value = 1
+        user32.GetForegroundWindow.return_value = 100
+        clock = [0.0]
+
+        def map_key(_vk, _map_type):
+            clock[0] = 1.0
+            return 1
+
+        user32.MapVirtualKeyW.side_effect = map_key
+        with patch.object(civ_click, "find_civ_window", return_value=100), patch.object(
+            civ_click, "user32", user32
+        ), patch.object(civ_click.time, "sleep"), patch.object(
+            civ_click.time, "monotonic", side_effect=lambda: clock[0]
+        ):
+            with self.assertRaisesRegex(civ_click.InputError, "deadline"):
+                civ_click.press_key(civ_click.VK_ESCAPE, deadline=1.0)
+        user32.PostMessageW.assert_not_called()
+
+    def test_deadline_expiring_after_foreground_check_sends_no_sendinput_key(self):
+        user32 = Mock()
+        user32.SetForegroundWindow.return_value = 1
+        clock = [0.0]
+        foreground_checks = [0]
+
+        def foreground():
+            foreground_checks[0] += 1
+            if foreground_checks[0] == 2:
+                clock[0] = 1.0
+            return 100
+
+        user32.GetForegroundWindow.side_effect = foreground
+        with patch.object(civ_click, "KEY_DELIVERY", "sendinput"), patch.object(
+            civ_click, "find_civ_window", return_value=100
+        ), patch.object(civ_click, "user32", user32), patch.object(
+            civ_click.time, "sleep"
+        ), patch.object(civ_click.time, "monotonic", side_effect=lambda: clock[0]):
+            with self.assertRaisesRegex(civ_click.InputError, "deadline"):
+                civ_click.press_key(civ_click.VK_ESCAPE, deadline=1.0)
+        self.assertEqual(foreground_checks[0], 2)
+        user32.SendInput.assert_not_called()
+
+    def test_key_before_deadline_is_sent(self):
+        for delivery in ("window", "sendinput"):
+            with self.subTest(delivery=delivery):
+                user32 = Mock()
+                user32.SetForegroundWindow.return_value = 1
+                user32.GetForegroundWindow.return_value = 100
+                user32.MapVirtualKeyW.return_value = 1
+                user32.PostMessageW.return_value = 1
+                user32.SendInput.return_value = 1
+                with patch.object(civ_click, "KEY_DELIVERY", delivery), patch.object(
+                    civ_click, "find_civ_window", return_value=100
+                ), patch.object(civ_click, "user32", user32), patch.object(
+                    civ_click.time, "sleep"
+                ), patch.object(civ_click.time, "monotonic", return_value=0.0):
+                    civ_click.press_key(civ_click.VK_ESCAPE, deadline=1.0)
+                if delivery == "window":
+                    self.assertEqual(user32.PostMessageW.call_count, 2)
+                    user32.SendInput.assert_not_called()
+                else:
+                    self.assertEqual(user32.SendInput.call_count, 2)
+                    user32.PostMessageW.assert_not_called()
+
     def test_foreground_mismatch_sends_no_keys_or_clicks(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1

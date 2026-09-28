@@ -29,7 +29,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 ## JSON 手順
 
-`scenarios/` に束0の保存・再読込、織田（人間）と武田（AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
+`scenarios/` に束0の保存・再読込、織田（人間）と武田（AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`manual` はこの期限の対象外で、`timeout` を指定できず、Enter が押されるまで待つ。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
 
 | action | 必要な値 | 動作 |
 |---|---|---|
@@ -42,7 +42,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | `save` / `load` | `name` | 単独プレイのローカル保存。保存完了イベントとファイルを確認する |
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
-| `manual` | `prompt` | 人または Computer Use の操作を促し、Enter 後に続行する |
+| `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
 
 `growth-notebooks.json` は `PartialScreenHooks` の `OnToggleNotebooks()` で Notebooks を開き、`JAC_Notebooks` 状態の `Controls.CharacterJournalButton:DoLeftClick()` で Character Journal に切り替える。Lua 状態とログを確認してから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
 

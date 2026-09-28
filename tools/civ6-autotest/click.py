@@ -132,6 +132,11 @@ def _focus_civ_window(hwnd: int) -> None:
     _require_foreground(hwnd)
 
 
+def _require_before_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise InputError("Step deadline expired before key input")
+
+
 def click_fraction(fx: float, fy: float) -> tuple[int, int]:
     if not (0.0 <= fx <= 1.0 and 0.0 <= fy <= 1.0):
         raise ValueError("fractions must be within 0..1")
@@ -158,14 +163,16 @@ def click_fraction(fx: float, fy: float) -> tuple[int, int]:
     return x, y
 
 
-def press_key(vk: int) -> None:
+def press_key(vk: int, *, deadline: float | None = None) -> None:
     """Send a key to the verified Civ VI window, releasing it on every error path."""
     hwnd = find_civ_window()
     _focus_civ_window(hwnd)
+    _require_before_deadline(deadline)
     if KEY_DELIVERY == "window":
         scan = user32.MapVirtualKeyW(vk, 0)
         down_param = 1 | (scan << 16)
         _require_foreground(hwnd)
+        _require_before_deadline(deadline)
         if not user32.PostMessageW(hwnd, WM_KEYDOWN, vk, down_param):
             raise InputError("Could not post Civ VI key down")
         try:
@@ -177,6 +184,8 @@ def press_key(vk: int) -> None:
     elif KEY_DELIVERY == "sendinput":
         def send(flags: int) -> None:
             key = INPUT(type=INPUT_KEYBOARD, data=INPUT_UNION(ki=KEYBDINPUT(vk, 0, flags, 0, 0)))
+            if flags == 0:
+                _require_before_deadline(deadline)
             if user32.SendInput(1, ctypes.byref(key), ctypes.sizeof(key)) != 1:
                 raise InputError("Could not send Civ VI key input")
 
