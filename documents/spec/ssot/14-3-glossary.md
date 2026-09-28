@@ -266,17 +266,8 @@
 | 秘境 | Hidden Site | Тайное место |
 | 探索 | Exploration | Исследование |
 | コンボ | Combo | Комбинация |
-| 三段撃ち | Three-Volley Fire | Трёхзалповый огонь |
-| 風林火山 | Fūrinkazan | Фуринкандзан |
-| 水軍連携 | Naval Coordination | Морское взаимодействие |
-| 城攻め連携 | Siege Coordination | Взаимодействие при осаде |
-| 偵察連携 | Reconnaissance Coordination | Разведывательное взаимодействие |
-| 籠城 | Castle Holdout | Оборона замка |
 | 調略 | Subversion | Подрывная деятельность |
-| 軍師連携 | Strategist Coordination | Взаимодействие со стратегом |
-| 忍び連携 | Shinobi Coordination | Взаимодействие синоби |
 | 暗殺者訓練所 | Assassin Training Grounds | Лагерь подготовки убийц |
-| 軌道防衛 | Orbital Defense | Орбитальная оборона |
 
 | 日本語 | 英語 | ロシア語 |
 |---|---|---|
