@@ -28,6 +28,13 @@ class ScenarioError(RuntimeError):
     pass
 
 
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TunerError("FireTuner query deadline expired")
+    return remaining
+
+
 @dataclass(frozen=True)
 class AutoplayStatus:
     turn: int
@@ -218,23 +225,26 @@ class Runner:
         with (self.output / "steps.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    def _connect(self) -> TunerClient:
+    def _connect(self, timeout: float = 5.0) -> TunerClient:
         if self.client is None:
-            self.client = TunerClient(port=self.port).__enter__()
+            self.client = TunerClient(port=self.port, timeout=timeout).__enter__()
         return self.client
 
-    def _states(self) -> list[str]:
+    def _states(self, timeout: float = 5.0) -> list[str]:
+        deadline = time.monotonic() + timeout
         try:
-            return self._connect().list_states()
+            return self._connect(_remaining(deadline)).list_states(timeout=_remaining(deadline))
         except (TunerError, OSError):
             if self.client:
                 self.client.close()
                 self.client = None
-            return self._connect().list_states()
+            return self._connect(_remaining(deadline)).list_states(timeout=_remaining(deadline))
 
     def _lua(self, state: str, code: str, timeout: float = 5.0) -> str:
-        self._states()  # Reconnect safely after a game/menu transition, before sending the command.
-        result = self._connect().run_lua(state, code, timeout)
+        deadline = time.monotonic() + timeout
+        self._states(_remaining(deadline))  # Reconnect before sending the command.
+        remaining = _remaining(deadline)
+        result = self._connect(remaining).run_lua(state, code, remaining)
         return result.value
 
     def _wait(self, condition: dict, timeout: float) -> None:
@@ -248,9 +258,15 @@ class Runner:
             try:
                 kind = condition["type"]
                 if kind == "state":
-                    present = condition["name"].casefold() in [s.casefold() for s in self._states()]
+                    remaining = min(5.0, end - time.monotonic())
+                    if remaining <= 0:
+                        break
+                    present = condition["name"].casefold() in [s.casefold() for s in self._states(remaining)]
                 elif kind == "lua":
-                    value = self._lua(condition["state_name"], condition["code"])
+                    remaining = min(5.0, end - time.monotonic())
+                    if remaining <= 0:
+                        break
+                    value = self._lua(condition["state_name"], condition["code"], remaining)
                     present = value == str(condition.get("equals", "true")).lower()
                     last = f"Lua returned {value!r}"
                 else:

@@ -104,6 +104,22 @@ class JudgeTests(unittest.TestCase):
         failed = {c.name for c in judge(logs, "growth") if not c.passed}
         self.assertIn("Growth: restored rows and journal", failed)
 
+    def test_growth_ignores_unrelated_game_error_and_catches_target_ui_error(self):
+        logs = {"Lua.log": GROWTH_LUA +
+                "BaseGamePanel: UI.DataError: unrelated game panel\n"
+                "Runtime Error: base game failure\n"
+                "  Assets/UI/BaseGamePanel.lua:21\n"
+                "BaseGamePanel: Cannot determine if partial screen for BaseGamePanel\n"
+                "JAC_Notebooks: [JAC_POC] notebooks opened\n",
+                "Modding.log": GROWTH_MODDING, "Database.log": ""}
+        self.assertTrue(all(check.passed for check in judge(logs, "growth")), judge(logs, "growth"))
+        logs["Lua.log"] += "UI.DataError: Cannot determine if partial screen for JAC_Notebooks\n"
+        failed = {check.name for check in judge(logs, "growth") if not check.passed}
+        self.assertEqual(failed, {"Growth: partial-screen errors"})
+        logs["Lua.log"] += "Runtime Error: JAC UI failure\n  Mods/JAC_PoC_GrowthUI/JAC_Notebooks.lua:4\n"
+        failed = {check.name for check in judge(logs, "growth") if not check.passed}
+        self.assertEqual(failed, {"Growth: partial-screen errors", "Generic: JAC Runtime Error"})
+
     def test_baseline_excludes_old_lines_and_handles_truncate(self):
         old = b"old error\n"
         mark = {"offset": len(old), "inode": 7,

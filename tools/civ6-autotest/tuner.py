@@ -36,9 +36,14 @@ class LuaResult:
     output: str
 
 
-def _read_exact(sock: socket.socket, count: int) -> bytes:
+def _read_exact(sock: socket.socket, count: int, deadline: float | None = None) -> bytes:
     parts = bytearray()
     while len(parts) < count:
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TunerError(f"FireTuner response timed out after {len(parts)}/{count} bytes")
+            sock.settimeout(remaining)
         try:
             chunk = sock.recv(count - len(parts))
         except socket.timeout as exc:
@@ -58,11 +63,11 @@ def send_frame(sock: socket.socket, tag: int, payload: str) -> None:
     sock.sendall(struct.pack("<Ii", len(body), tag) + body)
 
 
-def recv_frame(sock: socket.socket) -> Frame:
-    size, tag = struct.unpack("<Ii", _read_exact(sock, 8))
+def recv_frame(sock: socket.socket, deadline: float | None = None) -> Frame:
+    size, tag = struct.unpack("<Ii", _read_exact(sock, 8, deadline))
     if size < 1 or size > MAX_FRAME:
         raise TunerError(f"Invalid FireTuner frame size: {size}")
-    return Frame(tag, _read_exact(sock, size).rstrip(b"\x00").decode("utf-8", "replace"))
+    return Frame(tag, _read_exact(sock, size, deadline).rstrip(b"\x00").decode("utf-8", "replace"))
 
 
 class TunerClient:
@@ -76,10 +81,10 @@ class TunerClient:
 
     def __enter__(self) -> TunerClient:
         try:
+            deadline = time.monotonic() + self.timeout
             self.sock = socket.create_connection(("127.0.0.1", self.port), self.timeout)
-            self.sock.settimeout(self.timeout)
-            self.identity = self._request("APP:")
-            if not self.list_states():
+            self.identity = self._request("APP:", timeout=deadline - time.monotonic())
+            if not self.list_states(timeout=deadline - time.monotonic()):
                 raise TunerError("FireTuner returned no Lua states")
         except (OSError, TunerError) as exc:
             self.close()
@@ -99,33 +104,37 @@ class TunerClient:
             raise TunerError("FireTuner is not connected")
         return self.sock
 
-    def _request(self, payload: str) -> str:
+    def _request(self, payload: str, timeout: float | None = None) -> str:
         """Send a query and return its reply, skipping asynchronous game output frames.
 
         While a game is running, Lua print output arrives on the same socket as frames whose
         payload starts with "O " or "O\\x00" (verified live); those are not the reply.
         """
         sock = self._socket()
+        deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TunerError(f"No time left for {payload!r} FireTuner query")
+        sock.settimeout(remaining)
         send_frame(sock, HANDSHAKE, payload)
-        deadline = time.monotonic() + self.timeout
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TunerError(f"No reply to {payload!r} from FireTuner")
             sock.settimeout(remaining)
-            frame = recv_frame(sock)
+            frame = recv_frame(sock, deadline)
             if frame.payload[:2] in ("O ", "O\x00"):
                 continue
             sock.settimeout(self.timeout)
             return frame.payload
 
-    def list_state_pairs(self) -> list[tuple[int, str]]:
+    def list_state_pairs(self, timeout: float | None = None) -> list[tuple[int, str]]:
         """Return (state index, state name) pairs.
 
         The game answers LSQ with alternating fields "<index>", "<name>", ... and CMD
         needs that index, not the position of the name in the reply.
         """
-        raw = self._request("LSQ:")
+        raw = self._request("LSQ:", timeout)
         if raw.startswith("LSQ:"):
             raw = raw[4:]
         parts = [part.strip() for part in raw.replace("\r", "\n").replace("\x00", "\n").split("\n") if part.strip()]
@@ -140,11 +149,11 @@ class TunerClient:
                 raise TunerError(f"unexpected LSQ reply near {parts[i:i + 2]!r}") from exc
         return pairs
 
-    def list_states(self) -> list[str]:
-        return [name for _, name in self.list_state_pairs()]
+    def list_states(self, timeout: float | None = None) -> list[str]:
+        return [name for _, name in self.list_state_pairs(timeout)]
 
-    def state_index(self, name: str) -> int:
-        pairs = self.list_state_pairs()
+    def state_index(self, name: str, timeout: float | None = None) -> int:
+        pairs = self.list_state_pairs(timeout)
         matches = [index for index, state in pairs if state.casefold() == name.casefold()]
         if len(matches) != 1:
             raise TunerError(f"Lua state {name!r} not uniquely available; states: {[n for _, n in pairs]}")
@@ -156,7 +165,8 @@ class TunerClient:
         Never replay a command on timeout: it may already have changed the game.
         A Lua `return` in code becomes LuaResult.value; other print output is retained.
         """
-        index = self.state_index(state_name)
+        deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+        index = self.state_index(state_name, timeout=max(0.0, deadline - time.monotonic()))
         token = "JAC_AUTOTEST_" + uuid.uuid4().hex
         wrapper = (
             "local __ok, __value = pcall(function()\n"
@@ -165,8 +175,11 @@ class TunerClient:
             + f'print("{token}|" .. (__ok and "OK|" or "ERR|") .. tostring(__value))'
         )
         sock = self._socket()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TunerError(f"No time left to send Lua command to {state_name!r}")
+        sock.settimeout(remaining)
         send_frame(sock, COMMAND, f"CMD:{index}:{wrapper}")
-        deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
         lines: list[str] = []
         while True:
             remaining = deadline - time.monotonic()
@@ -174,7 +187,7 @@ class TunerClient:
                 raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run. Inspect logs before retrying")
             sock.settimeout(remaining)
             try:
-                frame = recv_frame(sock)
+                frame = recv_frame(sock, deadline)
             except TunerError as exc:
                 raise TunerError(f"No Lua acknowledgment from {state_name!r}; command may have run: {exc}") from exc
             lines.append(frame.payload)

@@ -96,7 +96,30 @@ def _runtime_errors(lua: str) -> list[str]:
     lines = lua.splitlines()
     found = []
     for index, line in enumerate(lines):
-        if "Runtime Error" in line and re.search(r"\bJAC[_\\/.-]|JAC_PoC", "\n".join(lines[index:index + 9]), re.I):
+        if "Runtime Error" in line and re.search(r"\bJAC[_\\/.-]|JAC_PoC", _error_context(lines, index), re.I):
+            found.append(line)
+    return found
+
+
+def _error_context(lines: list[str], index: int) -> str:
+    """Keep an error and its stack lines, stopping before a new log message."""
+    context = [lines[index]]
+    for line in lines[index + 1:index + 9]:
+        if line[:1].isspace() or line.strip().lower().startswith("stack traceback"):
+            context.append(line)
+        else:
+            break
+    return "\n".join(context)
+
+
+def _growth_ui_errors(lua: str) -> list[str]:
+    lines = lua.splitlines()
+    found = []
+    for index, line in enumerate(lines):
+        if not any(marker in line for marker in ("UI.DataError", "Cannot determine if partial screen", "Runtime Error")):
+            continue
+        context = _error_context(lines, index)
+        if re.search(r"\bJAC[_\\/.-]|JAC_PoC|PartialScreenHooks", context, re.I):
             found.append(line)
     return found
 
@@ -173,6 +196,7 @@ def _growth_checks(logs: dict[str, str]) -> list[Check]:
     after = [m for i, m in parsed if m["kind"] == "" and i > restore_at]
     initial_count = re.search(r"\binitialized count=(\d+)", "\n".join(own[:restore_at]))
     restored_count = re.search(r"\brestored count=(\d+)", "\n".join(own[restore_at:]))
+    ui_errors = _growth_ui_errors(lua)
     components = ("Text", "Gameplay", "InGameUI", "PartialScreenHooks", "UIFiles")
     checks = [
         Check("Growth: mod registered", GROWTH_ID in modding.lower(), "GrowthUI mod ID in Modding.log"),
@@ -187,9 +211,8 @@ def _growth_checks(logs: dict[str, str]) -> list[Check]:
         Check("Growth: open and journal", lua.count("[JAC_POC] notebooks opened") >= 3
               and lua.count("[JAC_POC] character journal shown count=") >= 2,
               f"opened={lua.count('[JAC_POC] notebooks opened')}, journal={lua.count('[JAC_POC] character journal shown count=')}"),
-        Check("Growth: partial-screen errors", "UI.DataError" not in lua
-              and "Cannot determine if partial screen" not in lua and "Runtime Error" not in lua,
-              "no UI.DataError or Runtime Error in run log"),
+        Check("Growth: partial-screen errors", not ui_errors,
+              f"JAC-related UI.DataError, partial-screen or Runtime Error: {len(ui_errors)}"),
         Check("Growth: new-game assignment", "[JAC_POC] no saved state (new game)" in "\n".join(own[:restore_at])
               and initial_count is not None and 1 <= len(assigned) <= 3
               and int(initial_count[1]) == len(assigned)

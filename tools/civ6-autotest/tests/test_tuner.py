@@ -44,7 +44,8 @@ class FakeTuner:
                         if frame.payload == "APP:":
                             self._send_split(connection, HANDSHAKE, "Civilization VI")
                         elif frame.payload == "LSQ:":
-                            self._send_split(connection, HANDSHAKE, "FrontEnd\x00InGame\x00GameCore_Tuner")
+                            self._send_split(connection, HANDSHAKE,
+                                             "3\x00FrontEnd\x0017\x00InGame\x0041\x00GameCore_Tuner")
                         elif frame.payload.startswith("CMD:"):
                             if self.no_ack:
                                 time.sleep(0.35)
@@ -66,13 +67,15 @@ class FramingTests(unittest.TestCase):
         try:
             with TunerClient(port=fake.port, timeout=1) as client:
                 self.assertEqual(client.identity, "Civilization VI")
+                self.assertEqual(client.list_state_pairs(),
+                                 [(3, "FrontEnd"), (17, "InGame"), (41, "GameCore_Tuner")])
                 self.assertEqual(client.list_states(), ["FrontEnd", "InGame", "GameCore_Tuner"])
                 result = client.run_lua("InGame", "return true")
                 self.assertEqual(result.value, "true")
                 self.assertIn("unsolicited output", result.output)
             commands = [frame for frame in fake.received if frame.tag == COMMAND]
             self.assertEqual(len(commands), 1)
-            self.assertTrue(commands[0].payload.startswith("CMD:1:"))
+            self.assertTrue(commands[0].payload.startswith("CMD:17:"))
         finally:
             fake.close()
 
