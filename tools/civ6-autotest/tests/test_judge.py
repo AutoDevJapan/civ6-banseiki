@@ -1,12 +1,13 @@
 import json
 import hashlib
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from judge import LOG_NAMES, judge, slice_log_bytes
+from judge import LOG_NAMES, judge, read_since, slice_log_bytes, snapshot_logs
 from scenario import Runner, validate_scenario
 
 
@@ -159,6 +160,24 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(slice_log_bytes(old + b"new line\n", mark, 7), "new line\n")
         self.assertEqual(slice_log_bytes(b"fresh\n", mark, 7), "fresh\n")
         self.assertEqual(slice_log_bytes(b"new file\n", mark, 8), "new file\n")
+
+    def test_baseline_detects_same_inode_rewrite_past_old_offset(self):
+        with tempfile.TemporaryDirectory() as root:
+            log_dir = Path(root)
+            for name in LOG_NAMES:
+                (log_dir / name).write_bytes(b"")
+            lua = log_dir / "Lua.log"
+            original = b"P" * 256 + b"M" * 256 + b"T" * 256
+            lua.write_bytes(original)
+            baseline = snapshot_logs(log_dir)
+            with lua.open("ab") as handle:
+                handle.write(b"appended\n")
+            self.assertEqual(read_since(log_dir, baseline)["Lua.log"], "appended\n")
+
+            replacement = b"P" * 256 + b"R" * 256 + b"U" * 256 + b"fresh\n"
+            lua.write_bytes(replacement)
+            self.assertEqual(lua.stat().st_ino, baseline["files"]["Lua.log"]["inode"])
+            self.assertEqual(read_since(log_dir, baseline)["Lua.log"], replacement.decode("ascii"))
 
     def test_shipped_scenarios_validate_offline(self):
         folder = Path(__file__).resolve().parents[1] / "scenarios"

@@ -28,6 +28,10 @@ class LuaResponseUnknown(TunerError):
     """A Lua send was attempted, but its execution/acknowledgment is unknown."""
 
 
+class LuaExecutionError(TunerError):
+    """FireTuner confirmed that the Lua chunk returned an ERR acknowledgment."""
+
+
 @dataclass(frozen=True)
 class Frame:
     tag: int
@@ -72,6 +76,27 @@ def recv_frame(sock: socket.socket, deadline: float | None = None) -> Frame:
     if size < 1 or size > MAX_FRAME:
         raise TunerError(f"Invalid FireTuner frame size: {size}")
     return Frame(tag, _read_exact(sock, size, deadline).rstrip(b"\x00").decode("utf-8", "replace"))
+
+
+def _lua_payload(index: int, code: str, token: str) -> str:
+    wrapper = (
+        "local __ok, __value = pcall(function()\n"
+        + code
+        + "\nend)\n"
+        + f'print("{token}|" .. (__ok and "OK|" or "ERR|") .. tostring(__value))'
+    )
+    return f"CMD:{index}:{wrapper}"
+
+
+# Leave room for the wrapper, acknowledgment token, a 20-digit state index and NUL.
+MAX_LUA_CODE_BYTES = MAX_FRAME - len(_lua_payload(int("9" * 20), "", "JAC_AUTOTEST_" + "0" * 32).encode("utf-8")) - 1
+
+
+def validate_lua_code(code: str) -> None:
+    if "\x00" in code:
+        raise ValueError("NUL is not allowed in Lua code")
+    if len(code.encode("utf-8")) > MAX_LUA_CODE_BYTES:
+        raise ValueError("Lua code is too large for a FireTuner command")
 
 
 class TunerClient:
@@ -169,22 +194,17 @@ class TunerClient:
         Never replay a command on timeout: it may already have changed the game.
         A Lua `return` in code becomes LuaResult.value; other print output is retained.
         """
+        validate_lua_code(code)
         deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
         index = self.state_index(state_name, timeout=max(0.0, deadline - time.monotonic()))
         token = "JAC_AUTOTEST_" + uuid.uuid4().hex
-        wrapper = (
-            "local __ok, __value = pcall(function()\n"
-            + code
-            + "\nend)\n"
-            + f'print("{token}|" .. (__ok and "OK|" or "ERR|") .. tostring(__value))'
-        )
         sock = self._socket()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TunerError(f"No time left to send Lua command to {state_name!r}")
         sock.settimeout(remaining)
         try:
-            send_frame(sock, COMMAND, f"CMD:{index}:{wrapper}")
+            send_frame(sock, COMMAND, _lua_payload(index, code, token))
         except OSError as exc:
             # sendall may have sent some or all bytes before reporting failure.
             raise LuaResponseUnknown(f"Lua command to {state_name!r} may have run: {exc}") from exc
@@ -209,7 +229,7 @@ class TunerClient:
                     continue
                 output = "\n".join(lines)
                 if status == "ERR":
-                    raise TunerError(f"Lua error in {state_name}: {value}")
+                    raise LuaExecutionError(f"Lua error in {state_name}: {value}")
                 if status == "OK":
                     return LuaResult(value, output)
 

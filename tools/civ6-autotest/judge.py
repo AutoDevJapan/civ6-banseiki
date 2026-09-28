@@ -31,24 +31,25 @@ def default_log_dir() -> Path:
     return Path(local) / "Firaxis Games" / "Sid Meier's Civilization VI" / "Logs"
 
 
-def _prefix_hash(path: Path, length: int) -> str:
-    with path.open("rb") as handle:
-        return hashlib.sha256(handle.read(length)).hexdigest()
-
-
 def snapshot_logs(log_dir: Path) -> dict:
     files = {}
     for name in LOG_NAMES:
         path = log_dir / name
         if path.exists():
-            stat = path.stat()
-            prefix_length = min(256, stat.st_size)
+            with path.open("rb") as handle:
+                stat = os.fstat(handle.fileno())
+                prefix_length = tail_length = min(256, stat.st_size)
+                prefix = handle.read(prefix_length)
+                handle.seek(stat.st_size - tail_length)
+                tail = handle.read(tail_length)
             files[name] = {"offset": stat.st_size, "inode": stat.st_ino,
                            "prefix_length": prefix_length,
-                           "prefix_sha256": _prefix_hash(path, prefix_length)}
+                           "prefix_sha256": hashlib.sha256(prefix).hexdigest(),
+                           "tail_length": tail_length,
+                           "tail_sha256": hashlib.sha256(tail).hexdigest()}
         else:
             files[name] = {"offset": 0, "inode": None, "prefix_length": 0,
-                           "prefix_sha256": None}
+                           "prefix_sha256": None, "tail_length": 0, "tail_sha256": None}
     return {"created_at": datetime.now(timezone.utc).isoformat(), "log_dir": str(log_dir), "files": files}
 
 
@@ -56,10 +57,13 @@ def slice_log_bytes(contents: bytes, mark: dict, inode: int) -> str:
     """Return bytes after a marker, or all bytes if Civ recreated/truncated the log."""
     old_offset = mark["offset"]
     current_prefix = hashlib.sha256(contents[:mark.get("prefix_length", min(256, old_offset))]).hexdigest()
+    tail_length = mark.get("tail_length", 0)
+    current_tail = hashlib.sha256(contents[old_offset - tail_length:old_offset]).hexdigest()
     replaced = (
         old_offset > len(contents)
         or (mark["inode"] is not None and mark["inode"] != inode)
         or (mark["prefix_sha256"] is not None and mark["prefix_sha256"] != current_prefix)
+        or (mark.get("tail_sha256") is not None and mark["tail_sha256"] != current_tail)
     )
     return contents[0 if replaced else old_offset:].decode("utf-8-sig", "replace")
 

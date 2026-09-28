@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import click as civ_click
 from judge import snapshot_logs
 from scenario import Runner, ScenarioError, _safe_relative_path, validate_scenario
-from tuner import LuaResponseUnknown, LuaResult, TunerError
+from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, LuaResult, TunerError
 
 
 class ScenarioSafetyTests(unittest.TestCase):
@@ -152,6 +152,24 @@ class ScenarioSafetyTests(unittest.TestCase):
         validate_scenario({"name": "timeout", "steps": [{"action": "autoplay", "turns": 1,
                                                           "timeout": 1.5}]})
 
+    def test_scenario_validates_lua_code_before_running(self):
+        for step in (
+            {"action": "ui_lua", "state_name": "InGame", "code": "return true"},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame",
+                                                 "code": "return true"}},
+        ):
+            with self.subTest(action=step["action"]):
+                code_holder = step if step["action"] == "ui_lua" else step["condition"]
+                for code, message in (("return\x00true", "NUL"),
+                                      ("界" * (MAX_LUA_CODE_BYTES // 3 + 1), "too large")):
+                    with self.subTest(message=message):
+                        code_holder["code"] = code
+                        with self.assertRaisesRegex(ScenarioError, "Step 1: .*" + message):
+                            validate_scenario({"name": "Lua validation", "steps": [step]})
+        validate_scenario({"name": "Lua validation", "steps": [
+            {"action": "ui_lua", "state_name": "InGame", "code": "a" * MAX_LUA_CODE_BYTES}
+        ]})
+
     def test_manual_wait_has_no_step_deadline_or_timeout_option(self):
         step = {"action": "manual", "prompt": "Inspect the game"}
         validate_scenario({"name": "manual", "steps": [step]})
@@ -188,6 +206,50 @@ class ScenarioSafetyTests(unittest.TestCase):
                 runner._wait(condition, 30)
         run_lua.assert_called_once()
         sleep.assert_not_called()
+
+    def test_lua_wait_confirmed_error_fails_without_reexecution(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        condition = {"type": "lua", "state_name": "InGame", "code": "error('boom')"}
+        with patch.object(runner, "_lua", side_effect=LuaExecutionError("Lua error in InGame: boom")) as run_lua, patch(
+            "scenario.time.sleep"
+        ) as sleep:
+            with self.assertRaisesRegex(LuaExecutionError, "boom"):
+                runner._wait(condition, 30)
+        run_lua.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_pre_send_framing_error_is_logged_as_step_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            logs = base / "logs"
+            logs.mkdir()
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (logs / name).write_text("", encoding="utf-8")
+            steps = (
+                {"action": "ui_lua", "state_name": "InGame", "code": "return true"},
+                {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame",
+                                                     "code": "return true"}},
+            )
+            for step in steps:
+                with self.subTest(action=step["action"]):
+                    runner = Runner({"name": "framing", "steps": [step]}, base / step["action"],
+                                    logs, base, 4318)
+                    original_wait = runner._wait
+
+                    def wait_after_start(condition, timeout):
+                        if condition["type"] == "lua" and condition["state_name"] == "FrontEnd":
+                            return
+                        return original_wait(condition, timeout)
+
+                    with redirect_stdout(StringIO()), patch.object(runner, "_wait", side_effect=wait_after_start), patch.object(
+                        runner, "_lua", side_effect=ValueError("FireTuner command is too large")
+                    ) as run_lua:
+                        self.assertEqual(runner.run(), 1)
+                    run_lua.assert_called_once()
+                    records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                        encoding="utf-8").splitlines()]
+                    self.assertEqual((records[-1]["action"], records[-1]["status"], records[-1]["detail"]),
+                                     ("1/1 " + step["action"], "FAIL", "FireTuner command is too large"))
 
     def test_transition_pre_send_failure_is_logged_without_waiting(self):
         with tempfile.TemporaryDirectory() as root:

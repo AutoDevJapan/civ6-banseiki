@@ -14,7 +14,7 @@ import time
 from capture import CaptureError, capture_civ_window
 from click import InputError, VK_ESCAPE, press_key
 from judge import default_log_dir, judge, print_table, read_since, snapshot_logs
-from tuner import LuaResponseUnknown, TunerClient, TunerError
+from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
 
 ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
@@ -114,6 +114,10 @@ def validate_scenario(data: dict) -> None:
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
+            try:
+                validate_lua_code(step["code"])
+            except ValueError as exc:
+                raise ScenarioError(f"Step {number}: {exc}") from exc
         elif action == "screenshot":
             _safe_relative_path(step.get("path", ""))
             crop = step.get("crop")
@@ -132,6 +136,11 @@ def validate_scenario(data: dict) -> None:
                                                    or not isinstance(condition.get("code"), str)
                                                    or not condition["code"].strip()):
                 raise ScenarioError(f"Step {number}: Lua wait needs state_name and code")
+            if condition["type"] == "lua":
+                try:
+                    validate_lua_code(condition["code"])
+                except ValueError as exc:
+                    raise ScenarioError(f"Step {number}: {exc}") from exc
             if condition["type"] == "log_line" and (condition.get("log") not in ("Lua.log", "Database.log", "Modding.log")
                                                         or not isinstance(condition.get("contains"), str)
                                                         or not condition["contains"]):
@@ -292,7 +301,7 @@ class Runner:
                     if kind == "log_line":
                         self.log_matches_consumed[key] = self.log_matches_consumed.get(key, 0) + 1
                     return
-            except LuaResponseUnknown:
+            except (LuaResponseUnknown, LuaExecutionError):
                 # This predicate may have executed; never poll it again.
                 raise
             except (TunerError, OSError) as exc:
@@ -600,7 +609,7 @@ class Runner:
                         self.log_step_baseline = snapshot_logs(self.logs)
                         self.log_matches_consumed.clear()
                     detail = self._run_step(step)
-                except (ScenarioError, TunerError, CaptureError, InputError, OSError, EOFError) as exc:
+                except (ScenarioError, TunerError, CaptureError, InputError, OSError, EOFError, ValueError) as exc:
                     self._log(action, "FAIL", str(exc))
                     return 1
                 self._log(action, "OK", detail)

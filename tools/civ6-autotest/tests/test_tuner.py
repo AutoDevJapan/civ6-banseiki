@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tuner import COMMAND, HANDSHAKE, LuaResponseUnknown, TunerClient, TunerError, recv_frame, send_frame
+from tuner import COMMAND, HANDSHAKE, LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, recv_frame, send_frame
 
 
 class FakeTuner:
@@ -84,8 +84,9 @@ class FramingTests(unittest.TestCase):
         fake = FakeTuner(lua_error=True)
         try:
             with TunerClient(port=fake.port, timeout=1) as client:
-                with self.assertRaisesRegex(TunerError, "boom"):
+                with self.assertRaisesRegex(LuaExecutionError, "boom"):
                     client.run_lua("InGame", "error('boom')")
+            self.assertEqual(sum(frame.tag == COMMAND for frame in fake.received), 1)
         finally:
             fake.close()
 
