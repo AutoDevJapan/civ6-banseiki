@@ -57,6 +57,82 @@ MOD の内容：
 - `Game:SetProperty` に保存した Lua のテーブルは、セーブ・ロードをまたいで復元される（シングルプレイで確認。マルチプレイでの同期・決定性は未検証で、本番で採用する前に確かめる）
 - `print` の出力は `Lua.log` に `<MOD名>: ` 付きで記録される（束4「外部とゲームの経路」で、ゲームから外へ渡す経路の候補になる。外部プロセスからの読み取りは未検証）
 
+## JAC_PoC_GrowthUI：成長保存・手帳（人物帳）・言語表示
+
+対象の PoC（SSOT 16.1）：束1「成長保存」、束1「UI」の Notebooks（手帳）と人物帳、束0「言語表示」。束1「UI」のスキル・Vault・Next Action の中身は対象外。
+
+MOD の内容：
+
+- 新規ゲームで人間プレイヤーの開始時ユニットをID順に最大3体選び、`Unit:SetProperty` にレベル・経験値・性格ID・特性ID・装備IDのリスト・Artifact IDを保存する。1体目は装備2件とArtifact 1件、2体目は装備1件を持つ。装備とArtifactは保存確認用の仮IDで、ゲーム内効果はない
+- 人間プレイヤーのターン開始時に固定20 XPを加え、必要XPを `floor(30 × 現レベル^1.5 + 0.5)` としてレベルアップする。通常上限30、同じゲームターンの二重加算は防ぐ。20 XPは検証用で報酬量の仕様ではない
+- 右上のバーの List of Reports のすぐ左に「手帳」ボタンを置く（SSOT 11.1）。`ReplaceUIScript` で `PartialScreenHooks` を `UI/JAC_PartialScreenHooks.lua` に差し替え、XP2 版を include して `AddScreenHooks()` の Era と Reports の間に1件足す。専用アイコン `UI/Textures/JAC_Notebooks_Hook.dds` を使う
+- 手帳は SSOT 11.1 の構成で、記録帳（人物帳・法律帳・宗教帳）と国家金庫（長官たち・宝物庫）を並べる。中身があるのは人物帳だけで、他は「（未実装）」付きの押せない項目。表示名は用語辞書（14-3）の3言語
+- 人物帳は生存中の武将ユニットの状態を直接 `Unit:GetProperty` から表示する（読み取り専用）。日本語・ロシア語・英語の固定テスト行を常時並べる。ESC による手帳の閉鎖は要実機確認。同じボタンの再クリックや他の画面（List of Reports など）を開くと手帳は閉じる
+- 以前の固定位置の「人物帳」ボタン（実機で表示されなかった）は削除した
+
+### 手帳ボタンとアイコンの再生成
+
+右上の手帳ボタンは `UI/Textures/JAC_Notebooks_Hook.dds` を使う。`UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` から参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` に登録する。表示寸法は `PartialScreenHooks.xml` の 26×26。
+
+`tools/jac_art/build_art.py` は PR #20 で `main` に追加済みで、このリポジトリから実行できる。GrowthUI の MOD フォルダが存在すると手帳 DDS も生成し、フォルダが無い場合はその工程をスキップして CustomCivs のアート生成を続ける。
+
+```powershell
+$env:JAC_ART_LOCAL = 'C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local'
+$env:JAC_GROWTH_MOD = (Join-Path (Get-Location) 'poc\JAC_PoC_GrowthUI')
+python tools/jac_art/build_art.py
+```
+
+このスクリプトは両 PoC のアートを生成する。Python の Pillow、ローカルアートストア内の各原本、および Civ6 SDK Asset Cooker が必要。`JAC_GROWTH_MOD` は GrowthUI の別配置先を使う場合に設定する。
+
+手帳アイコンの入力はローカルアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`（この PC では `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\JAC_PoC_GrowthUI\Originals\notebooks_generated.png`）、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。生成画像の来歴と利用条件は後段の CustomCivs 節「画像」に記録する。
+
+### 互換性
+
+`ReplaceUIScript` は `PartialScreenHooks` を置換するため、同じスクリプトを置換する他 MOD との競合があり得る。動作確認はこの MOD 単独の有効化で行っており、競合する MOD との共存は未確認。製品版 MOD は総合改変 MOD として他 MOD を無効にする方針で、共存が必要になった場合は互換パッチを用意する。
+
+手順：
+
+1. 共通の準備に従い `poc/JAC_PoC_GrowthUI` を `Mods/JAC_PoC_GrowthUI` へジャンクションで配置する。この検証中は `JAC_PoC_Bundle0` を無効にし、本MODを有効にする
+2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す。アイコンが欠けていないか、左上の「歴史年表」（History Timeline）ボタンと見分けられるかも見る
+3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
+4. 手帳をもう一度開き、開いたまま List of Reports を押す
+5. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
+6. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
+7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言と固定3行を確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
+
+
+成功条件：
+
+| 確認 | 期待する結果 |
+|---|---|
+| 読み込み | `Modding.log` に `JAC_GrowthUI_Text`・`JAC_GrowthUI_Gameplay`・`JAC_GrowthUI_InGameUI`・`JAC_GrowthUI_PartialScreenHooks`・`JAC_GrowthUI_UIFiles` の適用が記録され、`Database.log` に本MOD由来のエラーがない |
+| ボタンの位置 | `Lua.log` に `[JAC_POC] notebooks button attached parent=ButtonStack` が出て、ボタンが List of Reports のすぐ左にある。都市国家と出会った後も同じ位置にある。この行が出ないときは置換が効いていない（`ReplaceUIScript` の競合を疑う） |
+| アイコン | 専用の `JAC_Notebooks_Hook.dds` が欠けずに表示され、「歴史年表」ボタンと見分けられる |
+| 開き直しと切り替え | 手順4で手帳が閉じて List of Reports が開き、手順3〜4の間の `Lua.log` に `UI.DataError`（`Cannot determine if partial screen`）や `Runtime Error` がない。初回に開いたときの `[JAC_POC] notebooks path lookup found=<true/false>` も記録する（`false` なら、閉じた手帳を公式の `IsPartialScreenOpen()` がパスで探せず `UI.DataError` になる。公式の Era Progress と同じ作り） |
+| 手帳と人物帳 | 開くたびに `[JAC_POC] notebooks opened`、人物帳を出すたびに `[JAC_POC] character journal shown count=<n>` が出る。`n` は生存中の武将ユニット数（新規ゲームでは開始ユニット数に応じて1～3） |
+| 新規ゲームの `Lua.log` | `[JAC_POC] no saved state (new game)`、`[JAC_POC] assigned unit=...` が開始ユニット数に応じて1～3件、`[JAC_POC] initialized count=...` が出る。装備・Artifactの値も記録される |
+| 成長の `Lua.log` | `[JAC_POC] unit=<id> level=... xp=... personality=... trait=... equipment=... artifact=... player=... turn=...` がターンごとに出る。同じユニットで1ターンあたり20 XPを得る。Lv1の必要XPは30で、累計40 XPの時点ではLv2・残り10 XPとなる |
+| ロード後の `Lua.log` | `[JAC_POC] restored unit=...` の全項目がセーブ直前の記録と一致し、`restored count=...` と再表示時の `character journal shown count=` も一致する。ロード直後に `assigned unit=` は増えず、次ターンだけ経験値が増える |
+| 3言語 | 人物帳の表示が直近のログの記録と一致し、日本語・キリル文字・英語の固定3行に文字化けや欠落がない。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
+
+結果：**主要項目は成功**（2026-09-29、Steam 版 1.0.12.68、Gathering Storm、英語表示）。証跡は兄弟 worktree の `../civ6-autotest/tools/civ6-autotest/artifacts/run-11-growth-ui/`。自動シナリオ41手順とログ判定13/13が成功した。
+
+| 確認 | 実際の結果 |
+|---|---|
+| 読み込み | `Modding.log` に5アクションの適用を確認。`Database.log` に JAC 由来のエラーなし |
+| ボタンの位置 | `parent=ButtonStack`。手帳は Reports の左。都市国家1件との遭遇後も同じ位置（`02-top-right-closeup.png`・`12-after-city-state-top-bar-clean.png`） |
+| アイコン | 専用の `JAC_Notebooks_Hook.dds` が欠けずに表示され、画面上でも左上の歴史年表の肖像アイコンと区別できた（`03-timeline-closeup.png`）。CustomCivs との併用時にも装丁された本が表示され、履歴タイムラインと区別できた（`civ6-art-local/final-01/ingame/10-notebooks-button-closeup.png`・`ingame/19-notebooks-open-clean.png`） |
+| 開き直しと切り替え | `notebooks path lookup found=true`。再クリックで閉じ、手帳から Reports に切り替わった。`UI.DataError`・`Runtime Error` なし |
+| 手帳と人物帳 | `notebooks opened` 5件、`character journal shown count=2` 4件。メニュー・人物帳・保存前後の画像あり。日本語の固定行に英語表示で欠字が出たため、同梱の NotoSansCJKjp をその行に指定して再検証し、日露英の固定3行を表示できた |
+| 新規ゲーム | `no saved state`、開始2ユニットへ `assigned`、`initialized count=2`。1体目の装備2件・Artifact、2体目の装備1件を確認 |
+| 成長 | 両ユニットともターン1～5に毎回20 XP。ターン2で Lv2・残り10 XP（Lv1必要量30）、保存時は Lv2・70 XP |
+| 保存・ロード | `restored count=2`。両ユニットの全記録と人物帳の表示が保存前の Lv2・70 XP に一致。追加の `assigned` はなく、次のターン6で Lv3・5 XP |
+| 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認 |
+
+要オーナー確認：表示言語 `ja_JP`・`ru_RU` での文言とロシア語項目名の収まり。Options の表示言語変更はアプリ再起動を要求し、現ドライバはゲームの再起動を扱わない。人物帳を開いた状態で ESC を押して手帳が閉じるかも実機確認が必要。自動入力では公式 Reports List でも ESC がゲーム全体のメニューを開いたため、閉鎖を判定できなかった。
+
+未検証：マルチプレイ。`LastXPTurn` で同じターンの二重加算は防いでいるが、`Unit:SetProperty` の同期とクライアント間の一致はシングルプレイの結果からは確認できない。マルチプレイで採用する前に、2人プレイで加算回数とロード後の一致を確認する。
+
 ## JAC_PoC_CustomCivs：カスタム勢力
 
 対象の PoC：SSOT 16.1 束1「カスタム勢力」。別 Civilization ID の同時参加、AI の独立行動、ゲーム途中の家名表示変更を調べる。言語表示も束0の一部として確認する。
@@ -101,7 +177,7 @@ MOD の内容：
 | ロード後保持・翻訳 | 未実施 |
 | 表示の上書き | 未実施（UI 側の上書きを追加した。実機での確認待ち） |
 
-2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。手帳ボタンは PR #21（`feat/poc-growth-ui`）の GrowthUI を併用して確認したため、PR #20 単独ではこの表示を再現できない。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
+2026-09-29 の結果：**自動シナリオ成功**（Gathering Storm、シングルプレイ）。`civ6-autotest` worktree の `tools/civ6-autotest/scenarios/clans-notebooks.json` を実行し、`artifacts/clans-notebooks-run-09/steps.jsonl` で **17/17 ステップ、ログ判定 2/2 件**の成功を確認した。織田＝人間・武田＝AI の参加と手帳の表示を確認し、ターン4でセーブ、メインメニューからロード、ターン5への進行と手帳の再表示に成功した。手帳ボタンは GrowthUI MOD を併用して確認した。CustomCivs 単独の検証結果には含めない。画面記録は同じ実行フォルダの `01-start.png`、`02-notebooks.png`、`03-turn4.png`、`04-after-load-notebooks.png`。この実行は新アート生成前のため、下記の新アート表示の証拠にはしない。
 
 2026-09-29 のルールセット境界の再確認：**成功**（Steam 版 1.0.12.68、MOD 有効、ゲーム再起動後）。FrontEnd Lua で `GameConfiguration.SetRuleSet` と `GameConfiguration.UpdateEnabledMods` を実行。さらに `HostGame` の Lua で公式 `CreatePlayerParameters(0, true)` と `Refresh()` を呼び、実際の `Parameters.PlayerLeader.Domain` と `Values` を照会した。標準 `RULESET_STANDARD` は `Players:StandardPlayers`、全57候補中 **JAC 0 件**。GS `RULESET_EXPANSION_2` は `Players:Expansion2_Players`、全82候補中 **JAC 2 件**（`LEADER_JAC_ODA_NOBUHIDE`・`LEADER_JAC_TAKEDA_NOBUTORA`）。FrontEnd の `DB.ConfigurationQuery` でも有効ドメインの JAC 行数は標準 0 件・GS 2 件で一致。設定 DB 全体には両行が登録されるが、標準ルールセットの選択候補には入らない。FrontEnd アクションに `RuleSetInUse` 条件を付ける試行では、標準で起動してから GS へ切り替えても両行が追加されなかったため、その条件は採用せず、公式 GS と同じドメイン方式を維持した。
 
@@ -141,17 +217,28 @@ MOD の内容：
 
 `tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
 
+### 画像の成功条件
+
+| 確認 | 期待する結果 |
+|---|---|
+| 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、能力名と説明、新規生成した肖像と背景が出る。標準 UI は専用能力アイコンを表示しない |
+| 能力アイコン | PoC の成功条件は、4点が登録され、能力定義から正しく参照できること。これは `IconManager:FindIconAtlas` の返り値で検証済み。標準 UI は能力欄で文明／指導者アイコンを再利用するため、専用絵柄の画面表示は対象外。製品版で表示するには能力用のカスタム UI が必要 |
+| ロード画面 | 両名の新規生成人物と城内の背景が出る。紫色の縁や公式北条の人物が出ない |
+| ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
+| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。背景の上下に黒い余白が出ない。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
+| ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
+| ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
+
 #### 新しい画像の実機表示
 
 2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。初回に織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。修正後はゲームを再起動し、武田を人間／織田と公式クレオパトラを AI とするゲーム、および織田を人間／武田を AI とするゲームで再確認した。修正後の保存画像は 1456×939。画像の保存先は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-art-local/final-01/`（Git 管理外）。表中の `ingame/`・`ingame-v2/` から始まるパスはそこを基準とする。
 
 | 確認 | 実際の結果 |
 |---|---|
-| Mod と生成物 | 実機確認では `JAC_PoC_CustomCivs` と、PR #21（`feat/poc-growth-ui`）にある `JAC_PoC_GrowthUI` を併用した。CustomCivs の BLP 3 個に加え、GrowthUI 側の `JAC_Notebooks_Hook.dds` が存在した。GrowthUI とこの DDS は PR #21 の成果物で、PR #20 単独には含まれない。修正後 BLP 3 個は 03:24〜03:25 に再生成済み。ゲーム再起動後の `ArtDef.log` で3個の読み込み、両ゲームの `Modding.log` で `UpdateArt`・`UpdateIcons`・`JAC_CustomCivs_LeaderScene` の適用を確認した。 |
+| Mod と生成物 | 実機確認では `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を併用した。CustomCivs の BLP 3 個を確認し、手帳 DDS の表示結果は GrowthUI 節に記録した。修正後 BLP 3 個は 03:24〜03:25 に再生成済み。ゲーム再起動後の `ArtDef.log` で3個の読み込み、両ゲームの `Modding.log` で `UpdateArt`・`UpdateIcons`・`JAC_CustomCivs_LeaderScene` の適用を確認した。 |
 | Esc 前のロード画面 | 初回は武田の髷が上端で切れた（`ingame/15-loading-takeda-before-esc.png`）。修正後はロード完了・Esc 前でも髷全体と上の余白が表示された（`ingame-v2/10-loading-takeda-before-esc.png`）。織田の初回画像は `ingame/08-loading-oda-before-esc.png`。 |
 | FrontEnd の選択・設定 | 両家の指導者アイコンと家紋が詳細設定で並び、各人の肖像も基本設定に表示された。`ingame/02-setup-oda-details.png`、`ingame/07-advanced-setup.png`、`ingame/14-setup-takeda.png` |
 | ゲーム中のアイコン | 織田・武田の指導者アイコンが右上に表示され、接触後の外交リボンにも武田の指導者アイコンが表示された。外交画面の左上には武田の家紋も表示された。`ingame/09-ingame-oda.png`、`ingame/11-diplomacy-ribbon.png`、`ingame/12-diplomacy-takeda.png`、`ingame/16-ingame-takeda.png` |
-| 手帳ボタン | 右上の List of Reports の隣に新規アイコンが表示され、開くと手帳メニューが出た。`ingame/10-notebooks-button-closeup.png`、`ingame/19-notebooks-open-clean.png` |
 | 武田との外交 | 初回は新規フォールバック人物と背景の上下に黒帯が見えた（`ingame/12-diplomacy-takeda.png`）。修正後は織田を人間にして Gameplay Lua の `SetHasMet(1, true)` で接触させ、公式 UI の `DiplomacyRibbon_OpenDiplomacyActionView(1)` で開いた。人物と背景が上下まで表示され、黒帯は消えた。`LeaderScene` の上下レターボックスも `IsHidden()=true`。`ingame-v2/20-diplomacy-takeda.png` |
 | 織田との外交 | 武田を人間、織田を AI にして同じ方法で開いた。人物と背景が上下まで表示され、黒帯は無い。上下レターボックスは `IsHidden()=true`。`ingame-v2/11-diplomacy-oda.png` |
 | 公式指導者との外交 | 同じゲームでクレオパトラを AI に追加して開いた。公式の 3D 人物と標準の上下帯が表示され、上下レターボックスは `IsHidden()=false`。閉じて織田を開き直すと再び両方 `true` になった。`ingame-v2/12-diplomacy-cleopatra.png` |
@@ -212,24 +299,7 @@ Antigravity 追加利用規約の第6項は第三者ソフトウェア経由の�
 4. ゲーム内で、右上の指導者アイコンと都市の旗の家紋を確認する
 5. 武田との外交画面を開き、2D の肖像と背景を確認する。`Lua.log` に `[JAC_POC] leaderScreen loaded` が出ることも確認する
 
-成功条件：
-
-| 確認 | 期待する結果 |
-|---|---|
-| 設定画面 | 織田・武田の同一画風の丸い肖像アイコン、それぞれ木瓜・菱の家紋、能力名と説明、新規生成した肖像と背景が出る。標準 UI は専用能力アイコンを表示しない |
-| 能力アイコン | PoC の成功条件は、4点が登録され、能力定義から正しく参照できること。これは `IconManager:FindIconAtlas` の返り値で検証済み。標準 UI は能力欄で文明／指導者アイコンを再利用するため、専用絵柄の画面表示は対象外。製品版で表示するには能力用のカスタム UI が必要 |
-| ロード画面 | 両名の新規生成人物と城内の背景が出る。紫色の縁や公式北条の人物が出ない |
-| ゲーム内 | 右上の指導者アイコンと都市の旗が自前の画像になる。日本・北条のアイコンが出ない |
-| 外交画面 | 3D の北条ではなく、2D の肖像と各家の背景が出る。背景の上下に黒い余白が出ない。`leaderScreen loaded` が出て、画面が読み込み中で止まらない |
-| ロード画面の端 | 帯の上下の端が切れず、1080p で背景の上下に黒帯が出ない |
-| ログ | `ArtDef.log` に `Loading Package: …/JAC_CustomCivs_Icons.blp`（`_Leaders`・`_Fallback` も）が出て、`Unable to resolve Package` にこの MOD の BLP が無い。`Lua.log` に `Failed to load background image texture` と `We are lacking a texture` が出ない |
 
 修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗と1080pでの端の表示は未確認。能力専用アイコン4点は登録・参照を確認済みで、標準 UI が文明／指導者アイコンを再利用するため画面表示は PoC の対象外。製品版で専用絵柄を出すには能力用のカスタム UI が必要。
 
-BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問リスト](../questions.md) の議論待ちで決める。
-
-## JAC_PoC_GrowthUI：手帳ボタンの画像
-
-`JAC_PoC_GrowthUI` MOD と `JAC_Notebooks_Hook.dds` は PR #21（`feat/poc-growth-ui`）にある。PR #20 単独には GrowthUI の MOD フォルダも DDS も含まれず、手帳ボタンのカスタム画像表示は再現できない。PR #20 単独で再現できるアート工程は CustomCivs 用の3個の BLP の生成・確認まで。
-
-この PR の `tools/jac_art/build_art.py` は、GrowthUI の MOD フォルダが存在する場合だけ手帳 DDS の生成を行う（既定の `poc/JAC_PoC_GrowthUI`、または `JAC_GROWTH_MOD` で指定した場所）。フォルダが無ければ手帳工程をスキップし、CustomCivs 単独で完了する。GrowthUI の `UI/JAC_PartialScreenHooks.lua` の `AddScreenHook` は生成した `JAC_Notebooks_Hook.dds` を参照し、`JAC_PoC_GrowthUI.modinfo` の `ImportFiles` と `Files` に登録する。公式の History Timeline アイコンとの重複を解消する。表示寸法は `PartialScreenHooks.xml` の 26×26。PR #21 と併用した実機確認では、右上の手帳ボタンに装丁された本が表示され、履歴タイムラインと区別できた。再生成方法・入力先・出典は上記「画像」を参照。
+BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問 D10](../questions.md) の議論待ちで決める。

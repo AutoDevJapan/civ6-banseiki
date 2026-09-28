@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="7696e937-2044-4f3c-8e13-4e27632e2710" version="1">
+	<Properties>
+		<Name>LOC_JAC_POC_GROWTHUI_MOD_NAME</Name>
+		<Teaser>LOC_JAC_POC_GROWTHUI_MOD_TEASER</Teaser>
+		<Description>LOC_JAC_POC_GROWTHUI_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<!-- XP2 の PartialScreenHooks 置換より後に適用させる（BarbarianClansMode.modinfo と同じ書き方）。 -->
+	<References>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+	</References>
+	<LocalizedText>
+		<Text id="LOC_JAC_POC_GROWTHUI_MOD_NAME">
+			<en_US>JAC PoC: Growth and Character Journal</en_US>
+			<ja_JP>JAC PoC：成長と人物帳</ja_JP>
+			<ru_RU>JAC PoC: развитие и журнал полководцев</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_GROWTHUI_MOD_TEASER">
+			<en_US>Checks unit growth, save/load, UI and three languages.</en_US>
+			<ja_JP>ユニット成長・保存・UI・3言語を検証する。</ja_JP>
+			<ru_RU>Проверка развития юнитов, сохранения, интерфейса и трёх языков.</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_POC_GROWTHUI_MOD_DESCRIPTION">
+			<en_US>Assigns up to three starting units warlord records and displays them in a read-only ledger.</en_US>
+			<ja_JP>開始時の最大3ユニットに武将記録を付け、読み取り専用の人物帳に表示する。</ja_JP>
+			<ru_RU>Создаёт записи полководцев для трёх начальных юнитов и показывает их в журнале.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_GrowthUI_GatheringStorm">
+			<RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateText id="JAC_GrowthUI_Text" criteria="JAC_GrowthUI_GatheringStorm">
+			<File>Text/JAC_PoC_GrowthUI_Text.xml</File>
+		</UpdateText>
+		<AddGameplayScripts id="JAC_GrowthUI_Gameplay" criteria="JAC_GrowthUI_GatheringStorm">
+			<File>Scripts/JAC_PoC_GrowthUI_Gameplay.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_GrowthUI_InGameUI" criteria="JAC_GrowthUI_GatheringStorm">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/JAC_Notebooks.xml</File>
+		</AddUserInterfaces>
+		<ReplaceUIScript id="JAC_GrowthUI_PartialScreenHooks" criteria="JAC_GrowthUI_GatheringStorm">
+			<Properties>
+				<LuaContext>PartialScreenHooks</LuaContext>
+				<LuaReplace>UI/JAC_PartialScreenHooks.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
+		<ImportFiles id="JAC_GrowthUI_UIFiles" criteria="JAC_GrowthUI_GatheringStorm">
+			<File>UI/JAC_Notebooks.xml</File>
+			<File>UI/JAC_Notebooks.lua</File>
+			<File>UI/JAC_PartialScreenHooks.lua</File>
+			<File>UI/Textures/JAC_Notebooks_Hook.dds</File>
+		</ImportFiles>
+	</InGameActions>
+	<Files>
+		<File>Text/JAC_PoC_GrowthUI_Text.xml</File>
+		<File>Scripts/JAC_PoC_GrowthUI_Gameplay.lua</File>
+		<File>UI/JAC_Notebooks.xml</File>
+		<File>UI/JAC_Notebooks.lua</File>
+		<File>UI/JAC_PartialScreenHooks.lua</File>
+		<File>UI/Textures/JAC_Notebooks_Hook.dds</File>
+	</Files>
+</Mod>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+	<LocalizedText>
+		<!-- 手帳の表示名は用語辞書（14-3）に合わせる。 -->
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS"><Text>Notebooks</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS"><Text>手帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS"><Text>Записные книжки</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>Journals</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>記録帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_JOURNALS"><Text>Журналы</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>Character Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>人物帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_CHARACTER_JOURNAL"><Text>Журнал персонажей</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>Law Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>法律帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_LAW_JOURNAL"><Text>Журнал законов</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>Religion Journal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>宗教帳</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_RELIGION_JOURNAL"><Text>Журнал религий</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>National Treasury</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>国家金庫</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_NATIONAL_TREASURY"><Text>Государственная казна</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>Secretaries</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>長官たち</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_SECRETARIES"><Text>Министры</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>Vault</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>宝物庫</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_VAULT"><Text>Хранилище</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name} (not yet)</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name}（未実装）</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_NOTEBOOKS_NOT_YET"><Text>{1_Name} (не готово)</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Close</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>閉じる</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Закрыть</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Three-language glyph check</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>3言語表示テスト</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Проверка трёх языков</Text></Row>
+		<!-- 3行とも、ゲームの表示言語に関係なく同じ字形を出す。 -->
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>No surviving warlord units.</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>生存中の武将ユニットはありません。</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>Нет живых юнитов-полководцев.</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_UNIT"><Text>Unit</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_UNIT"><Text>ユニット</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_UNIT"><Text>Юнит</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_LEVEL"><Text>Level</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_LEVEL"><Text>レベル</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_LEVEL"><Text>Уровень</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_XP"><Text>XP</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_XP"><Text>経験値</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_XP"><Text>Опыт</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_PERSONALITY"><Text>Personality</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_PERSONALITY"><Text>性格</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_PERSONALITY"><Text>Характер</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TRAIT"><Text>Trait</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TRAIT"><Text>特性</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TRAIT"><Text>Черта</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_EQUIPMENT"><Text>Equipment</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_EQUIPMENT"><Text>装備</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_EQUIPMENT"><Text>Снаряжение</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>Artifact</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>アーティファクト</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_ARTIFACT"><Text>Артефакт</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_NONE"><Text>None</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_NONE"><Text>なし</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_NONE"><Text>Нет</Text></Row>
+
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_BRAVE"><Text>Brave</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_BRAVE"><Text>勇敢</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_BRAVE"><Text>Храбрый</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_CALM"><Text>Calm</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_CALM"><Text>冷静</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_CALM"><Text>Хладнокровный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_CAREFUL"><Text>Careful</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_CAREFUL"><Text>慎重</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_CAREFUL"><Text>Осторожный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_JOLLY"><Text>Jolly</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_JOLLY"><Text>陽気</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_JOLLY"><Text>Жизнерадостный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_GENTLE"><Text>Gentle</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_GENTLE"><Text>温厚</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_GENTLE"><Text>Мягкий</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_BOLD"><Text>Bold</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_BOLD"><Text>強気</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_BOLD"><Text>Напористый</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_FICKLE"><Text>Fickle</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_FICKLE"><Text>自由</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_FICKLE"><Text>Переменчивый</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_PERSONALITY_LOYAL"><Text>Loyal</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_PERSONALITY_LOYAL"><Text>忠実</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_PERSONALITY_LOYAL"><Text>Верный</Text></Row>
+
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_VALIANT"><Text>Valiant</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_VALIANT"><Text>武人</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_VALIANT"><Text>Доблестный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_FIERCE"><Text>Fierce</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_FIERCE"><Text>鬼神</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_FIERCE"><Text>Грозный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_ASTUTE"><Text>Astute</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_ASTUTE"><Text>策士</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_ASTUTE"><Text>Хитроумный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_SHREWD"><Text>Shrewd</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_SHREWD"><Text>魔神</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_SHREWD"><Text>Сверхъестественный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_DEVOUT"><Text>Devout</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_DEVOUT"><Text>教者</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_DEVOUT"><Text>Просветитель</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_ASCETIC"><Text>Ascetic</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_ASCETIC"><Text>霊神</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_ASCETIC"><Text>Духовный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_MUNDANE"><Text>Mundane</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_MUNDANE"><Text>凡人</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_MUNDANE"><Text>Обычный</Text></Row>
+		<Row Language="en_US" Tag="LOC_JAC_TRAIT_ADEPT"><Text>Adept</Text></Row>
+		<Row Language="ja_JP" Tag="LOC_JAC_TRAIT_ADEPT"><Text>天才</Text></Row>
+		<Row Language="ru_RU" Tag="LOC_JAC_TRAIT_ADEPT"><Text>Гений</Text></Row>
+	</LocalizedText>
+</GameData>

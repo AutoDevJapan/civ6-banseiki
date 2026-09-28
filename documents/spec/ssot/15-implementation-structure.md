@@ -59,7 +59,7 @@ japan-archipelago/
 |---|---|
 | 文明・勢力・Unit・建造物・能力 | SQL / XML |
 | レベル、ジョブ、宝、探索、コンボ、イベント、吸収、宗教、襲来、遠征 | Gameplay Lua |
-| Notebooks、Vault、Secretaries、武将帳、法律帳、宗教帳、Next Action | UI Lua + XML |
+| Notebooks、Vault、Secretaries、人物帳、法律帳、宗教帳、Next Action | UI Lua + XML |
 | 現行の関係宣言・小国懐柔・大国合併 | 外交画面、再利用する都市国家画面の枠、既存通知。新規の統治画面は作らない |
 | 旧9状態案の憲章・正当性・安定度・信頼 | 未採用。採用を決めるまで実装項目には含めない |
 | シナリオ内状態 | Game / Player / Unit Property |
