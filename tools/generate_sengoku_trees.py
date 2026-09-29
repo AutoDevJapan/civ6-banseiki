@@ -117,7 +117,7 @@ BOOSTS = {
 # proposal absent here remains TODO; even listed proxies keep their original
 # Civ6 effects, so the design-specific part of the proposal remains TODO.
 OFFICIAL_UNLOCKS = {
-    "T01": "IMPROVEMENT_FARM, BUILDING_WATER_MILL",
+    "T01": "IMPROVEMENT_FARM, IMPROVEMENT_PLANTATION, BUILDING_WATER_MILL",
     "T02": "UNIT_GALLEY, IMPROVEMENT_FISHING_BOATS",
     "T03": "UNIT_SWORDSMAN, BUILDING_BARRACKS",
     "T04": "BUILDING_WALLS, DISTRICT_ENCAMPMENT",

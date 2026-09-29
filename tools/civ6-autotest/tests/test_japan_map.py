@@ -73,6 +73,34 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertIn("initial territory owners mismatch", code)
                 self.assertIn("capital garrison missing", code)
 
+    def test_resource_scenario_matches_the_manifest_on_the_adopted_15km_map(self):
+        data = json.loads((SCENARIOS / "japan-resources.json").read_text(encoding="utf-8"))
+        validate_scenario(data)
+        manifest = json.loads((SCENARIOS.parents[2] / "poc/JAC_PoC_JapanMapScale/Maps/manifest.json")
+                              .read_text(encoding="utf-8"))
+        item = next(entry for entry in manifest if entry["km_per_tile"] == 15)  # SSOT 3.4: 15 km adopted
+        steps = data["steps"]
+        self.assertIn(item["file"], steps[1]["map_file"])
+        self.assertIs(steps[1]["build_setup"], True)
+        self.assertNotIn("JAC_RESOURCES_TEST_YEAR", json.dumps(data))  # the real 1534 calendar drives the release
+        checks = [step["code"] for step in steps if step["action"] == "ui_lua" and step["state_name"] == "InGame"]
+        deferred = [r for r in item["resource_candidates"] if r["start_status"] == "deferred"]
+        self.assertEqual(len(deferred), 9)
+        self.assertTrue(all(r["placement_status"] == "reserved_for_later_release" for r in deferred))
+        for code in checks:
+            for record in deferred:
+                self.assertIn(f"{{'{record['id']}',{record['plot']},'{record['resource_id']}',"
+                              f"{record['reveal_year']},'{record.get('reveal_tech', '')}'}}", code)
+        for record in item["resource_candidates"]:
+            if record["placement_status"] == "placed":
+                self.assertIn(f"{{'{record['id']}',{record['plot']},'{record['resource_id']}'}}", checks[0])
+        self.assertIn("error('deferred site missing: '", checks[0])
+        # 1534 at the start; 24 standard turns of 4 months reach 1542, checked against the engine's date string.
+        self.assertIn("if year~=1534 then", checks[1])
+        self.assertIn("if year~=1542 then", checks[2])
+        self.assertIn("Calendar.MakeYearStr(turn)", checks[2])
+        self.assertEqual([step["turns"] for step in steps if step["action"] == "autoplay"], [24])
+
     def test_rejects_bad_map_file_and_metrics_flag(self):
         data = json.loads((SCENARIOS / "japan-map-20km.json").read_text(encoding="utf-8"))
         data["steps"][1]["map_file"] = "../outside.Civ6Map"
