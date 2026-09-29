@@ -27,6 +27,13 @@ gave access level 0 live on 2026-09-29. The row copies Catherine de Medici's SOU
 "+1 access on every met civ from turn 1" (Gossip.xml:78: TraitType + FromCitizen; Base/Assets/Gameplay/Data/Leaders.xml:1088,
 :1698-1701, :4011-4025).
 Opinion values are untouched. The Lua script has all majors meet each other at game start.
+
+Ally vision: since Rise and Fall an alliance shares vision only at Military level 2 (ALLIANCE_SHARE_VISIBILITY,
+DLC/Expansion1/Data/Expansion1_Alliances.xml:158, :173-176), so the typeless SetHasAllied alliance of the start pairs
+shared nothing live on 2026-09-30. Poundmaker's "all alliances provide shared visibility" is the official player-level
+switch: MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS + ShareVis=true (Expansion1_Leaders.xml:289-292, :1054-1058,
+Expansion1_Leaders_Major.xml:285; EFFECT_ADJUST_PLAYER_ALL_ALLIANCES_PROVIDE_SHARED_VIS, Expansion1_Modifiers.xml:453-456).
+Every house of a start ally pair carries it on one civilization trait.
 """
 
 from __future__ import annotations
@@ -44,10 +51,18 @@ SAMPLE_TAG = "LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"  # "{diplomaticReason}", as ever
 ACCESS_MODIFIER = "JAC_1534_DIPLO_VISIBILITY"
 ACCESS_SOURCE = "SOURCE_JAC_1534_ACCESS"
 ACCESS_TRAIT = "TRAIT_JAC_1534_ACCESS"
+ALLY_KINDS = ("alliance", "marriage", "vassal", "friendship")  # the Lua ALLIED_KINDS
+ALLY_VISION_MODIFIER = "JAC_1534_ALLY_SHARED_VIS"
+ALLY_VISION_TRAIT = "TRAIT_JAC_1534_ALLY_VISION"
 
 
 def feud_pairs() -> list[tuple[str, str]]:
     """Hostility rows in force on the start date (same rule as the JSON apply_rule)."""
+    return relation_pairs(("hostility",))
+
+
+def relation_pairs(kinds: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Rows of these types in force on the start date (same rule as the JSON apply_rule)."""
     data = json.loads(DATA.read_text(encoding="utf-8"))
     start = data["start_date"]
 
@@ -58,7 +73,7 @@ def feud_pairs() -> list[tuple[str, str]]:
         return tuple(parts + [missing] * (3 - len(parts)))
 
     return [(r["a"], r["b"]) for r in data["relations"]
-            if r["type"] == "hostility" and r["confidence"] != "low"
+            if r["type"] in kinds and r["confidence"] != "low"
             and key(r["from"], 0) <= key(start, 0) < key(r["to"], 99)]
 
 
@@ -109,6 +124,14 @@ def build() -> ET.Element:
     ET.SubElement(t["DiplomaticVisibilitySources"], "Row", VisibilitySourceType=ACCESS_SOURCE,
                   Description="LOC_JAC_VIZSOURCE_1534_ACCESS", ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
                   GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS", FromCitizen="true", TraitType=ACCESS_TRAIT)
+    # Start ally pairs share vision (Poundmaker's trait modifier, copied column for column).
+    ET.SubElement(t["Types"], "Row", Type=ALLY_VISION_TRAIT, Kind="KIND_TRAIT")
+    ET.SubElement(t["Traits"], "Row", TraitType=ALLY_VISION_TRAIT)
+    for c in sorted({f for pair in relation_pairs(ALLY_KINDS) for f in pair}):
+        ET.SubElement(t["CivilizationTraits"], "Row", CivilizationType=f"CIVILIZATION_JAC_{c}", TraitType=ALLY_VISION_TRAIT)
+    ET.SubElement(t["Modifiers"], "Row", ModifierId=ALLY_VISION_MODIFIER, ModifierType="MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS")
+    ET.SubElement(t["ModifierArguments"], "Row", ModifierId=ALLY_VISION_MODIFIER, Name="ShareVis", Value="true")
+    ET.SubElement(t["TraitModifiers"], "Row", TraitType=ALLY_VISION_TRAIT, ModifierId=ALLY_VISION_MODIFIER)
     return root
 
 

@@ -1,6 +1,7 @@
 -- 日本マップ：1534年の同盟・婚姻・主従と交戦を、新規ゲームの開始時に1回だけ外交状態へ反映する。
 -- 元データ：documents/spec/data/japan-1534-relations.json（適用分だけをここに写す。テストで一致を確かめる）
 -- 同盟・婚姻・主従と、友好の島津・琉球王国（味方の8組）は開始時に同盟にし、同盟国として視界を共有する。
+-- 視界の共有は Data/JAC_Japan_Feuds.xml の特性 TRAIT_JAC_1534_ALLY_VISION（プンドメーカーと同じ「全同盟で視界を共有」）が担う。Rise and Fall 以降、種類の無い同盟だけでは視界を共有しない。
 -- 味方の同盟は期限なしで続き、イベントが EndStartAlliance を呼んだとき（または両家が交戦したとき）だけ終わる（オーナー判断 2026-09-30・Discord H「bで島津と琉球も。」）。
 -- 22勢力は開始時にすべて互いに出会い済みにする（固定キャラだけが出る日本マップなので、全員が互いを知っている）。
 -- 敵対・不仲（hostility）は、ここでは何もしない。「1534年の因縁」の好感度減点と、全勢力の外交アクセスレベル +1 は Data/JAC_Japan_Feuds.xml が担う。
@@ -139,7 +140,7 @@ local function Apply()
 			elseif kind == "hostility" then
 				ok = true -- 何もしない。減点は修正値が担う
 			else
-				-- 味方は友好宣言のあと通常の同盟にし、同盟国の視界共有（GAME_ALLIES_SHARE_VISIBILITY）を効かせる（オーナー判断G）。
+				-- 味方は友好宣言のあと通常の同盟にする。視界の共有は、両家が持つ特性 TRAIT_JAC_1534_ALLY_VISION が同盟に効かせる（オーナー判断G）。
 				-- 永久同盟（SetPermanentAlliance）は解く関数が無いので使わない。期限は KeepStartAlliances が毎ターン延ばす。
 				-- 公式：DLC/VikingsScenario/Scripts/VikingScenario.lua:18〜:20
 				ok, err = pcall(function()

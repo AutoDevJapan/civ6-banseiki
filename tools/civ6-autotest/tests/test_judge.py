@@ -205,7 +205,7 @@ class JudgeTests(unittest.TestCase):
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
-            "japan-1534-relations.json",
+            "japan-1534-relations.json", "probe-ally-vision.json",
             "japan-1534-relations-settlers.json",
             "japan-1534-feud-ui.json",
             "japan-resources.json",

@@ -11,6 +11,7 @@
     <Row Type="TRAIT_JAC_1534_FEUD_TAKEDA" Kind="KIND_TRAIT" />
     <Row Type="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" Kind="KIND_TRAIT" />
     <Row Type="TRAIT_JAC_1534_ACCESS" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_ALLY_VISION" Kind="KIND_TRAIT" />
   </Types>
   <Traits>
     <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" />
@@ -23,6 +24,7 @@
     <Row TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" />
     <Row TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" />
     <Row TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row TraitType="TRAIT_JAC_1534_ALLY_VISION" />
   </Traits>
   <CivilizationTraits>
     <Row CivilizationType="CIVILIZATION_JAC_HOJO" TraitType="TRAIT_JAC_1534_FEUD_HOJO" />
@@ -56,6 +58,18 @@
     <Row CivilizationType="CIVILIZATION_JAC_SHIMAZU" TraitType="TRAIT_JAC_1534_ACCESS" />
     <Row CivilizationType="CIVILIZATION_JAC_RYUKYU" TraitType="TRAIT_JAC_1534_ACCESS" />
     <Row CivilizationType="CIVILIZATION_JAC_AINU" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_AMAGO" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASAKURA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHIKAGA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHINA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_DATE" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_HOJO" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_IMAGAWA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_MORI" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_OUCHI" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ROKKAKU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_RYUKYU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_SHIMAZU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
   </CivilizationTraits>
   <Modifiers>
     <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_TAKEDA" />
@@ -73,6 +87,7 @@
     <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_MATSUDAIRA" />
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_ODA" />
     <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" ModifierType="MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY" />
+    <Row ModifierId="JAC_1534_ALLY_SHARED_VIS" ModifierType="MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS" />
   </Modifiers>
   <ModifierArguments>
     <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" Name="InitialValue" Value="-10" />
@@ -106,6 +121,7 @@
     <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="Amount" Value="1" />
     <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="Source" Value="SOURCE_JAC_1534_ACCESS" />
     <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="SourceType" Value="DIPLO_SOURCE_ALL_NAMES" />
+    <Row ModifierId="JAC_1534_ALLY_SHARED_VIS" Name="ShareVis" Value="true" />
   </ModifierArguments>
   <TraitModifiers>
     <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" />
@@ -123,6 +139,7 @@
     <Row TraitType="TRAIT_JAC_1534_FEUD_ODA" ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" />
     <Row TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" />
     <Row TraitType="TRAIT_JAC_1534_ACCESS" ModifierId="JAC_1534_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_ALLY_VISION" ModifierId="JAC_1534_ALLY_SHARED_VIS" />
   </TraitModifiers>
   <RequirementSets>
     <Row RequirementSetId="JAC_1534_PLAYER_IS_HOJO" RequirementSetType="REQUIREMENTSET_TEST_ALL" />

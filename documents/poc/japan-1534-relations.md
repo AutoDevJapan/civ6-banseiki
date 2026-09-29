@@ -16,7 +16,7 @@
 | 1534年の関係 | Civ6 で開始時に行うこと | 根拠 |
 |---|---|---|
 | 交戦中 | 双方 `SetHasMet` のあと `DeclareWarOn(相手, WarTypes.FORMAL_WAR, true)` | 公式シナリオと同じ。下記 |
-| 同盟・婚姻・主従 | 双方 `SetHasMet` のあと、双方から `SetHasDeclaredFriendship(相手, true)`、続けて片側から `SetHasAllied(相手, true)`（通常の同盟。同盟国として視界を共有する。オーナー判断G）。組のプロパティを `true` にし、以後は期限なしで保つ（オーナー判断H。下記「開始時の同盟を期限なしで保つ」） | 友好宣言は DLL の Lua バインディングにあり、公式の使用例はない（実機で効くことを確認済み）。同盟は公式シナリオと同じ呼び方（下記 9） |
+| 同盟・婚姻・主従 | 双方 `SetHasMet` のあと、双方から `SetHasDeclaredFriendship(相手, true)`、続けて片側から `SetHasAllied(相手, true)`（通常の同盟。視界の共有は下記の特性 `TRAIT_JAC_1534_ALLY_VISION` が効かせる。オーナー判断G）。組のプロパティを `true` にし、以後は期限なしで保つ（オーナー判断H。下記「開始時の同盟を期限なしで保つ」） | 友好宣言は DLL の Lua バインディングにあり、公式の使用例はない（実機で効くことを確認済み）。同盟は公式シナリオと同じ呼び方（下記 9） |
 | 友好（島津・琉球。R19） | 同盟・婚姻・主従と同じ（友好宣言のあと同盟。オーナー判断 4a・H） | 同上 |
 | 敵対・不仲（7組） | Lua では何もしない。好感度の減点は下記の修正値 | 下記 |
 | 全勢力の出会い | 開始時に1回だけ、22家すべてが互いに `SetHasMet`（両方向）。固定キャラだけが出る日本マップなので、全員が互いを知っている（オーナー判断 2026-09-29・Discord G）。ロード時は再適用しない | `Apply` の先頭。下記 |
@@ -48,9 +48,10 @@
 7. 状態の読み取り（シナリオの確認に使う）：`Base/Assets/UI/DiplomacyActionView.lua:194`〜`:200`（`DiplomaticStates`）、`:870`（`GetDiplomaticAI():GetDiplomaticStateIndex`）
 8. Lua から呼べる外交の設定関数：`DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` の文字列に `lSetHasMet`・`lDeclareWarOn`・`lSetPermanentAlliance`・`lSetHasDeclaredFriendship`・`lSetHasDelegationAt`・`lSetHasEmbassyAt`・`lMakePeaceWith`・`lNeverMakePeaceWith`・`lPrepareForWarWith` がある。非難（Denounce）と不満（Grievance）の設定関数は、取得用の `lGetDenounceTurn`・`lGetGrievancesAgainst` しかない。行番号のないバイナリなので、実機確認で補う
 9. 通常の同盟：`DLC/VikingsScenario/Scripts/VikingScenario.lua:18`〜`:20`（`InitializeNewGame` で `SetHasMet` の後に `GetDiplomacy():SetHasAllied(相手, true)` を片側から呼び、`:27`〜`:29` で `RecheckVisibilityOnAll`）。同じ関数は Gathering Storm の `DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` の文字列にも `lSetHasAllied`・`lHasAllied`・`lSetAlliesShareVisFlag` としてある。ヴァイキングのシナリオは基本ルールセットなので、Gathering Storm で種類（研究・軍事など）の無い同盟がどう扱われるかは実機で確かめる
-10. 同盟国の視界共有の設定：`Base/Assets/Configuration/Data/SetupParameters.xml:48`（`GAME_ALLIES_SHARE_VISIBILITY`、既定 1）。ヴァイキングのシナリオは `Game.GetGameDiplomacy():SetAlliesShareVisFlag(false)` で共有を切る（`VikingScenario.lua:13`）。つまり同盟国は既定で視界を共有する。「チームなし」（`NO_TEAMS`=1）を選ぶと共有が 0 になる（`SetupParameters.xml:199`〜`:200`）
+10. 同盟国の視界共有の設定：`Base/Assets/Configuration/Data/SetupParameters.xml:48`（`GAME_ALLIES_SHARE_VISIBILITY`、既定 1）。ヴァイキングのシナリオは `Game.GetGameDiplomacy():SetAlliesShareVisFlag(false)` で共有を切る（`VikingScenario.lua:13`）。ただしこれは基本ルールセットの話で、Rise and Fall 以降は同盟の種類とレベルで決まる：視界の共有は軍事同盟のレベル2の効果 `ALLIANCE_SHARE_VISIBILITY`（`DLC/Expansion1/Data/Expansion1_Alliances.xml:158`・`:173`〜`:176`、`MODIFIER_ALLIANCE_SHARE_VISIBILITY` → `EFFECT_ALLIANCE_GRANT_SHARED_VIS`、`DLC/Expansion1/Data/Expansion1_Modifiers.xml:332`〜`:336`）。`GameCore_XP2_FinalRelease.dll` にも `m_bAllAlliancesProvideSharedVis` と `EFFECT_ADJUST_PLAYER_ALL_ALLIANCES_PROVIDE_SHARED_VIS` がある。種類の無い `SetHasAllied` の同盟は共有しない（2026-09-30 の実機：`DIPLO_STATE_ALLIED` の確認は通り、北条から今川の掛川城が見えなかった。`artifacts/diplo-11`）。「チームなし」（`NO_TEAMS`=1）を選ぶと設定が 0 になる（`SetupParameters.xml:199`〜`:200`）
 11. 毎ターンの初めの処理：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246`（`GameEvents.OnGameTurnStarted.Add`）
 12. 同盟の期限の残り：`DLC/Expansion2/UI/Additions/DiplomacyActionView_AllianceTab.lua:44`（`GetAllianceTurnsUntilExpiration`。UI での使用例。ゲームプレイのスクリプトから呼べるかは未実機確認なので `pcall` で囲む）
+13. 全同盟で視界を共有する特性：プンドメーカー（クリー）の `TRAIT_ALLIANCE_SHARED_VIS`。`MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS` + 引数 `ShareVis`=`true`（`DLC/Expansion1/Data/Expansion1_Leaders.xml:289`〜`:292`・`:1054`〜`:1058`、`Expansion1_Leaders_Major.xml:285`。修正値の型は `Expansion1_Modifiers.xml:453`〜`:456`、`COLLECTION_OWNER`）
 
 ### 敵対・不仲：AI の好感度の減点「1534年の因縁」（オーナー判断 1a・2026-09-29）
 
@@ -85,7 +86,9 @@
 6. セーブ → メニュー → ロード後、プロパティの `Turn` が開始ターンのまま（再適用されていない）で、2〜4 が保たれる
 7. ロード後にさらに31ターン（計32ターン）進め、同盟の期限 `DIPLOMACY_ALLIANCE_TIME_LIMIT`（30）を越えても、味方の8組が双方向に同盟のまま交戦せず、組のプロパティが `true` で、視界を共有している（ロード後も毎ターンの処理が動くことも兼ねて確かめる）
 
-`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。7 が落ちたら、Lua.log の `renewed`・`FAILED renew` 行で、結び直しが呼ばれたか・どのターンかを見る。同盟（`SetHasAllied`）と視界の共有、期限を越えた維持は未実機確認。同盟にならない、または視界が共有されない場合は、同盟を外して、各ターンに相手の見えているタイルを `ChangeVisibilityCount` で写す方式（公式の使用例：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:52`〜`:59`）に切り替える。
+`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。7 が落ちたら、Lua.log の `renewed`・`FAILED renew` 行で、結び直しが呼ばれたか・どのターンかを見る。同盟（`SetHasAllied`）は実機で `DIPLO_STATE_ALLIED` になった（2026-09-30）。特性による視界の共有と、期限を越えた維持は未実機確認。
+
+視界の調査用シナリオ `probe-ally-vision.json`（15 km・史実の領土、開始時と1ターン後）：北条・今川、島津・琉球と、対照の伊達・島津について、外交状態・`HasAllied`・同盟の種類とレベル・期限の残り・相手の本拠の `IsVisible`／`IsRevealed`／`GetVisibilityCount`・自分の本拠の `IsVisible`（対照）・相手に見えているタイルのうち自分にも見えている数と、`GAME_ALLIES_SHARE_VISIBILITY`・`NO_TEAMS`・特性の有無を、ゲームプレイ（`GameCore_Tuner`）と UI（`InGame`）の両方から読む。読み取りはすべて `pcall` で囲み、失敗しても `ERR(...)` を返して最後まで進む。結果は戻り値と Lua.log の `[JAC_ALLY_VISION_PROBE]` 行に出る。特性でも共有されない場合は、各ターンに相手の見えているタイルを `ChangeVisibilityCount` で写す方式（公式の使用例：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:52`〜`:59`）に切り替える。
 
 ## オーナー判断（2026-09-29 Discord・セットA）
 
@@ -107,7 +110,8 @@
 
 1. 出会い：上記のとおり、開始時に22家が互いに出会い済み
 2. アクセスレベル：上記の `TRAIT_JAC_1534_ACCESS`（全22家に「限定的」）。関係の理由（「1534年の因縁」を含む）が最初から見える。出所の行は `TraitType` でこの特性に結ぶ（結ばない行では実機でアクセスレベルが 0 のままだった）。実機で「限定的」になり、外交画面の関係欄に「-10 1534年の因縁」が出ることを確認済み
-3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組と島津・琉球（オーナー判断H）を開始時に通常の同盟（`SetHasAllied`）にし、Civ6 の同盟国の視界共有を効かせる。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値は 1（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`、`AlliesShareVisibility`）。テストが既定値 1 と、Lua が味方の組だけを同盟にすることを確かめる
+3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組と島津・琉球（オーナー判断H）を開始時に通常の同盟（`SetHasAllied`）にする。Rise and Fall 以降、種類の無い同盟だけでは視界を共有しない（上記の根拠 10）。そこで味方の組の12家（北条・今川・大内・毛利・伊達・蘆名・足利・六角・朝倉・尼子・島津・琉球）に、プンドメーカーと同じ「全同盟で視界を共有する」修正値 `JAC_1534_ALLY_SHARED_VIS`（`MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS`、`ShareVis`=`true`、根拠 13）を特性 `TRAIT_JAC_1534_ALLY_VISION` で付ける（`Data/JAC_Japan_Feuds.xml`、`write_feuds.py` が JSON の味方の組から生成）。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値も 1 のまま（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`）。テストが既定値 1、特性を持つ12家、Lua が味方の組だけを同盟にすることを確かめる
+   - 副作用（確認項目、`questions.md` Q30）：修正値は「その家の全同盟」に効くので、12家が後で結ぶ通常の同盟も、レベルに関係なく視界を共有する。修正値は外せないので、開始時の同盟が終わった後も残る
    - 同盟にした理由：視界の共有をエンジンに任せられる。ユニットが動いても即時に共有され、セーブにも同盟の状態として残り、マルチプレイでもゲームプレイの状態として同期する。各ターンにタイルの見え方を Lua で写す方式は、ターン中の移動が反映されず、写した分をセーブ・ロードをまたいで正しく取り消す必要がある
    - 副作用：同盟国どうしは外交のアクセスレベルが1段上がる（公式の出所 `Ally`。全員の「限定的」に加えて「開放」になる）、互いに正式な宣戦ができない、同盟ポイントが貯まる
    - 終わり方（オーナー判断H）：期限なしで続け、イベントでだけ終える。上記「開始時の同盟を期限なしで保つ」

@@ -139,7 +139,7 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertEqual({frozenset(p) for p in write_feuds.feud_pairs()}, expected)
         root = ET.parse(FEUDS).getroot()
         mods = {row.attrib["ModifierId"]: row.attrib for row in root.findall("./Modifiers/Row")
-                if row.attrib["ModifierId"] != write_feuds.ACCESS_MODIFIER}
+                if row.attrib["ModifierId"] not in (write_feuds.ACCESS_MODIFIER, write_feuds.ALLY_VISION_MODIFIER)}
         owners = {(row.attrib["TraitType"], row.attrib["ModifierId"]) for row in root.findall("./TraitModifiers/Row")}
         for pair in expected:
             for a, b in (tuple(pair), tuple(pair)[::-1]):  # both sides dislike each other
@@ -252,6 +252,47 @@ class Japan1534RelationsTests(unittest.TestCase):
             self.assertNotIn("~='DIPLO_STATE_DECLARED_FRIEND'", code)
         for code in codes[:3]:  # a far non-allied pair must not see each other
             self.assertIn("for _,d in ipairs({{'DATE','SHIMAZU'},{'SHIMAZU','DATE'}}) do local ok,city=seesNone", code)
+
+    def test_ally_houses_carry_poundmakers_shared_vision_modifier(self):
+        # Since Rise and Fall a (typeless) alliance shares vision only at Military level 2
+        # (DLC/Expansion1/Data/Expansion1_Alliances.xml:158); live on 2026-09-30 the allied Hojo did not see Imagawa.
+        # Poundmaker's trait switches it on for all alliances of its holder (Expansion1_Leaders.xml:289-292, :1054-1058).
+        root = ET.parse(FEUDS).getroot()
+        mod = write_feuds.ALLY_VISION_MODIFIER
+        self.assertEqual([r.attrib for r in root.findall("./Modifiers/Row") if r.attrib["ModifierId"] == mod],
+                         [{"ModifierId": mod, "ModifierType": "MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS"}])
+        self.assertEqual({r.attrib["Name"]: r.attrib["Value"] for r in root.findall("./ModifierArguments/Row")
+                          if r.attrib["ModifierId"] == mod}, {"ShareVis": "true"})
+        self.assertEqual([r.attrib["TraitType"] for r in root.findall("./TraitModifiers/Row")
+                          if r.attrib["ModifierId"] == mod], [write_feuds.ALLY_VISION_TRAIT])
+        start = self.data["start_date"]
+        allies = {f for r in self.relations if applies(r, start)
+                  and r["type"] in ("alliance", "marriage", "vassal", "friendship") for f in (r["a"], r["b"])}
+        self.assertEqual(len(allies), 12)
+        holders = {r.attrib["CivilizationType"] for r in root.findall("./CivilizationTraits/Row")
+                   if r.attrib["TraitType"] == write_feuds.ALLY_VISION_TRAIT}
+        self.assertEqual(holders, {f"CIVILIZATION_JAC_{f}" for f in allies})
+        self.assertNotIn("CIVILIZATION_JAC_TAKEDA", holders)  # no start ally
+        lua = LUA.read_text(encoding="utf-8")
+        self.assertIn('{alliance = true, marriage = true, vassal = true, friendship = true}', lua)
+        self.assertEqual(write_feuds.ALLY_KINDS, ("alliance", "marriage", "vassal", "friendship"))
+        path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-relations.json"
+        start_code = next(s["code"] for s in json.loads(path.read_text(encoding="utf-8"))["steps"] if "code" in s)
+        self.assertIn("row.TraitType=='TRAIT_JAC_1534_ALLY_VISION'", start_code)
+
+    def test_ally_vision_probe_reads_both_contexts_before_and_after_a_turn(self):
+        path = ROOT / "tools/civ6-autotest/scenarios/probe-ally-vision.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        probes = [s["state_name"] for s in steps if s["action"] == "ui_lua"]
+        self.assertEqual(probes, ["GameCore_Tuner", "InGame"] * 2)
+        self.assertEqual([s["action"] for s in steps].count("autoplay"), 1)
+        for step in steps:
+            if step["action"] == "ui_lua":
+                self.assertIn("pcall(f)", step["code"])  # every read returns a value instead of stopping the probe
+                self.assertNotIn("error(", step["code"])
+                for api in ("IsVisible(", "IsRevealed(", "GetVisibilityCount(", "HasAllied(", "GetAllianceType(",
+                            "GetAllianceLevel(", "GAME_ALLIES_SHARE_VISIBILITY"):
+                    self.assertIn(api, step["code"])
 
     def test_start_alliances_outlast_the_alliance_limit_until_an_event_ends_them(self):
         # Owner decision H (2026-09-30, "b" + Shimazu-Ryukyu): no time limit; only an event (or a war between the pair) ends a start alliance.
