@@ -167,7 +167,8 @@ def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
     lua_lines = logs["Lua.log"].splitlines()
     congress_paths = re.compile(
         r"WorldCongress|CongressButton|ActionPanel_Expansion2|GovernmentScreen_Expansion2|"
-        r"GreatPeoplePopup_Expansion2|DiplomacyRibbon_Expansion2|DiplomacyActionView_Expansion2", re.I)
+        r"GreatPeoplePopup_Expansion2|DiplomacyRibbon_Expansion2|DiplomacyActionView_Expansion2|"
+        r"GovernorPanel|CityPanel_Expansion2", re.I)
     congress_errors = [line for index, line in enumerate(lua_lines)
                        if ("Runtime Error" in line or "UI.DataError" in line)
                        and congress_paths.search(_error_context(lua_lines, index))]

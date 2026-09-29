@@ -165,6 +165,10 @@ class JudgeTests(unittest.TestCase):
         logs["Lua.log"] = "UI.DataError: WorldCongressPopup invalid stage\n"
         self.assertIn("Japan map: GS Congress paths",
                       {check.name for check in judge(logs, "japan_map") if not check.passed})
+        for name in ("GovernorPanel.lua:723", "CityPanel_Expansion2.lua:11"):
+            logs["Lua.log"] = f"Runtime Error: attempt to index a nil value\n  {name}\n"
+            self.assertIn("Japan map: GS Congress paths",
+                          {check.name for check in judge(logs, "japan_map") if not check.passed})
 
     def test_baseline_excludes_old_lines_and_handles_truncate(self):
         old = b"old error\n"

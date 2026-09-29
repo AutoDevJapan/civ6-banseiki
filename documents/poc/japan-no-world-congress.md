@@ -38,7 +38,7 @@ GS の開催時期は次の値で決まる。`Expansion2_GlobalParameters.xml:29
 
 ## 実機確認（メインセッション）
 
-シナリオ: `tools/civ6-autotest/scenarios/japan-no-world-congress.json`（20km 史実領土マップ、AI 21 + 琉球を人間、180 ターン自動進行）。確認する内容:
+シナリオ: `tools/civ6-autotest/scenarios/japan-no-world-congress.json`（15km 史実領土マップ（採用の縮尺、SSOT 3.4）、AI 21 + 琉球を人間、180 ターン自動進行）。確認する内容:
 
 1. 世界会議の能力が無い一方、`CAPABILITY_WORLD_CLIMATE` / `RANDOM_EVENTS` / `DIPLOMACY` / `ERAS` があり、外交支持と気候の値が取れる。
 2. `WORLD_CONGRESS_INITIAL_ERA`（2）以上の時代に入ってから `MAX_TIME_BETWEEN_MEETINGS`（30）ターンを超えるまで進め、世界会議のイベント（`WorldCongressStage1/2/Finished`、臨時会合の招集）が1回も起きない。会議が進行中でもない。
