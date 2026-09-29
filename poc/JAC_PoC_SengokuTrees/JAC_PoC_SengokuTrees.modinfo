@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" version="1">
+	<Properties>
+		<Name>LOC_JAC_SENGOKU_TREES_MOD_NAME</Name>
+		<Teaser>LOC_JAC_SENGOKU_TREES_MOD_DESCRIPTION</Teaser>
+		<Description>LOC_JAC_SENGOKU_TREES_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<Dependencies>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+		<Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+	</Dependencies>
+	<LocalizedText>
+		<Text id="LOC_JAC_SENGOKU_TREES_MOD_NAME">
+			<en_US>JAC PoC: Sengoku Trees</en_US><ja_JP>JAC PoC：戦国ツリー</ja_JP><ru_RU>JAC PoC: древо Сэнгоку</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_SENGOKU_TREES_MOD_DESCRIPTION">
+			<en_US>Provisional technology and civic trees for the Banseiki ruleset.</en_US>
+			<ja_JP>万世紀ルールセット専用の暫定技術・社会制度ツリー。</ja_JP>
+			<ru_RU>Предварительные деревья технологий и общественных институтов для Бансэйки.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_Sengoku_BanseikiOnly">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateDatabase id="JAC_Sengoku_Trees" criteria="JAC_Sengoku_BanseikiOnly">
+			<Properties><LoadOrder>200</LoadOrder></Properties>
+			<File>Data/JAC_Sengoku_Trees.sql</File>
+			<File>Data/JAC_Sengoku_Unlocks.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_Sengoku_Text" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>Text/JAC_Sengoku_Text.xml</File>
+		</UpdateText>
+		<UpdateIcons id="JAC_Sengoku_Icons" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>Data/JAC_Sengoku_Icons.xml</File>
+		</UpdateIcons>
+	</InGameActions>
+	<Files>
+		<File>Data/JAC_Sengoku_Trees.sql</File>
+		<File>Data/JAC_Sengoku_Unlocks.sql</File>
+		<File>Data/JAC_Sengoku_Icons.xml</File>
+		<File>Text/JAC_Sengoku_Text.xml</File>
+	</Files>
+</Mod>

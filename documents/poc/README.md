@@ -354,3 +354,13 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 全自動（`restart_game` から）で31手順すべて成功、判定2/2合格。設定画面で万世紀を選べ、既定の人間候補は万世紀プールの2人、すべてのプールでは81人（世宗を除外して82→81）。ルールセット選択後に `NO_DUPLICATE_LEADERS`=true・`NO_DUPLICATE_CIVILIZATIONS`=false。ゴルゴーとペリクレスが同時にギリシャとして開始。気候・世界会議が存在し、気候パネルを開閉できた。3ターン進行、セーブ、メニューへの復帰、ロード（Bundle0 の状態 turnsSeen=4 と万世紀ルールセットを復元）、ロード後1ターンが成功。
 
 シナリオ側で直した点：ルールセットの ConfigurationUpdates は設定画面のパラメータを組み立てた後に反映されるため、重複ルールの確認は HostGame の `BuildHeadlessGameSetup` の後に行う。設定値は真偽値で返る。HostGame の設定確認の後は設定が既定に戻るため、開始直前に `configure` をもう一度行う。`wait_for` は直前の手順のログ位置を使うため、読み込み時のログ待ちは開始の直後に置く。
+
+## JAC_PoC_SengokuTrees：戦国の技術・社会制度ツリー
+
+`poc/JAC_PoC_SengokuTrees` は `RULESET_JAC_BANSEIKI` だけで適用する独立PoC。設計案の技術32件・制度30件を元ID・AND前提・費用・行位置のまま登録した。4期は既存 Era ID の表示名を戦国用に変え、GSの時代システムを残す。公式研究行は、必要な公式アイテムを戦国ノードへ再配線してから削除する。公式アイテムは新規Unit・建物の代用品で、効果量は暫定。制度の列は標準CivicsTreeが再計算するため、設計表の列位置の再現は未確認。
+
+各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AIへの処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。SSOT 3.2に従い、このPoCを含むBanseikiルールセットのターン上限は `TURNLIMIT_NONE` に変更した。これは約200ターンの年表示や統一勝利の実装ではない。
+
+設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、Banseiki開始、両公式ツリー画面の候補、最初の技術と制度の進捗を検査する。
+
+**実機結果：未実施。** 本作業ではCiv6/Steamを起動していない。現時点の「ロード可・プレイ可」は静的検証による目標で、ゲーム内での合格判定ではない。特に既存BanseikiルールセットのGS中核読み込みは前節の未検証事項のまま。
