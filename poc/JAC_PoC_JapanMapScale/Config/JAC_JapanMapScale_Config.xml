@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
 <GameInfo>
   <Maps>
-    <Row Domain="Maps:Expansion2Maps" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" Name="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="120" />
-    <Row Domain="Maps:Expansion2Maps" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_20_SETTLERS_NAME" Description="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="170" />
-    <Row Domain="Maps:Expansion2Maps" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" Name="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="115" />
-    <Row Domain="Maps:Expansion2Maps" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_15_SETTLERS_NAME" Description="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="165" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" Name="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="120" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_20_SETTLERS_NAME" Description="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="170" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" Name="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="115" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_15_SETTLERS_NAME" Description="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="165" />
   </Maps>
   <MapSizes>
     <Row Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" MapSizeType="MAPSIZE_HUGE" Name="LOC_MAPSIZE_HUGE_NAME" Description="LOC_MAPSIZE_HUGE_DESCRIPTION" MinPlayers="22" MaxPlayers="22" DefaultPlayers="22" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10" />

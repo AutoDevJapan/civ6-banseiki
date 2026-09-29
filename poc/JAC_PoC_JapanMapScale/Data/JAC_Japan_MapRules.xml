@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <Types>
+    <Row Type="ABILITY_JAC_DOMAIN_CROSSING" Kind="KIND_ABILITY"/>
+  </Types>
+  <TypeTags>
+    <Row Type="ABILITY_JAC_DOMAIN_CROSSING" Tag="CLASS_ALL_UNITS"/>
+  </TypeTags>
+  <UnitAbilities>
+    <Row UnitAbilityType="ABILITY_JAC_DOMAIN_CROSSING" Name="LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME" Description="LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION"/>
+  </UnitAbilities>
+  <UnitAbilityModifiers>
+    <Row UnitAbilityType="ABILITY_JAC_DOMAIN_CROSSING" ModifierId="MOD_ENTER_FOREIGN_LANDS"/>
+  </UnitAbilityModifiers>
+  <Modifiers>
+    <Row ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS" ModifierType="MODIFIER_PLAYER_UNITS_GRANT_ABILITY"/>
+  </Modifiers>
+  <ModifierArguments>
+    <Row ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS" Name="AbilityType" Value="ABILITY_JAC_DOMAIN_CROSSING"/>
+  </ModifierArguments>
+  <TraitModifiers>
+    <Delete TraitType="TRAIT_LEADER_MAJOR_CIV" ModifierId="STANDARD_DIPLOMATIC_INCURSION"/>
+    <Row TraitType="TRAIT_LEADER_MAJOR_CIV" ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS"/>
+  </TraitModifiers>
+  <GlobalParameters>
+    <Update>
+      <Where Name="LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_LOYALTY"/>
+      <Set>
+        <Value>5</Value>
+      </Set>
+    </Update>
+  </GlobalParameters>
+</GameInfo>

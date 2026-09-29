@@ -32,6 +32,14 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertIn("if totalCities~=56 then", data["steps"][3]["code"])
                 self.assertIn("unowned land plot", data["steps"][3]["code"])
                 self.assertIn("settler in slot", data["steps"][3]["code"])
+                first_turn = data["steps"][3]["code"]
+                self.assertIn("UnitManager.GetReachableMovement(unit)", first_turn)
+                self.assertIn("UnitManager.CanStartOperation(unit,UnitOperationTypes.MOVE_TO,nil,params)",
+                              first_turn)
+                self.assertIn("not diplomacy:IsAtWarWith(owner)", first_turn)
+                self.assertIn("not diplomacy:HasOpenBordersFrom(owner)", first_turn)
+                self.assertIn("humanCapital:GetCulturalIdentity():GetLoyaltyPerTurn()", first_turn)
+                self.assertIn("if loyalty < -5 then error", first_turn)
 
     def test_rejects_bad_map_file_and_metrics_flag(self):
         data = json.loads((SCENARIOS / "japan-map-20km.json").read_text(encoding="utf-8"))

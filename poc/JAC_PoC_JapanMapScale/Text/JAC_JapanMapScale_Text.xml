@@ -73,5 +73,23 @@
     <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Language="ru_RU">
       <Text>22 державы 1534 года; начало: с поселенцев.</Text>
     </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME" Language="en_US">
+      <Text>Free passage across domains</Text>
+    </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME" Language="ja_JP">
+      <Text>領土境の自由通行</Text>
+    </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME" Language="ru_RU">
+      <Text>Свободный проход через владения</Text>
+    </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION" Language="en_US">
+      <Text>May enter another faction's territory without an Open Borders agreement.</Text>
+    </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION" Language="ja_JP">
+      <Text>開放国境の協定なしに他勢力の領土へ進入できる。</Text>
+    </Row>
+    <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION" Language="ru_RU">
+      <Text>Может входить во владения других держав без договора об открытых границах.</Text>
+    </Row>
   </LocalizedText>
 </GameData>

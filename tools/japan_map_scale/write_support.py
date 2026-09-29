@@ -34,7 +34,7 @@ def config() -> None:
             suffix = "_Settlers" if settlers else ""
             file = f"{{{MOD_ID}}}Maps/JAC_Japan_{km}km{suffix}.Civ6Map"
             mode = "SETTLERS" if settlers else "HISTORICAL"
-            ET.SubElement(maps, "Row", Domain="Maps:Expansion2Maps", File=file,
+            ET.SubElement(maps, "Row", Domain="Maps:JAC_Banseiki", File=file,
                           Name=f"LOC_JAC_JAPAN_{km}_{mode}_NAME",
                           Description=f"LOC_JAC_JAPAN_{km}_{mode}_DESCRIPTION", Image="Map_Earth",
                           StaticMap="1", RequiresUniqueLeaders="1",
@@ -67,6 +67,12 @@ def text() -> None:
                 f"22 fixed 1534 factions; start with {en}.",
                 f"1534年の22勢力。開始方法は{ja}。",
                 f"22 державы 1534 года; начало: {ru}.")
+    add("LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME",
+        "Free passage across domains", "領土境の自由通行", "Свободный проход через владения")
+    add("LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION",
+        "May enter another faction's territory without an Open Borders agreement.",
+        "開放国境の協定なしに他勢力の領土へ進入できる。",
+        "Может входить во владения других держав без договора об открытых границах.")
     write_xml(MOD / "Text" / "JAC_JapanMapScale_Text.xml", root)
 
 
@@ -107,6 +113,26 @@ def scenarios() -> None:
                     "for _,unit in p:GetUnits():Members() do "
                     "if GameInfo.Units[unit:GetUnitType()].UnitType=='UNIT_SETTLER' then "
                     "error('settler in slot '..i) end end end end; ")
+        passage = (
+            "local passage=nil; local diplomacy=Players[0]:GetDiplomacy(); "
+            "for _,unit in Players[0]:GetUnits():Members() do "
+            "local reachable=UnitManager.GetReachableMovement(unit); "
+            "if reachable then for _,index in ipairs(reachable) do "
+            "local plot=Map.GetPlotByIndex(index); local owner=plot and plot:GetOwner() or -1; "
+            "if owner>=0 and owner~=0 and not diplomacy:IsAtWarWith(owner) "
+            "and not diplomacy:HasOpenBordersFrom(owner) then "
+            "local params={[UnitOperationTypes.PARAM_X]=plot:GetX(),"
+            "[UnitOperationTypes.PARAM_Y]=plot:GetY()}; "
+            "if UnitManager.CanStartOperation(unit,UnitOperationTypes.MOVE_TO,nil,params) then "
+            "passage=tostring(owner)..':'..tostring(index); break end end end end; "
+            "if passage then break end end; "
+            "if not passage then error('no initial route into peaceful foreign territory without Open Borders') end; "
+        )
+        loyalty = (
+            "local humanCapital=Players[0]:GetCities():GetCapitalCity(); "
+            "local loyalty=humanCapital:GetCulturalIdentity():GetLoyaltyPerTurn(); "
+            "if loyalty < -5 then error('human capital loyalty strongly negative on turn 1: '..loyalty) end; "
+        )
         start_assertion = (grid_check + minors +
                            "if #PlayerManager.GetAliveMajors()~=22 then error('major count') end; " +
                            "local expected=" + expected + "; local leaders=" + leaders +
@@ -123,8 +149,9 @@ def scenarios() -> None:
                            "capital:GetX()~=e[1] or capital:GetY()~=e[2] then "
                            "error('capital mismatch '..i) end end; " +
                            f"if totalCities~={expected_total} then error('total city count '..totalCities) end; " +
-                           land + settlers +
-                           f"return '22 majors, 0 city-states, {expected_total} cities/capitals, all land owned, no settlers'")
+                           land + settlers + passage + loyalty +
+                           f"return '22 majors, 0 city-states, {expected_total} cities/capitals, all land owned, no settlers; "
+                           "passage='..passage..'; capital loyalty/turn='..loyalty")
         snapshot = (grid_check + minors + land + settlers +
                     "if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then "
                     "error('50-turn state lost') end; "

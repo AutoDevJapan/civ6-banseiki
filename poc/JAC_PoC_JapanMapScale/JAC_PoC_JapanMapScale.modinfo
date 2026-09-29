@@ -7,6 +7,11 @@
     <Authors>civ6-banseiki</Authors>
     <CompatibleVersions>2.0</CompatibleVersions>
   </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+    <Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
+    <Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+  </Dependencies>
   <LocalizedText>
     <Text id="LOC_JAC_JAPAN_SCALE_MOD_NAME">
       <en_US>JAC PoC: Japan Map Scale</en_US>
@@ -25,8 +30,8 @@
     </Text>
   </LocalizedText>
   <ActionCriteria>
-    <Criteria id="JAC_JapanMapScale_GatheringStorm">
-      <RuleSetInUse>RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI</RuleSetInUse>
+    <Criteria id="JAC_JapanMapScale_Banseiki">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
     </Criteria>
     <Criteria id="JAC_Japan_20km_Historical">
       <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
@@ -42,6 +47,22 @@
         <Group>Map</Group>
         <ConfigurationId>MAP_SCRIPT</ConfigurationId>
         <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Japan_20km_Settlers">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Japan_15km_Settlers">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value>
       </ConfigurationValueMatches>
     </Criteria>
   </ActionCriteria>
@@ -60,7 +81,19 @@
     <UpdateDatabase id="JAC_Japan_15km_NoSettlers" criteria="JAC_Japan_15km_Historical">
       <File>Data/JAC_Japan_NoSettlers.xml</File>
     </UpdateDatabase>
-    <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_GatheringStorm">
+    <UpdateDatabase id="JAC_Japan_20km_Historical_Rules" criteria="JAC_Japan_20km_Historical">
+      <File>Data/JAC_Japan_MapRules.xml</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_15km_Historical_Rules" criteria="JAC_Japan_15km_Historical">
+      <File>Data/JAC_Japan_MapRules.xml</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_20km_Settlers_Rules" criteria="JAC_Japan_20km_Settlers">
+      <File>Data/JAC_Japan_MapRules.xml</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_15km_Settlers_Rules" criteria="JAC_Japan_15km_Settlers">
+      <File>Data/JAC_Japan_MapRules.xml</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_Banseiki">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
     </UpdateText>
   </InGameActions>
@@ -68,6 +101,7 @@
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>
+    <File>Data/JAC_Japan_MapRules.xml</File>
     <File>Maps/JAC_Japan_20km.Civ6Map</File>
     <File>Maps/JAC_Japan_20km.lua</File>
     <File>Maps/JAC_Japan_20km_Settlers.Civ6Map</File>

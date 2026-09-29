@@ -3,8 +3,11 @@
 	<Rulesets>
 		<Row RulesetType="RULESET_JAC_BANSEIKI" Name="LOC_JAC_BANSEIKI_RULESET_NAME" Description="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" VictoryDomain="Expansion2_Victories" GameCore="Expansion2" IsScenario="0" SupportsSinglePlayer="1" SupportsMultiPlayer="1" SortIndex="-19"/>
 	</Rulesets>
+	<DomainValueUnions>
+		<Row Domain="Maps:JAC_Banseiki" OtherDomain="Maps:Expansion2Maps"/>
+	</DomainValueUnions>
 	<RulesetDomainOverrides>
-		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="Map" Domain="Maps:Expansion2Maps"/>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="Map" Domain="Maps:JAC_Banseiki"/>
 		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="PlayerLeader" Domain="Players:Expansion2_Players"/>
 	</RulesetDomainOverrides>
 	<Parameters>

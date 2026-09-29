@@ -116,6 +116,22 @@ class GeneratedMapTests(unittest.TestCase):
                     self.assertLessEqual(start["displacement_km"], 30)
             self.assertEqual(item["close_start_pairs"], g.close_start_pairs(starts))
 
+    def test_oda_has_a_passable_neighbouring_domain_for_initial_route_check(self):
+        for item in self.manifest:
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                grid = g.HexGrid(item["km_per_tile"], item["width"], item["height"], 0, 0)
+                start = next(row for row in item["starts"] if row["seat"] == "ODA")
+                candidates = []
+                for col, row in grid.neighbours(start["col"], start["row"]):
+                    plot = grid.index(col, row)
+                    owner = db.execute("SELECT Owner FROM PlotOwners WHERE ID=?", (plot,)).fetchone()
+                    terrain, impassable = db.execute(
+                        "SELECT TerrainType,IsImpassable FROM Plots WHERE ID=?", (plot,)).fetchone()
+                    city = db.execute("SELECT 1 FROM Cities WHERE Plot=?", (plot,)).fetchone()
+                    if owner and owner[0] != 0 and terrain.startswith("TERRAIN_GRASS") and not impassable and not city:
+                        candidates.append(plot)
+                self.assertTrue(candidates)
+
     def test_historical_players_castles_and_territory(self):
         draft = data()
         self.assertEqual(len(draft["castles"]), 53)
@@ -183,6 +199,8 @@ class GeneratedMapTests(unittest.TestCase):
                                 for b in item["cities"][i + 1:]))
 
     def test_nudges_use_nearest_free_plot_of_the_original_owner(self):
+        if not (g.CACHE / "ne_10m_admin_0_countries.zip").is_file():
+            self.skipTest("Natural Earth cache absent")
         japan = g.read_shapes(g.CACHE / "ne_10m_admin_0_countries.zip",
                               "ne_10m_admin_0_countries", country="JPN")
         for item in self.manifest:
@@ -263,7 +281,15 @@ class GeneratedMapTests(unittest.TestCase):
 
     def test_config_and_scenarios_cover_all_scales(self):
         config = ET.parse(g.MOD / "Config" / "JAC_JapanMapScale_Config.xml").getroot()
-        self.assertEqual(len(config.findall("./Maps/Row")), 4)
+        maps = config.findall("./Maps/Row")
+        self.assertEqual(len(maps), 4)
+        self.assertEqual({row.attrib["Domain"] for row in maps}, {"Maps:JAC_Banseiki"})
+        self.assertEqual(config.findall("./DomainValueUnions/Row"), [])
+        ruleset = ET.parse(g.MOD.parent / "JAC_PoC_BanseikiRuleset" / "Config/JAC_Banseiki_Config.xml").getroot()
+        self.assertEqual([row.attrib for row in ruleset.findall("./DomainValueUnions/Row")],
+                         [{"Domain": "Maps:JAC_Banseiki", "OtherDomain": "Maps:Expansion2Maps"}])
+        self.assertEqual([row.attrib["Domain"] for row in ruleset.findall("./RulesetDomainOverrides/Row")
+                          if row.attrib["ParameterId"] == "Map"], ["Maps:JAC_Banseiki"])
         self.assertEqual(len(config.findall("./MapSizes/Row")), 4)
         self.assertEqual(config.findall("./Players/Row"), [])
         self.assertEqual(len(config.findall("./MapLeaders/Row")), 88)
@@ -288,6 +314,10 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual(by_tag[f"LOC_JAC_JAPAN_{km}_{mode}_NAME"], {"ja_JP", "en_US", "ru_RU"})
         mod = ET.parse(g.MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
         packaged = {element.text for element in mod.findall("./Files/File")}
+        self.assertEqual({row.attrib["id"] for row in mod.findall("./Dependencies/Mod")},
+                         {"4873eb62-8ccc-4574-b784-dda455e74e68",
+                          "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+                          "bd7a82c5-6b38-4b69-a7f5-8dc9af534249"})
         for item in self.manifest:
             file = "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/" + item["file"]
             self.assertIn(file, {row.attrib["File"] for row in config.findall("./Maps/Row")})
@@ -361,12 +391,13 @@ class GeneratedMapTests(unittest.TestCase):
         criteria = {c.attrib["id"]: c.findtext("./ConfigurationValueMatches/Value")
                     for c in mod.findall("./ActionCriteria/Criteria")}
         actions = mod.findall("./InGameActions/UpdateDatabase")
-        self.assertEqual(len(actions), 2)
-        for action in actions:
+        no_settlers = [action for action in actions
+                       if action.findtext("File") == "Data/JAC_Japan_NoSettlers.xml"]
+        self.assertEqual(len(no_settlers), 2)
+        for action in no_settlers:
             selected = criteria[action.attrib["criteria"]]
             self.assertIn(selected, {f"{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{km}km.Civ6Map"
                                      for km in g.SCALES})
-            self.assertEqual(action.findtext("File"), "Data/JAC_Japan_NoSettlers.xml")
         removal = ET.parse(g.MOD / "Data/JAC_Japan_NoSettlers.xml").getroot()
         self.assertEqual(removal.find("./MajorStartingUnits/Delete").attrib, {"Unit": "UNIT_SETTLER"})
 
@@ -396,6 +427,48 @@ class GeneratedMapTests(unittest.TestCase):
         if official.exists():
             rows = ET.parse(official).getroot().findall(".//*[@Name='CITY_MIN_RANGE']")
             self.assertEqual([row.attrib["Value"] for row in rows], ["3"])
+
+    def test_domain_passage_and_loyalty_are_limited_to_all_four_japan_maps(self):
+        config = ET.parse(g.MOD / "Config/JAC_JapanMapScale_Config.xml").getroot()
+        map_files = {row.attrib["File"] for row in config.findall("./Maps/Row")}
+        mod = ET.parse(g.MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
+        criteria = {row.attrib["id"]: row for row in mod.findall("./ActionCriteria/Criteria")}
+        rules_actions = [row for row in mod.findall("./InGameActions/UpdateDatabase")
+                         if row.findtext("File") == "Data/JAC_Japan_MapRules.xml"]
+        self.assertEqual(len(rules_actions), 4)
+        self.assertEqual({criteria[row.attrib["criteria"]].findtext("./ConfigurationValueMatches/Value")
+                          for row in rules_actions}, map_files)
+        for row in rules_actions:
+            criterion = criteria[row.attrib["criteria"]]
+            self.assertEqual(criterion.findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
+            self.assertEqual(criterion.findtext("./ConfigurationValueMatches/Group"), "Map")
+            self.assertEqual(criterion.findtext("./ConfigurationValueMatches/ConfigurationId"), "MAP_SCRIPT")
+        self.assertIn("Data/JAC_Japan_MapRules.xml",
+                      {row.text for row in mod.findall("./Files/File")})
+
+        rules = ET.parse(g.MOD / "Data/JAC_Japan_MapRules.xml").getroot()
+        self.assertEqual(rules.find("./TypeTags/Row").attrib,
+                         {"Type": "ABILITY_JAC_DOMAIN_CROSSING", "Tag": "CLASS_ALL_UNITS"})
+        self.assertEqual(rules.find("./UnitAbilityModifiers/Row").attrib["ModifierId"],
+                         "MOD_ENTER_FOREIGN_LANDS")
+        self.assertEqual(rules.find("./Modifiers/Row").attrib["ModifierType"],
+                         "MODIFIER_PLAYER_UNITS_GRANT_ABILITY")
+        self.assertEqual(rules.find("./ModifierArguments/Row").attrib["Value"],
+                         "ABILITY_JAC_DOMAIN_CROSSING")
+        self.assertEqual({(row.tag, row.attrib["ModifierId"])
+                          for row in rules.findall("./TraitModifiers/*")},
+                         {("Row", "JAC_DOMAIN_CROSSING_ALL_UNITS"),
+                          ("Delete", "STANDARD_DIPLOMATIC_INCURSION")})
+        loyalty = rules.find("./GlobalParameters/Update")
+        self.assertEqual(loyalty.find("Where").attrib["Name"],
+                         "LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_LOYALTY")
+        self.assertEqual(loyalty.findtext("Set/Value"), "5")
+        source = g.OFFICIAL.parents[4] / "DLC/Expansion2/Data/Expansion2_GlobalParameters.xml"
+        if source.is_file():
+            baseline = ET.parse(source).getroot()
+            matches = [row.attrib["Value"] for row in baseline.findall("./GlobalParameters/Replace")
+                       if row.attrib["Name"] == loyalty.find("Where").attrib["Name"]]
+            self.assertEqual(matches, ["20"])
 
 
 if __name__ == "__main__":
