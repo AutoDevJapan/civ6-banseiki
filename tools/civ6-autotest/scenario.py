@@ -578,6 +578,14 @@ class Runner:
                         raise ScenarioError("Civ VI process changed during metrics sampling")
                     recorder.sample(status.turn, process_memory(metrics_pid))
                 _remaining(deadline)
+                if status.turn > target or (status.local_player < 0 and not status.active and status.event):
+                    # Autoplay cannot return to a player the AI lost with; turns then keep running
+                    # without a local player (live 2026-09-29, Oda eliminated before turn 51).
+                    alive = self._lua("InGame", f"return tostring(Players[{human}]:IsAlive())",
+                                      min(5, _remaining(deadline)))
+                    if alive == "false":
+                        raise ScenarioError(f"Human player {human} was eliminated during autoplay "
+                                            f"(stopped at turn {status.turn}, target {target})")
                 if status.turn > target:
                     raise ScenarioError(f"Autoplay overshot turn {target}: {status}")
                 if (status.event and status.turn == target and not status.active

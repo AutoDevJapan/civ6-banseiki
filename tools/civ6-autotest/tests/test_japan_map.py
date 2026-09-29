@@ -113,6 +113,23 @@ class JapanMapScenarioTests(unittest.TestCase):
             self.assertEqual(rows[-1]["memory"]["private_bytes"], 100)
             self.assertIn("observed=2 missed=0", detail)
 
+    def test_autoplay_reports_eliminated_human_instead_of_overshoot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+
+            def lua(_state, code, _timeout=5.0):
+                if "return tostring(startTurn)" in code:
+                    return "1|0"
+                return "false" if "IsAlive()" in code else "true"
+
+            with patch.object(runner, "_lua", side_effect=lua), patch.object(
+                runner, "_autoplay_status", return_value=AutoplayStatus(52, False, True, 0, -1)
+            ), patch.object(runner, "_close_options_menu"), patch.object(
+                runner, "_dismiss_advisor"
+            ), patch("scenario.time.sleep"):
+                with self.assertRaisesRegex(ScenarioError, "eliminated during autoplay"):
+                    runner._autoplay(50, 10)
+
     def test_map_log_profile_detects_mod_errors(self):
         base = {"Lua.log": "", "Database.log": "",
                 "Modding.log": ("403be889-1455-4de7-967b-ad54c0ff3431\n"
