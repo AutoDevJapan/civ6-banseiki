@@ -111,6 +111,10 @@ def _runtime_errors(lua: str) -> list[str]:
     return found
 
 
+# Official Base/Assets/UI/FrontEnd/LoadScreen.lua:218,248 report a missing loading-screen texture this way.
+TEXTURE_MISSING = re.compile(r"(?:Failed to load background image texture: |We are lacking a texture for )\S*JAC_")
+
+
 def _error_context(lines: list[str], index: int) -> str:
     """Keep an error and its stack lines, stopping before a new log message."""
     context = [lines[index]]
@@ -372,9 +376,11 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
             raise ValueError(f"Missing log: {name}")
     jac_errors = [line for line in logs["Lua.log"].splitlines() if _jac_error_line(line)]
     runtime_errors = _runtime_errors(logs["Lua.log"])
+    missing = [line for line in logs["Lua.log"].splitlines() if TEXTURE_MISSING.search(line)]
     checks = [
         Check("Generic: [JAC_POC] errors", not jac_errors, f"{len(jac_errors)} matching lines"),
         Check("Generic: JAC Runtime Error", not runtime_errors, f"{len(runtime_errors)} matching stack traces"),
+        Check("Generic: JAC missing texture", not missing, f"{len(missing)} matching lines"),
     ]
     if profile == "bundle0":
         checks.extend(_bundle0_checks(logs))
