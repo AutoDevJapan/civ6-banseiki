@@ -18,6 +18,8 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/clans-noteb
 python -m unittest discover -s tools/civ6-autotest/tests -v
 ```
 
+オーナーが PC の前にいるとき（確認モード）は `--owner-start` を付ける。`start_game` で自動開始せず、設定済みの「ゲームの作成」画面を開いて、オーナーが「ゲーム開始」を押すまで最大1時間待つ。以降の手順は自動で進む。
+
 `states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
 
 ### 自動鮮度確認と再起動

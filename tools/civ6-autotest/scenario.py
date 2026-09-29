@@ -244,8 +244,9 @@ def _configure_code(step: dict) -> str:
 
 class Runner:
     def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int,
-                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR):
+                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False):
         self.scenario = scenario
+        self.owner_start = owner_start
         self.output = output
         self.logs = logs
         self.saves = saves
@@ -654,6 +655,11 @@ class Runner:
         if single_civ_process() is not None:
             raise ScenarioError("A Civ VI process appeared before Steam relaunch")
         self._launch_steam_and_wait(deadline)
+        if self.owner_start:
+            # The owner is using the PC: Windows refuses to move focus, so let the opening finish.
+            self._disconnect()
+            self._wait_frontend_ready(_remaining(deadline), skip_opening=False)
+            return "Civ VI relaunched via Steam; opening played to the end; FrontEnd answered"
         # Let the opening movie start before sending its skip click. Keep clear of the menu buttons.
         time.sleep(min(8, _remaining(deadline)))
         click_fraction(0.5, 0.15)
@@ -678,6 +684,17 @@ class Runner:
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
             return f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, players={len(step['players'])}"
+        if action == "start_game" and self.owner_start:
+            # The owner presses Start Game; the configured setup is shown, not reset (MainMenu's
+            # OnAdvancedSetup would call SetToDefaults, so the popup is queued directly).
+            before = self._loadscreen_count()
+            self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\n"
+                      "UIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\n"
+                      "return true", min(5, _remaining(deadline)))
+            print("OWNER ACTION: press Start Game on the Create Game screen", flush=True)
+            wait = max(timeout, 3600.0)
+            self._enter_game_after_loadscreen(before, wait, deadline=time.monotonic() + wait)
+            return "owner pressed Start Game; single-player game reached InGame"
         if action == "start_game":
             before = self._loadscreen_count()
             response_unknown = False
@@ -855,6 +872,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=4318)
     parser.add_argument("--mods", type=Path, default=DEFAULT_MODS_DIR, help="Installed Civ VI Mods directory")
     parser.add_argument("--no-auto-restart", action="store_true", help="Skip startup freshness check (debugging only)")
+    parser.add_argument("--owner-start", action="store_true",
+                        help="Open the configured Create Game screen and wait for the owner to press Start Game")
     args = parser.parse_args()
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
@@ -866,7 +885,8 @@ def main() -> int:
                                  (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + args.scenario.stem))
         saves = args.saves or (Path.home() / "Documents" / "My Games" / "Sid Meier's Civilization VI" / "Saves" / "Single")
         return Runner(data, output, args.logs or default_log_dir(), saves, args.port,
-                      auto_restart=not args.no_auto_restart, mods_dir=args.mods).run()
+                      auto_restart=not args.no_auto_restart, mods_dir=args.mods,
+                      owner_start=args.owner_start).run()
     except (OSError, json.JSONDecodeError, ScenarioError, ValueError) as exc:
         parser.exit(2, f"Scenario error: {exc}\n")
 

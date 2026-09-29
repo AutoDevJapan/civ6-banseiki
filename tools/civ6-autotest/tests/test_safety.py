@@ -16,6 +16,18 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
+        with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
+            runner, "_loadscreen_count", return_value=3
+        ), patch.object(runner, "_enter_game_after_loadscreen") as enter, redirect_stdout(StringIO()):
+            runner._run_step({"action": "start_game", "timeout": 600})
+        code = run_lua.call_args.args[1]
+        self.assertIn("/FrontEnd/MainMenu/AdvancedSetup", code)
+        self.assertNotIn("HostGame", code)
+        self.assertNotIn("SetToDefaults", code)
+        self.assertEqual(enter.call_args.args[:2], (3, 3600.0))
+
     def test_load_wait_sends_one_escape_even_if_ingame_state_exists(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         deadline = civ_click.time.monotonic() + 1
