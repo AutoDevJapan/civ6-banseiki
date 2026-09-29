@@ -516,6 +516,10 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
                    ((city["plot"], city["plot"]) for city in ordered))
     db.executemany("INSERT INTO CityAttributes VALUES (?, 'Population', 'Initial', '2')",
                    ((city["plot"],) for city in ordered))
+    # A map city is a capital only with a palace (live 2026-09-29: no player had a
+    # capital without it; official DLC/VikingsScenario/Maps/Viking.Civ6Map does the same).
+    db.executemany("INSERT INTO Buildings VALUES ('BUILDING_PALACE', ?)",
+                   ((city["plot"],) for city in ordered if city["capital"]))
     city_order = {city["plot"]: index for index, city in enumerate(ordered)}
     db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
                    sorted(allocations, key=lambda row: (0, city_order[row[0]])
