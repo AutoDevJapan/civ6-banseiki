@@ -41,6 +41,34 @@ class SengokuEventTests(unittest.TestCase):
             self.assertTrue(all(e["name"][k] for k in ("ja", "en", "ru")), e["id"])
             self.assertTrue(e["sources"] and e["confidence"] in ("high", "medium", "low"), e["id"])
 
+    def test_month_set_when_date_text_names_a_month(self):
+        # SSOT 3.2: events follow the historical month as closely as possible.
+        for e in EVENTS:
+            if re.search(r"\d+月", e["date_text"]):
+                self.assertIsNotNone(e["month"], e["id"])
+
+    def test_boost_and_advisor_popup(self):
+        for e in EVENTS:
+            b = e["boost"]
+            # SSOT 3.2: factions without the related research get a boost toward it.
+            self.assertEqual(b is None, not e["earlier_by"], e["id"])
+            if b:
+                self.assertIn(b, e["earlier_by"], e["id"])
+                prefix = {"tech": ("TECH_JAC_SENGOKU_", "T"), "civic": ("CIVIC_JAC_SENGOKU_", "C")}[b["type"]]
+                self.assertTrue(b["id"].startswith(prefix[0]) and b["short"].startswith(prefix[1]), e["id"])
+            a = e["advisor_popup"]
+            if a is not None:
+                self.assertTrue(all(a[k] for k in ("ja", "en", "ru")), e["id"])
+        self.assertTrue(any(e["advisor_popup"] and "和睦" in e["advisor_popup"]["ja"] for e in EVENTS))
+
+    def test_ssot_decisions(self):
+        # SSOT 3.2: no Sekigahara; Toyotomi is Oda after the rename; Taikō kenchi is not house-specific.
+        ids = {e["id"] for e in EVENTS}
+        self.assertNotIn("EV_SEKIGAHARA", ids)
+        for e in EVENTS:
+            self.assertTrue(e.get("house") is None or e["house"] in FACTIONS, e["id"])
+        self.assertFalse(next(e for e in EVENTS if e["id"] == "EV_YAMAZAKI_KENCHI")["house_specific"])
+
     def test_house_specific_has_generic_name(self):
         for e in EVENTS:
             if e["house_specific"]:

@@ -4,8 +4,10 @@
   "period": "1534-1600",
   "factions": "documents/spec/data/japan-1534-start.json の22勢力ID (ALL=全勢力)",
   "earlier_by": "その研究を先に終えた勢力は、史実年より前にイベントの効果を使える (SSOT 3.2)",
-  "month_note": "月は西暦（ユリウス暦）の目安。date_text に旧暦表記・幅を残す",
-  "confidence": "high/medium/low"
+  "month_note": "月は date_text の日付を西暦に換算した月（1582年10月4日まではユリウス暦、10月15日以降はグレゴリオ暦）。旧暦の月だけ分かるものはその月の15日、幅があるものは開始日で換算。date_text に旧暦表記・幅を残す",
+  "confidence": "high/medium/low",
+  "boost": "史実の年に、関係する研究を終えていない影響勢力へ与えるひらめき／着想（SSOT 3.2）。earlier_by のうち1つ。null は与えない",
+  "advisor_popup": "助言役のポップアップで薦める行動（和睦など）。null は通常の通知と Boost の表示だけ"
  },
  "events": [
   {
@@ -16,7 +18,7 @@
     "ru": "Кодекс Дзинкайсю (закон владения Датэ)"
    },
    "year": 1536,
-   "month": 4,
+   "month": 5,
    "date_text": "天文5年4月",
    "regions": [
     "陸奥",
@@ -52,7 +54,13 @@
      "title": "Wikipedia日本語版『塵芥集』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAW",
+    "short": "C05"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_SHIMAZU_UNIFY_1",
@@ -99,7 +107,17 @@
     }
    ],
    "confidence": "medium",
-   "note": "japan-1534-start.jsonの当主は島津勝久（史実）だが、SSOT 3.1は貴久を当主とするため、両者の整合はオーナー確認事項。"
+   "note": "当主は SSOT 3.1 のとおり島津貴久（`japan-1534-start.json` は史実の名目上の当主・島津勝久のままで、SSOT に合わせる修正が別途必要）。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+    "short": "C02"
+   },
+   "advisor_popup": {
+    "ja": "分家と和睦し、薩摩の国人と盟約を結びましょう。",
+    "en": "Make peace with the branch houses and bind the Satsuma kokujin by oath.",
+    "ru": "Заключите мир с боковыми ветвями дома и союз с кокудзин Сацумы."
+   }
   },
   {
    "id": "EV_TENBUN_FAMINE",
@@ -143,49 +161,17 @@
      "title": "Wikipedia日本語版『天文の飢饉』"
     }
    ],
-   "confidence": "medium"
-  },
-  {
-   "id": "EV_TENBUN_DATE",
-   "name": {
-    "ja": "伊達氏天文の乱",
-    "en": "Date Tenbun Civil War",
-    "ru": "Междоусобица Датэ годов Тэмбун"
+   "confidence": "medium",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_GRAIN_STORES",
+    "short": "T07"
    },
-   "year": 1542,
-   "month": 6,
-   "year_end": 1548,
-   "date_text": "天文11年6月〜天文17年（1548）",
-   "regions": [
-    "陸奥",
-    "出羽"
-   ],
-   "affected_factions": [
-    "DATE",
-    "ASHINA"
-   ],
-   "primary_factions": [
-    "DATE"
-   ],
-   "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    }
-   ],
-   "house_specific": false,
-   "effect_category": "succession",
-   "gameplay_effect": "伊達稙宗と晴宗の父子対立が南奥全体へ広がる。伊達と蘆名の外交状態が揺れ、1548年の和睦で当主が晴宗へ交代。内紛中は伊達の戦力・生産が低下（暫定）。",
-   "sources": [
-    {
-     "title": "コトバンク『伊達氏天文の乱』"
-    },
-    {
-     "title": "Wikipedia日本語版『天文の乱 (伊達氏)』"
-    }
-   ],
-   "confidence": "high"
+   "advisor_popup": {
+    "ja": "兵糧蔵を建てて、飢饉に備えましょう。",
+    "en": "Build granaries to weather the famine.",
+    "ru": "Постройте амбары, чтобы пережить голод."
+   }
   },
   {
    "id": "EV_IKUNO_SILVER",
@@ -237,7 +223,65 @@
     }
    ],
    "confidence": "medium",
-   "note": "但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。"
+   "note": "但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
+    "short": "T06"
+   },
+   "advisor_popup": null
+  },
+  {
+   "id": "EV_TENBUN_DATE",
+   "name": {
+    "ja": "伊達氏天文の乱",
+    "en": "Date Tenbun Civil War",
+    "ru": "Междоусобица Датэ годов Тэмбун"
+   },
+   "year": 1542,
+   "month": 7,
+   "year_end": 1548,
+   "date_text": "天文11年6月〜天文17年（1548）",
+   "regions": [
+    "陸奥",
+    "出羽"
+   ],
+   "affected_factions": [
+    "DATE",
+    "ASHINA"
+   ],
+   "primary_factions": [
+    "DATE"
+   ],
+   "earlier_by": [
+    {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+     "short": "C02"
+    }
+   ],
+   "house_specific": false,
+   "effect_category": "succession",
+   "gameplay_effect": "伊達稙宗と晴宗の父子対立が南奥全体へ広がる。伊達と蘆名の外交状態が揺れ、1548年の和睦で当主が晴宗へ交代。内紛中は伊達の戦力・生産が低下（暫定）。",
+   "sources": [
+    {
+     "title": "コトバンク『伊達氏天文の乱』"
+    },
+    {
+     "title": "Wikipedia日本語版『天文の乱 (伊達氏)』"
+    }
+   ],
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+    "short": "C02"
+   },
+   "advisor_popup": {
+    "ja": "父子の争いを和睦で収め、蘆名との仲を立て直しましょう。",
+    "en": "End the father–son war with a truce and mend ties with the Ashina.",
+    "ru": "Завершите войну отца и сына миром и восстановите отношения с Асина."
+   }
   },
   {
    "id": "EV_TEPPO",
@@ -283,7 +327,13 @@
     }
    ],
    "confidence": "high",
-   "note": "複線的な伝播（倭寇船・西国諸港）を考え、島津以外は伝来年に一斉に得る。T12の前提はT03。"
+   "note": "複線的な伝播（倭寇船・西国諸港）を考え、島津以外は伝来年に一斉に得る。T12の前提はT03。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_FIREARMS_CONTACT",
+    "short": "T12"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KUNITOMO_GUN",
@@ -332,7 +382,13 @@
      "title": "documents/research/sengoku-tech-civic-tree.md（史実メモ）"
     }
    ],
-   "confidence": "medium"
+   "confidence": "medium",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_MATCHLOCK_CRAFT",
+    "short": "T13"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KOSHU_HATTO",
@@ -342,7 +398,7 @@
     "ru": "Принятие «Косю хатто-но сидай»"
    },
    "year": 1547,
-   "month": 6,
+   "month": 7,
    "date_text": "天文16年6月",
    "regions": [
     "甲斐"
@@ -377,7 +433,13 @@
      "title": "Wikipedia日本語版『甲州法度之次第』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAW",
+    "short": "C05"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_EGUCHI",
@@ -420,7 +482,17 @@
      "title": "Wikipedia日本語版『江口の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": {
+    "ja": "将軍家へ使節を送り、畿内の情勢を見極めましょう。",
+    "en": "Send envoys to the shogunate and read the situation in the Kinai.",
+    "ru": "Отправьте послов к сёгунату и оцените положение в Кинай."
+   }
   },
   {
    "id": "EV_CHRISTIAN",
@@ -431,7 +503,7 @@
    },
    "year": 1549,
    "month": 8,
-   "date_text": "天文18年（1549）8月15日 鹿児島上陸",
+   "date_text": "天文18年7月22日（1549年8月15日）鹿児島上陸",
    "regions": [
     "薩摩",
     "周防",
@@ -470,7 +542,13 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 9.2『カトリック（1549年以降のイベントで登場）』に対応。"
+   "note": "SSOT 9.2『カトリック（1549年以降のイベントで登場）』に対応。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
+    "short": "C19"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_OTOMO_NIKAI",
@@ -503,7 +581,9 @@
      "title": "Wikipedia日本語版『二階崩れの変』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": null,
+   "advisor_popup": null
   },
   {
    "id": "EV_HOJO_TAX",
@@ -513,7 +593,7 @@
     "ru": "Налоговая реформа Ходзё Удзияса"
    },
    "year": 1550,
-   "month": 4,
+   "month": 5,
    "date_text": "天文19年4月（『公事赦免令』）。後北条氏の検地全体は年代が広い",
    "regions": [
     "相模",
@@ -549,7 +629,13 @@
      "title": "コトバンク『北条氏康』"
     }
    ],
-   "confidence": "medium"
+   "confidence": "medium",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS",
+    "short": "C20"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_AINU_TRADE_ACCORD",
@@ -593,7 +679,17 @@
      "title": "Wikipedia日本語版『蠣崎季広』"
     }
    ],
-   "confidence": "low"
+   "confidence": "low",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
+    "short": "C11"
+   },
+   "advisor_popup": {
+    "ja": "交易の取り決めを結び、和睦を保ちましょう。",
+    "en": "Agree on trade terms and keep the peace.",
+    "ru": "Договоритесь об условиях торговли и сохраните мир."
+   }
   },
   {
    "id": "EV_HIRADO_PORTUGUESE",
@@ -655,7 +751,13 @@
     }
    ],
    "confidence": "medium",
-   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。1586年の島津の玉薬購入記録も同資料に記載。"
+   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。1586年の島津の玉薬購入記録も同資料に記載。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS",
+    "short": "C13"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_OUCHI_DAINEIJI",
@@ -697,7 +799,17 @@
      "title": "Wikipedia日本語版『大寧寺の変』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+    "short": "C02"
+   },
+   "advisor_popup": {
+    "ja": "離反しそうな家臣・国人と盟約を結び直しましょう。",
+    "en": "Renew oaths with wavering retainers and kokujin.",
+    "ru": "Возобновите клятвы с колеблющимися вассалами и кокудзин."
+   }
   },
   {
    "id": "EV_KANTO_KANREI",
@@ -740,7 +852,17 @@
      "title": "Wikipedia日本語版『上杉憲政』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": {
+    "ja": "上杉憲政を保護し、関東管領職の継承を目指しましょう。",
+    "en": "Shelter Uesugi Norimasa and aim to inherit the Kantō Kanrei office.",
+    "ru": "Приютите Уэсуги Норимасу и добивайтесь должности канто-канрэй."
+   }
   },
   {
    "id": "EV_KAWANAKAJIMA",
@@ -789,7 +911,17 @@
     }
    ],
    "confidence": "high",
-   "note": "第四次の戦い1561-10は長尾が上杉を名乗った直後にあたる。"
+   "note": "第四次の戦い1561-10は長尾が上杉を名乗った直後にあたる。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_RIDGE_DITCHES",
+    "short": "T16"
+   },
+   "advisor_popup": {
+    "ja": "北信濃の城の守りを固め、長い戦いに備えましょう。",
+    "en": "Fortify the castles of northern Shinano for a long war.",
+    "ru": "Укрепите замки северного Синано для долгой войны."
+   }
   },
   {
    "id": "EV_SANGOKU_DOMEI",
@@ -834,7 +966,17 @@
      "title": "Wikipedia日本語版『甲相駿三国同盟』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
+    "short": "C11"
+   },
+   "advisor_popup": {
+    "ja": "武田・北条・今川の三家で同盟を結び、背後を固めましょう。",
+    "en": "Ally the Takeda, Hōjō and Imagawa to secure your rear.",
+    "ru": "Заключите союз Такэда, Ходзё и Имагава, чтобы обезопасить тыл."
+   }
   },
   {
    "id": "EV_ITSUKUSHIMA",
@@ -886,7 +1028,13 @@
      "title": "Wikipedia日本語版『厳島の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING",
+    "short": "T10"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_OKEHAZAMA",
@@ -934,7 +1082,13 @@
      "title": "Wikipedia日本語版『桶狭間の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+    "short": "C10"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KOSHU_GOLD",
@@ -986,7 +1140,13 @@
     }
    ],
    "confidence": "low",
-   "note": "japan-map-resources.mdの金候補（黒川・中山）。開始時に既に操業していた可能性があり、reveal年はオーナー確認。"
+   "note": "japan-map-resources.mdの金候補（黒川・中山）。開始時に既に操業していた可能性があり、reveal年はオーナー確認。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "short": "T14"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_NAGAO_TO_UESUGI",
@@ -996,7 +1156,7 @@
     "ru": "Нагао становится Уэсуги (наследование должности канрэя Канто)"
    },
    "year": 1561,
-   "month": null,
+   "month": 4,
    "date_text": "永禄4年閏3月16日（鶴岡八幡宮での就任）",
    "regions": [
     "越後",
@@ -1040,7 +1200,13 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 3.1の記述に対応。表示切替の実装方式はSSOT 3.1（共有状態＋UI上書き）に従う。"
+   "note": "SSOT 3.1の記述に対応。表示切替の実装方式はSSOT 3.1（共有状態＋UI上書き）に従う。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_MORI_IWAMI",
@@ -1102,7 +1268,13 @@
     }
    ],
    "confidence": "high",
-   "note": "map-resources.mdによりRESOURCE_SILVERは石見の地形と合わない（砂漠・ツンドラ系のみ）。資源ノードの扱いは保留。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。"
+   "note": "map-resources.mdによりRESOURCE_SILVERは石見の地形と合わない（砂漠・ツンドラ系のみ）。資源ノードの扱いは保留。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_CUPELLATION",
+    "short": "T09"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_MIKAWA_IKKI",
@@ -1148,7 +1320,17 @@
      "title": "Wikipedia日本語版『三河一向一揆』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY",
+    "short": "C08"
+   },
+   "advisor_popup": {
+    "ja": "門徒と和睦し、寺内町の自治を認めましょう。",
+    "en": "Make peace with the Ikkō believers and grant the temple towns autonomy.",
+    "ru": "Заключите мир с последователями Икко и признайте самоуправление храмовых городов."
+   }
   },
   {
    "id": "EV_AMAGO_FALL",
@@ -1158,7 +1340,7 @@
     "ru": "Падение Гассан-Тода и дома Амаго"
    },
    "year": 1566,
-   "month": 11,
+   "month": 12,
    "date_text": "永禄9年11月",
    "regions": [
     "出雲",
@@ -1208,7 +1390,13 @@
     }
    ],
    "confidence": "high",
-   "note": "japan-map-resources.md: 出雲では戦国期に毛利氏が良鉄確保のため鉄奉行を置いた。"
+   "note": "japan-map-resources.md: 出雲では戦国期に毛利氏が良鉄確保のため鉄奉行を置いた。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_SUPPLY_ROADS",
+    "short": "T19"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_MATSUDAIRA_TOKUGAWA",
@@ -1217,8 +1405,8 @@
     "en": "Matsudaira Becomes Tokugawa",
     "ru": "Мацудайра принимают фамилию Токугава"
    },
-   "year": 1566,
-   "month": 12,
+   "year": 1567,
+   "month": 1,
    "date_text": "永禄9年12月（勅許）",
    "regions": [
     "三河"
@@ -1238,7 +1426,7 @@
    ],
    "house_specific": false,
    "effect_category": "rename",
-   "gameplay_effect": "松平元康（家康）が朝廷から徳川の姓を認められ、三河守に任官。長尾→上杉と同様に、条件を満たすと家名を『松平』から『徳川』へ表示切替（Civilization IDは維持）。条件案：C16を研究。",
+   "gameplay_effect": "松平元康（家康）が朝廷から徳川の姓を認められ、三河守に任官。長尾→上杉と同じ仕組みで、条件を満たすと家名を『松平』から『徳川』へ表示切替（Civilization IDは維持。SSOT 3.2）。条件案：C16を研究。",
    "sources": [
     {
      "title": "コトバンク『徳川家康』"
@@ -1248,7 +1436,13 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 3.1に長尾→上杉の記載はあるが、松平→徳川は未記載。本イベントは提案で、オーナー確認が必要。"
+   "note": "SSOT 3.2 で、長尾→上杉と同じ仕組みで松平→徳川を切り替えると決まっている。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_RAKUICHI",
@@ -1258,7 +1452,7 @@
     "ru": "Свободные рынки Ракуити-ракудза (Кано, Адзути)"
    },
    "year": 1567,
-   "month": 10,
+   "month": 11,
    "date_text": "永禄10年10月（美濃・加納）、天正5年（1577）安土山下町",
    "regions": [
     "美濃",
@@ -1291,7 +1485,13 @@
     }
    ],
    "confidence": "high",
-   "note": "『楽市楽座』は織田だけの名ではなく、そのまま一般名にできる。1549年の六角氏・石寺新市の楽市令（確度中）が先例で、六角は本イベントの年より早く施行できる。"
+   "note": "『楽市楽座』は織田だけの名ではなく、そのまま一般名にできる。1549年の六角氏・石寺新市の楽市令（確度中）が先例で、六角は本イベントの年より早く施行できる。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_FREE_MARKETS",
+    "short": "C17"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_JORAKU",
@@ -1341,7 +1541,13 @@
      "title": "Wikipedia日本語版『織田信長』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_IMAGAWA_FALL",
@@ -1350,9 +1556,8 @@
     "en": "Invasion of Suruga and Fall of the Imagawa",
     "ru": "Вторжение в Суруга и падение дома Имагава"
    },
-   "year": 1568,
-   "month": 12,
-   "year_end": 1569,
+   "year": 1569,
+   "month": 1,
    "date_text": "永禄11年12月〜永禄12年5月",
    "regions": [
     "駿河",
@@ -1381,7 +1586,9 @@
      "title": "Wikipedia日本語版『駿河侵攻』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": null,
+   "advisor_popup": null
   },
   {
    "id": "EV_ISHIYAMA",
@@ -1391,7 +1598,7 @@
     "ru": "Война Исияма"
    },
    "year": 1570,
-   "month": null,
+   "month": 10,
    "year_end": 1580,
    "date_text": "元亀元年9月〜天正8年8月（1570〜1580）",
    "regions": [
@@ -1437,7 +1644,17 @@
      "title": "Wikipedia日本語版『石山合戦』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES",
+    "short": "C18"
+   },
+   "advisor_popup": {
+    "ja": "本願寺と和睦し、寺社領を安堵しましょう。",
+    "en": "Make peace with the Honganji and guarantee its temple lands.",
+    "ru": "Заключите мир с Хонгандзи и гарантируйте храмовые земли."
+   }
   },
   {
    "id": "EV_NAGASAKI",
@@ -1494,7 +1711,13 @@
     }
    ],
    "confidence": "high",
-   "note": "1534年配分で肥前は大友領。大村純忠らの影響で実際の帰属は複雑。"
+   "note": "1534年配分で肥前は大友領。大村純忠らの影響で実際の帰属は複雑。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
+    "short": "C19"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_MUROMACHI_END",
@@ -1524,7 +1747,7 @@
    ],
    "house_specific": false,
    "effect_category": "rename",
-   "gameplay_effect": "織田が足利義昭を京都から追放する。足利将軍家の役割（停戦裁定・所領安堵）が失われ、C16／C24の効果が変質する。足利将軍家の勢力を存続させるか、名前を変更するかはオーナー確認。",
+   "gameplay_effect": "織田が足利義昭を京都から追放する。足利将軍家の勢力は残り、裁定の力（停戦裁定・所領安堵）だけを失う（SSOT 3.2）。",
    "sources": [
     {
      "title": "コトバンク『足利義昭』"
@@ -1534,7 +1757,13 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 3.1で『足利将軍家』は勢力の1つ。プレイヤー勢力を消すのではなく、将軍位の喪失イベントとして扱う案。"
+   "note": "SSOT 3.1で『足利将軍家』は勢力の1つ。プレイヤー勢力を消すのではなく、将軍位の喪失イベントとして扱う案。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_ASAKURA_FALL",
@@ -1569,7 +1798,9 @@
      "title": "Wikipedia日本語版『一乗谷城の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": null,
+   "advisor_popup": null
   },
   {
    "id": "EV_NAGASHINO",
@@ -1622,7 +1853,13 @@
      "title": "Wikipedia日本語版『長篠の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION",
+    "short": "C21"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_SHIMANTO",
@@ -1632,7 +1869,7 @@
     "ru": "Тёсокабэ Мототика объединяет Тоса (Симантогава)"
    },
    "year": 1575,
-   "month": 7,
+   "month": 8,
    "date_text": "天正3年7月",
    "regions": [
     "土佐"
@@ -1671,7 +1908,13 @@
      "title": "Wikipedia日本語版『四万十川の戦い』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+    "short": "C10"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_AZUCHI",
@@ -1727,7 +1970,13 @@
      "title": "Wikipedia日本語版『安土城』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_STONE_RAMPARTS",
+    "short": "T21"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KENSHIN_DEATH",
@@ -1774,7 +2023,17 @@
      "title": "Wikipedia日本語版『御館の乱』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
+    "short": "C11"
+   },
+   "advisor_popup": {
+    "ja": "後継争いを和睦で収め、北条・武田との同盟を探りましょう。",
+    "en": "Settle the succession dispute by truce and seek alliances with the Hōjō and Takeda.",
+    "ru": "Уладьте спор о наследии миром и ищите союза с Ходзё и Такэда."
+   }
   },
   {
    "id": "EV_TAKEDA_FALL",
@@ -1813,7 +2072,9 @@
      "title": "Wikipedia日本語版『甲州征伐』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": null,
+   "advisor_popup": null
   },
   {
    "id": "EV_HONNOJI",
@@ -1852,7 +2113,7 @@
    ],
    "house_specific": false,
    "effect_category": "succession",
-   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の当主・領土が入れ替わる。『織田』勢力の後継（羽柴／豊臣）の扱いはオーナー確認。",
+   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の当主が替わり、表示名を織田→羽柴→豊臣へ切り替える（長尾→上杉と同じ仕組み。SSOT 3.2）。",
    "sources": [
     {
      "title": "コトバンク『本能寺の変』"
@@ -1862,7 +2123,17 @@
     }
    ],
    "confidence": "high",
-   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれない。"
+   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれず、織田家の表示名の切り替えで表す（SSOT 3.2）。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": {
+    "ja": "朝廷・将軍への取次で、後継の正統性を固めましょう。",
+    "en": "Use envoys to the court to secure the successor's legitimacy.",
+    "ru": "Через послов ко двору укрепите законность наследника."
+   }
   },
   {
    "id": "EV_YAMAZAKI_KENCHI",
@@ -1901,15 +2172,9 @@
      "short": "T31"
     }
    ],
-   "house_specific": true,
-   "house": "TOYOTOMI",
-   "generic_name": {
-    "ja": "検地",
-    "en": "Land Survey (Kenchi)",
-    "ru": "Земельное обследование (кэнти)"
-   },
+   "house_specific": false,
    "effect_category": "institution",
-   "gameplay_effect": "羽柴秀吉が山城・山崎で検地を始め、のちに全国で検地（石高制）が進む。『検地』は一般名として全勢力が研究でき、豊臣期の太閤検地（C25）は特定人物の名を冠するため他家では『検地』と表示する。先に領国検地（C20）／検地尺の標準化（T31）を研究した勢力は年より早く導入可能。",
+   "gameplay_effect": "羽柴秀吉が山城・山崎で検地を始め、のちに全国で検地（石高制）が進む。太閤検地（C25）は研究したすべての家に『太閤検地』と表示する（SSOT 3.2）。先に領国検地（C20）／検地尺の標準化（T31）を研究した勢力は年より早く検地の効果を使える。",
    "sources": [
     {
      "title": "小田原デジタルミュージアム 北条氏の検地・貫高制",
@@ -1923,7 +2188,12 @@
     }
    ],
    "confidence": "high",
-   "note": "Toyotomiは22勢力の外。太閤検地(C25)を研究した勢力にはローカル名『太閤検地』を、他は『検地』と表示する案。"
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS",
+    "short": "C20"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_OSAKA",
@@ -1933,7 +2203,7 @@
     "ru": "Строительство замка Осака"
    },
    "year": 1583,
-   "month": 9,
+   "month": 10,
    "date_text": "天正11年（1583）9月着工",
    "regions": [
     "摂津"
@@ -1969,7 +2239,7 @@
     }
    ],
    "house_specific": true,
-   "house": "TOYOTOMI",
+   "house": "ODA",
    "generic_name": {
     "ja": "巨大城郭の築城",
     "en": "Grand Castle Construction",
@@ -1985,7 +2255,13 @@
      "title": "Wikipedia日本語版『大坂城』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE",
+    "short": "T29"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_SHIKOKU",
@@ -2039,7 +2315,17 @@
      "title": "Wikipedia日本語版『四国攻め』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+    "short": "C10"
+   },
+   "advisor_popup": {
+    "ja": "天下人との和睦で、本領を守るか考えましょう。",
+    "en": "Consider a peace with the realm's ruler to keep your home province.",
+    "ru": "Подумайте о мире с правителем страны, чтобы сохранить родную провинцию."
+   }
   },
   {
    "id": "EV_TENSHO_QUAKE",
@@ -2090,7 +2376,17 @@
      "title": "Wikipedia日本語版『天正地震』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_BATH_AND_MEDICINE",
+    "short": "T18"
+   },
+   "advisor_popup": {
+    "ja": "被災した城を修理し、湯屋と兵糧蔵で民を救いましょう。",
+    "en": "Repair damaged castles and relieve the people with baths and granaries.",
+    "ru": "Восстановите замки и помогите народу банями и амбарами."
+   }
   },
   {
    "id": "EV_KYUSHU",
@@ -2100,8 +2396,7 @@
     "ru": "Поход на Кюсю"
    },
    "year": 1587,
-   "month": 6,
-   "year_end": 1587,
+   "month": 1,
    "date_text": "天正14年12月〜天正15年5月（1586〜1587）",
    "regions": [
     "日向",
@@ -2145,7 +2440,17 @@
      "title": "Wikipedia日本語版『九州平定』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_SUPPLY_ROADS",
+    "short": "T19"
+   },
+   "advisor_popup": {
+    "ja": "天下人と和睦し、本領の安堵を求めましょう。",
+    "en": "Make peace with the realm's ruler and seek confirmation of your lands.",
+    "ru": "Заключите мир с правителем страны и добейтесь подтверждения владений."
+   }
   },
   {
    "id": "EV_BATEREN",
@@ -2191,7 +2496,13 @@
      "title": "Wikipedia日本語版『バテレン追放令』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES",
+    "short": "C18"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KITANO_TEA",
@@ -2225,7 +2536,7 @@
     }
    ],
    "house_specific": true,
-   "house": "TOYOTOMI",
+   "house": "ODA",
    "generic_name": {
     "ja": "大茶会",
     "en": "Grand Tea Gathering",
@@ -2241,7 +2552,13 @@
      "title": "Wikipedia日本語版『北野大茶湯』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_TEA_GATHERINGS",
+    "short": "C14"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_KATANAGARI",
@@ -2274,13 +2591,7 @@
      "short": "C28"
     }
    ],
-   "house_specific": true,
-   "house": "TOYOTOMI",
-   "generic_name": {
-    "ja": "武装の制限",
-    "en": "Disarmament Edict",
-    "ru": "Указ о разоружении"
-   },
+   "house_specific": false,
    "effect_category": "institution",
    "gameplay_effect": "農民の武器を没収する令。一揆の発生を抑え、忠誠が上がるが、兵農分離（C28）前は徴兵基盤が減る。自動施行せず選択制（樹形案の方針）。",
    "sources": [
@@ -2291,110 +2602,13 @@
      "title": "Wikipedia日本語版『刀狩』"
     }
    ],
-   "confidence": "high"
-  },
-  {
-   "id": "EV_SURIAGEHARA",
-   "name": {
-    "ja": "摺上原の戦い（蘆名氏の滅亡）",
-    "en": "Battle of Suriagehara (Fall of the Ashina)",
-    "ru": "Битва при Суриагэхара (падение дома Асина)"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_SWORD_HUNT",
+    "short": "C27"
    },
-   "year": 1589,
-   "month": 6,
-   "date_text": "天正17年5月",
-   "regions": [
-    "陸奥",
-    "出羽"
-   ],
-   "affected_factions": [
-    "ASHINA",
-    "DATE"
-   ],
-   "primary_factions": [
-    "ASHINA",
-    "DATE"
-   ],
-   "earlier_by": [
-    {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION",
-     "short": "T22"
-    },
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
-     "short": "C10"
-    }
-   ],
-   "house_specific": false,
-   "effect_category": "war",
-   "gameplay_effect": "伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆産業圏（RESOURCE_JAC_LACQUER）の所有が伊達へ移る。",
-   "resource": {
-    "resource_id": "RESOURCE_JAC_LACQUER",
-    "location": "会津 (37.490, 139.930)",
-    "action": "ownership",
-    "start_year": 1534
-   },
-   "sources": [
-    {
-     "title": "コトバンク『摺上原の戦い』"
-    },
-    {
-     "title": "Wikipedia日本語版『摺上原の戦い』"
-    }
-   ],
-   "confidence": "high"
-  },
-  {
-   "id": "EV_SADO_SUBJUGATION",
-   "name": {
-    "ja": "上杉景勝の佐渡平定と西三川砂金",
-    "en": "Uesugi Kagekatsu Takes Sado; Nishimikawa Gold",
-    "ru": "Уэсуги Кагэкацу берёт Садо; золото Нисимикава"
-   },
-   "year": 1589,
-   "month": 8,
-   "date_text": "天正17年（1589）平定、西三川の本格採取は1593年ごろ",
-   "regions": [
-    "佐渡"
-   ],
-   "affected_factions": [
-    "NAGAO"
-   ],
-   "primary_factions": [
-    "NAGAO"
-   ],
-   "earlier_by": [
-    {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
-     "short": "T14"
-    },
-    {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
-     "short": "T06"
-    }
-   ],
-   "house_specific": false,
-   "effect_category": "resource",
-   "gameplay_effect": "上杉が佐渡の本間氏を平定。西三川の砂金（金）が採れる。金（RESOURCE_JAC_GOLD案）を佐渡に追加。相川金銀山の発見（1596）と本格開発（1601）の前提。",
-   "resource": {
-    "resource_id": "RESOURCE_JAC_GOLD",
-    "location": "西三川・佐渡 (37.819, 138.273)",
-    "action": "reveal",
-    "start_year": 1593
-   },
-   "sources": [
-    {
-     "title": "documents/research/japan-map-resources.md（資源の代表地点と年代）"
-    },
-    {
-     "title": "Wikipedia日本語版『西三川砂金山』"
-    }
-   ],
-   "confidence": "medium"
+   "advisor_popup": null
   },
   {
    "id": "EV_RYUKYU_SHIMAZU_DEMAND",
@@ -2447,58 +2661,192 @@
      "title": "Wikipedia日本語版『琉球の役』"
     }
    ],
-   "confidence": "medium"
+   "confidence": "medium",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
+    "short": "C11"
+   },
+   "advisor_popup": {
+    "ja": "島津を通じて使節を送り、和睦を保ちましょう。",
+    "en": "Send envoys through the Shimazu and keep the peace.",
+    "ru": "Отправьте послов через Симадзу и сохраните мир."
+   }
   },
   {
-   "id": "EV_AIZU_LACQUER",
+   "id": "EV_SURIAGEHARA",
    "name": {
-    "ja": "蒲生氏郷の会津入封と漆器産業",
-    "en": "Gamō Ujisato in Aizu; Lacquerware Industry",
-    "ru": "Гамо Удзисато в Аидзу; лаковое производство"
+    "ja": "摺上原の戦い（蘆名氏の滅亡）",
+    "en": "Battle of Suriagehara (Fall of the Ashina)",
+    "ru": "Битва при Суриагэхара (падение дома Асина)"
    },
-   "year": 1590,
-   "month": 8,
-   "date_text": "天正18年（1590）8月",
+   "year": 1589,
+   "month": 7,
+   "date_text": "天正17年6月5日",
    "regions": [
-    "陸奥"
+    "陸奥",
+    "出羽"
    ],
    "affected_factions": [
-    "DATE",
-    "ASHINA"
+    "ASHINA",
+    "DATE"
    ],
    "primary_factions": [
-    "ASHINA"
+    "ASHINA",
+    "DATE"
    ],
    "earlier_by": [
     {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
-     "short": "C15"
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION",
+     "short": "T22"
     },
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS",
-     "short": "C13"
+     "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+     "short": "C10"
+    }
+   ],
+   "house_specific": false,
+   "effect_category": "war",
+   "gameplay_effect": "伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆産業圏（RESOURCE_JAC_LACQUER）の所有が伊達へ移る。",
+   "resource": {
+    "resource_id": "RESOURCE_JAC_LACQUER",
+    "location": "会津 (37.490, 139.930)",
+    "action": "ownership",
+    "start_year": 1534
+   },
+   "sources": [
+    {
+     "title": "コトバンク『摺上原の戦い』"
+    },
+    {
+     "title": "Wikipedia日本語版『摺上原の戦い』"
+    }
+   ],
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+    "short": "C10"
+   },
+   "advisor_popup": null
+  },
+  {
+   "id": "EV_SADO_SUBJUGATION",
+   "name": {
+    "ja": "上杉景勝の佐渡平定と西三川砂金",
+    "en": "Uesugi Kagekatsu Takes Sado; Nishimikawa Gold",
+    "ru": "Уэсуги Кагэкацу берёт Садо; золото Нисимикава"
+   },
+   "year": 1589,
+   "month": 8,
+   "date_text": "天正17年（1589）平定、西三川の本格採取は1593年ごろ",
+   "regions": [
+    "佐渡"
+   ],
+   "affected_factions": [
+    "NAGAO"
+   ],
+   "primary_factions": [
+    "NAGAO"
+   ],
+   "earlier_by": [
+    {
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+     "short": "T14"
+    },
+    {
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
+     "short": "T06"
     }
    ],
    "house_specific": false,
    "effect_category": "resource",
-   "gameplay_effect": "奥州仕置で会津が蒲生氏郷に与えられ、近江から漆器職人が招かれる。漆（RESOURCE_JAC_LACQUER案）を会津に追加。会津は蘆名の旧領で、黒川城は若松に改称。",
+   "gameplay_effect": "上杉が佐渡の本間氏を平定。西三川の砂金（金）が採れる。金（RESOURCE_JAC_GOLD案）を佐渡に追加。相川金銀山の発見（1596）と本格開発（1601）の前提。",
    "resource": {
-    "resource_id": "RESOURCE_JAC_LACQUER",
-    "location": "会津 (37.490, 139.930)",
+    "resource_id": "RESOURCE_JAC_GOLD",
+    "location": "西三川・佐渡 (37.819, 138.273)",
     "action": "reveal",
-    "start_year": 1590
+    "start_year": 1593
    },
    "sources": [
     {
      "title": "documents/research/japan-map-resources.md（資源の代表地点と年代）"
     },
     {
-     "title": "Wikipedia日本語版『蒲生氏郷』"
+     "title": "Wikipedia日本語版『西三川砂金山』"
     }
    ],
-   "confidence": "medium"
+   "confidence": "medium",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "short": "T14"
+   },
+   "advisor_popup": null
+  },
+  {
+   "id": "EV_ODAWARA",
+   "name": {
+    "ja": "小田原征伐と北条氏の滅亡",
+    "en": "Odawara Campaign; Fall of the Hojo",
+    "ru": "Поход на Одавару; падение дома Ходзё"
+   },
+   "year": 1590,
+   "month": 5,
+   "date_text": "天正18年4月〜7月5日",
+   "regions": [
+    "相模",
+    "武蔵",
+    "下野"
+   ],
+   "affected_factions": [
+    "HOJO",
+    "DATE",
+    "MATSUDAIRA",
+    "YAMANOUCHI_UESUGI"
+   ],
+   "primary_factions": [
+    "HOJO",
+    "MATSUDAIRA"
+   ],
+   "earlier_by": [
+    {
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_OUTER_DEFENSES",
+     "short": "T32"
+    },
+    {
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_STONE_RAMPARTS",
+     "short": "T21"
+    }
+   ],
+   "house_specific": false,
+   "effect_category": "war",
+   "gameplay_effect": "秀吉が小田原城を包囲し、北条氏直が降伏。北条領（関東）は徳川家康へ与えられる（次のイベント）。惣構（T32）を持つ勢力は籠城の耐久が高い。",
+   "sources": [
+    {
+     "title": "コトバンク『小田原征伐』"
+    },
+    {
+     "title": "Wikipedia日本語版『小田原征伐』"
+    }
+   ],
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_OUTER_DEFENSES",
+    "short": "T32"
+   },
+   "advisor_popup": {
+    "ja": "包囲を受ける前に、天下人との和睦を考えましょう。",
+    "en": "Consider peace with the realm's ruler before the siege begins.",
+    "ru": "Подумайте о мире с правителем страны до начала осады."
+   }
   },
   {
    "id": "EV_MATSUDAIRA_KANTO",
@@ -2545,57 +2893,70 @@
      "title": "Wikipedia日本語版『徳川家康』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
+    "short": "C15"
+   },
+   "advisor_popup": null
   },
   {
-   "id": "EV_ODAWARA",
+   "id": "EV_AIZU_LACQUER",
    "name": {
-    "ja": "小田原征伐と北条氏の滅亡",
-    "en": "Odawara Campaign; Fall of the Hojo",
-    "ru": "Поход на Одавару; падение дома Ходзё"
+    "ja": "蒲生氏郷の会津入封と漆器産業",
+    "en": "Gamō Ujisato in Aizu; Lacquerware Industry",
+    "ru": "Гамо Удзисато в Аидзу; лаковое производство"
    },
    "year": 1590,
-   "month": 8,
-   "date_text": "天正18年4月〜7月5日",
+   "month": 9,
+   "date_text": "天正18年（1590）8月",
    "regions": [
-    "相模",
-    "武蔵",
-    "下野"
+    "陸奥"
    ],
    "affected_factions": [
-    "HOJO",
     "DATE",
-    "MATSUDAIRA",
-    "YAMANOUCHI_UESUGI"
+    "ASHINA"
    ],
    "primary_factions": [
-    "HOJO",
-    "MATSUDAIRA"
+    "ASHINA"
    ],
    "earlier_by": [
     {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_OUTER_DEFENSES",
-     "short": "T32"
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
+     "short": "C15"
     },
     {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_STONE_RAMPARTS",
-     "short": "T21"
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS",
+     "short": "C13"
     }
    ],
    "house_specific": false,
-   "effect_category": "war",
-   "gameplay_effect": "秀吉が小田原城を包囲し、北条氏直が降伏。北条領（関東）は徳川家康へ与えられる（次のイベント）。惣構（T32）を持つ勢力は籠城の耐久が高い。",
+   "effect_category": "resource",
+   "gameplay_effect": "奥州仕置で会津が蒲生氏郷に与えられ、近江から漆器職人が招かれる。漆（RESOURCE_JAC_LACQUER案）を会津に追加。会津は蘆名の旧領で、黒川城は若松に改称。",
+   "resource": {
+    "resource_id": "RESOURCE_JAC_LACQUER",
+    "location": "会津 (37.490, 139.930)",
+    "action": "reveal",
+    "start_year": 1590
+   },
    "sources": [
     {
-     "title": "コトバンク『小田原征伐』"
+     "title": "documents/research/japan-map-resources.md（資源の代表地点と年代）"
     },
     {
-     "title": "Wikipedia日本語版『小田原征伐』"
+     "title": "Wikipedia日本語版『蒲生氏郷』"
     }
    ],
-   "confidence": "high"
+   "confidence": "medium",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
+    "short": "C15"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_SHINBUN_SEIDO",
@@ -2633,13 +2994,7 @@
      "short": "C25"
     }
    ],
-   "house_specific": true,
-   "house": "TOYOTOMI",
-   "generic_name": {
-    "ja": "身分の固定",
-    "en": "Class Fixing Edict",
-    "ru": "Закрепление сословий"
-   },
+   "house_specific": false,
    "effect_category": "institution",
    "gameplay_effect": "武士・町人・百姓の身分を固定する令。C28を持つ勢力は徴兵基盤と税収を安定させる。",
    "sources": [
@@ -2650,7 +3005,13 @@
      "title": "Wikipedia日本語版『身分統制令』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION",
+    "short": "C28"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_BUNROKU",
@@ -2718,7 +3079,13 @@
      "title": "Wikipedia日本語版『文禄・慶長の役』"
     }
    ],
-   "confidence": "high"
+   "confidence": "high",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_PORT_SUPPLY",
+    "short": "T24"
+   },
+   "advisor_popup": null
   },
   {
    "id": "EV_EZO_MATSUMAE",
@@ -2762,99 +3129,17 @@
      "title": "Wikipedia日本語版『松前慶広』"
     }
    ],
-   "confidence": "medium"
-  },
-  {
-   "id": "EV_SAN_FELIPE",
-   "name": {
-    "ja": "サン＝フェリペ号事件と二十六聖人の殉教",
-    "en": "San Felipe Incident and Martyrdom of the 26 Saints",
-    "ru": "Инцидент с «Сан-Фелипе» и казнь 26 мучеников"
+   "confidence": "medium",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
+    "short": "C11"
    },
-   "year": 1596,
-   "month": 10,
-   "date_text": "慶長元年（1596）10月",
-   "regions": [
-    "土佐",
-    "肥前"
-   ],
-   "affected_factions": [
-    "CHOSOKABE",
-    "OTOMO",
-    "SHIMAZU"
-   ],
-   "primary_factions": [
-    "CHOSOKABE"
-   ],
-   "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES",
-     "short": "C18"
-    },
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
-     "short": "C19"
-    }
-   ],
-   "house_specific": false,
-   "effect_category": "religion",
-   "gameplay_effect": "土佐に漂着したスペイン船の積荷が没収され、キリスト教徒が長崎で処刑される（翌1597年）。カトリックの禁教が強まり、信徒の地下化が進む。",
-   "sources": [
-    {
-     "title": "コトバンク『サン＝フェリペ号事件』"
-    },
-    {
-     "title": "Wikipedia日本語版『サン＝フェリペ号事件』"
-    }
-   ],
-   "confidence": "high"
-  },
-  {
-   "id": "EV_CHOSOKABE_HYAKKAJO",
-   "name": {
-    "ja": "長宗我部氏掟書（百箇条）",
-    "en": "Chosokabe Motochika Hyakkajō",
-    "ru": "Свод законов Тёсокабэ Мототика (Хякукадзё)"
-   },
-   "year": 1596,
-   "month": 12,
-   "date_text": "慶長元年11月15日（1596年）",
-   "regions": [
-    "土佐"
-   ],
-   "affected_factions": [
-    "CHOSOKABE"
-   ],
-   "primary_factions": [
-    "CHOSOKABE"
-   ],
-   "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAW",
-     "short": "C05"
-    }
-   ],
-   "house_specific": true,
-   "house": "CHOSOKABE",
-   "generic_name": {
-    "ja": "分国法の制定",
-    "en": "Domain Law Enacted",
-    "ru": "Принятие законов владения"
-   },
-   "effect_category": "institution",
-   "gameplay_effect": "長宗我部元親が分国法を制定する。領国の忠誠・訴訟が安定する。",
-   "sources": [
-    {
-     "title": "コトバンク『長宗我部元親』"
-    },
-    {
-     "title": "Wikipedia日本語版『長宗我部元親百箇条』"
-    }
-   ],
-   "confidence": "high"
+   "advisor_popup": {
+    "ja": "蠣崎氏との交易の取り決めを結び直しましょう。",
+    "en": "Renegotiate the trade terms with the Kakizaki.",
+    "ru": "Пересмотрите условия торговли с Какидзаки."
+   }
   },
   {
    "id": "EV_AIKAWA",
@@ -2910,65 +3195,117 @@
     }
    ],
    "confidence": "medium",
-   "note": "map-resources.md: 相川銀鉱床は鶴子と近く、20kmタイルでは別ノードにしない。"
+   "note": "map-resources.md: 相川銀鉱床は鶴子と近く、20kmタイルでは別ノードにしない。",
+   "boost": {
+    "type": "tech",
+    "id": "TECH_JAC_SENGOKU_CUPELLATION",
+    "short": "T09"
+   },
+   "advisor_popup": null
   },
   {
-   "id": "EV_SEKIGAHARA",
+   "id": "EV_SAN_FELIPE",
    "name": {
-    "ja": "関ヶ原の戦い",
-    "en": "Battle of Sekigahara",
-    "ru": "Битва при Сэкигахара"
+    "ja": "サン＝フェリペ号事件と二十六聖人の殉教",
+    "en": "San Felipe Incident and Martyrdom of the 26 Saints",
+    "ru": "Инцидент с «Сан-Фелипе» и казнь 26 мучеников"
    },
-   "year": 1600,
+   "year": 1596,
    "month": 10,
-   "date_text": "慶長5年9月15日",
+   "date_text": "文禄5年8月28日（1596年10月19日）土佐・浦戸に漂着。二十六聖人の殉教は慶長元年12月19日（1597年2月5日）",
    "regions": [
-    "美濃",
-    "全国"
+    "土佐",
+    "肥前"
    ],
    "affected_factions": [
-    "MATSUDAIRA",
-    "MORI",
-    "SHIMAZU",
-    "ODA",
-    "ASAKURA",
     "CHOSOKABE",
-    "NAGAO"
+    "OTOMO",
+    "SHIMAZU"
    ],
    "primary_factions": [
-    "MATSUDAIRA",
-    "MORI"
+    "CHOSOKABE"
    ],
    "earlier_by": [
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS",
-     "short": "C23"
+     "id": "CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES",
+     "short": "C18"
     },
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",
-     "short": "C11"
-    },
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION",
-     "short": "C24"
+     "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
+     "short": "C19"
     }
    ],
    "house_specific": false,
-   "effect_category": "war",
-   "gameplay_effect": "東軍（徳川）と西軍（石田・毛利ほか）の決戦。1600年10月に天下の分け目となる。終盤の大規模同盟戦の分岐。統一勝利は登録済みの全城支配（SSOT 3.1）で、本イベントは勝利を自動付与しない。",
+   "effect_category": "religion",
+   "gameplay_effect": "土佐に漂着したスペイン船の積荷が没収され、キリスト教徒が長崎で処刑される（翌1597年）。カトリックの禁教が強まり、信徒の地下化が進む。",
    "sources": [
     {
-     "title": "コトバンク『関ヶ原の戦い』"
+     "title": "コトバンク『サン＝フェリペ号事件』"
     },
     {
-     "title": "Wikipedia日本語版『関ヶ原の戦い』"
+     "title": "Wikipedia日本語版『サン＝フェリペ号事件』"
     }
    ],
    "confidence": "high",
-   "note": "Civ6では勝利条件と独立。決戦イベントの形は『終盤の大規模同盟戦』として設計する案。"
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES",
+    "short": "C18"
+   },
+   "advisor_popup": null
+  },
+  {
+   "id": "EV_CHOSOKABE_HYAKKAJO",
+   "name": {
+    "ja": "長宗我部氏掟書（百箇条）",
+    "en": "Chosokabe Motochika Hyakkajō",
+    "ru": "Свод законов Тёсокабэ Мототика (Хякукадзё)"
+   },
+   "year": 1597,
+   "month": 1,
+   "date_text": "慶長元年11月15日（1596年）",
+   "regions": [
+    "土佐"
+   ],
+   "affected_factions": [
+    "CHOSOKABE"
+   ],
+   "primary_factions": [
+    "CHOSOKABE"
+   ],
+   "earlier_by": [
+    {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAW",
+     "short": "C05"
+    }
+   ],
+   "house_specific": true,
+   "house": "CHOSOKABE",
+   "generic_name": {
+    "ja": "分国法の制定",
+    "en": "Domain Law Enacted",
+    "ru": "Принятие законов владения"
+   },
+   "effect_category": "institution",
+   "gameplay_effect": "長宗我部元親が分国法を制定する。領国の忠誠・訴訟が安定する。",
+   "sources": [
+    {
+     "title": "コトバンク『長宗我部元親』"
+    },
+    {
+     "title": "Wikipedia日本語版『長宗我部元親百箇条』"
+    }
+   ],
+   "confidence": "high",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_DOMAIN_LAW",
+    "short": "C05"
+   },
+   "advisor_popup": null
   }
  ]
 }

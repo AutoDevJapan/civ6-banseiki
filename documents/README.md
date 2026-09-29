@@ -19,7 +19,7 @@
 | [`spec/data/japan-1534-prosperity.json`](spec/data/japan-1534-prosperity.json) | 上記の機械可読データ（22勢力・56都市）。生成は `tools/japan_map_scale/prosperity.py`、地図への反映は `prosper_start.py` |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
-| [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント60件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・暫定の効果案 |
+| [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント59件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
