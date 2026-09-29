@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="f6398d3b-707c-4d0a-8b19-e68333efa200" version="1">
+	<Properties>
+		<Name>LOC_JAC_HISTORICAL_EVENTS_MOD_NAME</Name>
+		<Teaser>LOC_JAC_HISTORICAL_EVENTS_MOD_DESCRIPTION</Teaser>
+		<Description>LOC_JAC_HISTORICAL_EVENTS_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<Dependencies>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+		<Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+		<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
+		<Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="LOC_JAC_SENGOKU_TREES_MOD_NAME"/>
+	</Dependencies>
+	<LocalizedText>
+		<Text id="LOC_JAC_HISTORICAL_EVENTS_MOD_NAME">
+			<en_US>JAC PoC: Historical Events</en_US><ja_JP>JAC PoC：史実の出来事</ja_JP><ru_RU>JAC PoC: исторические события</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_HISTORICAL_EVENTS_MOD_DESCRIPTION">
+			<en_US>Sengoku historical events that fire in their year, or earlier after the related research.</en_US>
+			<ja_JP>史実の年に起き、関係する研究を先に終えると早く起きる戦国の出来事。</ja_JP>
+			<ru_RU>События Сэнгоку: наступают в свой год или раньше после связанного исследования.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_Events_Banseiki">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+		</Criteria>
+		<Criteria id="JAC_Events_20km">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Events_20km_Settlers">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Events_15km">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Events_15km_Settlers">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateDatabase id="JAC_Events_Data" criteria="JAC_Events_Banseiki">
+			<Properties><LoadOrder>300</LoadOrder></Properties>
+			<File>Data/JAC_HistoricalEvents_Schema.sql</File>
+			<File>Data/JAC_HistoricalEvents_Sengoku.sql</File>
+		</UpdateDatabase>
+		<UpdateDatabase id="JAC_Events_Plots_20km" criteria="JAC_Events_20km">
+			<Properties><LoadOrder>310</LoadOrder></Properties>
+			<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
+		</UpdateDatabase>
+		<UpdateDatabase id="JAC_Events_Plots_20km_Settlers" criteria="JAC_Events_20km_Settlers">
+			<Properties><LoadOrder>310</LoadOrder></Properties>
+			<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
+		</UpdateDatabase>
+		<UpdateDatabase id="JAC_Events_Plots_15km" criteria="JAC_Events_15km">
+			<Properties><LoadOrder>310</LoadOrder></Properties>
+			<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
+		</UpdateDatabase>
+		<UpdateDatabase id="JAC_Events_Plots_15km_Settlers" criteria="JAC_Events_15km_Settlers">
+			<Properties><LoadOrder>310</LoadOrder></Properties>
+			<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_Events_Text" criteria="JAC_Events_Banseiki">
+			<File>Text/JAC_HistoricalEvents_Text.xml</File>
+		</UpdateText>
+		<UpdateIcons id="JAC_Events_Icons" criteria="JAC_Events_Banseiki">
+			<File>Data/JAC_HistoricalEvents_Icons.xml</File>
+		</UpdateIcons>
+		<AddGameplayScripts id="JAC_Events_Scripts" criteria="JAC_Events_Banseiki">
+			<File>Scripts/JAC_HistoricalEvents.lua</File>
+		</AddGameplayScripts>
+	</InGameActions>
+	<Files>
+		<File>Data/JAC_HistoricalEvents_Schema.sql</File>
+		<File>Data/JAC_HistoricalEvents_Sengoku.sql</File>
+		<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
+		<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
+		<File>Data/JAC_HistoricalEvents_Icons.xml</File>
+		<File>Text/JAC_HistoricalEvents_Text.xml</File>
+		<File>Scripts/JAC_HistoricalEvents.lua</File>
+	</Files>
+</Mod>

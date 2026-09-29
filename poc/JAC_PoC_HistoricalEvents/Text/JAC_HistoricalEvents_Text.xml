@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<LocalizedText>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_NAME" Language="ja_JP"><Text>鉄砲伝来</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_NAME" Language="en_US"><Text>Arrival of Firearms</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_NAME" Language="ru_RU"><Text>Появление огнестрельного оружия</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_DESCRIPTION" Language="ja_JP"><Text>種子島に火縄銃が伝わり、鉄砲の知識が広まった。</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_DESCRIPTION" Language="en_US"><Text>Matchlocks have reached Tanegashima, and knowledge of firearms is spreading.</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_TEPPO_DENRAI_DESCRIPTION" Language="ru_RU"><Text>Фитильные ружья попали на Танэгасиму, и знания об огнестрельном оружии распространяются.</Text></Row>
+
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_NAME" Language="ja_JP"><Text>足尾銅山の開坑</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_NAME" Language="en_US"><Text>Ashio Copper Mine Opens</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_NAME" Language="ru_RU"><Text>Открытие медного рудника Асио</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_DESCRIPTION" Language="ja_JP"><Text>下野の足尾で銅山が開かれ、銅が地図に現れた。</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_DESCRIPTION" Language="en_US"><Text>A copper mine has opened at Ashio in Shimotsuke; copper now appears on the map.</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ASHIO_COPPER_DESCRIPTION" Language="ru_RU"><Text>В Асио (провинция Симоцукэ) открыт медный рудник; медь появилась на карте.</Text></Row>
+
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_NAME" Language="ja_JP"><Text>長尾家の上杉家継承</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_NAME" Language="en_US"><Text>The Nagao Inherit the Uesugi Name</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_NAME" Language="ru_RU"><Text>Нагао наследуют имя Уэсуги</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_DESCRIPTION" Language="ja_JP"><Text>長尾景虎が山内上杉家の名跡と関東管領職を継ぎ、長尾家は上杉家を名乗る。</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_DESCRIPTION" Language="en_US"><Text>Nagao Kagetora inherits the Yamanouchi Uesugi name and the office of Kanto Kanrei; the Nagao clan now bears the Uesugi name.</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_NAGAO_UESUGI_DESCRIPTION" Language="ru_RU"><Text>Нагао Кагэтора наследует имя дома Яманоути Уэсуги и должность канто-канрэй; род Нагао отныне носит имя Уэсуги.</Text></Row>
+
+		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="ja_JP"><Text>上杉</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="en_US"><Text>Uesugi</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="ru_RU"><Text>Уэсуги</Text></Row>
+	</LocalizedText>
+</GameInfo>
