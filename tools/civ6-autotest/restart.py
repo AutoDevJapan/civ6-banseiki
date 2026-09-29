@@ -96,7 +96,7 @@ def process_start_time(pid: int) -> float:
         kernel32.CloseHandle(process)
 
 
-def single_civ_process(settle: float = 10.0) -> tuple[int, float] | None:
+def single_civ_process(settle: float = 30.0) -> tuple[int, float] | None:
     """Return the only Civ VI process. If several exist, wait up to `settle` seconds
     for exiting ones to vanish; never kills anything, still refuses when they persist."""
     pids = _civ_process_ids()
