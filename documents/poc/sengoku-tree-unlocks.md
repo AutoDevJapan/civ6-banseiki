@@ -5,7 +5,7 @@
 
 | ノード | 設計案の解放 | 現行PoCの公式代理 | 残課題 |
 |---|---|---|---|
-| T01 用水普請 | 用水改修（改善案）。初期の水田は既設・利用可 | `IMPROVEMENT_FARM`, `BUILDING_WATER_MILL` | TODO: 設計案の固有実装（用水改修（改善案）。初期の水田は既設・利用可） |
+| T01 用水普請 | 用水改修（改善案）。初期の水田は既設・利用可 | `IMPROVEMENT_FARM`, `IMPROVEMENT_PLANTATION`, `BUILDING_WATER_MILL` | TODO: 設計案の固有実装（用水改修（改善案）。初期の水田は既設・利用可） |
 | T02 沿岸航法 | 沿岸輸送・水軍兵の基本行動（案）。既存の港・漁は使用可 | `UNIT_GALLEY`, `IMPROVEMENT_FISHING_BOATS` | TODO: 設計案の固有実装（沿岸輸送・水軍兵の基本行動（案）。既存の港・漁は使用可） |
 | T03 砂鉄鍛冶 | **刀鍛冶座**、刀剣修理・槍兵の装備（案） | `UNIT_SWORDSMAN`, `BUILDING_BARRACKS` | TODO: 設計案の固有実装（**刀鍛冶座**、刀剣修理・槍兵の装備（案）） |
 | T04 堀切・土塁 | **本丸櫓**の新設、土塁改修（案）。既存城の利用は維持 | `BUILDING_WALLS`, `DISTRICT_ENCAMPMENT` | TODO: 設計案の固有実装（**本丸櫓**の新設、土塁改修（案）。既存城の利用は維持） |

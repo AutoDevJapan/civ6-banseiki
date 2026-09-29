@@ -3,7 +3,9 @@
 -- compares the map rows with this record (tools/japan_map_scale/prosper_start.py lua_start_check).
 -- Value: "player=cities,pop,units,districts,walls,improvements,gold,garrisoned,stacked;..." where
 -- garrisoned = cities whose plot holds exactly one own military unit, stacked = plots with 2+ of them.
+-- BUILDINGS_KEY: "player:BUILDING_X=n,BUILDING_Y=m;..." (every building in the player's cities, by type).
 local KEY = "JAC_JAPAN_START_STATE"
+local BUILDINGS_KEY = "JAC_JAPAN_START_BUILDINGS"
 
 local function Record()
 	local saved = Game:GetProperty(KEY) -- one value even when unset (see JAC_CustomCivs.lua:12-17)
@@ -18,7 +20,7 @@ local function Record()
 			improvements[plot:GetOwner()] = (improvements[plot:GetOwner()] or 0) + 1
 		end
 	end
-	local rows = {}
+	local rows, buildingRows = {}, {}
 	for _, player in ipairs(PlayerManager.GetAliveMajors()) do
 		local id = player:GetID()
 		local onPlot, units, stacked = {}, 0, 0
@@ -32,8 +34,13 @@ local function Record()
 			end
 		end
 		local cities, pop, wl, garrisoned = 0, 0, 0, 0
+		local built = {}
 		for _, city in player:GetCities():Members() do
 			cities = cities + 1
+			local buildings = city:GetBuildings()
+			for row in GameInfo.Buildings() do
+				if buildings:HasBuilding(row.Index) then built[row.BuildingType] = (built[row.BuildingType] or 0) + 1 end
+			end
 			pop = pop + city:GetPopulation()
 			if city:GetBuildings():HasBuilding(walls) then wl = wl + 1 end
 			if onPlot[city:GetY() * width + city:GetX()] == 1 then garrisoned = garrisoned + 1 end
@@ -44,9 +51,16 @@ local function Record()
 		end
 		rows[#rows + 1] = string.format("%d=%d,%d,%d,%d,%d,%d,%d,%d,%d", id, cities, pop, units, districts, wl,
 			improvements[id] or 0, math.floor(player:GetTreasury():GetGoldBalance()), garrisoned, stacked)
+		local types = {}
+		for kind in pairs(built) do types[#types + 1] = kind end
+		table.sort(types)
+		for n, kind in ipairs(types) do types[n] = kind .. "=" .. built[kind] end
+		buildingRows[#buildingRows + 1] = id .. ":" .. table.concat(types, ",")
 	end
+	Game:SetProperty(BUILDINGS_KEY, table.concat(buildingRows, ";")) -- before KEY, which marks the record done
 	Game:SetProperty(KEY, table.concat(rows, ";"))
 	print("[JAC_JAPAN] start state recorded: " .. table.concat(rows, ";"))
+	print("[JAC_JAPAN] start buildings recorded: " .. table.concat(buildingRows, ";"))
 end
 
 Record()

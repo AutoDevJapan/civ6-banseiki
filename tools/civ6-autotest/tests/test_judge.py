@@ -153,6 +153,23 @@ class JudgeTests(unittest.TestCase):
         failed = {check.name for check in judge(logs, "growth", expected_units=1) if not check.passed}
         self.assertEqual(failed, {"Growth: partial-screen errors", "Generic: JAC Runtime Error"})
 
+    def test_japan_map_fails_on_congress_dependent_ui_error(self):
+        logs = {"Lua.log": "Runtime Error: unrelated\n  BaseGamePanel.lua:21\n",
+                "Database.log": "",
+                "Modding.log": "403be889-1455-4de7-967b-ad54c0ff3431\n"
+                               "Applying Component - JAC_JapanMapScale_InGameText (UpdateText)\n"}
+        self.assertTrue(all(check.passed for check in judge(logs, "japan_map")))
+        logs["Lua.log"] += "Runtime Error: attempt to index a nil value\n  ActionPanel_Expansion2.lua:44\n"
+        self.assertIn("Japan map: GS Congress paths",
+                      {check.name for check in judge(logs, "japan_map") if not check.passed})
+        logs["Lua.log"] = "UI.DataError: WorldCongressPopup invalid stage\n"
+        self.assertIn("Japan map: GS Congress paths",
+                      {check.name for check in judge(logs, "japan_map") if not check.passed})
+        for name in ("GovernorPanel.lua:723", "CityPanel_Expansion2.lua:11"):
+            logs["Lua.log"] = f"Runtime Error: attempt to index a nil value\n  {name}\n"
+            self.assertIn("Japan map: GS Congress paths",
+                          {check.name for check in judge(logs, "japan_map") if not check.passed})
+
     def test_baseline_excludes_old_lines_and_handles_truncate(self):
         old = b"old error\n"
         mark = {"offset": len(old), "inode": 7,
@@ -185,9 +202,13 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(names, {
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
-            "growth-notebooks.json", "sengoku-trees.json",
+            "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
+            "japan-resources.json",
+            "japan-no-world-congress.json",
+            "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
+            "japan-map-15km-200turn.json",
             "japan-scale-baseline-15km.json", "japan-prosperous-15km.json",
         })
         for path in folder.glob("*.json"):
@@ -216,7 +237,7 @@ class AutoplayTests(unittest.TestCase):
                 return next(statuses)
             return "true"
 
-        with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(
+        with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
             runner, "_dismiss_advisor", return_value=False
         ), patch.object(runner, "_close_options_menu", return_value=False), patch("scenario.time.sleep"):
             detail = runner._autoplay(3, 10)

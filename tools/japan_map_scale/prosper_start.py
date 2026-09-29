@@ -195,6 +195,9 @@ def apply(db: sqlite3.Connection, width: int, height: int, km: int, cities: list
             "units": len(units),
             "districts": sum(len(x["districts"]) for x in plans),
             "walls": sum("BUILDING_WALLS" in x["plan"]["city_buildings"] for x in plans),
+            "buildings": dict(sorted(Counter(
+                [b for x in plans for b in x["plan"]["city_buildings"]]
+                + [b for x in plans for d in x["districts"] for b in d["buildings"]]).items())),
             "improvements": sum(sum(x["improvements"].values()) for x in plans),
             "gold": gold,
             "upkeep": sum(p.upkeep_of([], x["districts"]) for x in plans) + sum(p.UNIT_UPKEEP[u] for u in units),
@@ -242,6 +245,7 @@ def report_for(km: int) -> dict:
 
 
 START_STATE_KEY = "JAC_JAPAN_START_STATE"  # written by poc/JAC_PoC_JapanMapScale/Scripts/JAC_Japan_StartState.lua
+START_BUILDINGS_KEY = "JAC_JAPAN_START_BUILDINGS"  # same script: "player:BUILDING_X=n,...;..."
 
 
 def lua_start_check(report: dict) -> str:
@@ -253,12 +257,21 @@ def lua_start_check(report: dict) -> str:
     expected = ",".join(
         "{l}={{{cities},{pop},{units},{districts},{walls},{improvements},{gold}}}".format(
             l=g.SEATS[g.SEAT_INDEX[slug]].leader, **row) for slug, row in report.items())
+    expected_buildings = ",".join(
+        "{l}={{{b}}}".format(l=g.SEATS[g.SEAT_INDEX[slug]].leader,
+                             b=",".join(f"{k}={v}" for k, v in row["buildings"].items()))
+        for slug, row in report.items())
     return (
         "local E={" + expected + "}; "
+        "local EB={" + expected_buildings + "}; "
         f"local s=Game:GetProperty('{START_STATE_KEY}'); "
         "if s==nil then error('no start state recorded (JAC_Japan_StartState.lua)') end; "
+        f"local sb=Game:GetProperty('{START_BUILDINGS_KEY}'); "
+        "if sb==nil then error('no start buildings recorded (JAC_Japan_StartState.lua)') end; "
         "local S={}; for id,vals in string.gmatch(s,'(%d+)=([%d,%-]+)') do local t={}; "
         "for v in string.gmatch(vals,'%-?%d+') do t[#t+1]=tonumber(v) end; S[tonumber(id)]=t end; "
+        "local SB={}; for id,list in string.gmatch(sb,'(%d+):([^;]*)') do local t={}; "
+        "for k,v in string.gmatch(list,'([%w_]+)=(%d+)') do t[k]=tonumber(v) end; SB[tonumber(id)]=t end; "
         "local out={'START'}; local bad={}; local names={'cities','pop','units','districts','walls','improvements'}; "
         "for i=0,21 do local leader=PlayerConfigurations[i]:GetLeaderTypeName(); local e=E[leader]; local got=S[i]; "
         "if not got or not e then error('missing player '..i..' '..tostring(leader)) end; "
@@ -266,17 +279,24 @@ def lua_start_check(report: dict) -> str:
         "if got[9]>0 then bad[#bad+1]=leader..' stacked plots '..got[9] end; "
         "for k=1,6 do if got[k]~=e[k] then bad[#bad+1]=leader..' '..names[k]..' '..got[k]..' expected '..e[k] end end; "
         "if got[7]<e[7] then bad[#bad+1]=leader..' gold '..got[7]..' expected >= '..e[7] end; "
+        "local eb,gb=EB[leader] or {},SB[i] or {}; "
+        "for k,v in pairs(eb) do if (gb[k] or 0)~=v then bad[#bad+1]=leader..' '..k..' '..(gb[k] or 0)..' expected '..v end end; "
+        "for k,v in pairs(gb) do if eb[k]==nil then bad[#bad+1]=leader..' '..k..' '..v..' expected 0' end end; "
         "out[#out+1]=leader:gsub('LEADER_JAC_','')..' '..table.concat(got,'/',1,7) end; "
         "if #bad>0 then error(table.concat(bad,'; ')) end; return table.concat(out,'; ')"
     )
 
 
+# The prosperous start must keep every house alive with its capital through the 50-turn
+# autoplay; a death or a lost capital fails the run (error() stops the scenario).
 SURVIVORS = (
-    "local t=Game.GetCurrentGameTurn(); local alive,dead={},{}; "
+    "local t=Game.GetCurrentGameTurn(); local alive,dead,nocap={},{},0; "
     "for i=0,21 do local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); local p=Players[i]; "
     "if p and p:IsAlive() then local c=p:GetCities():GetCount(); local cap=p:GetCities():GetCapitalCity(); "
+    "if not cap then nocap=nocap+1 end; "
     "alive[#alive+1]=n..' c'..c..(cap and '' or ' NO_CAPITAL') else dead[#dead+1]=n end end; "
-    "return 'SURVIVORS T'..t..' '..#alive..'/22: '..table.concat(alive,', ')..' | DEAD: '..table.concat(dead,', ')"
+    "local line='SURVIVORS T'..t..' '..#alive..'/22: '..table.concat(alive,', ')..' | DEAD: '..table.concat(dead,', '); "
+    "if #alive<22 or nocap>0 then error('regression: '..line) end; return line"
 )
 
 

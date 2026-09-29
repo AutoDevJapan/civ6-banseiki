@@ -235,14 +235,14 @@ class GeneratedMapTests(unittest.TestCase):
                               for group in draft["resource_groups"] for _ in group["points"])
         marine_candidates = sum(group.get("placement_domain") == "marine"
                                 for group in draft["resource_groups"] for _ in group["points"])
-        self.assertEqual((land_candidates, marine_candidates), (50, 17))
-        self.assertEqual(sum(len(group["points"]) for group in draft["resource_groups"]), 67)
+        self.assertEqual((land_candidates, marine_candidates), (51, 17))
+        self.assertEqual(sum(len(group["points"]) for group in draft["resource_groups"]), 68)
         self.assertEqual({item["km_per_tile"]: item["resource_placement"]["placed_count"]
-                          for item in self.manifest}, {20: 50, 15: 53})
+                          for item in self.manifest}, {20: 53, 15: 57})
         for item in self.manifest:
             with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
                 rows = db.execute("SELECT ID,ResourceType FROM PlotResources ORDER BY ID").fetchall()
-                self.assertEqual(len(item["resource_candidates"]), 67)
+                self.assertEqual(len(item["resource_candidates"]), 68)
                 self.assertEqual(len(rows), item["resource_placement"]["placed_count"])
                 self.assertEqual(dict(sorted(Counter(resource for _, resource in rows).items())),
                     item["resource_placement"]["count_by_type"])
@@ -257,18 +257,18 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertNotIn("RESOURCE_NITER", resource_types)
                 for requirement in item["custom_content_required"]:
                     if requirement["kind"] == "resource":
-                        self.assertNotIn(requirement["type"], resource_types)
+                        self.assertTrue(requirement["status"].startswith("defined_in_"))
                 collisions = [record for record in item["resource_candidates"]
                               if record["placement_status"] == "same_tile_conflict"]
                 for record in collisions:
                     winner = next(candidate for candidate in item["resource_candidates"]
                                   if candidate["id"] == record["conflict_with"])
                     self.assertEqual(record["plot"], winner["plot"])
+                # Iwami (1526) is a start site now that silver may sit on temperate hills.
                 silver = next(record for record in item["resource_candidates"]
                               if record["id"] == "silver-iwami")
-                self.assertEqual(silver["placement_status"], "no_historically_sensible_terrain")
-                self.assertIn("desert or tundra", silver["placement_reason"])
-                self.assertIn(silver, item["deferred_resources"])
+                self.assertEqual(silver["placement_status"], "placed")
+                self.assertNotIn(silver, item["deferred_resources"])
 
     def test_every_placed_resource_obeys_installed_official_rules_on_final_plot(self):
         if not g.OFFICIAL.is_file():
@@ -347,8 +347,8 @@ class GeneratedMapTests(unittest.TestCase):
 
     def test_lakes_features_and_volcanoes_follow_draft_counts(self):
         expected = {
-            20: {"land": 1082, "lake_tiles": 7, "forest": 404, "marsh": 27},
-            15: {"land": 1906, "lake_tiles": 8, "forest": 750, "marsh": 33},
+            20: {"land": 1082, "lake_tiles": 7, "forest": 399, "marsh": 27},
+            15: {"land": 1906, "lake_tiles": 8, "forest": 744, "marsh": 33},
         }
         for item in self.manifest:
             km = item["km_per_tile"]

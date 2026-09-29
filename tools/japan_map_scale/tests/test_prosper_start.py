@@ -31,8 +31,8 @@ ALLOWED_IMPROVEMENTS = {"IMPROVEMENT_FARM", "IMPROVEMENT_MINE", "IMPROVEMENT_QUA
 TIER_TOTALS = {
     15: {"A": (7, 80, 55, 16, 11, 60, 3850), "B": (5, 47, 34, 7, 7, 31, 1620),
          "C": (4, 47, 27, 9, 8, 29, 1070), "D": (6, 30, 21, 6, 9, 21, 780)},
-    20: {"A": (7, 77, 55, 16, 11, 43, 3850), "B": (5, 46, 34, 5, 7, 35, 1620),
-         "C": (4, 47, 27, 6, 8, 28, 1070), "D": (6, 29, 21, 5, 9, 24, 780)},
+    20: {"A": (7, 77, 55, 16, 11, 45, 3850), "B": (5, 46, 34, 5, 7, 35, 1620),
+         "C": (4, 47, 27, 6, 8, 27, 1070), "D": (6, 29, 21, 5, 9, 24, 780)},
 }
 # Districts that do not fit without clearing woods are left out (owner decision E1=b).
 MISSING_DISTRICTS = {15: {}, 20: {"MATSUDAIRA": 1, "ASHIKAGA": 1}}
@@ -230,18 +230,45 @@ class ProsperousMapTests(unittest.TestCase):
         self.assertIn(f"Game:GetProperty('{ps.START_STATE_KEY}')", steps[3]["code"])
         self.assertIn("LEADER_JAC_ODA_NOBUHIDE={2,5,4,", steps[3]["code"])
         self.assertEqual(sum(s["turns"] for s in steps if s["action"] == "autoplay"), 50)
-        self.assertIn("SURVIVORS", steps[-1]["code"])
+        self.assertEqual(steps[-1]["code"], ps.SURVIVORS)
+
+    def test_survivor_step_fails_on_a_death_or_a_lost_capital(self):
+        # Regression rule of the live run: all 22 houses alive with a capital after 50 turns.
+        self.assertIn("if #alive<22 or nocap>0 then error('regression: '..line) end; return line", ps.SURVIVORS)
+        self.assertIn("if not cap then nocap=nocap+1 end", ps.SURVIVORS)
+        self.assertIn("for i=0,21 do", ps.SURVIVORS)
+
+    def test_start_check_compares_every_planned_building(self):
+        # The planned set in the start check equals the Buildings rows of the checked-in map per owner.
+        item, db = self.maps[15]
+        owner = dict(rows(db, "SELECT ID, Owner FROM PlotOwners"))
+        in_map: dict[str, Counter] = defaultdict(Counter)
+        for kind, plot in rows(db, "SELECT BuildingType, Plot FROM Buildings"):
+            in_map[g.SEATS[owner[plot]].slug][kind] += 1
+        report = ps.report_for(15)
+        code = json.loads(ps.SCENARIO.read_text(encoding="utf-8"))["steps"][3]["code"]
+        self.assertIn(f"Game:GetProperty('{ps.START_BUILDINGS_KEY}')", code)
+        for slug, row in report.items():
+            with self.subTest(slug=slug):
+                self.assertEqual(row["buildings"], dict(in_map[slug]))
+                self.assertIn(row["buildings"]["BUILDING_PALACE"], (1,))
+                table = ",".join(f"{k}={v}" for k, v in row["buildings"].items())
+                self.assertIn(f"{g.SEATS[g.SEAT_INDEX[slug]].leader}={{{table}}}", code)
+        self.assertEqual(sum(sum(r["buildings"].values()) for r in report.values()),
+                         rows(db, "SELECT COUNT(*) FROM Buildings")[0][0])
 
     def test_start_state_script_runs_only_on_the_historical_maps(self):
         # AI players act on turn 1 before a UI step runs, so the live check reads what this
         # gameplay script recorded at load (before turn 1) under the same property key.
         script = (g.MOD / "Scripts/JAC_Japan_StartState.lua").read_text(encoding="utf-8")
         self.assertIn(f'local KEY = "{ps.START_STATE_KEY}"', script)
+        self.assertIn(f'local BUILDINGS_KEY = "{ps.START_BUILDINGS_KEY}"', script)
+        self.assertIn("for row in GameInfo.Buildings() do", script)
         self.assertIn("GameConfiguration.GetStartTurn()", script)
         mod = ET.parse(g.MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
         criteria = {c.attrib["id"]: c.findtext("./ConfigurationValueMatches/Value")
                     for c in mod.findall("./ActionCriteria/Criteria")}
-        actions = mod.findall("./InGameActions/AddGameplayScripts")
+        actions = [a for a in mod.findall("./InGameActions/AddGameplayScripts") if a.attrib["id"].endswith("_StartState")]
         self.assertEqual([a.findtext("File") for a in actions], ["Scripts/JAC_Japan_StartState.lua"] * 2)
         self.assertEqual({criteria[a.attrib["criteria"]] for a in actions},
                          {f"{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{km}km.Civ6Map" for km in g.SCALES})
