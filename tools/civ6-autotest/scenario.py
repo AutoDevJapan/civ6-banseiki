@@ -531,8 +531,9 @@ class Runner:
             "LuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\n"
             f"AutoplayManager.SetTurns({turns})\n"
             "AutoplayManager.SetReturnAsPlayer(human)\n"
-            # Watch as the human so the leader ribbon keeps hiding unmet leaders (NONE shows everyone).
-            "AutoplayManager.SetObserveAsPlayer(human)\n"
+            # NONE shows every leader in the ribbon during autoplay, but observing as the human
+            # left the game without a local player after autoplay (live 2026-09-29), so keep NONE.
+            "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
             "AutoplayManager.SetActive(true)\n"
             "return tostring(startTurn) .. '|' .. tostring(human)"
         )
@@ -580,7 +581,7 @@ class Runner:
                         self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
                                   f"AutoplayManager.SetTurns({remaining})\n"
                                   f"AutoplayManager.SetReturnAsPlayer({human})\n"
-                                  f"AutoplayManager.SetObserveAsPlayer({human})\n"
+                                  "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
                                   "AutoplayManager.SetActive(true)\nreturn true",
                                   min(5, _remaining(deadline)))
                         restarts += 1
