@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<StartEras>
+		<Update>
+			<Where EraType="ERA_ANCIENT"/>
+			<Set>
+				<Year>1534</Year>
+			</Set>
+		</Update>
+	</StartEras>
+	<!-- Starting in 1534 makes the engine's start turn about 16603 (live 2026-09-29); show turns from 1 like the
+	     official PiratesScenario_GameCapabilities.xml:4 (TopPanel.lua:389-399 normalizes with this capability). -->
+	<GameCapabilities>
+		<Row GameCapability="CAPABILITY_DISPLAY_NORMALIZED_TURN"/>
+	</GameCapabilities>
+	<!-- Replace the ordinary 4000 BC progression only while the Sengoku action criterion matches. -->
+	<GameSpeed_Turns>
+		<Delete/>
+		<!-- 200 standard turns = 800 months; continue dating games without a turn limit. -->
+		<Row>
+			<GameSpeedType>GAMESPEED_STANDARD</GameSpeedType>
+			<MonthIncrement>4</MonthIncrement>
+			<TurnsPerIncrement>10000</TurnsPerIncrement>
+		</Row>
+		<Row>
+			<GameSpeedType>GAMESPEED_QUICK</GameSpeedType>
+			<MonthIncrement>6</MonthIncrement>
+			<TurnsPerIncrement>10000</TurnsPerIncrement>
+		</Row>
+		<Row>
+			<GameSpeedType>GAMESPEED_ONLINE</GameSpeedType>
+			<MonthIncrement>8</MonthIncrement>
+			<TurnsPerIncrement>10000</TurnsPerIncrement>
+		</Row>
+		<!-- Epic and Marathon use two stages so their longer research pacing reaches 1600 near turns 300/600. -->
+		<Row>
+			<GameSpeedType>GAMESPEED_EPIC</GameSpeedType>
+			<MonthIncrement>3</MonthIncrement>
+			<TurnsPerIncrement>200</TurnsPerIncrement>
+		</Row>
+		<Row>
+			<GameSpeedType>GAMESPEED_EPIC</GameSpeedType>
+			<MonthIncrement>2</MonthIncrement>
+			<TurnsPerIncrement>9800</TurnsPerIncrement>
+		</Row>
+		<Row>
+			<GameSpeedType>GAMESPEED_MARATHON</GameSpeedType>
+			<MonthIncrement>2</MonthIncrement>
+			<TurnsPerIncrement>200</TurnsPerIncrement>
+		</Row>
+		<Row>
+			<GameSpeedType>GAMESPEED_MARATHON</GameSpeedType>
+			<MonthIncrement>1</MonthIncrement>
+			<TurnsPerIncrement>9800</TurnsPerIncrement>
+		</Row>
+	</GameSpeed_Turns>
+</GameInfo>

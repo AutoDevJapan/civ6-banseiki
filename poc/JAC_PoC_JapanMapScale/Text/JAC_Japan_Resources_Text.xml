@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_RESOURCE_JAC_GOLD_NAME" Language="en_US"><Text>Gold</Text></Row>
+    <Row Tag="LOC_RESOURCE_JAC_GOLD_NAME" Language="ja_JP"><Text>金</Text></Row>
+    <Row Tag="LOC_RESOURCE_JAC_GOLD_NAME" Language="ru_RU"><Text>Золото</Text></Row>
+    <Row Tag="LOC_RESOURCE_JAC_LACQUER_NAME" Language="en_US"><Text>Lacquer</Text></Row>
+    <Row Tag="LOC_RESOURCE_JAC_LACQUER_NAME" Language="ja_JP"><Text>漆</Text></Row>
+    <Row Tag="LOC_RESOURCE_JAC_LACQUER_NAME" Language="ru_RU"><Text>Лак</Text></Row>
+  </LocalizedText>
+</GameData>
