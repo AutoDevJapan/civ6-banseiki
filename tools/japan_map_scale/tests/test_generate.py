@@ -390,7 +390,17 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual([row[1] for row in recorder.calls[0][1][:22]], capital_plots)
                 self.assertEqual([row[0] for row in recorder.calls[1][1][:22]], capital_plots)
                 self.assertEqual([row[0] for row in recorder.calls[2][1][:22]], capital_plots)
-                self.assertEqual([row[0] for row in recorder.calls[3][1][:22]], capital_plots)
+                self.assertIn("BUILDING_PALACE", recorder.calls[3][0])
+                self.assertEqual([row[0] for row in recorder.calls[3][1]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[4][1][:22]], capital_plots)
+
+    def test_every_capital_and_only_capitals_have_a_palace(self):
+        for item in self.manifest:
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                palaces = {plot for (plot,) in db.execute(
+                    "SELECT Plot FROM Buildings WHERE BuildingType='BUILDING_PALACE'")}
+                self.assertEqual(palaces, {city["plot"] for city in item["cities"] if city["capital"]})
+                self.assertEqual(len(palaces), 22)
 
     def test_hex_distance_matches_neighbours(self):
         grid = g.HexGrid(40, 20, 20, 0.0, 0.0)
