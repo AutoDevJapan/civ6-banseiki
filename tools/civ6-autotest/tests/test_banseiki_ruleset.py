@@ -55,6 +55,8 @@ class BanseikiRulesetStaticTests(unittest.TestCase):
             ("Game", "RULESET"): ruleset,
             ("Player", "PLAYER_ID"): player_id,
             ("Game", "JAC_BANSEIKI_HUMAN_POOL"): pool,
+            # Japan maps skip the human filter; that case is covered in japan_map_scale tests.
+            ("Map", "MAP_SCRIPT"): "Continents.lua",
         }
         with sqlite3.connect(":memory:") as database:
             database.execute("CREATE TABLE Players (Domain TEXT, LeaderType TEXT)")

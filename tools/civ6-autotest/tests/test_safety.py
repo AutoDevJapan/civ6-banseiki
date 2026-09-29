@@ -16,6 +16,18 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
+        with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
+            runner, "_loadscreen_count", return_value=3
+        ), patch.object(runner, "_enter_game_after_loadscreen") as enter, redirect_stdout(StringIO()):
+            runner._run_step({"action": "start_game", "timeout": 600})
+        code = run_lua.call_args.args[1]
+        self.assertIn("/FrontEnd/MainMenu/AdvancedSetup", code)
+        self.assertNotIn("HostGame", code)
+        self.assertNotIn("SetToDefaults", code)
+        self.assertEqual(enter.call_args.args[:2], (3, 3600.0))
+
     def test_load_wait_sends_one_escape_even_if_ingame_state_exists(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         deadline = civ_click.time.monotonic() + 1
@@ -29,6 +41,21 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
         self.assertEqual(run_lua.call_count, 2)
         press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=deadline)
+
+    def test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        deadline = civ_click.time.monotonic() + 1
+        with patch.object(runner, "_states", return_value=["LoadScreen", "InGame"]), patch.object(
+            runner, "_lua", side_effect=["true", "true"]
+        ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
+            runner, "_close_options_menu"
+        ), patch.object(runner, "_dismiss_advisor"), patch(
+            "scenario.press_key"
+        ) as press, patch("scenario.time.sleep"):
+            runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
+        self.assertEqual(run_lua.call_args_list[0].args[0], "LoadScreen")
+        self.assertIn("OnActivateButtonClicked()", run_lua.call_args_list[0].args[1])
+        press.assert_not_called()
 
     def test_load_wait_never_sends_escape_before_load_complete_log(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)

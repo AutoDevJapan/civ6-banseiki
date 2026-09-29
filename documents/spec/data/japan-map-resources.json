@@ -255,7 +255,7 @@
     "marsh": {
       "feature_id": "FEATURE_MARSH",
       "target_share_of_land_tiles_percent": "2-3",
-      "rule": "河口・氾濫原・高層湿原の陸地側に22-33タイルを上限として集中。現代湿地の面積をそのまま1534年に遡及しない。", 
+      "rule": "河口・氾濫原・高層湿原の陸地側に22-33タイルを上限として集中。現代湿地の面積をそのまま1534年に遡及しない。",
       "clusters": [
         {"id": "marsh-kushiro", "site": "釧路湿原", "province": "蝦夷地", "center": [144.350, 43.150], "source_ids": ["wetlands"]},
         {"id": "marsh-sarobetsu", "site": "サロベツ原野", "province": "蝦夷地", "center": [141.720, 45.100], "source_ids": ["wetlands"]},

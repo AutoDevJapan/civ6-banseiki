@@ -34,6 +34,166 @@
 									<m_TemplateName text="Civilizations" />
 									<m_ParamName text="Civilizations002" />
 								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_DATE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations003" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHINA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations004" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HOJO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations005" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations006" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_NAGAO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations007" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_IMAGAWA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations008" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MATSUDAIRA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations009" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASAKURA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations010" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHIKAGA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations011" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MIYOSHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations012" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ROKKAKU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations013" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HONGANJI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations014" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OUCHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations015" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AMAGO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations016" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MORI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations017" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_CHOSOKABE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations018" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OTOMO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations019" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_SHIMAZU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations020" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_RYUKYU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations021" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AINU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations022" />
+								</Element>
 							</m_Values>
 							<m_ParamName text="Civilizations" />
 						</Element>
@@ -66,6 +226,166 @@
 									<m_TemplateName text="Civilizations" />
 									<m_ParamName text="Civilizations002" />
 								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_DATE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations003" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHINA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations004" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HOJO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations005" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations006" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_NAGAO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations007" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_IMAGAWA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations008" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MATSUDAIRA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations009" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASAKURA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations010" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHIKAGA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations011" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MIYOSHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations012" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ROKKAKU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations013" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HONGANJI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations014" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OUCHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations015" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AMAGO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations016" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MORI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations017" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_CHOSOKABE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations018" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OTOMO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations019" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_SHIMAZU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations020" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_RYUKYU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations021" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AINU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations022" />
+								</Element>
 							</m_Values>
 							<m_ParamName text="Civilizations" />
 						</Element>
@@ -97,6 +417,166 @@
 									<m_CollectionIsLocked>true</m_CollectionIsLocked>
 									<m_TemplateName text="Civilizations" />
 									<m_ParamName text="Civilizations002" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_DATE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations003" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHINA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations004" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HOJO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations005" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations006" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_NAGAO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations007" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_IMAGAWA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations008" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MATSUDAIRA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations009" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASAKURA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations010" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ASHIKAGA" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations011" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MIYOSHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations012" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_ROKKAKU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations013" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_HONGANJI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations014" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OUCHI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations015" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AMAGO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations016" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_MORI" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations017" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_CHOSOKABE" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations018" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_OTOMO" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations019" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_SHIMAZU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations020" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_RYUKYU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations021" />
+								</Element>
+								<Element class="AssetObjects..ArtDefReferenceValue">
+									<m_ElementName text="CIVILIZATION_JAC_AINU" />
+									<m_RootCollectionName text="Civilization" />
+									<m_ArtDefPath text="Civilizations.artdef" />
+									<m_CollectionIsLocked>true</m_CollectionIsLocked>
+									<m_TemplateName text="Civilizations" />
+									<m_ParamName text="Civilizations022" />
 								</Element>
 							</m_Values>
 							<m_ParamName text="Civilizations" />

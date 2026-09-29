@@ -1,6 +1,6 @@
 # PoC の検証記録
 
-SSOT 16.1 の PoC のうち、実機で検証した項目の手順と結果。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
+SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状態を明記する。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
 
 ## 共通の準備
 
@@ -10,12 +10,177 @@ SSOT 16.1 の PoC のうち、実機で検証した項目の手順と結果。�
 | MOD の配置 | `Documents\My Games\Sid Meier's Civilization VI\Mods\<MOD名>` から、リポジトリの `poc/<MOD名>` へジャンクションを張る |
 | ログ | `%LOCALAPPDATA%\Firaxis Games\Sid Meier's Civilization VI\Logs\` の `Database.log`・`Modding.log`・`Lua.log` |
 | FireTuner | `AppOptions.txt` の `EnableTuner` を `1` にする（元のファイルは `AppOptions.txt.bak-20260928`） |
+| イントロ動画 | 自動検証では `AppOptions.txt` の `PlayIntroVideo` を `0` にし、起動時のオープニングを流さない（2026-09-29 変更、元のファイルは `AppOptions.txt.bak-20260929`）。Windows が Civ6 を前面に出すのを拒むと、スキップのクリックが届かないため |
 
 ジャンクションの作り方（PowerShell）:
 
 ```powershell
 New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments'))\My Games\Sid Meier's Civilization VI\Mods\JAC_PoC_Bundle0" -Target "<リポジトリ>\poc\JAC_PoC_Bundle0"
 ```
+
+## JAC_PoC_JapanMapScale：1534年開始状態（現行）
+
+万世紀ルールセット用の開始状態。基準日は **天文3年5月12日**。日本列島の22勢力をそれぞれ専用の指導者・文明で登録した。島津は貴久を1勢力の代表とし、アイヌはタリコナを全域代表とするゲーム上の扱い。長尾の文明 ID は `CIVILIZATION_JAC_NAGAO` のまま維持する。人間と AI の指導者候補は、地図を選択すると `MapLeaders` に登録した22人に限定され、同じ指導者は重複できない。万世紀の通常の「人間は2人から選ぶ」フィルタは日本地図では適用しない。`MapSizes` で22人・都市国家0を固定する。
+
+開始方法は設定画面の地図一覧から「史実の領土」または「開拓者から」を選ぶ。各縮尺で前者を先に表示する。史実の領土版には22人の `Players`、草案の53城・拠点と追加の代表本拠3つからなる56都市、都市中心地区、全陸タイルの所有者、人口2を格納した。`Units` に開拓者は入れず、この地図と万世紀ルールセットの組み合わせに限る modinfo 条件で `MajorStartingUnits` の開拓者を除く。開拓者版は同じ地形・22開始位置で、都市・所有地を持たず、通常の開拓者初期配置を使う。シングルプレイの主経路は史実の領土版。マルチプレイは開拓者版を選択できる。別ルールセットの初期ユニット表は変更しない。**旧20 km版での都市消失は実機確認済み。修正後の15 km史実領土版の統合実機結果は下表のとおり。今回の資源配置と指導者選択の変更は静的検査済みで、実機では未確認。**
+
+日本マップ4種は `Maps:JAC_Banseiki` に登録し、万世紀ルールセット側でこのドメインに `Maps:Expansion2Maps` を合併する。地図 MOD を無効にしても、万世紀から Gathering Storm の地図を選べる。万世紀の `Map` パラメータだけが専用ドメインを参照し、素の Gathering Storm には22勢力が必要な地図を表示しない。地図 MOD は Gathering Storm・CustomCivs・万世紀ルールセットを依存対象に宣言する。ローカル実装の根拠：`DLC/Expansion2/Config/Expansion2_StandardMaps.xml:3-4` のドメイン合併、`DLC/Expansion2/Config/Expansion2_Config.xml:10-12` と `Base/Assets/Configuration/Data/Schema/AdditionalTables.sql:308-312` のルールセット別置換。15 km史実領土版を選んだ実機開始は確認済み。地図4種すべての表示順は未確認。
+
+通常の移動 UI は目的地を指定して `UnitManager.CanStartOperation(..., MOVE_TO, ...)` を確認する（`Base/Assets/UI/UnitFlagManager.lua:291-298`）。外交 UI は開放国境の有無を方向別に確認し（`Base/Assets/UI/DiplomacyActionView.lua:1429-1432`）、戦争状態も別に扱う（`Base/Assets/UI/PartialScreens/CityStates.lua:1129-1130`）。Rise and Fall の緊急事態は `OpenBorders=True` を設定できる（`DLC/Expansion1/Data/Expansion1_Emergencies.xml:16-24`）一方、Alexander などのシナリオは外交行動そのものを削除している（`DLC/AlexanderScenario/Data/AlexanderScenario_RemoveData.xml:207`）。移動を最終判断する GameCore の内部実装はこのローカルの Lua/XML にはないため、通行権の効果は実機シナリオで確認する。
+
+領土境の通行には、日本マップでだけ `TRAIT_LEADER_MAJOR_CIV` から `MODIFIER_PLAYER_UNITS_GRANT_ABILITY` を使い、`CLASS_ALL_UNITS` に `MOD_ENTER_FOREIGN_LANDS` を付ける。既存・新規ユニットに適用され、セーブ後も同じルールから復元される設計。根拠：`Base/Assets/Gameplay/Data/Leaders.xml:825-827`、`Base/Assets/Gameplay/Data/Units.xml:502-505`、`Base/Assets/Gameplay/Data/Modifiers.xml:1929-1933`、`Base/Assets/Gameplay/Data/UnitAbilities.xml:548-553,948-949,1392-1394`。Gathering Storm のロックバンド（`DLC/Expansion2/Data/Expansion2_UnitAbilities.xml:104,135-137`）、秘密結社の Cultist（`DLC/Ethiopia/Data/Ethiopia_SecretSocieties_MODE.xml:591-592`）、英雄 Himiko（`DLC/Babylon/Data/Babylon_Heroes_MODE.xml:590`）も同じ進入効果を使う。開放国境協定を全組に付け直す方法は採らない。協定は30ターン期限付き（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:62`）であり、観光ボーナス25%（`Base/Assets/Gameplay/Data/GlobalParameters.xml:575`）や外交評価（`Base/Assets/Gameplay/Data/Leaders.xml:1332-1335`）まで変わる。協定の通行上の価値は日本マップでは減るが、協定自体とその外交・観光効果は残る。通常の近接警戒とは別に、開放国境なしの領土侵犯を扱う外交修正だけを日本マップで外す（`Base/Assets/Gameplay/Data/Leaders.xml:1296-1300`）。宣戦・和平と他の外交修正は維持する。シナリオでは、協定と戦争のない相手の領土への初手の移動可能範囲を検査し、15 km史実領土版の織田→松平で実機確認した。AI の通行・外交判断と保存・読込後の通行は未確認。
+
+忠誠心は日本マップ4種に限り、近隣市民圧力による毎ターン変化の上限 `LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_LOYALTY` を Gathering Storm の20から5に変更する。半径10、圧力の基礎値と比率、総忠誠心100は維持する（`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:36-42,184-194`）。Rise and Fall 側も同じ上限20と比率を持つ（`DLC/Expansion1/Data/Expansion1_GlobalParameters.xml:110-116`）。総督の基本効果8（`DLC/Expansion2/Data/Expansion1_Governors.xml:69-75`）、駐留や総督に応じた政策の毎ターン加算（`DLC/Expansion2/Data/Expansion1_Policies.xml:154-174,647-664`）、政府複合施設の加算8（`DLC/Expansion2/Data/Expansion1_Districts.xml:88-112,125-128`）は調整しない。[同じ設定を使う MOD 作者の記録](https://steamcommunity.com/sharedfiles/filedetails/?id=1330549455)は、5刻み以外の値でクラッシュした例があると注意している。
+
+2026-09-29 のオーナー判断：城が密集する日本マップで、通常の Gathering Storm の忠誠心圧力による反乱・独立で都市を自由都市にしない。上限を5に下げても、織田の首都は1ターン目に -2.9/ターンで、都市が自由都市になることを実機で確認した。ローカルの公式テキストは忠誠心が0になると自由都市になると説明する（`DLC/Expansion2/Text/en_US/Expansion1_Civilopedia_Text.xml:167`）。近隣圧力以外にも不満・飢餓・占領などの減算がある（`DLC/Expansion2/Data/Expansion1_Happinesses.xml:5-11`、`DLC/Expansion2/Data/Expansion1_GlobalParameters.xml:75-87`）。
+
+対策は `JAC_Japan_MapRules.xml` に `MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN` の +100/ターンを追加し、`TRAIT_LEADER_MAJOR_CIV` に付ける。公式の Modifier 定義は対象を `COLLECTION_PLAYER_CITIES`、効果を `EFFECT_ADJUST_CITY_IDENTITY_PER_TURN` とする（`DLC/Expansion2/Data/Expansion1_Modifiers.xml:859-861`）。この共通 Trait は `LEADER_DEFAULT` に付き（`Base/Assets/Gameplay/Data/Leaders.xml:825-827`）、本 PoC の指導者はこれを継承する（`poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql:20-22`、`poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql:71-88`）。そのため22勢力の既存都市だけでなく、後から建設・占領した都市にも所有者を通じて適用し、保存・読込後もデータ定義から有効になる設計。+100は既定の忠誠心最大値100（`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:188-194`）に合わせ、通常の減算を毎ターン相殺するための値。15 km統合実機では開始時と50ターン進行の効果を確認した。今回拡張した都市別ロード比較は未実機。
+
+宮殿は各勢力の首都1都市だけ（`Base/Assets/Gameplay/Data/Buildings.xml:98`）、総督による圧力無視は配属と昇進が必要（`DLC/Expansion2/Data/Expansion2_Governors.xml:71-72,99-100,135-137`、`DLC/Expansion2/Data/Expansion2_Modifiers.xml:383-385`）なので、全都市の対策には使わない。Gameplay Lua でターンごとに忠誠心を回復する方法は、GameCore の独立判定より先に必ず実行されることをローカルの Lua/XML から確認できないため採用しない。将来の特別なイベント・行動による離反は別機能として、対象都市の補正を明示的に上書きするか、独立・所有者変更をイベントから直接実行する余地を残す（シナリオの都市固有忠誠心補正例：`DLC/BlackDeathScenario/Data/BlackDeathScenario_GameplayData.xml:539,579-583`）。
+
+生成シナリオは開始時の全都市と50ターン後の残存都市の忠誠心変化が負でないことを調べる。50ターン後に自由都市の所有都市が0件であることに加え、公式 UI も使う `Events.CulturalIdentityCityConverted`（`DLC/Expansion2/UI/Loaders/TutorialLoader_Expansion1.lua:95-122`）で、途中に主要勢力が忠誠心によって都市を失った場合も失敗させる。戦争による占領はこのイベントの対象外として扱う。各勢力の都市数は開始時→50ターン後で報告する。15 km史実領土版の56都市、50ターンの自由都市0、保存・読込後の勢力別都市数・生存・陸所有者ハッシュは統合実機で確認済み。今回追加した都市別の位置・所有者・宮殿・守備隊・忠誠心の保存比較、開拓者版での新設都市、通常の Gathering Storm 地図への非波及は未実機。
+
+SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地図に初期外交状態はない。どの関係を初期化するかは[Q24](../questions.md)の判断待ちで、今回の生成器は外交を設定しない。
+
+代表本拠と草案の城が同じ場所を示す19勢力では、その城を首都にした。米沢・室町殿は草案の53拠点にないため追加した。那古野は草案上では今川領だが、SSOT の代表本拠は織田の那古野である。織田の首都を追加し、今川の那古野も別タイルの都市として残した。20 km版で今川の那古野は元タイルから60 km移動する。この2都市の同名・近接は地図表現上の妥協で、1534年に両家が同じ城を同時に実効支配したという意味ではない。長尾・山内上杉は別の Civilization ID を使い、文明 ID だけで同盟を組ませる処理はない。
+
+| 対辺間距離 | 盤面 | 陸タイル | 史実領土版 | 開拓者版 | 都市間1タイル | 2タイル | 3タイル |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 20 km | 154×67 | 1,082 | 532,480 B | 516,096 B | 0組 | 31組 | 23組 |
+| 15 km | 204×88 | 1,906 | 745,472 B | 716,800 B | 0組 | 20組 | 10組 |
+
+城・本拠間の距離は都市タイル配置後の六角距離。公式インストールの `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Assets/Gameplay/Data/GlobalParameters.xml:98` に `<Replace Name="CITY_MIN_RANGE" Value="3" />` があり、修正前の実機では3タイル以内の後続都市が落ちた。日本マップ4種だけのゲームプレイ DB アクションで `CITY_MIN_RANGE=1` に更新し、都市間2タイルを許す。万世紀の通常の Gathering Storm 地図には適用しない。新条件で `close_city_pairs` は20 km・15 kmとも **0組**（隣接都市なし）。首都22件を最優先し、残る都市は調査データの番号順に配置・書き込みする。隣接する優先度の低い都市は、移動前の領有判定で同じ勢力に属する空き陸タイルから最短の地点へ、最大3タイルまで移す。20 kmでは11都市（最大60 km）、15 kmでは8都市（最大15 km）を移動した。各都市の元座標からの `displacement_km` と、移動した都市の `nudge.from_plot`・`to_plot`・`distance_km` は `Maps/manifest.json` に記録した。40/30/25 km の生成物とシナリオは削除し、現行の比較対象を20/15 kmに絞った。下の旧試験の表は実装前の履歴であり、現在の生成コマンド・シナリオには対応しない。
+
+### 史実領土版の実機結果と都市消失の修正（2026-09-29）
+
+修正前の20 km版を `RULESET_JAC_BANSEIKI` で開始した結果、主要文明22、陸1,089タイルすべて領有、開拓者0だったが、静的マップの56都市中30都市だけが存在した。先に処理された都市から3タイル以内の都市が落ち、松平・六角・本願寺・毛利は首都を含めて都市0となった。確認された勢力別都市数（実際／期待）は次のとおり。
+
+| 勢力 | 実際／期待 | 勢力 | 実際／期待 |
+|---|---:|---|---:|
+| 織田 | 1／2 | 伊達 | 1／4 |
+| 蘆名 | 1／2 | 北条 | 2／3 |
+| 山内上杉 | 2／5 | 武田 | 1／2 |
+| 今川 | 1／3 | 松平 | 0／1 |
+| 足利 | 8／12 | 三好 | 2／4 |
+| 六角 | 0／2 | 本願寺 | 0／1 |
+| 大内 | 2／3 | 毛利 | 0／1 |
+
+新しい地図は各城・本拠56都市を保持し、生成シナリオは勢力別の全都市数・合計56都市・首都位置・22主要文明・全陸領有・開拓者0を開始時に検査する。15 km史実領土版の統合実機結果は下表のとおり。20 kmの修正版と今回の追加変更は未実機。
+
+領土の判断は [`japan-1534-start.json`](../spec/data/japan-1534-start.json) の68令制国配分と53拠点に従う。海岸線・陸域・標高の元データと利用条件は下の旧縮尺試験の出典表と同じ。境界ポリゴンを直接使えるデータは採用できなかった。[CODH「旧国・旧郡境界データセット」](https://geoshape.ex.nii.ac.jp/kg/) は江戸末期の境界で、CC BY-NC の非商用条件がある。代わりに53拠点・22代表本拠の位置と、拠点がない国の概略中心33点（`TERRITORY_ANCHORS`）を使う最近接割当とし、その中心点の勢力が草案の配分表に載ることを生成時に検査する。北海道は二風谷と同じ連結島をアイヌ、南西諸島の南側は琉球として補正する。地理的な代理境界であり、郡境・1534年の実効支配を再現したものではない。陸の全タイルに22勢力のいずれか、さらに同勢力で最寄りの都市を `PlotOwners` の `CityOwner` / `CityWorking` として付ける。城座標・所有者・国配分の史料と留保は[調査記録](../research/japan-1534-start.md)にある。
+
+### 統合実機結果（2026-09-29、15 km・万世紀・戦国ツリーあり）
+
+日本マップ・資源・首都（宮殿）・守備隊・領土境の通行・自由都市化なし（忠誠心+100/ターン）・戦国ツリー（`poc/integration` ブランチで #31 と統合）を有効にし、全自動（`restart_game` から）で実行した。
+
+| 項目 | 結果 |
+|---|---|
+| 開始 | 盤面204×88、主要文明22、都市国家0、都市56（首都22に宮殿）、陸地1,906タイルすべて所有、開拓者0、各首都に戦士1 |
+| 領土境 | 開始時に織田の戦士が、国境開放なしで隣接勢力（松平）の領土へ移動できる |
+| 忠誠心 | 開始時の首都 +97/ターン、最低の都市でも +92/ターン（修正前は首都でも −2.9、50ターンで24都市が自由都市化） |
+| 戦国ツリー | 技術32・社会制度30、公式の技術・制度なし、GS の気候・世界会議などの仕組みは存在 |
+| 50ターン | 自由都市0。1ターン平均6.45秒・中央値2.59秒・最大24.6秒（最後の10ターン平均2.35秒）、プライベートメモリ約8.2〜8.3 GB で横ばい |
+| 序盤の戦争 | AI どうしの自動進行で、50ターン以内に織田（自動進行中は AI が操作）が滅亡した回がある。質問リスト Q24 |
+| セーブ・ロード | 10ターン後にセーブ→メニュー→ロードし、勢力ごとの都市数・生存・全タイルの所有者のハッシュが一致。ロード後1ターンも成功 |
+| ログ | 判定6項目すべて合格（本 MOD 由来のエラーなし） |
+
+途中で見つかった検証側の問題（修正済み）：地図の都市は宮殿がないと首都にならない、開拓者なしで開始するとユニットが0になる、自動進行中に人間の勢力が滅亡すると操作プレイヤーに戻らずターンが進み続ける（ドライバは滅亡として報告する）、FireTuner が自動進行の開始直後に空のフレームを送ることがある、Windows が Civ6 の前面化を拒むと入力が届かない（ロード画面の開始ボタンを Lua で押し、イントロ動画は `AppOptions.txt` で無効化）。
+
+長時間（300ターン相当）の安定性と、20 km との比較は未実施。
+
+### 資源・河川・湖沼・植生・火山
+
+生成器は[資源候補JSON](../spec/data/japan-map-resources.json)の50陸上・17海上候補、河川10本、湖沼6か所、森林・湿地規則、火山候補を両縮尺へ反映する。史実領土版と開拓者版は同じ資源・地形データを持つ。開始地図にはCiv6既定資源だけを書き、資源は都市中心タイルに置かない。
+
+| 内容 | 20 km | 15 km | 配置・近似 |
+|---|---:|---:|---|
+| Civ6既定資源 | 50件 | 53件 | 陸上33/36件、海上17件。競合5/2件を保留し、石見銀山1件は公式の合法地形が現地の気候に合わないため保留 |
+| 河川 | 10本・177辺 | 10本・232辺 | 1534年旧流路案を含む座標列を、連結した共有辺へ吸着 |
+| 湖沼 | 6か所・7タイル | 6か所・8タイル | 面積とタイル目安から水面を近似 |
+| 森林 | 404タイル | 750タイル | 絹資源に必要な森林3タイルと、残りの適格タイルの44.96%/45.03%（401/747）。丘陵・山地側を優先し、都市・他の資源・湿地・湖・火山・稲作平野近傍を除外 |
+| 湿地 | 27タイル | 33タイル | 主要7クラスターへ集中。陸地の2.5%を目標に22〜33タイルで上限 |
+| Gathering Storm 火山 | 5か所 | 5か所 | 浅間・富士・阿蘇・桜島・霧島。Civ6の火山Featureが山岳地形を要するため、山岳タイルでない火口候補は地形を山岳へ補正 |
+
+資源の候補座標はWGS84の代表点で、公式の `Resource_ValidTerrains`・`Resource_ValidFeatures` と `LakeEligible`・河川・沿岸条件を満たす60 km以内の最寄りのタイルへ吸着する。絹3件は公式条件に従って森林を付ける。瀬戸内など沿岸の塩6件は製塩用の開けた土地を平原タイルで近似する。これは気候を砂漠にする表現ではない。石見銀山の銀は公式資源が砂漠・ツンドラ系しか許さず、温暖な石見をその地形に変える根拠がないため開始地図では保留し、`no_historically_sensible_terrain` と理由を記録する。調査確度・出典ID・吸着先・競合・開始時状態は `Maps/manifest.json` に記録した。金・漆は通常マップ用の資源行が必要なため開始地図から除外し、`RESOURCE_JAC_GOLD` と `RESOURCE_JAC_LACQUER` を今後追加する候補として記録した。既定資源でも1534年後の開発となる生野銀山・鶴子銀山・延沢銀山・足尾銅山は開始時には置かず、後年イベント／研究で解禁する候補として保持した。金山・漆器産地の年次条件がある地点も同様に記録する。硝石は鉱床資源として置かず、平戸（1586年以後）と年代未確定の堺の交易アクセス候補として記録する。
+
+湖には公式 `WorldBuilderMap.sql` の専用テーブルも `FEATURE_LAKE` もないため、面積比で選んだタイルを `TERRAIN_COAST` の水域として表現した。実際の湖岸線、埋立・干拓、1534年の河道を測量復元したものではない。河川の中心線も概略点列で、利根川は東遷前の旧流路案、石狩川・淀川などは改修前の線形を簡略化している。森林率は16世紀の実測値ではなく、草地・丘陵のゲーム調整値。湿地は現代の湿地情報を参照した地域代表で、1534年の面積を直接示さない。自然の驚異は富士山／阿蘇カルデラのどちらも選ばず、未実装候補 `FEATURE_JAC_FUJI`・`FEATURE_JAC_ASO_CALDERA` として記録した。
+
+候補ごとの典拠と確度は[調査記録](../research/japan-map-resources.md)とJSONの `sources` にある。主な地理資料は[Natural Earth 10m land](https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-land/)、[NOAA ETOPO 2022](https://www.ncei.noaa.gov/products/etopo-global-relief-model)、国土地理院の[湖沼データ](https://www.gsi.go.jp/kankyochiri/lakedatalist.html)、環境省の[現存植生図](https://eadas.env.go.jp/eiadb/ebidbs/Service/About?title=Gis)・[ラムサール湿地](https://www.env.go.jp/nature/ramsar/conv/RamsarSites_in_Japan.html)、気象庁の各火山履歴（例：[浅間山](https://www.data.jma.go.jp/vois/data/tokyo/306_Asamayama/306_history.html)）である。資源の鉱山・産業史と各河川の出典は、JSONの地点・河川ごとの `source_ids` から辿れる。
+
+| 用途 | 作品 | 作者と年 | 所蔵と出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 53拠点・1534年の所有者・令制国配分 | 日本1534年開始データ草案 | 本リポジトリの調査、2026 | [調査記録](../research/japan-1534-start.md)の各参照先 | 各史料を参照。位置・人物などの事実を入力し、外部の境界図形は複製しない | `documents/spec/data/japan-1534-start.json` |
+| 20人の仮指導者アイコン・ロード肖像・外交フォールバック | 既存の織田信秀 PoC 画像を共用 | Gemini 3.1 Flash Image による生成、2026-09-29 | [CustomCivs の画像記録](#画像)に詳記。画像自体はローカルアートストア | 生成画像の公開・再配布可否は未決（[質問 D11](../questions.md)）。新たな画像を収録しない | `oda_nobuhide_portrait.jpg`・`oda_nobuhide_figure.png`・`oda_nobuhide_background.png` → `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` |
+| 20文明の仮紋章 | Civ6 日本文明のシンボル | Firaxis Games、2016 | インストール済みの Civ6 `Base/Assets/UI/Icons/Icons_Civilizations.xml` の `ICON_CIVILIZATION_JAPAN` | ゲーム本体の素材。MOD に画像画素を複製せず、ゲーム内参照のみ | `CivSymbols*.dds`（ゲーム本体） |
+
+新規20勢力に専用肖像・家紋がまだないため、上の仮画像を割り当てた。共用する織田肖像は他の20人の史実肖像ではない。画面で「?」を避けるには、CustomCivs 節のアートビルドで作る BLP 3個を MOD とともに配置する必要がある。配布前に各勢力の絵へ差し替え、画像の利用条件を確定する。BLP は Git 管理外。
+
+再生成・静的検査は `python tools/japan_map_scale/generate.py`（地図を再生成しない場合は `python tools/japan_map_scale/write_support.py`）、`python tools/japan_map_scale/write_custom_civs.py`、`python -m unittest discover -s tools/japan_map_scale/tests`、`python -m unittest discover -s tools/civ6-autotest/tests`。今回の静的検査は前者25件成功、後者96件成功。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリに書き込めないため、作業ツリー内で権限を継承する一時ディレクトリを使った。テスト中の Civ6 起動表示はモックであり、実際の Civ6 と Steam は起動していない。
+
+15 km史実領土版の統合実機では、織田を人間として56都市・首都22・全陸領有・開拓者0・通行・忠誠心・50ターン進行・従来の保存比較・ロード後1ターン・ログと性能を確認した。今回の資源修正、20 km修正版、22人の選択画面、武田信虎を人間にした開始、拡張した保存比較、開拓者版、マルチプレイは未実機。史実地図の `Players.ID` は城・領土・宮殿・守備隊の所有者IDと一致させ、公式 Vikings 地図と同じく選択可能な行を `Human` とする。生成した `japan-map-20km-takeda.json`・`japan-map-15km-takeda.json` は設定枠0を武田信虎とし、実際のローカルプレイヤーの指導者、首都、56都市の座標と所有者、宮殿、首都守備隊、全陸所有者を開始時に照合する。
+
+織田シナリオの保存前後のスナップショットは、ターン、主要勢力数、各勢力の都市数・生存状態、全陸タイルの所有者の31ビットハッシュに加え、**各残存都市のタイル位置・所有者ID・宮殿の有無・同じ所有者の守備隊が都市タイルにいるか・現在の忠誠心・忠誠心の毎ターン変化**を位置順で比較する。戦争で50ターン後の都市数が開始時と変わることは許すが、保存前後の都市行は一致が必要。陸所有者はハッシュ比較であり、都市以外の地形・資源・ユニット位置全体は比較しない。最後に1ターン進める。
+
+## JAC_PoC_JapanMapScale：旧縮尺試験（保存記録）
+
+以下は領土・都市を持たない旧版の20/25/30/40 km比較の記録で、現行ファイルや手順には対応しない。20 kmの実機結果も旧条件によるもの。現行の受け入れ結果として扱わない。
+
+対象は SSOT 16.1「日本列島マップの縮尺」と「ターン処理とメモリ」。独自ルールセット「万世紀」（`JAC_PoC_BanseikiRuleset`）で遊ぶ前提で検証する。**生成・静的検査済み、Civ6 の実機検証は未実施**。最終縮尺はこの表から決めず、実機で開始・50ターン進行・セーブ・ロードを比較してから決める。
+
+| 対辺間の距離 | 盤面 | 総タイル | 日本の陸タイル | `.Civ6Map` 容量 | 本拠からの最大移動 | 3タイル以内の本拠の組 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 40 km | 79×36 | 2,844 | 278 | 319,488 B | 20.9 km | 24 |
+| 30 km | 104×47 | 4,888 | 483 | 368,640 B | 16.8 km | 12 |
+| 25 km | 124×55 | 6,820 | 698 | 417,792 B | 13.9 km | 10 |
+| 20 km | 154×67 | 10,318 | 1,089 | 503,808 B | 10.8 km | 4 |
+
+Civ6 は都市から3タイル以内に別の都市を建てられない（`CITY_MIN_RANGE`）。最後の列の組は、両方が本拠の位置に首都を置けない。20 km でも織田と松平、伊達と蘆名、足利と六角・本願寺が該当する。組の一覧は `Maps/manifest.json` の `close_start_pairs`。
+
+距離は正六角形の向かい合う辺の間隔。中心 (138°E, 36°N) の Lambert 正積方位図法を45°回し、南西から北東へ伸びる列島を盤面の横軸に近づける。北が画面上向きではない試作地図で、面積は投影回転で変わらない。奇数行を半タイル東へずらした Civ6 のオフセット座標を使う。北海道から与那国・石垣・宮古・沖縄・徳之島・奄美まで含み、30/40 km で小島が中心点抽出から消える場合は Natural Earth の島ポリゴン上の基準点を1タイルとして残す。日本以外の陸地（朝鮮半島・サハリン・大陸）は海にする。対象から離れた小笠原・硫黄島・南鳥島は、この北海道〜琉球の縮尺試験範囲に含めない。国境は Natural Earth の de facto 表現に従う。
+
+陸・海は Natural Earth 10m land と admin-0 countries の日本領域の**両方**に含まれるかで判定する。陸に隣接する水タイルは海岸、それ以外は外洋。標高は NOAA ETOPO 2022 の60秒 DEM を3分間隔で取得し、400 m 以上を丘、1,200 m 以上を山として近似した。山は通行不可。湖・河川・資源は入れていない。土壌や気候も未再現で、陸の基底地形は草原。標高区分は地形性能試験用の暫定値で、戦略地形の完成形ではない。
+
+22人は SSOT 3.1 の20家・琉球王国・アイヌの本拠に置く。開始地点は米沢・黒川・小田原・平井・躑躅ヶ崎・春日山・駿府・那古野・岡崎・一乗谷・室町殿・勝瑞・観音寺・石山本願寺・山口・月山富田・吉田郡山・岡豊・府内・鹿児島・首里・二風谷の概略座標。三好は1534年頃の阿波の拠点である勝瑞を使う（[日本遺産の資料](https://www.japan-heritage.bunka.go.jp/ja/datas/files/2024/03/15/ad9723e8037d6fd0fa0cf1cc61fc87d2a1213da3.pdf)）。城でない室町殿・石山本願寺・二風谷は「本拠／地点」として扱う。座標、選ばれたタイル、移動距離、指導者と文明は `Maps/manifest.json` に全件記録する。各地点は日本の陸上で、生成マップ内でも重複せず通行可能。
+
+この PoC の目的は地図と22人の負荷測定であり、22家の専用指導者はまだない。人間は万世紀プールの織田信秀（`JAC_PoC_CustomCivs`、織田の本拠）、武田の本拠は武田信虎（AI）、残り20か所は**公式の指導者と公式の文明**の AI にする。万世紀の規則に合わせ、指導者は重複させず、文明は重複してよい（ギリシャ・インドが2人ずつ）。公式の指導者を仮の文明に付け替えると、同じ指導者が2つの文明に登録されて「ゲームの作成」画面がプレイヤー設定を不正と判定するため、仮の文明は作らない。1534年の人物や領土をこの割当で主張しない。後続の勢力 PoC で専用の人物に置き換える。
+
+### データの出典と利用条件
+
+| 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 海岸線・島 | Natural Earth 10m land, v5.1.1 | Tom Patterson、Nathaniel Vaughn Kelso ほか、版5.1.1 | [Natural Earth Land](https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-land/) | [パブリックドメイン](https://www.naturalearthdata.com/about/terms-of-use/) | `tools/japan_map_scale/cache/ne_10m_land.zip` |
+| 日本以外の陸の除外 | Natural Earth 10m admin-0 countries, v5.1.1 | 同上 | [Natural Earth Admin 0](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/10m-admin-0-countries/) | 同上 | `tools/japan_map_scale/cache/ne_10m_admin_0_countries.zip` |
+| 標高 | ETOPO 2022 60 arc-second ice surface elevation、日本周辺の3分抽出 | NOAA NCEI、2022 | [NOAA ETOPO 2022](https://www.ncei.noaa.gov/products/etopo-global-relief-model)、[抽出元 ERDDAP](https://oceanwatch.pifsc.noaa.gov/erddap/griddap/ETOPO_2022_v1_60s.html) | [NOAA メタデータの CC0 1.0](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ngdc.mgg.dem%3Aetopo_2022) | `tools/japan_map_scale/cache/etopo_2022_japan_3arcmin.csv` |
+
+取得物はすべて Git 除外の `tools/japan_map_scale/cache/` に保存し、生成器が SHA-256 を照合する。公式 Civ6 の `Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map` は SQLite **スキーマだけ**の参照元で、公式の地形・画像は生成物へ複製しない。Python の標準ライブラリだけで生成できる。4つの生成マップはいずれも10 MB未満なので Git に収録する。
+
+サイズの根拠：公式 Huge は手元の `Base/Assets/Gameplay/Data/Maps.xml` で106×66。付属 `WorldMapHuge.Civ6Map` には130×66の静的マップ例がある。[YnAMP の作者による設定文](https://github.com/Gedemon/Civ6-YnAMP/blob/master/Configuration/ConfigText.xml)では Enormous が128×80、Giant が180×94で終盤不安定、230×116はフルサイズでロード不可と記される。25 km は公式 Huge に近い6,820タイル、20 km は Enormous に近い10,318タイルになる。ただし盤面の縦横比もAI・GSの処理も異なるため、これらは受け入れ保証ではない。
+
+### 再生成・検証手順
+
+```powershell
+python tools/japan_map_scale/generate.py
+python -m unittest discover -s tools/japan_map_scale/tests -v
+python -m unittest discover -s tools/civ6-autotest/tests -v
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-map-40km.json --check
+```
+
+実機では共通の準備に従って `poc/JAC_PoC_JapanMapScale` を `Mods/JAC_PoC_JapanMapScale` から参照できるようにする。シナリオは万世紀ルールセット・カスタム勢力・成長 UI・本 MOD を有効にし、Bundle0 を無効にする。都市国家は0にする。万世紀の設定画面に「日本列島 40/30/25/20 km」4候補が出ることと日英露の表示を確かめる。各 `japan-map-<km>km.json` を `scenario.py` で別の `--output` ディレクトリへ実行する。再実行時は JSON 内の `save` と `load` の名前を両方新しい名前にする。シナリオは22人の指導者と開始地点（自分の本拠から1タイル以内）、都市国家0、50ターンの自動進行、セーブ、ロード、ロード後の生存勢力数、ロード後1ターンを確認する。`autoplay-metrics-1.jsonl` と `-2.jsonl` に観測したターンごとの経過秒数・作業セット・プライベートメモリを残し、飛ばしたターンは `duration_seconds: null` とする。`steps.jsonl` に保存・ロード所要時間も残り、`judge_profile=japan_map` は本 MOD のゲーム内テキストの適用と `Database.log`・`Modding.log` エラーを検出する。フロントエンドの Config 適用ログは実行前の基準位置より古いことがあるため、設定画面の候補表示とシナリオで選んだ地図の実寸を別途確認する。ログの無関係な本体エラーは切り分けて記録する。
+
+### 実機結果（2026-09-29、20 km）
+
+| 項目 | 結果 |
+|---|---|
+| 設定画面 | 万世紀ルールセットで「Japan archipelago 20 km/hex」を選べた。人間は織田信秀。オーナーが「ゲーム開始」を押して開始（`--owner-start`） |
+| 開始 | 盤面154×67、主要文明22、都市国家0（GS の自由都市は数えない）。22人とも自分の本拠から1タイル以内 |
+| 50ターン | 1→51 を自動進行。1ターン平均1.86秒、中央値1.89秒、最大2.3秒。プライベートメモリ約7.8〜7.9 GB でほぼ横ばい、作業セット最大約3.4 GB |
+| セーブ・ロード | セーブ、メニューへの復帰、ロード、ロード後1ターンが成功 |
+| 生存 | 51ターン時点で22勢力中16。蘆名・武田・今川・松平・足利・六角が滅亡（本拠が密集する南東北・東海・畿内） |
+| ログ | 本 MOD 由来のエラーなし。公式 CivRoyale シナリオの中国語訳ファイル欠落の警告が出るが、本 MOD とは無関係 |
+
+この試験は開拓者で始める Civ6 標準の開始で行った。万世紀の日本マップは、選んだ指導者の史実の領土を持って開始する（開拓者なし）ため、開始条件を実装してから負荷と安定性を測り直す。
+
+実機で未確認なのは、設定画面の登録、22人の実際の開始位置、各縮尺の50ターン進行・セーブ・ロード・次ターン、万世紀（GS 基盤）でのクラッシュとログ、ターン時間・メモリ、3言語表示。4候補の結果を比較し、成功した中で最も細かい縮尺を束0の結論として記録する。50ターンでは終盤の海面上昇や長期肥大は判定できないので、採用候補は別途長時間試験に回す。SSOT 3.4 の最終値は実機確認まで変更しない。
 
 ## JAC_PoC_Bundle0：読み込みと保存
 
@@ -228,9 +393,9 @@ MOD の内容：
 | 文明・指導者の能力アイコン | `JAC_Abilities{22,30,32,36,44,45,48,50,64,80,128,200,256}`（4×1。0＝織田家、1＝武田家、2＝織田信秀、3＝武田信虎。全サイズ白＋透明） | アイコン定義に登録済み。標準の設定画面・百科事典では専用絵柄は使われない（下記参照） |
 | ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024、髷の上に余白を確保）・`_BACKGROUND`（1920×1080） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
 | 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
-| 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。`LeaderScene` の標準レターボックスを両家で隠す | 外交画面 |
+| 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。仮指導者20人は織田の背景を共用し、`LeaderScene` の標準レターボックスを22人で隠す | 外交画面 |
 
-`tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
+`tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。20人の仮指導者アイコンは織田のアトラス0番を、文明アイコンはゲーム本体の日本文明アトラス12番を参照し、ロード・外交画像も織田のテクスチャを共用する。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
 
 ### 画像の成功条件
 
@@ -274,7 +439,9 @@ MOD の内容：
 
 CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は `JAC_ART_LOCAL` で指定できる。GrowthUI が `<リポジトリ>/poc/JAC_PoC_GrowthUI` にある場合だけ、`civ6-art-local/JAC_PoC_GrowthUI/Originals/` から手帳 DDS を作る。別の場所にある GrowthUI は `JAC_GROWTH_MOD` で指定する。GrowthUI フォルダが無い場合は手帳工程をスキップし、CustomCivs 単独で完了する。
 
-Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 のビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
+Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 の先行ビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` と全テクスチャの PNG・コンタクトシートは、この作業ツリー内の `tools/jac_art/build/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。ビルド後に `python -m unittest discover -s tools/jac_art/tests -v` を実行すると、FrontEnd の22行から参照するアイコン・肖像とゲーム内のフォールバックを、ローカルの Civ6 本体アイコン定義と生成済み BLP に照らして検査する。ゲーム本体が標準の Steam インストール先にない場合は `CIV6_INSTALL_DIR` を設定する。
+
+今回の「?」の調査では、2026-09-29 14:31 の `ArtDef.log` に `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` の `Unable to resolve Package` が記録され、実機側の CustomCivs MOD フォルダに BLP がなかった。`FrontEndActions` の `UpdateIcons` と `UpdateArt` は適用されているため、画像名の登録だけでは画素を読み込めない。公式の Portugal DLC と同じく、設定画面には `UpdateArt` と `UpdateIcons` を用い、BLP に収録した UI テクスチャを `.dep` の `UITexture` ライブラリで参照する。UI 用スクリプトの `ImportFiles` はこの画像のロード経路ではない。今回の作業ツリーでは BLP 3個を再生成し、GrowthUI があるため43点のコンタクトシートと手帳 DDS も作った。これらは Git 除外で作業ツリー内にあり、実機の MOD フォルダには配置していない。実機の再表示確認は未実施。
 
 選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定し、Antigravity の OAuth サブスクリプション枠を使った（API キーや従量課金 API は不使用）。これは生成経路の事実を記録したもので、規約上この経路が許可されるという判断ではない。生成元画像と Cooker の画像出力はローカルの `civ6-art-local/` にのみ保存し、Git には含めていない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
 

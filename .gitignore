@@ -15,3 +15,6 @@
 __pycache__/
 # Generated UI texture, rebuilt from civ6-art-local by tools/jac_art/build_art.py
 /poc/JAC_PoC_GrowthUI/UI/Textures/*.dds
+
+# Japan map source downloads and generated diagnostics
+/tools/japan_map_scale/cache/

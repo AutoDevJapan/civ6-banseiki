@@ -3,8 +3,11 @@
 	<Rulesets>
 		<Row RulesetType="RULESET_JAC_BANSEIKI" Name="LOC_JAC_BANSEIKI_RULESET_NAME" Description="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" VictoryDomain="Expansion2_Victories" GameCore="Expansion2" IsScenario="0" SupportsSinglePlayer="1" SupportsMultiPlayer="1" SortIndex="-19"/>
 	</Rulesets>
+	<DomainValueUnions>
+		<Row Domain="Maps:JAC_Banseiki" OtherDomain="Maps:Expansion2Maps"/>
+	</DomainValueUnions>
 	<RulesetDomainOverrides>
-		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="Map" Domain="Maps:Expansion2Maps"/>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="Map" Domain="Maps:JAC_Banseiki"/>
 		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="PlayerLeader" Domain="Players:Expansion2_Players"/>
 	</RulesetDomainOverrides>
 	<Parameters>
@@ -33,7 +36,8 @@
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="NO_DUPLICATE_CIVILIZATIONS" TargetValue="0" Hash="0"/>
 	</ConfigurationUpdates>
 	<!-- SetupParameters runs these queries for each player. The official-DLC exclusion applies
-	     to every slot; the human-pool filter currently identifies the single-player human as slot 0. -->
+	     to every slot. The human-pool filter identifies the single-player human as slot 0; Japan maps
+	     use MapLeaders for both human and AI, so it does not apply there. -->
 	<DomainValueFilterQueries>
 		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter"/>
 		<Row QueryId="JAC_Banseiki_HumanLeaderFilter"/>
@@ -42,12 +46,13 @@
 		<!-- GreatBuilders registers Sejong in Expansion2_Players, but its leader gameplay action
 		     requires RULESET_EXPANSION_2. Exclude only this audited mismatch for Banseiki. -->
 		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'difference' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_SEJONG') AND ?1 = 'RULESET_JAC_BANSEIKI'"/>
-		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'intersect' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_JAC_ODA_NOBUHIDE', 'LEADER_JAC_TAKEDA_NOBUTORA') AND ?1 = 'RULESET_JAC_BANSEIKI' AND ?2 = 0 AND ?3 = 'JAC_BANSEIKI_ONLY'"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'intersect' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_JAC_ODA_NOBUHIDE', 'LEADER_JAC_TAKEDA_NOBUTORA') AND ?1 = 'RULESET_JAC_BANSEIKI' AND ?2 = 0 AND ?3 = 'JAC_BANSEIKI_ONLY' AND instr(COALESCE(?4, ''), 'Maps/JAC_Japan_') = 0"/>
 	</Queries>
 	<QueryParameters>
 		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" Index="1" ConfigurationGroup="Game" ConfigurationId="RULESET"/>
 		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="1" ConfigurationGroup="Game" ConfigurationId="RULESET"/>
 		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="2" ConfigurationGroup="Player" ConfigurationId="PLAYER_ID"/>
 		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="3" ConfigurationGroup="Game" ConfigurationId="JAC_BANSEIKI_HUMAN_POOL"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="4" ConfigurationGroup="Map" ConfigurationId="MAP_SCRIPT"/>
 	</QueryParameters>
 </GameInfo>
