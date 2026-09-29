@@ -525,7 +525,31 @@ class Runner:
         assert SAFE_NAME.fullmatch(name)
         return name
 
+    def _retry_idempotent(self, fn, deadline: float | None = None, window: float = 30.0):
+        """Call fn(), retrying transient FireTuner timeouts with backoff until the deadline.
+
+        Only for read-only or idempotent Lua (status queries, guarded popup dismissals): a
+        busy game can miss a 5 s reply window and still answer afterwards (live 2026-09-29).
+        The socket is dropped before each retry so a late reply cannot be mistaken for the
+        next one. LuaExecutionError (a confirmed Lua ERR) is never retried.
+        """
+        end = deadline if deadline is not None else time.monotonic() + window
+        delay = 0.5
+        while True:
+            try:
+                return fn()
+            except LuaExecutionError:
+                raise
+            except (TunerError, OSError) as exc:
+                if time.monotonic() + delay >= end:
+                    raise
+                print(f"Transient FireTuner failure, retrying: {exc}", flush=True)
+                self._disconnect()
+                time.sleep(delay)
+                delay = min(delay * 2, 4)
+
     def _close_options_menu(self, deadline: float | None = None) -> bool:
+        # Not retried: OnReturn/CloseImmediately mutate the UI, so an unknown reply stops the run.
         def remaining() -> float:
             return min(5, _remaining(deadline)) if deadline is not None else 5
 
@@ -540,6 +564,10 @@ class Runner:
         return closed
 
     def _dismiss_advisor(self, deadline: float | None = None) -> bool:
+        # OnHideAdvisorDialog is guarded by IsBlockingInput(), so a repeat after a timeout is a no-op.
+        return self._retry_idempotent(lambda: self._dismiss_advisor_once(deadline), deadline)
+
+    def _dismiss_advisor_once(self, deadline: float | None = None) -> bool:
         # AdvisorPopup.lua's OnHideAdvisorDialog releases its tutorial input block.
         def remaining() -> float:
             return min(5, _remaining(deadline)) if deadline is not None else 5
@@ -553,6 +581,9 @@ class Runner:
         return dismissed
 
     def _autoplay_status(self, deadline: float) -> AutoplayStatus:
+        return self._retry_idempotent(lambda: self._autoplay_status_once(deadline), deadline)
+
+    def _autoplay_status_once(self, deadline: float) -> AutoplayStatus:
         value = self._lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. "
                           "tostring(AutoplayManager.IsActive()) .. '|' .. "
                           "tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. "
