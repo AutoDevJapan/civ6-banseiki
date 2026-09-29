@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import sqlite3
 import unittest
 import xml.etree.ElementTree as ET
@@ -96,7 +98,8 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
-            "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Icons.xml",
+            "Data/JAC_Sengoku_StartingKnowledge.sql", "Data/JAC_Sengoku_Victories.sql",
+            "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
@@ -162,6 +165,7 @@ class SengokuTreeTests(unittest.TestCase):
         """)
         db.executescript((MOD / "Data/JAC_Sengoku_Trees.sql").read_text(encoding="utf-8"))
         db.executescript((MOD / "Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8"))
+        db.executescript((MOD / "Data/JAC_Sengoku_StartingKnowledge.sql").read_text(encoding="utf-8"))
         for table, col, count in (("Technologies", "TechnologyType", 32), ("Civics", "CivicType", 30)):
             self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], count)
             self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table} WHERE {col} NOT LIKE '%JAC_SENGOKU%'").fetchone()[0], 0)
@@ -173,12 +177,65 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT PrereqTech FROM Districts WHERE DistrictType='DISTRICT_AERODROME'").fetchone()[0],
                          "TECH_JAC_SENGOKU_OUTER_DEFENSES")
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
-        self.assertEqual(db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'").fetchone()[0],
-                         "CIVIC_JAC_SENGOKU_HOUSE_RULES")
+        starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
+        self.assertEqual(len(starting_civics), 3)
+        self.assertEqual(set(starting_civics),
+                         {"CIVIC_JAC_SENGOKU_HOUSE_RULES", "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+                          "CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS"})
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Eras_XP2").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM ClimateParameters").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
         db.close()
+
+    def test_starting_knowledge_matches_all_era_i_roots_and_is_new_game_only(self):
+        tech_roots = {node.id for node in self.nodes if node.short.startswith("T")
+                      and node.era == "ERA_ANCIENT" and not node.prereqs}
+        civic_roots = {node.id for node in self.nodes if node.short.startswith("C")
+                       and node.era == "ERA_ANCIENT" and not node.prereqs}
+        self.assertEqual(len(tech_roots), 4)
+        self.assertEqual(len(civic_roots), 3)
+
+        sql = (MOD / "Data/JAC_Sengoku_StartingKnowledge.sql").read_text(encoding="utf-8")
+        lua = (MOD / "Scripts/JAC_Sengoku_StartingKnowledge.lua").read_text(encoding="utf-8")
+        scripted_techs = set(re.findall(r'"(TECH_JAC_SENGOKU_[A-Z_]+)"', lua))
+        self.assertEqual(scripted_techs, tech_roots)
+        self.assertEqual(set(re.findall(r"'(?P<civic>CIVIC_JAC_SENGOKU_[A-Z_]+)'", sql)),
+                         civic_roots - {"CIVIC_JAC_SENGOKU_HOUSE_RULES"})
+        self.assertIn("PlayerManager.GetAliveMajors()", lua)
+        self.assertIn("LuaEvents.NewGameInitialized.Add(InitializeNewGame)", lua)
+        self.assertIn("Game:GetProperty(INITIALIZED_KEY)", lua)
+        self.assertIn("Game:SetProperty(INITIALIZED_KEY, true)", lua)
+        self.assertIn("Game.GetCurrentGameTurn() > GameConfiguration.GetStartTurn()", lua)
+        self.assertIn("playerTechs:SetTech(techIndex, true)", lua)
+        self.assertNotIn("SetResearchProgress", lua)
+        self.assertNotIn("TriggerBoost", lua)
+
+        meta = ET.parse(MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
+        script = meta.find("./InGameActions/AddGameplayScripts")
+        self.assertIsNotNone(script)
+        self.assertEqual(script.attrib["criteria"], "JAC_Sengoku_BanseikiOnly")
+        self.assertEqual([f.text for f in script.findall("File")],
+                         ["Scripts/JAC_Sengoku_StartingKnowledge.lua"])
+        self.assertLess([f.text for f in meta.findall("./InGameActions/UpdateDatabase/File")].index(
+            "Data/JAC_Sengoku_Unlocks.sql"),
+            [f.text for f in meta.findall("./InGameActions/UpdateDatabase/File")].index(
+                "Data/JAC_Sengoku_StartingKnowledge.sql"))
+
+        scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/sengoku-starting-knowledge.json")
+                              .read_text(encoding="utf-8"))
+        players = next(step["players"] for step in scenario["steps"] if step["action"] == "configure")
+        self.assertEqual(len(players), 22)
+        self.assertEqual(sum(player["human"] for player in players), 1)
+        checks = [step["code"] for step in scenario["steps"] if step["action"] == "ui_lua"]
+        self.assertTrue(any("GetLiveData()" in code and "ITEM_STATUS.RESEARCHED" in code for code in checks))
+        game_checks = [code for code in checks if "GetAllMomentsData" in code]
+        self.assertEqual(len(game_checks), 2)  # before save and after load
+        for code in game_checks:
+            self.assertIn("#majors~=22", code)
+            self.assertEqual(set(re.findall(r"\['(TECH_JAC_SENGOKU_[A-Z_]+)'\]=true", code)), tech_roots)
+            self.assertEqual(set(re.findall(r"\['(CIVIC_JAC_SENGOKU_[A-Z_]+)'\]=true", code)), civic_roots)
+        self.assertEqual([step["action"] for step in scenario["steps"]][-4:],
+                         ["save", "exit_to_menu", "load", "ui_lua"])
 
     def test_banseiki_sengoku_disables_official_victories_and_time_limit(self):
         base = ET.parse(ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")
