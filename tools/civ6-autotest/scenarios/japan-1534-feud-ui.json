@@ -1,0 +1,213 @@
+{
+  "name": "JAC Japan map 15 km (historical): Hojo human opens the official diplomacy screen with Takeda and reads the '1534 feud' relationship reason",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(),'^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; if id.HOJO==nil or id.TAKEDA==nil then error('Hojo or Takeda missing') end; if Game.GetLocalPlayer()~=id.HOJO then error('local player is not Hojo: '..tostring(Game.GetLocalPlayer())) end; local function feud(a,b) local n=0; local mods=Players[a]:GetDiplomaticAI():GetDiplomaticModifiers(b); if mods then for _,t in ipairs(mods) do if t.Score==-10 then n=n+t.Score end end end return n end; if feud(id.TAKEDA,id.HOJO)~=-10 then error('Takeda->Hojo feud penalty '..feud(id.TAKEDA,id.HOJO)) end; if feud(id.HOJO,id.TAKEDA)~=-10 then error('Hojo->Takeda feud penalty '..feud(id.HOJO,id.TAKEDA)) end; return 'Hojo human: Takeda<->Hojo carry the -10 feud score'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "pause",
+      "seconds": 0.5
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(),'^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; if id.HOJO==nil or id.TAKEDA==nil then error('Hojo or Takeda missing') end; if Game.GetLocalPlayer()~=id.HOJO then error('local player is not Hojo: '..tostring(Game.GetLocalPlayer())) end; local function feud(a,b) local n=0; local mods=Players[a]:GetDiplomaticAI():GetDiplomaticModifiers(b); if mods then for _,t in ipairs(mods) do if t.Score==-10 then n=n+t.Score end end end return n end; if feud(id.TAKEDA,id.HOJO)~=-10 then error('Takeda->Hojo feud penalty '..feud(id.TAKEDA,id.HOJO)) end; if feud(id.HOJO,id.TAKEDA)~=-10 then error('Hojo->Takeda feud penalty '..feud(id.HOJO,id.TAKEDA)) end; LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView(id.TAKEDA); return 'opened diplomacy with Takeda'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return Controls.AlphaIn:IsStopped() and Controls.SlideIn:IsStopped()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "if ContextPtr:IsHidden() then error('diplomacy hidden') end; local want=Locale.Lookup('LOC_JAC_DIPLO_MODIFIER_1534_FEUD'); local stack; local function find(x,d) if d>40 or stack then return end; if x:GetID()=='RelationshipReasonStack' then stack=x; return end; for _,c in ipairs(x:GetChildren() or {}) do find(c,d+1) end end; for _,root in ipairs({Controls.OverviewContainer,ContextPtr}) do if not stack then pcall(find,root,0) end end; if not stack then error('RelationshipReasonStack not found under the diplomacy view') end; local function lab(x,id,d) if d>10 then return nil end; if x:GetID()==id then return x:GetText() end; for _,c in ipairs(x:GetChildren() or {}) do local r=lab(c,id,d+1); if r then return r end end end; local shown={}; local hit=false; for _,row in ipairs(stack:GetChildren() or {}) do local sc,tx=lab(row,'Score',0),lab(row,'Text',0); shown[#shown+1]=tostring(sc)..' '..tostring(tx); if tx and sc and string.find(tx,want,1,true) and string.find(sc,'-10',1,true) then hit=true end end; local line=table.concat(shown,' | '); print('[JAC_DIPLO] relationship reasons: '..line); if not hit then error('no -10 row with text '..want..'; displayed: '..line) end; return line"
+    },
+    {
+      "action": "screenshot",
+      "path": "hojo-takeda-diplomacy.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    }
+  ]
+}

@@ -39,7 +39,7 @@
 
 開始時に Civ6 の「非難」や「不満」を置く API はないため、公式のアジェンダと同じ仕組みで AI の好感度に固定の減点を付ける。外交画面の「関係」欄に「-10 1534年の因縁」の行が出る。
 
-- 仕組み：勢力別の特性 `TRAIT_JAC_1534_FEUD_<勢力>` を、その勢力の文明に `CivilizationTraits` で付け、特性に `MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER` の修正値 `JAC_1534_FEUD_<自分>_<相手>` を `TraitModifiers` で結ぶ。修正値の `SubjectRequirementSet`（相手プレイヤーへの条件）は「相手の文明が <相手>」で、`REQUIREMENT_PLAYER_TYPE_MATCHES` + `CivilizationType` を使う。理由の文言は `SimpleModifierDescription` = `LOC_JAC_DIPLO_MODIFIER_1534_FEUD`（「1534年の因縁」）。さらに修正値ごとに `ModifierStrings`（`Context="Sample"`、`Text=LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL` = `{diplomaticReason}`）の行が要る。公式は全エージェンダ修正値に付けている（`Base/Assets/Gameplay/Data/Agendas.xml:2296`〜`:2370`）。この行が無いと `GetDiplomaticModifiers` の `Text` が `LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON`（「理由不明」）になり、外交画面は灰色でそう表示する（`DiplomacyActionView.lua:915`）。2026-09-29 の実機（15 km 史実マップ、1〜2ターン目）で、-10 の行は出たが `Text` が Unknown Reason だった
+- 仕組み：勢力別の特性 `TRAIT_JAC_1534_FEUD_<勢力>` を、その勢力の文明に `CivilizationTraits` で付け、特性に `MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER` の修正値 `JAC_1534_FEUD_<自分>_<相手>` を `TraitModifiers` で結ぶ。修正値の `SubjectRequirementSet`（相手プレイヤーへの条件）は「相手の文明が <相手>」で、`REQUIREMENT_PLAYER_TYPE_MATCHES` + `CivilizationType` を使う。理由の文言は `SimpleModifierDescription` = `LOC_JAC_DIPLO_MODIFIER_1534_FEUD`（「1534年の因縁」）。さらに修正値ごとに `ModifierStrings`（`Context="Sample"`、`Text=LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL` = `{diplomaticReason}`）の行が要る。公式は全エージェンダ修正値に付けている（`Base/Assets/Gameplay/Data/Agendas.xml:2296`〜`:2370`）。この行が無いと `GetDiplomaticModifiers` の `Text` が `LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON`（「理由不明」）になり、外交画面は灰色でそう表示する（`DiplomacyActionView.lua:915`）。2026-09-29 の実機（15 km 史実マップ、1〜2ターン目）で、-10 の行は出たが `Text` が Unknown Reason だった。ただし FireTuner の InGame から呼ぶ `GetDiplomaticModifiers` は公式の修正値でも `Text` が Unknown Reason を返す（北条を人間にして今川→北条を見ても Unknown Reason=-4・9）ので、この API の `Text` は文言の証明にならない。シナリオの判定は点数（-10 の行の有無）で行い、文言は外交画面の表示で確かめる
 - 減点は両側にかける（北条→武田と武田→北条）。7組で14個。値は -10（公式の別政体 -6、友好宣言中の非難などの範囲に合わせた）
 - 減衰しない：`InitialValue` だけを付け、`ReductionTurns` を付けない。公式の `AGENDA_SAME_GOVERNMENT`（`Base/Assets/Gameplay/Data/Agendas.xml:813`・`:2247`）と同じく、条件（相手がその文明）が成り立つ間は値が変わらない。時間で薄まる `STANDARD_DIPLOMACY_JOINT_WAR`（`Base/Assets/Gameplay/Data/Leaders.xml:3160`〜`:3177`、`ReductionTurns` = 20）とは別の作り。因縁が解消する仕組み（和睦の儀式など）は作らない（MVP）
 - 開始時から効く：修正値は特性の付与と同時に有効になるはず（要実機確認）。ただし AI が相手を知らないと表示されないため、Lua が7組を `SetHasMet` で出会い済みにする
@@ -51,16 +51,16 @@
 1. 好感度の修正値の型と理由の文言：`Base/Assets/Gameplay/Data/Agendas.xml:451`〜`:455`（`AGENDA_ALLY_OF_ENKIDU_FRIEND`）、`:1021`〜`:1050`（`InitialValue`・`ReductionTurns`・`SimpleModifierDescription`）
 2. 相手プレイヤーで条件を判定する：`SubjectRequirementSetId`（`Agendas.xml:813`〜`:816`）。アジェンダの特性は `TraitModifiers` で結ぶ（`Agendas.xml:445`〜`:447`）
 3. 相手の文明を条件にする：`DLC/GranColombia_Maya/Data/GranColombia_Maya_Civilizations.xml:403`・`:414`・`:427`（`REQUIREMENT_PLAYER_TYPE_MATCHES` + `CivilizationType`）。指導者版は `DLC/RulersOfEngland/Data/RulersOfEngland_Leaders.xml:479`（`REQUIREMENT_PLAYER_LEADER_TYPE_MATCHES`）
-4. 外交画面が理由を出す処理：`Base/Assets/UI/DiplomacyActionView.lua:895`〜`:918`（`GetDiplomaticModifiers` の `Score`・`Text`）。シナリオの確認にも同じ関数を使う。シナリオは -10 の行を見つけたら、`Locale.Lookup(Text)` が「1534年の因縁」と一致することまで確かめ、違えば実際の文言を添えて失敗する
+4. 外交画面が理由を出す処理：`Base/Assets/UI/DiplomacyActionView.lua:895`〜`:918`（`GetDiplomaticModifiers` の `Score`・`Text`）。シナリオの確認にも同じ関数を使う。`japan-1534-relations.json` の判定は点数だけ（`Text` は見ない）。文言は `japan-1534-feud-ui.json` が外交画面のコントロールから読む。画面の関係欄は `GetDiplomaticModifiers` の結果を `Score`・`Text` の2つのラベルに入れる（`DiplomacyActionView.lua:906`〜`:916`。`Text` が `LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON` なら灰色の「理由不明」）。ラベルの ID は `DiplomacyActionView.xml:345`〜`:354`（`IntelRelationshipReasonEntry`）。開く入口は指導者リボンのクリック `DiplomacyRibbon.lua:59`〜`:66` → `LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView` → `DiplomacyActionView.lua:2192`（`OnOpenDiplomacyActionView`）
 
 ## 実機確認（メインセッションで実行）
 
-シナリオ：`tools/civ6-autotest/scenarios/japan-1534-relations.json`（15 km・史実の領土、織田が人間、22勢力）と、開拓者から版の `japan-1534-relations-settlers.json`（何も適用されないこと）
+シナリオ：`tools/civ6-autotest/scenarios/japan-1534-relations.json`（15 km・史実の領土、織田が人間、22勢力）、`japan-1534-feud-ui.json`（北条が人間。公式の入口で武田との外交画面を開き、関係欄のラベルを読んで「-10 1534年の因縁」を確かめ、スクリーンショット `hojo-takeda-diplomacy.png` を撮る）と、開拓者から版の `japan-1534-relations-settlers.json`（何も適用されないこと）
 
 1. 開始直後：`JAC_JAPAN_1534_RELATIONS` が開始ターンに `Applied=16`・`Failed=0`・`Missing=0` で残る
 2. 大内と大友が相互に交戦中
 3. 北条・今川、大内・毛利、伊達・蘆名、足利・六角、島津・琉球が、双方向に `DIPLO_STATE_DECLARED_FRIEND`（`SetHasDeclaredFriendship` が効くかの確認を兼ねる）
-4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10「1534年の因縁」がある。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面で「関係」欄に行が出ることも目で確認する（AI どうしで `GetDiplomaticModifiers` が取れない場合はシナリオの判定を人間側の組へ変える）
+4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10 の行がある（点数で判定。文言は `japan-1534-feud-ui.json`）。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面の「関係」欄に「-10 1534年の因縁」が出ることは `japan-1534-feud-ui.json` が読み取る（読み取れなかった場合は、スクリーンショットを目で確認する。`Text` が「理由不明」なら `ModifierStrings` の行を見直す）
 5. 1ターン進めても 2〜4 が保たれる
 6. セーブ → メニュー → ロード後、プロパティの `Turn` が開始ターンのまま（再適用されていない）で、2〜4 が保たれる
 
