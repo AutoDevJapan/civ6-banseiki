@@ -174,7 +174,9 @@ def scenarios() -> None:
                            f"return '22 majors, 0 city-states, {expected_total} cities/capitals, all land owned, no settlers; "
                            "passage='..passage..'; capital loyalty/turn='..loyalty.."
                            "'; minimum loyalty/turn='..minimumLoyaltyPerTurn")
-        snapshot = (grid_check + minors + land + settlers +
+        # Only start-state facts belong in the start check: after turns, AI settlers and
+        # razed plots are normal (live 2026-09-29), so the snapshot leaves them out.
+        snapshot = (grid_check + minors +
                     "if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then "
                     "error('50-turn state lost') end; "
                     "local initialCounts=" + initial_counts + "; local names=" + count_names + "; "
