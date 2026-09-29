@@ -173,8 +173,8 @@ class HouseNamesLuaTests(unittest.TestCase):
     def test_load_screen_without_game_keeps_generic_names(self):
         # LoadScreen.lua:473 (OnLoadGameViewStateDone) runs before Game exists; an error there hangs the load.
         lua = self.runtime("CIVILIZATION_JAC_ODA", extra="Game = nil; PlayerConfigurations = nil")
-        generic = self.texts[CIVIC]
-        self.assertEqual(self.lookup(lua, CIVIC), generic)
+        generic = self.texts[DESC]
+        self.assertEqual(self.lookup(lua, DESC), generic)
         self.assertEqual(lua.globals().JAC_ApplyHouseNames(generic), generic)
         self.assertFalse(lua.globals().JAC_LocalHouseHasNames())
 
