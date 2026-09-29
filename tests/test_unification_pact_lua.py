@@ -221,12 +221,61 @@ class UnificationPactTests(unittest.TestCase):
         self.request("Propose", ODA, DATE)  # an eliminated player cannot be invited again
         self.assertEqual(self.result(ODA), "INVALID")
 
-    def test_no_marker_without_registered_castles(self):
+    def test_no_pact_without_registered_castles(self):
         self.setUp(no_castles=True)
         self.g.ALLIED[f"{ODA}-{DATE}"] = True
         self.request("Propose", ODA, DATE)
-        self.assertEqual(self.lead(DATE), ODA)
+        self.assertEqual(self.result(ODA), "NO_CASTLES")
+        self.assertIsNone(self.lead(DATE))
         self.assertEqual(self.marked(), [])
+
+    def pact_of_oda_date_ashina(self):
+        self.g.ALLIED[f"{ODA}-{DATE}"] = True
+        self.g.ALLIED[f"{ODA}-{ASHINA}"] = True
+        self.date_castle.owner = ASHINA
+        self.request("Propose", ODA, DATE)
+        self.request("Propose", ODA, ASHINA)
+        self.assertEqual((self.lead(DATE), self.lead(ASHINA)), (ODA, ODA))
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 6)])  # the pact holds all four
+        del self.g.BUILT[1]  # forget it: each test below checks the marker after the lead's death
+
+    def eliminate_oda(self, taker_of_capital: int, taker_of_other: int):
+        self.g.CITIES[5 * 32 + 6].owner, self.g.CITIES[5 * 32 + 6].capital = taker_of_capital, False
+        self.g.CITIES[14 * 32 + 6].owner = taker_of_other
+        self.g.Players[ODA].dead = True
+        self.g.FIRE("CityConquered", taker_of_capital, ODA, 0, 6, 5)
+
+    def test_lead_eliminated_passes_the_pact_to_the_member_with_most_castles(self):
+        self.pact_of_oda_date_ashina()
+        self.eliminate_oda(ASHINA, ASHINA)  # Ashina 3 castles, Date 1: the count beats the lower ID
+        self.assertEqual((self.lead(DATE), self.lead(ASHINA)), (ASHINA, ASHINA))
+        self.assertIn("JAC_Sengoku_UnificationPact: lead 0 eliminated; 2 leads the pact (3 castles)",
+                      list(self.g.LOG.values()))
+        self.assertEqual(self.marked(), [(self.unified(), 10 * 32 + 16)], "the new lead's capital")
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual((self.lead(DATE), len(self.marked())), (ASHINA, 1), "stable, placed once")
+
+    def test_lead_eliminated_tie_goes_to_the_lowest_id_who_can_then_take_members(self):
+        self.pact_of_oda_date_ashina()
+        self.eliminate_oda(SHIMAZU, SHIMAZU)  # an outsider takes Oda's castles; Date and Ashina hold 1 each
+        self.assertEqual((self.lead(DATE), self.lead(ASHINA)), (DATE, DATE))
+        self.assertEqual(self.marked(), [], "Shimazu holds two castles")
+        self.request("Propose", DATE, SHIMAZU)  # the new lead may take members
+        self.request("Accept", SHIMAZU, DATE)
+        self.assertEqual(self.lead(SHIMAZU), DATE)
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 25)], "Date's capital")
+
+    def test_pact_with_no_survivor_is_gone(self):
+        self.g.ALLIED[f"{ODA}-{DATE}"] = True
+        self.date_castle.owner = ASHINA
+        self.request("Propose", ODA, DATE)
+        self.g.Players[DATE].dead = True
+        self.eliminate_oda(ASHINA, ASHINA)
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual(self.marked(), [])
+        self.assertFalse(any("leads the pact" in line for line in self.g.LOG.values()))
+        self.request("Propose", ODA, SHIMAZU)  # a dead lead takes no members
+        self.assertEqual(self.result(ODA), "INVALID")
 
 
 if __name__ == "__main__":

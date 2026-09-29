@@ -58,5 +58,8 @@
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ja_JP"><Text>この相手とは組めない（どちらかが別の同盟にいる、または同じチーム）。</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="en_US"><Text>Not possible with this house (one of you is in another pact, or you share a team).</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ru_RU"><Text>С этим домом невозможно (кто-то уже в другом союзе или вы в одной команде).</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="ja_JP"><Text>この地図には登録された城がないため、天下統一同盟は組めない。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="en_US"><Text>This map has no registered castles, so no unification pact can be formed.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="ru_RU"><Text>На этой карте нет зарегистрированных замков, поэтому союз объединения заключить нельзя.</Text></Row>
   </LocalizedText>
 </GameData>

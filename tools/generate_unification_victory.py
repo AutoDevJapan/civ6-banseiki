@@ -396,7 +396,8 @@ def registry_scenario() -> dict:
 
 
 def pact_scenario() -> dict:
-    """天下統一同盟 on the test map: Oda (human) leads, Date (AI) joins, pooled castles make only Oda win.
+    """天下統一同盟 on the test map: Oda (human) leads, Date (AI) joins, the pact survives save/load,
+    pooled castles make only Oda win.
 
     Requests go through the pact panel's UI.RequestPlayerOperation like a click; results are read from
     the properties the gameplay script writes (a log_line wait only sees lines after the previous step).
@@ -459,6 +460,15 @@ def pact_scenario() -> dict:
             {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined},
              "timeout": 30},
             {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": held_out},
+            # The pact lives in Game/Player properties: they must come back from a save.
+            {"action": "save", "name": "jac-unification-pact"},
+            {"action": "exit_to_menu"},  # load runs from the main menu (live 2026-09-29)
+            {"action": "load", "name": "jac-unification-pact", "timeout": 300},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": held_out},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": panel, "code":
+             "return JAC_RequestPact~=nil"}, "timeout": 30},
             {"action": "ui_lua", "state_name": panel, "code": "JAC_TogglePactPanel(); return true"},
             {"action": "screenshot", "path": "unification-pact-panel.png"},
             {"action": "ui_lua", "state_name": panel, "code": "JAC_TogglePactPanel(); return true"},

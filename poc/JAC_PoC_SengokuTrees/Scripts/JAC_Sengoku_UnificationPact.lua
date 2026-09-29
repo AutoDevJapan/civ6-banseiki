@@ -10,7 +10,10 @@
 -- Rules (the simplest reading; owner questions Q61-Q64 in documents/questions.md):
 --   the proposer is the lead; a human target must accept, an AI target joins at once when it is allied
 --   with the proposer (the official alliance is the AI's consent); a pact has one lead and any number of
---   members, a player is in at most one pact, and a pact lasts until the game ends (no dissolving).
+--   members, a player is in at most one pact, and a pact lasts until victory (no leaving, Q63).
+--   The pact outlives its lead: when the lead is eliminated, the surviving member holding the most counted
+--   castles (tie: lowest player ID) leads it, on every machine alike. With no survivor the pact is gone
+--   (no live player refers to the dead lead, and a dead lead cannot take members).
 --   Players on the same Civ6 team already pool through the team-evaluated victory, so a pact joins teams.
 --   An eliminated member drops out (Members() lists alive majors; it owns no cities), so its lost castles
 --   count for whoever took them and the rest of the pact still wins by holding every counted castle.
@@ -20,7 +23,8 @@
 -- (tools/generate_unification_victory.py) is met only by the team owning that city.
 -- ponytail: the marker is never removed (no documented removal API); the victory fired on the same
 -- change live for TransferCity (unify-08), so a castle lost before the evaluation is not expected.
--- The pact is only for maps with registered castles; settler starts keep the per-team capital rule (Q64).
+-- The pact is only for maps with registered castles (NO_CASTLES otherwise; the panel says so too);
+-- settler starts keep the per-team capital rule (Q64).
 
 local LEAD_PREFIX = "JAC_UNIFICATION_PACT_LEAD_";         -- + player ID -> lead's player ID (Game property)
 local PROPOSAL_PREFIX = "JAC_UNIFICATION_PACT_PROPOSAL_"; -- + target ID -> proposer ID (Game property)
@@ -60,7 +64,7 @@ local function CheckPact(lead)
   local teams = {};
   for _, id in ipairs(Members(lead)) do teams[Players[id]:GetTeam()] = true; end
   local castles = api.CountedCities();
-  if #castles == 0 then return; end  -- settler starts: no castles to pool (Q64)
+  if #castles == 0 then return; end  -- every castle razed: nothing to pool
   for _, city in ipairs(castles) do
     if not teams[Players[city:GetOwner()]:GetTeam()] then return; end
   end
@@ -72,7 +76,33 @@ local function CheckPact(lead)
   end
 end
 
+-- Members of an eliminated lead's pact follow the heir described in the header.
+local function PassLead(castles)
+  local held, heir = {}, {};  -- player -> counted castles; dead lead -> heir
+  for _, city in ipairs(castles) do held[city:GetOwner()] = (held[city:GetOwner()] or 0) + 1; end
+  local alive = PlayerManager.GetAliveMajors();
+  for _, player in ipairs(alive) do
+    local id, lead = player:GetID(), LeadOf(player:GetID());
+    if lead ~= nil and not Alive(lead) then
+      local best = heir[lead];
+      local mine, theirs = held[id] or 0, best and held[best] or 0;
+      if best == nil or mine > theirs or (mine == theirs and id < best) then heir[lead] = id; end
+    end
+  end
+  for _, player in ipairs(alive) do
+    local id = player:GetID();
+    local dead = LeadOf(id);
+    local new = dead ~= nil and heir[dead] or nil;
+    if new ~= nil then
+      Game:SetProperty(LEAD_PREFIX .. id, new);
+      if id == new then Log("lead " .. dead .. " eliminated; " .. new .. " leads the pact (" .. (held[new] or 0) .. " castles)"); end
+    end
+  end
+end
+
 local function CheckAll()
+  local api = ExposedMembers.JAC_UnificationCastles;
+  PassLead(api and api.CountedCities() or {});
   for _, player in ipairs(PlayerManager.GetAliveMajors()) do
     if LeadOf(player:GetID()) == player:GetID() then CheckPact(player:GetID()); end
   end
@@ -89,7 +119,10 @@ end
 
 local function OnPropose(playerID, params)
   local target = params and params.Target;
-  if not CanJoin(playerID, target) then
+  local api = ExposedMembers.JAC_UnificationCastles;
+  if not (api and api.HasCastles()) then
+    Players[playerID]:SetProperty(RESULT, "NO_CASTLES");
+  elseif not CanJoin(playerID, target) then
     Players[playerID]:SetProperty(RESULT, "INVALID");
   elseif Players[target]:IsHuman() then
     Game:SetProperty(PROPOSAL_PREFIX .. target, playerID);

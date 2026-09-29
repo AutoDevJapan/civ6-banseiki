@@ -9,6 +9,19 @@ local RESULT = "JAC_UNIFICATION_PACT_RESULT"
 
 local m_Rows = InstanceManager:new("PlayerRow", "Root", Controls.Rows)
 
+-- 同盟は登録城のある地図だけ（Q64）。登録は JAC_Sengoku_RebuiltCastles.lua と同じ行を読む（(-1, -1) は空の印）
+local function HasCastles()
+	local castle = {}
+	for row in GameInfo.RequirementSetRequirements() do
+		if row.RequirementSetId == "JAC_UNIFICATION_CITY_IS_CASTLE" then castle[row.RequirementId] = true end
+	end
+	for row in GameInfo.RequirementArguments() do
+		if castle[row.RequirementId] and row.Name == "X" and tonumber(row.Value) >= 0 then return true end
+	end
+	return false
+end
+local HAS_CASTLES = HasCastles()
+
 local function Name(playerID)
 	return Locale.Lookup(PlayerConfigurations[playerID]:GetCivilizationShortDescription())
 end
@@ -27,6 +40,11 @@ local function Refresh()
 	m_Rows:ResetInstances()
 	local me = Game.GetLocalPlayer()
 	if me == -1 then return end
+	if not HAS_CASTLES then
+		Controls.Status:SetText(Locale.Lookup("LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES"))
+		Controls.PactPanel:DoAutoSize()
+		return
+	end
 	local myLead = LeadOf(me)
 	local status = Locale.Lookup("LOC_JAC_UNIFICATION_PACT_NONE")
 	if myLead ~= nil then

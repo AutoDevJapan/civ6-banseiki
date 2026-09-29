@@ -105,6 +105,41 @@
       "code": "local capital=Players[0]:GetCities():GetCapitalCity(); if capital:GetBuildings():HasBuilding(GameInfo.Buildings['BUILDING_JAC_PACT_UNIFIED'].Index) then error('pact marked with 3 of 4 castles') end; if Game.GetWinningTeam()~=nil then error('winner while Ashina holds a castle') end; return 'pact holds 3 of 4 castles; no winner'"
     },
     {
+      "action": "save",
+      "name": "jac-unification-pact"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "jac-unification-pact",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; return Players[0]:GetProperty('JAC_UNIFICATION_PACT_RESULT')=='JOINED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)==0 and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_0')==0"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local capital=Players[0]:GetCities():GetCapitalCity(); if capital:GetBuildings():HasBuilding(GameInfo.Buildings['BUILDING_JAC_PACT_UNIFIED'].Index) then error('pact marked with 3 of 4 castles') end; if Game.GetWinningTeam()~=nil then error('winner while Ashina holds a castle') end; return 'pact holds 3 of 4 castles; no winner'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_UnificationPact",
+        "code": "return JAC_RequestPact~=nil"
+      },
+      "timeout": 30
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_UnificationPact",
       "code": "JAC_TogglePactPanel(); return true"

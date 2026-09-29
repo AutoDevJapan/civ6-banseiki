@@ -304,7 +304,7 @@ class UnificationVictoryTests(unittest.TestCase):
         used = set(re.findall(r'"(LOC_JAC_UNIFICATION_PACT_[A-Z_]+)"', panel + xml)) - {"LOC_JAC_UNIFICATION_PACT_RESULT_"}
         used |= {f"LOC_JAC_UNIFICATION_PACT_RESULT_{code}"
                  for code in re.findall(r'SetProperty\(RESULT, "([A-Z_]+)"\)', pact)}
-        self.assertEqual(len(used), 11)
+        self.assertEqual(len(used), 12)
         self.assertLessEqual(used, texts)
 
     def test_rebuilt_castle_script_marks_razed_plots_and_survives_capture(self):
@@ -466,6 +466,12 @@ class UnificationVictoryTests(unittest.TestCase):
         joined, held_out = first("=='JOINED'"), first("pact marked with 3 of 4 castles")
         handover = first("TransferCity(last,date)")
         self.assertTrue(propose[0] < not_allied < allied < propose[1] < joined < held_out < handover)
+        # The formed pact is saved and loaded, and its properties are checked again before the handover.
+        actions = [step["action"] for step in steps]
+        save = actions.index("save")
+        self.assertEqual(actions[save:save + 3], ["save", "exit_to_menu", "load"])
+        self.assertTrue(held_out < save < handover)
+        self.assertEqual(steps[save + 3]["condition"]["code"], steps[joined]["condition"]["code"])
         # Two transfers: Date's castle to Ashina before the pact, then Ashina's to the partner Date.
         self.assertEqual(sum("TransferCity(" in code for code in codes), 2)
         self.assertIn(UNIFIED, codes[handover + 1])
