@@ -1,0 +1,183 @@
+{
+  "name": "JAC Japan resources: custom rows, tech gates, improvements, calendar-year site release (15 km, 1534 to 1542)",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620960,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_RESOURCES] loaded"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=204 or h~=88 then error('map grid mismatch '..w..'x'..h) end; for _,id in ipairs({'RESOURCE_JAC_GOLD','RESOURCE_JAC_LACQUER'}) do local r=GameInfo.Resources[id]; if not r then error('missing resource '..id) end; if r.PrereqTech then error(id..' must not be gated by a tech') end end; for r in GameInfo.Resources() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then error('official tech gate on '..r.ResourceType..': '..r.PrereqTech) end end; if GameInfo.Resources['RESOURCE_IRON'].PrereqTech~='TECH_JAC_SENGOKU_IRON_FORGING' then error('iron gate') end; for r in GameInfo.Resource_Harvests() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then error('official tech harvest gate on '..r.ResourceType) end; if r.ResourceType=='RESOURCE_RICE' and r.PrereqTech~='TECH_JAC_SENGOKU_IRRIGATION_WORKS' then error('rice harvest gate '..tostring(r.PrereqTech)) end end; local hills=false; for r in GameInfo.Resource_ValidTerrains() do if r.ResourceType=='RESOURCE_SILVER' and r.TerrainType=='TERRAIN_GRASS_HILLS' then hills=true end end; if not hills then error('silver is not valid on grass hills') end; local plantation=GameInfo.Improvements['IMPROVEMENT_PLANTATION']; if not plantation.Buildable or plantation.PrereqTech~='TECH_JAC_SENGOKU_IRRIGATION_WORKS' then error('plantation not buildable from Irrigation Works') end; local improves={}; for r in GameInfo.Improvement_ValidResources() do improves[r.ResourceType..'>'..r.ImprovementType]=true end; for _,pair in ipairs({'RESOURCE_JAC_GOLD>IMPROVEMENT_MINE','RESOURCE_IRON>IMPROVEMENT_MINE','RESOURCE_JAC_LACQUER>IMPROVEMENT_PLANTATION','RESOURCE_TEA>IMPROVEMENT_PLANTATION','RESOURCE_SILK>IMPROVEMENT_PLANTATION'}) do if not improves[pair] then error('missing improvement '..pair) end end; local starts={{'fish-ariake',12728,'RESOURCE_FISH'},{'fish-choshi',5444,'RESOURCE_FISH'},{'fish-genkai',13954,'RESOURCE_FISH'},{'fish-ise',8073,'RESOURCE_FISH'},{'fish-ishikari',14460,'RESOURCE_FISH'},{'fish-noto',10330,'RESOURCE_FISH'},{'fish-sagami',5638,'RESOURCE_FISH'},{'fish-sanriku-north',9550,'RESOURCE_FISH'},{'fish-sanriku-south',8525,'RESOURCE_FISH'},{'fish-sendai',8109,'RESOURCE_FISH'},{'fish-seto-bingo',11115,'RESOURCE_FISH'},{'fish-seto-iyo',11316,'RESOURCE_FISH'},{'fish-seto-suo',12331,'RESOURCE_FISH'},{'fish-suruga',6244,'RESOURCE_FISH'},{'fish-tosa',9682,'RESOURCE_FISH'},{'fish-tsugaru',12408,'RESOURCE_FISH'},{'gold-kai-kurokawa',7270,'RESOURCE_JAC_GOLD'},{'gold-kai-nakayama',7063,'RESOURCE_JAC_GOLD'},{'horse-kai-hosaka',7268,'RESOURCE_HORSES'},{'horse-kiso',8284,'RESOURCE_HORSES'},{'horse-nanbu-kuji',10161,'RESOURCE_HORSES'},{'horse-nanbu-morioka',9953,'RESOURCE_HORSES'},{'horse-nanbu-shichinohe',11182,'RESOURCE_HORSES'},{'horse-shimosa',5849,'RESOURCE_HORSES'},{'iron-hoki-kofu',11937,'RESOURCE_IRON'},{'iron-hoki-misasa',11735,'RESOURCE_IRON'},{'iron-hoki-nichinan',12140,'RESOURCE_IRON'},{'iron-iwami-mountains',12746,'RESOURCE_IRON'},{'iron-izumo-mitoya',12343,'RESOURCE_IRON'},{'iron-izumo-yokota',12139,'RESOURCE_IRON'},{'lacquer-wajima',10943,'RESOURCE_JAC_LACQUER'},{'rice-bizen',10916,'RESOURCE_RICE'},{'rice-chikugo',12934,'RESOURCE_RICE'},{'rice-echigo',9527,'RESOURCE_RICE'},{'rice-higo',12116,'RESOURCE_RICE'},{'rice-kanto-lower',6053,'RESOURCE_RICE'},{'rice-kanto-upper',6666,'RESOURCE_RICE'},{'rice-kawachi',8883,'RESOURCE_RICE'},{'rice-nobi',8483,'RESOURCE_RICE'},{'rice-omi',9093,'RESOURCE_RICE'},{'rice-owari',8279,'RESOURCE_RICE'},{'rice-sanuki',10302,'RESOURCE_RICE'},{'rice-sendai',8313,'RESOURCE_RICE'},{'rice-shonai',9943,'RESOURCE_RICE'},{'salt-ako',10511,'RESOURCE_SALT'},{'salt-kojima',10711,'RESOURCE_SALT'},{'salt-noto-suzu',10944,'RESOURCE_SALT'},{'salt-shima',7459,'RESOURCE_SALT'},{'salt-shodoshima',10305,'RESOURCE_SALT'},{'salt-yuge',11318,'RESOURCE_SALT'},{'silk-gunnai',6861,'RESOURCE_SILK'},{'silk-kiryu',7480,'RESOURCE_SILK'},{'silk-nishijin',9293,'RESOURCE_SILK'},{'silver-iwami',12750,'RESOURCE_SILVER'},{'tea-uji',9089,'RESOURCE_TEA'},{'tea-ujitawara',8885,'RESOURCE_TEA'},{'whale-ise',7868,'RESOURCE_WHALES'}}; for _,s in ipairs(starts) do local t=Map.GetPlotByIndex(s[2]):GetResourceType(); if t~=GameInfo.Resources[s[3]].Index then error('start resource missing: '..s[1]) end end; local api=ExposedMembers.JAC_Resources; if not api then error('JAC_Resources API missing') end; local sites={{'silver-ikuno',10719,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'silver-sado-tsurushi',10545,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'copper-ashio',7482,'RESOURCE_COPPER',1550,'TECH_JAC_SENGOKU_ORE_PROSPECTING'},{'gold-izu-toi',6042,'RESOURCE_JAC_GOLD',1577,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-noto-hodatsu',10328,'RESOURCE_JAC_GOLD',1586,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'lacquer-aizu',8304,'RESOURCE_JAC_LACQUER',1590,''},{'gold-sado-nishimikawa',10340,'RESOURCE_JAC_GOLD',1593,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-sado-aikawa',10544,'RESOURCE_JAC_GOLD',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'silver-nobesawa',8924,'RESOURCE_SILVER',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'}}; local listed={}; for _,s in ipairs(api.GetSites()) do listed[s.id]=s end; for _,s in ipairs(sites) do local l=listed[s[1]]; if not l then error('deferred site missing: '..s[1]) end; if l.plot~=s[2] or l.resource~=s[3] then error('deferred site moved: '..s[1]) end; listed[s[1]]=nil end; for id in pairs(listed) do error('unexpected deferred site: '..id) end; return #starts..' start resources and '..#sites..' deferred sites present; plantation and mine rows in place'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=204 or h~=88 then error('map grid mismatch '..w..'x'..h) end; local api=ExposedMembers.JAC_Resources; if not api then error('JAC_Resources API missing') end; local sites={{'silver-ikuno',10719,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'silver-sado-tsurushi',10545,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'copper-ashio',7482,'RESOURCE_COPPER',1550,'TECH_JAC_SENGOKU_ORE_PROSPECTING'},{'gold-izu-toi',6042,'RESOURCE_JAC_GOLD',1577,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-noto-hodatsu',10328,'RESOURCE_JAC_GOLD',1586,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'lacquer-aizu',8304,'RESOURCE_JAC_LACQUER',1590,''},{'gold-sado-nishimikawa',10340,'RESOURCE_JAC_GOLD',1593,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-sado-aikawa',10544,'RESOURCE_JAC_GOLD',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'silver-nobesawa',8924,'RESOURCE_SILVER',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'}}; local turn=Game.GetCurrentGameTurn(); local year=api.CurrentYear(); if year~=1534 then error('calendar year '..tostring(year)..', expected 1534') end; local shown=Calendar.MakeYearStr(turn); if not string.find(shown,'1534',1,true) then error('engine date '..tostring(shown)..' is not 1534') end; local function researched(tech) local info=tech~='' and GameInfo.Technologies[tech]; if not info then return false end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetTechs():HasTech(info.Index) then return true end end; return false end; local out=0; for _,s in ipairs(sites) do local t=Map.GetPlotByIndex(s[2]):GetResourceType(); if s[4]<=year then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; out=out+1 elseif t~=-1 then if t~=GameInfo.Resources[s[3]].Index or not researched(s[5]) then error('site released too early: '..s[1]) end; out=out+1 end end; return 'year '..year..' (engine '..shown..', turn '..(turn-GameConfiguration.GetStartTurn())..'): '..out..' of '..#sites..' deferred sites on the map'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 24,
+      "timeout": 3600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_RESOURCES] revealed silver-ikuno"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=204 or h~=88 then error('map grid mismatch '..w..'x'..h) end; local api=ExposedMembers.JAC_Resources; if not api then error('JAC_Resources API missing') end; local sites={{'silver-ikuno',10719,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'silver-sado-tsurushi',10545,'RESOURCE_SILVER',1542,'TECH_JAC_SENGOKU_CUPELLATION'},{'copper-ashio',7482,'RESOURCE_COPPER',1550,'TECH_JAC_SENGOKU_ORE_PROSPECTING'},{'gold-izu-toi',6042,'RESOURCE_JAC_GOLD',1577,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-noto-hodatsu',10328,'RESOURCE_JAC_GOLD',1586,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'lacquer-aizu',8304,'RESOURCE_JAC_LACQUER',1590,''},{'gold-sado-nishimikawa',10340,'RESOURCE_JAC_GOLD',1593,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'gold-sado-aikawa',10544,'RESOURCE_JAC_GOLD',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'},{'silver-nobesawa',8924,'RESOURCE_SILVER',1596,'TECH_JAC_SENGOKU_MINE_MANAGEMENT'}}; local turn=Game.GetCurrentGameTurn(); local year=api.CurrentYear(); if year~=1542 then error('calendar year '..tostring(year)..', expected 1542') end; local shown=Calendar.MakeYearStr(turn); if not string.find(shown,'1542',1,true) then error('engine date '..tostring(shown)..' is not 1542') end; local function researched(tech) local info=tech~='' and GameInfo.Technologies[tech]; if not info then return false end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetTechs():HasTech(info.Index) then return true end end; return false end; local out=0; for _,s in ipairs(sites) do local t=Map.GetPlotByIndex(s[2]):GetResourceType(); if s[4]<=year then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; out=out+1 elseif t~=-1 then if t~=GameInfo.Resources[s[3]].Index or not researched(s[5]) then error('site released too early: '..s[1]) end; out=out+1 end end; return 'year '..year..' (engine '..shown..', turn '..(turn-GameConfiguration.GetStartTurn())..'): '..out..' of '..#sites..' deferred sites on the map'"
+    }
+  ]
+}

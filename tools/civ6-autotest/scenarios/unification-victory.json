@@ -1,0 +1,169 @@
+{
+  "name": "Sengoku unification victory on the test map: raze, one castle missing, save/load, rebuild, then all",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
+      "map_size": "MAPSIZE_DUEL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620951,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; return 'turn limit NONE after Create Game setup'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total~=4 or total-owned~=2 then error('initial castles '..owned..'/'..total) end; if not Game.IsVictoryEnabled('VICTORY_JAC_SENGOKU_UNIFICATION') then error('unification victory disabled') end; if Game.GetWinningTeam()~=nil then error('winner at start') end; return 'registered=4, two held by Date'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local target=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then local capital=Players[owner]:GetCities():GetCapitalCity(); for _,city in Players[owner]:GetCities():Members() do if castle(city) and (not capital or city:GetID()~=capital:GetID()) then target=city end end end end; if not target then error('Date castle to raze missing') end; local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; if CityManager.GetCity(owner,id) then how='fallback transfer (DestroyCity did not raze)'; CityManager.TransferCity(CityManager.GetCity(owner,id),0) end; return 'raze: '..how"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.PartialScreenHooks_OpenWorldRankings(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "WorldRankings",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "WorldRankings",
+      "code": "ViewGeneric('VICTORY_JAC_SENGOKU_UNIFICATION'); if Controls.GenericView:IsHidden() then error('custom victory tab hidden') end; return 'World Rankings shows 天下統一 condition'"
+    },
+    {
+      "action": "screenshot",
+      "path": "unification-progress-negative.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.PartialScreenHooks_CloseAllExcept('_AllTheThings'); return true"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+    },
+    {
+      "action": "save",
+      "name": "jac-unification-negative"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "jac-unification-negative",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local coords={{6,5},{25,5},{6,14},{25,14}}; local marker=GameInfo.Buildings['BUILDING_JAC_REBUILT_ON_CASTLE'].Index; local function razed(x,y) return Game:GetProperty('JAC_UNIFICATION_RAZED_CASTLE_PLOT_'..Map.GetPlot(x,y):GetIndex())==true end; local target=nil; for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); if razed(xy[1],xy[2]) then if city then error('razed plot has a city') end; if target then error('more than one razed plot') end; target=xy elseif not city then error('empty plot not recorded as razed: '..xy[1]..','..xy[2]) end end; if not target then error('no razed plot recorded (raze or turn-start scan failed)') end; local builder=nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then builder=id end end; if not builder then error('Ashina missing') end; Players[builder]:GetCities():Create(target[1],target[2]); if not CityManager.GetCityAt(target[1],target[2]) then error('rebuild failed') end; return 'rebuilt '..target[1]..','..target[2]..' for Ashina'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local coords={{6,5},{25,5},{6,14},{25,14}}; local marker=GameInfo.Buildings['BUILDING_JAC_REBUILT_ON_CASTLE'].Index; local function razed(x,y) return Game:GetProperty('JAC_UNIFICATION_RAZED_CASTLE_PLOT_'..Map.GetPlot(x,y):GetIndex())==true end; local n=0; for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); if city and razed(xy[1],xy[2]) then n=n+1; if not city:GetBuildings():HasBuilding(marker) then error('rebuilt city unmarked') end elseif city and city:GetBuildings():HasBuilding(marker) then error('original castle marked') end end; if n~=1 then error('rebuilt cities '..n) end; if Game.GetWinningTeam()~=nil then error('winner before the last castle') end; return 'rebuilt city marked; no winner'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then for _,city in Players[owner]:GetCities():Members() do if castle(city) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local coords={{6,5},{25,5},{6,14},{25,14}}; local marker=GameInfo.Buildings['BUILDING_JAC_REBUILT_ON_CASTLE'].Index; local function razed(x,y) return Game:GetProperty('JAC_UNIFICATION_RAZED_CASTLE_PLOT_'..Map.GetPlot(x,y):GetIndex())==true end; local owned=0; local rebuilt=0; for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); if razed(xy[1],xy[2]) then rebuilt=rebuilt+1; if not city or not city:GetBuildings():HasBuilding(marker) then error('rebuilt city lost') end; if city:GetOwner()==0 then error('rebuilt city owned by Oda') end else if not city then error('castle missing at '..xy[1]..','..xy[2]) end; if city:GetBuildings():HasBuilding(marker) then error('castle marked as rebuilt: '..xy[1]..','..xy[2]) end; if city:GetOwner()==0 then owned=owned+1 end end end; if rebuilt~=1 or owned~=3 then error('after transfer owned '..owned..', rebuilt '..rebuilt) end; return 'all 3 castles held by Oda, none marked; rebuilt city marked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local winner,v=Game.GetWinningTeam(); return winner==Players[0]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
+      },
+      "timeout": 300
+    },
+    {
+      "action": "screenshot",
+      "path": "unification-victory.png"
+    }
+  ]
+}

@@ -32,10 +32,13 @@ class ProsperityPlanTests(unittest.TestCase):
                 with self.subTest(city=c["id"]):
                     self.assertEqual([u["where"] for u in c["units"]].count("center"), 1)
                     self.assertGreaterEqual(c["pop_15km"], 2)
-                    self.assertLessEqual(c["pop_15km"], max(2, c["tiles_15km"] - 1))
+                    # owned land tiles minus the centre and mountains
+                    self.assertLessEqual(c["pop_15km"], max(2, c["land_15km"]))
                     self.assertEqual(c["capital"], "BUILDING_PALACE" in c["city_buildings"])
                     # a citizen or a district occupies a tile
-                    self.assertLessEqual(c["pop_15km"] + len(c["districts"]), max(2, c["tiles_15km"] - 1))
+                    self.assertLessEqual(c["pop_15km"] + len(c["districts"]), max(2, c["land_15km"]))
+                    # one improvement per worked tile (population minus districts)
+                    self.assertLessEqual(sum(c["improvements"].values()), c["pop_15km"] - len(c["districts"]))
 
     def test_only_buildings_and_units_kept_by_the_sengoku_trees(self):
         buildings = {"BUILDING_PALACE", "BUILDING_WALLS", "BUILDING_GRANARY", "BUILDING_MARKET",
@@ -56,6 +59,13 @@ class ProsperityPlanTests(unittest.TestCase):
         self.assertEqual(tiers["ODA"], "D")
         # bigger houses never get fewer field units than smaller ones
         self.assertGreater(p.field_units("OUCHI"), p.field_units("ODA"))
+        # Ryukyu and the Ainu are sized from sources too (owner decision 8b)
+        self.assertEqual((tiers["RYUKYU"], tiers["AINU"]), ("C", "D"))
+        shares = {f["id"]: f["direct_koku_share_pct"] for f in self.plan["factions"]}
+        self.assertIsNone(shares["AINU"])  # population-derived, not koku
+        self.assertAlmostEqual(sum(v for v in shares.values() if v is not None), 100, delta=0.5)
+        self.assertTrue(all(len(spec["k"]) == 3 and spec["k"][0] <= spec["k"][1] <= spec["k"][2]
+                            for spec in p.FACTIONS.values()))
 
 
 if __name__ == "__main__":

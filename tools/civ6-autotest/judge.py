@@ -111,6 +111,10 @@ def _runtime_errors(lua: str) -> list[str]:
     return found
 
 
+# Official Base/Assets/UI/FrontEnd/LoadScreen.lua:218,248 report a missing loading-screen texture this way.
+TEXTURE_MISSING = re.compile(r"(?:Failed to load background image texture: |We are lacking a texture for )\S*JAC_")
+
+
 def _error_context(lines: list[str], index: int) -> str:
     """Keep an error and its stack lines, stopping before a new log message."""
     context = [lines[index]]
@@ -164,6 +168,14 @@ def _database_errors(database: str) -> list[str]:
 
 def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
     modding = logs["Modding.log"]
+    lua_lines = logs["Lua.log"].splitlines()
+    congress_paths = re.compile(
+        r"WorldCongress|CongressButton|ActionPanel_Expansion2|GovernmentScreen_Expansion2|"
+        r"GreatPeoplePopup_Expansion2|DiplomacyRibbon_Expansion2|DiplomacyActionView_Expansion2|"
+        r"GovernorPanel|CityPanel_Expansion2", re.I)
+    congress_errors = [line for index, line in enumerate(lua_lines)
+                       if ("Runtime Error" in line or "UI.DataError" in line)
+                       and congress_paths.search(_error_context(lua_lines, index))]
 
     own = re.compile(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431", re.I)
 
@@ -195,6 +207,8 @@ def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
         Check("Japan map: Database.log", not database_errors,
               f"{len(database_errors)} JAC-related database errors"),
         Check("Japan map: Modding.log", not errors, f"{len(errors)} JAC-related modding errors"),
+        Check("Japan map: GS Congress paths", not congress_errors,
+              f"{len(congress_errors)} World Congress-related UI or gameplay errors"),
     ]
 
 
@@ -362,9 +376,11 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
             raise ValueError(f"Missing log: {name}")
     jac_errors = [line for line in logs["Lua.log"].splitlines() if _jac_error_line(line)]
     runtime_errors = _runtime_errors(logs["Lua.log"])
+    missing = [line for line in logs["Lua.log"].splitlines() if TEXTURE_MISSING.search(line)]
     checks = [
         Check("Generic: [JAC_POC] errors", not jac_errors, f"{len(jac_errors)} matching lines"),
         Check("Generic: JAC Runtime Error", not runtime_errors, f"{len(runtime_errors)} matching stack traces"),
+        Check("Generic: JAC missing texture", not missing, f"{len(missing)} matching lines"),
     ]
     if profile == "bundle0":
         checks.extend(_bundle0_checks(logs))

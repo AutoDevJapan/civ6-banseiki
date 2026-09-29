@@ -6,13 +6,23 @@ from copy import deepcopy
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from generate import MOD as MAP_MOD, SEATS, SEAT_CASTLES, EXTRA_CAPITAL_NAMES
+from generate import MOD as MAP_MOD, SEATS, SEAT_CASTLES, EXTRA_CAPITAL_NAMES, CASTLE_NAMES
 from start_1534 import HEADS, HEAD_OVERRIDES, civ_id, data, leader_id
 
 
 MOD = MAP_MOD.parent / "JAC_PoC_CustomCivs"
 EXISTING = {"ODA", "TAKEDA"}
 EXTRA = [seat for seat in SEATS if seat.slug not in EXISTING]
+# Russian capital names in Cyrillic (Polivanov), so a Russian UI does not mix scripts.
+CAPITAL_RU = {
+    "ODA": "Нагоя", "DATE": "Ёнэдзава", "ASHINA": "Курокава", "HOJO": "Одавара",
+    "YAMANOUCHI_UESUGI": "Хираи", "TAKEDA": "Цуцудзигасаки", "NAGAO": "Касугаяма",
+    "IMAGAWA": "Сумпу", "MATSUDAIRA": "Окадзаки", "ASAKURA": "Итидзёдани",
+    "ASHIKAGA": "Муромати", "MIYOSHI": "Сёдзуй", "ROKKAKU": "Каннондзи",
+    "HONGANJI": "Исияма", "OUCHI": "Ямагути", "AMAGO": "Гассан-Тода",
+    "MORI": "Ёсида-Корияма", "CHOSOKABE": "Око", "OTOMO": "Фунай",
+    "SHIMAZU": "Кагосима", "RYUKYU": "Сюри", "AINU": "Нибутани",
+}
 
 
 def write_xml(path: Path, root: ET.Element) -> None:
@@ -46,11 +56,10 @@ def gameplay() -> None:
               "INSERT INTO CityNames (CivilizationType, CityName, SortIndex)\n"
               "SELECT c.CivilizationType, n.CityName, n.SortIndex FROM Civilizations c JOIN CityNames n ON n.CivilizationType='CIVILIZATION_JAPAN'\n"
               "WHERE c.CivilizationType LIKE 'CIVILIZATION_JAC_%' AND c.CivilizationType NOT IN ('CIVILIZATION_JAC_ODA','CIVILIZATION_JAC_TAKEDA');",
-              "-- Existing Oda art is a temporary shared portrait for these twenty leaders.",
               "INSERT INTO LoadingInfo (LeaderType, ForegroundImage, BackgroundImage, LeaderText, PlayDawnOfManAudio) VALUES",
-              ",\n".join(f"    ('{leader_id(s.slug)}', 'LEADER_JAC_ODA_NOBUHIDE_NEUTRAL', 'LEADER_JAC_ODA_NOBUHIDE_BACKGROUND', 'LOC_JAC_1534_LOADING', 0)" for s in EXTRA) + ";",
+              ",\n".join(f"    ('{leader_id(s.slug)}', '{leader_id(s.slug)}_NEUTRAL', '{leader_id(s.slug)}_BACKGROUND', 'LOC_JAC_1534_LOADING', 0)" for s in EXTRA) + ";",
               "INSERT INTO DiplomacyInfo (Type, BackgroundImage) VALUES",
-              ",\n".join(f"    ('{leader_id(s.slug)}', 'LEADER_JAC_ODA_NOBUHIDE_DIPLOMACY_BACKGROUND')" for s in EXTRA) + ";"]
+              ",\n".join(f"    ('{leader_id(s.slug)}', '{leader_id(s.slug)}_DIPLOMACY_BACKGROUND')" for s in EXTRA) + ";"]
     (MOD / "Data/JAC_Japan1534_Gameplay.sql").write_text("\n\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -63,8 +72,8 @@ def front_end() -> None:
                       CivilizationType=civ, LeaderType=leader,
                       CivilizationName=f"LOC_{civ}_NAME", CivilizationIcon=f"ICON_{civ}",
                       LeaderName=f"LOC_{leader}_NAME", LeaderIcon=f"ICON_{leader}",
-                      Portrait="LEADER_JAC_ODA_NOBUHIDE_NEUTRAL",
-                      PortraitBackground="LEADER_JAC_ODA_NOBUHIDE_BACKGROUND",
+                      Portrait=f"{leader}_NEUTRAL",
+                      PortraitBackground=f"{leader}_BACKGROUND",
                       CivilizationAbilityName="LOC_JAC_1534_FACTION_TRAIT",
                       CivilizationAbilityDescription="LOC_TRAIT_JAC_CLAN_POC_DESCRIPTION",
                       CivilizationAbilityIcon="ICON_CIVILIZATION_JAPAN",
@@ -77,11 +86,11 @@ def front_end() -> None:
 def icons() -> None:
     root = ET.Element("GameInfo")
     defs = ET.SubElement(root, "IconDefinitions")
-    for seat in EXTRA:
+    for index, seat in enumerate(EXTRA, 2):
         ET.SubElement(defs, "Row", Name=f"ICON_{civ_id(seat.slug)}",
                       Atlas="ICON_ATLAS_CIVILIZATIONS", Index="12")
         ET.SubElement(defs, "Row", Name=f"ICON_{leader_id(seat.slug)}",
-                      Atlas="ICON_ATLAS_JAC_LEADERS", Index="0")
+                      Atlas="ICON_ATLAS_JAC_LEADERS", Index=str(index))
     write_xml(MOD / "Data/JAC_Japan1534_Icons.xml", root)
 
 
@@ -135,7 +144,9 @@ def translated_text() -> None:
             add(f"LOC_{leader_id(slug)}_NAME", head, head_en, head_ru)
         alias = SEAT_CASTLES.get(slug)
         capital_ja = castles[alias]["name"] if alias else EXTRA_CAPITAL_NAMES[slug]
-        add(f"LOC_JAC_1534_CAPITAL_{slug}", capital_ja, seat.castle, seat.castle)
+        add(f"LOC_JAC_1534_CAPITAL_{slug}", capital_ja, seat.castle, CAPITAL_RU[slug])
+    for castle_id, (en, ru) in CASTLE_NAMES.items():
+        add(f"LOC_JAC_1534_CITY_{castle_id}", castles[castle_id]["name"], en, ru)
     write_xml(MOD / "Text/JAC_Japan1534_Text.xml", root)
 
 
@@ -157,6 +168,9 @@ def artdefs() -> None:
         for seat in EXTRA:
             copy = deepcopy(template)
             copy.find("m_Name").set("text", ids(seat.slug))
+            if filename == "FallbackLeaders.artdef":
+                entry = copy.find("./m_ChildCollections/Element/Element/m_Fields/m_Values/Element/m_EntryName")
+                entry.set("text", f"FALLBACK_NEUTRAL_JAC_{ids(seat.slug).removeprefix('LEADER_JAC_')}")
             collection.append(copy)
         write_xml(path, root)
     path = MOD / "ArtDefs/Cultures.artdef"

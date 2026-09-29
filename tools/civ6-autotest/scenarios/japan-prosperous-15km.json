@@ -1,5 +1,5 @@
 {
-  "name": "JAC Japan map 15 km baseline survey, OUCHI human, 50 turns (Q28 scale research)",
+  "name": "JAC Japan map 15 km prosperous 1534 start: start-state check, then 50 turns of AI autoplay (OUCHI human) with a survey every 10 turns and the survivors",
   "judge_profile": "japan_map",
   "steps": [
     {
@@ -143,13 +143,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
-    },
-    {
-      "action": "autoplay",
-      "turns": 10,
-      "metrics": true,
-      "timeout": 3600
+      "code": "local E={LEADER_JAC_ODA_NOBUHIDE={2,5,4,1,2,2,200},LEADER_JAC_DATE_TANEMUNE={4,15,8,2,2,13,310},LEADER_JAC_ASHINA_MORIKIYO={2,8,6,1,1,7,290},LEADER_JAC_HOJO_UJITSUNA={3,15,8,3,2,12,510},LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA={5,24,11,4,3,20,540},LEADER_JAC_TAKEDA_NOBUTORA={2,8,6,1,1,0,230},LEADER_JAC_NAGAO_TAMEKAGE={1,5,6,1,1,4,380},LEADER_JAC_IMAGAWA_UJITERU={3,11,8,2,2,7,410},LEADER_JAC_MATSUDAIRA_KIYOYASU={1,4,4,1,1,3,180},LEADER_JAC_ASAKURA_TAKAKAGE={1,6,6,2,1,4,500},LEADER_JAC_ASHIKAGA_YOSHIHARU={12,31,15,5,4,26,370},LEADER_JAC_MIYOSHI_NAGAYOSHI={4,9,6,1,3,7,160},LEADER_JAC_ROKKAKU_SADAYORI={2,8,7,0,1,4,480},LEADER_JAC_HONGANJI_SHONYO={1,5,4,1,1,0,300},LEADER_JAC_OUCHI_YOSHITAKA={3,15,10,3,2,12,820},LEADER_JAC_AMAGO_TSUNEHISA={1,6,6,2,1,4,400},LEADER_JAC_MORI_MOTONARI={1,3,2,1,1,2,100},LEADER_JAC_CHOSOKABE_KUNICHIKA={1,3,2,1,1,2,100},LEADER_JAC_OTOMO_YOSHIAKI={1,6,7,2,1,4,600},LEADER_JAC_SHIMAZU_TAKAHISA={3,7,5,1,1,6,120},LEADER_JAC_RYUKYU_SHO_SEI={2,7,4,2,2,0,220},LEADER_JAC_AINU_TARIKONA={1,3,2,1,1,2,100}}; local EB={LEADER_JAC_ODA_NOBUHIDE={BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=2},LEADER_JAC_DATE_TANEMUNE={BUILDING_BARRACKS=2,BUILDING_GRANARY=2,BUILDING_PALACE=1,BUILDING_WALLS=2},LEADER_JAC_ASHINA_MORIKIYO={BUILDING_GRANARY=1,BUILDING_PALACE=1,BUILDING_SHRINE=1,BUILDING_WALLS=1},LEADER_JAC_HOJO_UJITSUNA={BUILDING_BARRACKS=2,BUILDING_GRANARY=3,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=2},LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA={BUILDING_BARRACKS=3,BUILDING_GRANARY=5,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=3},LEADER_JAC_TAKEDA_NOBUTORA={BUILDING_BARRACKS=1,BUILDING_GRANARY=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_NAGAO_TAMEKAGE={BUILDING_GRANARY=1,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_IMAGAWA_UJITERU={BUILDING_GRANARY=2,BUILDING_MARKET=2,BUILDING_PALACE=1,BUILDING_WALLS=2},LEADER_JAC_MATSUDAIRA_KIYOYASU={BUILDING_BARRACKS=1,BUILDING_GRANARY=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_ASAKURA_TAKAKAGE={BUILDING_GRANARY=1,BUILDING_LIBRARY=1,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_ASHIKAGA_YOSHIHARU={BUILDING_GRANARY=1,BUILDING_MARKET=4,BUILDING_PALACE=1,BUILDING_SHRINE=1,BUILDING_TEMPLE=1,BUILDING_WALLS=4},LEADER_JAC_MIYOSHI_NAGAYOSHI={BUILDING_LIGHTHOUSE=1,BUILDING_PALACE=1,BUILDING_WALLS=3},LEADER_JAC_ROKKAKU_SADAYORI={BUILDING_GRANARY=2,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_HONGANJI_SHONYO={BUILDING_GRANARY=1,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_OUCHI_YOSHITAKA={BUILDING_GRANARY=3,BUILDING_MARKET=2,BUILDING_PALACE=1,BUILDING_WALLS=2,BUILDING_WORKSHOP=1},LEADER_JAC_AMAGO_TSUNEHISA={BUILDING_BARRACKS=1,BUILDING_GRANARY=1,BUILDING_PALACE=1,BUILDING_WALLS=1,BUILDING_WORKSHOP=1},LEADER_JAC_MORI_MOTONARI={BUILDING_BARRACKS=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_CHOSOKABE_KUNICHIKA={BUILDING_BARRACKS=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_OTOMO_YOSHIAKI={BUILDING_GRANARY=1,BUILDING_LIGHTHOUSE=1,BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_SHIMAZU_TAKAHISA={BUILDING_BARRACKS=1,BUILDING_PALACE=1,BUILDING_WALLS=1},LEADER_JAC_RYUKYU_SHO_SEI={BUILDING_GRANARY=1,BUILDING_MARKET=2,BUILDING_PALACE=1,BUILDING_WALLS=2},LEADER_JAC_AINU_TARIKONA={BUILDING_MARKET=1,BUILDING_PALACE=1,BUILDING_WALLS=1}}; local s=Game:GetProperty('JAC_JAPAN_START_STATE'); if s==nil then error('no start state recorded (JAC_Japan_StartState.lua)') end; local sb=Game:GetProperty('JAC_JAPAN_START_BUILDINGS'); if sb==nil then error('no start buildings recorded (JAC_Japan_StartState.lua)') end; local S={}; for id,vals in string.gmatch(s,'(%d+)=([%d,%-]+)') do local t={}; for v in string.gmatch(vals,'%-?%d+') do t[#t+1]=tonumber(v) end; S[tonumber(id)]=t end; local SB={}; for id,list in string.gmatch(sb,'(%d+):([^;]*)') do local t={}; for k,v in string.gmatch(list,'([%w_]+)=(%d+)') do t[k]=tonumber(v) end; SB[tonumber(id)]=t end; local out={'START'}; local bad={}; local names={'cities','pop','units','districts','walls','improvements'}; for i=0,21 do local leader=PlayerConfigurations[i]:GetLeaderTypeName(); local e=E[leader]; local got=S[i]; if not got or not e then error('missing player '..i..' '..tostring(leader)) end; if got[8]~=got[1] then bad[#bad+1]=leader..' ungarrisoned cities '..(got[1]-got[8]) end; if got[9]>0 then bad[#bad+1]=leader..' stacked plots '..got[9] end; for k=1,6 do if got[k]~=e[k] then bad[#bad+1]=leader..' '..names[k]..' '..got[k]..' expected '..e[k] end end; if got[7]<e[7] then bad[#bad+1]=leader..' gold '..got[7]..' expected >= '..e[7] end; local eb,gb=EB[leader] or {},SB[i] or {}; for k,v in pairs(eb) do if (gb[k] or 0)~=v then bad[#bad+1]=leader..' '..k..' '..(gb[k] or 0)..' expected '..v end end; for k,v in pairs(gb) do if eb[k]==nil then bad[#bad+1]=leader..' '..k..' '..v..' expected 0' end end; out[#out+1]=leader:gsub('LEADER_JAC_','')..' '..table.concat(got,'/',1,7) end; if #bad>0 then error(table.concat(bad,'; ')) end; return table.concat(out,'; ')"
     },
     {
       "action": "ui_lua",
@@ -199,6 +193,22 @@
       "action": "ui_lua",
       "state_name": "InGame",
       "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local alive,dead,nocap={},{},0; for i=0,21 do local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); local p=Players[i]; if p and p:IsAlive() then local c=p:GetCities():GetCount(); local cap=p:GetCities():GetCapitalCity(); if not cap then nocap=nocap+1 end; alive[#alive+1]=n..' c'..c..(cap and '' or ' NO_CAPITAL') else dead[#dead+1]=n end end; local line='SURVIVORS T'..t..' '..#alive..'/22: '..table.concat(alive,', ')..' | DEAD: '..table.concat(dead,', '); if #alive<22 or nocap>0 then error('regression: '..line) end; return line"
     }
   ]
 }

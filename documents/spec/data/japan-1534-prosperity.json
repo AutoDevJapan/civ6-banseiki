@@ -1,10 +1,10 @@
 {
  "_schema": {
-  "status": "調査案。オーナー確認前(Q28)。SSOT ではない",
+  "status": "Q28 はオプション①に決定(SSOT 3.1)。地図への反映は prosper_start.py(documents/poc/japan-prosperous-start.md)",
   "generated_by": "tools/japan_map_scale/prosperity.py",
-  "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale",
-  "option1": "各家の1534年規模に合わせる案。plan[] が都市ごとの開始状態",
-  "option2": "全勢力に同じ量を置く案。option2_rule を参照"
+  "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale; koku_equivalent=true is derived from population",
+  "option1": "各家の1534年規模に合わせる案(採用)。plan[] は15km 地図の目安。実際の配置は地図ごとに prosper_start.py が決める",
+  "option2": "全勢力に同じ量を置く案(不採用)。option2_rule を参照"
  },
  "option2_rule": {
   "per_city": {
@@ -136,13 +136,14 @@
    "id": "ODA",
    "name": "織田",
    "tier": "D",
-   "confidence": "低",
+   "confidence": "中低",
    "direct_koku_man": {
     "low": 4,
     "mid": 8,
     "high": 12
    },
-   "direct_koku_basis": "尾張の海東・海西郡の弾正忠家。勝幡城と津島・熱田の湊町の矢銭で伸びる途中。石高は小さいが商業は大きい",
+   "koku_equivalent": false,
+   "direct_koku_basis": "尾張の海東・海西郡の弾正忠家。勝幡城と津島・熱田の湊町の矢銭で伸びる途中。石高は小さいが商業は大きい(1540年に伊勢遷宮へ銭700貫文、1543年に内裏修理料4000貫文を献上。Wikipedia「織田信秀」)",
    "mobilization_troops": {
     "low": 1000,
     "mid": 2000,
@@ -167,6 +168,7 @@
    "option2_units_total": 5,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 4,
+   "starting_gold": 200,
    "plan": [
     {
      "id": "ODA_SEAT",
@@ -176,6 +178,7 @@
      "target_pop": 3,
      "tiles_15km": 7,
      "tiles_20km": 3,
+     "land_15km": 6,
      "pop_15km": 3,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -223,6 +226,7 @@
      "target_pop": 2,
      "tiles_15km": 4,
      "tiles_20km": 5,
+     "land_15km": 3,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 3,
@@ -252,13 +256,14 @@
    "id": "DATE",
    "name": "伊達",
    "tier": "B",
-   "confidence": "低",
+   "confidence": "中低",
    "direct_koku_man": {
     "low": 15,
     "mid": 27,
     "high": 35
    },
-   "direct_koku_basis": "伊達・信夫・置賜の直轄と近隣の従属国衆。陸奥北部と出羽の大半は独立性が強く数えない",
+   "koku_equivalent": false,
+   "direct_koku_basis": "伊達・信夫・置賜の直轄と近隣の従属国衆。陸奥北部と出羽の大半は独立性が強く数えない(1532年に桑折西山城へ移り、1533年『蔵方之掟』、1535年『棟役日記』、1538年『御段銭帳』の徴税台帳を作る。Wikipedia「伊達稙宗」。台帳の数値は未確認)",
    "mobilization_troops": {
     "low": 3750,
     "mid": 6750,
@@ -267,7 +272,7 @@
    "territory_koku_1598_man": 116.2,
    "tiles_15km": 298,
    "tile_share_pct": 15.6,
-   "direct_koku_share_pct": 4.9,
+   "direct_koku_share_pct": 4.8,
    "traits": {
     "martial": 2,
     "trade": 1,
@@ -283,6 +288,7 @@
    "option2_units_total": 7,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 9,
+   "starting_gold": 310,
    "plan": [
     {
      "id": "DATE_SEAT",
@@ -292,6 +298,7 @@
      "target_pop": 5,
      "tiles_15km": 20,
      "tiles_20km": 19,
+     "land_15km": 18,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -348,6 +355,7 @@
      "target_pop": 4,
      "tiles_15km": 12,
      "tiles_20km": 6,
+     "land_15km": 11,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -387,6 +395,7 @@
      "target_pop": 3,
      "tiles_15km": 26,
      "tiles_20km": 17,
+     "land_15km": 25,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -416,6 +425,7 @@
      "target_pop": 3,
      "tiles_15km": 240,
      "tiles_20km": 128,
+     "land_15km": 236,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -449,7 +459,8 @@
     "mid": 25,
     "high": 32
    },
-   "direct_koku_basis": "会津4郡と仙道南部の一族・従属国衆。出羽の仮割当は数えない",
+   "koku_equivalent": false,
+   "direct_koku_basis": "会津4郡と仙道南部の一族・従属国衆。出羽の仮割当は数えない(当主は盛舜。「会津守護」を自称。Wikipedia「蘆名氏」。数値の史料は見つからず推定のまま)",
    "mobilization_troops": {
     "low": 3750,
     "mid": 6250,
@@ -474,6 +485,7 @@
    "option2_units_total": 5,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 6,
+   "starting_gold": 290,
    "plan": [
     {
      "id": "ASHINA_KUROKAWA",
@@ -483,6 +495,7 @@
      "target_pop": 5,
      "tiles_15km": 36,
      "tiles_20km": 21,
+     "land_15km": 30,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -539,6 +552,7 @@
      "target_pop": 3,
      "tiles_15km": 29,
      "tiles_20km": 12,
+     "land_15km": 27,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -572,6 +586,7 @@
     "mid": 43,
     "high": 52
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "相模+伊豆(26.4万)と武蔵南部の江戸周辺(約25%=16.7万)。下総は政治的連携で数えない",
    "mobilization_troops": {
     "low": 8750,
@@ -597,6 +612,7 @@
    "option2_units_total": 6,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 10,
+   "starting_gold": 510,
    "plan": [
     {
      "id": "HOJO_ODAWARA",
@@ -606,6 +622,7 @@
      "target_pop": 6,
      "tiles_15km": 25,
      "tiles_20km": 17,
+     "land_15km": 23,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -672,6 +689,7 @@
      "target_pop": 5,
      "tiles_15km": 13,
      "tiles_20km": 11,
+     "land_15km": 12,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -711,6 +729,7 @@
      "target_pop": 4,
      "tiles_15km": 11,
      "tiles_20km": 11,
+     "land_15km": 10,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -746,7 +765,8 @@
     "mid": 50,
     "high": 60
    },
-   "direct_koku_basis": "上野(49.6万)と武蔵北部(50万)の名目領のうち約半分が実効。1530年代は内紛と衰退の途中",
+   "koku_equivalent": false,
+   "direct_koku_basis": "上野(49.6万)と武蔵北部(50万)の名目領のうち約半分が実効。1530年代は内紛と衰退の途中(1531年の関東享禄の内乱で憲政が家督。1546年河越で3,000人余を失う。Wikipedia「上杉憲政」)",
    "mobilization_troops": {
     "low": 10000,
     "mid": 12500,
@@ -755,7 +775,7 @@
    "territory_koku_1598_man": 237.8,
    "tiles_15km": 140,
    "tile_share_pct": 7.3,
-   "direct_koku_share_pct": 9.0,
+   "direct_koku_share_pct": 8.9,
    "traits": {
     "martial": 2,
     "trade": 1,
@@ -771,6 +791,7 @@
    "option2_units_total": 8,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 14,
+   "starting_gold": 540,
    "plan": [
     {
      "id": "UESUGI_HIRAI",
@@ -780,6 +801,7 @@
      "target_pop": 6,
      "tiles_15km": 14,
      "tiles_20km": 10,
+     "land_15km": 13,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -850,6 +872,7 @@
      "target_pop": 5,
      "tiles_15km": 15,
      "tiles_20km": 8,
+     "land_15km": 14,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -889,6 +912,7 @@
      "target_pop": 5,
      "tiles_15km": 46,
      "tiles_20km": 24,
+     "land_15km": 28,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -928,6 +952,7 @@
      "target_pop": 4,
      "tiles_15km": 24,
      "tiles_20km": 11,
+     "land_15km": 23,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -959,6 +984,7 @@
      "target_pop": 4,
      "tiles_15km": 41,
      "tiles_20km": 21,
+     "land_15km": 40,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -994,6 +1020,7 @@
     "mid": 23,
     "high": 30
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "甲斐一国(22.8万)。信虎が1519-31年に統一済み。信濃はまだ制圧前",
    "mobilization_troops": {
     "low": 5000,
@@ -1019,6 +1046,7 @@
    "option2_units_total": 5,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 6,
+   "starting_gold": 230,
    "plan": [
     {
      "id": "TAKEDA_TSUTSUJI",
@@ -1028,6 +1056,7 @@
      "target_pop": 5,
      "tiles_15km": 25,
      "tiles_20km": 12,
+     "land_15km": 13,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -1084,6 +1113,7 @@
      "target_pop": 3,
      "tiles_15km": 35,
      "tiles_20km": 21,
+     "land_15km": 18,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -1117,6 +1147,7 @@
     "mid": 30,
     "high": 36
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "越後(39.1万)の約75%。守護上杉定実を立てた為景の実効支配。直江津の青苧交易あり",
    "mobilization_troops": {
     "low": 6250,
@@ -1142,6 +1173,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 5,
+   "starting_gold": 380,
    "plan": [
     {
      "id": "NAGAO_KASUGAYAMA",
@@ -1151,6 +1183,7 @@
      "target_pop": 5,
      "tiles_15km": 48,
      "tiles_20km": 26,
+     "land_15km": 43,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -1215,6 +1248,7 @@
     "mid": 33,
     "high": 40
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "駿河(15万)+遠江(25.5万)の約70%。遠江は斯波氏と争奪中",
    "mobilization_troops": {
     "low": 7000,
@@ -1240,6 +1274,7 @@
    "option2_units_total": 6,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 6,
+   "starting_gold": 410,
    "plan": [
     {
      "id": "IMAGAWA_SUNPU",
@@ -1249,6 +1284,7 @@
      "target_pop": 5,
      "tiles_15km": 20,
      "tiles_20km": 5,
+     "land_15km": 16,
      "pop_15km": 5,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -1309,6 +1345,7 @@
      "target_pop": 4,
      "tiles_15km": 15,
      "tiles_20km": 8,
+     "land_15km": 14,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -1348,6 +1385,7 @@
      "target_pop": 3,
      "tiles_15km": 3,
      "tiles_20km": 11,
+     "land_15km": 2,
      "pop_15km": 2,
      "pop_20km": 3,
      "option2_pop_15km": 2,
@@ -1381,6 +1419,7 @@
     "mid": 18,
     "high": 24
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "三河(29.1万)の約60%。清康が西三河を固め東三河へ進出中(1535年没)",
    "mobilization_troops": {
     "low": 3750,
@@ -1406,6 +1445,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 5,
+   "starting_gold": 180,
    "plan": [
     {
      "id": "MATSUDAIRA_OKAZAKI",
@@ -1415,6 +1455,7 @@
      "target_pop": 4,
      "tiles_15km": 21,
      "tiles_20km": 8,
+     "land_15km": 19,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -1471,6 +1512,7 @@
     "mid": 42,
     "high": 50
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "越前(49.9万)の約85%。一乗谷は「北陸の小京都」と呼ばれた計画城下町",
    "mobilization_troops": {
     "low": 9500,
@@ -1480,7 +1522,7 @@
    "territory_koku_1598_man": 49.9,
    "tiles_15km": 19,
    "tile_share_pct": 1.0,
-   "direct_koku_share_pct": 7.6,
+   "direct_koku_share_pct": 7.5,
    "traits": {
     "martial": 1,
     "trade": 2,
@@ -1496,6 +1538,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 7,
+   "starting_gold": 500,
    "plan": [
     {
      "id": "ASAKURA_ICHIJODANI",
@@ -1505,6 +1548,7 @@
      "target_pop": 6,
      "tiles_15km": 19,
      "tiles_20km": 12,
+     "land_15km": 18,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -1569,13 +1613,14 @@
    "id": "ASHIKAGA",
    "name": "足利将軍家",
    "tier": "C",
-   "confidence": "低",
+   "confidence": "中低",
    "direct_koku_man": {
     "low": 8,
     "mid": 15,
     "high": 25
    },
-   "direct_koku_basis": "将軍家の直轄は山城の御料所程度。石高は小さいが京都の人口・寺社・商業と威信が最大",
+   "koku_equivalent": false,
+   "direct_koku_basis": "将軍家の直轄は山城の御料所程度。石高は小さいが京都の人口・寺社・商業と威信が最大(幕府財政は御料所が主で小規模。Wikipedia「室町幕府」。義晴は1534年6月まで桑実寺、のち坂本。Wikipedia「足利義晴」)",
    "mobilization_troops": {
     "low": 2000,
     "mid": 3750,
@@ -1600,6 +1645,7 @@
    "option2_units_total": 15,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 10,
+   "starting_gold": 370,
    "plan": [
     {
      "id": "ASHIKAGA_SEAT",
@@ -1609,6 +1655,7 @@
      "target_pop": 6,
      "tiles_15km": 13,
      "tiles_20km": 7,
+     "land_15km": 12,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -1668,6 +1715,7 @@
      "target_pop": 2,
      "tiles_15km": 33,
      "tiles_20km": 14,
+     "land_15km": 32,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1697,6 +1745,7 @@
      "target_pop": 3,
      "tiles_15km": 9,
      "tiles_20km": 4,
+     "land_15km": 8,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -1735,6 +1784,7 @@
      "target_pop": 2,
      "tiles_15km": 43,
      "tiles_20km": 24,
+     "land_15km": 32,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1764,6 +1814,7 @@
      "target_pop": 2,
      "tiles_15km": 18,
      "tiles_20km": 7,
+     "land_15km": 17,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1793,6 +1844,7 @@
      "target_pop": 2,
      "tiles_15km": 21,
      "tiles_20km": 13,
+     "land_15km": 16,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1822,6 +1874,7 @@
      "target_pop": 2,
      "tiles_15km": 11,
      "tiles_20km": 8,
+     "land_15km": 10,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1851,6 +1904,7 @@
      "target_pop": 3,
      "tiles_15km": 42,
      "tiles_20km": 28,
+     "land_15km": 41,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -1889,6 +1943,7 @@
      "target_pop": 3,
      "tiles_15km": 31,
      "tiles_20km": 18,
+     "land_15km": 30,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -1927,6 +1982,7 @@
      "target_pop": 2,
      "tiles_15km": 31,
      "tiles_20km": 19,
+     "land_15km": 30,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1956,6 +2012,7 @@
      "target_pop": 2,
      "tiles_15km": 8,
      "tiles_20km": 10,
+     "land_15km": 7,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -1985,6 +2042,7 @@
      "target_pop": 2,
      "tiles_15km": 19,
      "tiles_20km": 10,
+     "land_15km": 18,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -2018,7 +2076,8 @@
     "mid": 8,
     "high": 15
    },
-   "direct_koku_basis": "阿波三好郡の三好家(元長は1532年没、長慶は12歳)。守護細川氏の阿波・讃岐・淡路は数えない",
+   "koku_equivalent": false,
+   "direct_koku_basis": "阿波三好郡の三好家(元長は1532年没、長慶は12歳)。守護細川氏の阿波・讃岐・淡路は数えない(元長の死は Wikipedia「三好元長」。所領の数値の史料は見つからず推定のまま)",
    "mobilization_troops": {
     "low": 1000,
     "mid": 2000,
@@ -2043,6 +2102,7 @@
    "option2_units_total": 7,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 5,
+   "starting_gold": 160,
    "plan": [
     {
      "id": "MIYOSHI_SHOZUI",
@@ -2052,6 +2112,7 @@
      "target_pop": 3,
      "tiles_15km": 14,
      "tiles_20km": 8,
+     "land_15km": 13,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -2099,6 +2160,7 @@
      "target_pop": 2,
      "tiles_15km": 19,
      "tiles_20km": 9,
+     "land_15km": 17,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -2130,6 +2192,7 @@
      "target_pop": 2,
      "tiles_15km": 15,
      "tiles_20km": 8,
+     "land_15km": 14,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -2161,6 +2224,7 @@
      "target_pop": 2,
      "tiles_15km": 4,
      "tiles_20km": 5,
+     "land_15km": 3,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 3,
@@ -2194,6 +2258,7 @@
     "mid": 40,
     "high": 45
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "近江(77.5万)のうち南近江の約50%。北近江は浅井氏が半独立",
    "mobilization_troops": {
     "low": 7500,
@@ -2203,7 +2268,7 @@
    "territory_koku_1598_man": 77.5,
    "tiles_15km": 13,
    "tile_share_pct": 0.7,
-   "direct_koku_share_pct": 7.2,
+   "direct_koku_share_pct": 7.1,
    "traits": {
     "martial": 2,
     "trade": 2,
@@ -2219,6 +2284,7 @@
    "option2_units_total": 5,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 5,
+   "starting_gold": 480,
    "plan": [
     {
      "id": "ROKKAKU_KANNONJI",
@@ -2228,6 +2294,7 @@
      "target_pop": 6,
      "tiles_15km": 5,
      "tiles_20km": 4,
+     "land_15km": 4,
      "pop_15km": 4,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -2277,6 +2344,7 @@
      "target_pop": 4,
      "tiles_15km": 8,
      "tiles_20km": 3,
+     "land_15km": 7,
      "pop_15km": 4,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -2316,7 +2384,8 @@
     "mid": 18,
     "high": 30
    },
-   "direct_koku_basis": "石山御坊・寺内町と加賀の一向一揆領(35.6万の約50%)。石高より門徒・寺内町・資金が力",
+   "koku_equivalent": false,
+   "direct_koku_basis": "石山御坊・寺内町と加賀の一向一揆領(35.6万の約50%)。石高より門徒・寺内町・資金が力(1532年に山科本願寺を焼かれ、石山は濠・土居で囲んだ寺内町。細川晴元との戦いは1535年11月まで。Wikipedia「石山本願寺」「証如」)",
    "mobilization_troops": {
     "low": 2500,
     "mid": 4500,
@@ -2341,6 +2410,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 3,
+   "starting_gold": 300,
    "plan": [
     {
      "id": "HONGANJI_ISHIYAMA",
@@ -2350,6 +2420,7 @@
      "target_pop": 5,
      "tiles_15km": 18,
      "tiles_20km": 10,
+     "land_15km": 15,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -2406,6 +2477,7 @@
     "mid": 70,
     "high": 85
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "周防+長門(29.9万)、石見の約70%、筑前の約70%、豊前の約80%。山口と博多、石見銀山(1533年に灰吹法)",
    "mobilization_troops": {
     "low": 13750,
@@ -2415,7 +2487,7 @@
    "territory_koku_1598_man": 124.2,
    "tiles_15km": 113,
    "tile_share_pct": 5.9,
-   "direct_koku_share_pct": 12.6,
+   "direct_koku_share_pct": 12.5,
    "traits": {
     "martial": 1,
     "trade": 3,
@@ -2431,6 +2503,7 @@
    "option2_units_total": 6,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 10,
+   "starting_gold": 820,
    "plan": [
     {
      "id": "OUCHI_YAMAGUCHI",
@@ -2440,6 +2513,7 @@
      "target_pop": 6,
      "tiles_15km": 65,
      "tiles_20km": 39,
+     "land_15km": 63,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -2514,6 +2588,7 @@
      "target_pop": 5,
      "tiles_15km": 27,
      "tiles_20km": 16,
+     "land_15km": 26,
      "pop_15km": 5,
      "pop_20km": 5,
      "option2_pop_15km": 4,
@@ -2537,7 +2612,7 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_FARM": 3,
       "IMPROVEMENT_MINE": 1
      },
      "unverified_improvements": {
@@ -2553,6 +2628,7 @@
      "target_pop": 4,
      "tiles_15km": 21,
      "tiles_20km": 11,
+     "land_15km": 20,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -2588,6 +2664,7 @@
     "mid": 40,
     "high": 50
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "出雲+隠岐+伯耆(29.9万)と美作・石見・備後・安芸の一部。たたら製鉄の産地。影響は中国11か国に及ぶと伝わる",
    "mobilization_troops": {
     "low": 7500,
@@ -2597,7 +2674,7 @@
    "territory_koku_1598_man": 51.4,
    "tiles_15km": 37,
    "tile_share_pct": 1.9,
-   "direct_koku_share_pct": 7.2,
+   "direct_koku_share_pct": 7.1,
    "traits": {
     "martial": 3,
     "trade": 0,
@@ -2613,6 +2690,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 9,
+   "starting_gold": 400,
    "plan": [
     {
      "id": "AMAGO_TODA",
@@ -2622,6 +2700,7 @@
      "target_pop": 6,
      "tiles_15km": 37,
      "tiles_20km": 19,
+     "land_15km": 36,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -2672,8 +2751,8 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 4,
-      "IMPROVEMENT_MINE": 5
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
      },
      "unverified_improvements": {
       "IMPROVEMENT_PASTURE": 0,
@@ -2686,13 +2765,14 @@
    "id": "MORI",
    "name": "毛利",
    "tier": "D",
-   "confidence": "低",
+   "confidence": "中低",
    "direct_koku_man": {
     "low": 2,
     "mid": 3,
     "high": 5
    },
-   "direct_koku_basis": "吉田郡山周辺の一国衆(家督継承時に約3,000貫と伝わる。要確認)。大内方の従属国衆",
+   "koku_equivalent": false,
+   "direct_koku_basis": "吉田郡山周辺の一国衆。大内方の従属国衆。元就の元の所領は多治比300貫、大内義興から可部700貫・温科300貫・深川300貫・久村70貫の恩賞(Wikipedia「毛利元就」)。1540年の郡山籠城は徴集兵込み3,000。本家の貫高は見つからず、国衆連合を含めて推定",
    "mobilization_troops": {
     "low": 500,
     "mid": 750,
@@ -2717,6 +2797,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 4,
+   "starting_gold": 100,
    "plan": [
     {
      "id": "MORI_KORIYAMA",
@@ -2726,6 +2807,7 @@
      "target_pop": 3,
      "tiles_15km": 26,
      "tiles_20km": 11,
+     "land_15km": 25,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -2767,22 +2849,23 @@
    "id": "CHOSOKABE",
    "name": "長宗我部",
    "tier": "D",
-   "confidence": "低",
+   "confidence": "中低",
    "direct_koku_man": {
-    "low": 2,
-    "mid": 3,
-    "high": 5
+    "low": 0.3,
+    "mid": 0.45,
+    "high": 0.6
    },
-   "direct_koku_basis": "土佐長岡郡岡豊と周辺。土佐(9.8万)の1/3未満。一条氏など土佐七雄の一つ",
+   "koku_equivalent": false,
+   "direct_koku_basis": "土佐長岡郡岡豊と周辺。土佐七雄で最小の長岡郡3000貫(1貫=1〜2石で0.3〜0.6万石)。本山・吉良・安芸・津野は各5000貫、一条氏は幡多郡16000貫(Wikipedia「土佐七雄」)",
    "mobilization_troops": {
-    "low": 500,
-    "mid": 750,
-    "high": 1250
+    "low": 75,
+    "mid": 112,
+    "high": 150
    },
    "territory_koku_1598_man": 9.8,
    "tiles_15km": 34,
    "tile_share_pct": 1.8,
-   "direct_koku_share_pct": 0.5,
+   "direct_koku_share_pct": 0.1,
    "traits": {
     "martial": 2,
     "trade": 0,
@@ -2798,6 +2881,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 4,
+   "starting_gold": 100,
    "plan": [
     {
      "id": "CHOSOKABE_OKO",
@@ -2807,6 +2891,7 @@
      "target_pop": 3,
      "tiles_15km": 34,
      "tiles_20km": 13,
+     "land_15km": 33,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -2854,6 +2939,7 @@
     "mid": 48,
     "high": 60
    },
+   "koku_equivalent": false,
    "direct_koku_basis": "豊後(41.8万)の約85%、筑後の約40%、肥後の一部。府内は明との貿易港を持つ",
    "mobilization_troops": {
     "low": 10000,
@@ -2879,6 +2965,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 6,
+   "starting_gold": 600,
    "plan": [
     {
      "id": "OTOMO_RESIDENCE",
@@ -2888,6 +2975,7 @@
      "target_pop": 6,
      "tiles_15km": 94,
      "tiles_20km": 58,
+     "land_15km": 91,
      "pop_15km": 6,
      "pop_20km": 6,
      "option2_pop_15km": 4,
@@ -2955,23 +3043,24 @@
   {
    "id": "SHIMAZU",
    "name": "島津",
-   "tier": "C",
-   "confidence": "低",
+   "tier": "D",
+   "confidence": "中低",
    "direct_koku_man": {
-    "low": 6,
-    "mid": 12,
-    "high": 20
+    "low": 4,
+    "mid": 8,
+    "high": 15
    },
-   "direct_koku_basis": "薩摩・大隅・日向南部の名目領(57.6万)のうち貴久(伊作家)が固めた範囲。宗家と分家が分裂中",
+   "koku_equivalent": false,
+   "direct_koku_basis": "薩摩・大隅・日向南部の名目領(57.6万)のうち貴久(伊作家・相州家)が固めた範囲。1533年に南郷城で初陣、1535年に実久が宗家を奪い勝久を追放(Wikipedia「島津貴久」)。宗家と分家が分裂中のため旧案(中12万)から下げた",
    "mobilization_troops": {
-    "low": 1500,
-    "mid": 3000,
-    "high": 5000
+    "low": 1000,
+    "mid": 2000,
+    "high": 3750
    },
    "territory_koku_1598_man": 57.9,
    "tiles_15km": 69,
    "tile_share_pct": 3.6,
-   "direct_koku_share_pct": 2.2,
+   "direct_koku_share_pct": 1.4,
    "traits": {
     "martial": 3,
     "trade": 1,
@@ -2981,29 +3070,30 @@
     "learn": 0
    },
    "cities": 3,
-   "pop_total_15km": 8,
+   "pop_total_15km": 7,
    "units_total": 5,
    "option2_pop_total_15km": 12,
    "option2_units_total": 6,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 5,
+   "starting_gold": 120,
    "plan": [
     {
      "id": "SHIMAZU_SHIMIZU",
      "name": "清水城",
      "capital": true,
      "importance": 3,
-     "target_pop": 4,
+     "target_pop": 3,
      "tiles_15km": 28,
      "tiles_20km": 17,
-     "pop_15km": 4,
-     "pop_20km": 4,
+     "land_15km": 25,
+     "pop_15km": 3,
+     "pop_20km": 3,
      "option2_pop_15km": 4,
      "coastal_centre": true,
      "city_buildings": [
       "BUILDING_PALACE",
-      "BUILDING_WALLS",
-      "BUILDING_GRANARY"
+      "BUILDING_WALLS"
      ],
      "districts": [
       {
@@ -3028,7 +3118,7 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_FARM": 2,
       "IMPROVEMENT_MINE": 0
      },
      "unverified_improvements": {
@@ -3044,6 +3134,7 @@
      "target_pop": 2,
      "tiles_15km": 14,
      "tiles_20km": 7,
+     "land_15km": 12,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -3073,6 +3164,7 @@
      "target_pop": 2,
      "tiles_15km": 27,
      "tiles_20km": 13,
+     "land_15km": 26,
      "pop_15km": 2,
      "pop_20km": 2,
      "option2_pop_15km": 4,
@@ -3100,14 +3192,23 @@
    "id": "RYUKYU",
    "name": "琉球王国",
    "tier": "C",
-   "confidence": "低",
-   "direct_koku_man": null,
-   "direct_koku_basis": "石高なし。那覇の中継貿易(明・東南アジア・日本)で成り立つ。兵は少なく港・商業が主",
-   "mobilization_troops": null,
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 8,
+    "mid": 10,
+    "high": 11
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "1609年以後の「琉球国高究帳」で11万石余・沖縄本島8万石(Wikipedia「薩摩藩」、典拠『沖縄県史料 前近代1』)。奄美は1571年まで全域支配でないため中10万。那覇の中継貿易で商業・港が主。兵力は数千人規模(Wikipedia「琉球王国」)",
+   "mobilization_troops": {
+    "low": 2000,
+    "mid": 2500,
+    "high": 2750
+   },
    "territory_koku_1598_man": 0.0,
    "tiles_15km": 18,
    "tile_share_pct": 0.9,
-   "direct_koku_share_pct": null,
+   "direct_koku_share_pct": 1.8,
    "traits": {
     "martial": 0,
     "trade": 3,
@@ -3125,6 +3226,7 @@
     "UNIT_ARCHER"
    ],
    "gold_upkeep_per_turn": 3,
+   "starting_gold": 220,
    "plan": [
     {
      "id": "RYUKYU_SHURI",
@@ -3134,6 +3236,7 @@
      "target_pop": 4,
      "tiles_15km": 8,
      "tiles_20km": 7,
+     "land_15km": 7,
      "pop_15km": 4,
      "pop_20km": 4,
      "option2_pop_15km": 4,
@@ -3178,6 +3281,7 @@
      "target_pop": 3,
      "tiles_15km": 10,
      "tiles_20km": 8,
+     "land_15km": 9,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
@@ -3215,9 +3319,18 @@
    "name": "アイヌ",
    "tier": "D",
    "confidence": "低",
-   "direct_koku_man": null,
-   "direct_koku_basis": "石高なし。各コタン・チャシの連合で単一の領域ではない(ゲーム上の扱い)",
-   "mobilization_troops": null,
+   "direct_koku_man": {
+    "low": 2,
+    "mid": 3,
+    "high": 7
+   },
+   "koku_equivalent": true,
+   "direct_koku_basis": "石高なし。人口からの石高相当。江戸時代の記録上の最大は26,800人、1804年以降の調査で約2万人(Wikipedia「アイヌ」「江戸時代の日本の人口統計」)。1人1石(吉田東伍)〜1石0.28〜0.44人(速水融)で2.7〜9.6万石だが、狩猟・交易社会で徴税・動員の仕組みがないため下限側の3万石相当とした(推定)。各コタン・チャシの連合で単一の領域ではない",
+   "mobilization_troops": {
+    "low": 500,
+    "mid": 750,
+    "high": 1750
+   },
    "territory_koku_1598_man": 0.0,
    "tiles_15km": 404,
    "tile_share_pct": 21.2,
@@ -3237,6 +3350,7 @@
    "option2_units_total": 4,
    "units_unplaced": [],
    "gold_upkeep_per_turn": 2,
+   "starting_gold": 100,
    "plan": [
     {
      "id": "AINU_POROMOI",
@@ -3246,6 +3360,7 @@
      "target_pop": 3,
      "tiles_15km": 404,
      "tiles_20km": 227,
+     "land_15km": 397,
      "pop_15km": 3,
      "pop_20km": 3,
      "option2_pop_15km": 4,
