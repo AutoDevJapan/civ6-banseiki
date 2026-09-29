@@ -165,7 +165,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "Civilopedia",
+      "state_name": "CivilopediaScreen",
       "code": "local house=false; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local id='CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY'; local section; for _,s in ipairs(GetSections()) do for _,p in ipairs(GetPages(s.SectionId)) do if p.PageId==id then section=s.SectionId; if house and p.Title~=hs then error('page title not switched: '..tostring(p.Title)) end; if not house and p.Title~=gs then error('page title leaked: '..tostring(p.Title)) end end end end; if section==nil then error('no Civilopedia page for '..id) end; NavigateTo(section,id); local head=Controls.PageHeaderCaption:GetText() or ''; if house and not has(head,Locale.ToUpper(hs)) then error('page header not switched: '..head) end; if not house and has(head,O.ToUpper(hs)) then error('page header leaked: '..head) end; if JAC_LocalHouseHasNames()~=house then error('JAC_LocalHouseHasNames is wrong') end; print('[JAC_HOUSE] state=Civilopedia local='..who..' header='..head); return head"
     },
     {
