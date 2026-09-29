@@ -1,5 +1,6 @@
 -- 日本マップ：1534年の同盟・婚姻・主従と交戦を、新規ゲームの開始時に1回だけ外交状態へ反映する。
 -- 元データ：documents/spec/data/japan-1534-relations.json（適用分だけをここに写す。テストで一致を確かめる）
+-- 同盟・婚姻・主従の組は開始時に同盟にし、同盟国として視界を共有する。
 -- 22勢力は開始時にすべて互いに出会い済みにする（固定キャラだけが出る日本マップなので、全員が互いを知っている）。
 -- 敵対・不仲（hostility）は、ここでは何もしない。「1534年の因縁」の好感度減点と、全勢力の外交アクセスレベル +1 は Data/JAC_Japan_Feuds.xml が担う。
 -- 史実の領土の日本マップだけで読み込まれる（modinfo）。開拓者からの2種では何も適用しない。
@@ -25,6 +26,9 @@ local RELATIONS = {
 	{"ODA", "MATSUDAIRA", "hostility", "R15"},
 	{"SHIMAZU", "RYUKYU", "friendship", "R19"},
 }
+
+-- 味方（同盟国として視界を共有する組）。友好（島津と琉球王国）は含めない
+local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true}
 
 local function Log(message)
 	print("[JAC_1534_RELATIONS] " .. message)
@@ -66,10 +70,13 @@ local function Apply()
 			elseif kind == "hostility" then
 				ok = true -- 何もしない。減点は修正値が担う
 			else
-				-- ponytail: 同盟・婚姻・主従・友好はすべて友好宣言で近似する。期限（30ターン）で切れる
+				-- 同盟・婚姻・主従・友好は友好宣言で始める。友好宣言は期限（30ターン）で切れる
+				-- 同盟・婚姻・主従（味方）はさらに通常の同盟にし、同盟国の視界共有（GAME_ALLIES_SHARE_VISIBILITY）を効かせる（オーナー判断G）。
+				-- 永久同盟（SetPermanentAlliance）は解消できないので使わない。公式：DLC/VikingsScenario/Scripts/VikingScenario.lua:18〜:20
 				ok, err = pcall(function()
 					diploA:SetHasDeclaredFriendship(b, true)
 					diploB:SetHasDeclaredFriendship(a, true)
+					if ALLIED_KINDS[kind] then diploA:SetHasAllied(b, true) end
 				end)
 			end
 			if ok then

@@ -224,6 +224,27 @@ class Japan1534RelationsTests(unittest.TestCase):
         row = re.search(r'<Row [^>]*ConfigurationId="GAME_ALLIES_SHARE_VISIBILITY"[^>]*/>', config).group(0)
         self.assertIn('DefaultValue="1"', row)
 
+    def test_ally_pairs_start_allied_so_they_share_vision(self):
+        # Owner decision G: allied houses (alliance / marriage / vassal) share vision; friendship alone does not.
+        lua = LUA.read_text(encoding="utf-8")
+        self.assertIn("local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true}", lua)
+        self.assertIn("if ALLIED_KINDS[kind] then diploA:SetHasAllied(b, true) end", lua)
+        self.assertNotIn(":SetPermanentAlliance(", lua)  # permanent alliances cannot be dissolved
+        self.assertLess(lua.index("SetHasAllied(b, true)"), lua.index("RecheckVisibilityOnAll()"))
+        start = self.data["start_date"]
+        allies = {(r["a"], r["b"]) for r in self.relations
+                  if applies(r, start) and r["type"] in ("alliance", "marriage", "vassal")}
+        path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-relations.json"
+        codes = [s["code"] for s in json.loads(path.read_text(encoding="utf-8"))["steps"] if "code" in s]
+        self.assertEqual(len(codes), 3)  # start, after 1 turn, after load
+        for code in codes:
+            listed = re.search(r"local allies=\{(.*?)\}; ", code).group(1)
+            self.assertEqual(set(re.findall(r"\{'([A-Z_]+)','([A-Z_]+)'\}", listed)), allies)
+            self.assertIn("'DIPLO_STATE_ALLIED'", code)
+            self.assertIn("PlayersVisibility[id[a]]", code)
+            self.assertIn("{'DATE','SHIMAZU'}", code)  # a far non-allied pair must not see each other
+            self.assertIn("{'SHIMAZU','RYUKYU'},{'RYUKYU','SHIMAZU'}}) do local ok,city=seesNone", code)
+
     def test_sengoku_tree_keeps_the_printing_access_bonus(self):
         sql = (ROOT / "poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8")
         tech = "TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS"

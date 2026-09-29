@@ -15,12 +15,12 @@
 | 1534年の関係 | Civ6 で開始時に行うこと | 根拠 |
 |---|---|---|
 | 交戦中 | 双方 `SetHasMet` のあと `DeclareWarOn(相手, WarTypes.FORMAL_WAR, true)` | 公式シナリオと同じ。下記 |
-| 同盟・婚姻・主従 | 双方 `SetHasMet` のあと、双方から `SetHasDeclaredFriendship(相手, true)`（暫定） | DLL の Lua バインディングにある。公式の使用例はないため要実機確認 |
+| 同盟・婚姻・主従 | 双方 `SetHasMet` のあと、双方から `SetHasDeclaredFriendship(相手, true)`、続けて片側から `SetHasAllied(相手, true)`（通常の同盟。同盟国として視界を共有する。オーナー判断G） | 友好宣言は DLL の Lua バインディングにあり、公式の使用例はない（実機で効くことを確認済み）。同盟は公式シナリオと同じ呼び方（下記 9） |
 | 友好（島津・琉球。R19） | 同盟と同じく双方 `SetHasDeclaredFriendship`（オーナー判断 4a） | 同上 |
 | 敵対・不仲（7組） | Lua では何もしない。好感度の減点は下記の修正値 | 下記 |
 | 全勢力の出会い | 開始時に1回だけ、22家すべてが互いに `SetHasMet`（両方向）。固定キャラだけが出る日本マップなので、全員が互いを知っている（オーナー判断 2026-09-29・Discord G）。ロード時は再適用しない | `Apply` の先頭。下記 |
 
-- 同盟を友好宣言で近似したのは、Civ6 の同盟を Lua で結ぶ手段が `SetPermanentAlliance`（解消できない永久同盟）しかないため。1534年の同盟は数年で崩れる（R02 は1537年に破綻）ので、永久同盟は採らない。友好宣言は標準で30ターンで切れ、その後は AI の判断に任せる（暫定）
+- 永久同盟 `SetPermanentAlliance` は解消できないので採らない。1534年の同盟は数年で崩れる（R02 は1537年に破綻）。通常の同盟 `SetHasAllied` を使う。通常の同盟の期限は `DIPLOMACY_ALLIANCE_TIME_LIMIT` = 30（`Base/Assets/Gameplay/Data/GlobalParameters.xml:232`）、友好宣言も30ターン（同 `:234`）。切れた後の更新は AI の判断に任せる（終わり方は設計判断。`questions.md` Q29）
 - 主従は Civ6 に対応する外交状態がない。友好宣言で近似し、主従そのものは SSOT 9 の関係宣言（従属国など）が実装されたときに置き換える（TODO）
 
 ### 公式ファイルの根拠
@@ -35,6 +35,8 @@
 6. 友好宣言の状態と期限：`Base/Assets/Gameplay/Data/DiplomaticActions.xml:110`（`DIPLO_STATE_DECLARED_FRIEND`）、`Base/Assets/Gameplay/Data/GlobalParameters.xml:234`（`DIPLOMACY_DECLARED_FRIENDSHIP_TIME_LIMIT` = 30）
 7. 状態の読み取り（シナリオの確認に使う）：`Base/Assets/UI/DiplomacyActionView.lua:194`〜`:200`（`DiplomaticStates`）、`:870`（`GetDiplomaticAI():GetDiplomaticStateIndex`）
 8. Lua から呼べる外交の設定関数：`DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` の文字列に `lSetHasMet`・`lDeclareWarOn`・`lSetPermanentAlliance`・`lSetHasDeclaredFriendship`・`lSetHasDelegationAt`・`lSetHasEmbassyAt`・`lMakePeaceWith`・`lNeverMakePeaceWith`・`lPrepareForWarWith` がある。非難（Denounce）と不満（Grievance）の設定関数は、取得用の `lGetDenounceTurn`・`lGetGrievancesAgainst` しかない。行番号のないバイナリなので、実機確認で補う
+9. 通常の同盟：`DLC/VikingsScenario/Scripts/VikingScenario.lua:18`〜`:20`（`InitializeNewGame` で `SetHasMet` の後に `GetDiplomacy():SetHasAllied(相手, true)` を片側から呼び、`:27`〜`:29` で `RecheckVisibilityOnAll`）。同じ関数は Gathering Storm の `DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` の文字列にも `lSetHasAllied`・`lHasAllied`・`lSetAlliesShareVisFlag` としてある。ヴァイキングのシナリオは基本ルールセットなので、Gathering Storm で種類（研究・軍事など）の無い同盟がどう扱われるかは実機で確かめる
+10. 同盟国の視界共有の設定：`Base/Assets/Configuration/Data/SetupParameters.xml:48`（`GAME_ALLIES_SHARE_VISIBILITY`、既定 1）。ヴァイキングのシナリオは `Game.GetGameDiplomacy():SetAlliesShareVisFlag(false)` で共有を切る（`VikingScenario.lua:13`）。つまり同盟国は既定で視界を共有する。「チームなし」（`NO_TEAMS`=1）を選ぶと共有が 0 になる（`SetupParameters.xml:199`〜`:200`）
 
 ### 敵対・不仲：AI の好感度の減点「1534年の因縁」（オーナー判断 1a・2026-09-29）
 
@@ -62,17 +64,18 @@
 
 1. 開始直後：`JAC_JAPAN_1534_RELATIONS` が開始ターンに `Applied=16`・`Failed=0`・`Missing=0` で残る。22家の全組（22×21）が出会い済みで、アクセスレベルが1以上
 2. 大内と大友が相互に交戦中
-3. 北条・今川、大内・毛利、伊達・蘆名、足利・六角、島津・琉球が、双方向に `DIPLO_STATE_DECLARED_FRIEND`（`SetHasDeclaredFriendship` が効くかの確認を兼ねる）
+3. 味方の7組（北条・今川、大内・毛利、伊達・蘆名、足利・六角、朝倉・六角、足利・朝倉、尼子・毛利）が双方向に `DIPLO_STATE_ALLIED`、島津・琉球が双方向に `DIPLO_STATE_DECLARED_FRIEND`
+   - 視界の共有：味方の各組で、相手の全都市の都市中心のタイルが見えている（UI の `PlayersVisibility[自分]:IsVisible(x, y)`、公式 `Base/Assets/UI/WorldInput.lua:2066`）。さらに相手に見えているタイルがすべて自分にも見えている。遠い無関係の伊達・島津と、友好だけの島津・琉球は、相手の都市中心が1つも見えない
 4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10 の行がある（点数で判定。文言は `japan-1534-feud-ui.json`）。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面の「関係」欄に「-10 1534年の因縁」が出ることは `japan-1534-feud-ui.json` が読み取る。同じシナリオは、開く前に北条の武田へのアクセスレベルが1以上であること、関係欄に「理由不明（Unknown Reason）」の行が1つも無いことも確かめる（読み取れなかった場合は、スクリーンショットを目で確認する。「理由不明」が出たら、まずアクセスレベルの画面に「諸家のあいだを行き交う噂」があるかを見て、次に `ModifierStrings` の行を見直す）
 5. 1ターン進めても 2〜4 が保たれる
 6. セーブ → メニュー → ロード後、プロパティの `Turn` が開始ターンのまま（再適用されていない）で、2〜4 が保たれる
 
-`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。友好宣言が効かない場合は、同盟・婚姻・主従を未反映に戻すか、永久同盟を使うかをオーナーに確認する。
+`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。同盟（`SetHasAllied`）と視界の共有は未実機確認。同盟にならない、または視界が共有されない場合は、同盟を外して、各ターンに相手の見えているタイルを `ChangeVisibilityCount` で写す方式（公式の使用例：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:52`〜`:59`）に切り替える。
 
 ## オーナー判断（2026-09-29 Discord・セットA）
 
 1. 1a：敵対・不仲は AI の好感度の減点「1534年の因縁」で表す。史実の領土の日本マップだけ、開始時から、減衰しない
-2. 2a：同盟・婚姻・主従は友好宣言で近似する（実装済み）
+2. 2a：同盟・婚姻・主従は友好宣言で近似する（実装済み）。オーナー判断G（視界の共有）を受けて、さらに通常の同盟にした
 3. 3a：史実の関係は史実の領土の日本マップにだけ適用し、開拓者からの2種には適用しない
 4. 4a：島津と琉球を友好（友好宣言）で始める。1534年時点の直接の文献は未確認（`research/japan-1534-relations.md` R19）
 
@@ -82,12 +85,17 @@
 
 1. 出会い：上記のとおり、開始時に22家が互いに出会い済み
 2. アクセスレベル：上記の `TRAIT_JAC_1534_ACCESS`（全22家に「限定的」）。関係の理由（「1534年の因縁」を含む）が最初から見える。出所の行は `TraitType` でこの特性に結ぶ（結ばない行では実機でアクセスレベルが 0 のままだった）。実機で「限定的」になり、外交画面の関係欄に「-10 1534年の因縁」が出ることを確認済み
-3. 同盟国の視界共有：ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値は 1（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`、`AlliesShareVisibility`）。追加の実装は不要。テストが既定値 1 を確かめる。これは正式な同盟を結んだ場合の共有で、開始時の友好宣言（史実の同盟の近似）では視界を共有しない。同盟の視界共有そのものは実機未確認
+3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組を開始時に通常の同盟（`SetHasAllied`）にし、Civ6 の同盟国の視界共有を効かせる。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値は 1（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`、`AlliesShareVisibility`）。テストが既定値 1 と、Lua が味方の組だけを同盟にすることを確かめる
+   - 同盟にした理由：視界の共有をエンジンに任せられる。ユニットが動いても即時に共有され、セーブにも同盟の状態として残り、マルチプレイでもゲームプレイの状態として同期する。各ターンにタイルの見え方を Lua で写す方式は、ターン中の移動が反映されず、写した分をセーブ・ロードをまたいで正しく取り消す必要がある
+   - 副作用：同盟国どうしは外交のアクセスレベルが1段上がる（公式の出所 `Ally`。全員の「限定的」に加えて「開放」になる）、互いに正式な宣戦ができない、同盟ポイントが貯まる
+   - 終わり方（設計判断。オーナー未決、`questions.md` Q29）：Civ6 の通常の同盟の規則に任せる。期限30ターンで切れ、更新しなければ同盟と視界の共有が終わる。友好だけの島津・琉球は視界を共有しない
+   - 未実機確認：Gathering Storm で種類の無い同盟になるか（外交画面は種類 -1 を扱える。`DLC/Expansion2/UI/Additions/DiplomacyActionView_AllianceTab.lua:38`〜`:39`）、期限で切れるか、友好宣言の期限との関係。確認は `japan-1534-relations.json`
 4. 戦国パックの技術・制度ツリーは公式の技術をすべて消すので、`TECH_PRINTING` に付いた「アクセスレベル +1」（`TechnologyModifiers` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）と、出所の行 `SOURCE_TECH`（`Base/Assets/Gameplay/Data/Gossip.xml:75`、`PrereqTech=TECH_PRINTING`）が外部キーの連鎖削除で無くなる。`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql` が、削除の前に両方を戦国の技術 T05「街道と荷駄」`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` へ付け替える（全地図で有効）。理由：荷駄・使者が街道を通って諸家の噂を運ぶ、情報に最も近い戦国の技術で、交易商人（`UNIT_TRADER`）も解放する。公式でも交易路は別の出所 `SOURCE_TRADER` としてアクセスレベルを上げる。序盤の第I期（列2）なので、日本マップ以外でも早めに理由が見え始める。テストが付け替えを確かめる
 
 ## 未検証・注意
 
 - 開拓者から始める2種には史実の関係を適用しない（オーナー判断 3a）。都市がない状態で交戦が始まるのを避けるため
 - AI が開始直後に友好宣言を破棄したり和睦したりする頻度は未確認
-- 確認項目：マルチプレイでの同期（全員の出会い・友好宣言・交戦・因縁・アクセスレベルが全員で一致するか）は未検証
+- 確認項目：マルチプレイでの同期（全員の出会い・友好宣言・同盟と視界の共有・交戦・因縁・アクセスレベルが全員で一致するか）は未検証
+- 確認項目：ゲーム設定で「チームなし」を選ぶと同盟国の視界共有が切れる（`SetupParameters.xml:199`〜`:200`）
 - 確認項目：プロパティ `JAC_JAPAN_1534_RELATIONS` を書かない古いビルドで作った開始ターンのセーブをロードすると、`LoadScreenClose` の判定で再適用されうる。影響はリリース前のセーブだけなので対応しない
