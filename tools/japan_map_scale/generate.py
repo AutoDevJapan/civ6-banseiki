@@ -337,6 +337,51 @@ SEAT_CASTLES = {
     "AINU": "AINU_POROMOI",
 }
 EXTRA_CAPITAL_NAMES = {"ODA": "那古野城", "DATE": "米沢城", "ASHIKAGA": "室町殿"}
+# English/Russian names of the 34 non-capital draft castles. A Civ6Map city name
+# is shown as-is unless it is a LOC tag, so a literal Japanese name renders as
+# tofu in the English font (live 2026-09-29). Every map city uses a LOC tag.
+CASTLE_NAMES = {
+    "DATE_KOORI": ("Koori Nishiyama", "Коори-Нисияма"),
+    "DATE_YANAGAWA": ("Yanagawa", "Янагава"),
+    "ASHINA_INAWASHIRO": ("Inawashiro", "Инавасиро"),
+    "DATE_YAMAGATA": ("Yamagata", "Ямагата"),
+    "HOJO_EDO": ("Edo", "Эдо"),
+    "UESUGI_KAWAGOE": ("Kawagoe", "Кавагоэ"),
+    "UESUGI_MINOWA": ("Minowa", "Минова"),
+    "HOJO_KOGA": ("Koga", "Кога"),
+    "UESUGI_OBOW": ("Oyumi", "Оюми"),
+    "UESUGI_OTA": ("Ota", "Ота"),
+    "TAKEDA_UEHARA": ("Uehara", "Уэхара"),
+    "IMAGAWA_KAKEGAWA": ("Kakegawa", "Какэгава"),
+    "ODA_SHOBATA": ("Shobata", "Сёбата"),
+    "IMAGAWA_NAGOYA": ("Nagoya", "Нагоя"),
+    "ASHIKAGA_KIRIYAMA": ("Kiriyama", "Кирияма"),
+    "ASHIKAGA_NANAO": ("Nanao", "Нанао"),
+    "ASHIKAGA_SAKURABORA": ("Sakurabora", "Сакурабора"),
+    "ASHIKAGA_GOSEYAMA": ("Nochiseyama", "Нотисэяма"),
+    "ASHIKAGA_HOJOZU": ("Hojozu", "Ходзёдзу"),
+    "ASHIKAGA_KUWANOMI": ("Kuwanomi-dera", "Куваноми-дэра"),
+    "ROKKAKU_KAMAHABA": ("Kamaha", "Камаха"),
+    "MIYOSHI_SHIBAO": ("Shibo", "Сибо"),
+    "MIYOSHI_YAGAMI": ("Yakami", "Яками"),
+    "ASHIKAGA_TAKAYA": ("Takaya", "Такая"),
+    "ASHIKAGA_OKISHIO": ("Okishio", "Окисио"),
+    "MIYOSHI_AMAGIRI": ("Amagiri", "Амагири"),
+    "ASHIKAGA_YUZUKI": ("Yuzuki", "Юдзуки"),
+    "OUCHI_YAMABUKI": ("Yamabuki", "Ямабуки"),
+    "OUCHI_TSUWANO": ("Tsuwano", "Цувано"),
+    "ASHIKAGA_MITSUISHI": ("Mitsuishi", "Мицуиси"),
+    "ASHIKAGA_BITCHU_MATSUYAMA": ("Bitchu Matsuyama", "Биттю-Мацуяма"),
+    "SHIMAZU_IZAKU": ("Izaku", "Идзаку"),
+    "SHIMAZU_OBI": ("Obi", "Оби"),
+    "RYUKYU_NAKAGUSUKU": ("Nakagusuku", "Накагусуку"),
+}
+
+
+def city_name_tag(city: dict) -> str:
+    """The LOC tag written into Cities.Name; the text files carry en/ja/ru rows."""
+    return city.get("name_tag") or (f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
+            else f"LOC_JAC_1534_CITY_{city['id']}")
 
 # Province centres used only where the 53-castle draft has no site. These are
 # hand-placed geographic proxies, NOT historical boundaries. Their owners are
@@ -367,7 +412,8 @@ def choose_cities(grid: HexGrid, passable: set[int], starts: list[dict],
     """Reserve representative capitals first; place every draft castle next."""
     sites = {castle["id"]: castle for castle in castles}
     expected = {seat.slug for seat in SEATS} - set(SEAT_CASTLES)
-    if expected != set(EXTRA_CAPITAL_NAMES) or len(sites) != 53:
+    if (expected != set(EXTRA_CAPITAL_NAMES) or len(sites) != 53
+            or set(CASTLE_NAMES) != set(sites) - set(SEAT_CASTLES.values())):
         raise ValueError("1534 castle/seat inventory changed; review capital aliases")
     used = {start["plot"] for start in starts}
     cities = []
@@ -511,7 +557,7 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     ordered = ordered_cities(cities)
     db.executemany("INSERT INTO Cities VALUES (?, ?, ?)",
                    ((SEAT_INDEX[city["owner"]], city["plot"],
-                     f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"] else city["name"])
+                     city_name_tag(city))
                     for city in ordered))
     db.executemany("INSERT INTO Districts VALUES ('DISTRICT_CITY_CENTER', ?, ?)",
                    ((city["plot"], city["plot"]) for city in ordered))
@@ -521,11 +567,9 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     # capital without it; official DLC/VikingsScenario/Maps/Viking.Civ6Map does the same).
     db.executemany("INSERT INTO Buildings VALUES ('BUILDING_PALACE', ?)",
                    ((city["plot"],) for city in ordered if city["capital"]))
-    # No settler on the historical start, so each capital gets one garrison;
-    # without any unit a faction cannot act on turn 1 (live 2026-09-29).
-    capitals = [city for city in ordered if city["capital"]]
-    db.executemany("INSERT INTO Units VALUES (?, 'UNIT_WARRIOR', ?, ?, NULL)",
-                   ((index, SEAT_INDEX[city["owner"]], city["plot"]) for index, city in enumerate(capitals)))
+    # Units, population, districts, improvements and gold come from
+    # prosper_start.apply() (SSOT 3.1). Without any unit a faction cannot act on
+    # turn 1 (live 2026-09-29), so every city gets a garrison there.
     city_order = {city["plot"]: index for index, city in enumerate(ordered)}
     db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
                    sorted(allocations, key=lambda row: (0, city_order[row[0]])
@@ -764,6 +808,29 @@ def _resource_is_deferred(point: dict) -> bool:
             isinstance(start_year, int) and start_year > START_YEAR)
 
 
+# SSOT 3.2: a deferred site appears at its historical year or when the first faction finishes this
+# tech, whichever comes first. Sites without an entry appear by year only. Provisional mapping.
+REVEAL_TECH = {
+    "silver-ikuno": "TECH_JAC_SENGOKU_CUPELLATION",
+    "silver-sado-tsurushi": "TECH_JAC_SENGOKU_CUPELLATION",
+    "copper-ashio": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
+    "gold-izu-toi": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "gold-noto-hodatsu": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "gold-sado-nishimikawa": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "gold-sado-aikawa": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "silver-nobesawa": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+}
+
+
+def reveal_year(point: dict) -> int | None:
+    """start_year, else the first year of a numeric start_year_range."""
+    year = point.get("start_year")
+    if isinstance(year, int):
+        return year
+    span = point.get("start_year_range") or []
+    return span[0] if span and isinstance(span[0], int) else None
+
+
 def official_resource_rules(official: Path) -> dict[str, dict]:
     """Read the installed base and GS gameplay rows used by this map's ruleset."""
     assets = official.parents[2]
@@ -771,7 +838,8 @@ def official_resource_rules(official: Path) -> dict[str, dict]:
     sources = (assets / "Gameplay/Data/Resources.xml",
                game / "DLC/Expansion2/Data/Expansion1_Resources.xml",
                game / "DLC/Expansion2/Data/Expansion2_Resources.xml",
-               game / "DLC/Expansion2/Data/Expansion2_RemoveData.xml")
+               game / "DLC/Expansion2/Data/Expansion2_RemoveData.xml",
+               MOD / "Data" / "JAC_Japan_Resources.xml")  # custom gold/lacquer and silver on hills
     rules: dict[str, dict] = {}
     for source in sources:
         root = ET.parse(source).getroot()
@@ -814,25 +882,11 @@ def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
     occupied: dict[int, str] = {}
     records = []
     eligible = []
-    custom_ids = set()
     for group in groups:
         mapping = mapping_by_name.get(group["resource_ja"], {})
-        custom = (group.get("normal_map_requires_custom_resource", False) or
-                  mapping.get("availability") in ("custom_proposed", "official_scenario_only") or
-                  str(group.get("civ6_id", "")).startswith("RESOURCE_JAC_"))
-        if custom:
-            custom_ids.add(group["civ6_id"])
         for point in group["points"]:
             deferred = _resource_is_deferred(point)
-            if custom and deferred:
-                status = "custom_type_and_later_release"
-            elif custom:
-                status = "custom_type_required"
-            elif deferred:
-                status = "deferred"
-            else:
-                status = "start_candidate"
-                eligible.append((group, point, mapping))
+            eligible.append((group, point, mapping, deferred))
             records.append({"id": point["id"], "site": point["site"],
                             "province": point.get("province"), "resource_ja": group["resource_ja"],
                             "resource_id": group["civ6_id"],
@@ -843,14 +897,16 @@ def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
                             "start_year": point.get("start_year"),
                             "start_year_range": point.get("start_year_range"),
                             "available_at_start": point.get("available_at_start"),
-                            "start_status": status, "placement_status": "not_placed",
+                            "start_status": "deferred" if deferred else "start_candidate",
+                            "placement_status": "not_placed",
                             "confidence": point.get("confidence"),
                             "source_ids": point.get("source_ids", [])})
 
     def priority(candidate):
-        group, point, _ = candidate
+        group, point, _, deferred = candidate
         certainty = {"high": 0, "medium": 1, "low": 2}.get(point.get("confidence"), 3)
-        return (certainty, group["candidate_count"], point["id"])
+        # Start sites claim their tiles first; later sites take the nearest free tile.
+        return (deferred, certainty, group["candidate_count"], point["id"])
 
     by_id = {record["id"]: record for record in records}
     rows = []
@@ -860,22 +916,21 @@ def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
         "land": sorted(land_tiles - city_plots - custom_plots - lake_tiles),
         "marine": sorted(coast_tiles - lake_tiles),
     }
-    for group, point, mapping in sorted(eligible, key=priority):
+    reserved: dict[int, str] = {}  # later-release sites: tiles kept free for the Lua API
+    for group, point, mapping, deferred in sorted(eligible, key=priority):
         domain = "marine" if group.get("placement_domain") == "marine" else "land"
         target = project(*point["coordinates"])
-        resource = mapping.get("civ6_id", "")
+        resource = group["civ6_id"]
         record = by_id[point["id"]]
-        if not resource.startswith("RESOURCE_") or mapping.get("availability") not in (
-                "official", "official_gathering_storm"):
-            record["placement_status"] = "unavailable_official_type"
-            continue
         rule = rules.get(resource)
         if not rule:
-            raise ValueError(f"No official resource rule for {resource}")
+            raise ValueError(f"No resource rule for {resource}")
         options = []
         for candidate in candidate_plot_sets[domain]:
             # A formally legal climate on a distant island is not the historical site.
-            if math.dist(plot_center(grid, candidate), target) > max(60, 3 * grid.km):
+            # A later site must not hop to another island, so its radius is tighter.
+            limit = max(30, 2 * grid.km) if deferred else max(60, 3 * grid.km)
+            if math.dist(plot_center(grid, candidate), target) > limit:
                 continue
             terrain = terrain_by_plot.get(candidate, "TERRAIN_COAST")
             near_land = candidate in land_tiles or candidate in coast_tiles - lake_tiles
@@ -902,19 +957,28 @@ def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
             else:
                 continue
             options.append((candidate, feature, replacement))
+        if deferred:
+            # Lua cannot add a feature or reshape terrain later: a free tile that already fits.
+            options = [option for option in options
+                       if option[1] is None and option[2] is None and option[0] not in occupied
+                       and option[0] not in reserved]
         candidates = options
         if not candidates:
-            record["placement_status"] = ("no_historically_sensible_terrain" if
-                resource == "RESOURCE_SILVER" else "no_valid_official_plot")
-            record["placement_reason"] = ("The official silver terrains are desert or tundra; "
-                "Iwami's temperate mine cannot be represented by those climates." if
-                resource == "RESOURCE_SILVER" else
-                "No nearby plot satisfies the installed GS resource rules.")
+            record["placement_status"] = "no_valid_official_plot"
+            record["placement_reason"] = ("No nearby free plot satisfies the resource rules "
+                                          "(the tile budget of this scale is used up).")
             continue
         plot, feature, replacement = min(candidates, key=lambda option: (
             math.dist(plot_center(grid, option[0]), target), option[0]))
         record["plot"] = plot
         record["displacement_km"] = round(math.dist(plot_center(grid, plot), target), 1)
+        if deferred:
+            reserved[plot] = point["id"]
+            record["placement_status"] = "reserved_for_later_release"
+            record["reveal_year"] = reveal_year(point)
+            if point["id"] in REVEAL_TECH:
+                record["reveal_tech"] = REVEAL_TECH[point["id"]]
+            continue
         if plot in occupied:
             record["placement_status"] = "same_tile_conflict"
             record["conflict_with"] = occupied[plot]
@@ -928,16 +992,19 @@ def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
             required_features[plot] = feature
             record["required_feature"] = feature
         rows.append((plot, resource, 1))
+    start_eligible = [group for group, _, _, deferred in eligible if not deferred]
     stats = {"candidate_count": len(records), "placed_count": len(rows),
              "land_candidate_count": sum(group.get("placement_domain") != "marine"
-                                         for group, _, _ in eligible),
+                                         for group in start_eligible),
              "marine_candidate_count": sum(group.get("placement_domain") == "marine"
-                                           for group, _, _ in eligible),
+                                           for group in start_eligible),
+             "reserved_count": len(reserved),
              "count_by_type": dict(sorted(Counter(resource for _, resource, _ in rows).items())),
              "candidate_status_counts": dict(sorted(Counter(
                  record["placement_status"] if record["start_status"] == "start_candidate"
                  else record["start_status"] for record in records).items())),
-             "custom_resource_ids": sorted(custom_ids)}
+             "custom_resource_ids": sorted({group["civ6_id"] for group in groups
+                                            if group["civ6_id"].startswith("RESOURCE_JAC_")})}
     return rows, records, stats, required_features
 
 
@@ -1031,11 +1098,11 @@ def place_forests(grid: HexGrid, land_tiles: set[int], terrain_by_plot: dict[int
 def custom_content_inventory(draft: dict, resource_records: list[dict]) -> list[dict]:
     custom_resources: dict[str, dict] = {}
     for record in resource_records:
-        if record["start_status"] in ("custom_type_required", "custom_type_and_later_release"):
+        if record["resource_id"].startswith("RESOURCE_JAC_"):
             entry = custom_resources.setdefault(record["resource_id"], {
                 "type": record["resource_id"], "kind": "resource",
                 "resource_ja": record["resource_ja"], "candidate_ids": [],
-                "status": "requires_custom_resource_definition"})
+                "status": "defined_in_Data/JAC_Japan_Resources.xml"})
             entry["candidate_ids"].append(record["id"])
     result = list(custom_resources.values())
     for wonder in draft["terrain"].get("natural_wonder_candidates", []):
@@ -1119,6 +1186,8 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
         draft["resource_groups"], draft["resource_mapping"], terrain_by_plot,
         river_edges, resource_rules)
     occupied = {plot for plot, _, _ in resource_rows}
+    occupied.update(record["plot"] for record in resource_records
+                    if record["placement_status"] == "reserved_for_later_release")
     occupied.update(city["plot"] for city in cities)
     occupied.update(volcano["plot"] for volcano in volcano_records)
     marsh_tiles, marsh_stats = place_marshes(
@@ -1147,9 +1216,7 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
     custom_content = custom_content_inventory(draft, resource_records)
     deferred_resources = [record for record in resource_records
                           if record["start_status"] == "deferred" or
-                          record["start_status"] == "custom_type_and_later_release" or
-                          record["placement_status"] in ("no_historically_sensible_terrain",
-                                                         "no_valid_official_plot")]
+                          record["placement_status"] == "no_valid_official_plot"]
     wonder_records = [{**wonder, "status": "not_placed_custom_feature_candidate"}
                       for wonder in draft["terrain"].get("natural_wonder_candidates", [])]
     db = create_schema(official, destination)
@@ -1185,6 +1252,8 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
                              "Human", "DIFFICULTY_PRINCE", "INVALID",
                              "RANDOM", 1) for i, seat in enumerate(SEATS)))
             insert_historical_state(db, cities, assign_land(grid, land_tiles, cities))
+            import prosper_start  # imports this module; kept local to avoid a cycle at import time
+            prosper_start.apply(db, grid.width, grid.height, km, cities)
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"Invalid SQLite map: {destination}")
         db.commit()
@@ -1213,6 +1282,38 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
                                  "WorldBuilderMap has no lake table or FEATURE_LAKE; lake plots use TERRAIN_COAST"},
             "start_mode": "settlers" if settlers else "historical",
             "file": destination.name, "bytes": destination.stat().st_size}
+
+
+def deferred_sites(manifest: list[dict]) -> dict[str, list[dict]]:
+    """Later-release resource sites per grid size ("WxH"), sorted by year then id."""
+    result = {}
+    for item in manifest:
+        sites = [{"id": r["id"], "resource": r["resource_id"], "plot": r["plot"],
+                  "year": r.get("reveal_year"), "tech": r.get("reveal_tech")}
+                 for r in item["resource_candidates"]
+                 if r["placement_status"] == "reserved_for_later_release"]
+        result[f"{item['width']}x{item['height']}"] = sorted(
+            sites, key=lambda site: (site["year"] or 9999, site["id"]))
+    return result
+
+
+def write_resource_sites(manifest: list[dict], target: Path) -> None:
+    """Lua data for Scripts/JAC_Resources.lua; the plots are 0-based Map plot indexes."""
+    lines = ["-- Generated by tools/japan_map_scale/generate.py (SSOT 3.2). Do not edit.",
+             "ExposedMembers.JAC_ResourceSiteData = {"]
+    for size, sites in deferred_sites(manifest).items():
+        lines.append(f'\t["{size}"] = {{')
+        for site in sites:
+            fields = [f'id="{site["id"]}"', f'resource="{site["resource"]}"', f'plot={site["plot"]}']
+            if site["year"] is not None:
+                fields.append(f'year={site["year"]}')
+            if site["tech"]:
+                fields.append(f'tech="{site["tech"]}"')
+            lines.append("\t\t{ " + ", ".join(fields) + " },")
+        lines.append("\t},")
+    lines.append("}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> None:
@@ -1246,6 +1347,7 @@ def main() -> None:
               f"{item['land_tiles']} land, {item['bytes']} bytes", flush=True)
     (args.output / "manifest.json").write_text(json.dumps(manifests, ensure_ascii=False, indent=2) + "\n",
                                                 encoding="utf-8")
+    write_resource_sites(manifests, args.output.parent / "Scripts" / "JAC_ResourceSites.lua")
     if args.output.resolve() == (MOD / "Maps").resolve():
         import write_support
         write_support.main()

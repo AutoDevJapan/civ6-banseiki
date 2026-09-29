@@ -35,7 +35,7 @@
 			<Text>Nagoya</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_ODA" Language="ru_RU">
-			<Text>Nagoya</Text>
+			<Text>Нагоя</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_DATE_NAME" Language="ja_JP">
 			<Text>伊達</Text>
@@ -80,7 +80,7 @@
 			<Text>Yonezawa</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_DATE" Language="ru_RU">
-			<Text>Yonezawa</Text>
+			<Text>Ёнэдзава</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_ASHINA_NAME" Language="ja_JP">
 			<Text>蘆名</Text>
@@ -125,7 +125,7 @@
 			<Text>Kurokawa</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_ASHINA" Language="ru_RU">
-			<Text>Kurokawa</Text>
+			<Text>Курокава</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_HOJO_NAME" Language="ja_JP">
 			<Text>北条</Text>
@@ -170,7 +170,7 @@
 			<Text>Odawara</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_HOJO" Language="ru_RU">
-			<Text>Odawara</Text>
+			<Text>Одавара</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_YAMANOUCHI_UESUGI_NAME" Language="ja_JP">
 			<Text>山内上杉</Text>
@@ -215,7 +215,7 @@
 			<Text>Hirai</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_YAMANOUCHI_UESUGI" Language="ru_RU">
-			<Text>Hirai</Text>
+			<Text>Хираи</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_TAKEDA" Language="ja_JP">
 			<Text>躑躅ヶ崎館</Text>
@@ -224,7 +224,7 @@
 			<Text>Tsutsujigasaki</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_TAKEDA" Language="ru_RU">
-			<Text>Tsutsujigasaki</Text>
+			<Text>Цуцудзигасаки</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_NAGAO_NAME" Language="ja_JP">
 			<Text>長尾</Text>
@@ -269,7 +269,7 @@
 			<Text>Kasugayama</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_NAGAO" Language="ru_RU">
-			<Text>Kasugayama</Text>
+			<Text>Касугаяма</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_IMAGAWA_NAME" Language="ja_JP">
 			<Text>今川</Text>
@@ -314,7 +314,7 @@
 			<Text>Sunpu</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_IMAGAWA" Language="ru_RU">
-			<Text>Sunpu</Text>
+			<Text>Сумпу</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_MATSUDAIRA_NAME" Language="ja_JP">
 			<Text>松平</Text>
@@ -359,7 +359,7 @@
 			<Text>Okazaki</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_MATSUDAIRA" Language="ru_RU">
-			<Text>Okazaki</Text>
+			<Text>Окадзаки</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_ASAKURA_NAME" Language="ja_JP">
 			<Text>朝倉</Text>
@@ -404,7 +404,7 @@
 			<Text>Ichijodani</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_ASAKURA" Language="ru_RU">
-			<Text>Ichijodani</Text>
+			<Text>Итидзёдани</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_ASHIKAGA_NAME" Language="ja_JP">
 			<Text>足利将軍家</Text>
@@ -449,7 +449,7 @@
 			<Text>Muromachi</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_ASHIKAGA" Language="ru_RU">
-			<Text>Muromachi</Text>
+			<Text>Муромати</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_MIYOSHI_NAME" Language="ja_JP">
 			<Text>三好</Text>
@@ -494,7 +494,7 @@
 			<Text>Shozui</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_MIYOSHI" Language="ru_RU">
-			<Text>Shozui</Text>
+			<Text>Сёдзуй</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_ROKKAKU_NAME" Language="ja_JP">
 			<Text>六角</Text>
@@ -539,7 +539,7 @@
 			<Text>Kannonji</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_ROKKAKU" Language="ru_RU">
-			<Text>Kannonji</Text>
+			<Text>Каннондзи</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_HONGANJI_NAME" Language="ja_JP">
 			<Text>本願寺</Text>
@@ -584,7 +584,7 @@
 			<Text>Ishiyama</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_HONGANJI" Language="ru_RU">
-			<Text>Ishiyama</Text>
+			<Text>Исияма</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_OUCHI_NAME" Language="ja_JP">
 			<Text>大内</Text>
@@ -629,7 +629,7 @@
 			<Text>Yamaguchi</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_OUCHI" Language="ru_RU">
-			<Text>Yamaguchi</Text>
+			<Text>Ямагути</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_AMAGO_NAME" Language="ja_JP">
 			<Text>尼子</Text>
@@ -674,7 +674,7 @@
 			<Text>Gassan Toda</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_AMAGO" Language="ru_RU">
-			<Text>Gassan Toda</Text>
+			<Text>Гассан-Тода</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_MORI_NAME" Language="ja_JP">
 			<Text>毛利</Text>
@@ -719,7 +719,7 @@
 			<Text>Yoshida Koriyama</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_MORI" Language="ru_RU">
-			<Text>Yoshida Koriyama</Text>
+			<Text>Ёсида-Корияма</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_CHOSOKABE_NAME" Language="ja_JP">
 			<Text>長宗我部</Text>
@@ -764,7 +764,7 @@
 			<Text>Oko</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_CHOSOKABE" Language="ru_RU">
-			<Text>Oko</Text>
+			<Text>Око</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_OTOMO_NAME" Language="ja_JP">
 			<Text>大友</Text>
@@ -809,7 +809,7 @@
 			<Text>Funai</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_OTOMO" Language="ru_RU">
-			<Text>Funai</Text>
+			<Text>Фунай</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_SHIMAZU_NAME" Language="ja_JP">
 			<Text>島津</Text>
@@ -854,7 +854,7 @@
 			<Text>Kagoshima</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_SHIMAZU" Language="ru_RU">
-			<Text>Kagoshima</Text>
+			<Text>Кагосима</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_RYUKYU_NAME" Language="ja_JP">
 			<Text>琉球王国</Text>
@@ -899,7 +899,7 @@
 			<Text>Shuri</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_RYUKYU" Language="ru_RU">
-			<Text>Shuri</Text>
+			<Text>Сюри</Text>
 		</Row>
 		<Row Tag="LOC_CIVILIZATION_JAC_AINU_NAME" Language="ja_JP">
 			<Text>アイヌ</Text>
@@ -944,7 +944,313 @@
 			<Text>Nibutani</Text>
 		</Row>
 		<Row Tag="LOC_JAC_1534_CAPITAL_AINU" Language="ru_RU">
-			<Text>Nibutani</Text>
+			<Text>Нибутани</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_KOORI" Language="ja_JP">
+			<Text>桑折西山城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_KOORI" Language="en_US">
+			<Text>Koori Nishiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_KOORI" Language="ru_RU">
+			<Text>Коори-Нисияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YANAGAWA" Language="ja_JP">
+			<Text>梁川城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YANAGAWA" Language="en_US">
+			<Text>Yanagawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YANAGAWA" Language="ru_RU">
+			<Text>Янагава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHINA_INAWASHIRO" Language="ja_JP">
+			<Text>猪苗代城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHINA_INAWASHIRO" Language="en_US">
+			<Text>Inawashiro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHINA_INAWASHIRO" Language="ru_RU">
+			<Text>Инавасиро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YAMAGATA" Language="ja_JP">
+			<Text>山形城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YAMAGATA" Language="en_US">
+			<Text>Yamagata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_DATE_YAMAGATA" Language="ru_RU">
+			<Text>Ямагата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_EDO" Language="ja_JP">
+			<Text>江戸城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_EDO" Language="en_US">
+			<Text>Edo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_EDO" Language="ru_RU">
+			<Text>Эдо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_KAWAGOE" Language="ja_JP">
+			<Text>河越城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_KAWAGOE" Language="en_US">
+			<Text>Kawagoe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_KAWAGOE" Language="ru_RU">
+			<Text>Кавагоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_MINOWA" Language="ja_JP">
+			<Text>箕輪城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_MINOWA" Language="en_US">
+			<Text>Minowa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_MINOWA" Language="ru_RU">
+			<Text>Минова</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_KOGA" Language="ja_JP">
+			<Text>古河城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_KOGA" Language="en_US">
+			<Text>Koga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_HOJO_KOGA" Language="ru_RU">
+			<Text>Кога</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OBOW" Language="ja_JP">
+			<Text>小弓城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OBOW" Language="en_US">
+			<Text>Oyumi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OBOW" Language="ru_RU">
+			<Text>Оюми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OTA" Language="ja_JP">
+			<Text>太田城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OTA" Language="en_US">
+			<Text>Ota</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_UESUGI_OTA" Language="ru_RU">
+			<Text>Ота</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_TAKEDA_UEHARA" Language="ja_JP">
+			<Text>上原城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_TAKEDA_UEHARA" Language="en_US">
+			<Text>Uehara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_TAKEDA_UEHARA" Language="ru_RU">
+			<Text>Уэхара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_KAKEGAWA" Language="ja_JP">
+			<Text>掛川城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_KAKEGAWA" Language="en_US">
+			<Text>Kakegawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_KAKEGAWA" Language="ru_RU">
+			<Text>Какэгава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ODA_SHOBATA" Language="ja_JP">
+			<Text>勝幡城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ODA_SHOBATA" Language="en_US">
+			<Text>Shobata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ODA_SHOBATA" Language="ru_RU">
+			<Text>Сёбата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_NAGOYA" Language="ja_JP">
+			<Text>那古野城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_NAGOYA" Language="en_US">
+			<Text>Nagoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_IMAGAWA_NAGOYA" Language="ru_RU">
+			<Text>Нагоя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KIRIYAMA" Language="ja_JP">
+			<Text>霧山城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KIRIYAMA" Language="en_US">
+			<Text>Kiriyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KIRIYAMA" Language="ru_RU">
+			<Text>Кирияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_NANAO" Language="ja_JP">
+			<Text>七尾城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_NANAO" Language="en_US">
+			<Text>Nanao</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_NANAO" Language="ru_RU">
+			<Text>Нанао</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_SAKURABORA" Language="ja_JP">
+			<Text>桜洞城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_SAKURABORA" Language="en_US">
+			<Text>Sakurabora</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_SAKURABORA" Language="ru_RU">
+			<Text>Сакурабора</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_GOSEYAMA" Language="ja_JP">
+			<Text>後瀬山城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_GOSEYAMA" Language="en_US">
+			<Text>Nochiseyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_GOSEYAMA" Language="ru_RU">
+			<Text>Нотисэяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_HOJOZU" Language="ja_JP">
+			<Text>放生津城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_HOJOZU" Language="en_US">
+			<Text>Hojozu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_HOJOZU" Language="ru_RU">
+			<Text>Ходзёдзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KUWANOMI" Language="ja_JP">
+			<Text>桑実寺正覚院（臨時政庁）</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KUWANOMI" Language="en_US">
+			<Text>Kuwanomi-dera</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_KUWANOMI" Language="ru_RU">
+			<Text>Куваноми-дэра</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ROKKAKU_KAMAHABA" Language="ja_JP">
+			<Text>鎌刃城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ROKKAKU_KAMAHABA" Language="en_US">
+			<Text>Kamaha</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ROKKAKU_KAMAHABA" Language="ru_RU">
+			<Text>Камаха</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_SHIBAO" Language="ja_JP">
+			<Text>芝生城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_SHIBAO" Language="en_US">
+			<Text>Shibo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_SHIBAO" Language="ru_RU">
+			<Text>Сибо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_YAGAMI" Language="ja_JP">
+			<Text>八上城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_YAGAMI" Language="en_US">
+			<Text>Yakami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_YAGAMI" Language="ru_RU">
+			<Text>Яками</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_TAKAYA" Language="ja_JP">
+			<Text>高屋城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_TAKAYA" Language="en_US">
+			<Text>Takaya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_TAKAYA" Language="ru_RU">
+			<Text>Такая</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_OKISHIO" Language="ja_JP">
+			<Text>置塩城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_OKISHIO" Language="en_US">
+			<Text>Okishio</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_OKISHIO" Language="ru_RU">
+			<Text>Окисио</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_AMAGIRI" Language="ja_JP">
+			<Text>天霧城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_AMAGIRI" Language="en_US">
+			<Text>Amagiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_MIYOSHI_AMAGIRI" Language="ru_RU">
+			<Text>Амагири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_YUZUKI" Language="ja_JP">
+			<Text>湯築城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_YUZUKI" Language="en_US">
+			<Text>Yuzuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_YUZUKI" Language="ru_RU">
+			<Text>Юдзуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_YAMABUKI" Language="ja_JP">
+			<Text>山吹城・石見銀山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_YAMABUKI" Language="en_US">
+			<Text>Yamabuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_YAMABUKI" Language="ru_RU">
+			<Text>Ямабуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_TSUWANO" Language="ja_JP">
+			<Text>津和野城（三本松城）</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_TSUWANO" Language="en_US">
+			<Text>Tsuwano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_OUCHI_TSUWANO" Language="ru_RU">
+			<Text>Цувано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_MITSUISHI" Language="ja_JP">
+			<Text>三石城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_MITSUISHI" Language="en_US">
+			<Text>Mitsuishi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_MITSUISHI" Language="ru_RU">
+			<Text>Мицуиси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_BITCHU_MATSUYAMA" Language="ja_JP">
+			<Text>備中松山城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_BITCHU_MATSUYAMA" Language="en_US">
+			<Text>Bitchu Matsuyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_ASHIKAGA_BITCHU_MATSUYAMA" Language="ru_RU">
+			<Text>Биттю-Мацуяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_IZAKU" Language="ja_JP">
+			<Text>伊作城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_IZAKU" Language="en_US">
+			<Text>Izaku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_IZAKU" Language="ru_RU">
+			<Text>Идзаку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_OBI" Language="ja_JP">
+			<Text>飫肥城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_OBI" Language="en_US">
+			<Text>Obi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_SHIMAZU_OBI" Language="ru_RU">
+			<Text>Оби</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_RYUKYU_NAKAGUSUKU" Language="ja_JP">
+			<Text>中城グスク</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_RYUKYU_NAKAGUSUKU" Language="en_US">
+			<Text>Nakagusuku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_1534_CITY_RYUKYU_NAKAGUSUKU" Language="ru_RU">
+			<Text>Накагусуку</Text>
 		</Row>
 	</LocalizedText>
 </GameData>

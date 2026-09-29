@@ -22,7 +22,7 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 万世紀ルールセット用の開始状態。基準日は **天文3年5月12日**。日本列島の22勢力をそれぞれ専用の指導者・文明で登録した。島津は貴久を1勢力の代表とし、アイヌはタリコナを全域代表とするゲーム上の扱い。長尾の文明 ID は `CIVILIZATION_JAC_NAGAO` のまま維持する。人間と AI の指導者候補は、地図を選択すると `MapLeaders` に登録した22人に限定され、同じ指導者は重複できない。万世紀の通常の「人間は2人から選ぶ」フィルタは日本地図では適用しない。`MapSizes` で22人・都市国家0を固定する。
 
-開始方法は設定画面の地図一覧から「史実の領土」または「開拓者から」を選ぶ。各縮尺で前者を先に表示する。史実の領土版には22人の `Players`、草案の53城・拠点と追加の代表本拠3つからなる56都市、都市中心地区、全陸タイルの所有者、人口2を格納した。`Units` に開拓者は入れず、この地図と万世紀ルールセットの組み合わせに限る modinfo 条件で `MajorStartingUnits` の開拓者を除く。開拓者版は同じ地形・22開始位置で、都市・所有地を持たず、通常の開拓者初期配置を使う。シングルプレイの主経路は史実の領土版。マルチプレイは開拓者版を選択できる。別ルールセットの初期ユニット表は変更しない。**旧20 km版での都市消失は実機確認済み。修正後の15 km史実領土版の統合実機結果は下表のとおり。資源配置と指導者選択の変更後の再実機結果は後段の「2026-09-29 の再実機」にある。資源の画面表示と設定画面の22人の候補は未確認。**
+開始方法は設定画面の地図一覧から「史実の領土」または「開拓者から」を選ぶ。各縮尺で前者を先に表示する。史実の領土版には22人の `Players`、草案の53城・拠点と追加の代表本拠3つからなる56都市、都市中心地区、全陸タイルの所有者、人口2を格納した。`Units` に開拓者は入れず、この地図と万世紀ルールセットの組み合わせに限る modinfo 条件で `MajorStartingUnits` を全行除く（部隊は地図の `Units` の行だけ。[japan-prosperous-start.md](japan-prosperous-start.md) §3.2）。開拓者版は同じ地形・22開始位置で、都市・所有地を持たず、通常の開拓者初期配置を使う。シングルプレイの主経路は史実の領土版。マルチプレイは開拓者版を選択できる。別ルールセットの初期ユニット表は変更しない。**旧20 km版での都市消失は実機確認済み。修正後の15 km史実領土版の統合実機結果は下表のとおり。資源配置と指導者選択の変更後の再実機結果は後段の「2026-09-29 の再実機」にある。資源の画面表示と設定画面の22人の候補は未確認。**
 
 日本マップ4種は `Maps:JAC_Banseiki` に登録し、万世紀ルールセット側でこのドメインに `Maps:Expansion2Maps` を合併する。地図 MOD を無効にしても、万世紀から Gathering Storm の地図を選べる。万世紀の `Map` パラメータだけが専用ドメインを参照し、素の Gathering Storm には22勢力が必要な地図を表示しない。地図 MOD は Gathering Storm・CustomCivs・万世紀ルールセットを依存対象に宣言する。ローカル実装の根拠：`DLC/Expansion2/Config/Expansion2_StandardMaps.xml:3-4` のドメイン合併、`DLC/Expansion2/Config/Expansion2_Config.xml:10-12` と `Base/Assets/Configuration/Data/Schema/AdditionalTables.sql:308-312` のルールセット別置換。15 km史実領土版を選んだ実機開始は確認済み。地図4種すべての表示順は未確認。
 
@@ -50,6 +50,14 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 | 15 km | 204×88 | 1,906 | 745,472 B | 716,800 B | 0組 | 20組 | 10組 |
 
 城・本拠間の距離は都市タイル配置後の六角距離。公式インストールの `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Assets/Gameplay/Data/GlobalParameters.xml:98` に `<Replace Name="CITY_MIN_RANGE" Value="3" />` があり、修正前の実機では3タイル以内の後続都市が落ちた。日本マップ4種だけのゲームプレイ DB アクションで `CITY_MIN_RANGE=1` に更新し、都市間2タイルを許す。万世紀の通常の Gathering Storm 地図には適用しない。新条件で `close_city_pairs` は20 km・15 kmとも **0組**（隣接都市なし）。首都22件を最優先し、残る都市は調査データの番号順に配置・書き込みする。隣接する優先度の低い都市は、移動前の領有判定で同じ勢力に属する空き陸タイルから最短の地点へ、最大3タイルまで移す。20 kmでは11都市（最大60 km）、15 kmでは8都市（最大15 km）を移動した。各都市の元座標からの `displacement_km` と、移動した都市の `nudge.from_plot`・`to_plot`・`distance_km` は `Maps/manifest.json` に記録した。40/30/25 km の生成物とシナリオは削除し、現行の比較対象を20/15 kmに絞った。下の旧試験の表は実装前の履歴であり、現在の生成コマンド・シナリオには対応しない。
+
+### 都市名の表示言語（2026-09-30）
+
+英語 UI の実機画面（`leader-portraits` シナリオ、2026-09-29）で、日本マップの都市名の一部が □□□ の豆腐文字になった。首都（NAGOYA・OKAZAKI など）は正常だった。原因は、史実領土版の地図（20 km・15 km）の `Cities.Name` に首都以外の34都市の日本語名をそのまま書き込んでいたこと。Civ6 は LOC タグでない地図の都市名を翻訳せずにそのまま表示し、英語・ロシア語のフォントには漢字・かなのグリフがない。首都22件は `LOC_JAC_1534_CAPITAL_<勢力>` を使っていたため正常だった。表示名の上書き（`JAC_CivNameOverride.lua`）は武田の家名だけを扱い、都市名には関係しない。
+
+修正として、全56都市の `Cities.Name` を LOC タグにした。首都は従来どおり `LOC_JAC_1534_CAPITAL_<勢力>`、それ以外は `LOC_JAC_1534_CITY_<城ID>`（城 ID は `japan-1534-start.json`）。日英露の行は `write_custom_civs.py` が `JAC_Japan1534_Text.xml` に書き出す。英語はヘボン式の城名（例：桑実寺正覚院 → Kuwanomi-dera、後瀬山城 → Nochiseyama）、ロシア語はポリワノフ式のキリル文字で、首都のロシア語名もキリル文字にそろえた。訳名の表は `generate.py` の `CASTLE_NAMES` で、草案の城の構成が変わると生成時に止まる。既存の地図2枚は地形を作り直さず、`manifest.json` の都市（位置・所有者）に対して `Cities.Name` だけを書き換えた（生成器の出力と同じ値）。
+
+同種の問題（指導者名・勢力名・家名・手帳の文言）も洗い出したが、地図の都市名以外に LOC タグでない日本語の表示名はなかった。`tests/test_localized_names.py` は、使われている `LOC_JAC_*` タグすべてに en_US・ja_JP・ru_RU の行があること、ja_JP 以外の行と地図・SQL・Lua・XML（ja_JP の行と modinfo の `<ja_JP>` を除く）に漢字・かながないこと、地図の都市名がすべて LOC タグであることを検査する。実機では `japan-city-names.json` が15 km史実領土版で全56都市のバナー文字列を読み、日本語以外の UI では漢字・かなを含まないこと、LOC タグのまま表示されていないことを確かめる。2026-09-30 に英語 UI で再実機（`city-name-glyphs-02`）を実行し、合格した。全56都市のバナーがローマ字の訳名で表示され、漢字・かなは含まれなかった。残る確認項目は、ロシア語 UI と日本語 UI での実機確認。都市ごとに期待どおりの名前が付いているかの照合は、生成器とテストによる静的な検査だけで確かめている。
 
 ### 史実領土版の実機結果と都市消失の修正（2026-09-29）
 
@@ -538,9 +546,9 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 
 `poc/JAC_PoC_SengokuTrees` は `RULESET_JAC_BANSEIKI` だけで適用する独立PoC。設計案の技術32件・制度30件を元ID・AND前提・費用・行位置のまま登録した。4期は既存 Era ID の表示名を戦国用に変え、GSの時代システムを残す。**黄金／暗黒時代の戦国向け再設計は未実装で、このPoCはSSOT 3.2に未達。** 時代スコア・誓約・忠誠効果の再設計は次段階で行う。公式研究行は、必要な公式アイテムを戦国ノードへ再配線してから削除する。公式アイテムは新規Unit・建物の代用品で、効果量は暫定。制度の列は標準CivicsTreeが再計算するため、設計表の列位置の再現は未確認。
 
-各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AI・勝利設定への処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。戦国ツリーPoCが有効なBanseikiでは、専用の空の勝利ドメイン、公式勝利7種の設定値とゲーム側の既定値の無効化、`TURNLIMIT_NONE` と最大ターン0で統一前の公式勝利を防ぐ。ターン上限は Banseiki 本体の `GAME_TURN_LIMIT` の設定更新を上書きする（`ConfigurationUpdates` には一意キーがなく、行を足すと `TURNLIMIT_GAMESPEED` と競合する）。**次の実装段階は登録済み全城（琉球王国・アイヌを含む）の支配による天下統一勝利**。現PoCにその判定・勝利画面はなく、約200ターンの年表示も未実装。
+各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AI・勝利設定への処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。戦国ツリーPoCが有効なBanseikiでは、専用の空の勝利ドメイン、公式勝利7種の設定値とゲーム側の既定値の無効化、`TURNLIMIT_NONE` と最大ターン0で統一前の公式勝利を防ぐ。ターン上限は Banseiki 本体の `GAME_TURN_LIMIT` の設定更新を上書きする（`ConfigurationUpdates` には一意キーがなく、行を足すと `TURNLIMIT_GAMESPEED` と競合する）。登録済み全城（琉球王国・アイヌを含む）の支配による天下統一勝利は `VICTORY_JAC_SENGOKU_UNIFICATION` として実装した（[天下統一 PoC](unification-victory.md)）。2026-09-30 の実機で、検証地図の破却・再建・移管を経て織田の天下統一が成立すること（unify-15）と、15 km 地図が登録城56で始まること（unify-16）を確認した。開拓者開始・通常地図の本拠の条件、チーム・同盟での合算、マルチプレイは未確認。約200ターンの年表示は未実装。
 
-設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、最初の技術と制度の進捗を検査する。
+設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、開始時に与える技術4・社会制度3を持つこと、その次に研究できる技術と制度の進捗を検査する（開始時の知識を与える前は最初のノードを研究させていたが、与えた後は研究済みで経路が得られず失敗していた。実機 sengoku-cascade-deletes-03）。
 
 **2026-09-29 の提示された実機結果：** `RULESET_JAC_BANSEIKI` と日本マップでゲームがロードし、戦国技術32件・社会制度30件、公式技術・制度行0件、Gathering Stormの仕組みの存在を確認。50ターンの自動進行とセーブ／ロードが成功した。今回の公式勝利無効化を加える前の結果である。
 

@@ -8,11 +8,14 @@ import mmap
 import os
 from pathlib import Path
 import re
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageChops
-from tools.jac_art.draw_crests import NAMES as CREST_NAMES, MOTIFS as CREST_MOTIFS
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from draw_crests import NAMES as CREST_NAMES, MOTIFS as CREST_MOTIFS
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -33,6 +36,7 @@ def action_files(modinfo, context, action):
 
 def icon_records(files, allow_duplicates=False):
     definitions = {}
+    replaced = {}
     atlases = {}
     for path in files:
         xml = ET.parse(path)
@@ -41,9 +45,12 @@ def icon_records(files, allow_duplicates=False):
             if name in definitions and not allow_duplicates:
                 raise AssertionError(f"duplicate icon: {name}")
             definitions.setdefault(name, row.attrib)
+        # <Replace> files load after the Row files (modinfo order), so they win.
+        for row in xml.findall("./IconDefinitions/Replace"):
+            replaced[row.attrib["Name"]] = row.attrib
         for row in xml.findall("./IconTextureAtlases/Row"):
             atlases.setdefault(row.attrib["Name"], []).append(row.attrib)
-    return definitions, atlases
+    return definitions | replaced, atlases
 
 
 def package_textures(path, names):
@@ -66,16 +73,25 @@ class FrontEndArtTests(unittest.TestCase):
         }
         self.assertEqual(official_sizes,
                          {22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256})
-        icon_files = ("Data/JAC_CustomCivs_Icons.xml",
-                      "Data/JAC_Japan1534_Icons.xml")
+        modinfo = ET.parse(MOD / "JAC_PoC_CustomCivs.modinfo")
+        for context in ("FrontEndActions", "InGameActions"):
+            icon_files = [node.text for node in modinfo.findall(f"./{context}/UpdateIcons/File")]
+            self.assertEqual(icon_files[-1], "Data/JAC_Crests_Icons.xml", context)
         definitions, atlases = icon_records(MOD / file for file in icon_files)
-        rows = atlases["ICON_ATLAS_JAC_CIVILIZATIONS"]
+        rows = atlases["ICON_ATLAS_JAC_CRESTS"]
         self.assertEqual({int(row["IconSize"]) for row in rows}, official_sizes)
         self.assertTrue(all(int(row["IconsPerRow"]) == 8 and
                             int(row["IconsPerColumn"]) == 3 for row in rows))
-        players = [row.attrib for file in ("Config/JAC_CustomCivs_Players.xml",
-                                           "Config/JAC_Japan1534_Players.xml")
+        players = [dict(row.attrib) for file in ("Config/JAC_CustomCivs_Players.xml",
+                                                 "Config/JAC_Japan1534_Players.xml")
                    for row in ET.parse(MOD / file).findall("./Players/Row")]
+        config_files = [node.text for node in modinfo.findall("./FrontEndActions/UpdateDatabase/File")]
+        self.assertEqual(config_files[-1], "Config/JAC_Crests_Players.xml")
+        for update in ET.parse(MOD / config_files[-1]).findall("./Players/Update"):
+            where, values = update.find("Where").attrib, update.find("Set").attrib
+            matched = [p for p in players if all(p[k] == v for k, v in where.items())]
+            self.assertEqual(len(matched), 1, where)
+            matched[0].update(values)
         self.assertEqual({row["CivilizationType"] for row in players},
                          {f"CIVILIZATION_JAC_{name}" for name in CREST_NAMES})
         for player in players:
@@ -84,8 +100,7 @@ class FrontEndArtTests(unittest.TestCase):
             self.assertEqual(int(definitions[icon]["Index"]),
                              CREST_NAMES.index(player["CivilizationType"].removeprefix(
                                  "CIVILIZATION_JAC_")))
-            self.assertEqual(definitions[icon]["Atlas"],
-                             "ICON_ATLAS_JAC_CIVILIZATIONS")
+            self.assertEqual(definitions[icon]["Atlas"], "ICON_ATLAS_JAC_CRESTS")
             self.assertNotIn("ICON_CIVILIZATION_JAPAN", player.values())
 
         originals = ROOT.parent.parent / "civ6-art-local" / "JAC_PoC_CustomCivs" / "Originals" / "crests"
@@ -110,7 +125,7 @@ class FrontEndArtTests(unittest.TestCase):
 
         for size in official_sizes:
             with Image.open(ROOT / "tools" / "jac_art" / "build" / "previews" /
-                            f"JAC_Civs{size}.png") as file:
+                            f"JAC_Crests{size}.png") as file:
                 atlas = file.convert("RGBA")
             self.assertEqual(atlas.size, (8*size, 3*size))
             for index, master in enumerate(masters):

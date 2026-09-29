@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<!-- 家紋（文明アイコン）。BLP は tools/jac_art/build_art.py で作る。番号は draw_crests.NAMES の順。
+	     JAC_CustomCivs_Icons.xml / JAC_Japan1534_Icons.xml の後に読み込み、文明アイコン22件を Replace で差し替える。 -->
+	<IconTextureAtlases>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="22" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests22.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="30" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests30.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="32" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="36" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests36.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="44" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests44.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="45" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="48" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="50" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="64" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="80" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="128" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests128.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="200" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests200.dds"/>
+		<Row Name="ICON_ATLAS_JAC_CRESTS" IconSize="256" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Crests256.dds"/>
+	</IconTextureAtlases>
+	<IconDefinitions>
+		<Replace Name="ICON_CIVILIZATION_JAC_ODA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="0"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_TAKEDA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="1"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_DATE" Atlas="ICON_ATLAS_JAC_CRESTS" Index="2"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_ASHINA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="3"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_HOJO" Atlas="ICON_ATLAS_JAC_CRESTS" Index="4"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_YAMANOUCHI_UESUGI" Atlas="ICON_ATLAS_JAC_CRESTS" Index="5"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_NAGAO" Atlas="ICON_ATLAS_JAC_CRESTS" Index="6"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_IMAGAWA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="7"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_MATSUDAIRA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="8"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_ASAKURA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="9"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_ASHIKAGA" Atlas="ICON_ATLAS_JAC_CRESTS" Index="10"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_MIYOSHI" Atlas="ICON_ATLAS_JAC_CRESTS" Index="11"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_ROKKAKU" Atlas="ICON_ATLAS_JAC_CRESTS" Index="12"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_HONGANJI" Atlas="ICON_ATLAS_JAC_CRESTS" Index="13"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_OUCHI" Atlas="ICON_ATLAS_JAC_CRESTS" Index="14"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_AMAGO" Atlas="ICON_ATLAS_JAC_CRESTS" Index="15"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_MORI" Atlas="ICON_ATLAS_JAC_CRESTS" Index="16"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_CHOSOKABE" Atlas="ICON_ATLAS_JAC_CRESTS" Index="17"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_OTOMO" Atlas="ICON_ATLAS_JAC_CRESTS" Index="18"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_SHIMAZU" Atlas="ICON_ATLAS_JAC_CRESTS" Index="19"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_RYUKYU" Atlas="ICON_ATLAS_JAC_CRESTS" Index="20"/>
+		<Replace Name="ICON_CIVILIZATION_JAC_AINU" Atlas="ICON_ATLAS_JAC_CRESTS" Index="21"/>
+	</IconDefinitions>
+</GameInfo>

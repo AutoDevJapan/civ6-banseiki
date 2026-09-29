@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameInfo>
   <Types>
+    <Delete Type="CAPABILITY_WORLD_CONGRESS"/>
     <Row Type="ABILITY_JAC_DOMAIN_CROSSING" Kind="KIND_ABILITY"/>
   </Types>
   <TypeTags>

@@ -246,6 +246,16 @@ def grid_atlas(masters, size, columns=8):
     return out
 
 
+def crest_masters():
+    masters = []
+    for name in CREST_NAMES:
+        master = Image.open(ORIGINALS / "crests" / f"{name.lower()}.png").convert("RGBA")
+        if master.size != (512, 512) or master.getchannel("A").getbbox() is None:
+            raise ValueError(f"Invalid crest image: {name}")
+        masters.append(master)
+    return masters
+
+
 def crest_contact_sheet(masters):
     """Readable local proof with full-size and 22px samples for each house."""
     cell_w, cell_h, columns = 180, 195, 6
@@ -336,6 +346,7 @@ def main():
     growth_available = (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file()
     required = [ORIGINALS / value for leader in LEADERS.values()
                 for value in (leader["portrait"], leader["figure"], leader["background"])]
+    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png"]
     required += [ORIGINALS / "crests" / f"{name.lower()}.png" for name in CREST_NAMES]
     if growth_available:
         required.append(GROWTH_ORIGINALS / "notebooks_generated.png")
@@ -355,19 +366,19 @@ def main():
 
     order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
     leader_masters = [leader_icon_master(k) for k in order]
-    civ_masters = []
-    for name in CREST_NAMES:
-        master = Image.open(ORIGINALS / "crests" / f"{name.lower()}.png").convert("RGBA")
-        if master.size != (512, 512) or master.getchannel("A").getbbox() is None:
-            raise ValueError(f"Invalid crest image: {name}")
-        civ_masters.append(master)
-    crest_contact_sheet(civ_masters)
+    civ_masters = [symbol_icon_master(name) for name in ("oda_mokko_generated.png", "takeda_bishi_generated.png")]
     ability_masters = [symbol_icon_master(name) for name in ABILITY_SOURCES]
     icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s)) for s in LEADER_ICON_SIZES]
     for s in CIV_ICON_SIZES:
-        icons.append(texture(f"JAC_Civs{s}", grid_atlas(civ_masters, s)))
+        icons.append(texture(f"JAC_Civs{s}", atlas(civ_masters, s)))
     for s in ABILITY_ICON_SIZES:
         icons.append(texture(f"JAC_Abilities{s}", atlas(ability_masters, s)))
+
+    # Data/JAC_Crests_Icons.xml replaces all 22 civilization icons with this atlas.
+    crests = crest_masters()
+    crest_contact_sheet(crests)
+    for s in CIV_ICON_SIZES:
+        icons.append(texture(f"JAC_Crests{s}", grid_atlas(crests, s)))
 
     leaders, fallbacks = [], []
     for key in order:

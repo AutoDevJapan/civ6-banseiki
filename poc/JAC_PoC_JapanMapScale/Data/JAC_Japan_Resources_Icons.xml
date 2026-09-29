@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No new art: both reuse cells of the official resource atlas (Base/Assets/UI/Icons/Icons_Resources.xml:26-27,76-77).
+     Gold shows the diamonds cell and lacquer the dyes cell until the owner picks something else. -->
+<GameInfo>
+  <IconDefinitions>
+    <Row Name="ICON_RESOURCE_JAC_GOLD" Atlas="ICON_ATLAS_RESOURCES" Index="14"/>
+    <Row Name="ICON_RESOURCE_JAC_GOLD_FOW" Atlas="ICON_ATLAS_RESOURCES_FOW" Index="14"/>
+    <Row Name="ICON_RESOURCE_JAC_LACQUER" Atlas="ICON_ATLAS_RESOURCES" Index="15"/>
+    <Row Name="ICON_RESOURCE_JAC_LACQUER_FOW" Atlas="ICON_ATLAS_RESOURCES_FOW" Index="15"/>
+  </IconDefinitions>
+</GameInfo>

@@ -1,5 +1,5 @@
 -- Official victory types remain in Types for GS references, but cannot end a
--- Sengoku game before the separate castle-unification victory is implemented.
+-- Sengoku game before the registered-castle victory condition is met.
 UPDATE Victories SET EnabledByDefault = 0
 WHERE VictoryType IN (
     'VICTORY_DEFAULT', 'VICTORY_CONQUEST', 'VICTORY_TECHNOLOGY',
