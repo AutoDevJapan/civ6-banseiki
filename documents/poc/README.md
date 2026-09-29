@@ -27,12 +27,31 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 | 対辺間距離 | 盤面 | 陸タイル | 史実領土版 | 開拓者版 | 都市間1タイル | 2タイル | 3タイル |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 20 km | 154×67 | 1,089 | 520,192 B | 503,808 B | 14組 | 18組 | 23組 |
-| 15 km | 204×88 | 1,914 | 724,992 B | 696,320 B | 9組 | 11組 | 12組 |
+| 20 km | 154×67 | 1,082 | 532,480 B | 516,096 B | 14組 | 18組 | 23組 |
+| 15 km | 204×88 | 1,906 | 745,472 B | 716,800 B | 9組 | 11組 | 12組 |
 
 城・本拠間の距離は、重複しない都市タイルに配置した後の六角距離。`CITY_MIN_RANGE=3` に対し、3タイル以内は20 kmで **55組**、15 kmで **32組**。厳密に3未満ならそれぞれ32組・20組。全組は `Maps/manifest.json` の `close_city_pairs` に城 ID と距離で記録した。近い静的都市がゲームに受け入れられるか、ロード時に移動・消失するかは実機で判定する。40/30/25 km の生成物とシナリオは削除し、現行の比較対象を20/15 kmに絞った。下の旧試験の表は実装前の履歴であり、現在の生成コマンド・シナリオには対応しない。
 
 領土の判断は [`japan-1534-start.json`](../spec/data/japan-1534-start.json) の68令制国配分と53拠点に従う。海岸線・陸域・標高の元データと利用条件は下の旧縮尺試験の出典表と同じ。境界ポリゴンを直接使えるデータは採用できなかった。[CODH「旧国・旧郡境界データセット」](https://geoshape.ex.nii.ac.jp/kg/) は江戸末期の境界で、CC BY-NC の非商用条件がある。代わりに53拠点・22代表本拠の位置と、拠点がない国の概略中心33点（`TERRITORY_ANCHORS`）を使う最近接割当とし、その中心点の勢力が草案の配分表に載ることを生成時に検査する。北海道は二風谷と同じ連結島をアイヌ、南西諸島の南側は琉球として補正する。地理的な代理境界であり、郡境・1534年の実効支配を再現したものではない。陸の全タイルに22勢力のいずれか、さらに同勢力で最寄りの都市を `PlotOwners` の `CityOwner` / `CityWorking` として付ける。城座標・所有者・国配分の史料と留保は[調査記録](../research/japan-1534-start.md)にある。
+
+### 資源・河川・湖沼・植生・火山
+
+生成器は[資源候補JSON](../spec/data/japan-map-resources.json)の50陸上・17海上候補、河川10本、湖沼6か所、森林・湿地規則、火山候補を両縮尺へ反映する。史実領土版と開拓者版は同じ資源・地形データを持つ。開始地図にはCiv6既定資源だけを書き、資源は都市中心タイルに置かない。
+
+| 内容 | 20 km | 15 km | 配置・近似 |
+|---|---:|---:|---|
+| Civ6既定資源 | 52件 | 53件 | 陸上35/36件、海上17件。候補が同一タイルへ重なった4/3件は根拠を残して1件に統合 |
+| 河川 | 10本・177辺 | 10本・232辺 | 1534年旧流路案を含む座標列を、連結した共有辺へ吸着 |
+| 湖沼 | 6か所・7タイル | 6か所・8タイル | 面積とタイル目安から水面を近似 |
+| 森林 | 402タイル | 748タイル | 森林適格タイルの45.02%/45.01%。丘陵・山地側を優先し、都市・資源・湿地・湖・火山・稲作平野近傍を除外 |
+| 湿地 | 27タイル | 33タイル | 主要7クラスターへ集中。陸地の2.5%を目標に22〜33タイルで上限 |
+| Gathering Storm 火山 | 5か所 | 5か所 | 浅間・富士・阿蘇・桜島・霧島。Civ6の火山Featureが山岳地形を要するため、山岳タイルでない火口候補は地形を山岳へ補正 |
+
+資源の候補座標はWGS84の代表点で、各タイルへ最短距離で吸着する。調査確度・出典ID・吸着先・競合・開始時状態は `Maps/manifest.json` に記録した。金・漆は通常マップ用の資源行が必要なため開始地図から除外し、`RESOURCE_JAC_GOLD` と `RESOURCE_JAC_LACQUER` を今後追加する候補として記録した。既定資源でも1534年後の開発となる生野銀山・鶴子銀山・延沢銀山・足尾銅山は開始時には置かず、後年イベント／研究で解禁する候補として保持した。金山・漆器産地の年次条件がある地点も同様に記録する。硝石は鉱床資源として置かず、平戸（1586年以後）と年代未確定の堺の交易アクセス候補として記録する。
+
+湖には公式 `WorldBuilderMap.sql` の専用テーブルも `FEATURE_LAKE` もないため、面積比で選んだタイルを `TERRAIN_COAST` の水域として表現した。実際の湖岸線、埋立・干拓、1534年の河道を測量復元したものではない。河川の中心線も概略点列で、利根川は東遷前の旧流路案、石狩川・淀川などは改修前の線形を簡略化している。森林率は16世紀の実測値ではなく、草地・丘陵のゲーム調整値。湿地は現代の湿地情報を参照した地域代表で、1534年の面積を直接示さない。自然の驚異は富士山／阿蘇カルデラのどちらも選ばず、未実装候補 `FEATURE_JAC_FUJI`・`FEATURE_JAC_ASO_CALDERA` として記録した。
+
+候補ごとの典拠と確度は[調査記録](../research/japan-map-resources.md)とJSONの `sources` にある。主な地理資料は[Natural Earth 10m land](https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-land/)、[NOAA ETOPO 2022](https://www.ncei.noaa.gov/products/etopo-global-relief-model)、国土地理院の[湖沼データ](https://www.gsi.go.jp/kankyochiri/lakedatalist.html)、環境省の[現存植生図](https://eadas.env.go.jp/eiadb/ebidbs/Service/About?title=Gis)・[ラムサール湿地](https://www.env.go.jp/nature/ramsar/conv/RamsarSites_in_Japan.html)、気象庁の各火山履歴（例：[浅間山](https://www.data.jma.go.jp/vois/data/tokyo/306_Asamayama/306_history.html)）である。資源の鉱山・産業史と各河川の出典は、JSONの地点・河川ごとの `source_ids` から辿れる。
 
 | 用途 | 作品 | 作者と年 | 所蔵と出典 | ライセンス | 元ファイル |
 |---|---|---|---|---|---|
@@ -42,7 +61,7 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 新規20勢力に専用肖像・家紋がまだないため、画面で「?」にならないよう上の仮画像を割り当てた。共用する織田肖像は他の20人の史実肖像ではない。配布前に各勢力の絵へ差し替え、画像の利用条件を確定する。既存の BLP は Git 管理外なので、実機に配置する際は CustomCivs 節のアートビルドが必要。
 
-再生成・静的検査は `python tools/japan_map_scale/generate.py`、`python tools/japan_map_scale/write_custom_civs.py`、`python -m unittest discover -s tools/japan_map_scale/tests`、`python -m unittest discover -s tools/civ6-autotest/tests`。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリに書き込めないため、権限を継承する一時ディレクトリで実行して91件成功した。これは Civ6 の起動ではない。
+再生成・静的検査は `python tools/japan_map_scale/generate.py`、`python tools/japan_map_scale/write_custom_civs.py`、`python -m unittest discover -s tools/japan_map_scale/tests`、`python -m unittest discover -s tools/civ6-autotest/tests`。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリへ書き込めないため、作業ツリーを一時ルートにし、親の書込権限を継承する実行ラッパーで91件成功した。これは Civ6 の起動ではない。
 
 実機で未確認：地図選択の既定順・22人候補と重複禁止、開拓者版への切替、全20人の仮画像表示、56都市と各勢力の都市数・首都位置、全陸タイルの所有、開拓者0、近接都市の維持、50ターン進行、保存・読込後の状態一致、読込後1ターン、ログ・処理時間・メモリ、マルチプレイの開始方法。`japan-map-20km.json` と `japan-map-15km.json` の `ui_lua` は開始時にこれらの構造条件を検査し、50ターン後とロード後の勢力別都市数・存続状態・陸所有者のハッシュが一致することを検査する。戦争で50ターン後の都市数が変わることは許容し、保存前と読込後を比較する。ただし陸に未所有地が出た場合は失敗する。最後に1ターン進める。Civ6 と Steam は本変更の作業中に起動していない。
 

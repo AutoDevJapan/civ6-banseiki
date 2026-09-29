@@ -3,8 +3,13 @@
     "km_per_tile": 20,
     "width": 154,
     "height": 67,
-    "land_tiles": 1089,
-    "sea_tiles": 9229,
+    "grid_origin_projected_km": [
+      -1947.19265,
+      -534.102064
+    ],
+    "land_tiles": 1082,
+    "sea_tiles": 9236,
+    "rasterized_land_tiles_before_lakes": 1089,
     "starts": [
       {
         "seat": "ODA",
@@ -1388,17 +1393,3363 @@
         2
       ]
     ],
+    "resource_placement": {
+      "candidate_count": 67,
+      "placed_count": 52,
+      "land_candidate_count": 39,
+      "marine_candidate_count": 17,
+      "count_by_type": {
+        "RESOURCE_FISH": 16,
+        "RESOURCE_HORSES": 6,
+        "RESOURCE_IRON": 5,
+        "RESOURCE_RICE": 13,
+        "RESOURCE_SALT": 6,
+        "RESOURCE_SILK": 3,
+        "RESOURCE_SILVER": 1,
+        "RESOURCE_TEA": 1,
+        "RESOURCE_WHALES": 1
+      },
+      "candidate_status_counts": {
+        "custom_type_and_later_release": 4,
+        "custom_type_required": 3,
+        "deferred": 4,
+        "placed": 52,
+        "same_tile_conflict": 4
+      },
+      "custom_resource_ids": [
+        "RESOURCE_JAC_GOLD",
+        "RESOURCE_JAC_LACQUER"
+      ]
+    },
+    "resource_candidates": [
+      {
+        "id": "gold-kai-kurokawa",
+        "site": "黒川金山",
+        "province": "甲斐",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.825,
+          35.817
+        ],
+        "start_year": null,
+        "start_year_range": [
+          "15世紀末",
+          "17世紀"
+        ],
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "kai_mines"
+        ]
+      },
+      {
+        "id": "gold-kai-nakayama",
+        "site": "中山金山",
+        "province": "甲斐",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.464,
+          35.377
+        ],
+        "start_year": null,
+        "start_year_range": [
+          "16世紀前後",
+          "17世紀末"
+        ],
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "nakayama_mine"
+        ]
+      },
+      {
+        "id": "gold-izu-toi",
+        "site": "土肥金山",
+        "province": "伊豆",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.79,
+          34.909
+        ],
+        "start_year": 1577,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "toi_mine"
+        ]
+      },
+      {
+        "id": "gold-noto-hodatsu",
+        "site": "宝達金山",
+        "province": "能登",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          136.803,
+          36.784
+        ],
+        "start_year": 1586,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "hodatsu_study"
+        ]
+      },
+      {
+        "id": "gold-sado-nishimikawa",
+        "site": "西三川砂金山・笹川",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.273,
+          37.819
+        ],
+        "start_year": 1593,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer"
+        ]
+      },
+      {
+        "id": "silver-iwami",
+        "site": "石見銀山・大森",
+        "province": "石見",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          132.437,
+          35.103
+        ],
+        "start_year": 1526,
+        "start_year_range": null,
+        "available_at_start": true,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "iwami_unesco",
+          "iwami_discovery"
+        ],
+        "plot": 7314,
+        "displacement_km": 13.8
+      },
+      {
+        "id": "silver-ikuno",
+        "site": "生野銀山",
+        "province": "但馬",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          134.79,
+          35.167
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "ikuno_mine"
+        ]
+      },
+      {
+        "id": "silver-sado-tsurushi",
+        "site": "鶴子銀山",
+        "province": "佐渡",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          138.351,
+          37.927
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_silver"
+        ]
+      },
+      {
+        "id": "silver-nobesawa",
+        "site": "延沢銀山",
+        "province": "出羽",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          140.528,
+          38.568
+        ],
+        "start_year": null,
+        "start_year_range": [
+          1596,
+          1615
+        ],
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "nobesawa_mine"
+        ]
+      },
+      {
+        "id": "copper-ashio",
+        "site": "足尾銅山",
+        "province": "下野",
+        "resource_ja": "銅",
+        "resource_id": "RESOURCE_COPPER",
+        "official_resource_id": "RESOURCE_COPPER",
+        "availability": "official_gathering_storm",
+        "coordinates": [
+          139.446,
+          36.642
+        ],
+        "start_year": 1550,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "ashio_mine"
+        ]
+      },
+      {
+        "id": "iron-izumo-yokota",
+        "site": "横田・奥出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.092,
+          35.199
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "high",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 7008,
+        "displacement_km": 6.8,
+        "conflict_with": "iron-hoki-nichinan"
+      },
+      {
+        "id": "iron-izumo-sata",
+        "site": "佐田・出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.88,
+          35.185
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 7162,
+        "displacement_km": 7.4,
+        "conflict_with": "iron-izumo-mitoya"
+      },
+      {
+        "id": "iron-izumo-mitoya",
+        "site": "三刀屋・出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.901,
+          35.274
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 7162,
+        "displacement_km": 7.4
+      },
+      {
+        "id": "iron-hoki-nichinan",
+        "site": "日南・日野郡",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.244,
+          35.16
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 7008,
+        "displacement_km": 7.7
+      },
+      {
+        "id": "iron-hoki-kofu",
+        "site": "江府・日野郡",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.417,
+          35.225
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 6855,
+        "displacement_km": 9.6
+      },
+      {
+        "id": "iron-hoki-misasa",
+        "site": "三朝・東伯耆",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.766,
+          35.41
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 6857,
+        "displacement_km": 8.1
+      },
+      {
+        "id": "iron-iwami-mountains",
+        "site": "石見山地・候補圏",
+        "province": "石見",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.15,
+          35.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "tatara_distribution"
+        ],
+        "plot": 7466,
+        "displacement_km": 13.7
+      },
+      {
+        "id": "horse-nanbu-shichinohe",
+        "site": "糠部・七戸周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.15,
+          40.69
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 6438,
+        "displacement_km": 6.9
+      },
+      {
+        "id": "horse-nanbu-kuji",
+        "site": "糠部・九戸周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.59,
+          40.18
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 5822,
+        "displacement_km": 4.7
+      },
+      {
+        "id": "horse-nanbu-morioka",
+        "site": "南部馬産圏・盛岡周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.15,
+          39.7
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 5665,
+        "displacement_km": 5.6
+      },
+      {
+        "id": "horse-kai-hosaka",
+        "site": "穂坂牧周辺",
+        "province": "甲斐",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          138.43,
+          35.75
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_kai"
+        ],
+        "plot": 4409,
+        "displacement_km": 8.3
+      },
+      {
+        "id": "horse-kiso",
+        "site": "木曽谷・開田高原",
+        "province": "信濃",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          137.56,
+          35.95
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "horse_kiso"
+        ],
+        "plot": 5023,
+        "displacement_km": 7.1
+      },
+      {
+        "id": "horse-shimosa",
+        "site": "下総台地・牧候補圏",
+        "province": "下総",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          140.13,
+          35.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "horse_shimosa"
+        ],
+        "plot": 3491,
+        "displacement_km": 5.8
+      },
+      {
+        "id": "rice-echigo",
+        "site": "越後平野",
+        "province": "越後",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.05,
+          37.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_shinano"
+        ],
+        "plot": 5497,
+        "displacement_km": 4.3
+      },
+      {
+        "id": "rice-shonai",
+        "site": "庄内平野",
+        "province": "出羽",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.88,
+          38.85
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_mogami"
+        ],
+        "plot": 5658,
+        "displacement_km": 12.2
+      },
+      {
+        "id": "rice-sendai",
+        "site": "仙台平野",
+        "province": "陸奥",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          140.92,
+          38.27
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_kitakami"
+        ],
+        "plot": 4735,
+        "displacement_km": 6.9
+      },
+      {
+        "id": "rice-kanto-upper",
+        "site": "関東平野北部",
+        "province": "上野",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.95,
+          36.22
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_tone"
+        ],
+        "plot": 3800,
+        "displacement_km": 4.6
+      },
+      {
+        "id": "rice-kanto-lower",
+        "site": "利根川旧下流低地",
+        "province": "下総",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          140.15,
+          35.88
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "low",
+        "source_ids": [
+          "river_tone"
+        ],
+        "plot": 3491,
+        "displacement_km": 6.2,
+        "conflict_with": "horse-shimosa"
+      },
+      {
+        "id": "rice-nobi",
+        "site": "濃尾平野",
+        "province": "美濃",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.82,
+          35.2
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "plot": 5018,
+        "displacement_km": 15.5
+      },
+      {
+        "id": "rice-owari",
+        "site": "尾張平野",
+        "province": "尾張",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.78,
+          35.05
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "plot": 4709,
+        "displacement_km": 11.1
+      },
+      {
+        "id": "rice-omi",
+        "site": "琵琶湖東岸低地",
+        "province": "近江",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.1,
+          35.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo",
+          "lake_biwa"
+        ],
+        "plot": 5323,
+        "displacement_km": 11.7
+      },
+      {
+        "id": "rice-yamashiro",
+        "site": "山城盆地",
+        "province": "山城",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          135.79,
+          34.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "plot": 5321,
+        "displacement_km": 11.4
+      },
+      {
+        "id": "rice-kawachi",
+        "site": "河内平野",
+        "province": "河内",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          135.58,
+          34.62
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "plot": 5166,
+        "displacement_km": 16.4
+      },
+      {
+        "id": "rice-bizen",
+        "site": "岡山平野",
+        "province": "備前",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          133.94,
+          34.66
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 6239,
+        "displacement_km": 7.1
+      },
+      {
+        "id": "rice-sanuki",
+        "site": "讃岐平野",
+        "province": "讃岐",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          133.82,
+          34.25
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 5929,
+        "displacement_km": 9.4
+      },
+      {
+        "id": "rice-chikugo",
+        "site": "筑紫平野",
+        "province": "筑前",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          130.49,
+          33.31
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_chikugo"
+        ],
+        "plot": 7455,
+        "displacement_km": 10.3
+      },
+      {
+        "id": "rice-higo",
+        "site": "熊本平野",
+        "province": "肥後",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          130.7,
+          32.79
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 6837,
+        "displacement_km": 10.8
+      },
+      {
+        "id": "salt-noto-suzu",
+        "site": "珠洲沿岸・候補",
+        "province": "能登",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          137.26,
+          37.44
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 6260,
+        "displacement_km": 8.9
+      },
+      {
+        "id": "salt-shima",
+        "site": "志摩沿岸",
+        "province": "伊勢",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          136.82,
+          34.33
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_ise"
+        ],
+        "plot": 4244,
+        "displacement_km": 3.6
+      },
+      {
+        "id": "salt-ako",
+        "site": "赤穂沿岸",
+        "province": "播磨",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          134.39,
+          34.75
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_medieval",
+          "salt_ako"
+        ],
+        "plot": 5933,
+        "displacement_km": 11.8
+      },
+      {
+        "id": "salt-kojima",
+        "site": "児島沿岸",
+        "province": "備前",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          133.83,
+          34.5
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 6238,
+        "displacement_km": 10.8
+      },
+      {
+        "id": "salt-yuge",
+        "site": "弓削島",
+        "province": "伊予",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          133.2,
+          34.28
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 6543,
+        "displacement_km": 18.1
+      },
+      {
+        "id": "salt-shodoshima",
+        "site": "小豆島沿岸",
+        "province": "讃岐",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          134.23,
+          34.48
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 5931,
+        "displacement_km": 3.8
+      },
+      {
+        "id": "tea-uji",
+        "site": "宇治",
+        "province": "山城",
+        "resource_ja": "茶",
+        "resource_id": "RESOURCE_TEA",
+        "official_resource_id": "RESOURCE_TEA",
+        "availability": "official",
+        "coordinates": [
+          135.8,
+          34.89
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "tea_uji"
+        ],
+        "plot": 5167,
+        "displacement_km": 10.1
+      },
+      {
+        "id": "tea-ujitawara",
+        "site": "宇治田原",
+        "province": "山城",
+        "resource_ja": "茶",
+        "resource_id": "RESOURCE_TEA",
+        "official_resource_id": "RESOURCE_TEA",
+        "availability": "official",
+        "coordinates": [
+          135.87,
+          34.85
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "medium",
+        "source_ids": [
+          "tea_uji",
+          "tea_kyoto"
+        ],
+        "plot": 5167,
+        "displacement_km": 2.5,
+        "conflict_with": "tea-uji"
+      },
+      {
+        "id": "silk-kiryu",
+        "site": "桐生・仁田山絹",
+        "province": "上野",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          139.33,
+          36.41
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "silk_kiryu"
+        ],
+        "plot": 4260,
+        "displacement_km": 7.7
+      },
+      {
+        "id": "silk-gunnai",
+        "site": "郡内織物圏",
+        "province": "甲斐",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          138.81,
+          35.55
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "silk_kai"
+        ],
+        "plot": 3947,
+        "displacement_km": 6.7
+      },
+      {
+        "id": "silk-nishijin",
+        "site": "西陣",
+        "province": "山城",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          135.75,
+          35.03
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "silk_nishijin"
+        ],
+        "plot": 5475,
+        "displacement_km": 13.1
+      },
+      {
+        "id": "lacquer-wajima",
+        "site": "輪島塗産地",
+        "province": "能登",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          136.9,
+          37.39
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_wajima"
+        ]
+      },
+      {
+        "id": "lacquer-aizu",
+        "site": "会津漆器産地",
+        "province": "陸奥",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          139.93,
+          37.49
+        ],
+        "start_year": 1590,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_aizu"
+        ]
+      },
+      {
+        "id": "fish-ishikari",
+        "site": "石狩湾",
+        "province": "蝦夷地",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.32,
+          43.3
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general",
+          "river_ishikari"
+        ],
+        "plot": 8297,
+        "displacement_km": 8.1
+      },
+      {
+        "id": "fish-tsugaru",
+        "site": "津軽海峡",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          140.85,
+          41.43
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 7211,
+        "displacement_km": 11.5
+      },
+      {
+        "id": "fish-sanriku-north",
+        "site": "三陸北部",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          142.05,
+          40.02
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 5515,
+        "displacement_km": 8.4
+      },
+      {
+        "id": "fish-sanriku-south",
+        "site": "三陸南部",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.75,
+          39.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 4894,
+        "displacement_km": 14.4
+      },
+      {
+        "id": "fish-sendai",
+        "site": "仙台湾",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.05,
+          38.25
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 4581,
+        "displacement_km": 15.4
+      },
+      {
+        "id": "fish-choshi",
+        "site": "銚子沖",
+        "province": "下総",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          140.73,
+          35.83
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "fishery_tokyo_bay"
+        ],
+        "plot": 3031,
+        "displacement_km": 15.0
+      },
+      {
+        "id": "fish-sagami",
+        "site": "相模湾",
+        "province": "相模",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          139.57,
+          35.1
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 3332,
+        "displacement_km": 9.4
+      },
+      {
+        "id": "fish-ise",
+        "site": "伊勢湾",
+        "province": "伊勢",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          136.75,
+          34.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "fishery_general",
+          "whaling_ise"
+        ],
+        "plot": 4708,
+        "displacement_km": 7.8
+      },
+      {
+        "id": "fish-suruga",
+        "site": "駿河湾",
+        "province": "駿河",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          138.6,
+          34.72
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 3482,
+        "displacement_km": 6.8
+      },
+      {
+        "id": "fish-noto",
+        "site": "能登沖",
+        "province": "能登",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          137.05,
+          37.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 5950,
+        "displacement_km": 6.8
+      },
+      {
+        "id": "fish-seto-bingo",
+        "site": "備後灘",
+        "province": "備後",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          133.2,
+          34.3
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 6388,
+        "displacement_km": 9.5
+      },
+      {
+        "id": "fish-seto-iyo",
+        "site": "燧灘",
+        "province": "伊予",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          132.9,
+          33.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 6387,
+        "displacement_km": 23.6
+      },
+      {
+        "id": "fish-seto-suo",
+        "site": "周防灘",
+        "province": "周防",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          131.7,
+          33.95
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 7153,
+        "displacement_km": 8.9
+      },
+      {
+        "id": "fish-genkai",
+        "site": "玄界灘",
+        "province": "肥前",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          129.65,
+          33.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 8223,
+        "displacement_km": 12.8
+      },
+      {
+        "id": "fish-ariake",
+        "site": "有明海",
+        "province": "肥前",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          130.3,
+          33.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general",
+          "wetlands"
+        ],
+        "plot": 7298,
+        "displacement_km": 4.5
+      },
+      {
+        "id": "fish-tosa",
+        "site": "土佐湾",
+        "province": "土佐",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          133.6,
+          33.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 5462,
+        "displacement_km": 21.9
+      },
+      {
+        "id": "whale-ise",
+        "site": "伊勢湾・回遊海域候補",
+        "province": "伊勢",
+        "resource_ja": "鯨",
+        "resource_id": "RESOURCE_WHALES",
+        "official_resource_id": "RESOURCE_WHALES",
+        "availability": "official",
+        "coordinates": [
+          136.77,
+          34.69
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "whaling_ise"
+        ],
+        "plot": 4553,
+        "displacement_km": 5.2
+      }
+    ],
+    "deferred_resources": [
+      {
+        "id": "gold-izu-toi",
+        "site": "土肥金山",
+        "province": "伊豆",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.79,
+          34.909
+        ],
+        "start_year": 1577,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "toi_mine"
+        ]
+      },
+      {
+        "id": "gold-noto-hodatsu",
+        "site": "宝達金山",
+        "province": "能登",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          136.803,
+          36.784
+        ],
+        "start_year": 1586,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "hodatsu_study"
+        ]
+      },
+      {
+        "id": "gold-sado-nishimikawa",
+        "site": "西三川砂金山・笹川",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.273,
+          37.819
+        ],
+        "start_year": 1593,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer"
+        ]
+      },
+      {
+        "id": "silver-ikuno",
+        "site": "生野銀山",
+        "province": "但馬",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          134.79,
+          35.167
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "ikuno_mine"
+        ]
+      },
+      {
+        "id": "silver-sado-tsurushi",
+        "site": "鶴子銀山",
+        "province": "佐渡",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          138.351,
+          37.927
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_silver"
+        ]
+      },
+      {
+        "id": "silver-nobesawa",
+        "site": "延沢銀山",
+        "province": "出羽",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          140.528,
+          38.568
+        ],
+        "start_year": null,
+        "start_year_range": [
+          1596,
+          1615
+        ],
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "nobesawa_mine"
+        ]
+      },
+      {
+        "id": "copper-ashio",
+        "site": "足尾銅山",
+        "province": "下野",
+        "resource_ja": "銅",
+        "resource_id": "RESOURCE_COPPER",
+        "official_resource_id": "RESOURCE_COPPER",
+        "availability": "official_gathering_storm",
+        "coordinates": [
+          139.446,
+          36.642
+        ],
+        "start_year": 1550,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "ashio_mine"
+        ]
+      },
+      {
+        "id": "lacquer-aizu",
+        "site": "会津漆器産地",
+        "province": "陸奥",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          139.93,
+          37.49
+        ],
+        "start_year": 1590,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_aizu"
+        ]
+      }
+    ],
+    "trade_access": [
+      {
+        "id": "niter-hirado",
+        "commodity_ja": "硝石・焔硝",
+        "civ6_id": "RESOURCE_NITER",
+        "mode": "port_import_access",
+        "port": "平戸",
+        "province": "肥前",
+        "coordinates": [
+          129.553,
+          33.368
+        ],
+        "available_from_year": 1586,
+        "confidence": "medium",
+        "source_ids": [
+          "niter_trade"
+        ],
+        "start_status": "deferred_until_year"
+      },
+      {
+        "id": "niter-sakai",
+        "commodity_ja": "硝石・焔硝",
+        "civ6_id": "RESOURCE_NITER",
+        "mode": "port_import_access",
+        "port": "堺",
+        "province": "和泉",
+        "coordinates": [
+          135.483,
+          34.573
+        ],
+        "available_from_year": null,
+        "date_note": "16世紀の港交易圏としての仮置き。堺での個別硝石輸入を示す同時代史料は今回確認できず",
+        "confidence": "low",
+        "source_ids": [
+          "niter_trade",
+          "sakai_trade"
+        ],
+        "start_status": "undated_trade_access_not_placed"
+      }
+    ],
+    "custom_content_required": [
+      {
+        "type": "RESOURCE_JAC_GOLD",
+        "kind": "resource",
+        "resource_ja": "金",
+        "candidate_ids": [
+          "gold-kai-kurokawa",
+          "gold-kai-nakayama",
+          "gold-izu-toi",
+          "gold-noto-hodatsu",
+          "gold-sado-nishimikawa"
+        ],
+        "status": "requires_custom_resource_definition"
+      },
+      {
+        "type": "RESOURCE_JAC_LACQUER",
+        "kind": "resource",
+        "resource_ja": "漆",
+        "candidate_ids": [
+          "lacquer-wajima",
+          "lacquer-aizu"
+        ],
+        "status": "requires_custom_resource_definition"
+      },
+      {
+        "type": "FEATURE_JAC_FUJI",
+        "kind": "feature",
+        "name_ja": "富士山",
+        "candidate_ids": [
+          "wonder-fuji-custom"
+        ],
+        "status": "not_selected_or_implemented"
+      },
+      {
+        "type": "FEATURE_JAC_ASO_CALDERA",
+        "kind": "feature",
+        "name_ja": "阿蘇カルデラ",
+        "candidate_ids": [
+          "wonder-aso-caldera-alternative"
+        ],
+        "status": "not_selected_or_implemented"
+      }
+    ],
+    "rivers": [
+      {
+        "id": "river-ishikari",
+        "name_ja": "石狩川",
+        "source_ids": [
+          "river_ishikari"
+        ],
+        "confidence": null,
+        "historical_note": "明治以後に直線化・捷水路化された下流河道は概略補正が必要",
+        "edge_count": 22,
+        "edge_path": [
+          {
+            "plot": 7688,
+            "side": "W",
+            "neighbor": 7687
+          },
+          {
+            "plot": 7842,
+            "side": "NW",
+            "neighbor": 7687
+          },
+          {
+            "plot": 7842,
+            "side": "W",
+            "neighbor": 7841
+          },
+          {
+            "plot": 7995,
+            "side": "NW",
+            "neighbor": 7841
+          },
+          {
+            "plot": 7995,
+            "side": "W",
+            "neighbor": 7994
+          },
+          {
+            "plot": 8149,
+            "side": "NW",
+            "neighbor": 7994
+          },
+          {
+            "plot": 8148,
+            "side": "NE",
+            "neighbor": 7994
+          },
+          {
+            "plot": 8148,
+            "side": "NW",
+            "neighbor": 7993
+          },
+          {
+            "plot": 8148,
+            "side": "W",
+            "neighbor": 8147
+          },
+          {
+            "plot": 8301,
+            "side": "NW",
+            "neighbor": 8147
+          },
+          {
+            "plot": 8300,
+            "side": "NE",
+            "neighbor": 8147
+          },
+          {
+            "plot": 8147,
+            "side": "W",
+            "neighbor": 8146
+          },
+          {
+            "plot": 8146,
+            "side": "NE",
+            "neighbor": 7992
+          },
+          {
+            "plot": 8146,
+            "side": "NW",
+            "neighbor": 7991
+          },
+          {
+            "plot": 8145,
+            "side": "NE",
+            "neighbor": 7991
+          },
+          {
+            "plot": 8145,
+            "side": "NW",
+            "neighbor": 7990
+          },
+          {
+            "plot": 8144,
+            "side": "NE",
+            "neighbor": 7990
+          },
+          {
+            "plot": 8144,
+            "side": "NW",
+            "neighbor": 7989
+          },
+          {
+            "plot": 8143,
+            "side": "NE",
+            "neighbor": 7989
+          },
+          {
+            "plot": 7989,
+            "side": "W",
+            "neighbor": 7988
+          },
+          {
+            "plot": 8143,
+            "side": "NE",
+            "neighbor": 7989
+          },
+          {
+            "plot": 8144,
+            "side": "W",
+            "neighbor": 8143
+          }
+        ]
+      },
+      {
+        "id": "river-kitakami",
+        "name_ja": "北上川",
+        "source_ids": [
+          "river_kitakami"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 19,
+        "edge_path": [
+          {
+            "plot": 5973,
+            "side": "NE",
+            "neighbor": 5819
+          },
+          {
+            "plot": 5819,
+            "side": "W",
+            "neighbor": 5818
+          },
+          {
+            "plot": 5819,
+            "side": "NW",
+            "neighbor": 5665
+          },
+          {
+            "plot": 5818,
+            "side": "NE",
+            "neighbor": 5665
+          },
+          {
+            "plot": 5665,
+            "side": "W",
+            "neighbor": 5664
+          },
+          {
+            "plot": 5664,
+            "side": "NE",
+            "neighbor": 5510
+          },
+          {
+            "plot": 5510,
+            "side": "W",
+            "neighbor": 5509
+          },
+          {
+            "plot": 5509,
+            "side": "NE",
+            "neighbor": 5356
+          },
+          {
+            "plot": 5356,
+            "side": "W",
+            "neighbor": 5355
+          },
+          {
+            "plot": 5355,
+            "side": "NE",
+            "neighbor": 5201
+          },
+          {
+            "plot": 5355,
+            "side": "NW",
+            "neighbor": 5200
+          },
+          {
+            "plot": 5354,
+            "side": "NE",
+            "neighbor": 5200
+          },
+          {
+            "plot": 5200,
+            "side": "W",
+            "neighbor": 5199
+          },
+          {
+            "plot": 5199,
+            "side": "NE",
+            "neighbor": 5046
+          },
+          {
+            "plot": 5046,
+            "side": "W",
+            "neighbor": 5045
+          },
+          {
+            "plot": 5045,
+            "side": "NE",
+            "neighbor": 4891
+          },
+          {
+            "plot": 4891,
+            "side": "W",
+            "neighbor": 4890
+          },
+          {
+            "plot": 4890,
+            "side": "NE",
+            "neighbor": 4737
+          },
+          {
+            "plot": 4737,
+            "side": "W",
+            "neighbor": 4736
+          }
+        ]
+      },
+      {
+        "id": "river-mogami",
+        "name_ja": "最上川",
+        "source_ids": [
+          "river_mogami"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 17,
+        "edge_path": [
+          {
+            "plot": 4885,
+            "side": "W",
+            "neighbor": 4884
+          },
+          {
+            "plot": 5039,
+            "side": "NW",
+            "neighbor": 4884
+          },
+          {
+            "plot": 5039,
+            "side": "NE",
+            "neighbor": 4885
+          },
+          {
+            "plot": 5040,
+            "side": "NW",
+            "neighbor": 4885
+          },
+          {
+            "plot": 5040,
+            "side": "NE",
+            "neighbor": 4886
+          },
+          {
+            "plot": 5041,
+            "side": "W",
+            "neighbor": 5040
+          },
+          {
+            "plot": 5194,
+            "side": "NE",
+            "neighbor": 5041
+          },
+          {
+            "plot": 5195,
+            "side": "W",
+            "neighbor": 5194
+          },
+          {
+            "plot": 5349,
+            "side": "NE",
+            "neighbor": 5195
+          },
+          {
+            "plot": 5350,
+            "side": "NW",
+            "neighbor": 5195
+          },
+          {
+            "plot": 5350,
+            "side": "NE",
+            "neighbor": 5196
+          },
+          {
+            "plot": 5351,
+            "side": "W",
+            "neighbor": 5350
+          },
+          {
+            "plot": 5504,
+            "side": "NE",
+            "neighbor": 5351
+          },
+          {
+            "plot": 5505,
+            "side": "W",
+            "neighbor": 5504
+          },
+          {
+            "plot": 5659,
+            "side": "NW",
+            "neighbor": 5504
+          },
+          {
+            "plot": 5659,
+            "side": "W",
+            "neighbor": 5658
+          },
+          {
+            "plot": 5812,
+            "side": "NW",
+            "neighbor": 5658
+          }
+        ]
+      },
+      {
+        "id": "river-tone-1534",
+        "name_ja": "利根川（1534年旧流路概略）",
+        "source_ids": [
+          "river_tone",
+          "tone_old_course"
+        ],
+        "confidence": "low",
+        "historical_note": "1594年以後の東遷前。下流位置は歴史河道の概略候補であり、旧流路の水理・分流を復元した測量線ではない",
+        "edge_count": 19,
+        "edge_path": [
+          {
+            "plot": 4877,
+            "side": "NE",
+            "neighbor": 4724
+          },
+          {
+            "plot": 4724,
+            "side": "W",
+            "neighbor": 4723
+          },
+          {
+            "plot": 4723,
+            "side": "NE",
+            "neighbor": 4569
+          },
+          {
+            "plot": 4723,
+            "side": "NW",
+            "neighbor": 4568
+          },
+          {
+            "plot": 4569,
+            "side": "W",
+            "neighbor": 4568
+          },
+          {
+            "plot": 4568,
+            "side": "NE",
+            "neighbor": 4415
+          },
+          {
+            "plot": 4415,
+            "side": "W",
+            "neighbor": 4414
+          },
+          {
+            "plot": 4414,
+            "side": "NE",
+            "neighbor": 4260
+          },
+          {
+            "plot": 4414,
+            "side": "NW",
+            "neighbor": 4259
+          },
+          {
+            "plot": 4260,
+            "side": "W",
+            "neighbor": 4259
+          },
+          {
+            "plot": 4259,
+            "side": "NE",
+            "neighbor": 4106
+          },
+          {
+            "plot": 4106,
+            "side": "W",
+            "neighbor": 4105
+          },
+          {
+            "plot": 4106,
+            "side": "NW",
+            "neighbor": 3951
+          },
+          {
+            "plot": 3952,
+            "side": "W",
+            "neighbor": 3951
+          },
+          {
+            "plot": 3951,
+            "side": "NE",
+            "neighbor": 3798
+          },
+          {
+            "plot": 3798,
+            "side": "W",
+            "neighbor": 3797
+          },
+          {
+            "plot": 3798,
+            "side": "NW",
+            "neighbor": 3643
+          },
+          {
+            "plot": 3644,
+            "side": "W",
+            "neighbor": 3643
+          },
+          {
+            "plot": 3643,
+            "side": "NE",
+            "neighbor": 3490
+          }
+        ]
+      },
+      {
+        "id": "river-shinano",
+        "name_ja": "信濃川・千曲川",
+        "source_ids": [
+          "river_shinano"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 34,
+        "edge_path": [
+          {
+            "plot": 4411,
+            "side": "NE",
+            "neighbor": 4257
+          },
+          {
+            "plot": 4412,
+            "side": "W",
+            "neighbor": 4411
+          },
+          {
+            "plot": 4565,
+            "side": "NW",
+            "neighbor": 4411
+          },
+          {
+            "plot": 4565,
+            "side": "W",
+            "neighbor": 4564
+          },
+          {
+            "plot": 4719,
+            "side": "NE",
+            "neighbor": 4565
+          },
+          {
+            "plot": 4720,
+            "side": "W",
+            "neighbor": 4719
+          },
+          {
+            "plot": 4873,
+            "side": "NE",
+            "neighbor": 4720
+          },
+          {
+            "plot": 4874,
+            "side": "W",
+            "neighbor": 4873
+          },
+          {
+            "plot": 5028,
+            "side": "NW",
+            "neighbor": 4873
+          },
+          {
+            "plot": 5028,
+            "side": "W",
+            "neighbor": 5027
+          },
+          {
+            "plot": 5181,
+            "side": "NE",
+            "neighbor": 5028
+          },
+          {
+            "plot": 5182,
+            "side": "W",
+            "neighbor": 5181
+          },
+          {
+            "plot": 5336,
+            "side": "NE",
+            "neighbor": 5182
+          },
+          {
+            "plot": 5337,
+            "side": "NW",
+            "neighbor": 5182
+          },
+          {
+            "plot": 5337,
+            "side": "NE",
+            "neighbor": 5183
+          },
+          {
+            "plot": 5338,
+            "side": "W",
+            "neighbor": 5337
+          },
+          {
+            "plot": 5491,
+            "side": "NE",
+            "neighbor": 5338
+          },
+          {
+            "plot": 5492,
+            "side": "W",
+            "neighbor": 5491
+          },
+          {
+            "plot": 5492,
+            "side": "NW",
+            "neighbor": 5338
+          },
+          {
+            "plot": 5339,
+            "side": "W",
+            "neighbor": 5338
+          },
+          {
+            "plot": 5339,
+            "side": "NW",
+            "neighbor": 5184
+          },
+          {
+            "plot": 5339,
+            "side": "NE",
+            "neighbor": 5185
+          },
+          {
+            "plot": 5340,
+            "side": "NW",
+            "neighbor": 5185
+          },
+          {
+            "plot": 5340,
+            "side": "NE",
+            "neighbor": 5186
+          },
+          {
+            "plot": 5341,
+            "side": "NW",
+            "neighbor": 5186
+          },
+          {
+            "plot": 5341,
+            "side": "NE",
+            "neighbor": 5187
+          },
+          {
+            "plot": 5342,
+            "side": "W",
+            "neighbor": 5341
+          },
+          {
+            "plot": 5342,
+            "side": "NW",
+            "neighbor": 5187
+          },
+          {
+            "plot": 5342,
+            "side": "NE",
+            "neighbor": 5188
+          },
+          {
+            "plot": 5343,
+            "side": "W",
+            "neighbor": 5342
+          },
+          {
+            "plot": 5496,
+            "side": "NE",
+            "neighbor": 5343
+          },
+          {
+            "plot": 5497,
+            "side": "NW",
+            "neighbor": 5343
+          },
+          {
+            "plot": 5497,
+            "side": "NE",
+            "neighbor": 5344
+          },
+          {
+            "plot": 5498,
+            "side": "W",
+            "neighbor": 5497
+          }
+        ]
+      },
+      {
+        "id": "river-kiso",
+        "name_ja": "木曽川",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 20,
+        "edge_path": [
+          {
+            "plot": 5024,
+            "side": "NE",
+            "neighbor": 4870
+          },
+          {
+            "plot": 4870,
+            "side": "W",
+            "neighbor": 4869
+          },
+          {
+            "plot": 4869,
+            "side": "NE",
+            "neighbor": 4716
+          },
+          {
+            "plot": 4869,
+            "side": "NW",
+            "neighbor": 4715
+          },
+          {
+            "plot": 4868,
+            "side": "NE",
+            "neighbor": 4715
+          },
+          {
+            "plot": 4715,
+            "side": "W",
+            "neighbor": 4714
+          },
+          {
+            "plot": 4868,
+            "side": "NW",
+            "neighbor": 4714
+          },
+          {
+            "plot": 4867,
+            "side": "NE",
+            "neighbor": 4714
+          },
+          {
+            "plot": 4867,
+            "side": "NW",
+            "neighbor": 4713
+          },
+          {
+            "plot": 4866,
+            "side": "NE",
+            "neighbor": 4713
+          },
+          {
+            "plot": 4866,
+            "side": "NW",
+            "neighbor": 4712
+          },
+          {
+            "plot": 4866,
+            "side": "W",
+            "neighbor": 4865
+          },
+          {
+            "plot": 5020,
+            "side": "NW",
+            "neighbor": 4865
+          },
+          {
+            "plot": 5019,
+            "side": "NE",
+            "neighbor": 4865
+          },
+          {
+            "plot": 5019,
+            "side": "NW",
+            "neighbor": 4864
+          },
+          {
+            "plot": 5019,
+            "side": "W",
+            "neighbor": 5018
+          },
+          {
+            "plot": 5018,
+            "side": "NE",
+            "neighbor": 4864
+          },
+          {
+            "plot": 5018,
+            "side": "NW",
+            "neighbor": 4863
+          },
+          {
+            "plot": 5017,
+            "side": "NE",
+            "neighbor": 4863
+          },
+          {
+            "plot": 4863,
+            "side": "W",
+            "neighbor": 4862
+          }
+        ]
+      },
+      {
+        "id": "river-yodo",
+        "name_ja": "瀬田川・宇治川・淀川",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 12,
+        "edge_path": [
+          {
+            "plot": 5324,
+            "side": "NE",
+            "neighbor": 5170
+          },
+          {
+            "plot": 5324,
+            "side": "NW",
+            "neighbor": 5169
+          },
+          {
+            "plot": 5323,
+            "side": "NE",
+            "neighbor": 5169
+          },
+          {
+            "plot": 5323,
+            "side": "NW",
+            "neighbor": 5168
+          },
+          {
+            "plot": 5322,
+            "side": "NE",
+            "neighbor": 5168
+          },
+          {
+            "plot": 5322,
+            "side": "NW",
+            "neighbor": 5167
+          },
+          {
+            "plot": 5321,
+            "side": "NE",
+            "neighbor": 5167
+          },
+          {
+            "plot": 5322,
+            "side": "W",
+            "neighbor": 5321
+          },
+          {
+            "plot": 5475,
+            "side": "NW",
+            "neighbor": 5321
+          },
+          {
+            "plot": 5474,
+            "side": "NE",
+            "neighbor": 5321
+          },
+          {
+            "plot": 5474,
+            "side": "NW",
+            "neighbor": 5320
+          },
+          {
+            "plot": 5473,
+            "side": "NE",
+            "neighbor": 5320
+          }
+        ]
+      },
+      {
+        "id": "river-hii",
+        "name_ja": "斐伊川",
+        "source_ids": [
+          "river_hii"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 6,
+        "edge_path": [
+          {
+            "plot": 7162,
+            "side": "NE",
+            "neighbor": 7008
+          },
+          {
+            "plot": 7163,
+            "side": "W",
+            "neighbor": 7162
+          },
+          {
+            "plot": 7163,
+            "side": "NW",
+            "neighbor": 7008
+          },
+          {
+            "plot": 7163,
+            "side": "NE",
+            "neighbor": 7009
+          },
+          {
+            "plot": 7164,
+            "side": "W",
+            "neighbor": 7163
+          },
+          {
+            "plot": 7317,
+            "side": "NW",
+            "neighbor": 7163
+          }
+        ]
+      },
+      {
+        "id": "river-yoshino",
+        "name_ja": "吉野川",
+        "source_ids": [
+          "river_yoshino"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 18,
+        "edge_path": [
+          {
+            "plot": 6078,
+            "side": "W",
+            "neighbor": 6077
+          },
+          {
+            "plot": 6078,
+            "side": "NW",
+            "neighbor": 5924
+          },
+          {
+            "plot": 6078,
+            "side": "NE",
+            "neighbor": 5925
+          },
+          {
+            "plot": 6079,
+            "side": "NW",
+            "neighbor": 5925
+          },
+          {
+            "plot": 5926,
+            "side": "W",
+            "neighbor": 5925
+          },
+          {
+            "plot": 5926,
+            "side": "NW",
+            "neighbor": 5771
+          },
+          {
+            "plot": 5926,
+            "side": "NE",
+            "neighbor": 5772
+          },
+          {
+            "plot": 5927,
+            "side": "NW",
+            "neighbor": 5772
+          },
+          {
+            "plot": 5927,
+            "side": "NE",
+            "neighbor": 5773
+          },
+          {
+            "plot": 5928,
+            "side": "NW",
+            "neighbor": 5773
+          },
+          {
+            "plot": 5774,
+            "side": "W",
+            "neighbor": 5773
+          },
+          {
+            "plot": 5774,
+            "side": "NW",
+            "neighbor": 5620
+          },
+          {
+            "plot": 5621,
+            "side": "W",
+            "neighbor": 5620
+          },
+          {
+            "plot": 5621,
+            "side": "NW",
+            "neighbor": 5466
+          },
+          {
+            "plot": 5621,
+            "side": "NE",
+            "neighbor": 5467
+          },
+          {
+            "plot": 5622,
+            "side": "NW",
+            "neighbor": 5467
+          },
+          {
+            "plot": 5468,
+            "side": "W",
+            "neighbor": 5467
+          },
+          {
+            "plot": 5468,
+            "side": "NW",
+            "neighbor": 5314
+          }
+        ]
+      },
+      {
+        "id": "river-chikugo",
+        "name_ja": "筑後川",
+        "source_ids": [
+          "river_chikugo"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 10,
+        "edge_path": [
+          {
+            "plot": 6840,
+            "side": "W",
+            "neighbor": 6839
+          },
+          {
+            "plot": 6993,
+            "side": "NE",
+            "neighbor": 6840
+          },
+          {
+            "plot": 6994,
+            "side": "W",
+            "neighbor": 6993
+          },
+          {
+            "plot": 7148,
+            "side": "NW",
+            "neighbor": 6993
+          },
+          {
+            "plot": 7148,
+            "side": "W",
+            "neighbor": 7147
+          },
+          {
+            "plot": 7301,
+            "side": "NW",
+            "neighbor": 7147
+          },
+          {
+            "plot": 7301,
+            "side": "W",
+            "neighbor": 7300
+          },
+          {
+            "plot": 7455,
+            "side": "NW",
+            "neighbor": 7300
+          },
+          {
+            "plot": 7454,
+            "side": "NE",
+            "neighbor": 7300
+          },
+          {
+            "plot": 7454,
+            "side": "NW",
+            "neighbor": 7299
+          }
+        ]
+      }
+    ],
+    "river_edge_count": 177,
+    "river_edge_unique_count": 176,
+    "lake_records": [
+      {
+        "id": "lake-biwa",
+        "name_ja": "琵琶湖",
+        "province": "近江",
+        "tile_ids": [
+          5325,
+          5478
+        ],
+        "tile_count": 2,
+        "area_km2": 670.3,
+        "tile_hint": "2-4",
+        "source_ids": [
+          "lake_biwa",
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-inawashiro",
+        "name_ja": "猪苗代湖",
+        "province": "陸奥",
+        "tile_ids": [
+          4575
+        ],
+        "tile_count": 1,
+        "area_km2": 103.3,
+        "tile_hint": "1",
+        "source_ids": [
+          "lake_inawashiro",
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-kasumigaura",
+        "name_ja": "霞ヶ浦",
+        "province": "常陸",
+        "tile_ids": [
+          3493
+        ],
+        "tile_count": 1,
+        "area_km2": 167.6,
+        "tile_hint": "1-2",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-towada",
+        "name_ja": "十和田湖",
+        "province": "陸奥",
+        "tile_ids": [
+          6437
+        ],
+        "tile_count": 1,
+        "area_km2": 61.0,
+        "tile_hint": "1",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-shinji",
+        "name_ja": "宍道湖",
+        "province": "出雲",
+        "tile_ids": [
+          7316
+        ],
+        "tile_count": 1,
+        "area_km2": 79.1,
+        "tile_hint": "1",
+        "source_ids": [
+          "river_hii"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-suwa",
+        "name_ja": "諏訪湖",
+        "province": "信濃",
+        "tile_ids": [
+          4871
+        ],
+        "tile_count": 1,
+        "area_km2": 13.3,
+        "tile_hint": "1",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      }
+    ],
+    "terrain_features": {
+      "feature_counts": {
+        "FEATURE_FOREST": 402,
+        "FEATURE_MARSH": 27,
+        "FEATURE_VOLCANO": 5
+      },
+      "forest": {
+        "feature_id": "FEATURE_FOREST",
+        "target_percent": 45,
+        "eligible_tiles": 893,
+        "placed_count": 402,
+        "placed_percent": 45.02,
+        "rice_basin_exclusion_radius_km": 23.0,
+        "source_ids": [
+          "forest_history",
+          "vegetation_gis"
+        ]
+      },
+      "marsh": {
+        "feature_id": "FEATURE_MARSH",
+        "target_count": 27,
+        "placed_count": 27,
+        "eligible_flat_land_tiles": 603,
+        "cluster_ids": [
+          "marsh-kushiro",
+          "marsh-sarobetsu",
+          "marsh-oze",
+          "marsh-nakaumi-shinji",
+          "marsh-kiso-delta",
+          "marsh-tone-lowland",
+          "marsh-ariake"
+        ],
+        "clusters": [
+          {
+            "id": "marsh-kushiro",
+            "site": "釧路湿原",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-sarobetsu",
+            "site": "サロベツ原野",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-oze",
+            "site": "尾瀬",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-nakaumi-shinji",
+            "site": "中海・宍道湖周辺",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-kiso-delta",
+            "site": "木曽三川低地",
+            "source_ids": [
+              "wetlands",
+              "river_kiso"
+            ]
+          },
+          {
+            "id": "marsh-tone-lowland",
+            "site": "利根川旧下流低地",
+            "source_ids": [
+              "river_tone",
+              "tone_old_course"
+            ]
+          },
+          {
+            "id": "marsh-ariake",
+            "site": "筑後川河口・有明海",
+            "source_ids": [
+              "wetlands",
+              "river_chikugo"
+            ]
+          }
+        ],
+        "source_ids": []
+      },
+      "volcanoes": [
+        {
+          "id": "volcano-asama",
+          "site": "浅間山",
+          "plot": 4720,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "上野・信濃",
+          "coordinates": [
+            138.523,
+            36.406
+          ],
+          "displacement_km": 5.3,
+          "eruption_years_in_scope": [
+            1532,
+            1534,
+            1582,
+            1590,
+            1591,
+            1596
+          ],
+          "source_ids": [
+            "volcano_asama"
+          ],
+          "terrain_promoted_to_mountain": true
+        },
+        {
+          "id": "volcano-fuji",
+          "site": "富士山",
+          "plot": 3946,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "駿河・甲斐",
+          "coordinates": [
+            138.727,
+            35.361
+          ],
+          "displacement_km": 5.7,
+          "eruption_years_in_scope": [],
+          "source_ids": [
+            "volcano_fuji"
+          ],
+          "terrain_promoted_to_mountain": false
+        },
+        {
+          "id": "volcano-aso",
+          "site": "阿蘇山・中岳",
+          "plot": 6684,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "肥後",
+          "coordinates": [
+            131.104,
+            32.884
+          ],
+          "displacement_km": 7.2,
+          "eruption_years_in_scope": [
+            1533,
+            1542,
+            1558,
+            1559,
+            1562,
+            1573,
+            1574,
+            1576,
+            1582,
+            1583,
+            1584,
+            1587
+          ],
+          "source_ids": [
+            "volcano_aso"
+          ],
+          "terrain_promoted_to_mountain": true
+        },
+        {
+          "id": "volcano-sakurajima",
+          "site": "桜島",
+          "plot": 6061,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "大隅",
+          "coordinates": [
+            130.66,
+            31.59
+          ],
+          "displacement_km": 14.6,
+          "eruption_years_in_scope": [],
+          "source_ids": [
+            "volcano_sakurajima"
+          ],
+          "terrain_promoted_to_mountain": true
+        },
+        {
+          "id": "volcano-kirishima",
+          "site": "霧島山・御鉢",
+          "plot": 6218,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "日向・大隅",
+          "coordinates": [
+            130.86,
+            31.91
+          ],
+          "displacement_km": 5.7,
+          "eruption_years_in_scope": [
+            1554,
+            1555,
+            1588
+          ],
+          "source_ids": [
+            "volcano_kirishima"
+          ],
+          "terrain_promoted_to_mountain": true
+        }
+      ],
+      "lakes": [
+        {
+          "id": "lake-biwa",
+          "name_ja": "琵琶湖",
+          "province": "近江",
+          "tile_ids": [
+            5325,
+            5478
+          ],
+          "tile_count": 2,
+          "area_km2": 670.3,
+          "tile_hint": "2-4",
+          "source_ids": [
+            "lake_biwa",
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-inawashiro",
+          "name_ja": "猪苗代湖",
+          "province": "陸奥",
+          "tile_ids": [
+            4575
+          ],
+          "tile_count": 1,
+          "area_km2": 103.3,
+          "tile_hint": "1",
+          "source_ids": [
+            "lake_inawashiro",
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-kasumigaura",
+          "name_ja": "霞ヶ浦",
+          "province": "常陸",
+          "tile_ids": [
+            3493
+          ],
+          "tile_count": 1,
+          "area_km2": 167.6,
+          "tile_hint": "1-2",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-towada",
+          "name_ja": "十和田湖",
+          "province": "陸奥",
+          "tile_ids": [
+            6437
+          ],
+          "tile_count": 1,
+          "area_km2": 61.0,
+          "tile_hint": "1",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-shinji",
+          "name_ja": "宍道湖",
+          "province": "出雲",
+          "tile_ids": [
+            7316
+          ],
+          "tile_count": 1,
+          "area_km2": 79.1,
+          "tile_hint": "1",
+          "source_ids": [
+            "river_hii"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-suwa",
+          "name_ja": "諏訪湖",
+          "province": "信濃",
+          "tile_ids": [
+            4871
+          ],
+          "tile_count": 1,
+          "area_km2": 13.3,
+          "tile_hint": "1",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        }
+      ],
+      "natural_wonder_candidates": [
+        {
+          "id": "wonder-fuji-custom",
+          "name_ja": "富士山",
+          "coordinates": [
+            138.727,
+            35.361
+          ],
+          "civ6_official_gs_wonder": false,
+          "proposed_custom_feature_id": "FEATURE_JAC_FUJI",
+          "priority": 1,
+          "mutually_exclusive_with": [
+            "volcano-fuji"
+          ],
+          "source_ids": [
+            "fuji_unesco",
+            "civ6_gs_manual"
+          ],
+          "status": "not_placed_custom_feature_candidate"
+        },
+        {
+          "id": "wonder-aso-caldera-alternative",
+          "name_ja": "阿蘇カルデラ",
+          "coordinates": [
+            131.1,
+            32.9
+          ],
+          "civ6_official_gs_wonder": false,
+          "proposed_custom_feature_id": "FEATURE_JAC_ASO_CALDERA",
+          "priority": 2,
+          "mutually_exclusive_with": [
+            "wonder-fuji-custom",
+            "volcano-aso"
+          ],
+          "source_ids": [
+            "volcano_aso"
+          ],
+          "status": "not_placed_custom_feature_candidate"
+        }
+      ],
+      "lake_schema_representation": "WorldBuilderMap has no lake table or FEATURE_LAKE; lake plots use TERRAIN_COAST"
+    },
     "start_mode": "historical",
     "file": "JAC_Japan_20km.Civ6Map",
-    "bytes": 520192,
+    "bytes": 532480,
     "settler_file": "JAC_Japan_20km_Settlers.Civ6Map"
   },
   {
     "km_per_tile": 15,
     "width": 204,
     "height": 88,
-    "land_tiles": 1914,
-    "sea_tiles": 16038,
+    "grid_origin_projected_km": [
+      -1937.19265,
+      -524.102064
+    ],
+    "land_tiles": 1906,
+    "sea_tiles": 16046,
+    "rasterized_land_tiles_before_lakes": 1914,
     "starts": [
       {
         "seat": "ODA",
@@ -2662,9 +6013,3626 @@
         2
       ]
     ],
+    "resource_placement": {
+      "candidate_count": 67,
+      "placed_count": 53,
+      "land_candidate_count": 39,
+      "marine_candidate_count": 17,
+      "count_by_type": {
+        "RESOURCE_FISH": 16,
+        "RESOURCE_HORSES": 6,
+        "RESOURCE_IRON": 6,
+        "RESOURCE_RICE": 12,
+        "RESOURCE_SALT": 6,
+        "RESOURCE_SILK": 3,
+        "RESOURCE_SILVER": 1,
+        "RESOURCE_TEA": 2,
+        "RESOURCE_WHALES": 1
+      },
+      "candidate_status_counts": {
+        "custom_type_and_later_release": 4,
+        "custom_type_required": 3,
+        "deferred": 4,
+        "placed": 53,
+        "same_tile_conflict": 3
+      },
+      "custom_resource_ids": [
+        "RESOURCE_JAC_GOLD",
+        "RESOURCE_JAC_LACQUER"
+      ]
+    },
+    "resource_candidates": [
+      {
+        "id": "gold-kai-kurokawa",
+        "site": "黒川金山",
+        "province": "甲斐",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.825,
+          35.817
+        ],
+        "start_year": null,
+        "start_year_range": [
+          "15世紀末",
+          "17世紀"
+        ],
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "kai_mines"
+        ]
+      },
+      {
+        "id": "gold-kai-nakayama",
+        "site": "中山金山",
+        "province": "甲斐",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.464,
+          35.377
+        ],
+        "start_year": null,
+        "start_year_range": [
+          "16世紀前後",
+          "17世紀末"
+        ],
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "nakayama_mine"
+        ]
+      },
+      {
+        "id": "gold-izu-toi",
+        "site": "土肥金山",
+        "province": "伊豆",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.79,
+          34.909
+        ],
+        "start_year": 1577,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "toi_mine"
+        ]
+      },
+      {
+        "id": "gold-noto-hodatsu",
+        "site": "宝達金山",
+        "province": "能登",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          136.803,
+          36.784
+        ],
+        "start_year": 1586,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "hodatsu_study"
+        ]
+      },
+      {
+        "id": "gold-sado-nishimikawa",
+        "site": "西三川砂金山・笹川",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.273,
+          37.819
+        ],
+        "start_year": 1593,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer"
+        ]
+      },
+      {
+        "id": "silver-iwami",
+        "site": "石見銀山・大森",
+        "province": "石見",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          132.437,
+          35.103
+        ],
+        "start_year": 1526,
+        "start_year_range": null,
+        "available_at_start": true,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "iwami_unesco",
+          "iwami_discovery"
+        ],
+        "plot": 12749,
+        "displacement_km": 10.0
+      },
+      {
+        "id": "silver-ikuno",
+        "site": "生野銀山",
+        "province": "但馬",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          134.79,
+          35.167
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "ikuno_mine"
+        ]
+      },
+      {
+        "id": "silver-sado-tsurushi",
+        "site": "鶴子銀山",
+        "province": "佐渡",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          138.351,
+          37.927
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_silver"
+        ]
+      },
+      {
+        "id": "silver-nobesawa",
+        "site": "延沢銀山",
+        "province": "出羽",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          140.528,
+          38.568
+        ],
+        "start_year": null,
+        "start_year_range": [
+          1596,
+          1615
+        ],
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "nobesawa_mine"
+        ]
+      },
+      {
+        "id": "copper-ashio",
+        "site": "足尾銅山",
+        "province": "下野",
+        "resource_ja": "銅",
+        "resource_id": "RESOURCE_COPPER",
+        "official_resource_id": "RESOURCE_COPPER",
+        "availability": "official_gathering_storm",
+        "coordinates": [
+          139.446,
+          36.642
+        ],
+        "start_year": 1550,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "ashio_mine"
+        ]
+      },
+      {
+        "id": "iron-izumo-yokota",
+        "site": "横田・奥出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.092,
+          35.199
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 12344,
+        "displacement_km": 1.8
+      },
+      {
+        "id": "iron-izumo-sata",
+        "site": "佐田・出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.88,
+          35.185
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 12547,
+        "displacement_km": 7.2,
+        "conflict_with": "iron-izumo-mitoya"
+      },
+      {
+        "id": "iron-izumo-mitoya",
+        "site": "三刀屋・出雲",
+        "province": "出雲",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.901,
+          35.274
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_shimane"
+        ],
+        "plot": 12547,
+        "displacement_km": 4.0
+      },
+      {
+        "id": "iron-hoki-nichinan",
+        "site": "日南・日野郡",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.244,
+          35.16
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 12140,
+        "displacement_km": 2.7
+      },
+      {
+        "id": "iron-hoki-kofu",
+        "site": "江府・日野郡",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.417,
+          35.225
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 11937,
+        "displacement_km": 7.8
+      },
+      {
+        "id": "iron-hoki-misasa",
+        "site": "三朝・東伯耆",
+        "province": "伯耆",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          133.766,
+          35.41
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tatara_hoki"
+        ],
+        "plot": 11940,
+        "displacement_km": 5.5
+      },
+      {
+        "id": "iron-iwami-mountains",
+        "site": "石見山地・候補圏",
+        "province": "石見",
+        "resource_ja": "鉄",
+        "resource_id": "RESOURCE_IRON",
+        "official_resource_id": "RESOURCE_IRON",
+        "availability": "official",
+        "coordinates": [
+          132.15,
+          35.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "tatara_distribution"
+        ],
+        "plot": 12951,
+        "displacement_km": 10.6
+      },
+      {
+        "id": "horse-nanbu-shichinohe",
+        "site": "糠部・七戸周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.15,
+          40.69
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 11182,
+        "displacement_km": 0.6
+      },
+      {
+        "id": "horse-nanbu-kuji",
+        "site": "糠部・九戸周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.59,
+          40.18
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 10161,
+        "displacement_km": 4.8
+      },
+      {
+        "id": "horse-nanbu-morioka",
+        "site": "南部馬産圏・盛岡周辺",
+        "province": "陸奥",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          141.15,
+          39.7
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_nanbu"
+        ],
+        "plot": 9953,
+        "displacement_km": 2.6
+      },
+      {
+        "id": "horse-kai-hosaka",
+        "site": "穂坂牧周辺",
+        "province": "甲斐",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          138.43,
+          35.75
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "horse_kai"
+        ],
+        "plot": 7473,
+        "displacement_km": 3.9
+      },
+      {
+        "id": "horse-kiso",
+        "site": "木曽谷・開田高原",
+        "province": "信濃",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          137.56,
+          35.95
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "horse_kiso"
+        ],
+        "plot": 8695,
+        "displacement_km": 8.1
+      },
+      {
+        "id": "horse-shimosa",
+        "site": "下総台地・牧候補圏",
+        "province": "下総",
+        "resource_ja": "馬",
+        "resource_id": "RESOURCE_HORSES",
+        "official_resource_id": "RESOURCE_HORSES",
+        "availability": "official",
+        "coordinates": [
+          140.13,
+          35.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "horse_shimosa"
+        ],
+        "plot": 5849,
+        "displacement_km": 5.3
+      },
+      {
+        "id": "rice-echigo",
+        "site": "越後平野",
+        "province": "越後",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.05,
+          37.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_shinano"
+        ],
+        "plot": 9527,
+        "displacement_km": 4.7
+      },
+      {
+        "id": "rice-shonai",
+        "site": "庄内平野",
+        "province": "出羽",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.88,
+          38.85
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_mogami"
+        ],
+        "plot": 9943,
+        "displacement_km": 6.5
+      },
+      {
+        "id": "rice-sendai",
+        "site": "仙台平野",
+        "province": "陸奥",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          140.92,
+          38.27
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_kitakami"
+        ],
+        "plot": 8313,
+        "displacement_km": 4.0
+      },
+      {
+        "id": "rice-kanto-upper",
+        "site": "関東平野北部",
+        "province": "上野",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          139.95,
+          36.22
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_tone"
+        ],
+        "plot": 6666,
+        "displacement_km": 3.8
+      },
+      {
+        "id": "rice-kanto-lower",
+        "site": "利根川旧下流低地",
+        "province": "下総",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          140.15,
+          35.88
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_tone"
+        ],
+        "plot": 6053,
+        "displacement_km": 5.5
+      },
+      {
+        "id": "rice-nobi",
+        "site": "濃尾平野",
+        "province": "美濃",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.82,
+          35.2
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "plot": 8482,
+        "displacement_km": 14.0
+      },
+      {
+        "id": "rice-owari",
+        "site": "尾張平野",
+        "province": "尾張",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.78,
+          35.05
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "low",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "plot": 8482,
+        "displacement_km": 10.7,
+        "conflict_with": "rice-nobi"
+      },
+      {
+        "id": "rice-omi",
+        "site": "琵琶湖東岸低地",
+        "province": "近江",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          136.1,
+          35.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo",
+          "lake_biwa"
+        ],
+        "plot": 9295,
+        "displacement_km": 14.1
+      },
+      {
+        "id": "rice-yamashiro",
+        "site": "山城盆地",
+        "province": "山城",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          135.79,
+          34.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "same_tile_conflict",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "plot": 9089,
+        "displacement_km": 8.2,
+        "conflict_with": "tea-uji"
+      },
+      {
+        "id": "rice-kawachi",
+        "site": "河内平野",
+        "province": "河内",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          135.58,
+          34.62
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "plot": 8883,
+        "displacement_km": 10.8
+      },
+      {
+        "id": "rice-bizen",
+        "site": "岡山平野",
+        "province": "備前",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          133.94,
+          34.66
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 10916,
+        "displacement_km": 8.3
+      },
+      {
+        "id": "rice-sanuki",
+        "site": "讃岐平野",
+        "province": "讃岐",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          133.82,
+          34.25
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 10302,
+        "displacement_km": 8.7
+      },
+      {
+        "id": "rice-chikugo",
+        "site": "筑紫平野",
+        "province": "筑前",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          130.49,
+          33.31
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "river_chikugo"
+        ],
+        "plot": 12934,
+        "displacement_km": 6.5
+      },
+      {
+        "id": "rice-higo",
+        "site": "熊本平野",
+        "province": "肥後",
+        "resource_ja": "米",
+        "resource_id": "RESOURCE_RICE",
+        "official_resource_id": "RESOURCE_RICE",
+        "availability": "official",
+        "coordinates": [
+          130.7,
+          32.79
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "agriculture_proxy"
+        ],
+        "plot": 12116,
+        "displacement_km": 5.7
+      },
+      {
+        "id": "salt-noto-suzu",
+        "site": "珠洲沿岸・候補",
+        "province": "能登",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          137.26,
+          37.44
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 10944,
+        "displacement_km": 14.7
+      },
+      {
+        "id": "salt-shima",
+        "site": "志摩沿岸",
+        "province": "伊勢",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          136.82,
+          34.33
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_ise"
+        ],
+        "plot": 7459,
+        "displacement_km": 5.1
+      },
+      {
+        "id": "salt-ako",
+        "site": "赤穂沿岸",
+        "province": "播磨",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          134.39,
+          34.75
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_medieval",
+          "salt_ako"
+        ],
+        "plot": 10511,
+        "displacement_km": 11.5
+      },
+      {
+        "id": "salt-kojima",
+        "site": "児島沿岸",
+        "province": "備前",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          133.83,
+          34.5
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 10711,
+        "displacement_km": 2.4
+      },
+      {
+        "id": "salt-yuge",
+        "site": "弓削島",
+        "province": "伊予",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          133.2,
+          34.28
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 11318,
+        "displacement_km": 18.1
+      },
+      {
+        "id": "salt-shodoshima",
+        "site": "小豆島沿岸",
+        "province": "讃岐",
+        "resource_ja": "塩",
+        "resource_id": "RESOURCE_SALT",
+        "official_resource_id": "RESOURCE_SALT",
+        "availability": "official",
+        "coordinates": [
+          134.23,
+          34.48
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "salt_medieval"
+        ],
+        "plot": 10305,
+        "displacement_km": 5.1
+      },
+      {
+        "id": "tea-uji",
+        "site": "宇治",
+        "province": "山城",
+        "resource_ja": "茶",
+        "resource_id": "RESOURCE_TEA",
+        "official_resource_id": "RESOURCE_TEA",
+        "availability": "official",
+        "coordinates": [
+          135.8,
+          34.89
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "tea_uji"
+        ],
+        "plot": 9089,
+        "displacement_km": 7.5
+      },
+      {
+        "id": "tea-ujitawara",
+        "site": "宇治田原",
+        "province": "山城",
+        "resource_ja": "茶",
+        "resource_id": "RESOURCE_TEA",
+        "official_resource_id": "RESOURCE_TEA",
+        "availability": "official",
+        "coordinates": [
+          135.87,
+          34.85
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "tea_uji",
+          "tea_kyoto"
+        ],
+        "plot": 8885,
+        "displacement_km": 7.6
+      },
+      {
+        "id": "silk-kiryu",
+        "site": "桐生・仁田山絹",
+        "province": "上野",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          139.33,
+          36.41
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "silk_kiryu"
+        ],
+        "plot": 7480,
+        "displacement_km": 6.8
+      },
+      {
+        "id": "silk-gunnai",
+        "site": "郡内織物圏",
+        "province": "甲斐",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          138.81,
+          35.55
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "silk_kai"
+        ],
+        "plot": 6861,
+        "displacement_km": 4.3
+      },
+      {
+        "id": "silk-nishijin",
+        "site": "西陣",
+        "province": "山城",
+        "resource_ja": "絹",
+        "resource_id": "RESOURCE_SILK",
+        "official_resource_id": "RESOURCE_SILK",
+        "availability": "official",
+        "coordinates": [
+          135.75,
+          35.03
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "high",
+        "source_ids": [
+          "silk_nishijin"
+        ],
+        "plot": 9293,
+        "displacement_km": 8.4
+      },
+      {
+        "id": "lacquer-wajima",
+        "site": "輪島塗産地",
+        "province": "能登",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          136.9,
+          37.39
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "custom_type_required",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_wajima"
+        ]
+      },
+      {
+        "id": "lacquer-aizu",
+        "site": "会津漆器産地",
+        "province": "陸奥",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          139.93,
+          37.49
+        ],
+        "start_year": 1590,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_aizu"
+        ]
+      },
+      {
+        "id": "fish-ishikari",
+        "site": "石狩湾",
+        "province": "蝦夷地",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.32,
+          43.3
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general",
+          "river_ishikari"
+        ],
+        "plot": 14460,
+        "displacement_km": 5.9
+      },
+      {
+        "id": "fish-tsugaru",
+        "site": "津軽海峡",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          140.85,
+          41.43
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 12408,
+        "displacement_km": 7.2
+      },
+      {
+        "id": "fish-sanriku-north",
+        "site": "三陸北部",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          142.05,
+          40.02
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 9550,
+        "displacement_km": 5.5
+      },
+      {
+        "id": "fish-sanriku-south",
+        "site": "三陸南部",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.75,
+          39.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 8525,
+        "displacement_km": 14.7
+      },
+      {
+        "id": "fish-sendai",
+        "site": "仙台湾",
+        "province": "陸奥",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          141.05,
+          38.25
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 8109,
+        "displacement_km": 5.3
+      },
+      {
+        "id": "fish-choshi",
+        "site": "銚子沖",
+        "province": "下総",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          140.73,
+          35.83
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "fishery_tokyo_bay"
+        ],
+        "plot": 5444,
+        "displacement_km": 8.8
+      },
+      {
+        "id": "fish-sagami",
+        "site": "相模湾",
+        "province": "相模",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          139.57,
+          35.1
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 5638,
+        "displacement_km": 5.2
+      },
+      {
+        "id": "fish-ise",
+        "site": "伊勢湾",
+        "province": "伊勢",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          136.75,
+          34.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "fishery_general",
+          "whaling_ise"
+        ],
+        "plot": 8073,
+        "displacement_km": 7.7
+      },
+      {
+        "id": "fish-suruga",
+        "site": "駿河湾",
+        "province": "駿河",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          138.6,
+          34.72
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 6244,
+        "displacement_km": 13.9
+      },
+      {
+        "id": "fish-noto",
+        "site": "能登沖",
+        "province": "能登",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          137.05,
+          37.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 10330,
+        "displacement_km": 6.7
+      },
+      {
+        "id": "fish-seto-bingo",
+        "site": "備後灘",
+        "province": "備後",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          133.2,
+          34.3
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 11115,
+        "displacement_km": 7.2
+      },
+      {
+        "id": "fish-seto-iyo",
+        "site": "燧灘",
+        "province": "伊予",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          132.9,
+          33.9
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 11316,
+        "displacement_km": 21.8
+      },
+      {
+        "id": "fish-seto-suo",
+        "site": "周防灘",
+        "province": "周防",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          131.7,
+          33.95
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 12331,
+        "displacement_km": 6.1
+      },
+      {
+        "id": "fish-genkai",
+        "site": "玄界灘",
+        "province": "肥前",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          129.65,
+          33.8
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 13954,
+        "displacement_km": 29.5
+      },
+      {
+        "id": "fish-ariake",
+        "site": "有明海",
+        "province": "肥前",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          130.3,
+          33.0
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general",
+          "wetlands"
+        ],
+        "plot": 12728,
+        "displacement_km": 7.1
+      },
+      {
+        "id": "fish-tosa",
+        "site": "土佐湾",
+        "province": "土佐",
+        "resource_ja": "魚",
+        "resource_id": "RESOURCE_FISH",
+        "official_resource_id": "RESOURCE_FISH",
+        "availability": "official",
+        "coordinates": [
+          133.6,
+          33.15
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "low",
+        "source_ids": [
+          "fishery_general"
+        ],
+        "plot": 9682,
+        "displacement_km": 21.6
+      },
+      {
+        "id": "whale-ise",
+        "site": "伊勢湾・回遊海域候補",
+        "province": "伊勢",
+        "resource_ja": "鯨",
+        "resource_id": "RESOURCE_WHALES",
+        "official_resource_id": "RESOURCE_WHALES",
+        "availability": "official",
+        "coordinates": [
+          136.77,
+          34.69
+        ],
+        "start_year": null,
+        "start_year_range": null,
+        "available_at_start": null,
+        "start_status": "start_candidate",
+        "placement_status": "placed",
+        "confidence": "medium",
+        "source_ids": [
+          "whaling_ise"
+        ],
+        "plot": 7868,
+        "displacement_km": 7.7
+      }
+    ],
+    "deferred_resources": [
+      {
+        "id": "gold-izu-toi",
+        "site": "土肥金山",
+        "province": "伊豆",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.79,
+          34.909
+        ],
+        "start_year": 1577,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "toi_mine"
+        ]
+      },
+      {
+        "id": "gold-noto-hodatsu",
+        "site": "宝達金山",
+        "province": "能登",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          136.803,
+          36.784
+        ],
+        "start_year": 1586,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "hodatsu_study"
+        ]
+      },
+      {
+        "id": "gold-sado-nishimikawa",
+        "site": "西三川砂金山・笹川",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.273,
+          37.819
+        ],
+        "start_year": 1593,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer"
+        ]
+      },
+      {
+        "id": "silver-ikuno",
+        "site": "生野銀山",
+        "province": "但馬",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          134.79,
+          35.167
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "ikuno_mine"
+        ]
+      },
+      {
+        "id": "silver-sado-tsurushi",
+        "site": "鶴子銀山",
+        "province": "佐渡",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          138.351,
+          37.927
+        ],
+        "start_year": 1542,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "high",
+        "source_ids": [
+          "sado_silver"
+        ]
+      },
+      {
+        "id": "silver-nobesawa",
+        "site": "延沢銀山",
+        "province": "出羽",
+        "resource_ja": "銀",
+        "resource_id": "RESOURCE_SILVER",
+        "official_resource_id": "RESOURCE_SILVER",
+        "availability": "official",
+        "coordinates": [
+          140.528,
+          38.568
+        ],
+        "start_year": null,
+        "start_year_range": [
+          1596,
+          1615
+        ],
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "nobesawa_mine"
+        ]
+      },
+      {
+        "id": "copper-ashio",
+        "site": "足尾銅山",
+        "province": "下野",
+        "resource_ja": "銅",
+        "resource_id": "RESOURCE_COPPER",
+        "official_resource_id": "RESOURCE_COPPER",
+        "availability": "official_gathering_storm",
+        "coordinates": [
+          139.446,
+          36.642
+        ],
+        "start_year": 1550,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "ashio_mine"
+        ]
+      },
+      {
+        "id": "lacquer-aizu",
+        "site": "会津漆器産地",
+        "province": "陸奥",
+        "resource_ja": "漆",
+        "resource_id": "RESOURCE_JAC_LACQUER",
+        "official_resource_id": "RESOURCE_JAC_LACQUER",
+        "availability": "custom_proposed",
+        "coordinates": [
+          139.93,
+          37.49
+        ],
+        "start_year": 1590,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "custom_type_and_later_release",
+        "placement_status": "not_placed",
+        "confidence": "medium",
+        "source_ids": [
+          "lacquer_aizu"
+        ]
+      }
+    ],
+    "trade_access": [
+      {
+        "id": "niter-hirado",
+        "commodity_ja": "硝石・焔硝",
+        "civ6_id": "RESOURCE_NITER",
+        "mode": "port_import_access",
+        "port": "平戸",
+        "province": "肥前",
+        "coordinates": [
+          129.553,
+          33.368
+        ],
+        "available_from_year": 1586,
+        "confidence": "medium",
+        "source_ids": [
+          "niter_trade"
+        ],
+        "start_status": "deferred_until_year"
+      },
+      {
+        "id": "niter-sakai",
+        "commodity_ja": "硝石・焔硝",
+        "civ6_id": "RESOURCE_NITER",
+        "mode": "port_import_access",
+        "port": "堺",
+        "province": "和泉",
+        "coordinates": [
+          135.483,
+          34.573
+        ],
+        "available_from_year": null,
+        "date_note": "16世紀の港交易圏としての仮置き。堺での個別硝石輸入を示す同時代史料は今回確認できず",
+        "confidence": "low",
+        "source_ids": [
+          "niter_trade",
+          "sakai_trade"
+        ],
+        "start_status": "undated_trade_access_not_placed"
+      }
+    ],
+    "custom_content_required": [
+      {
+        "type": "RESOURCE_JAC_GOLD",
+        "kind": "resource",
+        "resource_ja": "金",
+        "candidate_ids": [
+          "gold-kai-kurokawa",
+          "gold-kai-nakayama",
+          "gold-izu-toi",
+          "gold-noto-hodatsu",
+          "gold-sado-nishimikawa"
+        ],
+        "status": "requires_custom_resource_definition"
+      },
+      {
+        "type": "RESOURCE_JAC_LACQUER",
+        "kind": "resource",
+        "resource_ja": "漆",
+        "candidate_ids": [
+          "lacquer-wajima",
+          "lacquer-aizu"
+        ],
+        "status": "requires_custom_resource_definition"
+      },
+      {
+        "type": "FEATURE_JAC_FUJI",
+        "kind": "feature",
+        "name_ja": "富士山",
+        "candidate_ids": [
+          "wonder-fuji-custom"
+        ],
+        "status": "not_selected_or_implemented"
+      },
+      {
+        "type": "FEATURE_JAC_ASO_CALDERA",
+        "kind": "feature",
+        "name_ja": "阿蘇カルデラ",
+        "candidate_ids": [
+          "wonder-aso-caldera-alternative"
+        ],
+        "status": "not_selected_or_implemented"
+      }
+    ],
+    "rivers": [
+      {
+        "id": "river-ishikari",
+        "name_ja": "石狩川",
+        "source_ids": [
+          "river_ishikari"
+        ],
+        "confidence": null,
+        "historical_note": "明治以後に直線化・捷水路化された下流河道は概略補正が必要",
+        "edge_count": 27,
+        "edge_path": [
+          {
+            "plot": 13448,
+            "side": "NW",
+            "neighbor": 13244
+          },
+          {
+            "plot": 13448,
+            "side": "W",
+            "neighbor": 13447
+          },
+          {
+            "plot": 13652,
+            "side": "NW",
+            "neighbor": 13447
+          },
+          {
+            "plot": 13652,
+            "side": "W",
+            "neighbor": 13651
+          },
+          {
+            "plot": 13855,
+            "side": "NW",
+            "neighbor": 13651
+          },
+          {
+            "plot": 13855,
+            "side": "W",
+            "neighbor": 13854
+          },
+          {
+            "plot": 14059,
+            "side": "NW",
+            "neighbor": 13854
+          },
+          {
+            "plot": 14059,
+            "side": "W",
+            "neighbor": 14058
+          },
+          {
+            "plot": 14262,
+            "side": "NW",
+            "neighbor": 14058
+          },
+          {
+            "plot": 14261,
+            "side": "NE",
+            "neighbor": 14058
+          },
+          {
+            "plot": 14261,
+            "side": "NW",
+            "neighbor": 14057
+          },
+          {
+            "plot": 14261,
+            "side": "W",
+            "neighbor": 14260
+          },
+          {
+            "plot": 14260,
+            "side": "NE",
+            "neighbor": 14057
+          },
+          {
+            "plot": 14260,
+            "side": "NW",
+            "neighbor": 14056
+          },
+          {
+            "plot": 14259,
+            "side": "NE",
+            "neighbor": 14056
+          },
+          {
+            "plot": 14259,
+            "side": "NW",
+            "neighbor": 14055
+          },
+          {
+            "plot": 14258,
+            "side": "NE",
+            "neighbor": 14055
+          },
+          {
+            "plot": 14258,
+            "side": "NW",
+            "neighbor": 14054
+          },
+          {
+            "plot": 14257,
+            "side": "NE",
+            "neighbor": 14054
+          },
+          {
+            "plot": 14054,
+            "side": "W",
+            "neighbor": 14053
+          },
+          {
+            "plot": 14053,
+            "side": "NE",
+            "neighbor": 13849
+          },
+          {
+            "plot": 14053,
+            "side": "NW",
+            "neighbor": 13848
+          },
+          {
+            "plot": 14052,
+            "side": "NE",
+            "neighbor": 13848
+          },
+          {
+            "plot": 14052,
+            "side": "NW",
+            "neighbor": 13847
+          },
+          {
+            "plot": 14052,
+            "side": "W",
+            "neighbor": 14051
+          },
+          {
+            "plot": 14255,
+            "side": "NE",
+            "neighbor": 14052
+          },
+          {
+            "plot": 14256,
+            "side": "W",
+            "neighbor": 14255
+          }
+        ]
+      },
+      {
+        "id": "river-kitakami",
+        "name_ja": "北上川",
+        "source_ids": [
+          "river_kitakami"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 24,
+        "edge_path": [
+          {
+            "plot": 10361,
+            "side": "NE",
+            "neighbor": 10157
+          },
+          {
+            "plot": 10157,
+            "side": "W",
+            "neighbor": 10156
+          },
+          {
+            "plot": 10156,
+            "side": "NE",
+            "neighbor": 9953
+          },
+          {
+            "plot": 9953,
+            "side": "W",
+            "neighbor": 9952
+          },
+          {
+            "plot": 9953,
+            "side": "NW",
+            "neighbor": 9748
+          },
+          {
+            "plot": 9952,
+            "side": "NE",
+            "neighbor": 9748
+          },
+          {
+            "plot": 9748,
+            "side": "W",
+            "neighbor": 9747
+          },
+          {
+            "plot": 9747,
+            "side": "NE",
+            "neighbor": 9544
+          },
+          {
+            "plot": 9544,
+            "side": "W",
+            "neighbor": 9543
+          },
+          {
+            "plot": 9543,
+            "side": "NE",
+            "neighbor": 9339
+          },
+          {
+            "plot": 9543,
+            "side": "NW",
+            "neighbor": 9338
+          },
+          {
+            "plot": 9542,
+            "side": "NE",
+            "neighbor": 9338
+          },
+          {
+            "plot": 9338,
+            "side": "W",
+            "neighbor": 9337
+          },
+          {
+            "plot": 9337,
+            "side": "NE",
+            "neighbor": 9134
+          },
+          {
+            "plot": 9134,
+            "side": "W",
+            "neighbor": 9133
+          },
+          {
+            "plot": 9133,
+            "side": "NE",
+            "neighbor": 8929
+          },
+          {
+            "plot": 8929,
+            "side": "W",
+            "neighbor": 8928
+          },
+          {
+            "plot": 8928,
+            "side": "NE",
+            "neighbor": 8725
+          },
+          {
+            "plot": 8725,
+            "side": "W",
+            "neighbor": 8724
+          },
+          {
+            "plot": 8724,
+            "side": "NE",
+            "neighbor": 8520
+          },
+          {
+            "plot": 8520,
+            "side": "W",
+            "neighbor": 8519
+          },
+          {
+            "plot": 8519,
+            "side": "NE",
+            "neighbor": 8316
+          },
+          {
+            "plot": 8316,
+            "side": "W",
+            "neighbor": 8315
+          },
+          {
+            "plot": 8315,
+            "side": "NE",
+            "neighbor": 8111
+          }
+        ]
+      },
+      {
+        "id": "river-mogami",
+        "name_ja": "最上川",
+        "source_ids": [
+          "river_mogami"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 23,
+        "edge_path": [
+          {
+            "plot": 8511,
+            "side": "NW",
+            "neighbor": 8307
+          },
+          {
+            "plot": 8511,
+            "side": "W",
+            "neighbor": 8510
+          },
+          {
+            "plot": 8715,
+            "side": "NE",
+            "neighbor": 8511
+          },
+          {
+            "plot": 8716,
+            "side": "NW",
+            "neighbor": 8511
+          },
+          {
+            "plot": 8716,
+            "side": "NE",
+            "neighbor": 8512
+          },
+          {
+            "plot": 8717,
+            "side": "W",
+            "neighbor": 8716
+          },
+          {
+            "plot": 8920,
+            "side": "NE",
+            "neighbor": 8717
+          },
+          {
+            "plot": 8921,
+            "side": "NW",
+            "neighbor": 8717
+          },
+          {
+            "plot": 8921,
+            "side": "NE",
+            "neighbor": 8718
+          },
+          {
+            "plot": 8922,
+            "side": "NW",
+            "neighbor": 8718
+          },
+          {
+            "plot": 8922,
+            "side": "NE",
+            "neighbor": 8719
+          },
+          {
+            "plot": 8923,
+            "side": "W",
+            "neighbor": 8922
+          },
+          {
+            "plot": 9127,
+            "side": "NE",
+            "neighbor": 8923
+          },
+          {
+            "plot": 9128,
+            "side": "W",
+            "neighbor": 9127
+          },
+          {
+            "plot": 9331,
+            "side": "NE",
+            "neighbor": 9128
+          },
+          {
+            "plot": 9332,
+            "side": "W",
+            "neighbor": 9331
+          },
+          {
+            "plot": 9536,
+            "side": "NE",
+            "neighbor": 9332
+          },
+          {
+            "plot": 9537,
+            "side": "W",
+            "neighbor": 9536
+          },
+          {
+            "plot": 9740,
+            "side": "NW",
+            "neighbor": 9536
+          },
+          {
+            "plot": 9740,
+            "side": "W",
+            "neighbor": 9739
+          },
+          {
+            "plot": 9944,
+            "side": "NW",
+            "neighbor": 9739
+          },
+          {
+            "plot": 9944,
+            "side": "W",
+            "neighbor": 9943
+          },
+          {
+            "plot": 10147,
+            "side": "NW",
+            "neighbor": 9943
+          }
+        ]
+      },
+      {
+        "id": "river-tone-1534",
+        "name_ja": "利根川（1534年旧流路概略）",
+        "source_ids": [
+          "river_tone",
+          "tone_old_course"
+        ],
+        "confidence": "low",
+        "historical_note": "1594年以後の東遷前。下流位置は歴史河道の概略候補であり、旧流路の水理・分流を復元した測量線ではない",
+        "edge_count": 25,
+        "edge_path": [
+          {
+            "plot": 8501,
+            "side": "NE",
+            "neighbor": 8298
+          },
+          {
+            "plot": 8298,
+            "side": "W",
+            "neighbor": 8297
+          },
+          {
+            "plot": 8297,
+            "side": "NE",
+            "neighbor": 8093
+          },
+          {
+            "plot": 8093,
+            "side": "W",
+            "neighbor": 8092
+          },
+          {
+            "plot": 8092,
+            "side": "NE",
+            "neighbor": 7889
+          },
+          {
+            "plot": 8092,
+            "side": "NW",
+            "neighbor": 7888
+          },
+          {
+            "plot": 7889,
+            "side": "W",
+            "neighbor": 7888
+          },
+          {
+            "plot": 7888,
+            "side": "NE",
+            "neighbor": 7684
+          },
+          {
+            "plot": 7684,
+            "side": "W",
+            "neighbor": 7683
+          },
+          {
+            "plot": 7683,
+            "side": "NE",
+            "neighbor": 7480
+          },
+          {
+            "plot": 7480,
+            "side": "W",
+            "neighbor": 7479
+          },
+          {
+            "plot": 7479,
+            "side": "NE",
+            "neighbor": 7275
+          },
+          {
+            "plot": 7275,
+            "side": "W",
+            "neighbor": 7274
+          },
+          {
+            "plot": 7275,
+            "side": "NW",
+            "neighbor": 7071
+          },
+          {
+            "plot": 7072,
+            "side": "W",
+            "neighbor": 7071
+          },
+          {
+            "plot": 7071,
+            "side": "NE",
+            "neighbor": 6867
+          },
+          {
+            "plot": 6867,
+            "side": "W",
+            "neighbor": 6866
+          },
+          {
+            "plot": 6867,
+            "side": "NW",
+            "neighbor": 6663
+          },
+          {
+            "plot": 6664,
+            "side": "W",
+            "neighbor": 6663
+          },
+          {
+            "plot": 6663,
+            "side": "NE",
+            "neighbor": 6459
+          },
+          {
+            "plot": 6459,
+            "side": "W",
+            "neighbor": 6458
+          },
+          {
+            "plot": 6459,
+            "side": "NW",
+            "neighbor": 6255
+          },
+          {
+            "plot": 6256,
+            "side": "W",
+            "neighbor": 6255
+          },
+          {
+            "plot": 6255,
+            "side": "NE",
+            "neighbor": 6051
+          },
+          {
+            "plot": 6051,
+            "side": "W",
+            "neighbor": 6050
+          }
+        ]
+      },
+      {
+        "id": "river-shinano",
+        "name_ja": "信濃川・千曲川",
+        "source_ids": [
+          "river_shinano"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 41,
+        "edge_path": [
+          {
+            "plot": 7679,
+            "side": "NE",
+            "neighbor": 7476
+          },
+          {
+            "plot": 7680,
+            "side": "W",
+            "neighbor": 7679
+          },
+          {
+            "plot": 7884,
+            "side": "NE",
+            "neighbor": 7680
+          },
+          {
+            "plot": 7885,
+            "side": "W",
+            "neighbor": 7884
+          },
+          {
+            "plot": 8088,
+            "side": "NW",
+            "neighbor": 7884
+          },
+          {
+            "plot": 8088,
+            "side": "W",
+            "neighbor": 8087
+          },
+          {
+            "plot": 8292,
+            "side": "NE",
+            "neighbor": 8088
+          },
+          {
+            "plot": 8293,
+            "side": "W",
+            "neighbor": 8292
+          },
+          {
+            "plot": 8496,
+            "side": "NE",
+            "neighbor": 8293
+          },
+          {
+            "plot": 8497,
+            "side": "W",
+            "neighbor": 8496
+          },
+          {
+            "plot": 8701,
+            "side": "NW",
+            "neighbor": 8496
+          },
+          {
+            "plot": 8701,
+            "side": "W",
+            "neighbor": 8700
+          },
+          {
+            "plot": 8904,
+            "side": "NE",
+            "neighbor": 8701
+          },
+          {
+            "plot": 8905,
+            "side": "W",
+            "neighbor": 8904
+          },
+          {
+            "plot": 9109,
+            "side": "NE",
+            "neighbor": 8905
+          },
+          {
+            "plot": 9110,
+            "side": "W",
+            "neighbor": 9109
+          },
+          {
+            "plot": 9313,
+            "side": "NE",
+            "neighbor": 9110
+          },
+          {
+            "plot": 9314,
+            "side": "NW",
+            "neighbor": 9110
+          },
+          {
+            "plot": 9314,
+            "side": "NE",
+            "neighbor": 9111
+          },
+          {
+            "plot": 9315,
+            "side": "W",
+            "neighbor": 9314
+          },
+          {
+            "plot": 9519,
+            "side": "NE",
+            "neighbor": 9315
+          },
+          {
+            "plot": 9520,
+            "side": "W",
+            "neighbor": 9519
+          },
+          {
+            "plot": 9520,
+            "side": "NW",
+            "neighbor": 9315
+          },
+          {
+            "plot": 9316,
+            "side": "W",
+            "neighbor": 9315
+          },
+          {
+            "plot": 9316,
+            "side": "NW",
+            "neighbor": 9112
+          },
+          {
+            "plot": 9316,
+            "side": "NE",
+            "neighbor": 9113
+          },
+          {
+            "plot": 9317,
+            "side": "NW",
+            "neighbor": 9113
+          },
+          {
+            "plot": 9317,
+            "side": "NE",
+            "neighbor": 9114
+          },
+          {
+            "plot": 9318,
+            "side": "NW",
+            "neighbor": 9114
+          },
+          {
+            "plot": 9318,
+            "side": "NE",
+            "neighbor": 9115
+          },
+          {
+            "plot": 9319,
+            "side": "NW",
+            "neighbor": 9115
+          },
+          {
+            "plot": 9319,
+            "side": "NE",
+            "neighbor": 9116
+          },
+          {
+            "plot": 9320,
+            "side": "NW",
+            "neighbor": 9116
+          },
+          {
+            "plot": 9320,
+            "side": "NE",
+            "neighbor": 9117
+          },
+          {
+            "plot": 9321,
+            "side": "W",
+            "neighbor": 9320
+          },
+          {
+            "plot": 9525,
+            "side": "NE",
+            "neighbor": 9321
+          },
+          {
+            "plot": 9526,
+            "side": "NW",
+            "neighbor": 9321
+          },
+          {
+            "plot": 9526,
+            "side": "NE",
+            "neighbor": 9322
+          },
+          {
+            "plot": 9527,
+            "side": "NW",
+            "neighbor": 9322
+          },
+          {
+            "plot": 9527,
+            "side": "NE",
+            "neighbor": 9323
+          },
+          {
+            "plot": 9528,
+            "side": "W",
+            "neighbor": 9527
+          }
+        ]
+      },
+      {
+        "id": "river-kiso",
+        "name_ja": "木曽川",
+        "source_ids": [
+          "river_kiso"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 26,
+        "edge_path": [
+          {
+            "plot": 8492,
+            "side": "W",
+            "neighbor": 8491
+          },
+          {
+            "plot": 8491,
+            "side": "NE",
+            "neighbor": 8288
+          },
+          {
+            "plot": 8491,
+            "side": "NW",
+            "neighbor": 8287
+          },
+          {
+            "plot": 8490,
+            "side": "NE",
+            "neighbor": 8287
+          },
+          {
+            "plot": 8287,
+            "side": "W",
+            "neighbor": 8286
+          },
+          {
+            "plot": 8286,
+            "side": "NE",
+            "neighbor": 8082
+          },
+          {
+            "plot": 8286,
+            "side": "NW",
+            "neighbor": 8081
+          },
+          {
+            "plot": 8285,
+            "side": "NE",
+            "neighbor": 8081
+          },
+          {
+            "plot": 8285,
+            "side": "NW",
+            "neighbor": 8080
+          },
+          {
+            "plot": 8285,
+            "side": "W",
+            "neighbor": 8284
+          },
+          {
+            "plot": 8488,
+            "side": "NW",
+            "neighbor": 8284
+          },
+          {
+            "plot": 8487,
+            "side": "NE",
+            "neighbor": 8284
+          },
+          {
+            "plot": 8487,
+            "side": "NW",
+            "neighbor": 8283
+          },
+          {
+            "plot": 8486,
+            "side": "NE",
+            "neighbor": 8283
+          },
+          {
+            "plot": 8486,
+            "side": "NW",
+            "neighbor": 8282
+          },
+          {
+            "plot": 8486,
+            "side": "W",
+            "neighbor": 8485
+          },
+          {
+            "plot": 8690,
+            "side": "NW",
+            "neighbor": 8485
+          },
+          {
+            "plot": 8689,
+            "side": "NE",
+            "neighbor": 8485
+          },
+          {
+            "plot": 8689,
+            "side": "NW",
+            "neighbor": 8484
+          },
+          {
+            "plot": 8689,
+            "side": "W",
+            "neighbor": 8688
+          },
+          {
+            "plot": 8892,
+            "side": "NW",
+            "neighbor": 8688
+          },
+          {
+            "plot": 8891,
+            "side": "NE",
+            "neighbor": 8688
+          },
+          {
+            "plot": 8688,
+            "side": "W",
+            "neighbor": 8687
+          },
+          {
+            "plot": 8687,
+            "side": "NE",
+            "neighbor": 8483
+          },
+          {
+            "plot": 8483,
+            "side": "W",
+            "neighbor": 8482
+          },
+          {
+            "plot": 8482,
+            "side": "NE",
+            "neighbor": 8279
+          }
+        ]
+      },
+      {
+        "id": "river-yodo",
+        "name_ja": "瀬田川・宇治川・淀川",
+        "source_ids": [
+          "river_yodo"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 17,
+        "edge_path": [
+          {
+            "plot": 9094,
+            "side": "W",
+            "neighbor": 9093
+          },
+          {
+            "plot": 9093,
+            "side": "NE",
+            "neighbor": 8889
+          },
+          {
+            "plot": 9093,
+            "side": "NW",
+            "neighbor": 8888
+          },
+          {
+            "plot": 9092,
+            "side": "NE",
+            "neighbor": 8888
+          },
+          {
+            "plot": 9092,
+            "side": "NW",
+            "neighbor": 8887
+          },
+          {
+            "plot": 9092,
+            "side": "W",
+            "neighbor": 9091
+          },
+          {
+            "plot": 9295,
+            "side": "NW",
+            "neighbor": 9091
+          },
+          {
+            "plot": 9294,
+            "side": "NE",
+            "neighbor": 9091
+          },
+          {
+            "plot": 9294,
+            "side": "NW",
+            "neighbor": 9090
+          },
+          {
+            "plot": 9293,
+            "side": "NE",
+            "neighbor": 9090
+          },
+          {
+            "plot": 9090,
+            "side": "W",
+            "neighbor": 9089
+          },
+          {
+            "plot": 9293,
+            "side": "NW",
+            "neighbor": 9089
+          },
+          {
+            "plot": 9293,
+            "side": "W",
+            "neighbor": 9292
+          },
+          {
+            "plot": 9292,
+            "side": "NE",
+            "neighbor": 9089
+          },
+          {
+            "plot": 9292,
+            "side": "NW",
+            "neighbor": 9088
+          },
+          {
+            "plot": 9291,
+            "side": "NE",
+            "neighbor": 9088
+          },
+          {
+            "plot": 9291,
+            "side": "NW",
+            "neighbor": 9087
+          }
+        ]
+      },
+      {
+        "id": "river-hii",
+        "name_ja": "斐伊川",
+        "source_ids": [
+          "river_hii"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 9,
+        "edge_path": [
+          {
+            "plot": 12344,
+            "side": "NE",
+            "neighbor": 12140
+          },
+          {
+            "plot": 12345,
+            "side": "W",
+            "neighbor": 12344
+          },
+          {
+            "plot": 12548,
+            "side": "NW",
+            "neighbor": 12344
+          },
+          {
+            "plot": 12548,
+            "side": "W",
+            "neighbor": 12547
+          },
+          {
+            "plot": 12752,
+            "side": "NE",
+            "neighbor": 12548
+          },
+          {
+            "plot": 12548,
+            "side": "W",
+            "neighbor": 12547
+          },
+          {
+            "plot": 12548,
+            "side": "NW",
+            "neighbor": 12344
+          },
+          {
+            "plot": 12548,
+            "side": "NE",
+            "neighbor": 12345
+          },
+          {
+            "plot": 12549,
+            "side": "W",
+            "neighbor": 12548
+          }
+        ]
+      },
+      {
+        "id": "river-yoshino",
+        "name_ja": "吉野川",
+        "source_ids": [
+          "river_yoshino"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 23,
+        "edge_path": [
+          {
+            "plot": 10704,
+            "side": "NW",
+            "neighbor": 10499
+          },
+          {
+            "plot": 10704,
+            "side": "NE",
+            "neighbor": 10500
+          },
+          {
+            "plot": 10705,
+            "side": "NW",
+            "neighbor": 10500
+          },
+          {
+            "plot": 10501,
+            "side": "W",
+            "neighbor": 10500
+          },
+          {
+            "plot": 10501,
+            "side": "NW",
+            "neighbor": 10297
+          },
+          {
+            "plot": 10501,
+            "side": "NE",
+            "neighbor": 10298
+          },
+          {
+            "plot": 10502,
+            "side": "NW",
+            "neighbor": 10298
+          },
+          {
+            "plot": 10299,
+            "side": "W",
+            "neighbor": 10298
+          },
+          {
+            "plot": 10299,
+            "side": "NW",
+            "neighbor": 10094
+          },
+          {
+            "plot": 10299,
+            "side": "NE",
+            "neighbor": 10095
+          },
+          {
+            "plot": 10300,
+            "side": "NW",
+            "neighbor": 10095
+          },
+          {
+            "plot": 10300,
+            "side": "NE",
+            "neighbor": 10096
+          },
+          {
+            "plot": 10301,
+            "side": "NW",
+            "neighbor": 10096
+          },
+          {
+            "plot": 10097,
+            "side": "W",
+            "neighbor": 10096
+          },
+          {
+            "plot": 10097,
+            "side": "NW",
+            "neighbor": 9893
+          },
+          {
+            "plot": 9894,
+            "side": "W",
+            "neighbor": 9893
+          },
+          {
+            "plot": 9894,
+            "side": "NW",
+            "neighbor": 9689
+          },
+          {
+            "plot": 9690,
+            "side": "W",
+            "neighbor": 9689
+          },
+          {
+            "plot": 9690,
+            "side": "NW",
+            "neighbor": 9486
+          },
+          {
+            "plot": 9690,
+            "side": "NE",
+            "neighbor": 9487
+          },
+          {
+            "plot": 9691,
+            "side": "NW",
+            "neighbor": 9487
+          },
+          {
+            "plot": 9488,
+            "side": "W",
+            "neighbor": 9487
+          },
+          {
+            "plot": 9488,
+            "side": "NW",
+            "neighbor": 9283
+          }
+        ]
+      },
+      {
+        "id": "river-chikugo",
+        "name_ja": "筑後川",
+        "source_ids": [
+          "river_chikugo"
+        ],
+        "confidence": null,
+        "historical_note": null,
+        "edge_count": 17,
+        "edge_path": [
+          {
+            "plot": 11917,
+            "side": "W",
+            "neighbor": 11916
+          },
+          {
+            "plot": 12120,
+            "side": "NE",
+            "neighbor": 11917
+          },
+          {
+            "plot": 12121,
+            "side": "W",
+            "neighbor": 12120
+          },
+          {
+            "plot": 12325,
+            "side": "NW",
+            "neighbor": 12120
+          },
+          {
+            "plot": 12325,
+            "side": "W",
+            "neighbor": 12324
+          },
+          {
+            "plot": 12528,
+            "side": "NE",
+            "neighbor": 12325
+          },
+          {
+            "plot": 12528,
+            "side": "NW",
+            "neighbor": 12324
+          },
+          {
+            "plot": 12528,
+            "side": "W",
+            "neighbor": 12527
+          },
+          {
+            "plot": 12732,
+            "side": "NW",
+            "neighbor": 12527
+          },
+          {
+            "plot": 12732,
+            "side": "W",
+            "neighbor": 12731
+          },
+          {
+            "plot": 12935,
+            "side": "NW",
+            "neighbor": 12731
+          },
+          {
+            "plot": 12935,
+            "side": "W",
+            "neighbor": 12934
+          },
+          {
+            "plot": 12934,
+            "side": "NE",
+            "neighbor": 12731
+          },
+          {
+            "plot": 12934,
+            "side": "NW",
+            "neighbor": 12730
+          },
+          {
+            "plot": 12934,
+            "side": "W",
+            "neighbor": 12933
+          },
+          {
+            "plot": 13138,
+            "side": "NW",
+            "neighbor": 12933
+          },
+          {
+            "plot": 13137,
+            "side": "NE",
+            "neighbor": 12933
+          }
+        ]
+      }
+    ],
+    "river_edge_count": 232,
+    "river_edge_unique_count": 230,
+    "lake_records": [
+      {
+        "id": "lake-biwa",
+        "name_ja": "琵琶湖",
+        "province": "近江",
+        "tile_ids": [
+          9297,
+          9296,
+          9501
+        ],
+        "tile_count": 3,
+        "area_km2": 670.3,
+        "tile_hint": "2-4",
+        "source_ids": [
+          "lake_biwa",
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-inawashiro",
+        "name_ja": "猪苗代湖",
+        "province": "陸奥",
+        "tile_ids": [
+          8100
+        ],
+        "tile_count": 1,
+        "area_km2": 103.3,
+        "tile_hint": "1",
+        "source_ids": [
+          "lake_inawashiro",
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-kasumigaura",
+        "name_ja": "霞ヶ浦",
+        "province": "常陸",
+        "tile_ids": [
+          5851
+        ],
+        "tile_count": 1,
+        "area_km2": 167.6,
+        "tile_hint": "1-2",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-towada",
+        "name_ja": "十和田湖",
+        "province": "陸奥",
+        "tile_ids": [
+          11180
+        ],
+        "tile_count": 1,
+        "area_km2": 61.0,
+        "tile_hint": "1",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-shinji",
+        "name_ja": "宍道湖",
+        "province": "出雲",
+        "tile_ids": [
+          12753
+        ],
+        "tile_count": 1,
+        "area_km2": 79.1,
+        "tile_hint": "1",
+        "source_ids": [
+          "river_hii"
+        ],
+        "representation": "TERRAIN_COAST"
+      },
+      {
+        "id": "lake-suwa",
+        "name_ja": "諏訪湖",
+        "province": "信濃",
+        "tile_ids": [
+          8289
+        ],
+        "tile_count": 1,
+        "area_km2": 13.3,
+        "tile_hint": "1",
+        "source_ids": [
+          "gsi_lakes"
+        ],
+        "representation": "TERRAIN_COAST"
+      }
+    ],
+    "terrain_features": {
+      "feature_counts": {
+        "FEATURE_FOREST": 748,
+        "FEATURE_MARSH": 33,
+        "FEATURE_VOLCANO": 5
+      },
+      "forest": {
+        "feature_id": "FEATURE_FOREST",
+        "target_percent": 45,
+        "eligible_tiles": 1662,
+        "placed_count": 748,
+        "placed_percent": 45.01,
+        "rice_basin_exclusion_radius_km": 17.2,
+        "source_ids": [
+          "forest_history",
+          "vegetation_gis"
+        ]
+      },
+      "marsh": {
+        "feature_id": "FEATURE_MARSH",
+        "target_count": 33,
+        "placed_count": 33,
+        "eligible_flat_land_tiles": 1133,
+        "cluster_ids": [
+          "marsh-kushiro",
+          "marsh-sarobetsu",
+          "marsh-oze",
+          "marsh-nakaumi-shinji",
+          "marsh-kiso-delta",
+          "marsh-tone-lowland",
+          "marsh-ariake"
+        ],
+        "clusters": [
+          {
+            "id": "marsh-kushiro",
+            "site": "釧路湿原",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-sarobetsu",
+            "site": "サロベツ原野",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-oze",
+            "site": "尾瀬",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-nakaumi-shinji",
+            "site": "中海・宍道湖周辺",
+            "source_ids": [
+              "wetlands"
+            ]
+          },
+          {
+            "id": "marsh-kiso-delta",
+            "site": "木曽三川低地",
+            "source_ids": [
+              "wetlands",
+              "river_kiso"
+            ]
+          },
+          {
+            "id": "marsh-tone-lowland",
+            "site": "利根川旧下流低地",
+            "source_ids": [
+              "river_tone",
+              "tone_old_course"
+            ]
+          },
+          {
+            "id": "marsh-ariake",
+            "site": "筑後川河口・有明海",
+            "source_ids": [
+              "wetlands",
+              "river_chikugo"
+            ]
+          }
+        ],
+        "source_ids": []
+      },
+      "volcanoes": [
+        {
+          "id": "volcano-asama",
+          "site": "浅間山",
+          "plot": 8293,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "上野・信濃",
+          "coordinates": [
+            138.523,
+            36.406
+          ],
+          "displacement_km": 3.1,
+          "eruption_years_in_scope": [
+            1532,
+            1534,
+            1582,
+            1590,
+            1591,
+            1596
+          ],
+          "source_ids": [
+            "volcano_asama"
+          ],
+          "terrain_promoted_to_mountain": false
+        },
+        {
+          "id": "volcano-fuji",
+          "site": "富士山",
+          "plot": 6860,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "駿河・甲斐",
+          "coordinates": [
+            138.727,
+            35.361
+          ],
+          "displacement_km": 7.9,
+          "eruption_years_in_scope": [],
+          "source_ids": [
+            "volcano_fuji"
+          ],
+          "terrain_promoted_to_mountain": false
+        },
+        {
+          "id": "volcano-aso",
+          "site": "阿蘇山・中岳",
+          "plot": 11711,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "肥後",
+          "coordinates": [
+            131.104,
+            32.884
+          ],
+          "displacement_km": 7.5,
+          "eruption_years_in_scope": [
+            1533,
+            1542,
+            1558,
+            1559,
+            1562,
+            1573,
+            1574,
+            1576,
+            1582,
+            1583,
+            1584,
+            1587
+          ],
+          "source_ids": [
+            "volcano_aso"
+          ],
+          "terrain_promoted_to_mountain": true
+        },
+        {
+          "id": "volcano-sakurajima",
+          "site": "桜島",
+          "plot": 10682,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "大隅",
+          "coordinates": [
+            130.66,
+            31.59
+          ],
+          "displacement_km": 4.8,
+          "eruption_years_in_scope": [],
+          "source_ids": [
+            "volcano_sakurajima"
+          ],
+          "terrain_promoted_to_mountain": true
+        },
+        {
+          "id": "volcano-kirishima",
+          "site": "霧島山・御鉢",
+          "plot": 10888,
+          "feature_id": "FEATURE_VOLCANO",
+          "province": "日向・大隅",
+          "coordinates": [
+            130.86,
+            31.91
+          ],
+          "displacement_km": 1.7,
+          "eruption_years_in_scope": [
+            1554,
+            1555,
+            1588
+          ],
+          "source_ids": [
+            "volcano_kirishima"
+          ],
+          "terrain_promoted_to_mountain": true
+        }
+      ],
+      "lakes": [
+        {
+          "id": "lake-biwa",
+          "name_ja": "琵琶湖",
+          "province": "近江",
+          "tile_ids": [
+            9297,
+            9296,
+            9501
+          ],
+          "tile_count": 3,
+          "area_km2": 670.3,
+          "tile_hint": "2-4",
+          "source_ids": [
+            "lake_biwa",
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-inawashiro",
+          "name_ja": "猪苗代湖",
+          "province": "陸奥",
+          "tile_ids": [
+            8100
+          ],
+          "tile_count": 1,
+          "area_km2": 103.3,
+          "tile_hint": "1",
+          "source_ids": [
+            "lake_inawashiro",
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-kasumigaura",
+          "name_ja": "霞ヶ浦",
+          "province": "常陸",
+          "tile_ids": [
+            5851
+          ],
+          "tile_count": 1,
+          "area_km2": 167.6,
+          "tile_hint": "1-2",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-towada",
+          "name_ja": "十和田湖",
+          "province": "陸奥",
+          "tile_ids": [
+            11180
+          ],
+          "tile_count": 1,
+          "area_km2": 61.0,
+          "tile_hint": "1",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-shinji",
+          "name_ja": "宍道湖",
+          "province": "出雲",
+          "tile_ids": [
+            12753
+          ],
+          "tile_count": 1,
+          "area_km2": 79.1,
+          "tile_hint": "1",
+          "source_ids": [
+            "river_hii"
+          ],
+          "representation": "TERRAIN_COAST"
+        },
+        {
+          "id": "lake-suwa",
+          "name_ja": "諏訪湖",
+          "province": "信濃",
+          "tile_ids": [
+            8289
+          ],
+          "tile_count": 1,
+          "area_km2": 13.3,
+          "tile_hint": "1",
+          "source_ids": [
+            "gsi_lakes"
+          ],
+          "representation": "TERRAIN_COAST"
+        }
+      ],
+      "natural_wonder_candidates": [
+        {
+          "id": "wonder-fuji-custom",
+          "name_ja": "富士山",
+          "coordinates": [
+            138.727,
+            35.361
+          ],
+          "civ6_official_gs_wonder": false,
+          "proposed_custom_feature_id": "FEATURE_JAC_FUJI",
+          "priority": 1,
+          "mutually_exclusive_with": [
+            "volcano-fuji"
+          ],
+          "source_ids": [
+            "fuji_unesco",
+            "civ6_gs_manual"
+          ],
+          "status": "not_placed_custom_feature_candidate"
+        },
+        {
+          "id": "wonder-aso-caldera-alternative",
+          "name_ja": "阿蘇カルデラ",
+          "coordinates": [
+            131.1,
+            32.9
+          ],
+          "civ6_official_gs_wonder": false,
+          "proposed_custom_feature_id": "FEATURE_JAC_ASO_CALDERA",
+          "priority": 2,
+          "mutually_exclusive_with": [
+            "wonder-fuji-custom",
+            "volcano-aso"
+          ],
+          "source_ids": [
+            "volcano_aso"
+          ],
+          "status": "not_placed_custom_feature_candidate"
+        }
+      ],
+      "lake_schema_representation": "WorldBuilderMap has no lake table or FEATURE_LAKE; lake plots use TERRAIN_COAST"
+    },
     "start_mode": "historical",
     "file": "JAC_Japan_15km.Civ6Map",
-    "bytes": 724992,
+    "bytes": 745472,
     "settler_file": "JAC_Japan_15km_Settlers.Civ6Map"
   }
 ]

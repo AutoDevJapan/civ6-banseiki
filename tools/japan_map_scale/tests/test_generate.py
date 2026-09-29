@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from pathlib import Path
 import sqlite3
 import sys
@@ -69,7 +70,8 @@ class GeneratedMapTests(unittest.TestCase):
                                  (item["width"], item["height"], 0, 0, "MAPSIZE_HUGE"))
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Plots").fetchone()[0], width * height)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Plots WHERE ContinentType='CONTINENT_ASIA'").fetchone()[0], item["land_tiles"])
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotResources").fetchone()[0], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotResources").fetchone()[0],
+                                 item["resource_placement"]["placed_count"])
                 self.assertLessEqual((g.MOD / "Maps" / item["file"]).stat().st_size, 10_000_000)
 
     def test_known_land_and_removed_foreign_land(self):
@@ -153,6 +155,125 @@ class GeneratedMapTests(unittest.TestCase):
                 for table in ("Players", "Cities", "Districts", "PlotOwners", "Units"):
                     self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM StartPositions").fetchone()[0], 22)
+                with sqlite3.connect(g.MOD / "Maps" / item["file"]) as historical:
+                    for table in ("PlotResources", "PlotFeatures", "PlotRivers"):
+                        self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                                         historical.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+    def test_resource_counts_deferred_candidates_and_city_exclusion(self):
+        draft = g.resource_draft()
+        land_candidates = sum(group.get("placement_domain") != "marine"
+                              for group in draft["resource_groups"] for _ in group["points"])
+        marine_candidates = sum(group.get("placement_domain") == "marine"
+                                for group in draft["resource_groups"] for _ in group["points"])
+        self.assertEqual((land_candidates, marine_candidates), (50, 17))
+        self.assertEqual(sum(len(group["points"]) for group in draft["resource_groups"]), 67)
+        self.assertEqual({item["km_per_tile"]: item["resource_placement"]["placed_count"]
+                          for item in self.manifest}, {20: 52, 15: 53})
+        for item in self.manifest:
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                rows = db.execute("SELECT ID,ResourceType FROM PlotResources ORDER BY ID").fetchall()
+                self.assertEqual(len(item["resource_candidates"]), 67)
+                self.assertEqual(len(rows), item["resource_placement"]["placed_count"])
+                self.assertEqual(dict(sorted(Counter(resource for _, resource in rows).items())),
+                    item["resource_placement"]["count_by_type"])
+                city_plots = {row[0] for row in db.execute("SELECT Plot FROM Cities")}
+                self.assertTrue(city_plots.isdisjoint(plot for plot, _ in rows))
+                placed = {record["id"] for record in item["resource_candidates"]
+                          if record["placement_status"] == "placed"}
+                self.assertEqual(len(placed), len(rows))
+                self.assertEqual({record["id"] for record in item["deferred_resources"]} & placed, set())
+                resource_types = {resource for _, resource in rows}
+                self.assertNotIn("RESOURCE_COPPER", resource_types)
+                self.assertNotIn("RESOURCE_NITER", resource_types)
+                for requirement in item["custom_content_required"]:
+                    if requirement["kind"] == "resource":
+                        self.assertNotIn(requirement["type"], resource_types)
+                collisions = [record for record in item["resource_candidates"]
+                              if record["placement_status"] == "same_tile_conflict"]
+                for record in collisions:
+                    winner = next(candidate for candidate in item["resource_candidates"]
+                                  if candidate["id"] == record["conflict_with"])
+                    self.assertEqual(record["plot"], winner["plot"])
+
+    def test_rivers_are_connected_and_only_use_shared_land_edges(self):
+        self.assertEqual({item["km_per_tile"]: len(item["rivers"]) for item in self.manifest},
+                         {20: 10, 15: 10})
+        for item in self.manifest:
+            grid = g.HexGrid(item["km_per_tile"], item["width"], item["height"],
+                             *item["grid_origin_projected_km"])
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                land = {row[0] for row in db.execute(
+                    "SELECT ID FROM Plots WHERE ContinentType='CONTINENT_ASIA'")}
+                actual_edges = set()
+                for plot, ne, west, nw in db.execute(
+                        "SELECT ID,IsNEOfRiver,IsWOfRiver,IsNWOfRiver FROM PlotRivers"):
+                    for side, present in (("NE", ne), ("W", west), ("NW", nw)):
+                        if not present:
+                            continue
+                        neighbor = g.side_neighbour(grid, plot, side)
+                        self.assertIsNotNone(neighbor)
+                        self.assertIn(plot, land)
+                        self.assertIn(neighbor, land)
+                        actual_edges.add((plot, side))
+                expected_edges = set()
+                for river in item["rivers"]:
+                    path = river["edge_path"]
+                    self.assertEqual(len(path), river["edge_count"])
+                    self.assertGreater(river["edge_count"], 0)
+                    for edge in path:
+                        key = (edge["plot"], edge["side"])
+                        expected_edges.add(key)
+                        self.assertIn(key, actual_edges)
+                        self.assertEqual(edge["neighbor"],
+                                         g.side_neighbour(grid, edge["plot"], edge["side"]))
+                    for before, after in zip(path, path[1:]):
+                        before_vertices = set(g.river_edge_geometry(
+                            grid, (before["plot"], before["side"]), before["neighbor"]))
+                        after_vertices = set(g.river_edge_geometry(
+                            grid, (after["plot"], after["side"]), after["neighbor"]))
+                        self.assertEqual(len(before_vertices & after_vertices), 1)
+                self.assertEqual(actual_edges, expected_edges)
+
+    def test_lakes_features_and_volcanoes_follow_draft_counts(self):
+        expected = {
+            20: {"land": 1082, "lake_tiles": 7, "forest": 402, "marsh": 27},
+            15: {"land": 1906, "lake_tiles": 8, "forest": 748, "marsh": 33},
+        }
+        for item in self.manifest:
+            km = item["km_per_tile"]
+            features = item["terrain_features"]
+            with self.subTest(km=km), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                self.assertEqual(item["land_tiles"], expected[km]["land"])
+                self.assertEqual(len(features["lakes"]), 6)
+                lake_tiles = [plot for lake in features["lakes"] for plot in lake["tile_ids"]]
+                self.assertEqual(len(lake_tiles), expected[km]["lake_tiles"])
+                self.assertEqual(len(set(lake_tiles)), len(lake_tiles))
+                for plot in lake_tiles:
+                    self.assertEqual(db.execute("SELECT TerrainType,ContinentType FROM Plots WHERE ID=?",
+                                                 (plot,)).fetchone(), ("TERRAIN_COAST", ""))
+                    self.assertIsNone(db.execute("SELECT ID FROM PlotOwners WHERE ID=?", (plot,)).fetchone())
+                feature_rows = db.execute("SELECT ID,FeatureType FROM PlotFeatures ORDER BY ID").fetchall()
+                feature_plots = {plot for plot, _ in feature_rows}
+                resource_plots = {row[0] for row in db.execute("SELECT ID FROM PlotResources")}
+                city_plots = {row[0] for row in db.execute("SELECT Plot FROM Cities")}
+                self.assertTrue(feature_plots.isdisjoint(resource_plots))
+                self.assertTrue(feature_plots.isdisjoint(city_plots))
+                self.assertTrue(feature_plots.isdisjoint(lake_tiles))
+                actual_counts = dict(sorted(Counter(feature for _, feature in feature_rows).items()))
+                self.assertEqual(actual_counts, features["feature_counts"])
+                self.assertEqual(actual_counts["FEATURE_FOREST"], expected[km]["forest"])
+                self.assertEqual(actual_counts["FEATURE_MARSH"], expected[km]["marsh"])
+                self.assertEqual(actual_counts["FEATURE_VOLCANO"], 5)
+                self.assertAlmostEqual(features["forest"]["placed_percent"], 45.0, delta=0.05)
+                self.assertGreaterEqual(features["marsh"]["placed_count"], 22)
+                self.assertLessEqual(features["marsh"]["placed_count"], 33)
+                for volcano in features["volcanoes"]:
+                    terrain, feature = db.execute(
+                        "SELECT p.TerrainType,f.FeatureType FROM Plots p JOIN PlotFeatures f ON f.ID=p.ID WHERE p.ID=?",
+                        (volcano["plot"],)).fetchone()
+                    self.assertTrue(terrain.endswith("_MOUNTAIN"))
+                    self.assertEqual(feature, "FEATURE_VOLCANO")
 
     def test_close_castle_pairs_report(self):
         self.assertEqual({item["km_per_tile"]: len(item["close_city_pairs"]) for item in self.manifest},
