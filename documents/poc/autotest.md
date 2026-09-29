@@ -32,7 +32,7 @@ python -m unittest discover -s tools/civ6-autotest/tests -v
 
 `tests/test_restart.py` は、模擬ファイル更新時刻と模擬プロセス開始時刻による鮮度判定、再起動が最初の手順より前に行われること、`restart_game` の JSON 入力検証、Steam 起動・左クリック・`FrontEnd` 待機を単体テストする。
 
-実行先ディレクトリは**新規**にする。`baseline.json`、`steps.jsonl`、PNG が入る。既存名のセーブは上書きせず停止するため、再実行時は JSON の `save` と `load` の名前を両方変える。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
+実行先ディレクトリは**新規**にする。省略時はマイクロ秒付き日時で作り、`baseline.json`、`steps.jsonl`、PNG が入る。`save` と `load` の名前には既定で出力ディレクトリの絶対パスから作った12桁の接尾辞を付ける。同じ実行の `save` / `load` は同じ実名を使い、再実行では新しい出力ディレクトリにより別名になる。既存名のセーブは上書きせず停止する。既存の保存を読む場合や名前を固定したい場合は両ステップで `"exact_name": true` を指定する。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
 
 途中で止まった実行のログだけを判定する場合:
 
@@ -50,12 +50,12 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 |---|---|---|
 | `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
-| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式 |
+| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式。`build_setup: true` は HostGame で Create Game の設定をビルド・更新し、全指定枠が維持されたことを検査して設定を閉じる |
 | `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
-| `autoplay` | `turns`、任意で `metrics: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` が真ならターン境界ごとの所要時間と Civ6 プロセスのメモリを記録する |
+| `autoplay` | `turns`、任意で `metrics: true`, `research_metrics: true`, `allow_human_elimination: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` はターン時間とプロセスメモリ、`research_metrics` は各メジャーの技術・社会制度の研究状態を JSONL に記録する。`allow_human_elimination` は人間勢力の滅亡をログに残し、目標ターンまで監視を続ける |
 | `ui_lua` | `state_name`, `code` | 指定 Lua 状態で任意のコードを1回実行する |
 | `screenshot` | `path` | Civ6 のウィンドウだけを PNG に保存する。出力先からの相対パス |
-| `save` / `load` | `name` | 単独プレイのローカル保存。保存完了イベントとファイルを確認する |
+| `save` / `load` | `name`、任意で `exact_name: true` | 単独プレイのローカル保存。既定で出力先別の接尾辞を付ける。保存完了イベントとファイルを確認する |
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
@@ -63,6 +63,21 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 `wait_for` の Lua 条件は繰り返し評価されるため、ゲーム状態を変更しない、副作用のない判定式に限定する。確認済みの Lua `ERR` は直ちに失敗とする。送信後に応答が失われて実行有無が不明な場合は、状態変更を伴う Lua コードを再送しない。`start_game` と `load` では、Lua コマンド送信前の接続・状態照会エラーをそのまま失敗として記録し、送信後の応答不明時だけ読み取り専用のログ・状態確認で遷移を判定する。確認できなければ判定不能として停止する。ロード遷移中に `Lua.log` の再生成・切り詰めを検出した場合も、世代をまたいだ件数比較をせず判定不能として停止する。スクリーンショットは撮影完了後にステップ期限を確認し、超過していれば失敗とする。
 
 `growth-notebooks.json` は `PartialScreenHooks` の `OnToggleNotebooks()` で Notebooks を開き、`JAC_Notebooks` 状態の `Controls.CharacterJournalButton:DoLeftClick()` で Character Journal に切り替える。Lua 状態とログを確認してから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
+
+### 今回追加した確認
+
+- `japan-map-setup-screen.json`: 「ゲームの作成」で通常マップの人間候補が織田・武田の2人、日本15 kmマップを選んだ後の候補が所定の22人と完全一致することを検査し、それぞれ画面を保存する。
+- `japan-map-15km-settlers.json`: 開拓者版の開始時に22メジャー勢力、各勢力ちょうど1人の開拓者、都市0、地図204×88を検査する。
+- `japan-map-15km-200turn.json`: 史実領土版の初期22勢力・56都市を検査し、200ターンを進め、滅亡を許容しつつターン時間・メモリと全メジャーの研究状況を記録する。最後に目標ターン到達と生存勢力数を確認する。
+
+研究ログは成果物の `autoplay-research-1.jsonl` に、**観測できた**各ターンの各メジャーについて、生死、研究済み技術・社会制度の件数とID、現在の研究IDを記録する。観測できなかったターンを補間しない。到達ターンの中央値と勢力間の最小・最大・幅は次のコマンドで出す。`--kind civic` で社会制度を集計する。最初の観測時点で既に完了した項目は `baseline_factions` に数え、その正確な研究完了ターンは不明である。
+
+```powershell
+python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl
+python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl --kind civic
+```
+
+実装の根拠、観測上の限界、主セッションで行う実機確認は [ドライバー拡張ノート](autotest-driver-extensions.md) に記す。
 
 ## 判定内容
 
