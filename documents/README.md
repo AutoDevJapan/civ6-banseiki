@@ -10,17 +10,26 @@
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
 | [`research/civ6-modding-readiness.md`](research/civ6-modding-readiness.md) | 実装着手の準備度調査。手元の Civ6 環境、Civ6 MOD の技術的制約、SSOT の不足 |
+| [`research/court-arbitration.md`](research/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定・所領安堵の設計案（選択肢と推奨） |
 | [`research/japan-1534-start.md`](research/japan-1534-start.md) | 1534年日本マップの当主・城・旧国割当の出典付きレビュー草案 |
 | [`spec/data/japan-1534-start.json`](spec/data/japan-1534-start.json) | 史料上の留保を含む開始データ。53拠点・勢力割当を日本地図の生成器が参照 |
 | [`research/japan-map-resources.md`](research/japan-map-resources.md) | 日本マップの資源・河川・湖沼・植生・火山の調査と出典 |
 | [`spec/data/japan-map-resources.json`](spec/data/japan-map-resources.json) | 上記調査の機械可読な候補・配置規則 |
+| [`research/japan-1534-prosperity.md`](research/japan-1534-prosperity.md) | 1534年開始時の各家の規模（石高・動員力の推定）と、Civ6 の開始状態（人口・建物・区域・部隊）への写像案（Q28） |
+| [`spec/data/japan-1534-prosperity.json`](spec/data/japan-1534-prosperity.json) | 上記の機械可読データ（22勢力・56都市）。生成は `tools/japan_map_scale/prosperity.py`、地図への反映は `prosper_start.py` |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
+| [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
+| [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
+| [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
+| [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |
+| [`poc/resources.md`](poc/resources.md) | 資源の出現（SSOT 3.2）。戦国ツリー下の技術ゲート、後発地点の Lua API とデータ、独自資源（金・漆）、実機確認項目 |
+| [`poc/japan-prosperous-start.md`](poc/japan-prosperous-start.md) | 日本マップ（史実開始）の栄えた1534年開始の実装：人口・建物・区域・改善・部隊・初期金、規模の見直しと実機シナリオ（Q28） |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
 

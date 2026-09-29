@@ -12,7 +12,7 @@ SSOT 3.2「『太閤検地』のような特定の人物・家に結びつく名
 
 | 対象 | 一般名（既定・DB が指す） | 家固有名 | 表示する家 | 理由 |
 |---|---|---|---|---|
-| 社会制度 C25 `CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY` | 広域検地 / Regional Land Survey / Общее межевание земель | 太閤検地 / Taikō Land Survey / Тайко-кэнти (межевание земель) | 織田（暫定） | SSOT 3.2 の例そのもの。豊臣は勢力にないため、秀吉が仕えた織田を暫定の持ち主にした |
+| 社会制度 C25 `CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY` | 広域検地 / Regional Land Survey / Общее межевание земель | 太閤検地 / Taikō Land Survey / Тайко-кэнти (межевание земель) | 織田（暫定、[Q31](../questions.md)） | SSOT 3.2 の例そのもの。豊臣は勢力にないため、秀吉が仕えた織田を暫定の持ち主にした |
 | 時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 / Campaigns for Unification / Походы за объединение | 天下布武と広域戦 / Tenka Fubu and Wide-Area Campaigns / «Тэнка фубу» и походы широкого масштаба | 織田（暫定） | 「天下布武」は信長の印文。従来の日本語名が家固有だったため、一般名を作り直した |
 
 対象外と判断したもの（一般的な制度名・史実の出来事で、特定の人物・家の名ではない）：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
@@ -83,7 +83,7 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 ## 実機確認（メインセッション）
 
-`tools/civ6-autotest/scenarios/sengoku-house-names-oda.json`（織田を操作）と `sengoku-house-names-takeda.json`（武田を操作）。どちらも `RULESET_JAC_BANSEIKI` で開始し、Banseiki・CustomCivs・SengokuTrees を有効化する。
+`tools/civ6-autotest/scenarios/sengoku-house-names-oda.json`（織田を操作）と `sengoku-house-names-takeda.json`（武田を操作）。どちらも `RULESET_JAC_BANSEIKI` で開始し、Banseiki・CustomCivs・SengokuTrees を有効化する。マップは既定のマップ（`map_size` は `MAPSIZE_SMALL`）で、日本マップは使わない。名前の切り替えは UI だけの処理でマップに依存しないため、日本マップでも結果は変わらない。
 
 | 確認 | 期待 |
 |---|---|
@@ -105,5 +105,5 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 ## オーナーへの質問
 
-1. 「太閤検地」「天下布武」の持ち主を織田家（暫定）にしてよいか。豊臣家は勢力に無い。織田家が秀吉の系譜を継ぐ扱いにするか、最後に天下を取った家が名乗る扱いにするか
+1. 「太閤検地」「天下布武」の持ち主を織田家（暫定）にしてよいか（[質問リスト](../questions.md)の Q31）。豊臣家は勢力に無い。織田家が秀吉の系譜を継ぐ扱いにするか、最後に天下を取った家が名乗る扱いにするか
 2. 上記の棚卸しで対象外にした名前（刀狩・楽市楽座・軍役帳・朱印状）のうち、家固有にしたいものはあるか

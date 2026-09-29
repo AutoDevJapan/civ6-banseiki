@@ -1,0 +1,3346 @@
+{
+ "_schema": {
+  "status": "Q28 はオプション①に決定(SSOT 3.1)。地図への反映は prosper_start.py(documents/poc/japan-prosperous-start.md)",
+  "generated_by": "tools/japan_map_scale/prosperity.py",
+  "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale; koku_equivalent=true is derived from population",
+  "option1": "各家の1534年規模に合わせる案(採用)。plan[] は15km 地図の目安。実際の配置は地図ごとに prosper_start.py が決める",
+  "option2": "全勢力に同じ量を置く案(不採用)。option2_rule を参照"
+ },
+ "option2_rule": {
+  "per_city": {
+   "pop": 4,
+   "city_buildings": [
+    "BUILDING_WALLS",
+    "BUILDING_GRANARY"
+   ],
+   "garrison": [
+    "UNIT_SPEARMAN"
+   ]
+  },
+  "per_faction_extra_units": [
+   "UNIT_SPEARMAN",
+   "UNIT_ARCHER",
+   "UNIT_WARRIOR"
+  ],
+  "pop_cap": "都市の所有陸タイル数-1-山岳数(オプション1と同じ上限)"
+ },
+ "koku_1598": {
+  "陸奥": 1672358,
+  "出羽": 318095,
+  "上野": 496377,
+  "下野": 374083,
+  "常陸": 530008,
+  "上総": 378892,
+  "下総": 393255,
+  "安房": 45045,
+  "武蔵": 667126,
+  "相模": 194204,
+  "甲斐": 227616,
+  "信濃": 408358,
+  "越後": 390770,
+  "佐渡": 17030,
+  "越中": 380298,
+  "加賀": 355570,
+  "能登": 210000,
+  "越前": 499411,
+  "若狭": 85000,
+  "伊豆": 69832,
+  "駿河": 150000,
+  "遠江": 255160,
+  "三河": 290750,
+  "尾張": 571737,
+  "美濃": 540000,
+  "飛騨": 38000,
+  "伊勢": 567105,
+  "志摩": 17854,
+  "伊賀": 100000,
+  "近江": 775379,
+  "山城": 225262,
+  "丹後": 110784,
+  "大和": 448946,
+  "摂津": 356066,
+  "河内": 242106,
+  "和泉": 141513,
+  "紀伊": 243550,
+  "淡路": 62104,
+  "播磨": 358534,
+  "丹波": 263887,
+  "但馬": 114235,
+  "因幡": 88500,
+  "伯耆": 100947,
+  "出雲": 186650,
+  "石見": 111770,
+  "隠岐": 10980,
+  "備前": 203388,
+  "備中": 176929,
+  "美作": 186018,
+  "備後": 186100,
+  "安芸": 194150,
+  "周防": 167820,
+  "長門": 130660,
+  "阿波": 183500,
+  "讃岐": 126200,
+  "伊予": 336200,
+  "土佐": 98200,
+  "筑前": 325695,
+  "筑後": 265998,
+  "豊前": 140000,
+  "豊後": 418313,
+  "肥前": 309935,
+  "肥後": 341220,
+  "日向": 120088,
+  "薩摩": 283483,
+  "大隅": 175057
+ },
+ "split_shares": {
+  "摂津": {
+   "HONGANJI": 0.1,
+   "MIYOSHI": 0.9
+  },
+  "尾張": {
+   "ODA": 0.95,
+   "IMAGAWA": 0.05
+  },
+  "武蔵": {
+   "HOJO": 0.25,
+   "YAMANOUCHI_UESUGI": 0.75
+  },
+  "下総": {
+   "HOJO": 0.75,
+   "YAMANOUCHI_UESUGI": 0.25
+  },
+  "信濃": {
+   "TAKEDA": 0.9,
+   "NAGAO": 0.1
+  },
+  "陸奥": {
+   "DATE": 0.6,
+   "ASHINA": 0.4
+  },
+  "出羽": {
+   "DATE": 0.5,
+   "ASHINA": 0.5
+  },
+  "安芸": {
+   "MORI": 0.1,
+   "AMAGO": 0.15,
+   "OUCHI": 0.75
+  },
+  "肥後": {
+   "OUCHI": 0.1,
+   "OTOMO": 0.9
+  }
+ },
+ "factions": [
+  {
+   "id": "ODA",
+   "name": "織田",
+   "tier": "D",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 4,
+    "mid": 8,
+    "high": 12
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "尾張の海東・海西郡の弾正忠家。勝幡城と津島・熱田の湊町の矢銭で伸びる途中。石高は小さいが商業は大きい(1540年に伊勢遷宮へ銭700貫文、1543年に内裏修理料4000貫文を献上。Wikipedia「織田信秀」)",
+   "mobilization_troops": {
+    "low": 1000,
+    "mid": 2000,
+    "high": 3000
+   },
+   "territory_koku_1598_man": 54.3,
+   "tiles_15km": 11,
+   "tile_share_pct": 0.6,
+   "direct_koku_share_pct": 1.4,
+   "traits": {
+    "martial": 1,
+    "trade": 3,
+    "port": 2,
+    "faith": 1,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 2,
+   "pop_total_15km": 5,
+   "units_total": 4,
+   "option2_pop_total_15km": 7,
+   "option2_units_total": 5,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 4,
+   "starting_gold": 200,
+   "plan": [
+    {
+     "id": "ODA_SEAT",
+     "name": "那古野城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 7,
+     "tiles_20km": 3,
+     "pop_15km": 3,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ODA_SHOBATA",
+     "name": "勝幡城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 2,
+     "tiles_15km": 4,
+     "tiles_20km": 5,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 3,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "DATE",
+   "name": "伊達",
+   "tier": "B",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 15,
+    "mid": 27,
+    "high": 35
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "伊達・信夫・置賜の直轄と近隣の従属国衆。陸奥北部と出羽の大半は独立性が強く数えない(1532年に桑折西山城へ移り、1533年『蔵方之掟』、1535年『棟役日記』、1538年『御段銭帳』の徴税台帳を作る。Wikipedia「伊達稙宗」。台帳の数値は未確認)",
+   "mobilization_troops": {
+    "low": 3750,
+    "mid": 6750,
+    "high": 8750
+   },
+   "territory_koku_1598_man": 116.2,
+   "tiles_15km": 298,
+   "tile_share_pct": 15.6,
+   "direct_koku_share_pct": 4.8,
+   "traits": {
+    "martial": 2,
+    "trade": 1,
+    "port": 0,
+    "faith": 1,
+    "mine": 1,
+    "learn": 0
+   },
+   "cities": 4,
+   "pop_total_15km": 15,
+   "units_total": 8,
+   "option2_pop_total_15km": 16,
+   "option2_units_total": 7,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 9,
+   "starting_gold": 310,
+   "plan": [
+    {
+     "id": "DATE_SEAT",
+     "name": "米沢城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 20,
+     "tiles_20km": 19,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "DATE_KOORI",
+     "name": "桑折西山城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 4,
+     "tiles_15km": 12,
+     "tiles_20km": 6,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 1,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "DATE_YANAGAWA",
+     "name": "梁川城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 3,
+     "tiles_15km": 26,
+     "tiles_20km": 17,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "DATE_YAMAGATA",
+     "name": "山形城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 3,
+     "tiles_15km": 240,
+     "tiles_20km": 128,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 3,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "ASHINA",
+   "name": "蘆名",
+   "tier": "B",
+   "confidence": "低",
+   "direct_koku_man": {
+    "low": 15,
+    "mid": 25,
+    "high": 32
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "会津4郡と仙道南部の一族・従属国衆。出羽の仮割当は数えない(当主は盛舜。「会津守護」を自称。Wikipedia「蘆名氏」。数値の史料は見つからず推定のまま)",
+   "mobilization_troops": {
+    "low": 3750,
+    "mid": 6250,
+    "high": 8000
+   },
+   "territory_koku_1598_man": 82.8,
+   "tiles_15km": 65,
+   "tile_share_pct": 3.4,
+   "direct_koku_share_pct": 4.5,
+   "traits": {
+    "martial": 1,
+    "trade": 1,
+    "port": 0,
+    "faith": 2,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 2,
+   "pop_total_15km": 8,
+   "units_total": 6,
+   "option2_pop_total_15km": 8,
+   "option2_units_total": 5,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 6,
+   "starting_gold": 290,
+   "plan": [
+    {
+     "id": "ASHINA_KUROKAWA",
+     "name": "黒川城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 36,
+     "tiles_20km": 21,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_HOLY_SITE",
+       "buildings": [
+        "BUILDING_SHRINE"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHINA_INAWASHIRO",
+     "name": "猪苗代城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 3,
+     "tiles_15km": 29,
+     "tiles_20km": 12,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 1,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "HOJO",
+   "name": "北条",
+   "tier": "A",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 35,
+    "mid": 43,
+    "high": 52
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "相模+伊豆(26.4万)と武蔵南部の江戸周辺(約25%=16.7万)。下総は政治的連携で数えない",
+   "mobilization_troops": {
+    "low": 8750,
+    "mid": 10750,
+    "high": 13000
+   },
+   "territory_koku_1598_man": 77.1,
+   "tiles_15km": 49,
+   "tile_share_pct": 2.6,
+   "direct_koku_share_pct": 7.7,
+   "traits": {
+    "martial": 3,
+    "trade": 2,
+    "port": 1,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 3,
+   "pop_total_15km": 15,
+   "units_total": 8,
+   "option2_pop_total_15km": 12,
+   "option2_units_total": 6,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 10,
+   "starting_gold": 510,
+   "plan": [
+    {
+     "id": "HOJO_ODAWARA",
+     "name": "小田原城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 25,
+     "tiles_20km": 17,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      },
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "HOJO_EDO",
+     "name": "江戸城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 5,
+     "tiles_15km": 13,
+     "tiles_20km": 11,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "HOJO_KOGA",
+     "name": "古河城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 4,
+     "tiles_15km": 11,
+     "tiles_20km": 11,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "YAMANOUCHI_UESUGI",
+   "name": "山内上杉",
+   "tier": "A",
+   "confidence": "低",
+   "direct_koku_man": {
+    "low": 40,
+    "mid": 50,
+    "high": 60
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "上野(49.6万)と武蔵北部(50万)の名目領のうち約半分が実効。1530年代は内紛と衰退の途中(1531年の関東享禄の内乱で憲政が家督。1546年河越で3,000人余を失う。Wikipedia「上杉憲政」)",
+   "mobilization_troops": {
+    "low": 10000,
+    "mid": 12500,
+    "high": 15000
+   },
+   "territory_koku_1598_man": 237.8,
+   "tiles_15km": 140,
+   "tile_share_pct": 7.3,
+   "direct_koku_share_pct": 8.9,
+   "traits": {
+    "martial": 2,
+    "trade": 1,
+    "port": 0,
+    "faith": 1,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 5,
+   "pop_total_15km": 24,
+   "units_total": 11,
+   "option2_pop_total_15km": 20,
+   "option2_units_total": 8,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 14,
+   "starting_gold": 540,
+   "plan": [
+    {
+     "id": "UESUGI_HIRAI",
+     "name": "平井城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 14,
+     "tiles_20km": 10,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      },
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "UESUGI_KAWAGOE",
+     "name": "河越城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 5,
+     "tiles_15km": 15,
+     "tiles_20km": 8,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "UESUGI_MINOWA",
+     "name": "箕輪城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 5,
+     "tiles_15km": 46,
+     "tiles_20km": 24,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 1
+     }
+    },
+    {
+     "id": "UESUGI_OBOW",
+     "name": "小弓城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 4,
+     "tiles_15km": 24,
+     "tiles_20km": 11,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 1,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "UESUGI_OTA",
+     "name": "太田城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 4,
+     "tiles_15km": 41,
+     "tiles_20km": 21,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "TAKEDA",
+   "name": "武田",
+   "tier": "B",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 20,
+    "mid": 23,
+    "high": 30
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "甲斐一国(22.8万)。信虎が1519-31年に統一済み。信濃はまだ制圧前",
+   "mobilization_troops": {
+    "low": 5000,
+    "mid": 5750,
+    "high": 7500
+   },
+   "territory_koku_1598_man": 59.5,
+   "tiles_15km": 60,
+   "tile_share_pct": 3.1,
+   "direct_koku_share_pct": 4.1,
+   "traits": {
+    "martial": 3,
+    "trade": 0,
+    "port": 0,
+    "faith": 1,
+    "mine": 2,
+    "learn": 0
+   },
+   "cities": 2,
+   "pop_total_15km": 8,
+   "units_total": 6,
+   "option2_pop_total_15km": 8,
+   "option2_units_total": 5,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 6,
+   "starting_gold": 230,
+   "plan": [
+    {
+     "id": "TAKEDA_TSUTSUJI",
+     "name": "躑躅ヶ崎館",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 25,
+     "tiles_20km": 12,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 1,
+      "IMPROVEMENT_PLANTATION": 1
+     }
+    },
+    {
+     "id": "TAKEDA_UEHARA",
+     "name": "上原城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 3,
+     "tiles_15km": 35,
+     "tiles_20km": 21,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 3
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "NAGAO",
+   "name": "長尾",
+   "tier": "B",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 25,
+    "mid": 30,
+    "high": 36
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "越後(39.1万)の約75%。守護上杉定実を立てた為景の実効支配。直江津の青苧交易あり",
+   "mobilization_troops": {
+    "low": 6250,
+    "mid": 7500,
+    "high": 9000
+   },
+   "territory_koku_1598_man": 44.9,
+   "tiles_15km": 48,
+   "tile_share_pct": 2.5,
+   "direct_koku_share_pct": 5.4,
+   "traits": {
+    "martial": 2,
+    "trade": 2,
+    "port": 2,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 5,
+   "units_total": 6,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 5,
+   "starting_gold": 380,
+   "plan": [
+    {
+     "id": "NAGAO_KASUGAYAMA",
+     "name": "春日山城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 48,
+     "tiles_20km": 26,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "IMAGAWA",
+   "name": "今川",
+   "tier": "B",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 28,
+    "mid": 33,
+    "high": 40
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "駿河(15万)+遠江(25.5万)の約70%。遠江は斯波氏と争奪中",
+   "mobilization_troops": {
+    "low": 7000,
+    "mid": 8250,
+    "high": 10000
+   },
+   "territory_koku_1598_man": 43.4,
+   "tiles_15km": 38,
+   "tile_share_pct": 2.0,
+   "direct_koku_share_pct": 5.9,
+   "traits": {
+    "martial": 1,
+    "trade": 2,
+    "port": 2,
+    "faith": 2,
+    "mine": 0,
+    "learn": 2
+   },
+   "cities": 3,
+   "pop_total_15km": 11,
+   "units_total": 8,
+   "option2_pop_total_15km": 10,
+   "option2_units_total": 6,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 6,
+   "starting_gold": 410,
+   "plan": [
+    {
+     "id": "IMAGAWA_SUNPU",
+     "name": "駿府今川館の推定アンカー",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 20,
+     "tiles_20km": 5,
+     "pop_15km": 5,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "IMAGAWA_KAKEGAWA",
+     "name": "掛川城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 4,
+     "tiles_15km": 15,
+     "tiles_20km": 8,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "IMAGAWA_NAGOYA",
+     "name": "那古野城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 3,
+     "tiles_15km": 3,
+     "tiles_20km": 11,
+     "pop_15km": 2,
+     "pop_20km": 3,
+     "option2_pop_15km": 2,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "MATSUDAIRA",
+   "name": "松平",
+   "tier": "C",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 15,
+    "mid": 18,
+    "high": 24
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "三河(29.1万)の約60%。清康が西三河を固め東三河へ進出中(1535年没)",
+   "mobilization_troops": {
+    "low": 3750,
+    "mid": 4500,
+    "high": 6000
+   },
+   "territory_koku_1598_man": 29.1,
+   "tiles_15km": 21,
+   "tile_share_pct": 1.1,
+   "direct_koku_share_pct": 3.2,
+   "traits": {
+    "martial": 3,
+    "trade": 0,
+    "port": 0,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 4,
+   "units_total": 4,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 5,
+   "starting_gold": 180,
+   "plan": [
+    {
+     "id": "MATSUDAIRA_OKAZAKI",
+     "name": "岡崎城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 4,
+     "tiles_15km": 21,
+     "tiles_20km": 8,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 3
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "ASAKURA",
+   "name": "朝倉",
+   "tier": "A",
+   "confidence": "中高",
+   "direct_koku_man": {
+    "low": 38,
+    "mid": 42,
+    "high": 50
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "越前(49.9万)の約85%。一乗谷は「北陸の小京都」と呼ばれた計画城下町",
+   "mobilization_troops": {
+    "low": 9500,
+    "mid": 10500,
+    "high": 12500
+   },
+   "territory_koku_1598_man": 49.9,
+   "tiles_15km": 19,
+   "tile_share_pct": 1.0,
+   "direct_koku_share_pct": 7.5,
+   "traits": {
+    "martial": 1,
+    "trade": 2,
+    "port": 2,
+    "faith": 2,
+    "mine": 0,
+    "learn": 3
+   },
+   "cities": 1,
+   "pop_total_15km": 6,
+   "units_total": 6,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 7,
+   "starting_gold": 500,
+   "plan": [
+    {
+     "id": "ASAKURA_ICHIJODANI",
+     "name": "一乗谷朝倉館",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 19,
+     "tiles_20km": 12,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_CAMPUS",
+       "buildings": [
+        "BUILDING_LIBRARY"
+       ]
+      },
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 1,
+      "IMPROVEMENT_MINE": 3
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "ASHIKAGA",
+   "name": "足利将軍家",
+   "tier": "C",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 8,
+    "mid": 15,
+    "high": 25
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "将軍家の直轄は山城の御料所程度。石高は小さいが京都の人口・寺社・商業と威信が最大(幕府財政は御料所が主で小規模。Wikipedia「室町幕府」。義晴は1534年6月まで桑実寺、のち坂本。Wikipedia「足利義晴」)",
+   "mobilization_troops": {
+    "low": 2000,
+    "mid": 3750,
+    "high": 6250
+   },
+   "territory_koku_1598_man": 462.8,
+   "tiles_15km": 279,
+   "tile_share_pct": 14.6,
+   "direct_koku_share_pct": 2.7,
+   "traits": {
+    "martial": 0,
+    "trade": 3,
+    "port": 0,
+    "faith": 3,
+    "mine": 0,
+    "learn": 3
+   },
+   "cities": 12,
+   "pop_total_15km": 31,
+   "units_total": 15,
+   "option2_pop_total_15km": 48,
+   "option2_units_total": 15,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 10,
+   "starting_gold": 370,
+   "plan": [
+    {
+     "id": "ASHIKAGA_SEAT",
+     "name": "室町殿",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 13,
+     "tiles_20km": 7,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      },
+      {
+       "district": "DISTRICT_HOLY_SITE",
+       "buildings": [
+        "BUILDING_SHRINE",
+        "BUILDING_TEMPLE"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 3
+     }
+    },
+    {
+     "id": "ASHIKAGA_KIRIYAMA",
+     "name": "霧山城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 33,
+     "tiles_20km": 14,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_NANAO",
+     "name": "七尾城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 3,
+     "tiles_15km": 9,
+     "tiles_20km": 4,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_SAKURABORA",
+     "name": "桜洞城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 43,
+     "tiles_20km": 24,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 1,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_GOSEYAMA",
+     "name": "後瀬山城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 18,
+     "tiles_20km": 7,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_HOJOZU",
+     "name": "放生津城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 21,
+     "tiles_20km": 13,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 1,
+      "IMPROVEMENT_MINE": 1
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_KUWANOMI",
+     "name": "桑実寺正覚院（臨時政庁）",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 11,
+     "tiles_20km": 8,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_TAKAYA",
+     "name": "高屋城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 3,
+     "tiles_15km": 42,
+     "tiles_20km": 28,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_OKISHIO",
+     "name": "置塩城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 3,
+     "tiles_15km": 31,
+     "tiles_20km": 18,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_YUZUKI",
+     "name": "湯築城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 31,
+     "tiles_20km": 19,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_MITSUISHI",
+     "name": "三石城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 8,
+     "tiles_20km": 10,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ASHIKAGA_BITCHU_MATSUYAMA",
+     "name": "備中松山城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 19,
+     "tiles_20km": 10,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "MIYOSHI",
+   "name": "三好",
+   "tier": "D",
+   "confidence": "低",
+   "direct_koku_man": {
+    "low": 4,
+    "mid": 8,
+    "high": 15
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "阿波三好郡の三好家(元長は1532年没、長慶は12歳)。守護細川氏の阿波・讃岐・淡路は数えない(元長の死は Wikipedia「三好元長」。所領の数値の史料は見つからず推定のまま)",
+   "mobilization_troops": {
+    "low": 1000,
+    "mid": 2000,
+    "high": 3750
+   },
+   "territory_koku_1598_man": 95.6,
+   "tiles_15km": 52,
+   "tile_share_pct": 2.7,
+   "direct_koku_share_pct": 1.4,
+   "traits": {
+    "martial": 2,
+    "trade": 2,
+    "port": 3,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 4,
+   "pop_total_15km": 9,
+   "units_total": 6,
+   "option2_pop_total_15km": 15,
+   "option2_units_total": 7,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 5,
+   "starting_gold": 160,
+   "plan": [
+    {
+     "id": "MIYOSHI_SHOZUI",
+     "name": "勝瑞守護所",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 14,
+     "tiles_20km": 8,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_HARBOR",
+       "buildings": [
+        "BUILDING_LIGHTHOUSE"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "MIYOSHI_SHIBAO",
+     "name": "芝生城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 2,
+     "tiles_15km": 19,
+     "tiles_20km": 9,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "MIYOSHI_YAGAMI",
+     "name": "八上城",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 2,
+     "tiles_15km": 15,
+     "tiles_20km": 8,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "MIYOSHI_AMAGIRI",
+     "name": "天霧城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 4,
+     "tiles_20km": 5,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 3,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 1,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "ROKKAKU",
+   "name": "六角",
+   "tier": "A",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 30,
+    "mid": 40,
+    "high": 45
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "近江(77.5万)のうち南近江の約50%。北近江は浅井氏が半独立",
+   "mobilization_troops": {
+    "low": 7500,
+    "mid": 10000,
+    "high": 11250
+   },
+   "territory_koku_1598_man": 77.5,
+   "tiles_15km": 13,
+   "tile_share_pct": 0.7,
+   "direct_koku_share_pct": 7.1,
+   "traits": {
+    "martial": 2,
+    "trade": 2,
+    "port": 1,
+    "faith": 1,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 2,
+   "pop_total_15km": 8,
+   "units_total": 7,
+   "option2_pop_total_15km": 8,
+   "option2_units_total": 5,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 5,
+   "starting_gold": 480,
+   "plan": [
+    {
+     "id": "ROKKAKU_KANNONJI",
+     "name": "観音寺城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 5,
+     "tiles_20km": 4,
+     "pop_15km": 4,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "ROKKAKU_KAMAHABA",
+     "name": "鎌刃城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 4,
+     "tiles_15km": 8,
+     "tiles_20km": 3,
+     "pop_15km": 4,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "HONGANJI",
+   "name": "本願寺",
+   "tier": "C",
+   "confidence": "低",
+   "direct_koku_man": {
+    "low": 10,
+    "mid": 18,
+    "high": 30
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "石山御坊・寺内町と加賀の一向一揆領(35.6万の約50%)。石高より門徒・寺内町・資金が力(1532年に山科本願寺を焼かれ、石山は濠・土居で囲んだ寺内町。細川晴元との戦いは1535年11月まで。Wikipedia「石山本願寺」「証如」)",
+   "mobilization_troops": {
+    "low": 2500,
+    "mid": 4500,
+    "high": 7500
+   },
+   "territory_koku_1598_man": 39.1,
+   "tiles_15km": 18,
+   "tile_share_pct": 0.9,
+   "direct_koku_share_pct": 3.2,
+   "traits": {
+    "martial": 0,
+    "trade": 3,
+    "port": 2,
+    "faith": 3,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 5,
+   "units_total": 4,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 3,
+   "starting_gold": 300,
+   "plan": [
+    {
+     "id": "HONGANJI_ISHIYAMA",
+     "name": "石山御坊",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 5,
+     "tiles_15km": 18,
+     "tiles_20km": 10,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 1
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "OUCHI",
+   "name": "大内",
+   "tier": "A",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 55,
+    "mid": 70,
+    "high": 85
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "周防+長門(29.9万)、石見の約70%、筑前の約70%、豊前の約80%。山口と博多、石見銀山(1533年に灰吹法)",
+   "mobilization_troops": {
+    "low": 13750,
+    "mid": 17500,
+    "high": 21250
+   },
+   "territory_koku_1598_man": 124.2,
+   "tiles_15km": 113,
+   "tile_share_pct": 5.9,
+   "direct_koku_share_pct": 12.5,
+   "traits": {
+    "martial": 1,
+    "trade": 3,
+    "port": 3,
+    "faith": 2,
+    "mine": 3,
+    "learn": 3
+   },
+   "cities": 3,
+   "pop_total_15km": 15,
+   "units_total": 10,
+   "option2_pop_total_15km": 12,
+   "option2_units_total": 6,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 10,
+   "starting_gold": 820,
+   "plan": [
+    {
+     "id": "OUCHI_YAMAGUCHI",
+     "name": "大内氏館",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 65,
+     "tiles_20km": 39,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      },
+      {
+       "district": "DISTRICT_INDUSTRIAL_ZONE",
+       "buildings": [
+        "BUILDING_WORKSHOP"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "OUCHI_YAMABUKI",
+     "name": "山吹城・石見銀山",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 5,
+     "tiles_15km": 27,
+     "tiles_20km": 16,
+     "pop_15km": 5,
+     "pop_20km": 5,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 1
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "OUCHI_TSUWANO",
+     "name": "津和野城（三本松城）",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 4,
+     "tiles_15km": 21,
+     "tiles_20km": 11,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_GRANARY"
+     ],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 4
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "AMAGO",
+   "name": "尼子",
+   "tier": "A",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 30,
+    "mid": 40,
+    "high": 50
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "出雲+隠岐+伯耆(29.9万)と美作・石見・備後・安芸の一部。たたら製鉄の産地。影響は中国11か国に及ぶと伝わる",
+   "mobilization_troops": {
+    "low": 7500,
+    "mid": 10000,
+    "high": 12500
+   },
+   "territory_koku_1598_man": 51.4,
+   "tiles_15km": 37,
+   "tile_share_pct": 1.9,
+   "direct_koku_share_pct": 7.1,
+   "traits": {
+    "martial": 3,
+    "trade": 0,
+    "port": 1,
+    "faith": 0,
+    "mine": 3,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 6,
+   "units_total": 6,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 9,
+   "starting_gold": 400,
+   "plan": [
+    {
+     "id": "AMAGO_TODA",
+     "name": "月山富田城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 37,
+     "tiles_20km": 19,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      },
+      {
+       "district": "DISTRICT_INDUSTRIAL_ZONE",
+       "buildings": [
+        "BUILDING_WORKSHOP"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 5
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "MORI",
+   "name": "毛利",
+   "tier": "D",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 2,
+    "mid": 3,
+    "high": 5
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "吉田郡山周辺の一国衆。大内方の従属国衆。元就の元の所領は多治比300貫、大内義興から可部700貫・温科300貫・深川300貫・久村70貫の恩賞(Wikipedia「毛利元就」)。1540年の郡山籠城は徴集兵込み3,000。本家の貫高は見つからず、国衆連合を含めて推定",
+   "mobilization_troops": {
+    "low": 500,
+    "mid": 750,
+    "high": 1250
+   },
+   "territory_koku_1598_man": 1.9,
+   "tiles_15km": 26,
+   "tile_share_pct": 1.4,
+   "direct_koku_share_pct": 0.5,
+   "traits": {
+    "martial": 2,
+    "trade": 0,
+    "port": 0,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 3,
+   "units_total": 2,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 4,
+   "starting_gold": 100,
+   "plan": [
+    {
+     "id": "MORI_KORIYAMA",
+     "name": "吉田郡山城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 26,
+     "tiles_20km": 11,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "CHOSOKABE",
+   "name": "長宗我部",
+   "tier": "D",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 0.3,
+    "mid": 0.45,
+    "high": 0.6
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "土佐長岡郡岡豊と周辺。土佐七雄で最小の長岡郡3000貫(1貫=1〜2石で0.3〜0.6万石)。本山・吉良・安芸・津野は各5000貫、一条氏は幡多郡16000貫(Wikipedia「土佐七雄」)",
+   "mobilization_troops": {
+    "low": 75,
+    "mid": 112,
+    "high": 150
+   },
+   "territory_koku_1598_man": 9.8,
+   "tiles_15km": 34,
+   "tile_share_pct": 1.8,
+   "direct_koku_share_pct": 0.1,
+   "traits": {
+    "martial": 2,
+    "trade": 0,
+    "port": 1,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 3,
+   "units_total": 2,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 4,
+   "starting_gold": 100,
+   "plan": [
+    {
+     "id": "CHOSOKABE_OKO",
+     "name": "岡豊城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 34,
+     "tiles_20km": 13,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 0,
+      "IMPROVEMENT_MINE": 2
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "OTOMO",
+   "name": "大友",
+   "tier": "A",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 40,
+    "mid": 48,
+    "high": 60
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "豊後(41.8万)の約85%、筑後の約40%、肥後の一部。府内は明との貿易港を持つ",
+   "mobilization_troops": {
+    "low": 10000,
+    "mid": 12000,
+    "high": 15000
+   },
+   "territory_koku_1598_man": 130.1,
+   "tiles_15km": 94,
+   "tile_share_pct": 4.9,
+   "direct_koku_share_pct": 8.6,
+   "traits": {
+    "martial": 1,
+    "trade": 3,
+    "port": 3,
+    "faith": 2,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 6,
+   "units_total": 7,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 6,
+   "starting_gold": 600,
+   "plan": [
+    {
+     "id": "OTOMO_RESIDENCE",
+     "name": "大友氏館",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 6,
+     "tiles_15km": 94,
+     "tiles_20km": 58,
+     "pop_15km": 6,
+     "pop_20km": 6,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      },
+      {
+       "district": "DISTRICT_HARBOR",
+       "buildings": [
+        "BUILDING_LIGHTHOUSE"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "SHIMAZU",
+   "name": "島津",
+   "tier": "D",
+   "confidence": "中低",
+   "direct_koku_man": {
+    "low": 4,
+    "mid": 8,
+    "high": 15
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "薩摩・大隅・日向南部の名目領(57.6万)のうち貴久(伊作家・相州家)が固めた範囲。1533年に南郷城で初陣、1535年に実久が宗家を奪い勝久を追放(Wikipedia「島津貴久」)。宗家と分家が分裂中のため旧案(中12万)から下げた",
+   "mobilization_troops": {
+    "low": 1000,
+    "mid": 2000,
+    "high": 3750
+   },
+   "territory_koku_1598_man": 57.9,
+   "tiles_15km": 69,
+   "tile_share_pct": 3.6,
+   "direct_koku_share_pct": 1.4,
+   "traits": {
+    "martial": 3,
+    "trade": 1,
+    "port": 2,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 3,
+   "pop_total_15km": 7,
+   "units_total": 5,
+   "option2_pop_total_15km": 12,
+   "option2_units_total": 6,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 5,
+   "starting_gold": 120,
+   "plan": [
+    {
+     "id": "SHIMAZU_SHIMIZU",
+     "name": "清水城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 28,
+     "tiles_20km": 17,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_ENCAMPMENT",
+       "buildings": [
+        "BUILDING_BARRACKS"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      },
+      {
+       "type": "UNIT_ARCHER",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "SHIMAZU_IZAKU",
+     "name": "伊作城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 14,
+     "tiles_20km": 7,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "SHIMAZU_OBI",
+     "name": "飫肥城",
+     "capital": false,
+     "importance": 1,
+     "target_pop": 2,
+     "tiles_15km": 27,
+     "tiles_20km": 13,
+     "pop_15km": 2,
+     "pop_20km": 2,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [],
+     "districts": [],
+     "units": [
+      {
+       "type": "UNIT_WARRIOR",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "RYUKYU",
+   "name": "琉球王国",
+   "tier": "C",
+   "confidence": "中",
+   "direct_koku_man": {
+    "low": 8,
+    "mid": 10,
+    "high": 11
+   },
+   "koku_equivalent": false,
+   "direct_koku_basis": "1609年以後の「琉球国高究帳」で11万石余・沖縄本島8万石(Wikipedia「薩摩藩」、典拠『沖縄県史料 前近代1』)。奄美は1571年まで全域支配でないため中10万。那覇の中継貿易で商業・港が主。兵力は数千人規模(Wikipedia「琉球王国」)",
+   "mobilization_troops": {
+    "low": 2000,
+    "mid": 2500,
+    "high": 2750
+   },
+   "territory_koku_1598_man": 0.0,
+   "tiles_15km": 18,
+   "tile_share_pct": 0.9,
+   "direct_koku_share_pct": 1.8,
+   "traits": {
+    "martial": 0,
+    "trade": 3,
+    "port": 3,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 2,
+   "pop_total_15km": 7,
+   "units_total": 3,
+   "option2_pop_total_15km": 8,
+   "option2_units_total": 5,
+   "units_unplaced": [
+    "UNIT_ARCHER"
+   ],
+   "gold_upkeep_per_turn": 3,
+   "starting_gold": 220,
+   "plan": [
+    {
+     "id": "RYUKYU_SHURI",
+     "name": "首里城",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 4,
+     "tiles_15km": 8,
+     "tiles_20km": 7,
+     "pop_15km": 4,
+     "pop_20km": 4,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS",
+      "BUILDING_GRANARY"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    },
+    {
+     "id": "RYUKYU_NAKAGUSUKU",
+     "name": "中城グスク",
+     "capital": false,
+     "importance": 2,
+     "target_pop": 3,
+     "tiles_15km": 10,
+     "tiles_20km": 8,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": true,
+     "city_buildings": [
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "AINU",
+   "name": "アイヌ",
+   "tier": "D",
+   "confidence": "低",
+   "direct_koku_man": {
+    "low": 2,
+    "mid": 3,
+    "high": 7
+   },
+   "koku_equivalent": true,
+   "direct_koku_basis": "石高なし。人口からの石高相当。江戸時代の記録上の最大は26,800人、1804年以降の調査で約2万人(Wikipedia「アイヌ」「江戸時代の日本の人口統計」)。1人1石(吉田東伍)〜1石0.28〜0.44人(速水融)で2.7〜9.6万石だが、狩猟・交易社会で徴税・動員の仕組みがないため下限側の3万石相当とした(推定)。各コタン・チャシの連合で単一の領域ではない",
+   "mobilization_troops": {
+    "low": 500,
+    "mid": 750,
+    "high": 1750
+   },
+   "territory_koku_1598_man": 0.0,
+   "tiles_15km": 404,
+   "tile_share_pct": 21.2,
+   "direct_koku_share_pct": null,
+   "traits": {
+    "martial": 1,
+    "trade": 1,
+    "port": 1,
+    "faith": 0,
+    "mine": 0,
+    "learn": 0
+   },
+   "cities": 1,
+   "pop_total_15km": 3,
+   "units_total": 2,
+   "option2_pop_total_15km": 4,
+   "option2_units_total": 4,
+   "units_unplaced": [],
+   "gold_upkeep_per_turn": 2,
+   "starting_gold": 100,
+   "plan": [
+    {
+     "id": "AINU_POROMOI",
+     "name": "ポロモイチャシ跡・二風谷拠点候補",
+     "capital": true,
+     "importance": 3,
+     "target_pop": 3,
+     "tiles_15km": 404,
+     "tiles_20km": 227,
+     "pop_15km": 3,
+     "pop_20km": 3,
+     "option2_pop_15km": 4,
+     "coastal_centre": false,
+     "city_buildings": [
+      "BUILDING_PALACE",
+      "BUILDING_WALLS"
+     ],
+     "districts": [
+      {
+       "district": "DISTRICT_COMMERCIAL_HUB",
+       "buildings": [
+        "BUILDING_MARKET"
+       ]
+      }
+     ],
+     "units": [
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "center"
+      },
+      {
+       "type": "UNIT_SPEARMAN",
+       "where": "near"
+      }
+     ],
+     "improvements": {
+      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_MINE": 0
+     },
+     "unverified_improvements": {
+      "IMPROVEMENT_PASTURE": 0,
+      "IMPROVEMENT_PLANTATION": 0
+     }
+    }
+   ]
+  }
+ ]
+}

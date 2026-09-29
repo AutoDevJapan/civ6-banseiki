@@ -22,8 +22,8 @@
     "low": "広域の自然条件・産業史からの配置推定。個別地点の生産量を示さない"
   },
   "map_budget": {
-    "terrestrial_resource_candidate_count": 50,
-    "terrestrial_density_percent_of_land_tiles": 4.59,
+    "terrestrial_resource_candidate_count": 51,
+    "terrestrial_density_percent_of_land_tiles": 4.68,
     "marine_resource_candidate_count": 17,
     "trade_access_port_count": 2,
     "counting_rule": "水域の魚・鯨、港交易アクセスは陸地タイル密度の分母・分子に含めない。20kmタイルへの吸着後、同一タイルの資源候補は1件に統合する。"
@@ -50,13 +50,14 @@
       "civ6_id": "RESOURCE_JAC_GOLD",
       "official_scenario_id": "RESOURCE_GOLD",
       "normal_map_requires_custom_resource": true,
-      "candidate_count": 5,
+      "candidate_count": 6,
       "points": [
         {"id": "gold-kai-kurokawa", "site": "黒川金山", "province": "甲斐", "coordinates": [138.825, 35.817], "start_year": null, "start_year_range": ["15世紀末", "17世紀"], "start_year_note": "操業期間の推定幅", "available_at_start": null, "confidence": "high", "source_ids": ["kai_mines"]},
         {"id": "gold-kai-nakayama", "site": "中山金山", "province": "甲斐", "coordinates": [138.464, 35.377], "start_year": null, "start_year_range": ["16世紀前後", "17世紀末"], "start_year_note": "操業期間の推定幅", "available_at_start": null, "confidence": "high", "source_ids": ["nakayama_mine"]},
         {"id": "gold-izu-toi", "site": "土肥金山", "province": "伊豆", "coordinates": [138.790, 34.909], "start_year": 1577, "available_at_start": false, "confidence": "high", "source_ids": ["toi_mine"]},
         {"id": "gold-noto-hodatsu", "site": "宝達金山", "province": "能登", "coordinates": [136.803, 36.784], "start_year": 1586, "start_year_note": "本格採掘年の研究推定。以前の産金可能性は未確定", "available_at_start": false, "confidence": "medium", "source_ids": ["hodatsu_study"]},
-        {"id": "gold-sado-nishimikawa", "site": "西三川砂金山・笹川", "province": "佐渡", "coordinates": [138.273, 37.819], "start_year": 1593, "start_year_note": "上杉景勝による本格開発", "available_at_start": false, "confidence": "high", "source_ids": ["sado_placer"]}
+        {"id": "gold-sado-nishimikawa", "site": "西三川砂金山・笹川", "province": "佐渡", "coordinates": [138.273, 37.819], "start_year": 1593, "start_year_note": "上杉景勝による本格開発", "available_at_start": false, "confidence": "high", "source_ids": ["sado_placer"]},
+        {"id": "gold-sado-aikawa", "site": "相川金銀山", "province": "佐渡", "coordinates": [138.235, 38.032], "start_year": 1596, "start_year_note": "1596年発見（本格開発は1601年）。SSOT 3.2 が例に挙げる、最初は地図に現れない資源", "available_at_start": false, "confidence": "high", "source_ids": ["sado_placer", "sado_silver"]}
       ]
     },
     {

@@ -1,0 +1,47 @@
+{
+  "name": "Japan map Create Game leader list and ordinary Banseiki filter",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "MainMenu",
+      "code": "OnAdvancedSetup(); return 'Create Game opened'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "local p=g_GameParameters.Parameters.Ruleset; local choice=nil; for _,v in ipairs(p.Values) do if v.Value=='RULESET_JAC_BANSEIKI' then choice=v end end; if not choice then error('Banseiki ruleset absent') end; g_GameParameters:SetParameterValue(p,choice); g_GameParameters:FullRefresh(); GameSetup_PlayerCountChanged(); local map=MapConfiguration.GetValue('MAP_SCRIPT') or ''; if string.find(map,'JAC_Japan_',1,true) then error('expected ordinary map: '..map) end; local human=GetPlayerParameters(0); if not human then error('human player parameters missing') end; human:Refresh(); local values=human.Parameters.PlayerLeader.Values; local seen={}; for _,v in ipairs(values) do seen[v.Value]=(seen[v.Value] or 0)+1 end; if #values~=2 or seen.LEADER_JAC_ODA_NOBUHIDE~=1 or seen.LEADER_JAC_TAKEDA_NOBUTORA~=1 then error('ordinary map human list is not exactly the two Banseiki leaders') end; return 'ordinary map human leaders: exactly Oda and Takeda'"
+    },
+    {
+      "action": "screenshot",
+      "path": "ordinary-banseiki-leaders.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "local file='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map'; local map=g_GameParameters.Parameters.Map; local found=false; for _,v in ipairs(map.Values) do if v.Value==file then found=true end end; if not found then error('Japan map absent from Create Game') end; OnSetMapByValue(file); GameSetup_PlayerCountChanged(); if MapConfiguration.GetValue('MAP_SCRIPT')~=file then error('Japan map not selected') end; local human=GetPlayerParameters(0); if not human then error('human player parameters missing') end; human:Refresh(); local values=human.Parameters.PlayerLeader.Values; local expected={['LEADER_JAC_ODA_NOBUHIDE']=true,['LEADER_JAC_DATE_TANEMUNE']=true,['LEADER_JAC_ASHINA_MORIKIYO']=true,['LEADER_JAC_HOJO_UJITSUNA']=true,['LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA']=true,['LEADER_JAC_TAKEDA_NOBUTORA']=true,['LEADER_JAC_NAGAO_TAMEKAGE']=true,['LEADER_JAC_IMAGAWA_UJITERU']=true,['LEADER_JAC_MATSUDAIRA_KIYOYASU']=true,['LEADER_JAC_ASAKURA_TAKAKAGE']=true,['LEADER_JAC_ASHIKAGA_YOSHIHARU']=true,['LEADER_JAC_MIYOSHI_NAGAYOSHI']=true,['LEADER_JAC_ROKKAKU_SADAYORI']=true,['LEADER_JAC_HONGANJI_SHONYO']=true,['LEADER_JAC_OUCHI_YOSHITAKA']=true,['LEADER_JAC_AMAGO_TSUNEHISA']=true,['LEADER_JAC_MORI_MOTONARI']=true,['LEADER_JAC_CHOSOKABE_KUNICHIKA']=true,['LEADER_JAC_OTOMO_YOSHIAKI']=true,['LEADER_JAC_SHIMAZU_TAKAHISA']=true,['LEADER_JAC_RYUKYU_SHO_SEI']=true,['LEADER_JAC_AINU_TARIKONA']=true}; local seen={}; for _,v in ipairs(values) do if not expected[v.Value] or seen[v.Value] then error('unexpected or duplicate human leader '..tostring(v.Value)) end; seen[v.Value]=true end; if #values~=22 then error('Japan map human leader count '..#values) end; for id,_ in pairs(expected) do if not seen[id] then error('missing Japan human leader '..id) end end; return 'Japan map human leaders: exactly 22'"
+    },
+    {
+      "action": "screenshot",
+      "path": "japan-map-22-leaders.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "OnBackButton(); return 'Create Game closed'"
+    }
+  ]
+}

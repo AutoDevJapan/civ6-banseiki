@@ -93,15 +93,52 @@
     <UpdateDatabase id="JAC_Japan_15km_Settlers_Rules" criteria="JAC_Japan_15km_Settlers">
       <File>Data/JAC_Japan_MapRules.xml</File>
     </UpdateDatabase>
+    <AddGameplayScripts id="JAC_Japan_20km_StartState" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_Japan_StartState.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_StartState" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_Japan_StartState.lua</File>
+    </AddGameplayScripts>
     <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_Banseiki">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
     </UpdateText>
+    <UpdateDatabase id="JAC_Japan_Resources" criteria="JAC_JapanMapScale_Banseiki">
+      <File>Data/JAC_Japan_Resources.xml</File>
+    </UpdateDatabase>
+    <UpdateIcons id="JAC_Japan_Resources_Icons" criteria="JAC_JapanMapScale_Banseiki">
+      <File>Data/JAC_Japan_Resources_Icons.xml</File>
+    </UpdateIcons>
+    <UpdateText id="JAC_Japan_Resources_Text" criteria="JAC_JapanMapScale_Banseiki">
+      <File>Text/JAC_Japan_Resources_Text.xml</File>
+    </UpdateText>
+    <AddGameplayScripts id="JAC_Japan_20km_Resources_Scripts" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_20km_Settlers_Resources_Scripts" criteria="JAC_Japan_20km_Settlers">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_Resources_Scripts" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_Settlers_Resources_Scripts" criteria="JAC_Japan_15km_Settlers">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
   </InGameActions>
   <Files>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>
     <File>Data/JAC_Japan_MapRules.xml</File>
+    <File>Data/JAC_Japan_Resources.xml</File>
+    <File>Data/JAC_Japan_Resources_Icons.xml</File>
+    <File>Text/JAC_Japan_Resources_Text.xml</File>
+    <File>Scripts/JAC_ResourceSites.lua</File>
+    <File>Scripts/JAC_Resources.lua</File>
+    <File>Scripts/JAC_Japan_StartState.lua</File>
     <File>Maps/JAC_Japan_20km.Civ6Map</File>
     <File>Maps/JAC_Japan_20km.lua</File>
     <File>Maps/JAC_Japan_20km_Settlers.Civ6Map</File>

@@ -96,8 +96,14 @@ def process_start_time(pid: int) -> float:
         kernel32.CloseHandle(process)
 
 
-def single_civ_process() -> tuple[int, float] | None:
+def single_civ_process(settle: float = 30.0) -> tuple[int, float] | None:
+    """Return the only Civ VI process. If several exist, wait up to `settle` seconds
+    for exiting ones to vanish; never kills anything, still refuses when they persist."""
     pids = _civ_process_ids()
+    end = time.monotonic() + settle
+    while len(pids) > 1 and time.monotonic() < end:
+        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+        pids = _civ_process_ids()
     if len(pids) > 1:
         raise InputError(f"Multiple Civ VI processes found ({len(pids)}); driver requires one local game")
     if not pids:
@@ -146,7 +152,7 @@ def wait_for_civ_window(deadline: float) -> int:
     last = "no Civ VI process yet"
     while time.monotonic() < deadline:
         try:
-            process = single_civ_process()
+            process = single_civ_process(settle=0)
         except InputError as exc:
             if not str(exc).startswith("Multiple Civ VI processes found"):
                 raise
