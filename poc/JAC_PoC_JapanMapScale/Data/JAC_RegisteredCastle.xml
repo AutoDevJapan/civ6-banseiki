@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <Types>
+    <Row Type="BUILDING_JAC_REGISTERED_CASTLE" Kind="KIND_BUILDING"/>
+  </Types>
+  <Buildings>
+    <Row BuildingType="BUILDING_JAC_REGISTERED_CASTLE" Name="LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME" PrereqDistrict="DISTRICT_CITY_CENTER" Cost="1" InternalOnly="1"/>
+  </Buildings>
+</GameInfo>

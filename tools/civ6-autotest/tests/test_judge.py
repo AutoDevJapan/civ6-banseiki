@@ -185,7 +185,7 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(names, {
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
-            "growth-notebooks.json", "sengoku-trees.json",
+            "growth-notebooks.json", "sengoku-trees.json", "unification-victory.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
         })

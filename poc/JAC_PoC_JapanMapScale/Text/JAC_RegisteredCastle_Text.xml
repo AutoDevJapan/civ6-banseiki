@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME" Language="ja_JP"><Text>登録城</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME" Language="en_US"><Text>Registered Castle</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME" Language="ru_RU"><Text>Зарегистрированный замок</Text></Row>
+  </LocalizedText>
+</GameData>

@@ -469,9 +469,12 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual([row[0] for row in recorder.calls[2][1][:22]], capital_plots)
                 self.assertIn("BUILDING_PALACE", recorder.calls[3][0])
                 self.assertEqual([row[0] for row in recorder.calls[3][1]], capital_plots)
-                self.assertIn("UNIT_WARRIOR", recorder.calls[4][0])
-                self.assertEqual([row[2] for row in recorder.calls[4][1]], capital_plots)
-                self.assertEqual([row[0] for row in recorder.calls[5][1][:22]], capital_plots)
+                self.assertIn(g.REGISTERED_CASTLE_BUILDING, {row[0] for row in recorder.calls[4][1]})
+                self.assertEqual({row[1] for row in recorder.calls[4][1]},
+                                 {city["plot"] for city in item["cities"]})
+                self.assertIn("UNIT_WARRIOR", recorder.calls[5][0])
+                self.assertEqual([row[2] for row in recorder.calls[5][1]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[6][1][:22]], capital_plots)
 
     def test_every_capital_and_only_capitals_have_a_palace(self):
         for item in self.manifest:

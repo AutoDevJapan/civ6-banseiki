@@ -96,14 +96,15 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
-            "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Icons.xml",
-            "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
+            "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
+            "Data/JAC_Sengoku_Icons.xml", "Config/JAC_Sengoku_Victories.xml",
+            "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
         self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],
                          ["Config/JAC_Sengoku_Victories.xml"])
         self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-1],
-                         "Data/JAC_Sengoku_Victories.sql")
+                         "Data/JAC_Sengoku_Unification.sql")
         icons = ET.parse(MOD / "Data/JAC_Sengoku_Icons.xml").getroot()
         icon_names = [row.get("Name") for row in icons.findall("./IconDefinitions/Row")]
         self.assertEqual(len(icon_names), 124)
@@ -188,7 +189,13 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(update.find("Where").attrib, {"RulesetType": "RULESET_JAC_BANSEIKI"})
         self.assertEqual(update.find("Set").attrib,
                          {"VictoryDomain": "JAC_Sengoku_Victories", "MaxTurns": "0"})
-        self.assertFalse(config.findall("./Victories/Row"))
+        self.assertEqual([row.attrib for row in config.findall("./Victories/Row")], [{
+            "Domain": "JAC_Sengoku_Victories",
+            "VictoryType": "VICTORY_JAC_SENGOKU_UNIFICATION",
+            "Name": "LOC_VICTORY_JAC_UNIFICATION_NAME",
+            "Description": "LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION",
+            "ReadOnly": "true", "EnabledByDefault": "true",
+        }])
         self.assertEqual([row.attrib for row in config.findall("./RulesetSupportedValues/Row")], [{
             "Ruleset": "RULESET_JAC_BANSEIKI", "Domain": "StandardTurnLimits", "Value": "TURNLIMIT_NONE"
         }])

@@ -31,6 +31,7 @@ CACHE = Path(__file__).resolve().parent / "cache"
 OFFICIAL = (Path("C:/Program Files (x86)/Steam/steamapps/common/")
             / "Sid Meier's Civilization VI/Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map")
 SCALES = (20, 15)
+REGISTERED_CASTLE_BUILDING = "BUILDING_JAC_REGISTERED_CASTLE"
 RESOURCE_DRAFT = ROOT / "documents" / "spec" / "data" / "japan-map-resources.json"
 START_YEAR = 1534
 SOURCE = {
@@ -521,6 +522,10 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     # capital without it; official DLC/VikingsScenario/Maps/Viking.Civ6Map does the same).
     db.executemany("INSERT INTO Buildings VALUES ('BUILDING_PALACE', ?)",
                    ((city["plot"],) for city in ordered if city["capital"]))
+    # A hidden, unbuildable marker records exactly the cities preplaced by this
+    # map. A later-founded city, even on the same plot, does not inherit it.
+    db.executemany("INSERT INTO Buildings VALUES (?, ?)",
+                   ((REGISTERED_CASTLE_BUILDING, city["plot"]) for city in ordered))
     # No settler on the historical start, so each capital gets one garrison;
     # without any unit a faction cannot act on turn 1 (live 2026-09-29).
     capitals = [city for city in ordered if city["capital"]]

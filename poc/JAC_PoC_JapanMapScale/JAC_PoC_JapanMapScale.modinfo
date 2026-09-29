@@ -75,6 +75,9 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
+    <UpdateDatabase id="JAC_Japan_RegisteredCastles" criteria="JAC_JapanMapScale_Banseiki">
+      <File>Data/JAC_RegisteredCastle.xml</File>
+    </UpdateDatabase>
     <UpdateDatabase id="JAC_Japan_20km_NoSettlers" criteria="JAC_Japan_20km_Historical">
       <File>Data/JAC_Japan_NoSettlers.xml</File>
     </UpdateDatabase>
@@ -95,11 +98,14 @@
     </UpdateDatabase>
     <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_Banseiki">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
+      <File>Text/JAC_RegisteredCastle_Text.xml</File>
     </UpdateText>
   </InGameActions>
   <Files>
+    <File>Data/JAC_RegisteredCastle.xml</File>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
+    <File>Text/JAC_RegisteredCastle_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>
     <File>Data/JAC_Japan_MapRules.xml</File>
     <File>Maps/JAC_Japan_20km.Civ6Map</File>
