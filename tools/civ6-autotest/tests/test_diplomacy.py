@@ -22,7 +22,7 @@ class FakeGame:
         self.calls, self.closed = [], []
 
     def states(self, _timeout=5.0):
-        return ["InGame", "DiplomacyActionView", "DiplomacyDealView"]
+        return ["InGame", *self.visible]
 
     def lua(self, state, code, _timeout=5.0):
         self.calls.append((state, code))
@@ -49,7 +49,7 @@ class FakeGame:
         return "true"
 
     def _advance(self):
-        if not self.active or any(self.visible.values()):
+        if not self.active or self.visible["DiplomacyActionView"] or self.visible["DiplomacyDealView"]:
             return  # the AI turn waits for the human's answer
         if self.turn in self.pending or self.reopen:
             self.pending.discard(self.turn)
@@ -121,6 +121,15 @@ class DiplomacyDuringAutoplayTests(unittest.TestCase):
         detail, _ = self.run_autoplay(game, 3)
         self.assertIn("(1->4", detail)
         self.assertClosed(game, ["DiplomacyActionView"])
+
+    def test_dark_age_policy_choice_is_closed_without_holding_autoplay(self):
+        game = FakeGame(set())
+        game.visible["JAC_SengokuDarkPolicy"] = True  # shown at the human's turn start; it holds no AI turn
+        detail, steps = self.run_autoplay(game, 2)
+        self.assertIn("(1->3", detail)
+        self.assertClosed(game, ["JAC_SengokuDarkPolicy"])
+        self.assertGreater(self.sent(game, "JAC_SengokuDarkPolicy", "OnClose()"), 0)
+        self.assertIn("closed dark-age policy choice", steps)
 
     def test_screen_that_keeps_reopening_is_bounded(self):
         game = FakeGame(set(), reopen=True)

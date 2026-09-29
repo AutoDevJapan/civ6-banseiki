@@ -10,6 +10,7 @@ The stubs have only gameplay-side calls (no GetAllianceType / CanTriggerBoost / 
 from __future__ import annotations
 
 import importlib.util
+import re
 import sqlite3
 import sys
 import unittest
@@ -48,7 +49,8 @@ def ages_tables() -> dict:
         if "CREATE TABLE JAC_" in statement or "INSERT INTO JAC_" in statement:
             db.execute(statement)
     out = {name: db.execute(f"SELECT * FROM {name}").fetchall()
-           for name in ("JAC_SengokuReigns", "JAC_SengokuDarkAgePolicies", "JAC_SengokuAgeEventScores")}
+           for name in ("JAC_SengokuReigns", "JAC_SengokuDarkAgePolicies", "JAC_SengokuAgeEventScores",
+                        "JAC_SengokuDarkAgePolicyDefaults")}
     calendar = ET.parse(MOD / "Data/JAC_Sengoku_Calendar.xml").getroot()
     out["StartYear"] = int(calendar.findtext("./StartEras/Update/Set/Year"))
     out["GameSpeed_Turns"] = [
@@ -139,11 +141,30 @@ class AgesDataTests(unittest.TestCase):
         written = {"JAC_AGE_GOLDEN"} | set(policies) | {p.replace("_POLICY_", "_ANCHOR_") for p in policies}
         self.assertLessEqual(props, written)
 
+    def test_every_house_has_a_valid_default_dark_policy(self):
+        # §6.2: the per-house table covers exactly the 22 houses of JAC_PoC_CustomCivs, each with a real policy.
+        civs = set()
+        for path in (ROOT / "poc/JAC_PoC_CustomCivs/Data").glob("*.sql"):
+            civs |= set(re.findall(r"\('(CIVILIZATION_JAC_[A-Z_]+)', 'LOC_", path.read_text(encoding="utf-8")))
+        self.assertEqual(len(civs), 22)
+        rows = dict(self.q("SELECT CivilizationType, PolicyType FROM JAC_SengokuDarkAgePolicyDefaults"))
+        self.assertEqual(set(rows), civs)
+        policies = {r[0] for r in self.q("SELECT PolicyType FROM JAC_SengokuDarkAgePolicies")}
+        self.assertLessEqual(set(rows.values()), policies)
+        self.assertGreater(len(set(rows.values())), 1)  # not every house on one policy
+
     def test_text_keys_are_translated(self):
         keys = {r[0] for r in self.q("SELECT Name FROM JAC_SengokuReigns UNION SELECT Announcement FROM JAC_SengokuReigns "
                                      "UNION SELECT Name FROM JAC_SengokuDarkAgePolicies "
+                                     "UNION SELECT Description FROM JAC_SengokuDarkAgePolicies "
                                      "UNION SELECT Announcement FROM JAC_SengokuDarkAgePolicies")}
         keys |= {"LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT", "LOC_JAC_AGE_HEROIC_ANNOUNCEMENT", "LOC_JAC_AGE_NORMAL_ANNOUNCEMENT"}
+        # The choice screen (UI/JAC_SengokuDarkPolicy.lua / .xml).
+        ui = "".join((MOD / f"UI/JAC_SengokuDarkPolicy.{ext}").read_text(encoding="utf-8") for ext in ("lua", "xml"))
+        ui_keys = set(re.findall(r"LOC_JAC_AGE_DARK_CHOICE_[A-Z]+", ui))
+        self.assertEqual(ui_keys, {"LOC_JAC_AGE_DARK_CHOICE_TITLE", "LOC_JAC_AGE_DARK_CHOICE_BODY",
+                                   "LOC_JAC_AGE_DARK_CHOICE_CHOOSE", "LOC_JAC_AGE_DARK_CHOICE_LATER"})
+        keys |= ui_keys
         text = {}
         for row in ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row"):
             text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
@@ -175,6 +196,7 @@ GameInfo = {
   JAC_SengokuReigns = gameInfoTable(tables.JAC_SengokuReigns),
   JAC_SengokuDarkAgePolicies = gameInfoTable(tables.JAC_SengokuDarkAgePolicies),
   JAC_SengokuAgeEventScores = gameInfoTable(tables.JAC_SengokuAgeEventScores),
+  JAC_SengokuDarkAgePolicyDefaults = gameInfoTable(tables.JAC_SengokuDarkAgePolicyDefaults),
 }
 CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
@@ -252,13 +274,18 @@ NotificationManager = { SendNotification = function(id, kind, data)
 end }
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
-local handlers = { turn = {}, conquered = {}, built = {} }
-function RESET_HANDLERS() handlers = { turn = {}, conquered = {}, built = {} } end
+local handlers = { turn = {}, conquered = {}, built = {}, choose = {} }
+function RESET_HANDLERS() handlers = { turn = {}, conquered = {}, built = {}, choose = {} } end
 GameEvents = {
   OnGameTurnStarted = { Add = function(f) table.insert(handlers.turn, f) end },
   CityConquered = { Add = function(f) table.insert(handlers.conquered, f) end },
   CityBuilt = { Add = function(f) table.insert(handlers.built, f) end },
+  JAC_SengokuDarkPolicyChoose = { Add = function(f) table.insert(handlers.choose, f) end },
 }
+-- EXECUTE_SCRIPT from the choice screen: the engine passes the requesting player and the parameter table.
+function CHOOSE(playerID, params)
+  for _, f in ipairs(handlers.choose) do f(playerID, params) end
+end
 function START_TURN(turn)
   CURRENT_TURN = startTurn + turn - 1
   for _, f in ipairs(handlers.turn) do f(CURRENT_TURN) end
@@ -412,8 +439,8 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual([self.score(p) for p in (0, 2, 3)], [0, 0, 0])
 
     def test_castle_of_a_non_major_has_no_age_flags(self):
-        self.turns(1, 66)  # every house dark
-        self.assertEqual(self.plot(14, 12).GetProperty(None, "JAC_AGE_POLICY_VALOR"), 1)
+        self.turns(1, 66)  # every house dark; Imagawa's default is Temple Learning
+        self.assertEqual(self.plot(14, 12).GetProperty(None, "JAC_AGE_POLICY_TEMPLE"), 1)
         self.g.TRANSFER(self.g.FREE_CITIES, 14, 12)
         self.assertEqual(self.plot_properties()[1214], (0,) * 9)
 
@@ -558,7 +585,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.g.LEDGER().reign, 6)
         notes = [tuple(n.values()) for n in self.g.NOTES.values()]
         self.assertEqual(len(notes), 6 * 4)
-        self.assertIn((0, 2, "LOC_JAC_REIGN_KOJI_ANNOUNCEMENT", "LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT", 66), notes)
+        self.assertIn((0, 2, "LOC_JAC_REIGN_KOJI_ANNOUNCEMENT", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
 
     def plot_properties(self) -> dict:
         names = ["JAC_AGE_GOLDEN"] + [f"JAC_AGE_{kind}_{p}" for kind in ("POLICY", "ANCHOR")
@@ -566,10 +593,10 @@ class LedgerTests(unittest.TestCase):
         return {i: tuple(p.GetProperty(None, n) for n in names) for i, p in self.g.PLOTS.items()}
 
     def test_property_writer_is_idempotent_with_one_anchor_per_house(self):
-        self.turns(1, 66)  # nobody scored: every house is dark with the first policy
+        self.turns(1, 66)  # nobody scored: every house is dark with its default policy
         self.house(1).age, self.house(1).policy = "GOLDEN", None  # make Takeda golden
         self.turns(67)
-        self.assertEqual(self.plot(12, 12).GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 1)
+        self.assertEqual(self.plot(12, 12).GetProperty(None, "JAC_AGE_ANCHOR_TEMPLE"), 1)
         self.g.FOUND(3, 11, 12, False)  # CityBuilt rewrites; the smaller plot index becomes Imagawa's anchor
         first = self.plot_properties()
         self.turns(68)
@@ -577,13 +604,13 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.plot_properties(), first)
         for x in (11, 12, 13, 14):
             plot = self.plot(x, 12)
-            self.assertEqual(plot.GetProperty(None, "JAC_AGE_POLICY_VALOR"), 1)
-            self.assertEqual(plot.GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 1 if x == 11 else 0)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_POLICY_TEMPLE"), 1)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_ANCHOR_TEMPLE"), 1 if x == 11 else 0)
             self.assertEqual(plot.GetProperty(None, "JAC_AGE_GOLDEN"), 0)
         for x in (5, 6):
             self.assertEqual(self.plot(x, 5).GetProperty(None, "JAC_AGE_GOLDEN"), 1)
-            self.assertEqual(self.plot(x, 5).GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 0)
-        anchors = [i for i, p in self.g.PLOTS.items() if p.GetProperty(None, "JAC_AGE_ANCHOR_VALOR") == 1]
+            self.assertEqual(self.plot(x, 5).GetProperty(None, "JAC_AGE_ANCHOR_ELITE"), 0)
+        anchors = [(i, n) for i, props in self.plot_properties().items() for n, v in enumerate(props[5:]) if v == 1]
         self.assertEqual(len(anchors), 3)  # Oda, Hojo, Imagawa are dark; one anchor each
 
     def test_normal_house_has_no_policy_and_dark_house_flags_every_city(self):
@@ -596,13 +623,83 @@ class LedgerTests(unittest.TestCase):
         r1 = self.g.LEDGER().history["r1"]
         self.assertEqual((r1.p0.age, r1.p3.age), ("NORMAL", "DARK"))
         self.assertIsNone(self.house(0).policy)
-        self.assertEqual(self.house(3).policy, "JAC_AGE_POLICY_VALOR")
+        self.assertEqual(self.house(3).policy, "JAC_AGE_POLICY_TEMPLE")
         for x in (1, 2):
             self.assertEqual(self.plot_properties()[100 + x], (0,) * 9)
         for x in (12, 13, 14):
             plot = self.plot(x, 12)
-            self.assertEqual(plot.GetProperty(None, "JAC_AGE_POLICY_VALOR"), 1)
-            self.assertEqual(plot.GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 1 if x == 12 else 0)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_POLICY_TEMPLE"), 1)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_ANCHOR_TEMPLE"), 1 if x == 12 else 0)
+
+    # --- dark-age policy choice (§6.2, §7.2) ---
+
+    def policy_flags(self, x: int, y: int) -> dict:
+        plot = self.plot(x, y)
+        return {n: (plot.GetProperty(None, f"JAC_AGE_POLICY_{n}"), plot.GetProperty(None, f"JAC_AGE_ANCHOR_{n}"))
+                for n in ("VALOR", "ELITE", "PIRATE", "TEMPLE")}
+
+    def choose(self, pid: int, policy: str | None, reign=1) -> None:
+        self.g.CHOOSE(pid, self.lua.table_from({"PolicyType": policy, "Reign": reign}))
+
+    def test_dark_houses_take_their_own_default_and_unlisted_civs_the_first_priority(self):
+        self.g.PlayerConfigurations[2].GetCivilizationTypeName = lambda _self: "CIVILIZATION_OTHER_MAP"
+        self.turns(1, 66)
+        self.assertEqual([self.house(p).policy for p in range(4)],
+                         ["JAC_AGE_POLICY_ELITE", "JAC_AGE_POLICY_ELITE", "JAC_AGE_POLICY_VALOR",
+                          "JAC_AGE_POLICY_TEMPLE"])
+        self.assertIsNone(self.house(0).chosen)
+
+    def test_dark_house_choice_applies_its_flags_once_per_reign(self):
+        self.turns(1, 67)  # every house dark; Takeda's default is Elite Troops
+        self.assertEqual(self.policy_flags(5, 5)["ELITE"], (1, 1))
+        self.choose(1, "JAC_AGE_POLICY_PIRATE")
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_PIRATE", 1))
+        self.assertEqual(self.policy_flags(5, 5),
+                         {"VALOR": (0, 0), "ELITE": (0, 0), "PIRATE": (1, 1), "TEMPLE": (0, 0)})
+        self.assertEqual(self.policy_flags(6, 5),
+                         {"VALOR": (0, 0), "ELITE": (0, 0), "PIRATE": (1, 0), "TEMPLE": (0, 0)})
+        self.choose(1, "JAC_AGE_POLICY_TEMPLE")  # a second choice in the same period is dropped
+        self.turns(68, 72)  # turn starts keep the choice
+        self.assertEqual(self.house(1).policy, "JAC_AGE_POLICY_PIRATE")
+        self.assertEqual(self.policy_flags(5, 5)["PIRATE"], (1, 1))
+        self.assertTrue(any("already chosen" in line for line in self.g.LOG.values()))
+        self.turns(73)  # 永禄: dark again -> the default again, and a new choice is open
+        self.assertEqual((self.house(1).age, self.house(1).policy), ("DARK", "JAC_AGE_POLICY_ELITE"))
+        self.choose(1, "JAC_AGE_POLICY_TEMPLE", reign=2)
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 2))
+
+    def test_invalid_choices_are_dropped(self):
+        self.turns(1, 30)
+        for i in range(1, 6):
+            self.g.Players[0].research.techs[i] = True  # Oda normal at 弘治 (as the normal-house test)
+        self.turns(31, 66)
+        self.assertEqual(self.house(0).age, "NORMAL")
+        before = self.snapshot()
+        self.choose(0, "JAC_AGE_POLICY_PIRATE")  # not dark
+        self.choose(1, "JAC_AGE_POLICY_UNKNOWN")  # not a policy of the table
+        self.choose(1, None)
+        self.choose(1, "JAC_AGE_POLICY_PIRATE", reign=0)  # the screen of an earlier period
+        self.choose(self.g.FREE_CITIES, "JAC_AGE_POLICY_PIRATE")  # no house
+        self.g.CHOOSE(1, None)  # no parameters
+        self.assertEqual(self.snapshot(), before)
+        reasons = [line.split(": ")[-1] for line in self.g.LOG.values() if "choice dropped" in line]
+        self.assertEqual(reasons, ["not dark", "unknown policy", "unknown policy", "stale period 0", "no house",
+                                   "stale period nil"])
+
+    def test_choice_before_the_first_judgement_is_dropped(self):
+        self.turns(1, 10)
+        self.choose(1, "JAC_AGE_POLICY_PIRATE", reign=0)
+        self.assertIsNone(self.house(1).policy)
+
+    def test_choice_survives_load(self):
+        self.turns(1, 66)
+        self.choose(3, "JAC_AGE_POLICY_VALOR")
+        self.g.RESET_HANDLERS()
+        self.load_script()  # load: only the Game property and the plot properties survive
+        self.turns(67)
+        self.assertEqual((self.house(3).policy, self.house(3).chosen), ("JAC_AGE_POLICY_VALOR", 1))
+        self.assertEqual(self.policy_flags(12, 12)["VALOR"], (1, 1))
+        self.assertEqual(self.policy_flags(12, 12)["TEMPLE"], (0, 0))
 
     def test_load_does_not_count_again(self):
         self.turns(1, 5)
@@ -616,6 +713,112 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         self.turns(7, 8)
         self.assertEqual(self.parts(1), {"castle": 2, "research": 1})
+
+
+UI_STUBS = r"""
+-- UI side of the choice screen: controls record their state; UI.RequestPlayerOperation hands the operation to the
+-- gameplay handler as the engine does for EXECUTE_SCRIPT (requesting player, parameter table).
+LOCAL_PLAYER, TURN_ACTIVE, REQUESTS = 1, true, {}
+local function control()
+  local c = { hidden = false, disabled = false }
+  function c:SetText(t) self.text = t end
+  function c:SetHide(h) self.hidden = h end
+  function c:IsHidden() return self.hidden end
+  function c:SetDisabled(d) self.disabled = d end
+  function c:RegisterCallback(_, f) self.click = f end
+  function c:CalculateSize() end
+  function c:DoAutoSize() end
+  return c
+end
+Controls = setmetatable({}, { __index = function(t, k) local c = control(); rawset(t, k, c); return c end })
+ContextPtr = control()
+ROWS = {}
+function include(name) assert(name == "InstanceManager") end
+InstanceManager = { new = function() return {
+  ResetInstances = function() ROWS = {} end,
+  GetInstance = function()
+    local row = { Name = control(), Description = control(), Choose = control() }
+    table.insert(ROWS, row)
+    return row
+  end,
+} end }
+Locale = { Lookup = function(key, ...) local a = { ... }; return key .. (a[1] and ("(" .. a[1] .. ")") or "") end }
+Mouse = { eLClick = 1 }
+PlayerOperations = { EXECUTE_SCRIPT = "EXECUTE_SCRIPT" }
+Game.GetLocalPlayer = function() return LOCAL_PLAYER end
+for _, p in pairs(Players) do p.IsTurnActive = function() return TURN_ACTIVE end end
+local uiEvents = { turn = {}, load = {} }
+Events = {
+  LocalPlayerTurnBegin = { Add = function(f) table.insert(uiEvents.turn, f) end },
+  LoadScreenClose = { Add = function(f) table.insert(uiEvents.load, f) end },
+}
+function LOCAL_TURN_BEGIN() for _, f in ipairs(uiEvents.turn) do f() end end
+UI = { RequestPlayerOperation = function(id, op, params)
+  table.insert(REQUESTS, { id = id, op = op, OnStart = params.OnStart })
+  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params) end
+end }
+"""
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
+class DarkPolicyScreenTests(unittest.TestCase):
+    """UI/JAC_SengokuDarkPolicy.lua on top of the ledger; Takeda (player 1) is the local human."""
+
+    load_script, turns, house, plot, policy_flags = (LedgerTests.load_script, LedgerTests.turns, LedgerTests.house,
+                                                     LedgerTests.plot, LedgerTests.policy_flags)
+
+    def setUp(self):
+        LedgerTests.setUp(self)
+        self.lua.execute(UI_STUBS)
+        self.lua.execute((MOD / "UI/JAC_SengokuDarkPolicy.lua").read_text(encoding="utf-8"))
+
+    def shown(self) -> bool:
+        return not self.g.ContextPtr.hidden
+
+    def test_screen_lists_the_policies_and_a_click_applies_the_choice(self):
+        self.turns(1, 65)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertFalse(self.shown())  # no judgement yet
+        self.turns(66)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())
+        rows = list(self.g.ROWS.values())
+        self.assertEqual([r.Name.text for r in rows], ["LOC_JAC_AGE_POLICY_VALOR_NAME", "LOC_JAC_AGE_POLICY_ELITE_NAME",
+                                                        "LOC_JAC_AGE_POLICY_PIRATE_NAME", "LOC_JAC_AGE_POLICY_TEMPLE_NAME"])
+        self.assertEqual(rows[2].Description.text, "LOC_JAC_AGE_POLICY_PIRATE_DESCRIPTION")
+        self.assertEqual(self.g.Controls.Body.text, "LOC_JAC_AGE_DARK_CHOICE_BODY(LOC_JAC_AGE_POLICY_ELITE_NAME)")
+        rows[2].Choose.click()
+        self.assertFalse(self.shown())
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_PIRATE", 1))
+        self.assertEqual(self.policy_flags(5, 5)["PIRATE"], (1, 1))
+        self.turns(67)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertFalse(self.shown())  # chosen: not shown again in this period
+
+    def test_later_closes_until_the_next_turn_and_nothing_is_sent_before_the_turn_is_active(self):
+        self.turns(1, 66)
+        self.g.TURN_ACTIVE = False
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())
+        list(self.g.ROWS.values())[2].Choose.click()  # before the turn is active: not sent, the screen stays
+        self.assertEqual(len(self.g.REQUESTS), 0)
+        self.assertTrue(self.shown())
+        self.g.Controls.LaterButton.click()
+        self.assertFalse(self.shown())
+        self.g.TURN_ACTIVE = True
+        self.turns(67)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())  # still unchosen: asked again, the default stays meanwhile
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_ELITE", None))
+
+    def test_not_shown_for_a_house_that_is_not_dark(self):
+        self.turns(1, 30)
+        for i in range(1, 6):
+            self.g.Players[1].research.techs[i] = True  # Takeda normal at 弘治
+        self.turns(31, 66)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertEqual(self.house(1).age, "NORMAL")
+        self.assertFalse(self.shown())
 
 
 # Live 2026-09-29 (ages-impl-01, 15 km Japan map, 22 AI houses, standard speed): at the 弘治 judgement (turn 66,

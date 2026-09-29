@@ -56,6 +56,12 @@
 			</Properties>
 			<File>UI/JAC_UnificationPact.xml</File>
 		</AddUserInterfaces>
+		<AddUserInterfaces id="JAC_Sengoku_DarkPolicyUI" criteria="JAC_Sengoku_BanseikiOnly">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/JAC_SengokuDarkPolicy.xml</File>
+		</AddUserInterfaces>
 		<UpdateText id="JAC_Sengoku_Text" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Text/JAC_Sengoku_Text.xml</File>
 			<File>Text/JAC_Sengoku_Unification_Text.xml</File>
@@ -69,6 +75,8 @@
 			<File>UI/JAC_HouseNamesData_Sengoku.lua</File>
 			<File>UI/JAC_UnificationPact.xml</File>
 			<File>UI/JAC_UnificationPact.lua</File>
+			<File>UI/JAC_SengokuDarkPolicy.xml</File>
+			<File>UI/JAC_SengokuDarkPolicy.lua</File>
 		</ImportFiles>
 	</InGameActions>
 	<FrontEndActions>
@@ -98,6 +106,8 @@
 		<File>Scripts/JAC_Sengoku_UnificationPact.lua</File>
 		<File>UI/JAC_UnificationPact.xml</File>
 		<File>UI/JAC_UnificationPact.lua</File>
+		<File>UI/JAC_SengokuDarkPolicy.xml</File>
+		<File>UI/JAC_SengokuDarkPolicy.lua</File>
 		<File>Data/JAC_Sengoku_Icons.xml</File>
 		<File>Config/JAC_Sengoku_Victories.xml</File>
 		<File>Config/JAC_Sengoku_Calendar.xml</File>
