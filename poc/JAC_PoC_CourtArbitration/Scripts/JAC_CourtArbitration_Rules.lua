@@ -30,6 +30,7 @@ R.LEGITIMACY_KEY = "JAC_LEGITIMACY"                 -- Player
 R.OUTLAW_KEY = "JAC_ARB_OUTLAW_UNTIL"               -- Player：討伐の大義が立つ最後のターン
 R.PENDING_KEY = "JAC_ARB_PENDING"                   -- Game：審理中の請求（同時に1件）
 R.LAST_REQUEST_KEY = "JAC_ARB_LAST_REQUEST_TURN"    -- Game：裁定は1ターンに1件まで
+R.LAST_EVENT_KEY = "JAC_ARB_LAST_EVENT"             -- Game：最後に届いた EXECUTE_SCRIPT（検証用の記録。判定には使わない）
 R.TRUCE_PREFIX = "JAC_ARB_TRUCE_"                   -- Game：<小さいID>_<大きいID> = 停戦が続く最後のターン
 
 -- ゲーム開始からのターン（1始まり）。エンジンのターンは 1534 年開始で 16603 から始まる

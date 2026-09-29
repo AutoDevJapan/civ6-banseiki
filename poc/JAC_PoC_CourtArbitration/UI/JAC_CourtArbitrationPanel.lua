@@ -11,18 +11,32 @@ local function Name(id)
 	return Locale.Lookup(R.NameKey(id))
 end
 
-local function Send(onStart, params)
-	params.OnStart = onStart
-	UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, params)
+-- 自分の手番が始まっているか（公式：ActionPanel.lua:688）。ターン処理中（「お待ちください」）に送った
+-- 要求はゲームプレイ側に届かなかった（実機 court-arbitration-03）ので、その間は送らない
+local function TurnActive()
+	local player = Players[Game.GetLocalPlayer()]
+	return player ~= nil and player:IsTurnActive()
 end
 
--- シナリオからも呼ぶ（tools/civ6-autotest/scenarios/court-arbitration.json）
+-- 送れたら true
+local function Send(onStart, params)
+	if not TurnActive() then
+		print("[JAC_ARB] not sent (local turn not active): " .. onStart)
+		return false
+	end
+	params.OnStart = onStart
+	UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, params)
+	return true
+end
+
+-- シナリオからも呼ぶ（tools/civ6-autotest/scenarios/court-arbitration.json）。引数名は動作済みの
+-- 天下統一同盟（JAC_UnificationPact.lua の Target）にそろえる
 function JAC_RequestArbitration(a, b)
-	Send("JAC_CourtArbitrationRequest", { A = a, B = b })
+	return Send("JAC_CourtArbitrationRequest", { Target = a, Other = b })
 end
 
 function JAC_RespondArbitration(accept)
-	Send("JAC_CourtArbitrationRespond", { Accept = accept and 1 or 0 })
+	return Send("JAC_CourtArbitrationRespond", { Accept = accept and 1 or 0 })
 end
 
 -- 請求できる組。自分が戦っている相手と、裁定の力を持つ将軍家なら他家どうしの戦争も
@@ -75,9 +89,11 @@ local function Refresh()
 	if key and pending[key] == nil then
 		local row = AddRow(Locale.Lookup("LOC_JAC_ARB_INCOMING", Name(pending.Requester), Name(pending.A), Name(pending.B)))
 		row.Action:SetText(Locale.Lookup("LOC_JAC_ARB_ACCEPT"))
+		row.Action:SetDisabled(not TurnActive())
 		row.Action:RegisterCallback(Mouse.eLClick, function() JAC_RespondArbitration(true); Refresh() end)
 		row.Action2:SetHide(false)
 		row.Action2:SetText(Locale.Lookup("LOC_JAC_ARB_REFUSE"))
+		row.Action2:SetDisabled(not TurnActive())
 		row.Action2:RegisterCallback(Mouse.eLClick, function() JAC_RespondArbitration(false); Refresh() end)
 		count = count + 1
 	end
@@ -86,7 +102,7 @@ local function Refresh()
 		local row = AddRow(Locale.Lookup("LOC_JAC_ARB_PAIR", Name(a), Name(b)))
 		row.Action:SetText(Locale.Lookup("LOC_JAC_ARB_REQUEST"))
 		local ok, reason = R.CheckRequest(localID, a, b)
-		row.Action:SetDisabled(not ok)
+		row.Action:SetDisabled(not ok or not TurnActive())
 		if not ok then row.Action:SetToolTipString(Locale.Lookup("LOC_JAC_ARB_REASON_" .. reason)) end
 		row.Action:RegisterCallback(Mouse.eLClick, function() JAC_RequestArbitration(a, b); Refresh() end)
 		count = count + 1

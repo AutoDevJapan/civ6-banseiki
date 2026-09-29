@@ -136,7 +136,7 @@ function START_TURN(turn)
   CURRENT_TURN = startTurn + turn - 1
   GameEvents.OnGameTurnStarted.Call(CURRENT_TURN)
 end
-function REQUEST(player, a, b) GameEvents.JAC_CourtArbitrationRequest.Call(player, { A = a, B = b, OnStart = "x" }) end
+function REQUEST(player, a, b) GameEvents.JAC_CourtArbitrationRequest.Call(player, { Target = a, Other = b, OnStart = "x" }) end
 function RESPOND(player, accept) GameEvents.JAC_CourtArbitrationRespond.Call(player, { Accept = accept }) end
 """
 
@@ -209,6 +209,14 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 2 + 10)
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
         self.assertIn("[JAC_ARB] decision player=1 accept=true by=ai", self.log())
+
+    def test_every_execute_script_is_recorded_at_entry_even_when_rejected(self):
+        # The live scenario reports this when a request never reaches the gameplay side (court-arbitration-03).
+        self.assertIsNone(self.game("JAC_ARB_LAST_EVENT"))
+        self.g.REQUEST(self.MORI, self.OUCHI, self.OTOMO)  # NOT_PARTY
+        self.assertEqual(self.game("JAC_ARB_LAST_EVENT"), "request player=3 turn=1")
+        self.g.RESPOND(self.OTOMO, 1)  # ignored: nothing pending
+        self.assertEqual(self.game("JAC_ARB_LAST_EVENT"), "respond player=1 turn=1")
 
     def test_the_other_party_may_be_the_requester(self):
         self.g.REQUEST(self.OTOMO, self.OUCHI, self.OTOMO)

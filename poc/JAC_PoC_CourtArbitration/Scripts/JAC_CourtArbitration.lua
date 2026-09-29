@@ -38,7 +38,8 @@ end
 -- 請求（UI/JAC_CourtArbitrationPanel.lua → UI.RequestPlayerOperation(EXECUTE_SCRIPT)、OnStart = この名前。
 -- 公式：BlackDeathScenario_PopupHandler.lua:22-28 → BlackDeathScenario.lua:66 の GameEvents.EventPopupChoice）
 local function OnRequest(requester, params)
-	local a, b = tonumber(params.A), tonumber(params.B)
+	Game:SetProperty(R.LAST_EVENT_KEY, string.format("request player=%d turn=%d", requester, R.GameTurn()))
+	local a, b = tonumber(params.Target), tonumber(params.Other)
 	local ok, reason = R.CheckRequest(requester, a, b)
 	if not ok then
 		Log(string.format("rejected request player=%d pair=%s-%s reason=%s", requester, tostring(a), tostring(b), reason))
@@ -70,6 +71,7 @@ end
 
 -- 人間の応否（同じく EXECUTE_SCRIPT。params.Accept = 1 / 0）。答える立場で、まだ答えていないときだけ記録する
 local function OnRespond(playerID, params)
+	Game:SetProperty(R.LAST_EVENT_KEY, string.format("respond player=%d turn=%d", playerID, R.GameTurn()))
 	local pending = Game:GetProperty(R.PENDING_KEY)
 	local key = R.AnswerKey(pending, playerID)
 	if key == nil or pending[key] ~= nil then
