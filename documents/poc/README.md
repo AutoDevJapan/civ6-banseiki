@@ -64,7 +64,7 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 | 20人の仮指導者アイコン・ロード肖像・外交フォールバック | 既存の織田信秀 PoC 画像を共用 | Gemini 3.1 Flash Image による生成、2026-09-29 | [CustomCivs の画像記録](#画像)に詳記。画像自体はローカルアートストア | 生成画像の公開・再配布可否は未決（[質問 D11](../questions.md)）。新たな画像を収録しない | `oda_nobuhide_portrait.jpg`・`oda_nobuhide_figure.png`・`oda_nobuhide_background.png` → `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` |
 | 20文明の仮紋章 | Civ6 日本文明のシンボル | Firaxis Games、2016 | インストール済みの Civ6 `Base/Assets/UI/Icons/Icons_Civilizations.xml` の `ICON_CIVILIZATION_JAPAN` | ゲーム本体の素材。MOD に画像画素を複製せず、ゲーム内参照のみ | `CivSymbols*.dds`（ゲーム本体） |
 
-新規20勢力に専用肖像・家紋がまだないため、画面で「?」にならないよう上の仮画像を割り当てた。共用する織田肖像は他の20人の史実肖像ではない。配布前に各勢力の絵へ差し替え、画像の利用条件を確定する。既存の BLP は Git 管理外なので、実機に配置する際は CustomCivs 節のアートビルドが必要。
+新規20勢力に専用肖像・家紋がまだないため、上の仮画像を割り当てた。共用する織田肖像は他の20人の史実肖像ではない。画面で「?」を避けるには、CustomCivs 節のアートビルドで作る BLP 3個を MOD とともに配置する必要がある。配布前に各勢力の絵へ差し替え、画像の利用条件を確定する。BLP は Git 管理外。
 
 再生成・静的検査は `python tools/japan_map_scale/generate.py`（地図を再生成しない場合は `python tools/japan_map_scale/write_support.py`）、`python tools/japan_map_scale/write_custom_civs.py`、`python -m unittest discover -s tools/japan_map_scale/tests`、`python -m unittest discover -s tools/civ6-autotest/tests`。今回の静的検査は前者19件中17件成功・元データのキャッシュがない2件をスキップ、後者91件成功。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリに書き込めないため、作業ツリー内で権限を継承する一時ディレクトリを使った。これは Civ6 の起動ではない。
 
@@ -342,9 +342,9 @@ MOD の内容：
 | 文明・指導者の能力アイコン | `JAC_Abilities{22,30,32,36,44,45,48,50,64,80,128,200,256}`（4×1。0＝織田家、1＝武田家、2＝織田信秀、3＝武田信虎。全サイズ白＋透明） | アイコン定義に登録済み。標準の設定画面・百科事典では専用絵柄は使われない（下記参照） |
 | ロード画面の肖像・背景 | `LEADER_JAC_<指導者>_NEUTRAL`（570×1024、髷の上に余白を確保）・`_BACKGROUND`（1920×1080） | ロード画面、ゲーム終了画面、設定画面の肖像ツールチップ |
 | 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
-| 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。`LeaderScene` の標準レターボックスを両家で隠す | 外交画面 |
+| 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。仮指導者20人は織田の背景を共用し、`LeaderScene` の標準レターボックスを22人で隠す | 外交画面 |
 
-`tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
+`tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。20人の仮指導者アイコンは織田のアトラス0番を、文明アイコンはゲーム本体の日本文明アトラス12番を参照し、ロード・外交画像も織田のテクスチャを共用する。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
 
 ### 画像の成功条件
 
@@ -388,7 +388,9 @@ MOD の内容：
 
 CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は `JAC_ART_LOCAL` で指定できる。GrowthUI が `<リポジトリ>/poc/JAC_PoC_GrowthUI` にある場合だけ、`civ6-art-local/JAC_PoC_GrowthUI/Originals/` から手帳 DDS を作る。別の場所にある GrowthUI は `JAC_GROWTH_MOD` で指定する。GrowthUI フォルダが無い場合は手帳工程をスキップし、CustomCivs 単独で完了する。
 
-Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 のビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` は `tools/jac_art/build/`、全テクスチャの PNG と一覧はローカルの `civ6-art-local/final-01/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。
+Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 の先行ビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` と全テクスチャの PNG・コンタクトシートは、この作業ツリー内の `tools/jac_art/build/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。ビルド後に `python -m unittest discover -s tools/jac_art/tests -v` を実行すると、FrontEnd の22行から参照するアイコン・肖像とゲーム内のフォールバックを、ローカルの Civ6 本体アイコン定義と生成済み BLP に照らして検査する。ゲーム本体が標準の Steam インストール先にない場合は `CIV6_INSTALL_DIR` を設定する。
+
+今回の「?」の調査では、2026-09-29 14:31 の `ArtDef.log` に `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` の `Unable to resolve Package` が記録され、実機側の CustomCivs MOD フォルダに BLP がなかった。`FrontEndActions` の `UpdateIcons` と `UpdateArt` は適用されているため、画像名の登録だけでは画素を読み込めない。公式の Portugal DLC と同じく、設定画面には `UpdateArt` と `UpdateIcons` を用い、BLP に収録した UI テクスチャを `.dep` の `UITexture` ライブラリで参照する。UI 用スクリプトの `ImportFiles` はこの画像のロード経路ではない。今回の作業ツリーでは BLP 3個を再生成し、GrowthUI があるため43点のコンタクトシートと手帳 DDS も作った。これらは Git 除外で作業ツリー内にあり、実機の MOD フォルダには配置していない。実機の再表示確認は未実施。
 
 選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定し、Antigravity の OAuth サブスクリプション枠を使った（API キーや従量課金 API は不使用）。これは生成経路の事実を記録したもので、規約上この経路が許可されるという判断ではない。生成元画像と Cooker の画像出力はローカルの `civ6-art-local/` にのみ保存し、Git には含めていない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
 

@@ -7,7 +7,7 @@ local function SetCustomCivLetterboxes(playerID)
     local config = PlayerConfigurations[playerID];
     if config == nil then return end
     local leader = config:GetLeaderTypeName();
-    local custom = leader == "LEADER_JAC_ODA_NOBUHIDE" or leader == "LEADER_JAC_TAKEDA_NOBUTORA";
+    local custom = leader ~= nil and leader:sub(1, 11) == "LEADER_JAC_";
     Controls.TopLetterbox:SetHide(custom);
     Controls.BottomLetterbox:SetHide(custom);
 end
