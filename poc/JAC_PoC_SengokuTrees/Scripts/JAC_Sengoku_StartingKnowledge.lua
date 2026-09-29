@@ -1,11 +1,17 @@
 -- Provisional 1534 knowledge common to every major in the Sengoku pack.
--- StartingCivics grants the three civic roots; only techs need a gameplay script.
+-- StartingCivics does not grant civics at an Ancient start (live 2026-09-29: 0 civics), so both are scripted
+-- like the official IndonesiaKhmerScenario.lua:31 (pCulture:SetCivic).
 local INITIALIZED_KEY = "JAC_SENGOKU_STARTING_KNOWLEDGE_GRANTED_V1";
 local STARTING_TECHS = {
   "TECH_JAC_SENGOKU_IRRIGATION_WORKS",
   "TECH_JAC_SENGOKU_COASTAL_PILOTAGE",
   "TECH_JAC_SENGOKU_IRON_FORGING",
   "TECH_JAC_SENGOKU_EARTHWORK_FORTS"
+};
+local STARTING_CIVICS = {
+  "CIVIC_JAC_SENGOKU_HOUSE_RULES",
+  "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
+  "CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS"
 };
 
 local function InitializeNewGame()
@@ -19,6 +25,13 @@ local function InitializeNewGame()
     table.insert(techs, tech.Index);
   end
 
+  local civics = {};
+  for _, civicType in ipairs(STARTING_CIVICS) do
+    local civic = GameInfo.Civics[civicType];
+    assert(civic ~= nil, "Sengoku starting civic missing: " .. civicType);
+    table.insert(civics, civic.Index);
+  end
+
   local majors = PlayerManager.GetAliveMajors();
   for _, player in ipairs(majors) do
     local playerTechs = player:GetTechs();
@@ -28,10 +41,16 @@ local function InitializeNewGame()
         playerTechs:SetTech(techIndex, true);
       end
     end
+    local pCulture = player:GetCulture();
+    for _, civicIndex in ipairs(civics) do
+      if not pCulture:HasCivic(civicIndex) then
+        pCulture:SetCivic(civicIndex, true);
+      end
+    end
   end
 
   Game:SetProperty(INITIALIZED_KEY, true);
-  print("JAC_Sengoku_StartingKnowledge: granted 4 techs to " .. tostring(#majors) .. " majors");
+  print("JAC_Sengoku_StartingKnowledge: granted 4 techs and 3 civics to " .. tostring(#majors) .. " majors");
 end
 
 LuaEvents.NewGameInitialized.Add(InitializeNewGame);

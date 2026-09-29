@@ -98,7 +98,7 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
-            "Data/JAC_Sengoku_StartingKnowledge.sql", "Data/JAC_Sengoku_Victories.sql",
+            "Data/JAC_Sengoku_Victories.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
         ])
@@ -165,7 +165,6 @@ class SengokuTreeTests(unittest.TestCase):
         """)
         db.executescript((MOD / "Data/JAC_Sengoku_Trees.sql").read_text(encoding="utf-8"))
         db.executescript((MOD / "Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8"))
-        db.executescript((MOD / "Data/JAC_Sengoku_StartingKnowledge.sql").read_text(encoding="utf-8"))
         for table, col, count in (("Technologies", "TechnologyType", 32), ("Civics", "CivicType", 30)):
             self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], count)
             self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table} WHERE {col} NOT LIKE '%JAC_SENGOKU%'").fetchone()[0], 0)
@@ -178,10 +177,7 @@ class SengokuTreeTests(unittest.TestCase):
                          "TECH_JAC_SENGOKU_OUTER_DEFENSES")
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
         starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
-        self.assertEqual(len(starting_civics), 3)
-        self.assertEqual(set(starting_civics),
-                         {"CIVIC_JAC_SENGOKU_HOUSE_RULES", "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-                          "CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS"})
+        self.assertEqual(starting_civics, ["CIVIC_JAC_SENGOKU_HOUSE_RULES"])
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Eras_XP2").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM ClimateParameters").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
@@ -195,12 +191,12 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(len(tech_roots), 4)
         self.assertEqual(len(civic_roots), 3)
 
-        sql = (MOD / "Data/JAC_Sengoku_StartingKnowledge.sql").read_text(encoding="utf-8")
         lua = (MOD / "Scripts/JAC_Sengoku_StartingKnowledge.lua").read_text(encoding="utf-8")
         scripted_techs = set(re.findall(r'"(TECH_JAC_SENGOKU_[A-Z_]+)"', lua))
         self.assertEqual(scripted_techs, tech_roots)
-        self.assertEqual(set(re.findall(r"'(?P<civic>CIVIC_JAC_SENGOKU_[A-Z_]+)'", sql)),
-                         civic_roots - {"CIVIC_JAC_SENGOKU_HOUSE_RULES"})
+        # StartingCivics does not grant civics at an Ancient start (live 2026-09-29), so civics are scripted too.
+        self.assertEqual(set(re.findall(r'"(CIVIC_JAC_SENGOKU_[A-Z_]+)"', lua)), civic_roots)
+        self.assertIn("pCulture:SetCivic(civicIndex, true)", lua)
         self.assertIn("PlayerManager.GetAliveMajors()", lua)
         self.assertIn("LuaEvents.NewGameInitialized.Add(InitializeNewGame)", lua)
         self.assertIn("Game:GetProperty(INITIALIZED_KEY)", lua)
@@ -216,10 +212,6 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(script.attrib["criteria"], "JAC_Sengoku_BanseikiOnly")
         self.assertEqual([f.text for f in script.findall("File")],
                          ["Scripts/JAC_Sengoku_StartingKnowledge.lua"])
-        self.assertLess([f.text for f in meta.findall("./InGameActions/UpdateDatabase/File")].index(
-            "Data/JAC_Sengoku_Unlocks.sql"),
-            [f.text for f in meta.findall("./InGameActions/UpdateDatabase/File")].index(
-                "Data/JAC_Sengoku_StartingKnowledge.sql"))
 
         scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/sengoku-starting-knowledge.json")
                               .read_text(encoding="utf-8"))
