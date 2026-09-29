@@ -260,6 +260,14 @@ def _configure_code(step: dict) -> str:
     return "\n".join(lines)
 
 
+BANSEIKI_RULESET = "RULESET_JAC_BANSEIKI"
+
+
+def _builds_setup(step: dict) -> bool:
+    """build_setup defaults to on for the Banseiki ruleset, off elsewhere; an explicit value wins."""
+    return step.get("build_setup", step.get("ruleset") == BANSEIKI_RULESET)
+
+
 def _build_setup_code(players: list[dict]) -> str:
     """Run the official headless Create Game refresh, then check every configured slot."""
     lines = ["BuildHeadlessGameSetup()", "g_GameParameters:FullRefresh()"]
@@ -292,6 +300,7 @@ class Runner:
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
         self.metrics_runs = 0
         self.lua_captures: dict[str, str] = {}
+        self.ruleset: str | None = None
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -845,6 +854,17 @@ class Runner:
         self._wait_frontend_ready(_remaining(deadline), skip_opening=True)
         return "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
 
+    def _check_start_turn(self, deadline: float) -> None:
+        """Banseiki must start at turn 1; without the Create Game setup the calendar override is lost."""
+        if self.ruleset != BANSEIKI_RULESET:
+            return
+        value = self._lua("InGame", "return tostring(GameConfiguration.GetStartTurn())",
+                          min(5, _remaining(deadline)))
+        if str(value).strip().strip('"') != "1":
+            raise ScenarioError(
+                f"{BANSEIKI_RULESET} start turn is {value}, expected 1: the calendar override was not applied "
+                "(configure without build_setup?)")
+
     def _run_step(self, step: dict) -> str:
         action = step["action"]
         if action == "manual":
@@ -861,11 +881,13 @@ class Runner:
             return "enabled/verified " + ", ".join(step["ids"])
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
-            if step.get("build_setup", False):
+            self.ruleset = step["ruleset"]
+            build = _builds_setup(step)
+            if build:
                 self._lua("HostGame", _build_setup_code(step["players"]), min(30, _remaining(deadline)))
             return (f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, "
                     f"players={len(step['players'])}"
-                    + ("; Create Game setup built and checked" if step.get("build_setup", False) else ""))
+                    + ("; Create Game setup built and checked" if build else ""))
         if action == "start_game" and self.owner_start:
             # The owner presses Start Game; the configured setup is shown, not reset (MainMenu's
             # OnAdvancedSetup would call SetToDefaults, so the popup is queued directly).
@@ -876,6 +898,7 @@ class Runner:
             print("OWNER ACTION: press Start Game on the Create Game screen", flush=True)
             wait = max(timeout, 3600.0)
             self._enter_game_after_loadscreen(before, wait, deadline=time.monotonic() + wait)
+            self._check_start_turn(deadline)
             return "owner pressed Start Game; single-player game reached InGame"
         if action == "start_game":
             before = self._loadscreen_count()
@@ -888,6 +911,7 @@ class Runner:
                 response_unknown = True
             self._enter_game_after_loadscreen(before, timeout, deadline=deadline,
                                               response_unknown=response_unknown)
+            self._check_start_turn(deadline)
             return "single-player game reached InGame"
         if action == "autoplay":
             return self._autoplay(step["turns"], timeout, deadline=deadline,
