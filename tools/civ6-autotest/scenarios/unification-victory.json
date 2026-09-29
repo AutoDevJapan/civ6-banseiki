@@ -139,7 +139,7 @@
     {
       "action": "ui_lua",
       "state_name": "HostGame",
-      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; if PlayerConfigurations[0]:GetLeaderTypeName()~='LEADER_JAC_ODA_NOBUHIDE' or PlayerConfigurations[1]:GetLeaderTypeName()~='LEADER_JAC_TAKEDA_NOBUTORA' then error('setup changed the configured players') end; HideGameSetup(); return 'setup built like Create Game; turn limit NONE'"
+      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; if PlayerConfigurations[0]:GetLeaderTypeName()~='LEADER_JAC_ODA_NOBUHIDE' or PlayerConfigurations[1]:GetLeaderTypeName()~='LEADER_JAC_DATE_TANEMUNE' then error('setup changed the configured players') end; HideGameSetup(); return 'setup built like Create Game; turn limit NONE'"
     },
     {
       "action": "start_game",
