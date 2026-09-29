@@ -1,6 +1,6 @@
 # PoC の検証記録
 
-SSOT 16.1 の PoC のうち、実機で検証した項目の手順と結果。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
+SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状態を明記する。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
 
 ## 共通の準備
 
@@ -16,6 +16,50 @@ SSOT 16.1 の PoC のうち、実機で検証した項目の手順と結果。�
 ```powershell
 New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments'))\My Games\Sid Meier's Civilization VI\Mods\JAC_PoC_Bundle0" -Target "<リポジトリ>\poc\JAC_PoC_Bundle0"
 ```
+
+## JAC_PoC_JapanMapScale：日本列島マップの縮尺（束0）
+
+対象は SSOT 16.1「日本列島マップの縮尺」と「ターン処理とメモリ」。**生成・静的検査済み、Civ6 の実機検証は未実施**。最終縮尺はこの表から決めず、実機で開始・50ターン進行・セーブ・ロードを比較してから決める。
+
+| 対辺間の距離 | 盤面 | 総タイル | 日本の陸タイル | `.Civ6Map` 容量 | 本拠からの最大移動 |
+|---:|---:|---:|---:|---:|---:|
+| 40 km | 79×36 | 2,844 | 278 | 319,488 B | 20.9 km |
+| 30 km | 104×47 | 4,888 | 483 | 368,640 B | 16.8 km |
+| 25 km | 124×55 | 6,820 | 698 | 417,792 B | 13.9 km |
+| 20 km | 154×67 | 10,318 | 1,089 | 503,808 B | 10.8 km |
+
+距離は正六角形の向かい合う辺の間隔。中心 (138°E, 36°N) の Lambert 正積方位図法を45°回し、南西から北東へ伸びる列島を盤面の横軸に近づける。北が画面上向きではない試作地図で、面積は投影回転で変わらない。奇数行を半タイル東へずらした Civ6 のオフセット座標を使う。北海道から与那国・石垣・宮古・沖縄・徳之島・奄美まで含み、30/40 km で小島が中心点抽出から消える場合は Natural Earth の島ポリゴン上の基準点を1タイルとして残す。日本以外の陸地（朝鮮半島・サハリン・大陸）は海にする。対象から離れた小笠原・硫黄島・南鳥島は、この北海道〜琉球の縮尺試験範囲に含めない。国境は Natural Earth の de facto 表現に従う。
+
+陸・海は Natural Earth 10m land と admin-0 countries の日本領域の**両方**に含まれるかで判定する。陸に隣接する水タイルは海岸、それ以外は外洋。標高は NOAA ETOPO 2022 の60秒 DEM を3分間隔で取得し、400 m 以上を丘、1,200 m 以上を山として近似した。山は通行不可。湖・河川・資源は入れていない。土壌や気候も未再現で、陸の基底地形は草原。標高区分は地形性能試験用の暫定値で、戦略地形の完成形ではない。
+
+22人は SSOT 3.1 の20家・琉球王国・アイヌにそれぞれ別の `CIVILIZATION_JAC_JAPAN_*` を与える。開始地点は米沢・黒川・小田原・平井・躑躅ヶ崎・春日山・駿府・那古野・岡崎・一乗谷・室町殿・勝瑞・観音寺・石山本願寺・山口・月山富田・吉田郡山・岡豊・府内・鹿児島・首里・二風谷の概略座標。三好は1534年頃の阿波の拠点である勝瑞を使う（[日本遺産の資料](https://www.japan-heritage.bunka.go.jp/ja/datas/files/2024/03/15/ad9723e8037d6fd0fa0cf1cc61fc87d2a1213da3.pdf)）。城でない室町殿・石山本願寺・二風谷は「本拠／地点」として扱う。座標、選ばれたタイル、移動距離、暫定指導者は `Maps/manifest.json` に全件記録する。各地点は日本の陸上で、生成マップ内でも重複せず通行可能。
+
+この PoC の目的は地図と22人の負荷測定であり、22人の専用指導者・肖像はまだ用意していない。AI・顔画像・配色には22人の**異なる公式指導者**を一時的に対応させ、文明名だけを日英露で表示する。家紋は日本の公式アイコンを一時流用する。固有能力は無効。1534年の人物や領土をこの割当で主張しない。後続の勢力 PoC で専用素材・人物に置き換える。
+
+### データの出典と利用条件
+
+| 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 海岸線・島 | Natural Earth 10m land, v5.1.1 | Tom Patterson、Nathaniel Vaughn Kelso ほか、版5.1.1 | [Natural Earth Land](https://www.naturalearthdata.com/downloads/10m-physical-vectors/10m-land/) | [パブリックドメイン](https://www.naturalearthdata.com/about/terms-of-use/) | `tools/japan_map_scale/cache/ne_10m_land.zip` |
+| 日本以外の陸の除外 | Natural Earth 10m admin-0 countries, v5.1.1 | 同上 | [Natural Earth Admin 0](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/10m-admin-0-countries/) | 同上 | `tools/japan_map_scale/cache/ne_10m_admin_0_countries.zip` |
+| 標高 | ETOPO 2022 60 arc-second ice surface elevation、日本周辺の3分抽出 | NOAA NCEI、2022 | [NOAA ETOPO 2022](https://www.ncei.noaa.gov/products/etopo-global-relief-model)、[抽出元 ERDDAP](https://oceanwatch.pifsc.noaa.gov/erddap/griddap/ETOPO_2022_v1_60s.html) | [NOAA メタデータの CC0 1.0](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ngdc.mgg.dem%3Aetopo_2022) | `tools/japan_map_scale/cache/etopo_2022_japan_3arcmin.csv` |
+
+取得物はすべて Git 除外の `tools/japan_map_scale/cache/` に保存し、生成器が SHA-256 を照合する。公式 Civ6 の `Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map` は SQLite **スキーマだけ**の参照元で、公式の地形・画像は生成物へ複製しない。Python の標準ライブラリだけで生成できる。4つの生成マップはいずれも10 MB未満なので Git に収録する。
+
+サイズの根拠：公式 Huge は手元の `Base/Assets/Gameplay/Data/Maps.xml` で106×66。付属 `WorldMapHuge.Civ6Map` には130×66の静的マップ例がある。[YnAMP の作者による設定文](https://github.com/Gedemon/Civ6-YnAMP/blob/master/Configuration/ConfigText.xml)では Enormous が128×80、Giant が180×94で終盤不安定、230×116はフルサイズでロード不可と記される。25 km は公式 Huge に近い6,820タイル、20 km は Enormous に近い10,318タイルになる。ただし盤面の縦横比もAI・GSの処理も異なるため、これらは受け入れ保証ではない。
+
+### 再生成・検証手順
+
+```powershell
+python tools/japan_map_scale/generate.py
+python -m unittest discover -s tools/japan_map_scale/tests -v
+python -m unittest discover -s tools/civ6-autotest/tests -v
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-map-40km.json --check
+```
+
+実機では共通の準備に従って `poc/JAC_PoC_JapanMapScale` を `Mods/JAC_PoC_JapanMapScale` から参照できるようにし、ほかの PoC を無効にする。GS の「日本列島 40/30/25/20 km」4候補が設定画面に出ることと日英露の表示を確かめる。各 `japan-map-<km>km.json` を `scenario.py` で別の `--output` ディレクトリへ実行する。再実行時は JSON 内の `save` と `load` の名前を両方新しい名前にする。シナリオは22人と開始地点、50ターンの自動進行、セーブ、ロード、ロード後1ターンを確認する。`autoplay-metrics-1.jsonl` と `-2.jsonl` に観測したターンごとの経過秒数・作業セット・プライベートメモリを残し、飛ばしたターンは `duration_seconds: null` とする。`steps.jsonl` に保存・ロード所要時間も残り、`judge_profile=japan_map` は本 MOD の Gameplay 適用と `Database.log`・`Modding.log` エラーを検出する。フロントエンドの Config 適用ログは実行前の基準位置より古いことがあるため、設定画面の候補表示とシナリオで選んだ地図の実寸を別途確認する。ログの無関係な本体エラーは切り分けて記録する。
+
+実機で未確認なのは、設定画面の登録、22人の実際の開始位置、各縮尺の50ターン進行・セーブ・ロード・次ターン、GSでのクラッシュとログ、ターン時間・メモリ、3言語表示。4候補の結果を比較し、成功した中で最も細かい縮尺を束0の結論として記録する。50ターンでは終盤の海面上昇や長期肥大は判定できないので、採用候補は別途長時間試験に回す。SSOT 3.4 の最終値は実機確認まで変更しない。
 
 ## JAC_PoC_Bundle0：読み込みと保存
 

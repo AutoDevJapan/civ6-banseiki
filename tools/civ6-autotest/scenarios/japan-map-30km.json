@@ -1,0 +1,177 @@
+{
+  "name": "JAC Japan map scale 30 km, 22 players, 50 turns",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_EXPANSION_2",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_30km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620959,
+      "players": [
+        {
+          "leader": "LEADER_CLEOPATRA",
+          "civ": "CIVILIZATION_JAC_JAPAN_DATE",
+          "human": true
+        },
+        {
+          "leader": "LEADER_GILGAMESH",
+          "civ": "CIVILIZATION_JAC_JAPAN_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_TRAJAN",
+          "civ": "CIVILIZATION_JAC_JAPAN_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_GORGO",
+          "civ": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PERICLES",
+          "civ": "CIVILIZATION_JAC_JAPAN_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PHILIP_II",
+          "civ": "CIVILIZATION_JAC_JAPAN_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_SALADIN",
+          "civ": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_VICTORIA",
+          "civ": "CIVILIZATION_JAC_JAPAN_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PETER_GREAT",
+          "civ": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_GANDHI",
+          "civ": "CIVILIZATION_JAC_JAPAN_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_QIN",
+          "civ": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_CHANDRAGUPTA",
+          "civ": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_MVEMBA",
+          "civ": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PEDRO",
+          "civ": "CIVILIZATION_JAC_JAPAN_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_TOMYRIS",
+          "civ": "CIVILIZATION_JAC_JAPAN_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_BARBAROSSA",
+          "civ": "CIVILIZATION_JAC_JAPAN_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_HARDRADA",
+          "civ": "CIVILIZATION_JAC_JAPAN_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_CATHERINE_DE_MEDICI",
+          "civ": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_T_ROOSEVELT",
+          "civ": "CIVILIZATION_JAC_JAPAN_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_SEONDEOK",
+          "civ": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_SHAKA",
+          "civ": "CIVILIZATION_JAC_JAPAN_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_WILHELMINA",
+          "civ": "CIVILIZATION_JAC_JAPAN_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=104 or h~=47 then error('map grid mismatch '..w..'x'..h) end; local expected={{74,21},{73,21},{66,16},{67,19},{65,19},{69,24},{63,17},{60,21},{61,20},{61,25},{58,24},{53,24},{58,23},{56,23},{47,32},{53,31},{50,31},{49,25},{44,29},{37,27},{16,21},{91,32}}; for i=0,21 do local p=Players[i]; if not p or not p:IsAlive() then error('missing player '..i) end; local e=expected[i+1]; local found=false; for _,unit in p:GetUnits():Members() do if Map.GetPlotDistance(unit:GetX(),unit:GetY(),e[1],e[2])<=2 then found=true end end; if not found then error('start moved from seat '..i) end end; return '22 player starts on 30km map'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 50,
+      "metrics": true,
+      "timeout": 7200
+    },
+    {
+      "action": "save",
+      "name": "JAC-JapanMap-30km-01",
+      "timeout": 180
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 180
+    },
+    {
+      "action": "load",
+      "name": "JAC-JapanMap-30km-01",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=104 or h~=47 then error('map grid mismatch '..w..'x'..h) end; if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then error('loaded game state lost') end; return 'loaded 22-slot map at turn '..Game.GetCurrentGameTurn()"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "metrics": true,
+      "timeout": 900
+    }
+  ]
+}

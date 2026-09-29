@@ -17,6 +17,7 @@ from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ
                    require_single_civ_process)
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
+from metrics import TurnMetrics, process_memory
 from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, newest_mod_file,
                      restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
@@ -28,6 +29,7 @@ ACTIONS = {"restart_game", "enable_mods", "configure", "start_game", "autoplay",
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 MOD_ID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 TYPE_ID = re.compile(r"^[A-Z][A-Z0-9_]+$")
+MAP_FILE = re.compile(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$")
 
 
 class ScenarioError(RuntimeError):
@@ -79,8 +81,8 @@ def _safe_relative_path(value: str) -> Path:
 def validate_scenario(data: dict) -> None:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
         raise ScenarioError("Scenario needs a name")
-    if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth"):
-        raise ScenarioError("judge_profile must be bundle0, generic or growth")
+    if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth", "japan_map"):
+        raise ScenarioError("judge_profile must be bundle0, generic, growth or japan_map")
     if data.get("judge_profile") == "growth":
         if type(data.get("expected_units")) is not int or data["expected_units"] < 1:
             raise ScenarioError("growth scenario needs a positive expected_units count")
@@ -109,6 +111,9 @@ def validate_scenario(data: dict) -> None:
                     raise ScenarioError(f"Step {number}: invalid {key}")
             if type(step.get("seed")) is not int or not -2**31 <= step["seed"] < 2**31:
                 raise ScenarioError(f"Step {number}: seed must be a signed 32-bit integer")
+            if "map_file" in step and (not isinstance(step["map_file"], str)
+                                       or not MAP_FILE.fullmatch(step["map_file"])):
+                raise ScenarioError(f"Step {number}: invalid map_file")
             players = step.get("players")
             if not isinstance(players, list) or len(players) < 2 or sum(p.get("human") is True for p in players if isinstance(p, dict)) != 1:
                 raise ScenarioError(f"Step {number}: specify at least two players and exactly one human")
@@ -120,6 +125,8 @@ def validate_scenario(data: dict) -> None:
         elif action == "autoplay":
             if type(step.get("turns")) is not int or step["turns"] < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
+            if "metrics" in step and type(step["metrics"]) is not bool:
+                raise ScenarioError(f"Step {number}: metrics must be boolean")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -210,6 +217,8 @@ def _configure_code(step: dict) -> str:
         "GameConfiguration.SetToDefaults()",
         f"GameConfiguration.SetRuleSet({_lua_string(step['ruleset'])})",
         "GameConfiguration.UpdateEnabledMods()",
+        *([f"MapConfiguration.SetValue('MAP_SCRIPT', {_lua_string(step['map_file'])})"]
+          if "map_file" in step else []),
         f"MapConfiguration.SetMapSize({_lua_string(step['map_size'])})",
         f"GameConfiguration.SetGameSpeedType({_lua_string(step['speed'])})",
         f"MapConfiguration.SetValue('RANDOM_SEED', {step['seed']})",
@@ -247,6 +256,7 @@ class Runner:
         self.baseline: dict | None = None
         self.log_step_baseline: dict | None = None
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
+        self.metrics_runs = 0
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -491,7 +501,8 @@ class Runner:
                           min(5, _remaining(deadline)))
         return _parse_autoplay_status(value)
 
-    def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None) -> str:
+    def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
+                  record_metrics: bool = False) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
         # An open partial screen and the base game's advisor can both hold input.
         self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true",
@@ -520,11 +531,25 @@ class Runner:
             except ValueError as exc:
                 raise ScenarioError(f"Unexpected autoplay start: {start_value!r}") from exc
             target = start_turn + turns
+            recorder = None
+            if record_metrics:
+                self.metrics_runs += 1
+                process = single_civ_process()
+                if process is None:
+                    raise ScenarioError("Civ VI process disappeared before metrics sampling")
+                metrics_pid = process[0]
+                recorder = TurnMetrics(self.output / f"autoplay-metrics-{self.metrics_runs}.jsonl", start_turn)
+                recorder.start(process_memory(metrics_pid))
             restarts = 0
             inactive_since = None
             status = None
             while time.monotonic() < deadline:
                 status = self._autoplay_status(deadline)
+                if recorder and status.turn != recorder.turn:
+                    process = single_civ_process()
+                    if process is None or process[0] != metrics_pid:
+                        raise ScenarioError("Civ VI process changed during metrics sampling")
+                    recorder.sample(status.turn, process_memory(metrics_pid))
                 _remaining(deadline)
                 if status.turn > target:
                     raise ScenarioError(f"Autoplay overshot turn {target}: {status}")
@@ -550,7 +575,7 @@ class Runner:
                         inactive_since = None
                 else:
                     inactive_since = None
-                time.sleep(min(0.5, max(0, deadline - time.monotonic())))
+                time.sleep(min(0.1 if recorder else 0.5, max(0, deadline - time.monotonic())))
             else:
                 raise ScenarioError(f"Autoplay timed out at turn {status.turn if status else '?'} / {target}; last: {status}")
         except (LuaResponseUnknown, LuaExecutionError):
@@ -568,7 +593,11 @@ class Runner:
         self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
                   "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
         _remaining(deadline)
-        return f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
+        detail = f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
+        if recorder:
+            detail += (f"; metrics=autoplay-metrics-{self.metrics_runs}.jsonl"
+                       f" observed={recorder.observed_turns} missed={recorder.missed_turns}")
+        return detail
 
     def _end_turn(self, timeout: float, *, deadline: float | None = None) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
@@ -662,7 +691,8 @@ class Runner:
                                               response_unknown=response_unknown)
             return "single-player game reached InGame"
         if action == "autoplay":
-            return self._autoplay(step["turns"], timeout, deadline=deadline)
+            return self._autoplay(step["turns"], timeout, deadline=deadline,
+                                  record_metrics=step.get("metrics", False))
         if action == "end_turn":
             return self._end_turn(timeout, deadline=deadline)
         if action == "ui_lua":

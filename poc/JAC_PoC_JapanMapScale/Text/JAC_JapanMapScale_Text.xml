@@ -1,0 +1,491 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_NAME" Language="en_US">
+      <Text>Map scale test</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_NAME" Language="ja_JP">
+      <Text>地図縮尺試験</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_NAME" Language="ru_RU">
+      <Text>Проверка масштаба карты</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_DESCRIPTION" Language="en_US">
+      <Text>Temporary faction identity for the map stability test; no special ability.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_DESCRIPTION" Language="ja_JP">
+      <Text>地図安定性試験用の仮勢力。固有能力はありません。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SCALE_POC_ABILITY_DESCRIPTION" Language="ru_RU">
+      <Text>Временная фракция для проверки карты; особой способности нет.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="en_US">
+      <Text>Japan archipelago 40 km/hex</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="ja_JP">
+      <Text>日本列島 40 km/タイル</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="ru_RU">
+      <Text>Японский архипелаг 40 км/гекс</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="en_US">
+      <Text>Fixed 22-faction Japan scale trial, 40 km between opposite hex sides.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="ja_JP">
+      <Text>22勢力の固定日本列島地図。六角形の対辺間が約40 km。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="ru_RU">
+      <Text>Фиксированная карта Японии для 22 фракций; около 40 км между сторонами гекса.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="en_US">
+      <Text>Japan archipelago 30 km/hex</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="ja_JP">
+      <Text>日本列島 30 km/タイル</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="ru_RU">
+      <Text>Японский архипелаг 30 км/гекс</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="en_US">
+      <Text>Fixed 22-faction Japan scale trial, 30 km between opposite hex sides.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="ja_JP">
+      <Text>22勢力の固定日本列島地図。六角形の対辺間が約30 km。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="ru_RU">
+      <Text>Фиксированная карта Японии для 22 фракций; около 30 км между сторонами гекса.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="en_US">
+      <Text>Japan archipelago 25 km/hex</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="ja_JP">
+      <Text>日本列島 25 km/タイル</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="ru_RU">
+      <Text>Японский архипелаг 25 км/гекс</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="en_US">
+      <Text>Fixed 22-faction Japan scale trial, 25 km between opposite hex sides.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="ja_JP">
+      <Text>22勢力の固定日本列島地図。六角形の対辺間が約25 km。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="ru_RU">
+      <Text>Фиксированная карта Японии для 22 фракций; около 25 км между сторонами гекса.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="en_US">
+      <Text>Japan archipelago 20 km/hex</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="ja_JP">
+      <Text>日本列島 20 km/タイル</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="ru_RU">
+      <Text>Японский архипелаг 20 км/гекс</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="en_US">
+      <Text>Fixed 22-faction Japan scale trial, 20 km between opposite hex sides.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="ja_JP">
+      <Text>22勢力の固定日本列島地図。六角形の対辺間が約20 km。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="ru_RU">
+      <Text>Фиксированная карта Японии для 22 фракций; около 20 км между сторонами гекса.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_NAME" Language="en_US">
+      <Text>Date</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_NAME" Language="ja_JP">
+      <Text>伊達</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_NAME" Language="ru_RU">
+      <Text>Датэ</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_CAPITAL" Language="en_US">
+      <Text>Yonezawa</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_CAPITAL" Language="ja_JP">
+      <Text>米沢城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_DATE_CAPITAL" Language="ru_RU">
+      <Text>Ёнэдзава</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_NAME" Language="en_US">
+      <Text>Ashina</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_NAME" Language="ja_JP">
+      <Text>蘆名</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_NAME" Language="ru_RU">
+      <Text>Асина</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_CAPITAL" Language="en_US">
+      <Text>Kurokawa</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_CAPITAL" Language="ja_JP">
+      <Text>黒川城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHINA_CAPITAL" Language="ru_RU">
+      <Text>Курокава</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_NAME" Language="en_US">
+      <Text>Hojo</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_NAME" Language="ja_JP">
+      <Text>北条</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_NAME" Language="ru_RU">
+      <Text>Ходзё</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_CAPITAL" Language="en_US">
+      <Text>Odawara</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_CAPITAL" Language="ja_JP">
+      <Text>小田原城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HOJO_CAPITAL" Language="ru_RU">
+      <Text>Одавара</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_NAME" Language="en_US">
+      <Text>Yamanouchi Uesugi</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_NAME" Language="ja_JP">
+      <Text>山内上杉</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_NAME" Language="ru_RU">
+      <Text>Яманоути Уэсуги</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_CAPITAL" Language="en_US">
+      <Text>Hirai</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_CAPITAL" Language="ja_JP">
+      <Text>平井城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_YAMANOUCHI_UESUGI_CAPITAL" Language="ru_RU">
+      <Text>Хираи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_NAME" Language="en_US">
+      <Text>Takeda</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_NAME" Language="ja_JP">
+      <Text>武田</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_NAME" Language="ru_RU">
+      <Text>Такэда</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_CAPITAL" Language="en_US">
+      <Text>Tsutsujigasaki</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_CAPITAL" Language="ja_JP">
+      <Text>躑躅ヶ崎館</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_TAKEDA_CAPITAL" Language="ru_RU">
+      <Text>Цуцудзигасаки</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_NAME" Language="en_US">
+      <Text>Nagao</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_NAME" Language="ja_JP">
+      <Text>長尾</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_NAME" Language="ru_RU">
+      <Text>Нагао</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_CAPITAL" Language="en_US">
+      <Text>Kasugayama</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_CAPITAL" Language="ja_JP">
+      <Text>春日山城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_NAGAO_CAPITAL" Language="ru_RU">
+      <Text>Касугаяма</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_NAME" Language="en_US">
+      <Text>Imagawa</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_NAME" Language="ja_JP">
+      <Text>今川</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_NAME" Language="ru_RU">
+      <Text>Имагава</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_CAPITAL" Language="en_US">
+      <Text>Sunpu</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_CAPITAL" Language="ja_JP">
+      <Text>駿府</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_IMAGAWA_CAPITAL" Language="ru_RU">
+      <Text>Сумпу</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_NAME" Language="en_US">
+      <Text>Oda</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_NAME" Language="ja_JP">
+      <Text>織田</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_NAME" Language="ru_RU">
+      <Text>Ода</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_CAPITAL" Language="en_US">
+      <Text>Nagoya</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_CAPITAL" Language="ja_JP">
+      <Text>那古野城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ODA_CAPITAL" Language="ru_RU">
+      <Text>Нагоя</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_NAME" Language="en_US">
+      <Text>Matsudaira</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_NAME" Language="ja_JP">
+      <Text>松平</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_NAME" Language="ru_RU">
+      <Text>Мацудайра</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_CAPITAL" Language="en_US">
+      <Text>Okazaki</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_CAPITAL" Language="ja_JP">
+      <Text>岡崎城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MATSUDAIRA_CAPITAL" Language="ru_RU">
+      <Text>Окадзаки</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_NAME" Language="en_US">
+      <Text>Asakura</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_NAME" Language="ja_JP">
+      <Text>朝倉</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_NAME" Language="ru_RU">
+      <Text>Асакура</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_CAPITAL" Language="en_US">
+      <Text>Ichijodani</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_CAPITAL" Language="ja_JP">
+      <Text>一乗谷</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASAKURA_CAPITAL" Language="ru_RU">
+      <Text>Итидзёдани</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_NAME" Language="en_US">
+      <Text>Ashikaga Shogunate</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_NAME" Language="ja_JP">
+      <Text>足利将軍家</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_NAME" Language="ru_RU">
+      <Text>Сёгунат Асикага</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_CAPITAL" Language="en_US">
+      <Text>Muromachi</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_CAPITAL" Language="ja_JP">
+      <Text>室町殿</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ASHIKAGA_CAPITAL" Language="ru_RU">
+      <Text>Муромати</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_NAME" Language="en_US">
+      <Text>Miyoshi</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_NAME" Language="ja_JP">
+      <Text>三好</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_NAME" Language="ru_RU">
+      <Text>Миёси</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_CAPITAL" Language="en_US">
+      <Text>Shozui</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_CAPITAL" Language="ja_JP">
+      <Text>勝瑞城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MIYOSHI_CAPITAL" Language="ru_RU">
+      <Text>Сёдзуй</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_NAME" Language="en_US">
+      <Text>Rokkaku</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_NAME" Language="ja_JP">
+      <Text>六角</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_NAME" Language="ru_RU">
+      <Text>Роккаку</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_CAPITAL" Language="en_US">
+      <Text>Kannonji</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_CAPITAL" Language="ja_JP">
+      <Text>観音寺城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_ROKKAKU_CAPITAL" Language="ru_RU">
+      <Text>Каннондзи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_NAME" Language="en_US">
+      <Text>Honganji</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_NAME" Language="ja_JP">
+      <Text>本願寺</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_NAME" Language="ru_RU">
+      <Text>Хонгандзи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_CAPITAL" Language="en_US">
+      <Text>Ishiyama</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_CAPITAL" Language="ja_JP">
+      <Text>石山本願寺</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_HONGANJI_CAPITAL" Language="ru_RU">
+      <Text>Исияма</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_NAME" Language="en_US">
+      <Text>Ouchi</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_NAME" Language="ja_JP">
+      <Text>大内</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_NAME" Language="ru_RU">
+      <Text>Оути</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_CAPITAL" Language="en_US">
+      <Text>Yamaguchi</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_CAPITAL" Language="ja_JP">
+      <Text>山口</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OUCHI_CAPITAL" Language="ru_RU">
+      <Text>Ямагути</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_NAME" Language="en_US">
+      <Text>Amago</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_NAME" Language="ja_JP">
+      <Text>尼子</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_NAME" Language="ru_RU">
+      <Text>Амаго</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_CAPITAL" Language="en_US">
+      <Text>Gassan Toda</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_CAPITAL" Language="ja_JP">
+      <Text>月山富田城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AMAGO_CAPITAL" Language="ru_RU">
+      <Text>Гассан-Тода</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_NAME" Language="en_US">
+      <Text>Mori</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_NAME" Language="ja_JP">
+      <Text>毛利</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_NAME" Language="ru_RU">
+      <Text>Мори</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_CAPITAL" Language="en_US">
+      <Text>Yoshida Koriyama</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_CAPITAL" Language="ja_JP">
+      <Text>吉田郡山城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_MORI_CAPITAL" Language="ru_RU">
+      <Text>Ёсида-Корияма</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_NAME" Language="en_US">
+      <Text>Chosokabe</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_NAME" Language="ja_JP">
+      <Text>長宗我部</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_NAME" Language="ru_RU">
+      <Text>Тёсокабэ</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_CAPITAL" Language="en_US">
+      <Text>Oko</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_CAPITAL" Language="ja_JP">
+      <Text>岡豊城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_CHOSOKABE_CAPITAL" Language="ru_RU">
+      <Text>Око</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_NAME" Language="en_US">
+      <Text>Otomo</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_NAME" Language="ja_JP">
+      <Text>大友</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_NAME" Language="ru_RU">
+      <Text>Отомо</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_CAPITAL" Language="en_US">
+      <Text>Funai</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_CAPITAL" Language="ja_JP">
+      <Text>府内</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_OTOMO_CAPITAL" Language="ru_RU">
+      <Text>Фунай</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_NAME" Language="en_US">
+      <Text>Shimazu</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_NAME" Language="ja_JP">
+      <Text>島津</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_NAME" Language="ru_RU">
+      <Text>Симадзу</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_CAPITAL" Language="en_US">
+      <Text>Kagoshima</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_CAPITAL" Language="ja_JP">
+      <Text>鹿児島</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_SHIMAZU_CAPITAL" Language="ru_RU">
+      <Text>Кагосима</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_NAME" Language="en_US">
+      <Text>Ryukyu Kingdom</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_NAME" Language="ja_JP">
+      <Text>琉球王国</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_NAME" Language="ru_RU">
+      <Text>Королевство Рюкю</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_CAPITAL" Language="en_US">
+      <Text>Shuri</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_CAPITAL" Language="ja_JP">
+      <Text>首里城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_RYUKYU_CAPITAL" Language="ru_RU">
+      <Text>Сюри</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_NAME" Language="en_US">
+      <Text>Ainu</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_NAME" Language="ja_JP">
+      <Text>アイヌ</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_NAME" Language="ru_RU">
+      <Text>Айны</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_CAPITAL" Language="en_US">
+      <Text>Nibutani</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_CAPITAL" Language="ja_JP">
+      <Text>二風谷</Text>
+    </Row>
+    <Row Tag="LOC_JAC_JAPAN_AINU_CAPITAL" Language="ru_RU">
+      <Text>Нибутани</Text>
+    </Row>
+  </LocalizedText>
+</GameData>

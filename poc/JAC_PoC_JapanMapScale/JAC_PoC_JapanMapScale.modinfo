@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="403be889-1455-4de7-967b-ad54c0ff3431" version="1">
+  <Properties>
+    <Name>LOC_JAC_JAPAN_SCALE_MOD_NAME</Name>
+    <Teaser>LOC_JAC_JAPAN_SCALE_MOD_TEASER</Teaser>
+    <Description>LOC_JAC_JAPAN_SCALE_MOD_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <LocalizedText>
+    <Text id="LOC_JAC_JAPAN_SCALE_MOD_NAME">
+      <en_US>JAC PoC: Japan Map Scale</en_US>
+      <ja_JP>JAC PoC：日本列島マップの縮尺</ja_JP>
+      <ru_RU>JAC PoC: масштаб карты Японии</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_JAPAN_SCALE_MOD_TEASER">
+      <en_US>Four fixed Japan maps for 22-player stability trials.</en_US>
+      <ja_JP>22勢力で安定性を測る4段階の固定日本地図。</ja_JP>
+      <ru_RU>Четыре карты Японии для проверки игры с 22 фракциями.</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_JAPAN_SCALE_MOD_DESCRIPTION">
+      <en_US>40, 30, 25 and 20 km per hex; provisional faction identities and official leader proxies.</en_US>
+      <ja_JP>1タイル約40・30・25・20 km。勢力は仮登録し、指導者のAIと画像を公式の人物で代用。</ja_JP>
+      <ru_RU>40, 30, 25 и 20 км на гекс. Временные фракции используют официальных лидеров.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_JapanMapScale_GatheringStorm">
+      <RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+    </Criteria>
+  </ActionCriteria>
+  <FrontEndActions>
+    <UpdateDatabase id="JAC_JapanMapScale_Config">
+      <File>Config/JAC_JapanMapScale_Config.xml</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_JapanMapScale_FrontEndText">
+      <File>Text/JAC_JapanMapScale_Text.xml</File>
+    </UpdateText>
+  </FrontEndActions>
+  <InGameActions>
+    <UpdateDatabase id="JAC_JapanMapScale_Gameplay" criteria="JAC_JapanMapScale_GatheringStorm">
+      <File>Data/JAC_JapanMapScale_Gameplay.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_GatheringStorm">
+      <File>Text/JAC_JapanMapScale_Text.xml</File>
+    </UpdateText>
+  </InGameActions>
+  <Files>
+    <File>Config/JAC_JapanMapScale_Config.xml</File>
+    <File>Data/JAC_JapanMapScale_Gameplay.sql</File>
+    <File>Text/JAC_JapanMapScale_Text.xml</File>
+    <File>Maps/JAC_Japan_40km.Civ6Map</File>
+    <File>Maps/JAC_Japan_40km.lua</File>
+    <File>Maps/JAC_Japan_30km.Civ6Map</File>
+    <File>Maps/JAC_Japan_30km.lua</File>
+    <File>Maps/JAC_Japan_25km.Civ6Map</File>
+    <File>Maps/JAC_Japan_25km.lua</File>
+    <File>Maps/JAC_Japan_20km.Civ6Map</File>
+    <File>Maps/JAC_Japan_20km.lua</File>
+  </Files>
+</Mod>

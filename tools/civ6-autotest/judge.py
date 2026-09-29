@@ -15,6 +15,7 @@ import re
 LOG_NAMES = ("Lua.log", "Database.log", "Modding.log")
 BUNDLE0_ID = "dfa0717e-4d0b-4370-b693-27fc6758571b"
 GROWTH_ID = "7696e937-2044-4f3c-8e13-4e27632e2710"
+JAPAN_MAP_ID = "403be889-1455-4de7-967b-ad54c0ff3431"
 TURN = re.compile(r"\bturn=(\d+)\s+firstTurn=(\d+)\s+turnsSeen=(\d+)")
 RESTORED = re.compile(r"\brestored firstTurn=(\d+) lastTurn=(\d+) turnsSeen=(\d+)")
 GROWTH_RECORD = re.compile(
@@ -143,6 +144,29 @@ def _database_errors(database: str) -> list[str]:
         if re.search(r"JAC[_\\/.-]|JAC_PoC", context, re.I):
             found.append(line)
     return found
+
+
+def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
+    modding = logs["Modding.log"]
+
+    def related_errors(content: str) -> list[str]:
+        lines = content.splitlines()
+        return [line for index, line in enumerate(lines)
+                if re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I)
+                and re.search(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431",
+                              "\n".join(lines[max(0, index - 2):index + 5]), re.I)]
+
+    errors = related_errors(modding)
+    database_errors = related_errors(logs["Database.log"])
+    return [
+        Check("Japan map: mod registered", JAPAN_MAP_ID.lower() in modding.lower(),
+              "Modding.log contains mod ID"),
+        Check("Japan map: gameplay applied", "Applying Component - JAC_JapanMapScale_Gameplay (UpdateDatabase)" in modding,
+              "22 civilization identities registered"),
+        Check("Japan map: Database.log", not database_errors,
+              f"{len(database_errors)} JAC-related database errors"),
+        Check("Japan map: Modding.log", not errors, f"{len(errors)} JAC-related modding errors"),
+    ]
 
 
 def _bundle0_checks(logs: dict[str, str]) -> list[Check]:
@@ -319,6 +343,8 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
         if type(expected_units) is not int or expected_units < 1:
             raise ValueError("growth judge needs a positive expected_units count")
         checks.extend(_growth_checks(logs, expected_units))
+    elif profile == "japan_map":
+        checks.extend(_japan_map_checks(logs))
     elif profile != "generic":
         raise ValueError(f"Unknown judge profile: {profile}")
     return checks
@@ -336,7 +362,7 @@ def main() -> int:
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--snapshot", type=Path, help="Write baseline before a manual run, then exit")
-    parser.add_argument("--profile", choices=("bundle0", "generic", "growth"), default="bundle0")
+    parser.add_argument("--profile", choices=("bundle0", "generic", "growth", "japan_map"), default="bundle0")
     parser.add_argument("--expected-units", type=int, help="Required unit count for the growth profile")
     args = parser.parse_args()
     log_dir = args.logs or default_log_dir()

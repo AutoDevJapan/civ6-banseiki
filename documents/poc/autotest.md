@@ -42,15 +42,15 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 ## JSON 手順
 
-`scenarios/` に束0の保存・再読込、`clans-notebooks.json`（織田が人間・武田が AI）、`clans-both-ai.json`（公式の日本が人間・織田と武田が AI）、成長 UI と Notebooks の例がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`manual` はこの期限の対象外で、`timeout` を指定できず、Enter が押されるまで待つ。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
+`scenarios/` に束0の保存・再読込、`clans-notebooks.json`（織田が人間・武田が AI）、`clans-both-ai.json`（公式の日本が人間・織田と武田が AI）、成長 UI と Notebooks、および `japan-map-{40,30,25,20}km.json`（固定日本地図・22人・50ターン）がある。各ステップには `action` を置く。`timeout` は秒単位で省略可能で、ステップ内の問い合わせと操作は同じ期限を使う。`manual` はこの期限の対象外で、`timeout` を指定できず、Enter が押されるまで待つ。`growth` 判定ではシナリオ直下の `expected_units` に期待するユニット数を指定する。`growth-notebooks.json` は 2 体を割当・復元・手帳表示で確認する。
 
 | action | 必要な値 | 動作 |
 |---|---|---|
 | `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
-| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players` | 既定のゲーム設定に戻し、ルールセット、マップ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する |
+| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式 |
 | `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
-| `autoplay` | `turns` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する |
+| `autoplay` | `turns`、任意で `metrics: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` が真ならターン境界ごとの所要時間と Civ6 プロセスのメモリを記録する |
 | `ui_lua` | `state_name`, `code` | 指定 Lua 状態で任意のコードを1回実行する |
 | `screenshot` | `path` | Civ6 のウィンドウだけを PNG に保存する。出力先からの相対パス |
 | `save` / `load` | `name` | 単独プレイのローカル保存。保存完了イベントとファイルを確認する |
@@ -72,6 +72,8 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 - 読込後の `restored firstTurn/lastTurn/turnsSeen` が保存前最後の行と一致し、次のターンでターン番号と `turnsSeen` が1増える。
 
 クランの `generic` 判定はエラー不在を表し、シナリオ内の `wait_for` で所定のログを追加確認する。成長 UI の `growth` 判定は MOD の適用、成長ログ、保存・復元後の値と手帳表示などを検査する。画面の見た目はスクリーンショットで別途確認する。
+
+`japan_map` 判定は MOD ID、Gameplay の適用、`Database.log`・`Modding.log` の本 MOD に関係するエラー不在を確認する。Config 適用ログは開始マーカーより前にある場合があるため、設定画面の候補表示と開始後のマップ寸法で別途確認する。地図シナリオは開始ユニットが各本拠の2ヘクス以内にいることも確認する。`metrics: true` の自動進行は成果物に `autoplay-metrics-1.jsonl`（50ターン）と `autoplay-metrics-2.jsonl`（ロード後1ターン）を作る。`duration_seconds` は観測した隣接ターン境界間の実時間で、Lua の問い合わせとポーリングの時間も含む。境界を飛ばしたターンは `observed: false`、`duration_seconds: null` として記録し、架空の値を補間しない。メモリは Windows の `GetProcessMemoryInfo` が返す作業セットとプライベート使用量のバイト数。
 
 ロード画面の完了ログが出た後の Esc は1回だけ送る。以後は `InGame` の状態と操作可能な人間プレイヤーを期限まで問い合わせ、入れなければ追加のキー入力なしで失敗する。入力先は、ウィンドウ名と実行ファイル名（`CivilizationVI.exe` / `CivilizationVI_DX12.exe`）を照合した唯一の Civ6 HWND に限定する。2026-09-29 の実機ロード画面で、その HWND への `PostMessageW` による `WM_KEYDOWN/WM_KEYUP` 1組で `InGame` への移行を確認したため、この方式を使う。送信直前に HWND を再照合し、ほかのアプリが前面でも Civ6 の HWND にだけ送る。キー押下後の確認が失敗しても、解放メッセージを送る。
 
