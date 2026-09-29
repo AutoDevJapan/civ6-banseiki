@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<Rulesets>
+		<Row RulesetType="RULESET_JAC_BANSEIKI" Name="LOC_JAC_BANSEIKI_RULESET_NAME" Description="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" VictoryDomain="Expansion2_Victories" GameCore="Expansion2" IsScenario="0" SupportsSinglePlayer="1" SupportsMultiPlayer="1" SortIndex="-19"/>
+	</Rulesets>
+	<RulesetDomainOverrides>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="Map" Domain="Maps:Expansion2Maps"/>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="PlayerLeader" Domain="Players:Expansion2_Players"/>
+	</RulesetDomainOverrides>
+	<Parameters>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="NoGoodyHuts" Name="LOC_GAME_NO_GOODY_HUTS" Description="" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="GAME_NO_GOODY_HUTS" GroupId="AdvancedOptions" SortIndex="2010"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="NoBarbarians" Name="LOC_GAME_NO_BARBARIANS" Description="" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="GAME_NO_BARBARIANS" GroupId="AdvancedOptions" SortIndex="2010"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="AlliesShareVisibility" Name="LOC_GAME_ALLIES_SHARE_VISIBILITY" Description="LOC_GAME_ALLIES_SHARE_VISIBILITY_DESCRIPTION" Domain="bool" DefaultValue="1" ConfigurationGroup="Game" ConfigurationId="GAME_ALLIES_SHARE_VISIBILITY" GroupId="AdvancedOptions" SortIndex="2010"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="Realism" Name="LOC_GAME_REALISM" Description="LOC_GAME_REALISM_DESCRIPTION" Domain="RealismRange" DefaultValue="2" ConfigurationGroup="Game" ConfigurationId="GAME_REALISM" Hash="0" GroupId="BasicGameOptions" SortIndex="80"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="NaturalWonders" Name="LOC_EXCLUDE_NATURAL_WONDER_NAME" Description="LOC_EXCLUDE_NATURAL_WONDER_DESC" Domain="Expansion2NaturalWonders" Hash="0" Array="1" ConfigurationGroup="Game" ConfigurationId="EXCLUDE_NATURAL_WONDERS" GroupId="MapOptions" UxHint="InvertSelection" SortIndex="230"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="CityStates" Name="LOC_EXCLUDE_CITY_STATES_NAME" Description="LOC_EXCLUDE_CITY_STATES_DESC" Domain="Expansion2CityStates" Hash="0" Array="1" ConfigurationGroup="Game" ConfigurationId="EXCLUDE_CITY_STATES" GroupId="MapOptions" UxHint="InvertSelection" SortIndex="230"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="LeaderPool1" Name="LOC_LEADER_POOL_1_NAME" Description="LOC_LEADER_POOL_1_DESC" Domain="Players:Expansion2_Players" Hash="0" Array="1" ConfigurationGroup="Game" ConfigurationId="LEADER_POOL_1" GroupId="MapOptions" UxHint="InvertSelection" SortIndex="221"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="LeaderPool2" Name="LOC_LEADER_POOL_2_NAME" Description="LOC_LEADER_POOL_2_DESC" Domain="Players:Expansion2_Players" Hash="0" Array="1" ConfigurationGroup="Game" ConfigurationId="LEADER_POOL_2" GroupId="MapOptions" UxHint="InvertSelection" SortIndex="222"/>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_BanseikiHumanPool" Name="LOC_JAC_BANSEIKI_HUMAN_POOL_NAME" Description="LOC_JAC_BANSEIKI_HUMAN_POOL_DESCRIPTION" Domain="JAC_BanseikiHumanPools" DefaultValue="JAC_BANSEIKI_ONLY" ConfigurationGroup="Game" ConfigurationId="JAC_BANSEIKI_HUMAN_POOL" GroupId="BasicGameOptions" SortIndex="85"/>
+	</Parameters>
+	<DomainValues>
+		<Row Domain="JAC_BanseikiHumanPools" Value="JAC_BANSEIKI_ONLY" Name="LOC_JAC_BANSEIKI_POOL_ONLY" Description="LOC_JAC_BANSEIKI_POOL_ONLY" SortIndex="1"/>
+		<Row Domain="JAC_BanseikiHumanPools" Value="JAC_ALL_POOLS" Name="LOC_JAC_BANSEIKI_POOL_ALL" Description="LOC_JAC_BANSEIKI_POOL_ALL" SortIndex="2"/>
+	</DomainValues>
+	<ParameterDependencies>
+		<Row ParameterId="Realism" ConfigurationGroup="Game" ConfigurationId="WORLD_BUILDER" Operator="NotEquals" ConfigurationValue="1"/>
+	</ParameterDependencies>
+	<ConfigurationUpdates>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_START_ERA" TargetValue="ERA_ANCIENT" Hash="1"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_TURN_LIMIT" TargetValue="TURNLIMIT_GAMESPEED" Hash="1"/>
+		<!-- SSOT 2.2: a leader appears at most once; a civilization may repeat. -->
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="NO_DUPLICATE_LEADERS" TargetValue="1" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="NO_DUPLICATE_CIVILIZATIONS" TargetValue="0" Hash="0"/>
+	</ConfigurationUpdates>
+	<!-- SetupParameters runs these queries for each player. The official-DLC exclusion applies
+	     to every slot; the human-pool filter currently identifies the single-player human as slot 0. -->
+	<DomainValueFilterQueries>
+		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter"/>
+	</DomainValueFilterQueries>
+	<Queries>
+		<!-- GreatBuilders registers Sejong in Expansion2_Players, but its leader gameplay action
+		     requires RULESET_EXPANSION_2. Exclude only this audited mismatch for Banseiki. -->
+		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'difference' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_SEJONG') AND ?1 = 'RULESET_JAC_BANSEIKI'"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'intersect' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_JAC_ODA_NOBUHIDE', 'LEADER_JAC_TAKEDA_NOBUTORA') AND ?1 = 'RULESET_JAC_BANSEIKI' AND ?2 = 0 AND ?3 = 'JAC_BANSEIKI_ONLY'"/>
+	</Queries>
+	<QueryParameters>
+		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" Index="1" ConfigurationGroup="Game" ConfigurationId="RULESET"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="1" ConfigurationGroup="Game" ConfigurationId="RULESET"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="2" ConfigurationGroup="Player" ConfigurationId="PLAYER_ID"/>
+		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" Index="3" ConfigurationGroup="Game" ConfigurationId="JAC_BANSEIKI_HUMAN_POOL"/>
+	</QueryParameters>
+</GameInfo>

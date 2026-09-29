@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" version="1">
+	<Properties>
+		<Name>LOC_JAC_BANSEIKI_MOD_NAME</Name>
+		<Teaser>LOC_JAC_BANSEIKI_MOD_DESCRIPTION</Teaser>
+		<Description>LOC_JAC_BANSEIKI_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+		<EnabledByDefault>1</EnabledByDefault>
+	</Properties>
+	<Dependencies>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+		<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
+	</Dependencies>
+	<LocalizedText>
+		<Text id="LOC_JAC_BANSEIKI_MOD_NAME">
+			<en_US>JAC PoC: Banseiki Ruleset</en_US>
+			<ja_JP>JAC PoC：万世紀ルールセット</ja_JP>
+			<ru_RU>JAC PoC: правила Бансэйки</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_BANSEIKI_MOD_DESCRIPTION">
+			<en_US>Banseiki with Gathering Storm systems.</en_US>
+			<ja_JP>Gathering Storm の仕組みを使う「万世紀」。</ja_JP>
+			<ru_RU>Бансэйки с системами Gathering Storm.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_Banseiki_Ruleset">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateText id="JAC_Banseiki_InGameText" criteria="JAC_Banseiki_Ruleset">
+			<File>Text/JAC_Banseiki_Text.xml</File>
+		</UpdateText>
+	</InGameActions>
+	<FrontEndActions>
+		<UpdateDatabase id="JAC_Banseiki_Settings">
+			<File>Config/JAC_Banseiki_Config.xml</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_Banseiki_SettingsText">
+			<File>Text/JAC_Banseiki_Text.xml</File>
+		</UpdateText>
+	</FrontEndActions>
+	<Files>
+		<File>Config/JAC_Banseiki_Config.xml</File>
+		<File>Text/JAC_Banseiki_Text.xml</File>
+	</Files>
+</Mod>

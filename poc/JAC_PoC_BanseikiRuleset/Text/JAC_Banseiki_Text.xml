@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<LocalizedText>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_NAME" Language="en_US"><Text>Banseiki</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_NAME" Language="ja_JP"><Text>万世紀</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_NAME" Language="ru_RU"><Text>Бансэйки</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" Language="en_US"><Text>Banseiki with Gathering Storm systems.</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" Language="ja_JP"><Text>Gathering Storm の仕組みを使う「万世紀」。</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_RULESET_DESCRIPTION" Language="ru_RU"><Text>Бансэйки с системами Gathering Storm.</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_NAME" Language="en_US"><Text>Human leader choices</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_NAME" Language="ja_JP"><Text>プレイヤーの指導者プール</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_NAME" Language="ru_RU"><Text>Выбор лидера игроком</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_DESCRIPTION" Language="en_US"><Text>Choose which leaders the human player can select. AI players always use all pools.</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_DESCRIPTION" Language="ja_JP"><Text>プレイヤーが選べる指導者の範囲。AI は常にすべてのプールを利用する。</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_HUMAN_POOL_DESCRIPTION" Language="ru_RU"><Text>Доступные игроку лидеры. ИИ всегда использует все пулы.</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ONLY" Language="en_US"><Text>Use Banseiki pool only</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ONLY" Language="ja_JP"><Text>万世紀プールのみ利用可能</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ONLY" Language="ru_RU"><Text>Только пул Бансэйки</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ALL" Language="en_US"><Text>Use all leader pools</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ALL" Language="ja_JP"><Text>すべての指導者プールを利用可能</Text></Row>
+		<Row Tag="LOC_JAC_BANSEIKI_POOL_ALL" Language="ru_RU"><Text>Все пулы лидеров</Text></Row>
+	</LocalizedText>
+</GameInfo>

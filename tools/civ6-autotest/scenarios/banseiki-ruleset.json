@@ -1,0 +1,224 @@
+{
+  "name": "Banseiki ruleset, leader filters, and civilization duplicates",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710"
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "local rows=DB.ConfigurationQuery(\"SELECT RulesetType, GameCore, IsScenario, SupportsSinglePlayer, SupportsMultiPlayer FROM Rulesets WHERE RulesetType='RULESET_JAC_BANSEIKI'\"); if #rows ~= 1 then error('Banseiki ruleset count '..#rows) end; local r=rows[1]; print('[JAC_RULESET_TEST] '..r.RulesetType..' core='..r.GameCore..' scenario='..tostring(r.IsScenario)..' single='..tostring(r.SupportsSinglePlayer)..' multi='..tostring(r.SupportsMultiPlayer)); return 'ruleset row found'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "MainMenu",
+      "code": "OnAdvancedSetup(); return 'advanced setup open'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "local p=g_GameParameters.Parameters.Ruleset; local selected=nil; for _,v in ipairs(p.Values) do if v.Value=='RULESET_JAC_BANSEIKI' then selected=v end end; if not selected then error('Banseiki absent from Create Game list') end; g_GameParameters:SetParameterValue(p,selected); local pool=g_GameParameters.Parameters.JAC_BanseikiHumanPool; if not pool or pool.Value.Value~='JAC_BANSEIKI_ONLY' then error('default not shown in setup') end; return 'ruleset selected and default shown'"
+    },
+    {
+      "action": "screenshot",
+      "path": "ruleset-and-default-pool.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "local p=g_GameParameters.Parameters.JAC_BanseikiHumanPool; local selected=nil; for _,v in ipairs(p.Values) do if v.Value=='JAC_ALL_POOLS' then selected=v end end; if not selected then error('all pools absent from setup') end; g_GameParameters:SetParameterValue(p,selected); return 'all pools shown'"
+    },
+    {
+      "action": "screenshot",
+      "path": "pool-all.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvancedSetup",
+      "code": "OnBackButton(); return 'advanced setup closed'"
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620933,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_CLEOPATRA",
+          "civ": "CIVILIZATION_EGYPT",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_GORGO",
+          "civ": "CIVILIZATION_GREECE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PERICLES",
+          "civ": "CIVILIZATION_GREECE",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local option=g_GameParameters.Parameters.JAC_BanseikiHumanPool; if not option or option.Value.Value~='JAC_BANSEIKI_ONLY' or #option.Values~=2 then error('leader pool default or options wrong') end; local counts={}; for _,id in ipairs({0,1,2,3,4}) do local p=CreatePlayerParameters(id,true); p:Refresh(); local a=p.Parameters.PlayerLeader; if a.Domain~='Players:Expansion2_Players' then error('wrong leader domain '..id) end; local jac=0; local official=0; for _,v in ipairs(a.Values) do if v.Value=='LEADER_SEJONG' then error('unsupported Sejong in player '..id) end; if v.Value=='LEADER_JAC_ODA_NOBUHIDE' or v.Value=='LEADER_JAC_TAKEDA_NOBUTORA' then jac=jac+1 end; if v.Value=='LEADER_CLEOPATRA' then official=official+1 end end; if jac~=2 or (id==0 and (#a.Values~=2 or official~=0)) or (id>0 and (#a.Values<=2 or official~=1)) then error('leader choices wrong for '..id..': '..#a.Values..'/'..jac..'/'..official) end; counts[#counts+1]=#a.Values end; print('[JAC_RULESET_TEST] default=JAC_BANSEIKI_ONLY human='..counts[1]..' ai='..counts[2]..','..counts[3]..','..counts[4]..','..counts[5]); return 'default human 2, AI all supported'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "local leaders=GameConfiguration.GetValue('NO_DUPLICATE_LEADERS'); local civs=GameConfiguration.GetValue('NO_DUPLICATE_CIVILIZATIONS'); local function on(v) return v==true or tonumber(v)==1 end; if not on(leaders) or on(civs) then error('duplicate policy wrong: leaders='..tostring(leaders)..' civs='..tostring(civs)) end; if PlayerConfigurations[3]:GetCivilizationTypeName()~='CIVILIZATION_GREECE' or PlayerConfigurations[4]:GetCivilizationTypeName()~='CIVILIZATION_GREECE' or PlayerConfigurations[3]:GetLeaderTypeName()==PlayerConfigurations[4]:GetLeaderTypeName() then error('same civilization with distinct leaders not configured') end; return 'leaders unique, civilizations may repeat'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "local option=g_GameParameters.Parameters.JAC_BanseikiHumanPool; local all=nil; for _,v in ipairs(option.Values) do if v.Value=='JAC_ALL_POOLS' then all=v end end; if not all then error('all pools option missing') end; g_GameParameters:SetParameterValue(option,all); local p=CreatePlayerParameters(0,true); p:Refresh(); local a=p.Parameters.PlayerLeader; local official=false; for _,v in ipairs(a.Values) do if v.Value=='LEADER_SEJONG' then error('unsupported Sejong in all human pools') end; if v.Value=='LEADER_CLEOPATRA' then official=true end end; if GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')~='JAC_ALL_POOLS' or #a.Values<=2 or not official then error('all pools not effective') end; print('[JAC_RULESET_TEST] all human='..#a.Values..' official='..tostring(official)); return 'all supported human '..#a.Values"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "local option=g_GameParameters.Parameters.JAC_BanseikiHumanPool; local only=nil; for _,v in ipairs(option.Values) do if v.Value=='JAC_BANSEIKI_ONLY' then only=v end end; g_GameParameters:SetParameterValue(option,only); local p=CreatePlayerParameters(0,true); p:Refresh(); if #p.Parameters.PlayerLeader.Values~=2 then error('restricting pool again failed') end; ReleasePlayerParameters(); HideGameSetup(); return 'restricted again, ready to start'"
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620933,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_CLEOPATRA",
+          "civ": "CIVILIZATION_EGYPT",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_GORGO",
+          "civ": "CIVILIZATION_GREECE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_PERICLES",
+          "civ": "CIVILIZATION_GREECE",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_POC] loaded version="
+      },
+      "timeout": 90
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_POC] loaded custom civs"
+      },
+      "timeout": 90
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_POC] initialized count="
+      },
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local g=PlayerConfigurations[3]; local p=PlayerConfigurations[4]; if not g or not p or g:GetLeaderTypeName()~='LEADER_GORGO' or p:GetLeaderTypeName()~='LEADER_PERICLES' or g:GetCivilizationTypeName()~='CIVILIZATION_GREECE' or p:GetCivilizationTypeName()~='CIVILIZATION_GREECE' then error('two Greek leaders did not survive game start') end; return 'Gorgo and Pericles both started as Greece'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong running ruleset') end; if not GameClimate or not GameClimate.GetTemperatureChange or not GameClimate.GetNextSeaLevelRiseTurns then error('climate API missing') end; local temp=GameClimate.GetTemperatureChange(); local sea=GameClimate.GetNextSeaLevelRiseTurns(); if not GameInfo.Resolutions or not GameInfo.Resolutions['WC_RES_LUXURY'] then error('world congress resolution data missing') end; local congress=Game.GetWorldCongress(); if not congress or not congress.GetMeetingStatus then error('world congress missing') end; local status=congress:GetMeetingStatus(); print('[JAC_RULESET_TEST] climate temperature='..tostring(temp)..' seaRiseTurns='..tostring(sea)..' congressStatus='..tostring(status~=nil)..' resolution=WC_RES_LUXURY'); return 'climate and world congress present'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if not LuaEvents.Launchbar_ToggleClimateScreen then error('climate panel toggle missing') end; LuaEvents.Launchbar_ToggleClimateScreen(); return 'climate panel opened'"
+    },
+    {
+      "action": "screenshot",
+      "path": "climate-panel.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.Launchbar_ToggleClimateScreen(); return 'climate panel closed'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 3,
+      "timeout": 300
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Banseiki-01",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Banseiki-01",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local state=Game:GetProperty('JAC_POC_BUNDLE0_STATE'); if not state or state.TurnsSeen<3 then error('Bundle0 state missing after load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('ruleset changed on load') end; return 'restored turnsSeen='..state.TurnsSeen..' ruleset='..GameConfiguration.GetRuleSet()"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "screenshot",
+      "path": "after-load.png"
+    }
+  ]
+}

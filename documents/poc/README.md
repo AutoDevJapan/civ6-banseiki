@@ -100,11 +100,11 @@ python tools/jac_art/build_art.py
 
 1. 共通の準備に従い `poc/JAC_PoC_GrowthUI` を `Mods/JAC_PoC_GrowthUI` へジャンクションで配置する。この検証中は `JAC_PoC_Bundle0` を無効にし、本MODを有効にする
 2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す。アイコンが欠けていないか、左上の「歴史年表」（History Timeline）ボタンと見分けられるかも見る
-3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
+3. 「人物帳」を押し、各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
 4. 手帳をもう一度開き、開いたまま List of Reports を押す
 5. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
 6. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
-7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言と固定3行を確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
+7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言がその言語だけで出ることを確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
 
 
 成功条件：
@@ -119,7 +119,7 @@ python tools/jac_art/build_art.py
 | 新規ゲームの `Lua.log` | `[JAC_POC] no saved state (new game)`、`[JAC_POC] assigned unit=...` が開始ユニット数に応じて1～3件、`[JAC_POC] initialized count=...` が出る。装備・Artifactの値も記録される |
 | 成長の `Lua.log` | `[JAC_POC] unit=<id> level=... xp=... personality=... trait=... equipment=... artifact=... player=... turn=...` がターンごとに出る。同じユニットで1ターンあたり20 XPを得る。Lv1の必要XPは30で、累計40 XPの時点ではLv2・残り10 XPとなる |
 | ロード後の `Lua.log` | `[JAC_POC] restored unit=...` の全項目がセーブ直前の記録と一致し、`restored count=...` と再表示時の `character journal shown count=` も一致する。ロード直後に `assigned unit=` は増えず、次ターンだけ経験値が増える |
-| 3言語 | 人物帳の表示が直近のログの記録と一致し、日本語・キリル文字・英語の固定3行に文字化けや欠落がない。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
+| 3言語 | 人物帳の表示が直近のログの記録と一致し、表示言語の文言だけが文字化けや欠落なく出る（他言語の訳を並べない。SSOT 14.2）。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
 
 結果：**主要項目は成功**（2026-09-29、Steam 版 1.0.12.68、Gathering Storm、英語表示）。証跡は兄弟 worktree の `../civ6-autotest/tools/civ6-autotest/artifacts/run-11-growth-ui/`。自動シナリオ41手順とログ判定13/13が成功した。
 
@@ -129,11 +129,11 @@ python tools/jac_art/build_art.py
 | ボタンの位置 | `parent=ButtonStack`。手帳は Reports の左。都市国家1件との遭遇後も同じ位置（`02-top-right-closeup.png`・`12-after-city-state-top-bar-clean.png`） |
 | アイコン | 専用の `JAC_Notebooks_Hook.dds` が欠けずに表示され、画面上でも左上の歴史年表の肖像アイコンと区別できた（`03-timeline-closeup.png`）。CustomCivs との併用時にも装丁された本が表示され、履歴タイムラインと区別できた（`civ6-art-local/final-01/ingame/10-notebooks-button-closeup.png`・`ingame/19-notebooks-open-clean.png`） |
 | 開き直しと切り替え | `notebooks path lookup found=true`。再クリックで閉じ、手帳から Reports に切り替わった。`UI.DataError`・`Runtime Error` なし |
-| 手帳と人物帳 | `notebooks opened` 5件、`character journal shown count=2` 4件。メニュー・人物帳・保存前後の画像あり。日本語の固定行に英語表示で欠字が出たため、同梱の NotoSansCJKjp をその行に指定して再検証し、日露英の固定3行を表示できた |
+| 手帳と人物帳 | `notebooks opened` 5件、`character journal shown count=2` 4件。メニュー・人物帳・保存前後の画像あり。**固定3行の削除前の結果**：日本語の固定行に英語表示で欠字が出たため、同梱の NotoSansCJKjp をその行に指定して再検証し、日露英の固定3行を表示できた |
 | 新規ゲーム | `no saved state`、開始2ユニットへ `assigned`、`initialized count=2`。1体目の装備2件・Artifact、2体目の装備1件を確認 |
 | 成長 | 両ユニットともターン1～5に毎回20 XP。ターン2で Lv2・残り10 XP（Lv1必要量30）、保存時は Lv2・70 XP |
 | 保存・ロード | `restored count=2`。両ユニットの全記録と人物帳の表示が保存前の Lv2・70 XP に一致。追加の `assigned` はなく、次のターン6で Lv3・5 XP |
-| 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認 |
+| 3言語 | **固定3行の削除前の結果**：英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認。固定3行は、訳を並べて表示しない方針（SSOT 14.2）により 2026-09-29 に削除した |
 
 
 このブランチの追加自動実行は `tools/civ6-autotest/scenarios/growth-notebooks.json` を使い、`tools/civ6-autotest/artifacts/growth-run-13/` に保存した（41/41 ステップ、ログ判定 13/13 件）。詳細な確認結果は本節の表を参照。
@@ -150,7 +150,7 @@ python tools/jac_art/build_art.py
 MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
-- `Players:Expansion2_Players` に両組だけを登録する。公式 GS の `RulesetDomainOverrides` が `RULESET_EXPANSION_2` の `PlayerLeader` をこのドメインに切り替えるため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
+- `Players:Expansion2_Players` に両組だけを登録する。公式 GS と独自ルールセット「万世紀」が `RulesetDomainOverrides` でこのドメインを選ぶため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
 - ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 - 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
@@ -318,3 +318,39 @@ Antigravity 追加利用規約の第6項は第三者ソフトウェア経由の�
 修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗と1080pでの端の表示は未確認。能力専用アイコン4点は登録・参照を確認済みで、標準 UI が文明／指導者アイコンを再利用するため画面表示は PoC の対象外。製品版で専用絵柄を出すには能力用のカスタム UI が必要。
 
 BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問 D10](../questions.md) の議論待ちで決める。
+
+## JAC_PoC_BanseikiRuleset：独立ルールセットと指導者プール
+
+SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検証。`poc/JAC_PoC_BanseikiRuleset` を独立した PoC MOD にした。ルールセットとステージング設定を既存のゲームプレイ PoC から分けることで、FrontEnd の設定登録を常時適用し、各 PoC のゲーム内アクションをルールセット条件で評価できる。3つの既存 MOD は `RULESET_JAC_BANSEIKI` と比較用の `RULESET_EXPANSION_2` の両方で読み込む。GS を残す理由は、既存シナリオの回帰確認と両ルールセットの差分調査である。**この PoC は設定と候補フィルターの機構を検証するもの**で、SSOT 2.2 の段階制限（異宇宙に行けるまでマップ別の固定指導者プール・固定プレイヤー数）は未実装。現在の開始画面ではプール設定と人数変更が可能で、AI も全プールの対応済み指導者を候補にする。
+
+新ルールセットの `Rulesets` 行は `RULESET_JAC_BANSEIKI`、`GameCore=Expansion2`、`IsScenario=0`、`SupportsSinglePlayer=1`、`SupportsMultiPlayer=1`。マルチプレイの実動作は未検証。勝利条件のドメインとマップ候補は GS を使う。GS が `RULESET_EXPANSION_2` 専用に宣言する通常オプション、災害の強度（`Realism`）、自然遺産・都市国家除外、公式の指導者プール1・2、および開始時代・ターン制限の設定更新を、このルールセットにも宣言する。
+
+指導者候補には `Players:Expansion2_Players` を共用する。これは公式と JAC の候補を持つドメインで、`RULESET_JAC_BANSEIKI` の `PlayerLeader` に `RulesetDomainOverrides` で指定する。織田・武田の行は `JAC_PoC_CustomCivs/Config/JAC_CustomCivs_Players.xml` に一度だけ登録し、新 MOD は CustomCivs を依存 MOD とする。`JAC_BanseikiHumanPool` 設定の既定は `JAC_BANSEIKI_ONLY`、もう一方は `JAC_ALL_POOLS`。`DomainValueFilterQueries` と `QueryParameters` がルールセット・プレイヤー ID・設定値を読み、シングルプレイの人間枠 0 かつ既定値のときだけ候補を織田信秀・武田信虎との積集合にする。AI 枠と「全プール」指定の人間枠には、下記の非対応指導者を除く公式・JAC の候補を残す。この仕組みは FrontEnd の設定 DB だけで動き、ゲームプレイ Lua や UI 差し替えは不要。
+
+2026-09-29 にこの PC の公式 `DLC/*/*.modinfo` 全 37 件を読み取り専用で監査した。うち 23 件の FrontEnd アクションが `Players:Expansion2_Players` に指導者を登録する。各 InGame アクションの参照する判定条件とゲーム内 `<Leaders>` 定義を突き合わせ、`any="1"` と `LeaderPlayable` により別の条件でも有効になるアクションは除外対象に数えなかった。万世紀で候補だけ残り、指導者定義の読み込み条件を満たさないものは次の 1 件。
+
+| DLC | 指導者 / 文明 | 根拠（公式ファイル:行） | 万世紀での扱い |
+|---|---|---|---|
+| GreatBuilders | `LEADER_SEJONG` / `CIVILIZATION_KOREA` | `DLC/GreatBuilders/GreatBuilders.modinfo:36,38,61`（XP2 専用の InGame アクション）、`DLC/GreatBuilders/Data/GreatBuilders_ConfigData_Korea.xml:7`（FrontEnd 登録）。XP1 側も同 `.modinfo:32-34,58-59` に限定 | `JAC_Banseiki_UnsupportedLeaderFilter` が `difference` で人間・AI の全候補から除外 |
+
+他の公式指導者の基礎定義には、万世紀でも成立する InGame アクションがある。公式ファイルは変更せず、専用クエリにルールセット条件を付けた。`LEADER_SEJONG` が元のドメインに無い環境では除外行は返さず、公式 `RULESET_EXPANSION_2` の候補も変えない。XP2 専用の追加能力や各ゲームモードの完全な互換性までは、この基礎定義の監査だけでは保証しない。
+
+2026-09-29 の設定画面と FrontEnd Lua の結果：**設定部分は成功**。英語 UI の「Create Game」ルールセット欄に `Banseiki` が現れ、選択すると `Human Leader Choices` の既定 `Use Banseiki pool only` が表示された。`Use all leader pools` への切替も画面で確認した。**非対応指導者の除外を追加する前**の `HostGame` の `CreatePlayerParameters(id, true)` と `Refresh()` では、既定時は人間枠 2 候補（両 JAC）、AI 枠 1・2 は各 82 候補（公式クレオパトラと両 JAC を含む）。全プールを選ぶと人間枠も 82 候補となった。スクリーンショットは Git 管理外の `tools/civ6-autotest/artifacts/banseiki-ui-01/ruleset-selected.png` と `pool-all.png`。3言語のタグは登録したが、ゲーム画面での表示確認は英語のみ。除外追加後の候補数・世宗の不在は要実機確認。
+
+ゲーム開始の初回実行 `tools/civ6-autotest/artifacts/banseiki-full-01/` は、ロード画面後にメニューへ戻り、開始ステップで失敗した。`Modding.log` と `Database.log` では公式 GS の `Expansion2Core` と `Expansion2CoreContent` が適用されず、XP1/XP2 の参照整合性エラーでゲームプレイ DB がロールバックされた。この時点の `Target Mods` にルールセット MOD 自体が入っていなかった。診断用に一時的に `IsScenario=1` として起動した `banseiki-flag1-01/` はゲーム内まで進み、3 MOD の `[JAC_POC]` ログも出たが、`GameClimate` と `Game.GetWorldCongress` は存在せず、Base コアの動作だった。対照の公式「黒死病」`blackdeath-core-control-01/` は同じドライバで `GameClimate=true`、`Game.GetWorldCongress=function`、`Expansion2Core` の適用を確認した。これは後述の成功結果より前の診断記録である。
+
+2026-09-29、この PC で日本マップのブランチを重ねた状態の実機結果：`RULESET_JAC_BANSEIKI` のシングルプレイを 22 主要文明で開始し、Gathering Storm の仕組みが存在する状態で 50 ターン進行、保存・ロードに成功した。設定画面では `NO_DUPLICATE_CIVILIZATIONS=0` の導入前に同文明の別指導者を拒否し、導入後は受け入れた。これらは日本マップのブランチとの組合せ結果で、PoC 単独実行や世宗を選ぶ経路の成功証拠ではない。
+
+以前の静的検証では XML 6 ファイルの解析、`banseiki-ruleset.json --check`（27 ステップ）、自動テスト 84 件、`git diff --check` が成功した。これは当時の差分の検査記録であり、今回の除外クエリとシナリオ変更を含まない。今回の静的検証では、除外クエリを監査結果と突き合わせて SQLite で人間・AI 枠に適用するテストを追加し、自動テスト全 86 件、改訂シナリオの `--check`（29 ステップ）、XML 解析、`git diff --check` に成功した。Civ6 の実行結果ではない。
+
+最終の自動シナリオは `tools/civ6-autotest/scenarios/banseiki-ruleset.json`。ルールセットとプールの画面記録、設定値と候補リストの Lua 照会、`NO_DUPLICATE_LEADERS=1`・`NO_DUPLICATE_CIVILIZATIONS=0` の FrontEnd 値、織田（人間）・クレオパトラ／武田／ゴルゴー／ペリクレス（AI）の開始を検査する。ゴルゴーとペリクレスは同じギリシャ文明で別指導者。さらに 3 MOD のログ、気候画面と世界会議 API、数ターンの自動進行、保存・メニューへ戻る・ロードを検査する。この**改訂後の全シナリオは未実行**であり、上記 22 主要文明・50 ターンの実機確認とは別の受入項目である。
+
+後続の受入条件：異宇宙に行けるまでのマップ別固定指導者プールと固定プレイヤー数（SSOT 2.2。マルチプレイは例外）を実装し、開始画面と AI 選択の両方で確認する。PoC 単独でも万世紀を開始・進行・保存・ロードし、GS 中核と改訂後の全シナリオを確認する。GreatBuilders 有効時に世宗が人間・AI の候補に出ないことを設定画面で確認する。長期プレイでの海面上昇と日本語・ロシア語表示も未確認。
+
+**要実機確認（マルチプレイ）**：SSOT 2.2 はマルチプレイを上記段階制限の例外とするが、複数の人間プレイヤーに `JAC_BanseikiHumanPool` をどう適用するかは未確定。現行クエリは `PLAYER_ID=0` を人間枠と仮定し、それ以外の人間枠には既定の「万世紀プールのみ」を適用しない。複数人の設定画面で各枠の候補を確認し、適用範囲を決めてから実装する。
+
+### 単独の実機結果（2026-09-29、`banseiki-ruleset.json` 31手順）
+
+全自動（`restart_game` から）で31手順すべて成功、判定2/2合格。設定画面で万世紀を選べ、既定の人間候補は万世紀プールの2人、すべてのプールでは81人（世宗を除外して82→81）。ルールセット選択後に `NO_DUPLICATE_LEADERS`=true・`NO_DUPLICATE_CIVILIZATIONS`=false。ゴルゴーとペリクレスが同時にギリシャとして開始。気候・世界会議が存在し、気候パネルを開閉できた。3ターン進行、セーブ、メニューへの復帰、ロード（Bundle0 の状態 turnsSeen=4 と万世紀ルールセットを復元）、ロード後1ターンが成功。
+
+シナリオ側で直した点：ルールセットの ConfigurationUpdates は設定画面のパラメータを組み立てた後に反映されるため、重複ルールの確認は HostGame の `BuildHeadlessGameSetup` の後に行う。設定値は真偽値で返る。HostGame の設定確認の後は設定が既定に戻るため、開始直前に `configure` をもう一度行う。`wait_for` は直前の手順のログ位置を使うため、読み込み時のログ待ちは開始の直後に置く。

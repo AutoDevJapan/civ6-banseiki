@@ -32,19 +32,6 @@
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Close</Text></Row>
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>閉じる</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_CLOSE"><Text>Закрыть</Text></Row>
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Three-language glyph check</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>3言語表示テスト</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_LANGUAGE_TEST"><Text>Проверка трёх языков</Text></Row>
-		<!-- 3行とも、ゲームの表示言語に関係なく同じ字形を出す。 -->
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_JA"><Text>織田信長 人物帳 テスト</Text></Row>
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_RU"><Text>Ода Нобунага — журнал полководцев</Text></Row>
-		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
-		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
-		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_TEST_EN"><Text>Oda Nobunaga — Character Journal test</Text></Row>
 		<Row Language="en_US" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>No surviving warlord units.</Text></Row>
 		<Row Language="ja_JP" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>生存中の武将ユニットはありません。</Text></Row>
 		<Row Language="ru_RU" Tag="LOC_JAC_POC_GROWTHUI_NO_UNITS"><Text>Нет живых юнитов-полководцев.</Text></Row>
