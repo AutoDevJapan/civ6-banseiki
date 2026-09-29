@@ -308,6 +308,36 @@ class Japan1534RelationsTests(unittest.TestCase):
         for api in ("GetAllianceType(", "GetAllianceLevel(", "GetAllianceTurnsUntilExpiration("):
             self.assertIn(api, probes[1]["code"])
 
+    def test_alliance_expiry_probe_measures_raw_engine_expiry_per_renewal_variant(self):
+        # live diplo-16: a same-call SetHasAllied(false)->(true) on turn 30 did not restart the clock; all 8 lapsed by turn 32
+        lua = LUA.read_text(encoding="utf-8")
+        self.assertIn('local KEEP_DISABLED_KEY = "JAC_1534_KEEP_ALLIANCES_DISABLED"', lua)
+        keep = lua.split("local function KeepStartAlliances()", 1)[1].split("\nend\n", 1)[0]
+        self.assertTrue(keep.lstrip().startswith("if Game:GetProperty(KEEP_DISABLED_KEY) == true then return end"))
+        path = ROOT / "tools/civ6-autotest/scenarios/probe-alliance-expiry.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        seats = next(s["players"] for s in steps if s["action"] == "configure")
+        self.assertEqual([p["civ"] for p in seats if p["human"]], ["CIVILIZATION_JAC_OUCHI"])
+        setup = [s for s in steps if s["action"] == "ui_lua"][:2]
+        self.assertEqual([s["state_name"] for s in setup], ["GameCore_Tuner", "InGame"])
+        self.assertIn("Game:SetProperty('JAC_1534_KEEP_ALLIANCES_DISABLED', true)", setup[0]["code"])
+        for api in ("GetAllianceTurnsUntilExpiration(", "GetAllianceType(", "GetAllianceLevel(", "IsVisible(",
+                    "DealManager.GetPlayerDeals(", "'AllianceEnded'"):
+            self.assertIn(api, setup[1]["code"])
+        codes = [s["code"] for s in steps if s["action"] == "ui_lua"]
+        for code in codes:
+            self.assertNotIn("error(", code)  # every read and write returns a value instead of stopping the probe
+        for code in setup:
+            self.assertIn("pcall(f)", code["code"])
+            self.assertIn("[JAC_ALLIANCE_EXPIRY_PROBE] ", code["code"])
+        # one autoplay to turn 27, then 1-turn autoplays to turn 34
+        autoplays = [s["turns"] for s in steps if s["action"] == "autoplay"]
+        self.assertEqual(autoplays, [26] + [1] * 7)
+        for tag in ("V2 step1 R04", "V2 step2 R04", "V2b R08 same call", "V5a R07", "V5c R19", "V3 step1 R05", "V3 step2 R05"):
+            self.assertEqual(sum(f"Variant('{tag}" in c for c in codes), 1, tag)
+        self.assertEqual(sum("RemakeIfLapsed('ASAKURA','ROKKAKU')" in c for c in codes), 8)  # V4 every turn 27-34
+        self.assertEqual(sum("RequestSession(a,b,'RENEW_ALLIANCE')" in c for c in codes), 1)  # V5b
+
     def test_start_alliances_outlast_the_alliance_limit_until_an_event_ends_them(self):
         # Owner decision H (2026-09-30, "b" + Shimazu-Ryukyu): no time limit; only an event (or a war between the pair) ends a start alliance.
         lua = LUA.read_text(encoding="utf-8")

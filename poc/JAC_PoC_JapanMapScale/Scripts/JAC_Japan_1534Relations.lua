@@ -39,6 +39,9 @@ local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"
 -- 期限切れで同盟が途切れ、結び直した回数（Game プロパティ。途切れなければ nil のまま）。実機シナリオが 0 を確かめる
 local LAPSES_KEY = "JAC_1534_ALLIANCE_LAPSES"
 
+-- 調査用シナリオ（tools/civ6-autotest/scenarios/probe-alliance-expiry.json）だけが true にする Game プロパティ。true の間は KeepStartAlliances が何もしない（エンジン本来の期限切れを測るため）。通常のゲームでは誰も書かないので nil のまま
+local KEEP_DISABLED_KEY = "JAC_1534_KEEP_ALLIANCES_DISABLED"
+
 local function Log(message)
 	print("[JAC_1534_RELATIONS] " .. message)
 end
@@ -100,6 +103,7 @@ end
 
 -- 毎ターンの初めに、続いている開始時の同盟を保つ。RELATIONS の順に処理する（全員で同じ順になる）
 local function KeepStartAlliances()
+	if Game:GetProperty(KEEP_DISABLED_KEY) == true then return end
 	local players = MajorPlayersByFaction()
 	local turn, limit = Game.GetCurrentGameTurn(), AllianceTimeLimit()
 	for _, relation in ipairs(RELATIONS) do
