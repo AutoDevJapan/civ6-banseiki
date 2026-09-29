@@ -6,13 +6,23 @@ from copy import deepcopy
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from generate import MOD as MAP_MOD, SEATS, SEAT_CASTLES, EXTRA_CAPITAL_NAMES
+from generate import MOD as MAP_MOD, SEATS, SEAT_CASTLES, EXTRA_CAPITAL_NAMES, CASTLE_NAMES
 from start_1534 import HEADS, HEAD_OVERRIDES, civ_id, data, leader_id
 
 
 MOD = MAP_MOD.parent / "JAC_PoC_CustomCivs"
 EXISTING = {"ODA", "TAKEDA"}
 EXTRA = [seat for seat in SEATS if seat.slug not in EXISTING]
+# Russian capital names in Cyrillic (Polivanov), so a Russian UI does not mix scripts.
+CAPITAL_RU = {
+    "ODA": "Нагоя", "DATE": "Ёнэдзава", "ASHINA": "Курокава", "HOJO": "Одавара",
+    "YAMANOUCHI_UESUGI": "Хираи", "TAKEDA": "Цуцудзигасаки", "NAGAO": "Касугаяма",
+    "IMAGAWA": "Сумпу", "MATSUDAIRA": "Окадзаки", "ASAKURA": "Итидзёдани",
+    "ASHIKAGA": "Муромати", "MIYOSHI": "Сёдзуй", "ROKKAKU": "Каннондзи",
+    "HONGANJI": "Исияма", "OUCHI": "Ямагути", "AMAGO": "Гассан-Тода",
+    "MORI": "Ёсида-Корияма", "CHOSOKABE": "Око", "OTOMO": "Фунай",
+    "SHIMAZU": "Кагосима", "RYUKYU": "Сюри", "AINU": "Нибутани",
+}
 
 
 def write_xml(path: Path, root: ET.Element) -> None:
@@ -135,7 +145,9 @@ def translated_text() -> None:
             add(f"LOC_{leader_id(slug)}_NAME", head, head_en, head_ru)
         alias = SEAT_CASTLES.get(slug)
         capital_ja = castles[alias]["name"] if alias else EXTRA_CAPITAL_NAMES[slug]
-        add(f"LOC_JAC_1534_CAPITAL_{slug}", capital_ja, seat.castle, seat.castle)
+        add(f"LOC_JAC_1534_CAPITAL_{slug}", capital_ja, seat.castle, CAPITAL_RU[slug])
+    for castle_id, (en, ru) in CASTLE_NAMES.items():
+        add(f"LOC_JAC_1534_CITY_{castle_id}", castles[castle_id]["name"], en, ru)
     write_xml(MOD / "Text/JAC_Japan1534_Text.xml", root)
 
 

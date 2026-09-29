@@ -171,8 +171,7 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT ID, Status FROM Players ORDER BY ID").fetchall(),
                                  [(i, "Human") for i in range(len(g.SEATS))])
                 expected_rows = sorted((g.SEAT_INDEX[city["owner"]], city["plot"],
-                                        f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
-                                        else city["name"]) for city in cities.values())
+                                        g.city_name_tag(city)) for city in cities.values())
                 self.assertEqual(sorted(db.execute("SELECT Owner,Plot,Name FROM Cities")), expected_rows)
                 self.assertEqual(sorted(db.execute(
                     "SELECT DistrictType,CityID,Plot FROM Districts WHERE DistrictType='DISTRICT_CITY_CENTER'")),

@@ -337,6 +337,51 @@ SEAT_CASTLES = {
     "AINU": "AINU_POROMOI",
 }
 EXTRA_CAPITAL_NAMES = {"ODA": "那古野城", "DATE": "米沢城", "ASHIKAGA": "室町殿"}
+# English/Russian names of the 34 non-capital draft castles. A Civ6Map city name
+# is shown as-is unless it is a LOC tag, so a literal Japanese name renders as
+# tofu in the English font (live 2026-09-29). Every map city uses a LOC tag.
+CASTLE_NAMES = {
+    "DATE_KOORI": ("Koori Nishiyama", "Коори-Нисияма"),
+    "DATE_YANAGAWA": ("Yanagawa", "Янагава"),
+    "ASHINA_INAWASHIRO": ("Inawashiro", "Инавасиро"),
+    "DATE_YAMAGATA": ("Yamagata", "Ямагата"),
+    "HOJO_EDO": ("Edo", "Эдо"),
+    "UESUGI_KAWAGOE": ("Kawagoe", "Кавагоэ"),
+    "UESUGI_MINOWA": ("Minowa", "Минова"),
+    "HOJO_KOGA": ("Koga", "Кога"),
+    "UESUGI_OBOW": ("Oyumi", "Оюми"),
+    "UESUGI_OTA": ("Ota", "Ота"),
+    "TAKEDA_UEHARA": ("Uehara", "Уэхара"),
+    "IMAGAWA_KAKEGAWA": ("Kakegawa", "Какэгава"),
+    "ODA_SHOBATA": ("Shobata", "Сёбата"),
+    "IMAGAWA_NAGOYA": ("Nagoya", "Нагоя"),
+    "ASHIKAGA_KIRIYAMA": ("Kiriyama", "Кирияма"),
+    "ASHIKAGA_NANAO": ("Nanao", "Нанао"),
+    "ASHIKAGA_SAKURABORA": ("Sakurabora", "Сакурабора"),
+    "ASHIKAGA_GOSEYAMA": ("Nochiseyama", "Нотисэяма"),
+    "ASHIKAGA_HOJOZU": ("Hojozu", "Ходзёдзу"),
+    "ASHIKAGA_KUWANOMI": ("Kuwanomi-dera", "Куваноми-дэра"),
+    "ROKKAKU_KAMAHABA": ("Kamaha", "Камаха"),
+    "MIYOSHI_SHIBAO": ("Shibo", "Сибо"),
+    "MIYOSHI_YAGAMI": ("Yakami", "Яками"),
+    "ASHIKAGA_TAKAYA": ("Takaya", "Такая"),
+    "ASHIKAGA_OKISHIO": ("Okishio", "Окисио"),
+    "MIYOSHI_AMAGIRI": ("Amagiri", "Амагири"),
+    "ASHIKAGA_YUZUKI": ("Yuzuki", "Юдзуки"),
+    "OUCHI_YAMABUKI": ("Yamabuki", "Ямабуки"),
+    "OUCHI_TSUWANO": ("Tsuwano", "Цувано"),
+    "ASHIKAGA_MITSUISHI": ("Mitsuishi", "Мицуиси"),
+    "ASHIKAGA_BITCHU_MATSUYAMA": ("Bitchu Matsuyama", "Биттю-Мацуяма"),
+    "SHIMAZU_IZAKU": ("Izaku", "Идзаку"),
+    "SHIMAZU_OBI": ("Obi", "Оби"),
+    "RYUKYU_NAKAGUSUKU": ("Nakagusuku", "Накагусуку"),
+}
+
+
+def city_name_tag(city: dict) -> str:
+    """The LOC tag written into Cities.Name; the text files carry en/ja/ru rows."""
+    return (f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
+            else f"LOC_JAC_1534_CITY_{city['id']}")
 
 # Province centres used only where the 53-castle draft has no site. These are
 # hand-placed geographic proxies, NOT historical boundaries. Their owners are
@@ -367,7 +412,8 @@ def choose_cities(grid: HexGrid, passable: set[int], starts: list[dict],
     """Reserve representative capitals first; place every draft castle next."""
     sites = {castle["id"]: castle for castle in castles}
     expected = {seat.slug for seat in SEATS} - set(SEAT_CASTLES)
-    if expected != set(EXTRA_CAPITAL_NAMES) or len(sites) != 53:
+    if (expected != set(EXTRA_CAPITAL_NAMES) or len(sites) != 53
+            or set(CASTLE_NAMES) != set(sites) - set(SEAT_CASTLES.values())):
         raise ValueError("1534 castle/seat inventory changed; review capital aliases")
     used = {start["plot"] for start in starts}
     cities = []
@@ -511,7 +557,7 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     ordered = ordered_cities(cities)
     db.executemany("INSERT INTO Cities VALUES (?, ?, ?)",
                    ((SEAT_INDEX[city["owner"]], city["plot"],
-                     f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"] else city["name"])
+                     city_name_tag(city))
                     for city in ordered))
     db.executemany("INSERT INTO Districts VALUES ('DISTRICT_CITY_CENTER', ?, ?)",
                    ((city["plot"], city["plot"]) for city in ordered))
