@@ -100,6 +100,7 @@
     },
     {
       "action": "configure",
+      "build_setup": true,
       "ruleset": "RULESET_JAC_BANSEIKI",
       "map_size": "MAPSIZE_SMALL",
       "speed": "GAMESPEED_STANDARD",

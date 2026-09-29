@@ -17,6 +17,7 @@
     },
     {
       "action": "configure",
+      "build_setup": true,
       "ruleset": "RULESET_JAC_BANSEIKI",
       "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
       "map_size": "MAPSIZE_HUGE",
@@ -139,7 +140,7 @@
     {
       "action": "ui_lua",
       "state_name": "HostGame",
-      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; if PlayerConfigurations[0]:GetLeaderTypeName()~='LEADER_JAC_ODA_NOBUHIDE' or PlayerConfigurations[1]:GetLeaderTypeName()~='LEADER_JAC_DATE_TANEMUNE' then error('setup changed the configured players') end; HideGameSetup(); return 'setup built like Create Game; turn limit NONE'"
+      "code": "local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; return 'turn limit NONE after Create Game setup'"
     },
     {
       "action": "start_game",

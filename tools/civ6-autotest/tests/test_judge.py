@@ -185,9 +185,11 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(names, {
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
-            "growth-notebooks.json", "sengoku-trees.json", "unification-victory.json",
-            "unification-registry-15km.json", "japan-map-20km.json", "japan-map-15km.json",
+            "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
+            "unification-victory.json", "unification-registry-15km.json", "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
+            "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
+            "japan-map-15km-200turn.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

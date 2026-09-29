@@ -18,6 +18,7 @@
     },
     {
       "action": "configure",
+      "build_setup": true,
       "ruleset": "RULESET_JAC_BANSEIKI",
       "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
       "map_size": "MAPSIZE_DUEL",
@@ -45,7 +46,7 @@
     {
       "action": "ui_lua",
       "state_name": "HostGame",
-      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; if PlayerConfigurations[0]:GetLeaderTypeName()~='LEADER_JAC_ODA_NOBUHIDE' or PlayerConfigurations[1]:GetLeaderTypeName()~='LEADER_JAC_DATE_TANEMUNE' then error('setup changed the configured players') end; HideGameSetup(); return 'setup built like Create Game; turn limit NONE'"
+      "code": "local limit=GameConfiguration.GetValue('GAME_TURN_LIMIT'); if limit~=DB.MakeHash('TURNLIMIT_NONE') then error('turn limit not NONE: '..tostring(limit)) end; return 'turn limit NONE after Create Game setup'"
     },
     {
       "action": "start_game",
@@ -129,6 +130,11 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=0 then error('positive castles '..owned..'/'..total) end; if total~=3 then error('raze not verified: '..total..' castles remain') end; return '天下統一 with 3 of 4 castles after the raze'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
       "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"
     },
     {
@@ -143,11 +149,6 @@
     {
       "action": "screenshot",
       "path": "unification-victory.png"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=0 then error('positive castles '..owned..'/'..total) end; if total~=3 then error('raze not verified: '..total..' castles remain') end; return '天下統一 with 3 of 4 castles after the raze'"
     }
   ]
 }

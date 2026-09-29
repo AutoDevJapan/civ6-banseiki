@@ -205,11 +205,13 @@ def scenario() -> dict:
             {"action": "load", "name": "jac-unification-negative", "timeout": 300},
             {"action": "ui_lua", "state_name": "InGame", "code": negative},
             {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": final},
+            # Ownership is checked while the game still runs; after victory the alive/city
+            # enumeration no longer matches (live 2026-09-29: "positive castles 2/3").
+            {"action": "ui_lua", "state_name": "InGame", "code": razed},
             {"action": "ui_lua", "state_name": "InGame", "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"},  # the game ends during this turn, so wait for the winner instead of autoplay completion (live 2026-09-29),
             {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": won},
              "timeout": 300},
             {"action": "screenshot", "path": "unification-victory.png"},
-            {"action": "ui_lua", "state_name": "InGame", "code": razed},
         ],
     }
 

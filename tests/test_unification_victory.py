@@ -261,10 +261,11 @@ class UnificationVictoryTests(unittest.TestCase):
         final = next(index for index, step in enumerate(steps)
                      if "transferred the last castle" in step.get("code", ""))
         # The game ends during that turn, so autoplay is started from Lua and the winner is awaited (live 2026-09-29).
-        self.assertEqual(actions[final + 1:final + 3], ["ui_lua", "wait_for"])
-        self.assertIn("AutoplayManager.SetActive(true)", steps[final + 1]["code"])
-        self.assertIn(VICTORY, steps[final + 2]["condition"]["code"])
-        self.assertIn("raze not verified", steps[-1]["code"])
+        self.assertEqual(actions[final + 1:final + 4], ["ui_lua", "ui_lua", "wait_for"])
+        self.assertIn("raze not verified", steps[final + 1]["code"])  # ownership checked before the game ends
+        self.assertIn("AutoplayManager.SetActive(true)", steps[final + 2]["code"])
+        self.assertIn(VICTORY, steps[final + 3]["condition"]["code"])
+        self.assertNotIn("castles", steps[-1].get("code", ""))  # nothing but the screenshot after victory
 
         registry = json.loads((folder / "unification-registry-15km.json").read_text(encoding="utf-8"))
         self.assertEqual(registry, registry_scenario(verify_or_stamp()))
