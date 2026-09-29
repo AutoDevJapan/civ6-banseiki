@@ -1,0 +1,223 @@
+{
+  "name": "Banseiki Sengoku 1534 shared starting knowledge, 22 majors and UI",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": false,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('ruleset changed') end; HideGameSetup(); return 'Sengoku setup refreshed'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetCurrentGameTurn()~=GameConfiguration.GetStartTurn() then error('not turn 1') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; if Game:GetProperty('JAC_SENGOKU_STARTING_KNOWLEDGE_GRANTED_V1')~=true then error('initial grant marker missing') end; local techs={['TECH_JAC_SENGOKU_IRRIGATION_WORKS']=true,['TECH_JAC_SENGOKU_COASTAL_PILOTAGE']=true,['TECH_JAC_SENGOKU_IRON_FORGING']=true,['TECH_JAC_SENGOKU_EARTHWORK_FORTS']=true}; local civics={['CIVIC_JAC_SENGOKU_HOUSE_RULES']=true,['CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES']=true,['CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS']=true}; local majors=PlayerManager.GetAliveMajors(); if #majors~=22 then error('major count '..#majors) end; local nt,nc=0,0; for row in GameInfo.Technologies() do nt=nt+1 end; for row in GameInfo.Civics() do nc=nc+1 end; if nt~=32 or nc~=30 then error('tree count '..nt..'/'..nc) end; for _,p in ipairs(majors) do local id=p:GetID(); local t=p:GetTechs(); local c=p:GetCulture(); for row in GameInfo.Technologies() do if t:HasTech(row.Index)~=(techs[row.TechnologyType]==true) then error('tech mismatch '..id..':'..row.TechnologyType) end end; for row in GameInfo.Civics() do if c:HasCivic(row.Index)~=(civics[row.CivicType]==true) then error('civic mismatch '..id..':'..row.CivicType) end end; for boost in GameInfo.Boosts() do if boost.TechnologyType and t:HasBoostBeenTriggered(GameInfo.Technologies[boost.TechnologyType].Index) then error('unexpected eureka '..id..':'..boost.TechnologyType) end; if boost.CivicType and c:HasBoostBeenTriggered(GameInfo.Civics[boost.CivicType].Index) then error('unexpected inspiration '..id..':'..boost.CivicType) end end; for _,moment in ipairs(Game.GetHistoryManager():GetAllMomentsData(id,1) or {}) do local info=GameInfo.Moments[moment.Type]; if info and (string.find(info.MomentType,'MOMENT_TECH_RESEARCHED',1,true) or string.find(info.MomentType,'MOMENT_CIVIC_CULTURVATED',1,true)) then error('starting knowledge caused historic moment '..id..':'..info.MomentType) end end end; return 'all 22 majors have exactly 4 techs and 3 civics; no boosts or research moments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.LaunchBar_RaiseTechTree(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "TechTree",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "TechTree",
+      "code": "local expected={['TECH_JAC_SENGOKU_IRRIGATION_WORKS']=true,['TECH_JAC_SENGOKU_COASTAL_PILOTAGE']=true,['TECH_JAC_SENGOKU_IRON_FORGING']=true,['TECH_JAC_SENGOKU_EARTHWORK_FORTS']=true}; local live=GetLiveData(); if not live then error('TechTree has no live data') end; local count,done=0,0; for id,_ in pairs(g_kItemDefaults) do count=count+1; local row=live[id]; if not row then error('TechTree missing node '..id) end; local completed=row.Status==ITEM_STATUS.RESEARCHED; if completed~=(expected[id]==true) then error('screen completion mismatch '..id) end; if completed then done=done+1; if not row.IsRevealed then error('completed node hidden '..id) end end end; if count~=32 or done~=4 then error('screen counts '..count..'/'..done) end; return 'TechTree: 4 completed of 32'"
+    },
+    {
+      "action": "screenshot",
+      "path": "starting-tech-tree.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.LaunchBar_CloseTechTree(); LuaEvents.LaunchBar_RaiseCivicsTree(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "CivicsTree",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CivicsTree",
+      "code": "local expected={['CIVIC_JAC_SENGOKU_HOUSE_RULES']=true,['CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES']=true,['CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS']=true}; local live=GetLiveData(); if not live then error('CivicsTree has no live data') end; local count,done=0,0; for id,_ in pairs(g_kItemDefaults) do count=count+1; local row=live[id]; if not row then error('CivicsTree missing node '..id) end; local completed=row.Status==ITEM_STATUS.RESEARCHED; if completed~=(expected[id]==true) then error('screen completion mismatch '..id) end; if completed then done=done+1; if not row.IsRevealed then error('completed node hidden '..id) end end end; if count~=30 or done~=3 then error('screen counts '..count..'/'..done) end; return 'CivicsTree: 3 completed of 30'"
+    },
+    {
+      "action": "screenshot",
+      "path": "starting-civic-tree.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.LaunchBar_CloseCivicsTree(); return true"
+    },
+    {
+      "action": "save",
+      "name": "jac-sengoku-starting-knowledge"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "jac-sengoku-starting-knowledge",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetCurrentGameTurn()~=GameConfiguration.GetStartTurn() then error('not turn 1') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; if Game:GetProperty('JAC_SENGOKU_STARTING_KNOWLEDGE_GRANTED_V1')~=true then error('initial grant marker missing') end; local techs={['TECH_JAC_SENGOKU_IRRIGATION_WORKS']=true,['TECH_JAC_SENGOKU_COASTAL_PILOTAGE']=true,['TECH_JAC_SENGOKU_IRON_FORGING']=true,['TECH_JAC_SENGOKU_EARTHWORK_FORTS']=true}; local civics={['CIVIC_JAC_SENGOKU_HOUSE_RULES']=true,['CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES']=true,['CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS']=true}; local majors=PlayerManager.GetAliveMajors(); if #majors~=22 then error('major count '..#majors) end; local nt,nc=0,0; for row in GameInfo.Technologies() do nt=nt+1 end; for row in GameInfo.Civics() do nc=nc+1 end; if nt~=32 or nc~=30 then error('tree count '..nt..'/'..nc) end; for _,p in ipairs(majors) do local id=p:GetID(); local t=p:GetTechs(); local c=p:GetCulture(); for row in GameInfo.Technologies() do if t:HasTech(row.Index)~=(techs[row.TechnologyType]==true) then error('tech mismatch '..id..':'..row.TechnologyType) end end; for row in GameInfo.Civics() do if c:HasCivic(row.Index)~=(civics[row.CivicType]==true) then error('civic mismatch '..id..':'..row.CivicType) end end; for boost in GameInfo.Boosts() do if boost.TechnologyType and t:HasBoostBeenTriggered(GameInfo.Technologies[boost.TechnologyType].Index) then error('unexpected eureka '..id..':'..boost.TechnologyType) end; if boost.CivicType and c:HasBoostBeenTriggered(GameInfo.Civics[boost.CivicType].Index) then error('unexpected inspiration '..id..':'..boost.CivicType) end end; for _,moment in ipairs(Game.GetHistoryManager():GetAllMomentsData(id,1) or {}) do local info=GameInfo.Moments[moment.Type]; if info and (string.find(info.MomentType,'MOMENT_TECH_RESEARCHED',1,true) or string.find(info.MomentType,'MOMENT_CIVIC_CULTURVATED',1,true)) then error('starting knowledge caused historic moment '..id..':'..info.MomentType) end end end; return 'all 22 majors have exactly 4 techs and 3 civics; no boosts or research moments'"
+    }
+  ]
+}

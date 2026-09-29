@@ -13,10 +13,10 @@
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ja_JP"><Text>技術交流と領国競争</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="en_US"><Text>Exchange and Rival Domains</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ru_RU"><Text>Обмен знаниями и борьба владений</Text></Row>
-    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ja_JP"><Text>統一への広域戦</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="en_US"><Text>Campaigns for Unification</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ru_RU"><Text>Походы за объединение</Text></Row>
-    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ja_JP"><Text>統一への広域戦</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="en_US"><Text>Campaigns for Unification</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ru_RU"><Text>Походы за объединение</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_4_NAME" Language="ja_JP"><Text>統一事業</Text></Row>
@@ -361,9 +361,9 @@
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ja_JP"><Text>広域検地</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="en_US"><Text>Regional Land Survey</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ru_RU"><Text>Общее межевание земель</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ja_JP"><Text>太閤検地</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="en_US"><Text>Taikō Land Survey</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ru_RU"><Text>Тайко-кэнти (межевание земель)</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
@@ -403,5 +403,11 @@
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ja_JP"><Text>ガレー船を1隻建造する。</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="en_US"><Text>Train a Galley.</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ru_RU"><Text>Постройте одну галеру.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="en_US"><Text>Tenka Fubu and Wide-Area Campaigns</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="ru_RU"><Text>«Тэнка фубу» и походы широкого масштаба</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="en_US"><Text>Tenka Fubu and Wide-Area Campaigns</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ru_RU"><Text>«Тэнка фубу» и походы широкого масштаба</Text></Row>
   </LocalizedText>
 </GameInfo>

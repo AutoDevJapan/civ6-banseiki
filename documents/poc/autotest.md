@@ -22,17 +22,31 @@ python -m unittest discover -s tools/civ6-autotest/tests -v
 
 `states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
 
+### FireTuner の一時的なタイムアウト
+
+`autoplay` が途中で止まる問題（2026-09-29、15 km 日本地図＋戦国パックで 31 ターン目に `Autoplay stopped early`）。原因は実機で確定した。人間（大内、枠 14）に AI の指導者（足利）が外交の声明（「Your people are lazy and unworthy...」と Goodbye ボタン）を出し、`DiplomacyActionView` と `LeaderScene` が表示されたまま、AI（枠 10）の手番が人間の返事を待って終わらない。そのため自動進行が途中で止まる（`active=False` で残りターンあり）か、問い合わせがタイムアウトする。`DiplomacyActionView` の Lua 状態で `OnClose()`（`Base/Assets/UI/DiplomacyActionView.lua:2883-2886`、ESC と同じ処理）を呼ぶと閉じ、次の AI（枠 11）の手番へ進んだ。
+
+ドライバは、自動進行の監視ループの各回と、状態の問い合わせが失敗したときに、表示中の外交画面を公式の処理で閉じる。AI からの取引の提案（`DiplomacyDealView`）を先に、ゲーム自身のターン終了処理 `OnLocalPlayerTurnEnd()`（`DLC/Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129`。`OnRefuseDeal(true)` で拒否してセッションを閉じ、`OnContinue` で隠す。素のゲームは `Base/Assets/UI/DiplomacyDealView.lua:3075-3085`）で断る。取引画面が出ている間は `DiplomacyActionView` が `DEAL_MODE` で `OnClose` を無視するため、この順番にしている。次に声明を `OnClose()` で閉じる。どちらも `ContextPtr:IsHidden()` で守り、閉じる途中の再呼び出しは公式の処理側でも無視されるので、タイムアウト後の再試行は冪等になる。閉じた内容はステップログ `autoplay_diplomacy` に残す（例：`closed AI diplomacy statement (turn 31, total 1)`）。外交画面が原因で自動進行が止まったときは、再開の上限（2 回）に数えずに残りターン数で再開する。1 ステップで閉じた回数が `20 + 5 × ターン数` を超えたら失敗にする。状態の問い合わせは 30 秒の枠で再試行し、失敗したときに閉じる画面が無ければ従来どおり止める。取引の拒否は実機では未確認（要実機確認）。単体テストは `tests/test_diplomacy.py`（偽の Tuner）。
+
+時代の切り替わりで人間プレイヤーに出る奉献（Dedication、Gathering Storm）の選択も、自動進行は人間の代わりに選ばない（`DLC/Expansion2/UI/Additions/DedicationPopup.lua`）。これで止まった例は実機では確認していない。ドライバは、停止が 5 秒続いたとき、まず公式の操作 `UI.RequestPlayerOperation(human, PlayerOperations.COMMEMORATE, {[PlayerOperations.PARAM_COMMEMORATION_TYPE] = idx})` を、`Game.GetEras():GetPlayerCommemorateChoices()` の先頭から `GetPlayerNumAllowedCommemorations()` 件だけ決定的に送り、Escape でポップアップを閉じて、残りターン数で自動進行を再開する。選んだ番号はステップログ `autoplay_dedication` に残す。選択肢が無ければ従来どおり再開のみ（最大 2 回）。奉献の選択は 1 ステップ内で最大 3 回までで、その後もステップ期限内に進まなければ失敗にする。単体テストは `tests/test_dedication.py`（偽の状態列）。
+
+ゲームが重いと、FireTuner が 5 秒以内に返事できず `No Lua acknowledgment ...` になることがある（2026-09-29、15 km 日本地図の 10 ターン自動進行で発生。ゲーム自体は生きていた）。`autoplay` の状態問い合わせとアドバイザーポップアップの解除は読み取り専用または冪等（`IsBlockingInput()` で守られている）なので、接続を張り直してバックオフ付きで再試行し、ステップの期限が切れたときだけ失敗にする。ゲームの状態を変えるコマンド（自動進行の開始、オプションメニューを閉じる操作など）は再送せず、従来どおり `LuaResponseUnknown` で止める。
+
 ### 自動鮮度確認と再起動
 
 実行開始時、全 `enable_mods.ids` に対応する `.modinfo` を `Mods` 直下の各 MOD フォルダで探し、ジャンクションを解決した参照先の全ファイルから最も新しい更新時刻を取得する。起動中の `CivilizationVI.exe` または `CivilizationVI_DX12.exe` の開始時刻よりその時刻が**新しい**場合、またはゲームが起動していない場合は、`steps.jsonl` の `auto_restart` に理由を記録して再起動する。MOD が見つからない、同じ UUID が複数ある、Civ6 プロセスが複数ある場合は失敗として止める。更新時刻が等しい場合は再起動しない。`--no-auto-restart` はデバッグ時のみ鮮度確認を省略する。
 
 再起動はまず FireTuner の `FrontEnd` / `InGame` UI 状態から `Events.UserConfirmedClose()` を呼ぶ。接続できなければ、実行ファイル名とタイトルを照合した Civ6 ウィンドウに閉じる要求を送る。15 秒待っても元のプロセスが残る場合は PID と開始時刻を再確認してから終了させる。旧 EXE の終了後も Steam が旧セッションを解放するまで 8 秒待ち、`steam://rungameid/289070` で再起動する。新しいゲームが現れなければ 45 秒間隔で最大 4 回起動を試す。確認済みの Civ6 ウィンドウを左クリックしてオープニングを飛ばす。動画が続いて `FrontEnd` が応答しなければ、安全な位置を 12 秒間隔で再度左クリックし、`UI.IsInFrontEnd()` が `true` を返すまで待つ（the opening can be skipped with a left click）。起動直後にこの読み取り専用照会の応答が欠けた場合だけ再接続して再試行する。再起動後に MOD の更新時刻を再確認し、まだ新しければ手順を始めず失敗する。ログの開始位置も取り直すため、古いゲームのログを判定に混ぜない。
 
+Civ6 がまったく起動していないときも、`restart_game`（自動再起動を含む）は「閉じる」手順を飛ばして Steam の起動経路でそのまま起動し、以後は通常の再起動と同じく（ウィンドウ待ち、オープニングのスキップ、FrontEnd 応答待ち）進む。最初の手順が `restart_game` 以外で `--no-auto-restart` のときも、Civ6 が無ければ同じ起動を先に行う。ドライバが起動していないプロセスは終了させず、待っても複数プロセスが残れば従来どおり拒否する。
+
+直前のシナリオで閉じたばかりの Civ6 が終了処理中で一時的に 2 プロセスに見える場合、single_civ_process は最大 10 秒、消えるのを待ってから数える（他のプロセスは終了させない）。待っても複数残れば従来どおり失敗する。再起動後に FrontEnd が応答しない場合は、Civ6 が起動中に固まった可能性と FireTuner 設定の確認を促すエラーで失敗する。
+
 ゲームプレイ Lua・SQL・テキストは新しいゲームの開始またはセーブの読込で再読込される。フロントエンド設定（ルールセット、プレイヤー、パラメータ）は MOD の再適用または再起動が必要。アート（BLP、DDS、ArtDefs、テクスチャ）は完全な再起動が必要。自動判定はファイル種別を問わず新しい更新時刻で再起動するため、これらを共通に扱う。
 
 `tests/test_restart.py` は、模擬ファイル更新時刻と模擬プロセス開始時刻による鮮度判定、再起動が最初の手順より前に行われること、`restart_game` の JSON 入力検証、Steam 起動・左クリック・`FrontEnd` 待機を単体テストする。
 
-実行先ディレクトリは**新規**にする。`baseline.json`、`steps.jsonl`、PNG が入る。既存名のセーブは上書きせず停止するため、再実行時は JSON の `save` と `load` の名前を両方変える。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
+実行先ディレクトリは**新規**にする。省略時はマイクロ秒付き日時で作り、`baseline.json`、`steps.jsonl`、PNG が入る。`save` と `load` の名前には既定で出力ディレクトリの絶対パスから作った12桁の接尾辞を付ける。同じ実行の `save` / `load` は同じ実名を使い、再実行では新しい出力ディレクトリにより別名になる。既存名のセーブは上書きせず停止する。既存の保存を読む場合や名前を固定したい場合は両ステップで `"exact_name": true` を指定する。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
 
 途中で止まった実行のログだけを判定する場合:
 
@@ -50,12 +64,12 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 |---|---|---|
 | `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
-| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式 |
-| `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
-| `autoplay` | `turns`、任意で `metrics: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` が真ならターン境界ごとの所要時間と Civ6 プロセスのメモリを記録する |
+| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式。`build_setup` は HostGame で Create Game の設定をビルド・更新し、全指定枠が維持されたことを検査して設定を閉じる。`RULESET_JAC_BANSEIKI` では既定で true（明示的な `false` で無効）、他のルールセットでは既定 false。ビルドしないと暦の上書き（CALENDAR_STANDARD_FROM_START_ERA）が効かず、開始ターンが 16603 になって長い AI オートプレイが 31 ターン付近で止まった（2026-09-29 実機） |
+| `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ。直前の `configure` が `RULESET_JAC_BANSEIKI` なら `GameConfiguration.GetStartTurn()` が 1 でなければ失敗する |
+| `autoplay` | `turns`、任意で `metrics: true`, `research_metrics: true`, `allow_human_elimination: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` はターン時間とプロセスメモリ、`research_metrics` は各メジャーの技術・社会制度の研究状態を JSONL に記録する。`allow_human_elimination` は人間勢力の滅亡をログに残し、目標ターンまで監視を続ける |
 | `ui_lua` | `state_name`, `code` | 指定 Lua 状態で任意のコードを1回実行する |
 | `screenshot` | `path` | Civ6 のウィンドウだけを PNG に保存する。出力先からの相対パス |
-| `save` / `load` | `name` | 単独プレイのローカル保存。保存完了イベントとファイルを確認する |
+| `save` / `load` | `name`、任意で `exact_name: true` | 単独プレイのローカル保存。既定で出力先別の接尾辞を付ける。保存完了イベントとファイルを確認する |
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
@@ -63,6 +77,21 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 `wait_for` の Lua 条件は繰り返し評価されるため、ゲーム状態を変更しない、副作用のない判定式に限定する。確認済みの Lua `ERR` は直ちに失敗とする。送信後に応答が失われて実行有無が不明な場合は、状態変更を伴う Lua コードを再送しない。`start_game` と `load` では、Lua コマンド送信前の接続・状態照会エラーをそのまま失敗として記録し、送信後の応答不明時だけ読み取り専用のログ・状態確認で遷移を判定する。確認できなければ判定不能として停止する。ロード遷移中に `Lua.log` の再生成・切り詰めを検出した場合も、世代をまたいだ件数比較をせず判定不能として停止する。スクリーンショットは撮影完了後にステップ期限を確認し、超過していれば失敗とする。
 
 `growth-notebooks.json` は `PartialScreenHooks` の `OnToggleNotebooks()` で Notebooks を開き、`JAC_Notebooks` 状態の `Controls.CharacterJournalButton:DoLeftClick()` で Character Journal に切り替える。Lua 状態とログを確認してから撮影する。PNG の画面内容と見た目は人が確認する。ログの自動判定だけで視覚的な成功を主張しない。
+
+### 今回追加した確認
+
+- `japan-map-setup-screen.json`: 「ゲームの作成」で通常マップの人間候補が織田・武田の2人、日本15 kmマップを選んだ後の候補が所定の22人と完全一致することを検査し、それぞれ画面を保存する。
+- `japan-map-15km-settlers.json`: 開拓者版の開始時に22メジャー勢力、各勢力ちょうど1人の開拓者、都市0、地図204×88を検査する。
+- `japan-map-15km-200turn.json`: 史実領土版の初期22勢力・56都市を検査し、開始後に ruleset が `RULESET_JAC_BANSEIKI` で戦国ツリー（技術32・社会制度30、公式の行なし）が有効なことを検査してから、200ターンを進め、滅亡を許容しつつターン時間・メモリと全メジャーの研究状況を記録する。最後に目標ターン到達と生存勢力数を確認する。
+
+研究ログは成果物の `autoplay-research-1.jsonl` に、**観測できた**各ターンの各メジャーについて、生死、研究済み技術・社会制度の件数とID、現在の研究IDを記録する。観測できなかったターンを補間しない。ターンごとの研究状況の問い合わせは読み取りだけなので、FireTuner の一時的なタイムアウトでは再試行する。途中で止まった自動進行を再開するときは、終了フラグ `JAC_AUTOTEST_AUTO_DONE` を消してから再開し、新しい終了イベントを待つ。到達ターンの中央値と勢力間の最小・最大・幅は次のコマンドで出す。`--kind civic` で社会制度を集計する。最初の観測時点で既に完了した項目は `baseline_factions` に数え、その正確な研究完了ターンは不明である。
+
+```powershell
+python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl
+python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl --kind civic
+```
+
+実装の根拠、観測上の限界、主セッションで行う実機確認は [ドライバー拡張ノート](autotest-driver-extensions.md) に記す。
 
 ## 判定内容
 
