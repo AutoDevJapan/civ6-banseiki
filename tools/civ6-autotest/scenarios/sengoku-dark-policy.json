@@ -1,0 +1,254 @@
+{
+  "name": "Sengoku dark-age policy choice on the 15 km Japan map: the human house (Takeda), forced dark at the Koji 改元 (turn 66), gets its default, sees the choice screen, chooses Temple Learning via EXECUTE_SCRIPT (flags applied, a second choice dropped) and keeps it across a turn and save/load; dark AI houses take their own defaults",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "autoplay",
+      "turns": 64,
+      "timeout": 14400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 65 or l.reign ~= 0 then error('not turn 65 before Koji: ' .. elapsed .. ' reign ' .. l.reign) end; if defaults.CIVILIZATION_JAC_TAKEDA == 'JAC_AGE_POLICY_TEMPLE' then error('the test chooses Temple Learning, which must not be the default') end; h.score = -1000; Game:SetProperty('JAC_AGES_LEDGER', l); return 'turn 65: forced Takeda (player ' .. takeda .. ') to score -1000 before the Koji judgement'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 66 then error('not turn 66: ' .. elapsed) end; if l.reign ~= 1 or type(l.history.r1) ~= 'table' or l.history.r1.turn ~= 66 then error('Koji not judged on turn 66') end; if h.age ~= 'DARK' then error('forced Takeda not dark: ' .. tostring(h.age)) end; if h.policy ~= defaults.CIVILIZATION_JAC_TAKEDA or h.chosen ~= nil then error('Takeda before choosing: ' .. tostring(h.policy) .. ' chosen ' .. tostring(h.chosen)) end; flags(takeda, h.policy); local dark = 0; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local x = l.houses['p' .. id]; local civ = PlayerConfigurations[id]:GetCivilizationTypeName(); if x.age == 'DARK' then dark = dark + 1; if x.policy ~= defaults[civ] then error('default of ' .. civ .. ': ' .. tostring(x.policy)) end; flags(id, x.policy) elseif x.policy ~= nil then error('policy of non-dark ' .. civ) end end; return 'Koji (turn 66): Takeda dark on its default ' .. h.policy .. '; ' .. dark .. ' dark houses, each on its own default'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-SengokuDarkPolicy-01",
+      "timeout": 180
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 180
+    },
+    {
+      "action": "load",
+      "name": "JAC-SengokuDarkPolicy-01",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if ContextPtr:IsHidden() then error('choice screen hidden after load for the dark human house') end; return 'choice screen shown: ' .. tostring(Controls.Body:GetText())"
+    },
+    {
+      "action": "screenshot",
+      "path": "01-dark-policy-choice.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if not JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE') then error('not sent: local turn not active') end; if not ContextPtr:IsHidden() then error('screen still open after choosing') end; return 'Temple Learning sent via EXECUTE_SCRIPT'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; local h = l.houses['p' .. takeda]; if h.policy == 'JAC_AGE_POLICY_TEMPLE' and h.chosen == 1 then return true end; return 'policy=' .. tostring(h.policy) .. ' chosen=' .. tostring(h.chosen)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; flags(takeda, 'JAC_AGE_POLICY_TEMPLE'); return 'turn ' .. elapsed .. ': Takeda chose Temple Learning; every castle has its flag, one anchor, no ' .. defaults.CIVILIZATION_JAC_TAKEDA .. ' flag'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if not JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('not sent: local turn not active') end; return 'second choice (Sea Captains) sent'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 67 then error('not turn 67: ' .. elapsed) end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then error('after the second choice and a turn start: ' .. tostring(h.policy) .. ' chosen ' .. tostring(h.chosen)) end; flags(takeda, h.policy); return 'turn 67: the second choice was dropped and the turn start kept Temple Learning'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-SengokuDarkPolicy-02",
+      "timeout": 180
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 180
+    },
+    {
+      "action": "load",
+      "name": "JAC-SengokuDarkPolicy-02",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 67 then error('loaded turn ' .. elapsed) end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then error('after load: ' .. tostring(h.policy) .. ' chosen ' .. tostring(h.chosen)) end; flags(takeda, h.policy); return 'after load, before any turn start: the choice and its flags are kept'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if not ContextPtr:IsHidden() then error('choice screen shown again after the house chose') end; return 'choice screen stays closed after load (already chosen)'"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal14" FontStyle="Shadow">
+	<!-- 暗黒期の政策の選択（documents/research/sengoku-ages.md §7.2）。枠とボタンは JAC_CourtArbitrationPanel.xml と同じ部品。 -->
+	<Grid ID="Panel" Anchor="C,C" Size="560,auto" SizePadding="0,20"
+		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22" ConsumeAllMouse="1">
+		<Stack ID="Rows" Anchor="L,T" Offset="20,12" StackGrowth="Down" Padding="6">
+			<Label Style="FontFlair24" String="LOC_JAC_AGE_DARK_CHOICE_TITLE"/>
+			<Label ID="Body" WrapWidth="520"/>
+		</Stack>
+		<GridButton ID="LaterButton" Anchor="R,T" Offset="12,10" Size="110,28" Style="ButtonControl" String="LOC_JAC_AGE_DARK_CHOICE_LATER"/>
+	</Grid>
+	<Instance Name="PolicyRow">
+		<Container ID="Root" Size="520,64">
+			<Box Size="parent,parent" Color="0,0,0,110"/>
+			<Label ID="Name" Anchor="L,T" Offset="8,6" Style="FontNormal16"/>
+			<Label ID="Description" Anchor="L,T" Offset="8,26" WrapWidth="390"/>
+			<GridButton ID="Choose" Anchor="R,C" Offset="6,0" Size="100,28" Style="ButtonControl" String="LOC_JAC_AGE_DARK_CHOICE_CHOOSE"/>
+		</Container>
+	</Instance>
+</Context>

@@ -101,20 +101,58 @@ INSERT INTO JAC_SengokuAgeEventScores (EventType, Score) VALUES
   ('JAC_EVENT_IKUNO_SILVER', 1),
   ('JAC_EVENT_NAGAO_TO_UESUGI', 3);
 
--- §7.2: dark-age policies. The ledger gives a dark house the lowest Priority (the choice screen is a
--- follow-up). A city-wide effect is on while the city centre's plot property <PolicyType> is 1; a house-wide
--- effect while JAC_AGE_ANCHOR_<suffix> is 1 on the house's anchor city (one city per house, §7.1).
+-- §7.2: dark-age policies. A house judged dark gets its default at once (its row of
+-- JAC_SengokuDarkAgePolicyDefaults, else the lowest Priority); a human house may choose another one on the choice
+-- screen (UI/JAC_SengokuDarkPolicy.lua), once per 改元. Priority is also the screen's order. A city-wide effect is
+-- on while the city centre's plot property <PolicyType> is 1; a house-wide effect while JAC_AGE_ANCHOR_<suffix>
+-- is 1 on the house's anchor city (one city per house, §7.1).
 CREATE TABLE JAC_SengokuDarkAgePolicies (
   PolicyType TEXT NOT NULL PRIMARY KEY CHECK (PolicyType LIKE 'JAC_AGE_POLICY_%'),
   Priority INTEGER NOT NULL UNIQUE,
   Name TEXT NOT NULL,
+  Description TEXT NOT NULL,
   Announcement TEXT NOT NULL
 );
-INSERT INTO JAC_SengokuDarkAgePolicies (PolicyType, Priority, Name, Announcement) VALUES
-  ('JAC_AGE_POLICY_VALOR', 1, 'LOC_JAC_AGE_POLICY_VALOR_NAME', 'LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT'),
-  ('JAC_AGE_POLICY_ELITE', 2, 'LOC_JAC_AGE_POLICY_ELITE_NAME', 'LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT'),
-  ('JAC_AGE_POLICY_PIRATE', 3, 'LOC_JAC_AGE_POLICY_PIRATE_NAME', 'LOC_JAC_AGE_DARK_PIRATE_ANNOUNCEMENT'),
-  ('JAC_AGE_POLICY_TEMPLE', 4, 'LOC_JAC_AGE_POLICY_TEMPLE_NAME', 'LOC_JAC_AGE_DARK_TEMPLE_ANNOUNCEMENT');
+INSERT INTO JAC_SengokuDarkAgePolicies (PolicyType, Priority, Name, Description, Announcement) VALUES
+  ('JAC_AGE_POLICY_VALOR', 1, 'LOC_JAC_AGE_POLICY_VALOR_NAME', 'LOC_JAC_AGE_POLICY_VALOR_DESCRIPTION', 'LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT'),
+  ('JAC_AGE_POLICY_ELITE', 2, 'LOC_JAC_AGE_POLICY_ELITE_NAME', 'LOC_JAC_AGE_POLICY_ELITE_DESCRIPTION', 'LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT'),
+  ('JAC_AGE_POLICY_PIRATE', 3, 'LOC_JAC_AGE_POLICY_PIRATE_NAME', 'LOC_JAC_AGE_POLICY_PIRATE_DESCRIPTION', 'LOC_JAC_AGE_DARK_PIRATE_ANNOUNCEMENT'),
+  ('JAC_AGE_POLICY_TEMPLE', 4, 'LOC_JAC_AGE_POLICY_TEMPLE_NAME', 'LOC_JAC_AGE_POLICY_TEMPLE_DESCRIPTION', 'LOC_JAC_AGE_DARK_TEMPLE_ANNOUNCEMENT');
+
+-- §6.2 / §7.2: each house's dark-age policy when it has not chosen (AI houses always; humans until they choose).
+-- The design's per-house ranking reduced to its first place: every policy can always be taken, so a lower place
+-- is never used. Provisional (owner question Q70), after the house's historical profile: Takeda / Oda / Nagao /
+-- Shimazu famed armies -> ELITE; sea powers (Mori's Murakami, Chosokabe, Otomo, Ryukyu) -> PIRATE; temple and
+-- court culture (Honganji, Ashikaga, Imagawa, Asakura, Ouchi) -> TEMPLE; the rest -> VALOR.
+-- CivilizationType has no foreign key: the houses come from JAC_PoC_CustomCivs, and other maps' civilizations
+-- simply have no row.
+CREATE TABLE JAC_SengokuDarkAgePolicyDefaults (
+  CivilizationType TEXT NOT NULL PRIMARY KEY,
+  PolicyType TEXT NOT NULL REFERENCES JAC_SengokuDarkAgePolicies (PolicyType)
+);
+INSERT INTO JAC_SengokuDarkAgePolicyDefaults (CivilizationType, PolicyType) VALUES
+  ('CIVILIZATION_JAC_AINU', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_AMAGO', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_ASAKURA', 'JAC_AGE_POLICY_TEMPLE'),
+  ('CIVILIZATION_JAC_ASHIKAGA', 'JAC_AGE_POLICY_TEMPLE'),
+  ('CIVILIZATION_JAC_ASHINA', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_CHOSOKABE', 'JAC_AGE_POLICY_PIRATE'),
+  ('CIVILIZATION_JAC_DATE', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_HOJO', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_HONGANJI', 'JAC_AGE_POLICY_TEMPLE'),
+  ('CIVILIZATION_JAC_IMAGAWA', 'JAC_AGE_POLICY_TEMPLE'),
+  ('CIVILIZATION_JAC_MATSUDAIRA', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_MIYOSHI', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_MORI', 'JAC_AGE_POLICY_PIRATE'),
+  ('CIVILIZATION_JAC_NAGAO', 'JAC_AGE_POLICY_ELITE'),
+  ('CIVILIZATION_JAC_ODA', 'JAC_AGE_POLICY_ELITE'),
+  ('CIVILIZATION_JAC_OTOMO', 'JAC_AGE_POLICY_PIRATE'),
+  ('CIVILIZATION_JAC_OUCHI', 'JAC_AGE_POLICY_TEMPLE'),
+  ('CIVILIZATION_JAC_ROKKAKU', 'JAC_AGE_POLICY_VALOR'),
+  ('CIVILIZATION_JAC_RYUKYU', 'JAC_AGE_POLICY_PIRATE'),
+  ('CIVILIZATION_JAC_SHIMAZU', 'JAC_AGE_POLICY_ELITE'),
+  ('CIVILIZATION_JAC_TAKEDA', 'JAC_AGE_POLICY_ELITE'),
+  ('CIVILIZATION_JAC_YAMANOUCHI_UESUGI', 'JAC_AGE_POLICY_VALOR');
 
 -- §7.1: conditions read the city centre's plot property. REQUIREMENT_PLOT_PROPERTY_MATCHES is the only
 -- official property requirement; its only official use gives PropertyName and PropertyMinimum
