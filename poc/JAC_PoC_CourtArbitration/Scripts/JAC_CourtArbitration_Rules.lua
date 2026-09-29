@@ -1,5 +1,5 @@
 -- 朝廷・将軍の停戦裁定（SSOT 3.2）の規則。ゲームプレイ側（Scripts/JAC_CourtArbitration.lua）と
--- UI 側（UI/JAC_CourtArbitration.lua）の両方が include する。UI は表示とボタンの可否だけに使い、
+-- UI 側（UI/JAC_CourtArbitrationPanel.lua）の両方が include する。UI は表示とボタンの可否だけに使い、
 -- 状態の変更はゲームプレイ側だけが行う（公式：BlackDeathScenario.lua:3 が Rules を include する形）。
 -- 両方の文脈にある API だけを使う（Players / Game / GameInfo / GameConfiguration / PlayerConfigurations）。
 --

@@ -35,7 +35,7 @@ local function Notify(ids, nameKey, summaryKey, ...)
 	end
 end
 
--- 請求（UI/JAC_CourtArbitration.lua → UI.RequestPlayerOperation(EXECUTE_SCRIPT)、OnStart = この名前。
+-- 請求（UI/JAC_CourtArbitrationPanel.lua → UI.RequestPlayerOperation(EXECUTE_SCRIPT)、OnStart = この名前。
 -- 公式：BlackDeathScenario_PopupHandler.lua:22-28 → BlackDeathScenario.lua:66 の GameEvents.EventPopupChoice）
 local function OnRequest(requester, params)
 	local a, b = tonumber(params.A), tonumber(params.B)

@@ -49,7 +49,7 @@ class ScopeAndTextTests(unittest.TestCase):
         for tag, found in languages.items():
             self.assertEqual(found, LANGUAGES, tag)
         lua = "".join((MOD / p).read_text(encoding="utf-8") for p in (
-            "UI/JAC_CourtArbitration.lua", "UI/JAC_CourtArbitration.xml", "Scripts/JAC_CourtArbitration.lua"))
+            "UI/JAC_CourtArbitrationPanel.lua", "UI/JAC_CourtArbitrationPanel.xml", "Scripts/JAC_CourtArbitration.lua"))
         used = set(re.findall(r'"(LOC_JAC_ARB_[A-Z_]+)"', lua))
         used -= {"LOC_JAC_ARB_REASON_"}
         rules = (MOD / "Scripts/JAC_CourtArbitration_Rules.lua").read_text(encoding="utf-8")
@@ -58,7 +58,7 @@ class ScopeAndTextTests(unittest.TestCase):
 
     @unittest.skipIf(lupa is None, "lupa is not installed")
     def test_ui_script_compiles(self):
-        source = (MOD / "UI/JAC_CourtArbitration.lua").read_text(encoding="utf-8")
+        source = (MOD / "UI/JAC_CourtArbitrationPanel.lua").read_text(encoding="utf-8")
         error = lupa.LuaRuntime().eval("function(s) local _, e = load(s); return e end")(source)
         self.assertIsNone(error)
 

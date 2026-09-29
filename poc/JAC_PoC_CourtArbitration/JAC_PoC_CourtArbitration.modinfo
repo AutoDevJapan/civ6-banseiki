@@ -68,7 +68,7 @@
 		</AddGameplayScripts>
 		<AddUserInterfaces id="JAC_Arbitration_UI_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
 			<Properties><Context>InGame</Context></Properties>
-			<File>UI/JAC_CourtArbitration.xml</File>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
 		<UpdateText id="JAC_Arbitration_Text_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
@@ -78,7 +78,7 @@
 		</AddGameplayScripts>
 		<AddUserInterfaces id="JAC_Arbitration_UI_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
 			<Properties><Context>InGame</Context></Properties>
-			<File>UI/JAC_CourtArbitration.xml</File>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
 		<UpdateText id="JAC_Arbitration_Text_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
@@ -88,7 +88,7 @@
 		</AddGameplayScripts>
 		<AddUserInterfaces id="JAC_Arbitration_UI_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
 			<Properties><Context>InGame</Context></Properties>
-			<File>UI/JAC_CourtArbitration.xml</File>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
 		<UpdateText id="JAC_Arbitration_Text_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
@@ -98,18 +98,21 @@
 		</AddGameplayScripts>
 		<AddUserInterfaces id="JAC_Arbitration_UI_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
 			<Properties><Context>InGame</Context></Properties>
-			<File>UI/JAC_CourtArbitration.xml</File>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
+		<!-- Lua は VFS 上でファイル名だけで引かれる（公式：Expansion2.modinfo の ImportFiles にある UI/Replacements/CitySupport.lua が
+		     Base/Assets/UI/CitySupport.lua を同名で置き換える）。UI 側を Scripts/JAC_CourtArbitration.lua と同名にすると、
+		     ゲームプレイ側がこの UI ファイルを読んでしまうので、名前を分ける（tests/test_lua_file_names.py）。 -->
 		<ImportFiles id="JAC_Arbitration_Files">
 			<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
-			<File>UI/JAC_CourtArbitration.lua</File>
+			<File>UI/JAC_CourtArbitrationPanel.lua</File>
 		</ImportFiles>
 	</InGameActions>
 	<Files>
 		<File>Text/JAC_CourtArbitration_Text.xml</File>
 		<File>Scripts/JAC_CourtArbitration.lua</File>
 		<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
-		<File>UI/JAC_CourtArbitration.xml</File>
-		<File>UI/JAC_CourtArbitration.lua</File>
+		<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		<File>UI/JAC_CourtArbitrationPanel.lua</File>
 	</Files>
 </Mod>

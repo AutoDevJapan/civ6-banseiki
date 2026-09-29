@@ -149,7 +149,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "JAC_CourtArbitration",
+      "state_name": "JAC_CourtArbitrationPanel",
       "code": "if Controls.OpenButton:IsHidden() then error('petition button hidden for the Ashikaga human') end; Controls.OpenButton:DoLeftClick(); if Controls.Panel:IsHidden() then error('panel did not open') end; return 'panel open'"
     },
     {
@@ -158,7 +158,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "JAC_CourtArbitration",
+      "state_name": "JAC_CourtArbitrationPanel",
       "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; JAC_RequestArbitration(ouchi,otomo); return 'request sent via EXECUTE_SCRIPT'"
     },
     {
@@ -172,7 +172,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "JAC_CourtArbitration",
+      "state_name": "JAC_CourtArbitrationPanel",
       "code": "Controls.CloseButton:DoLeftClick(); return 'closed'"
     },
     {
