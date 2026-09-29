@@ -289,11 +289,86 @@ def scenarios(human_slug: str = "ODA") -> None:
             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def resource_scenario() -> None:
+    """SSOT 3.2 live check on the 20 km map: custom resources, tech gates, year-driven site release."""
+    manifest = json.loads((MOD / "Maps" / "manifest.json").read_text(encoding="utf-8"))
+    item = next(entry for entry in manifest if entry["km_per_tile"] == 20)
+    assert SEATS[0].slug == "ODA"
+    reserved = [r for r in item["resource_candidates"] if r["placement_status"] == "reserved_for_later_release"]
+    sites = "{" + ",".join(f"{{'{r['id']}',{r['plot']},'{r['resource_id']}',{r['reveal_year']}}}"
+                           for r in sorted(reserved, key=lambda r: (r["reveal_year"], r["id"]))) + "}"
+    counts = item["resource_placement"]["count_by_type"]
+    grid = (f"local w,h=Map.GetGridSize(); if w~={item['width']} or h~={item['height']} then "
+            "error('map grid mismatch '..w..'x'..h) end; ")
+    static = (
+        grid +
+        "for _,id in ipairs({'RESOURCE_JAC_GOLD','RESOURCE_JAC_LACQUER'}) do local r=GameInfo.Resources[id]; "
+        "if not r then error('missing resource '..id) end; "
+        "if r.PrereqTech then error(id..' must not be gated by a tech') end end; "
+        "for r in GameInfo.Resources() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then "
+        "error('official tech gate on '..r.ResourceType..': '..r.PrereqTech) end end; "
+        "if GameInfo.Resources['RESOURCE_IRON'].PrereqTech~='TECH_JAC_SENGOKU_IRON_FORGING' then error('iron gate') end; "
+        "for r in GameInfo.Resource_Harvests() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then "
+        "error('official tech harvest gate on '..r.ResourceType) end; "
+        "if r.ResourceType=='RESOURCE_RICE' and r.PrereqTech~='TECH_JAC_SENGOKU_IRRIGATION_WORKS' then "
+        "error('rice harvest gate '..tostring(r.PrereqTech)) end end; "
+        "local hills=false; for r in GameInfo.Resource_ValidTerrains() do "
+        "if r.ResourceType=='RESOURCE_SILVER' and r.TerrainType=='TERRAIN_GRASS_HILLS' then hills=true end end; "
+        "if not hills then error('silver is not valid on grass hills') end; "
+        "local counts={}; for index=0,w*h-1 do local t=Map.GetPlotByIndex(index):GetResourceType(); "
+        "if t>=0 then local name=GameInfo.Resources[t].ResourceType; counts[name]=(counts[name] or 0)+1 end end; "
+        f"for name,expected in pairs({{RESOURCE_JAC_GOLD={counts['RESOURCE_JAC_GOLD']},"
+        f"RESOURCE_JAC_LACQUER={counts['RESOURCE_JAC_LACQUER']},RESOURCE_SILVER={counts['RESOURCE_SILVER']}}}) do "
+        "if counts[name]~=expected then error(name..' on map: '..tostring(counts[name])..', expected '..expected) end end; "
+        "return 'custom resources defined, tech gates Sengoku-only, start resources on the map'")
+
+    def released(year: int) -> str:
+        return (grid + f"local sites={sites}; local shown=0; for _,s in ipairs(sites) do "
+                "local t=Map.GetPlotByIndex(s[2]):GetResourceType(); "
+                f"if s[4]<={year} then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; "
+                "shown=shown+1 elseif t~=-1 then error('site released too early: '..s[1]) end end; "
+                f"return 'year {year}: '..shown..' of '..#sites..' deferred sites on the map'")
+
+    players = [{"leader": seat.leader, "civ": seat.civ, "human": i == 0} for i, seat in enumerate(SEATS)]
+    steps = [
+        {"action": "enable_mods",
+         "ids": [BANSEIKI_RULESET_ID, CUSTOM_CIVS_ID, GROWTH_UI_ID, SENGOKU_TREES_ID, MOD_ID],
+         "disable_ids": [BUNDLE0_ID]},
+        {"action": "configure", "ruleset": "RULESET_JAC_BANSEIKI",
+         "map_file": "{" + MOD_ID + "}Maps/" + item["file"], "map_size": "MAPSIZE_HUGE",
+         "speed": "GAMESPEED_STANDARD", "seed": 620960, "city_states": 0, "players": players},
+        {"action": "ui_lua", "state_name": "HostGame",
+         "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); "
+                 "GameConfiguration.SetValue('JAC_RESOURCES_TEST_YEAR', 1541); HideGameSetup(); "
+                 "return 'setup built; calendar test year 1541 on turn 1'"},
+        {"action": "start_game", "timeout": 600},
+        {"action": "wait_for", "condition": {"type": "log_line", "log": "Modding.log",
+                                              "contains": "Applying Component - JAC_Japan_Resources (UpdateDatabase)"},
+         "timeout": 60},
+        {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
+                                              "contains": "[JAC_RESOURCES] loaded"}, "timeout": 60},
+        {"action": "ui_lua", "state_name": "InGame", "code": static},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(1541)},
+        {"action": "autoplay", "turns": 1, "timeout": 600},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(1542)},
+        {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
+                                              "contains": "[JAC_RESOURCES] revealed silver-ikuno"}, "timeout": 30},
+        {"action": "autoplay", "turns": 8, "timeout": 900},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(1550)},
+    ]
+    data = {"name": "JAC Japan resources: custom rows, tech gates, year-driven site release (20 km)",
+            "judge_profile": "generic", "steps": steps}
+    output = ROOT / "tools" / "civ6-autotest" / "scenarios"
+    (output / "japan-resources.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                                                 encoding="utf-8")
+
+
 def main() -> None:
     config()
     text()
     scenarios()
     scenarios("TAKEDA")
+    resource_scenario()
 
 
 if __name__ == "__main__":

@@ -95,7 +95,7 @@ class SengokuTreeTests(unittest.TestCase):
             self.assertTrue(all(row.findtext(lang) for lang in ("en_US", "ja_JP", "ru_RU")))
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
-            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
+            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
         ])

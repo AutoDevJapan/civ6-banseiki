@@ -73,6 +73,28 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertIn("initial territory owners mismatch", code)
                 self.assertIn("capital garrison missing", code)
 
+    def test_resource_scenario_matches_the_manifest_and_the_lua_hook(self):
+        data = json.loads((SCENARIOS / "japan-resources.json").read_text(encoding="utf-8"))
+        validate_scenario(data)
+        manifest = json.loads((SCENARIOS.parents[2] / "poc/JAC_PoC_JapanMapScale/Maps/manifest.json")
+                              .read_text(encoding="utf-8"))
+        item = next(entry for entry in manifest if entry["km_per_tile"] == 20)
+        steps = data["steps"]
+        self.assertIn(item["file"], steps[1]["map_file"])
+        self.assertEqual(steps[2]["state_name"], "HostGame")
+        self.assertIn("JAC_RESOURCES_TEST_YEAR', 1541", steps[2]["code"])
+        checks = [step["code"] for step in steps if step["action"] == "ui_lua" and step["state_name"] == "InGame"]
+        reserved = [r for r in item["resource_candidates"] if r["placement_status"] == "reserved_for_later_release"]
+        self.assertEqual(len(reserved), 8)
+        for code in checks[1:]:
+            for record in reserved:
+                self.assertIn(f"{{'{record['id']}',{record['plot']},'{record['resource_id']}',{record['reveal_year']}}}", code)
+        # Turn 1 shows no site, turn 2 (1542) the two 1542 sites, turn 10 (1550) the copper mine too.
+        self.assertIn("if s[4]<=1541 then", checks[1])
+        self.assertIn("if s[4]<=1542 then", checks[2])
+        self.assertIn("if s[4]<=1550 then", checks[3])
+        self.assertEqual([step["turns"] for step in steps if step["action"] == "autoplay"], [1, 8])
+
     def test_rejects_bad_map_file_and_metrics_flag(self):
         data = json.loads((SCENARIOS / "japan-map-20km.json").read_text(encoding="utf-8"))
         data["steps"][1]["map_file"] = "../outside.Civ6Map"
