@@ -17,6 +17,11 @@ class SengokuCalendarTests(unittest.TestCase):
         cls.config = ET.parse(MOD / "Config/JAC_Sengoku_Calendar.xml").getroot()
         cls.modinfo = ET.parse(MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
 
+
+    def test_turn_display_is_normalized(self):
+        # The 1534 start makes the engine start turn about 16603 (live 2026-09-29); TopPanel shows 1 only with this.
+        rows = [row.get("GameCapability") for row in self.gameplay.findall("./GameCapabilities/Row")]
+        self.assertEqual(rows, ["CAPABILITY_DISPLAY_NORMALIZED_TURN"])
     def test_calendar_action_is_pack_and_ruleset_scoped(self):
         criteria = self.modinfo.find("./ActionCriteria/Criteria[@id='JAC_Sengoku_BanseikiOnly']")
         self.assertEqual(criteria.findtext("RuleSetInUse"), RULESET)
