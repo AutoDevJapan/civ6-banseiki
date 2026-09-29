@@ -276,7 +276,7 @@ def scenarios(human_slug: str = "ODA") -> None:
                     {"action": "enable_mods",
                      "ids": [BANSEIKI_RULESET_ID, CUSTOM_CIVS_ID, GROWTH_UI_ID, SENGOKU_TREES_ID, MOD_ID],
                      "disable_ids": [BUNDLE0_ID]},
-                    {"action": "configure", "ruleset": "RULESET_JAC_BANSEIKI",
+                    {"action": "configure", "build_setup": True, "ruleset": "RULESET_JAC_BANSEIKI",
                      "map_file": "{" + MOD_ID + "}Maps/" + item["file"], "map_size": "MAPSIZE_HUGE",
                      "speed": "GAMESPEED_STANDARD", "seed": 620929 + km, "city_states": 0,
                      "players": players},
@@ -299,11 +299,117 @@ def scenarios(human_slug: str = "ODA") -> None:
             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+# SSOT 3.4: 15 km is the adopted scale; the 20 km map is kept only for comparison, so the live check runs on 15 km.
+RESOURCE_SCENARIO_KM = 15
+# Standard speed advances 4 months a turn (JAC_Sengoku_Calendar.xml), so 24 turns take 1534 to 1542.
+RESOURCE_SCENARIO_TURNS = 24
+RESOURCE_SCENARIO_YEAR = 1542
+
+
+def resource_scenario() -> None:
+    """SSOT 3.2 live check on the 15 km map: custom resources, tech gates, improvements, calendar-year site release."""
+    manifest = json.loads((MOD / "Maps" / "manifest.json").read_text(encoding="utf-8"))
+    item = next(entry for entry in manifest if entry["km_per_tile"] == RESOURCE_SCENARIO_KM)
+    assert SEATS[0].slug == "ODA"
+    deferred = [r for r in item["resource_candidates"] if r["start_status"] == "deferred"]
+    missing = [r["id"] for r in deferred if r["placement_status"] != "reserved_for_later_release"]
+    if missing:
+        raise ValueError(f"{RESOURCE_SCENARIO_KM} km map lacks deferred resource sites: {missing}")
+    placed = [r for r in item["resource_candidates"] if r["placement_status"] == "placed"]
+    sites = "{" + ",".join(f"{{'{r['id']}',{r['plot']},'{r['resource_id']}',{r['reveal_year']},"
+                           f"'{r.get('reveal_tech', '')}'}}"
+                           for r in sorted(deferred, key=lambda r: (r["reveal_year"], r["id"]))) + "}"
+    start_sites = "{" + ",".join(f"{{'{r['id']}',{r['plot']},'{r['resource_id']}'}}"
+                                 for r in sorted(placed, key=lambda r: r["id"])) + "}"
+    grid = (f"local w,h=Map.GetGridSize(); if w~={item['width']} or h~={item['height']} then "
+            "error('map grid mismatch '..w..'x'..h) end; ")
+    api = "local api=ExposedMembers.JAC_Resources; if not api then error('JAC_Resources API missing') end; "
+    static = (
+        grid +
+        "for _,id in ipairs({'RESOURCE_JAC_GOLD','RESOURCE_JAC_LACQUER'}) do local r=GameInfo.Resources[id]; "
+        "if not r then error('missing resource '..id) end; "
+        "if r.PrereqTech then error(id..' must not be gated by a tech') end end; "
+        "for r in GameInfo.Resources() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then "
+        "error('official tech gate on '..r.ResourceType..': '..r.PrereqTech) end end; "
+        "if GameInfo.Resources['RESOURCE_IRON'].PrereqTech~='TECH_JAC_SENGOKU_IRON_FORGING' then error('iron gate') end; "
+        "for r in GameInfo.Resource_Harvests() do if r.PrereqTech and not string.find(r.PrereqTech,'TECH_JAC_SENGOKU_',1,true) then "
+        "error('official tech harvest gate on '..r.ResourceType) end; "
+        "if r.ResourceType=='RESOURCE_RICE' and r.PrereqTech~='TECH_JAC_SENGOKU_IRRIGATION_WORKS' then "
+        "error('rice harvest gate '..tostring(r.PrereqTech)) end end; "
+        "local hills=false; for r in GameInfo.Resource_ValidTerrains() do "
+        "if r.ResourceType=='RESOURCE_SILVER' and r.TerrainType=='TERRAIN_GRASS_HILLS' then hills=true end end; "
+        "if not hills then error('silver is not valid on grass hills') end; "
+        "local plantation=GameInfo.Improvements['IMPROVEMENT_PLANTATION']; "
+        "if not plantation.Buildable or plantation.PrereqTech~='TECH_JAC_SENGOKU_IRRIGATION_WORKS' then "
+        "error('plantation not buildable from Irrigation Works') end; "
+        "local improves={}; for r in GameInfo.Improvement_ValidResources() do "
+        "improves[r.ResourceType..'>'..r.ImprovementType]=true end; "
+        "for _,pair in ipairs({'RESOURCE_JAC_GOLD>IMPROVEMENT_MINE','RESOURCE_IRON>IMPROVEMENT_MINE',"
+        "'RESOURCE_JAC_LACQUER>IMPROVEMENT_PLANTATION','RESOURCE_TEA>IMPROVEMENT_PLANTATION',"
+        "'RESOURCE_SILK>IMPROVEMENT_PLANTATION'}) do if not improves[pair] then error('missing improvement '..pair) end end; "
+        f"local starts={start_sites}; for _,s in ipairs(starts) do "
+        "local t=Map.GetPlotByIndex(s[2]):GetResourceType(); "
+        "if t~=GameInfo.Resources[s[3]].Index then error('start resource missing: '..s[1]) end end; "
+        + api +
+        f"local sites={sites}; local listed={{}}; for _,s in ipairs(api.GetSites()) do listed[s.id]=s end; "
+        "for _,s in ipairs(sites) do local l=listed[s[1]]; if not l then error('deferred site missing: '..s[1]) end; "
+        "if l.plot~=s[2] or l.resource~=s[3] then error('deferred site moved: '..s[1]) end; listed[s[1]]=nil end; "
+        "for id in pairs(listed) do error('unexpected deferred site: '..id) end; "
+        "return #starts..' start resources and '..#sites..' deferred sites present; plantation and mine rows in place'")
+
+    def released(year: int) -> str:
+        # A site is due by its year; its tech may release it earlier (SSOT 3.2), so a tech holder excuses an early one.
+        return (grid + api + f"local sites={sites}; "
+                "local turn=Game.GetCurrentGameTurn(); local year=api.CurrentYear(); "
+                f"if year~={year} then error('calendar year '..tostring(year)..', expected {year}') end; "
+                "local shown=Calendar.MakeYearStr(turn); "
+                f"if not string.find(shown,'{year}',1,true) then error('engine date '..tostring(shown)..' is not {year}') end; "
+                "local function researched(tech) local info=tech~='' and GameInfo.Technologies[tech]; "
+                "if not info then return false end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do "
+                "if p:GetTechs():HasTech(info.Index) then return true end end; return false end; "
+                "local out=0; for _,s in ipairs(sites) do "
+                "local t=Map.GetPlotByIndex(s[2]):GetResourceType(); "
+                "if s[4]<=year then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; "
+                "out=out+1 elseif t~=-1 then if t~=GameInfo.Resources[s[3]].Index or not researched(s[5]) then "
+                "error('site released too early: '..s[1]) end; out=out+1 end end; "
+                "return 'year '..year..' (engine '..shown..', turn '..(turn-GameConfiguration.GetStartTurn())..'): '"
+                "..out..' of '..#sites..' deferred sites on the map'")
+
+    players = [{"leader": seat.leader, "civ": seat.civ, "human": i == 0} for i, seat in enumerate(SEATS)]
+    steps = [
+        {"action": "enable_mods",
+         "ids": [BANSEIKI_RULESET_ID, CUSTOM_CIVS_ID, GROWTH_UI_ID, SENGOKU_TREES_ID, MOD_ID],
+         "disable_ids": [BUNDLE0_ID]},
+        {"action": "configure", "build_setup": True, "ruleset": "RULESET_JAC_BANSEIKI",
+         "map_file": "{" + MOD_ID + "}Maps/" + item["file"], "map_size": "MAPSIZE_HUGE",
+         "speed": "GAMESPEED_STANDARD", "seed": 620960, "city_states": 0, "players": players},
+        {"action": "start_game", "timeout": 600},
+        # The per-map component is applied while the game loads, before this step's log baseline
+        # (live 2026-09-29), so only the later Lua line is awaited; the judge checks the mod loaded.
+        {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
+                                              "contains": "[JAC_RESOURCES] loaded"}, "timeout": 60},
+        {"action": "ui_lua", "state_name": "InGame", "code": static},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(1534)},
+        {"action": "autoplay", "turns": RESOURCE_SCENARIO_TURNS, "timeout": 3600},
+        # wait_for only sees log lines written after the previous step, so it must follow the autoplay (live 2026-09-29).
+        {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
+                                              "contains": "[JAC_RESOURCES] revealed silver-ikuno"}, "timeout": 30},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(RESOURCE_SCENARIO_YEAR)},
+    ]
+    data = {"name": f"JAC Japan resources: custom rows, tech gates, improvements, calendar-year site release "
+                    f"({RESOURCE_SCENARIO_KM} km, 1534 to {RESOURCE_SCENARIO_YEAR})",
+            "judge_profile": "generic", "steps": steps}
+    output = ROOT / "tools" / "civ6-autotest" / "scenarios"
+    (output / "japan-resources.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                                                 encoding="utf-8")
+
+
 def main() -> None:
     config()
     text()
     scenarios()
     scenarios("TAKEDA")
+    resource_scenario()
 
 
 if __name__ == "__main__":
