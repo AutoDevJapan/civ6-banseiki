@@ -79,6 +79,10 @@ local function LoadEvents()
 		end
 		if row.PrereqTech then event.tech = GameInfo.Technologies[row.PrereqTech].Index end
 		if row.PrereqCivic then event.civic = GameInfo.Civics[row.PrereqCivic].Index end
+		for boost in GameInfo.Boosts() do
+			if row.PrereqTech and boost.TechnologyType == row.PrereqTech then event.techBoost = true end
+			if row.PrereqCivic and boost.CivicType == row.PrereqCivic then event.civicBoost = true end
+		end
 		table.insert(events, event)
 	end
 	table.sort(events, function(a, b)
@@ -109,19 +113,31 @@ end
 
 -- SSOT 3.2 (owner decision 1a): a faction that has not researched the related tech/civic gets only its boost
 -- (eureka/inspiration) when the year arrives. Tech: PlayerTechs:TriggerBoost(index, 1) as in
--- AustraliaScenario.lua:784 (guards as in TechBoostsPanel.lua:91). Civic: the same call on
--- PlayerCulture, guarded as in CivicBoostsPanel.lua:88 (no official Lua example of the civic call).
+-- AustraliaScenario.lua:784. Civic: the same call on PlayerCulture (no official Lua example of the civic call).
+-- Only gameplay-side methods are used: CanTriggerBoost exists in the UI context only (TechBoostsPanel.lua:91)
+-- and is nil here (live Lua.log, events-06: "JAC_HistoricalEvents.lua:118: function expected instead of nil"),
+-- so "has a boost" is read from GameInfo.Boosts, and HasBoostBeenTriggered is the gameplay call of
+-- AustraliaScenario.lua:556. The boost runs in pcall: an engine error is logged and does not stop the turn
+-- loop for the other factions and events.
 local function BoostMissing(player, event)
 	local result = {}
-	local function try(kind, index, holder, has)
-		if index and not has then
-			local ok = holder:CanTriggerBoost(index) and not holder:HasBoostBeenTriggered(index)
-			if ok then holder:TriggerBoost(index, 1) end
-			table.insert(result, kind .. (ok and "=boosted" or "=no_boost"))
+	local function try(kind, index, hasBoost, holder, has)
+		if index == nil or has then return end
+		local status
+		if not hasBoost then
+			status = "no_boost"
+		else
+			local ok, err = pcall(function()
+				if holder:HasBoostBeenTriggered(index) then return "already" end
+				holder:TriggerBoost(index, 1)
+				return "boosted"
+			end)
+			status = ok and err or ("error:" .. tostring(err))
 		end
+		table.insert(result, kind .. "=" .. status)
 	end
-	try("tech", event.tech, player:GetTechs(), event.tech and player:GetTechs():HasTech(event.tech))
-	try("civic", event.civic, player:GetCulture(), event.civic and player:GetCulture():HasCivic(event.civic))
+	try("tech", event.tech, event.techBoost, player:GetTechs(), event.tech and player:GetTechs():HasTech(event.tech))
+	try("civic", event.civic, event.civicBoost, player:GetCulture(), event.civic and player:GetCulture():HasCivic(event.civic))
 	return table.concat(result, ",")
 end
 

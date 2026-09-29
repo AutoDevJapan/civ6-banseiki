@@ -72,7 +72,8 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 ## ひらめきの公式 API の根拠
 
 - 技術：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:761-784`。`player:GetTechs():HasBeenBoosted` で未発動を確かめ、`player:GetTechs():TriggerBoost(techIndex, 1)`（コメント「ゴーディハット由来として発動」）。UI 側の判定は `Base/Assets/UI/Panels/TechBoostsPanel.lua:91`（`HasTech`／`HasBoostBeenTriggered`／`CanTriggerBoost`）
-- 社会制度：`Base/Assets/UI/Panels/CivicBoostsPanel.lua:88` が `player:GetCulture()` に同名の `HasCivic`／`HasBoostBeenTriggered`／`CanTriggerBoost` を持つことを示す。`GetCulture():TriggerBoost(civicIndex, 1)` を呼ぶ公式の Lua 例は見つからなかった（**要実機確認**。技術側と同じ呼び出しを、上の3つの判定で守って使う）
+- 社会制度：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:556`（ゲームプレイ側）が `player:GetCulture():HasBoostBeenTriggered` を使う。`GetCulture():TriggerBoost(civicIndex, 1)` を呼ぶ公式の Lua 例は見つからなかった（**要実機確認**。技術側と同じ呼び出し）
+- ゲームプレイ側では `CanTriggerBoost` が無い（UI 側だけ）。実機（events-06）で `JAC_HistoricalEvents.lua:118: function expected instead of nil` になり、1勢力目で止まって誰にもひらめきが入らなかった。ひらめきの有無は `GameInfo.Boosts` の行で判定し、未発動かは `HasBoostBeenTriggered` で確かめ、呼び出しは `pcall` で囲む（エラーはログの `boost=tech=error:...` に残し、ほかの勢力・出来事の処理は続ける）。`tests/test_historical_events_lua.py` がゲームプレイ側のメソッドだけのスタブでターンを進めて確かめる
 - 代替（不採用）：モディファイア `MODIFIER_PLAYER_GRANT_SPECIFIC_TECH_BOOST`（`Base/Assets/Gameplay/Data/Modifiers.xml:2499-2503`）は技術のひらめきだけで、社会制度用の同種は無い。両方を同じ経路で扱うため Lua の API にした
 
 ## 決定事項（オーナー回答、B 組）
