@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from hashlib import sha256
+import heapq
 import json
 import math
 from pathlib import Path
@@ -28,6 +30,8 @@ CACHE = Path(__file__).resolve().parent / "cache"
 OFFICIAL = (Path("C:/Program Files (x86)/Steam/steamapps/common/")
             / "Sid Meier's Civilization VI/Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map")
 SCALES = (20, 15)
+RESOURCE_DRAFT = ROOT / "documents" / "spec" / "data" / "japan-map-resources.json"
+START_YEAR = 1534
 SOURCE = {
     "ne_10m_land.zip": (
         "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip",
@@ -541,6 +545,419 @@ def choose_starts(grid: HexGrid, passable: set[int]) -> list[dict]:
     return result
 
 
+def resource_draft() -> dict:
+    return json.loads(RESOURCE_DRAFT.read_text(encoding="utf-8"))
+
+
+def plot_center(grid: HexGrid, plot: int) -> tuple[float, float]:
+    return grid.centre(plot % grid.width, plot // grid.width)
+
+
+def lake_tile_count(lake: dict, km: int) -> int:
+    """Estimate lake cells from area while respecting the draft's tile hint."""
+    area_per_hex = math.sqrt(3) / 2 * km * km
+    count = max(1, round(float(lake["area_km2"]) / area_per_hex))
+    bounds = [int(value) for value in lake["tile_hint"].split("-")]
+    low, high = (bounds[0], bounds[-1])
+    return max(low, min(high, count))
+
+
+def place_lakes(grid: HexGrid, land_tiles: set[int], cities: list[dict],
+                lakes: list[dict]) -> tuple[set[int], list[dict]]:
+    """Carve the area-based lake estimate as coast water before ownership."""
+    city_plots = {city["plot"] for city in cities}
+    selected: set[int] = set()
+    results = []
+    lake_names = {"lake-biwa": "琵琶湖", "lake-inawashiro": "猪苗代湖",
+                  "lake-kasumigaura": "霞ヶ浦", "lake-towada": "十和田湖",
+                  "lake-shinji": "宍道湖", "lake-suwa": "諏訪湖"}
+    for lake in lakes:
+        lon, lat = lake["center"]
+        target = project(lon, lat)
+        count = lake_tile_count(lake, grid.km)
+        ranked = sorted(
+            ((math.dist(plot_center(grid, plot), target), plot)
+             for plot in range(grid.width * grid.height)
+             if plot not in city_plots and plot not in selected))
+        tiles = [plot for _, plot in ranked[:count]]
+        if len(tiles) != count:
+            raise ValueError(f"Could not rasterize lake: {lake['id']}")
+        for plot in tiles:
+            land_tiles.discard(plot)
+            selected.add(plot)
+        results.append({"id": lake["id"], "name_ja": lake_names.get(lake["id"], lake["id"]),
+                        "province": lake["province"], "tile_ids": tiles,
+                        "tile_count": count, "area_km2": lake["area_km2"],
+                        "tile_hint": lake["tile_hint"], "source_ids": lake["source_ids"],
+                        "representation": "TERRAIN_COAST"})
+    return selected, results
+
+
+RIVER_SIDES = {
+    "NE": ("IsNEOfRiver", "EFlowDirection"),
+    "W": ("IsWOfRiver", "SEFlowDirection"),
+    "NW": ("IsNWOfRiver", "SWFlowDirection"),
+}
+
+
+def side_neighbour(grid: HexGrid, plot: int, side: str) -> int | None:
+    col, row = plot % grid.width, plot // grid.width
+    odd = row & 1
+    delta = {"NE": (odd, -1), "W": (-1, 0), "NW": (odd - 1, -1)}[side]
+    ncol, nrow = col + delta[0], row + delta[1]
+    if 0 <= ncol < grid.width and 0 <= nrow < grid.height:
+        return grid.index(ncol, nrow)
+    return None
+
+
+def river_edge_geometry(grid: HexGrid, edge: tuple[int, str], neighbor: int | None = None
+                        ) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return the two vertices of a map-edge river segment."""
+    plot, _ = edge
+    neighbor = side_neighbour(grid, plot, edge[1]) if neighbor is None else neighbor
+    if neighbor is None:
+        raise ValueError(f"River edge has no adjacent plot: {edge}")
+    ax, ay = grid.centre(plot % grid.width, plot // grid.width)
+    bx, by = grid.centre(neighbor % grid.width, neighbor // grid.width)
+    length = math.hypot(bx - ax, by - ay)
+    if not length:
+        raise ValueError(f"River edge has coincident plot centres: {edge}")
+    half_side = grid.km / (2 * math.sqrt(3))
+    tx, ty = -(by - ay) / length, (bx - ax) / length
+    mx, my = (ax + bx) / 2, (ay + by) / 2
+    vertices = ((round(mx - tx * half_side, 5), round(my - ty * half_side, 5)),
+                (round(mx + tx * half_side, 5), round(my + ty * half_side, 5)))
+    return vertices
+
+
+def land_river_edges(grid: HexGrid, land_tiles: set[int]) -> dict[tuple[int, str], dict]:
+    edges = {}
+    for plot in land_tiles:
+        for side in RIVER_SIDES:
+            neighbor = side_neighbour(grid, plot, side)
+            if neighbor is None or neighbor not in land_tiles:
+                continue
+            edge = (plot, side)
+            edges[edge] = {"plot": plot, "side": side, "neighbor": neighbor,
+                           "vertices": river_edge_geometry(grid, edge, neighbor),
+                           "midpoint": tuple((a + b) / 2 for a, b in
+                                             zip(*river_edge_geometry(grid, edge, neighbor)))}
+    return edges
+
+
+def _point_segment_distance(point: tuple[float, float], a: tuple[float, float],
+                            b: tuple[float, float]) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length2 = dx * dx + dy * dy
+    t = 0 if length2 == 0 else max(0.0, min(1.0,
+        ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / length2))
+    return math.hypot(point[0] - (a[0] + t * dx), point[1] - (a[1] + t * dy))
+
+
+def _river_edge_graph(edges: dict[tuple[int, str], dict]
+                     ) -> dict[tuple[int, str], set[tuple[int, str]]]:
+    at_vertex: dict[tuple[float, float], list[tuple[int, str]]] = defaultdict(list)
+    graph = {edge: set() for edge in edges}
+    for edge, record in edges.items():
+        for vertex in record["vertices"]:
+            at_vertex[vertex].append(edge)
+    for adjacent in at_vertex.values():
+        for edge in adjacent:
+            graph[edge].update(other for other in adjacent if other != edge)
+    return graph
+
+
+def _route_river_edges(edges: dict[tuple[int, str], dict], graph: dict,
+                       start: tuple[int, str], end: tuple[int, str],
+                       segment: tuple[tuple[float, float], tuple[float, float]],
+                       km: int) -> list[tuple[int, str]]:
+    if start == end:
+        return [start]
+    distances = {start: 0.0}
+    previous = {}
+    queue = [(0.0, start)]
+    while queue:
+        distance, edge = heapq.heappop(queue)
+        if distance != distances.get(edge):
+            continue
+        if edge == end:
+            break
+        for nxt in graph[edge]:
+            deviation = _point_segment_distance(edges[nxt]["midpoint"], *segment)
+            cost = 1.0 + (deviation / max(1.0, km * 0.45)) ** 2
+            candidate = distance + cost
+            if candidate < distances.get(nxt, math.inf):
+                distances[nxt] = candidate
+                previous[nxt] = edge
+                heapq.heappush(queue, (candidate, nxt))
+    if end not in distances:
+        raise ValueError(f"River segment cannot be connected on land: {start} to {end}")
+    path = [end]
+    while path[-1] != start:
+        path.append(previous[path[-1]])
+    return list(reversed(path))
+
+
+def rasterize_rivers(grid: HexGrid, land_tiles: set[int], rivers: list[dict]
+                     ) -> tuple[dict[tuple[int, str], dict], list[dict]]:
+    edges = land_river_edges(grid, land_tiles)
+    graph = _river_edge_graph(edges)
+    if not edges:
+        raise ValueError("No shared land edges are available for rivers")
+    edge_centres = {edge: record["midpoint"] for edge, record in edges.items()}
+    results = []
+    for river in rivers:
+        points = [project(*coordinate) for coordinate in river["coordinates"]]
+        snapped = [min(edge_centres, key=lambda edge: (
+            math.dist(edge_centres[edge], point), edge[0], edge[1])) for point in points]
+        path = []
+        for a, b, start, end in zip(points, points[1:], snapped, snapped[1:]):
+            segment_path = _route_river_edges(edges, graph, start, end, (a, b), grid.km)
+            path.extend(edge for edge in segment_path if not path or path[-1] != edge)
+        if not path:
+            raise ValueError(f"River has no map edges: {river['id']}")
+        results.append({"id": river["id"], "name_ja": river["name_ja"],
+                        "source_ids": river["source_ids"],
+                        "confidence": river.get("confidence"),
+                        "historical_note": river.get("historical_note"),
+                        "edge_count": len(path),
+                        "edge_path": [{"plot": edges[edge]["plot"], "side": edge[1],
+                                       "neighbor": edges[edge]["neighbor"]} for edge in path]})
+    return edges, results
+
+
+def place_volcanoes(grid: HexGrid, land_tiles: set[int], cities: list[dict],
+                    lakes: set[int], volcanoes: list[dict]) -> list[dict]:
+    reserved = {city["plot"] for city in cities} | lakes
+    available = land_tiles - reserved
+    selected: set[int] = set()
+    results = []
+    for volcano in volcanoes:
+        lon, lat = volcano["coordinates"]
+        target = project(lon, lat)
+        plot = min(available - selected, key=lambda candidate: (
+            math.dist(plot_center(grid, candidate), target),
+            candidate))
+        displacement = math.dist(plot_center(grid, plot), target)
+        results.append({"id": volcano["id"], "site": volcano["site"], "plot": plot,
+                        "feature_id": volcano["feature_id"], "province": volcano["province"],
+                        "coordinates": volcano["coordinates"], "displacement_km": round(displacement, 1),
+                        "eruption_years_in_scope": volcano["eruption_years_in_scope"],
+                        "source_ids": volcano["source_ids"]})
+        selected.add(plot)
+    return results
+
+
+def _resource_is_deferred(point: dict) -> bool:
+    start_year = point.get("start_year")
+    return (point.get("available_at_start") is False or
+            isinstance(start_year, int) and start_year > START_YEAR)
+
+
+def place_resources(grid: HexGrid, land_tiles: set[int], coast_tiles: set[int],
+                    lake_tiles: set[int], cities: list[dict], volcanoes: list[dict],
+                    groups: list[dict], mappings: list[dict]
+                    ) -> tuple[list[tuple[int, str, int]], list[dict], dict]:
+    mapping_by_name = {entry["name_ja"]: entry for entry in mappings}
+    custom_plots = {entry["plot"] for entry in volcanoes}
+    city_plots = {city["plot"] for city in cities}
+    occupied: dict[int, str] = {}
+    records = []
+    eligible = []
+    custom_ids = set()
+    for group in groups:
+        mapping = mapping_by_name.get(group["resource_ja"], {})
+        custom = (group.get("normal_map_requires_custom_resource", False) or
+                  mapping.get("availability") in ("custom_proposed", "official_scenario_only") or
+                  str(group.get("civ6_id", "")).startswith("RESOURCE_JAC_"))
+        if custom:
+            custom_ids.add(group["civ6_id"])
+        for point in group["points"]:
+            deferred = _resource_is_deferred(point)
+            if custom and deferred:
+                status = "custom_type_and_later_release"
+            elif custom:
+                status = "custom_type_required"
+            elif deferred:
+                status = "deferred"
+            else:
+                status = "start_candidate"
+                eligible.append((group, point, mapping))
+            records.append({"id": point["id"], "site": point["site"],
+                            "province": point.get("province"), "resource_ja": group["resource_ja"],
+                            "resource_id": group["civ6_id"],
+                            "official_resource_id": group.get("official_scenario_id",
+                                                               mapping.get("civ6_id")),
+                            "availability": mapping.get("availability"),
+                            "coordinates": point["coordinates"],
+                            "start_year": point.get("start_year"),
+                            "start_year_range": point.get("start_year_range"),
+                            "available_at_start": point.get("available_at_start"),
+                            "start_status": status, "placement_status": "not_placed",
+                            "confidence": point.get("confidence"),
+                            "source_ids": point.get("source_ids", [])})
+
+    def priority(candidate):
+        group, point, _ = candidate
+        certainty = {"high": 0, "medium": 1, "low": 2}.get(point.get("confidence"), 3)
+        return (certainty, group["candidate_count"], point["id"])
+
+    by_id = {record["id"]: record for record in records}
+    rows = []
+    candidate_plot_sets = {
+        "land": sorted(land_tiles - city_plots - custom_plots - lake_tiles),
+        "marine": sorted(coast_tiles - lake_tiles),
+    }
+    for group, point, mapping in sorted(eligible, key=priority):
+        domain = "marine" if group.get("placement_domain") == "marine" else "land"
+        target = project(*point["coordinates"])
+        candidates = candidate_plot_sets[domain]
+        if not candidates:
+            by_id[point["id"]]["placement_status"] = "no_eligible_tile"
+            continue
+        plot = min(candidates, key=lambda candidate: (
+            math.dist(plot_center(grid, candidate), target),
+            candidate))
+        record = by_id[point["id"]]
+        record["plot"] = plot
+        record["displacement_km"] = round(math.dist(plot_center(grid, plot), target), 1)
+        if plot in occupied:
+            record["placement_status"] = "same_tile_conflict"
+            record["conflict_with"] = occupied[plot]
+            continue
+        if not mapping.get("civ6_id", "").startswith("RESOURCE_") or mapping.get("availability") not in (
+                "official", "official_gathering_storm"):
+            record["placement_status"] = "unavailable_official_type"
+            continue
+        occupied[plot] = point["id"]
+        record["placement_status"] = "placed"
+        rows.append((plot, mapping["civ6_id"], 1))
+    stats = {"candidate_count": len(records), "placed_count": len(rows),
+             "land_candidate_count": sum(group.get("placement_domain") != "marine"
+                                         for group, _, _ in eligible),
+             "marine_candidate_count": sum(group.get("placement_domain") == "marine"
+                                           for group, _, _ in eligible),
+             "count_by_type": dict(sorted(Counter(resource for _, resource, _ in rows).items())),
+             "candidate_status_counts": dict(sorted(Counter(
+                 record["placement_status"] if record["start_status"] == "start_candidate"
+                 else record["start_status"] for record in records).items())),
+             "custom_resource_ids": sorted(custom_ids)}
+    return rows, records, stats
+
+
+def place_marshes(grid: HexGrid, land_tiles: set[int], terrain_by_plot: dict[int, str],
+                  cities: list[dict], occupied: set[int], marsh_rule: dict
+                  ) -> tuple[set[int], dict]:
+    city_plots = {city["plot"] for city in cities}
+    eligible = {plot for plot in land_tiles if terrain_by_plot[plot] == "TERRAIN_GRASS"
+                and plot not in city_plots and plot not in occupied}
+    target = min(33, max(22, round(len(land_tiles) * 0.025)))
+    clusters = marsh_rule["clusters"]
+    quotas = [target // len(clusters) + (index < target % len(clusters))
+              for index in range(len(clusters))]
+    selected: set[int] = set()
+    centers = []
+    for cluster, quota in zip(clusters, quotas):
+        center = project(*cluster["center"])
+        centers.append(center)
+        nearby = sorted((math.dist(plot_center(grid, plot), center), plot)
+                        for plot in eligible - selected)
+        limit = max(2.5 * grid.km, 40)
+        chosen = [plot for distance, plot in nearby if distance <= limit][:quota]
+        selected.update(chosen)
+    if len(selected) < target:
+        rest = eligible - selected
+        ranked = sorted((min(math.dist(plot_center(grid, plot), center)
+                             for center in centers), plot) for plot in rest)
+        selected.update(plot for _, plot in ranked[:target - len(selected)])
+    if len(selected) != target:
+        raise ValueError(f"Could not place the draft marsh target of {target} tiles")
+    return selected, {"feature_id": marsh_rule["feature_id"], "target_count": target,
+                      "placed_count": len(selected), "eligible_flat_land_tiles": len(eligible),
+                      "cluster_ids": [cluster["id"] for cluster in clusters],
+                      "clusters": [{"id": cluster["id"], "site": cluster["site"],
+                                    "source_ids": cluster.get("source_ids", [])}
+                                   for cluster in clusters],
+                      "source_ids": marsh_rule.get("source_ids", [])}
+
+
+FOREST_BIAS_REGIONS = (
+    ((137.2, 36.0), 170, 1.6),  # Kiso-Hida
+    ((135.7, 34.1), 140, 1.6),  # Kii-Yoshino
+    ((132.8, 35.1), 160, 1.5),  # Chugoku mountains
+    ((132.3, 33.0), 210, 1.5),  # Shikoku and Kyushu mountains
+    ((140.5, 41.2), 360, 1.4),  # Ou and Hokkaido interior
+)
+
+
+def place_forests(grid: HexGrid, land_tiles: set[int], terrain_by_plot: dict[int, str],
+                  cities: list[dict], occupied: set[int], rice_points: list[dict],
+                  river_edges: dict, forest_rule: dict) -> tuple[set[int], dict]:
+    city_plots = {city["plot"] for city in cities}
+    feature_terrains = {"TERRAIN_GRASS", "TERRAIN_PLAINS", "TERRAIN_TUNDRA",
+                        "TERRAIN_GRASS_HILLS", "TERRAIN_PLAINS_HILLS", "TERRAIN_TUNDRA_HILLS"}
+    rice_centers = [project(*point["coordinates"]) for point in rice_points]
+    rice_radius = 1.15 * grid.km
+    eligible = set()
+    for plot in land_tiles - city_plots - occupied:
+        terrain = terrain_by_plot[plot]
+        if terrain not in feature_terrains:
+            continue
+        if not terrain.endswith("_HILLS") and any(
+                math.dist(plot_center(grid, plot), center) <= rice_radius
+                for center in rice_centers):
+            continue
+        eligible.add(plot)
+
+    target_percent = forest_rule["target_share_of_eligible_tiles_percent"]
+    target = round(len(eligible) * target_percent / 100)
+    riverbank = {edge_info[field] for edge_info in river_edges.values()
+                 for field in ("plot", "neighbor")}
+    ranked = []
+    for plot in eligible:
+        lon, lat = unproject(*plot_center(grid, plot))
+        terrain_weight = 1.6 if terrain_by_plot[plot].endswith("_HILLS") else 0.8
+        region_weight = max((weight for (center, radius, weight) in FOREST_BIAS_REGIONS
+                             if math.dist(project(lon, lat), project(*center)) <= radius), default=1.0)
+        river_weight = 0.65 if plot in riverbank else 1.0
+        digest = sha256(f"JAC/JapanMapScale/forest/{grid.km}/{plot}".encode()).digest()
+        uniform = (int.from_bytes(digest[:8], "big") + 1) / (2**64 + 1)
+        score = -math.log(uniform) / (terrain_weight * region_weight * river_weight)
+        ranked.append((score, plot))
+    selected = {plot for _, plot in sorted(ranked)[:target]}
+    return selected, {"feature_id": forest_rule["feature_id"], "target_percent": target_percent,
+                      "eligible_tiles": len(eligible), "placed_count": len(selected),
+                      "placed_percent": round(100 * len(selected) / len(eligible), 2) if eligible else 0,
+                      "rice_basin_exclusion_radius_km": round(rice_radius, 1),
+                      "source_ids": forest_rule.get("source_ids", [])}
+
+
+def custom_content_inventory(draft: dict, resource_records: list[dict]) -> list[dict]:
+    custom_resources: dict[str, dict] = {}
+    for record in resource_records:
+        if record["start_status"] in ("custom_type_required", "custom_type_and_later_release"):
+            entry = custom_resources.setdefault(record["resource_id"], {
+                "type": record["resource_id"], "kind": "resource",
+                "resource_ja": record["resource_ja"], "candidate_ids": [],
+                "status": "requires_custom_resource_definition"})
+            entry["candidate_ids"].append(record["id"])
+    result = list(custom_resources.values())
+    for wonder in draft["terrain"].get("natural_wonder_candidates", []):
+        result.append({"type": wonder["proposed_custom_feature_id"], "kind": "feature",
+                       "name_ja": wonder["name_ja"], "candidate_ids": [wonder["id"]],
+                       "status": "not_selected_or_implemented"})
+    return result
+
+
+def deferred_trade_access(draft: dict) -> list[dict]:
+    results = []
+    for item in draft["trade_access"]:
+        year = item.get("available_from_year")
+        results.append({**item, "start_status": "deferred_until_year" if year and year > START_YEAR
+                        else "undated_trade_access_not_placed"})
+    return results
+
+
 def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Path,
                  destination: Path, *, settlers: bool = False) -> dict:
     grid = HexGrid.for_scale(km, japan)
@@ -570,7 +987,28 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
     starts = choose_starts(grid, passable)
     castles = data()["castles"]
     cities = choose_cities(grid, passable, starts, castles)
+    draft = resource_draft()
+    original_land_count = len(land_tiles)
+    lake_tiles, lake_records = place_lakes(grid, land_tiles, cities, draft["terrain"]["lakes"])
+    # Lakes are final water before cities move, so the nudge and the territory
+    # both see the final land; resources and rivers then avoid the final cities.
+    passable &= land_tiles
     nudge_adjacent_cities(grid, land_tiles, passable, cities)
+    terrain_by_plot = {}
+    for plot in land_tiles:
+        height = heights[plot]
+        terrain_by_plot[plot] = ("TERRAIN_GRASS_MOUNTAIN" if height >= 1200 else
+                                 "TERRAIN_GRASS_HILLS" if height >= 400 else "TERRAIN_GRASS")
+    volcano_records = place_volcanoes(grid, land_tiles, cities, lake_tiles,
+                                      draft["terrain"]["volcanoes"])
+    for volcano in volcano_records:
+        plot = volcano["plot"]
+        if not terrain_by_plot[plot].endswith("_MOUNTAIN"):
+            terrain_by_plot[plot] = "TERRAIN_GRASS_MOUNTAIN"
+            volcano["terrain_promoted_to_mountain"] = True
+        else:
+            volcano["terrain_promoted_to_mountain"] = False
+    river_edges, river_records = rasterize_rivers(grid, land_tiles, draft["terrain"]["rivers"])
     coast = set()
     for index in land_tiles:
         col, row = index % grid.width, index // grid.width
@@ -578,6 +1016,41 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
             neighbour = grid.index(ncol, nrow)
             if neighbour not in land_tiles:
                 coast.add(neighbour)
+    coast.update(lake_tiles)
+    resource_rows, resource_records, resource_stats = place_resources(
+        grid, land_tiles, coast, lake_tiles, cities, volcano_records,
+        draft["resource_groups"], draft["resource_mapping"])
+    occupied = {plot for plot, _, _ in resource_rows}
+    occupied.update(city["plot"] for city in cities)
+    occupied.update(volcano["plot"] for volcano in volcano_records)
+    marsh_tiles, marsh_stats = place_marshes(
+        grid, land_tiles, terrain_by_plot, cities, occupied, draft["terrain"]["marsh"])
+    occupied.update(marsh_tiles)
+    rice_points = [point for group in draft["resource_groups"] if group["resource_ja"] == "米"
+                   for point in group["points"]]
+    forest_tiles, forest_stats = place_forests(
+        grid, land_tiles, terrain_by_plot, cities, occupied, rice_points,
+        river_edges, draft["terrain"]["forest"])
+    feature_rows = ([(volcano["plot"], "FEATURE_VOLCANO") for volcano in volcano_records] +
+                    [(plot, "FEATURE_MARSH") for plot in sorted(marsh_tiles)] +
+                    [(plot, draft["terrain"]["forest"]["feature_id"])
+                     for plot in sorted(forest_tiles)])
+    feature_counts = dict(sorted(Counter(feature for _, feature in feature_rows).items()))
+    river_edge_flags: dict[int, set[str]] = defaultdict(set)
+    for river in river_records:
+        for entry in river["edge_path"]:
+            river_edge_flags[entry["plot"]].add(entry["side"])
+    river_rows = []
+    for plot, sides in sorted(river_edge_flags.items()):
+        river_rows.append((plot, int("NE" in sides), int("W" in sides), int("NW" in sides),
+                           -1, -1, -1))
+    trade_records = deferred_trade_access(draft)
+    custom_content = custom_content_inventory(draft, resource_records)
+    deferred_resources = [record for record in resource_records
+                          if record["start_status"] == "deferred" or
+                          record["start_status"] == "custom_type_and_later_release"]
+    wonder_records = [{**wonder, "status": "not_placed_custom_feature_candidate"}
+                      for wonder in draft["terrain"].get("natural_wonder_candidates", [])]
     db = create_schema(official, destination)
     try:
         db.execute("INSERT INTO Map VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -592,15 +1065,17 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
         plots = []
         for index in range(grid.width * grid.height):
             if index in land_tiles:
-                h = heights[index]
-                terrain = ("TERRAIN_GRASS_MOUNTAIN" if h >= 1200 else
-                           "TERRAIN_GRASS_HILLS" if h >= 400 else "TERRAIN_GRASS")
-                continent, impassable = "CONTINENT_ASIA", int(h >= 1200)
+                terrain = terrain_by_plot[index]
+                continent = "CONTINENT_ASIA"
+                impassable = int(heights[index] >= 1200 or terrain.endswith("_MOUNTAIN"))
             else:
-                terrain = "TERRAIN_COAST" if index in coast else "TERRAIN_OCEAN"
+                terrain = "TERRAIN_COAST" if index in coast or index in lake_tiles else "TERRAIN_OCEAN"
                 continent, impassable = "", 0
             plots.append((index, terrain, continent, impassable))
         db.executemany("INSERT INTO Plots VALUES (?, ?, ?, ?)", plots)
+        db.executemany("INSERT INTO PlotResources VALUES (?, ?, ?)", resource_rows)
+        db.executemany("INSERT INTO PlotFeatures VALUES (?, ?)", feature_rows)
+        db.executemany("INSERT INTO PlotRivers VALUES (?, ?, ?, ?, ?, ?, ?)", river_rows)
         db.executemany("INSERT INTO StartPositions VALUES (?, 'LEADER', ?)",
                        ((start["plot"], start["leader"]) for start in starts))
         if not settlers:
@@ -616,9 +1091,25 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
     finally:
         db.close()
     return {"km_per_tile": km, "width": grid.width, "height": grid.height,
+            "grid_origin_projected_km": [round(grid.xmin, 6), round(grid.ymin, 6)],
             "land_tiles": len(land_tiles), "sea_tiles": grid.width * grid.height - len(land_tiles),
+            "rasterized_land_tiles_before_lakes": original_land_count,
             "starts": starts, "cities": cities, "close_city_pairs": close_city_pairs(cities),
             "close_start_pairs": close_start_pairs(starts),
+            "resource_placement": resource_stats, "resource_candidates": resource_records,
+            "deferred_resources": deferred_resources, "trade_access": trade_records,
+            "custom_content_required": custom_content,
+            "rivers": river_records,
+            "river_edge_count": sum(river["edge_count"] for river in river_records),
+            "river_edge_unique_count": sum(len(sides) for sides in river_edge_flags.values()),
+            "lake_records": lake_records,
+            "terrain_features": {"feature_counts": feature_counts,
+                                 "forest": forest_stats, "marsh": marsh_stats,
+                                 "volcanoes": volcano_records,
+                                 "lakes": lake_records,
+                                 "natural_wonder_candidates": wonder_records,
+                                 "lake_schema_representation":
+                                 "WorldBuilderMap has no lake table or FEATURE_LAKE; lake plots use TERRAIN_COAST"},
             "start_mode": "settlers" if settlers else "historical",
             "file": destination.name, "bytes": destination.stat().st_size}
 

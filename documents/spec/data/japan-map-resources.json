@@ -1,0 +1,355 @@
+{
+  "schema_version": 1,
+  "title": "1534年日本マップ 資源・地形候補",
+  "status": "owner_review_draft",
+  "evidence_cutoff": "2026-09-29",
+  "scenario": {
+    "start_year": 1534,
+    "historical_scope_end_year": 1600,
+    "map_width": 154,
+    "map_height": 67,
+    "approximate_land_tiles": 1089,
+    "approximate_hex_scale_km": 20,
+    "map_snapshot_source": "user-provided task context"
+  },
+  "coordinate_reference": "WGS84 / EPSG:4326",
+  "coordinate_order": "longitude, latitude",
+  "coordinate_precision": 3,
+  "coordinate_note": "小数第3位は表記統一であり実測精度を示さない。史跡・地域の代表点を20km級タイルへ吸着するための概略座標。現代行政界・沿岸線との対応を使う。",
+  "evidence_scale": {
+    "high": "一次史料、公的文化財資料、自治体・省庁資料等が地点・年代を具体的に支持",
+    "medium": "地域産業・歴史の根拠はあるが、期間内の開始年またはタイル位置に幅がある",
+    "low": "広域の自然条件・産業史からの配置推定。個別地点の生産量を示さない"
+  },
+  "map_budget": {
+    "terrestrial_resource_candidate_count": 50,
+    "terrestrial_density_percent_of_land_tiles": 4.59,
+    "marine_resource_candidate_count": 17,
+    "trade_access_port_count": 2,
+    "counting_rule": "水域の魚・鯨、港交易アクセスは陸地タイル密度の分母・分子に含めない。20kmタイルへの吸着後、同一タイルの資源候補は1件に統合する。"
+  },
+  "resource_mapping": [
+    {"name_ja": "金", "civ6_id": "RESOURCE_GOLD", "availability": "official_scenario_only", "normal_map_custom_id_proposed": "RESOURCE_JAC_GOLD", "civ6_class": "luxury", "note": "Gold Ore is documented for the Gifts of the Nile scenario; use a custom row on a normal Japanese map unless runtime database inspection confirms reusable availability."},
+    {"name_ja": "銀", "civ6_id": "RESOURCE_SILVER", "availability": "official", "civ6_class": "luxury"},
+    {"name_ja": "銅", "civ6_id": "RESOURCE_COPPER", "availability": "official_gathering_storm", "civ6_class": "bonus"},
+    {"name_ja": "鉄", "civ6_id": "RESOURCE_IRON", "availability": "official", "civ6_class": "strategic", "proxy": "たたら鉄・砂鉄産地"},
+    {"name_ja": "馬", "civ6_id": "RESOURCE_HORSES", "availability": "official", "civ6_class": "strategic"},
+    {"name_ja": "米", "civ6_id": "RESOURCE_RICE", "availability": "official", "civ6_class": "bonus", "proxy": "水田適地と地域生産圏"},
+    {"name_ja": "塩", "civ6_id": "RESOURCE_SALT", "availability": "official", "civ6_class": "luxury"},
+    {"name_ja": "茶", "civ6_id": "RESOURCE_TEA", "availability": "official", "civ6_class": "luxury"},
+    {"name_ja": "絹", "civ6_id": "RESOURCE_SILK", "availability": "official", "civ6_class": "luxury", "proxy": "絹織物産地・商品流通圏。原料生糸産地の厳密な復元ではない"},
+    {"name_ja": "魚", "civ6_id": "RESOURCE_FISH", "availability": "official", "civ6_class": "bonus"},
+    {"name_ja": "鯨", "civ6_id": "RESOURCE_WHALES", "availability": "official", "civ6_class": "luxury"},
+    {"name_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "availability": "official", "civ6_class": "strategic", "proxy": "鉱床ではなく、港の輸入・交易アクセスとして扱う"},
+    {"name_ja": "漆", "civ6_id": "RESOURCE_JAC_LACQUER", "availability": "custom_proposed", "civ6_class": "custom_luxury", "proxy": "漆器産地・原料調達圏"},
+    {"name_ja": "木材", "civ6_id": null, "availability": "terrain_feature", "terrain_feature_id": "FEATURE_FOREST", "proxy": "森林Featureで表現。別資源ノードなし"}
+  ],
+  "resource_groups": [
+    {
+      "resource_ja": "金",
+      "civ6_id": "RESOURCE_JAC_GOLD",
+      "official_scenario_id": "RESOURCE_GOLD",
+      "normal_map_requires_custom_resource": true,
+      "candidate_count": 5,
+      "points": [
+        {"id": "gold-kai-kurokawa", "site": "黒川金山", "province": "甲斐", "coordinates": [138.825, 35.817], "start_year": null, "start_year_range": ["15世紀末", "17世紀"], "start_year_note": "操業期間の推定幅", "available_at_start": null, "confidence": "high", "source_ids": ["kai_mines"]},
+        {"id": "gold-kai-nakayama", "site": "中山金山", "province": "甲斐", "coordinates": [138.464, 35.377], "start_year": null, "start_year_range": ["16世紀前後", "17世紀末"], "start_year_note": "操業期間の推定幅", "available_at_start": null, "confidence": "high", "source_ids": ["nakayama_mine"]},
+        {"id": "gold-izu-toi", "site": "土肥金山", "province": "伊豆", "coordinates": [138.790, 34.909], "start_year": 1577, "available_at_start": false, "confidence": "high", "source_ids": ["toi_mine"]},
+        {"id": "gold-noto-hodatsu", "site": "宝達金山", "province": "能登", "coordinates": [136.803, 36.784], "start_year": 1586, "start_year_note": "本格採掘年の研究推定。以前の産金可能性は未確定", "available_at_start": false, "confidence": "medium", "source_ids": ["hodatsu_study"]},
+        {"id": "gold-sado-nishimikawa", "site": "西三川砂金山・笹川", "province": "佐渡", "coordinates": [138.273, 37.819], "start_year": 1593, "start_year_note": "上杉景勝による本格開発", "available_at_start": false, "confidence": "high", "source_ids": ["sado_placer"]}
+      ]
+    },
+    {
+      "resource_ja": "銀",
+      "civ6_id": "RESOURCE_SILVER",
+      "candidate_count": 4,
+      "points": [
+        {"id": "silver-iwami", "site": "石見銀山・大森", "province": "石見", "coordinates": [132.437, 35.103], "start_year": 1526, "start_year_note": "発見伝承1526年、灰吹法等で16世紀に生産拡大", "available_at_start": true, "confidence": "high", "source_ids": ["iwami_unesco", "iwami_discovery"]},
+        {"id": "silver-ikuno", "site": "生野銀山", "province": "但馬", "coordinates": [134.790, 35.167], "start_year": 1542, "available_at_start": false, "confidence": "high", "source_ids": ["ikuno_mine"]},
+        {"id": "silver-sado-tsurushi", "site": "鶴子銀山", "province": "佐渡", "coordinates": [138.351, 37.927], "start_year": 1542, "start_year_note": "1542年頃から採掘。相川金銀山は別発見だが近接するため別ノードにしない", "available_at_start": false, "confidence": "high", "source_ids": ["sado_silver"]},
+        {"id": "silver-nobesawa", "site": "延沢銀山", "province": "出羽", "coordinates": [140.528, 38.568], "start_year": null, "start_year_range": [1596, 1615], "start_year_note": "慶長年間開始説。1600年以後の可能性を含む", "available_at_start": false, "confidence": "medium", "source_ids": ["nobesawa_mine"]}
+      ]
+    },
+    {
+      "resource_ja": "銅",
+      "civ6_id": "RESOURCE_COPPER",
+      "candidate_count": 1,
+      "points": [
+        {"id": "copper-ashio", "site": "足尾銅山", "province": "下野", "coordinates": [139.446, 36.642], "start_year": 1550, "start_year_note": "発見伝承。16世紀後半に採掘説、本格経営は1610年以降", "available_at_start": false, "confidence": "medium", "source_ids": ["ashio_mine"]}
+      ],
+      "uncounted_candidates": [
+        {"site": "生野・佐渡等の銀鉱床に伴う銅", "reason": "銅の副産・採掘は知られるが、16世紀の銅を独立資源タイルとして分ける位置・規模の根拠が足りない", "source_ids": ["ikuno_mine", "sado_silver"]}
+      ]
+    },
+    {
+      "resource_ja": "鉄",
+      "civ6_id": "RESOURCE_IRON",
+      "candidate_count": 7,
+      "proxy": "砂鉄・たたら製鉄の地理的生産圏。個別鉱床や16世紀生産量の断定ではない",
+      "points": [
+        {"id": "iron-izumo-yokota", "site": "横田・奥出雲", "province": "出雲", "coordinates": [133.092, 35.199], "confidence": "high", "source_ids": ["tatara_shimane"]},
+        {"id": "iron-izumo-sata", "site": "佐田・出雲", "province": "出雲", "coordinates": [132.880, 35.185], "confidence": "medium", "source_ids": ["tatara_shimane"]},
+        {"id": "iron-izumo-mitoya", "site": "三刀屋・出雲", "province": "出雲", "coordinates": [132.901, 35.274], "confidence": "medium", "source_ids": ["tatara_shimane"]},
+        {"id": "iron-hoki-nichinan", "site": "日南・日野郡", "province": "伯耆", "coordinates": [133.244, 35.160], "confidence": "high", "source_ids": ["tatara_hoki"]},
+        {"id": "iron-hoki-kofu", "site": "江府・日野郡", "province": "伯耆", "coordinates": [133.417, 35.225], "confidence": "medium", "source_ids": ["tatara_hoki"]},
+        {"id": "iron-hoki-misasa", "site": "三朝・東伯耆", "province": "伯耆", "coordinates": [133.766, 35.410], "confidence": "medium", "source_ids": ["tatara_hoki"]},
+        {"id": "iron-iwami-mountains", "site": "石見山地・候補圏", "province": "石見", "coordinates": [132.150, 35.000], "confidence": "low", "source_ids": ["tatara_distribution"]}
+      ]
+    },
+    {
+      "resource_ja": "馬",
+      "civ6_id": "RESOURCE_HORSES",
+      "candidate_count": 6,
+      "points": [
+        {"id": "horse-nanbu-shichinohe", "site": "糠部・七戸周辺", "province": "陸奥", "coordinates": [141.150, 40.690], "confidence": "high", "source_ids": ["horse_nanbu"]},
+        {"id": "horse-nanbu-kuji", "site": "糠部・九戸周辺", "province": "陸奥", "coordinates": [141.590, 40.180], "confidence": "medium", "source_ids": ["horse_nanbu"]},
+        {"id": "horse-nanbu-morioka", "site": "南部馬産圏・盛岡周辺", "province": "陸奥", "coordinates": [141.150, 39.700], "confidence": "medium", "source_ids": ["horse_nanbu"]},
+        {"id": "horse-kai-hosaka", "site": "穂坂牧周辺", "province": "甲斐", "coordinates": [138.430, 35.750], "confidence": "medium", "source_ids": ["horse_kai"]},
+        {"id": "horse-kiso", "site": "木曽谷・開田高原", "province": "信濃", "coordinates": [137.560, 35.950], "confidence": "high", "source_ids": ["horse_kiso"]},
+        {"id": "horse-shimosa", "site": "下総台地・牧候補圏", "province": "下総", "coordinates": [140.130, 35.800], "confidence": "low", "source_ids": ["horse_shimosa"]}
+      ]
+    },
+    {
+      "resource_ja": "米",
+      "civ6_id": "RESOURCE_RICE",
+      "candidate_count": 14,
+      "proxy": "水田適地・主要河川沖積平野を示す。戦国期の収穫高・余剰米の地域順位を示すものではない",
+      "points": [
+        {"id": "rice-echigo", "site": "越後平野", "province": "越後", "coordinates": [139.050, 37.900], "confidence": "low", "source_ids": ["river_shinano"]},
+        {"id": "rice-shonai", "site": "庄内平野", "province": "出羽", "coordinates": [139.880, 38.850], "confidence": "low", "source_ids": ["river_mogami"]},
+        {"id": "rice-sendai", "site": "仙台平野", "province": "陸奥", "coordinates": [140.920, 38.270], "confidence": "low", "source_ids": ["river_kitakami"]},
+        {"id": "rice-kanto-upper", "site": "関東平野北部", "province": "上野", "coordinates": [139.950, 36.220], "confidence": "low", "source_ids": ["river_tone"]},
+        {"id": "rice-kanto-lower", "site": "利根川旧下流低地", "province": "下総", "coordinates": [140.150, 35.880], "confidence": "low", "source_ids": ["river_tone"]},
+        {"id": "rice-nobi", "site": "濃尾平野", "province": "美濃", "coordinates": [136.820, 35.200], "confidence": "low", "source_ids": ["river_kiso"]},
+        {"id": "rice-owari", "site": "尾張平野", "province": "尾張", "coordinates": [136.780, 35.050], "confidence": "low", "source_ids": ["river_kiso"]},
+        {"id": "rice-omi", "site": "琵琶湖東岸低地", "province": "近江", "coordinates": [136.100, 35.150], "confidence": "low", "source_ids": ["river_yodo", "lake_biwa"]},
+        {"id": "rice-yamashiro", "site": "山城盆地", "province": "山城", "coordinates": [135.790, 34.900], "confidence": "low", "source_ids": ["river_yodo"]},
+        {"id": "rice-kawachi", "site": "河内平野", "province": "河内", "coordinates": [135.580, 34.620], "confidence": "low", "source_ids": ["river_yodo"]},
+        {"id": "rice-bizen", "site": "岡山平野", "province": "備前", "coordinates": [133.940, 34.660], "confidence": "low", "source_ids": ["agriculture_proxy"]},
+        {"id": "rice-sanuki", "site": "讃岐平野", "province": "讃岐", "coordinates": [133.820, 34.250], "confidence": "low", "source_ids": ["agriculture_proxy"]},
+        {"id": "rice-chikugo", "site": "筑紫平野", "province": "筑前", "coordinates": [130.490, 33.310], "confidence": "low", "source_ids": ["river_chikugo"]},
+        {"id": "rice-higo", "site": "熊本平野", "province": "肥後", "coordinates": [130.700, 32.790], "confidence": "low", "source_ids": ["agriculture_proxy"]}
+      ]
+    },
+    {
+      "resource_ja": "塩",
+      "civ6_id": "RESOURCE_SALT",
+      "candidate_count": 6,
+      "feature_caveat": "入浜式塩田は17世紀半ばの技術とする資料があり、1534年には揚浜・藻塩等の先行製塩地として表す",
+      "points": [
+        {"id": "salt-noto-suzu", "site": "珠洲沿岸・候補", "province": "能登", "coordinates": [137.260, 37.440], "confidence": "low", "source_ids": ["salt_medieval"]},
+        {"id": "salt-shima", "site": "志摩沿岸", "province": "伊勢", "coordinates": [136.820, 34.330], "confidence": "medium", "source_ids": ["salt_ise"]},
+        {"id": "salt-ako", "site": "赤穂沿岸", "province": "播磨", "coordinates": [134.390, 34.750], "confidence": "medium", "source_ids": ["salt_medieval", "salt_ako"]},
+        {"id": "salt-kojima", "site": "児島沿岸", "province": "備前", "coordinates": [133.830, 34.500], "confidence": "high", "source_ids": ["salt_medieval"]},
+        {"id": "salt-yuge", "site": "弓削島", "province": "伊予", "coordinates": [133.200, 34.280], "confidence": "high", "source_ids": ["salt_medieval"]},
+        {"id": "salt-shodoshima", "site": "小豆島沿岸", "province": "讃岐", "coordinates": [134.230, 34.480], "confidence": "medium", "source_ids": ["salt_medieval"]}
+      ]
+    },
+    {
+      "resource_ja": "茶",
+      "civ6_id": "RESOURCE_TEA",
+      "candidate_count": 2,
+      "points": [
+        {"id": "tea-uji", "site": "宇治", "province": "山城", "coordinates": [135.800, 34.890], "confidence": "high", "source_ids": ["tea_uji"]},
+        {"id": "tea-ujitawara", "site": "宇治田原", "province": "山城", "coordinates": [135.870, 34.850], "confidence": "medium", "source_ids": ["tea_uji", "tea_kyoto"]}
+      ]
+    },
+    {
+      "resource_ja": "絹",
+      "civ6_id": "RESOURCE_SILK",
+      "candidate_count": 3,
+      "proxy": "織物・絹商品産地。養蚕量の定量推定ではない",
+      "points": [
+        {"id": "silk-kiryu", "site": "桐生・仁田山絹", "province": "上野", "coordinates": [139.330, 36.410], "confidence": "high", "source_ids": ["silk_kiryu"]},
+        {"id": "silk-gunnai", "site": "郡内織物圏", "province": "甲斐", "coordinates": [138.810, 35.550], "confidence": "medium", "source_ids": ["silk_kai"]},
+        {"id": "silk-nishijin", "site": "西陣", "province": "山城", "coordinates": [135.750, 35.030], "confidence": "high", "source_ids": ["silk_nishijin"]}
+      ]
+    },
+    {
+      "resource_ja": "漆",
+      "civ6_id": "RESOURCE_JAC_LACQUER",
+      "availability": "custom_proposed",
+      "candidate_count": 2,
+      "proxy": "原料漆樹の分布でなく、漆工芸・材料調達の産業圏",
+      "points": [
+        {"id": "lacquer-wajima", "site": "輪島塗産地", "province": "能登", "coordinates": [136.900, 37.390], "confidence": "medium", "source_ids": ["lacquer_wajima"]},
+        {"id": "lacquer-aizu", "site": "会津漆器産地", "province": "陸奥", "coordinates": [139.930, 37.490], "start_year": 1590, "available_at_start": false, "confidence": "medium", "source_ids": ["lacquer_aizu"]}
+      ]
+    },
+    {
+      "resource_ja": "魚",
+      "civ6_id": "RESOURCE_FISH",
+      "candidate_count": 16,
+      "placement_domain": "marine",
+      "proxy": "主要沿岸・内海・海峡の候補漁場。各座標に戦国期の個別漁獲記録があるという意味ではない",
+      "points": [
+        {"id": "fish-ishikari", "site": "石狩湾", "province": "蝦夷地", "coordinates": [141.320, 43.300], "confidence": "low", "source_ids": ["fishery_general", "river_ishikari"]},
+        {"id": "fish-tsugaru", "site": "津軽海峡", "province": "陸奥", "coordinates": [140.850, 41.430], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-sanriku-north", "site": "三陸北部", "province": "陸奥", "coordinates": [142.050, 40.020], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-sanriku-south", "site": "三陸南部", "province": "陸奥", "coordinates": [141.750, 39.150], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-sendai", "site": "仙台湾", "province": "陸奥", "coordinates": [141.050, 38.250], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-choshi", "site": "銚子沖", "province": "下総", "coordinates": [140.730, 35.830], "confidence": "medium", "source_ids": ["fishery_tokyo_bay"]},
+        {"id": "fish-sagami", "site": "相模湾", "province": "相模", "coordinates": [139.570, 35.100], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-ise", "site": "伊勢湾", "province": "伊勢", "coordinates": [136.750, 34.800], "confidence": "medium", "source_ids": ["fishery_general", "whaling_ise"]},
+        {"id": "fish-suruga", "site": "駿河湾", "province": "駿河", "coordinates": [138.600, 34.720], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-noto", "site": "能登沖", "province": "能登", "coordinates": [137.050, 37.000], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-seto-bingo", "site": "備後灘", "province": "備後", "coordinates": [133.200, 34.300], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-seto-iyo", "site": "燧灘", "province": "伊予", "coordinates": [132.900, 33.900], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-seto-suo", "site": "周防灘", "province": "周防", "coordinates": [131.700, 33.950], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-genkai", "site": "玄界灘", "province": "肥前", "coordinates": [129.650, 33.800], "confidence": "low", "source_ids": ["fishery_general"]},
+        {"id": "fish-ariake", "site": "有明海", "province": "肥前", "coordinates": [130.300, 33.000], "confidence": "low", "source_ids": ["fishery_general", "wetlands"]},
+        {"id": "fish-tosa", "site": "土佐湾", "province": "土佐", "coordinates": [133.600, 33.150], "confidence": "low", "source_ids": ["fishery_general"]}
+      ]
+    },
+    {
+      "resource_ja": "鯨",
+      "civ6_id": "RESOURCE_WHALES",
+      "candidate_count": 1,
+      "placement_domain": "marine",
+      "points": [
+        {"id": "whale-ise", "site": "伊勢湾・回遊海域候補", "province": "伊勢", "coordinates": [136.770, 34.690], "confidence": "medium", "source_ids": ["whaling_ise"]}
+      ]
+    }
+  ],
+  "trade_access": [
+    {"id": "niter-hirado", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "平戸", "province": "肥前", "coordinates": [129.553, 33.368], "available_from_year": 1586, "confidence": "medium", "source_ids": ["niter_trade"]},
+    {"id": "niter-sakai", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "堺", "province": "和泉", "coordinates": [135.483, 34.573], "available_from_year": null, "date_note": "16世紀の港交易圏としての仮置き。堺での個別硝石輸入を示す同時代史料は今回確認できず", "confidence": "low", "source_ids": ["niter_trade", "sakai_trade"]}
+  ],
+  "terrain": {
+    "rivers": [
+      {"id": "river-ishikari", "name_ja": "石狩川", "coordinates": [[143.020, 43.660], [142.360, 43.770], [142.070, 43.700], [141.550, 43.120], [141.370, 43.240]], "source_ids": ["river_ishikari"], "historical_note": "明治以後に直線化・捷水路化された下流河道は概略補正が必要"},
+      {"id": "river-kitakami", "name_ja": "北上川", "coordinates": [[141.000, 39.850], [141.150, 39.700], [141.120, 39.390], [141.130, 38.930], [141.300, 38.460]], "source_ids": ["river_kitakami"]},
+      {"id": "river-mogami", "name_ja": "最上川", "coordinates": [[140.150, 37.820], [140.100, 37.910], [140.330, 38.240], [140.290, 38.760], [139.840, 38.910]], "source_ids": ["river_mogami"]},
+      {"id": "river-tone-1534", "name_ja": "利根川（1534年旧流路概略）", "coordinates": [[139.000, 36.900], [139.050, 36.650], [139.200, 36.300], [139.500, 36.000], [139.750, 35.800], [139.830, 35.620]], "source_ids": ["river_tone", "tone_old_course"], "confidence": "low", "historical_note": "1594年以後の東遷前。下流位置は歴史河道の概略候補であり、旧流路の水理・分流を復元した測量線ではない"},
+      {"id": "river-shinano", "name_ja": "信濃川・千曲川", "coordinates": [[138.730, 36.000], [138.180, 36.650], [138.200, 37.150], [138.840, 37.450], [139.050, 37.920]], "source_ids": ["river_shinano"]},
+      {"id": "river-kiso", "name_ja": "木曽川", "coordinates": [[137.800, 36.030], [137.690, 35.700], [136.950, 35.380], [136.760, 35.400], [136.730, 35.060]], "source_ids": ["river_kiso"]},
+      {"id": "river-yodo", "name_ja": "瀬田川・宇治川・淀川", "coordinates": [[136.170, 35.310], [135.900, 35.020], [135.800, 34.890], [135.690, 34.900], [135.430, 34.670]], "source_ids": ["river_yodo"]},
+      {"id": "river-hii", "name_ja": "斐伊川", "coordinates": [[133.120, 35.200], [132.970, 35.270], [132.910, 35.370], [132.970, 35.430], [133.020, 35.450]], "source_ids": ["river_hii"]},
+      {"id": "river-yoshino", "name_ja": "吉野川", "coordinates": [[133.100, 33.740], [133.800, 34.020], [134.000, 33.990], [134.330, 34.050], [134.580, 34.080]], "source_ids": ["river_yoshino"]},
+      {"id": "river-chikugo", "name_ja": "筑後川", "coordinates": [[131.200, 33.110], [130.930, 33.320], [130.520, 33.320], [130.360, 33.200], [130.280, 33.060]], "source_ids": ["river_chikugo"]}
+    ],
+    "river_rule": "座標列は概略中心線。20kmタイルの共有辺へ変換し、現代の放水路・河口改修は1534年以前の流路へ戻す。Toneは既知の東遷以前流路の概略案として別途人手確認。",
+    "lakes": [
+      {"id": "lake-biwa", "name_ja": "琵琶湖", "province": "近江", "center": [136.170, 35.310], "area_km2": 670.3, "tile_hint": "2-4", "source_ids": ["lake_biwa", "gsi_lakes"]},
+      {"id": "lake-inawashiro", "name_ja": "猪苗代湖", "province": "陸奥", "center": [140.080, 37.480], "area_km2": 103.3, "tile_hint": "1", "source_ids": ["lake_inawashiro", "gsi_lakes"]},
+      {"id": "lake-kasumigaura", "name_ja": "霞ヶ浦", "province": "常陸", "center": [140.410, 36.040], "area_km2": 167.6, "tile_hint": "1-2", "source_ids": ["gsi_lakes"]},
+      {"id": "lake-towada", "name_ja": "十和田湖", "province": "陸奥", "center": [140.880, 40.470], "area_km2": 61.0, "tile_hint": "1", "source_ids": ["gsi_lakes"]},
+      {"id": "lake-shinji", "name_ja": "宍道湖", "province": "出雲", "center": [132.970, 35.420], "area_km2": 79.1, "tile_hint": "1", "source_ids": ["river_hii"]},
+      {"id": "lake-suwa", "name_ja": "諏訪湖", "province": "信濃", "center": [138.080, 36.050], "area_km2": 13.3, "tile_hint": "1", "source_ids": ["gsi_lakes"]}
+    ],
+    "forest": {
+      "feature_id": "FEATURE_FOREST",
+      "target_share_of_eligible_tiles_percent": 45,
+      "eligible_terrain": ["grassland", "plains", "hills"],
+      "exclude_terrain": ["mountains", "urban_core", "open_rice_basin"],
+      "rule": "適格陸地の約45%から始め、丘陵・内陸山地は高確率、平野農地・河岸は低確率で配置。1タイルに資源・湿地・湖・Natural Wonderと森林Featureを重複させない。値は16世紀森林率の実測ではなくゲーム調整値。",
+      "bias_regions": [
+        {"region": "木曽・飛騨", "province_examples": ["信濃", "飛騨", "美濃"], "weight": 1.6},
+        {"region": "紀伊・吉野", "province_examples": ["紀伊", "大和"], "weight": 1.6},
+        {"region": "中国山地", "province_examples": ["出雲", "伯耆", "石見", "備後"], "weight": 1.5},
+        {"region": "四国山地・九州山地", "province_examples": ["伊予", "土佐", "肥後", "日向"], "weight": 1.5},
+        {"region": "奥羽・北海道内陸", "province_examples": ["陸奥", "出羽", "蝦夷地"], "weight": 1.4}
+      ],
+      "source_ids": ["forest_history", "vegetation_gis"]
+    },
+    "marsh": {
+      "feature_id": "FEATURE_MARSH",
+      "target_share_of_land_tiles_percent": "2-3",
+      "rule": "河口・氾濫原・高層湿原の陸地側に22-33タイルを上限として集中。現代湿地の面積をそのまま1534年に遡及しない。", 
+      "clusters": [
+        {"id": "marsh-kushiro", "site": "釧路湿原", "province": "蝦夷地", "center": [144.350, 43.150], "source_ids": ["wetlands"]},
+        {"id": "marsh-sarobetsu", "site": "サロベツ原野", "province": "蝦夷地", "center": [141.720, 45.100], "source_ids": ["wetlands"]},
+        {"id": "marsh-oze", "site": "尾瀬", "province": "上野・下野", "center": [139.180, 36.930], "source_ids": ["wetlands"]},
+        {"id": "marsh-nakaumi-shinji", "site": "中海・宍道湖周辺", "province": "出雲・伯耆", "center": [133.150, 35.480], "source_ids": ["wetlands"]},
+        {"id": "marsh-kiso-delta", "site": "木曽三川低地", "province": "尾張・美濃", "center": [136.720, 35.100], "source_ids": ["wetlands", "river_kiso"]},
+        {"id": "marsh-tone-lowland", "site": "利根川旧下流低地", "province": "下総・武蔵", "center": [139.850, 35.800], "source_ids": ["river_tone", "tone_old_course"]},
+        {"id": "marsh-ariake", "site": "筑後川河口・有明海", "province": "肥前", "center": [130.280, 33.060], "source_ids": ["wetlands", "river_chikugo"]}
+      ]
+    },
+    "volcanoes": [
+      {"id": "volcano-asama", "site": "浅間山", "province": "上野・信濃", "coordinates": [138.523, 36.406], "eruption_years_in_scope": [1532, 1534, 1582, 1590, 1591, 1596], "feature_id": "FEATURE_VOLCANO", "source_ids": ["volcano_asama"]},
+      {"id": "volcano-fuji", "site": "富士山", "province": "駿河・甲斐", "coordinates": [138.727, 35.361], "eruption_years_in_scope": [], "last_recorded_eruptions_before_scope": [1435, 1511], "feature_id": "FEATURE_VOLCANO", "source_ids": ["volcano_fuji"]},
+      {"id": "volcano-aso", "site": "阿蘇山・中岳", "province": "肥後", "coordinates": [131.104, 32.884], "eruption_years_in_scope": [1533, 1542, 1558, 1559, 1562, 1573, 1574, 1576, 1582, 1583, 1584, 1587], "feature_id": "FEATURE_VOLCANO", "source_ids": ["volcano_aso"]},
+      {"id": "volcano-sakurajima", "site": "桜島", "province": "大隅", "coordinates": [130.660, 31.590], "eruption_years_in_scope": [], "last_recorded_eruptions_before_scope": [1471, 1473, 1475, 1476], "feature_id": "FEATURE_VOLCANO", "source_ids": ["volcano_sakurajima"]},
+      {"id": "volcano-kirishima", "site": "霧島山・御鉢", "province": "日向・大隅", "coordinates": [130.860, 31.910], "eruption_years_in_scope": [1554, 1555, 1588], "feature_id": "FEATURE_VOLCANO", "source_ids": ["volcano_kirishima"]}
+    ],
+    "natural_wonder_candidates": [
+      {"id": "wonder-fuji-custom", "name_ja": "富士山", "coordinates": [138.727, 35.361], "civ6_official_gs_wonder": false, "proposed_custom_feature_id": "FEATURE_JAC_FUJI", "priority": 1, "mutually_exclusive_with": ["volcano-fuji"], "source_ids": ["fuji_unesco", "civ6_gs_manual"]},
+      {"id": "wonder-aso-caldera-alternative", "name_ja": "阿蘇カルデラ", "coordinates": [131.100, 32.900], "civ6_official_gs_wonder": false, "proposed_custom_feature_id": "FEATURE_JAC_ASO_CALDERA", "priority": 2, "mutually_exclusive_with": ["wonder-fuji-custom", "volcano-aso"], "source_ids": ["volcano_aso"]}
+    ]
+  },
+  "generator_rules": [
+    "資源候補はWGS84から最寄りの適格タイルへ吸着。同一タイルは1資源のみとし、根拠強度・年代適合度で重複候補を監査する。",
+    "1534年開始時にstart_yearが1534より後の資源を無条件に可視化しない。1590年代の開発地点は開始年・解禁条件を保持する。",
+    "RESOURCE_NITERを陸上鉱床として置かず、平戸・堺など交易アクセスとして保持する。",
+    "河川は線をプロット共有辺へ変換する。利根川・石狩川・信濃川等の現代河道工事・分水路を年代補正する。",
+    "湖沼はGSI湖岸形状を使い、現代の干拓・埋立を1534年に遡及しない。",
+    "森林は適格陸地の45%を初期値、湿地は22-33タイルを上限に調整。火山は活火山の地形に1群1タイルを基本とする。",
+    "カスタムNatural Wonder採用時は同一タイルの火山Feature・他Wonderとの重複を禁止する。"
+  ],
+  "sources": [
+    {"id": "civ6_base_resources", "title": "Civ6 Base Resources data module", "url": "https://civilization.fandom.com/wiki/Module:Data/Civ6/Base/Resources"},
+    {"id": "civ6_gs_resources", "title": "Civ6 Gathering Storm Resources data module", "url": "https://civilization.fandom.com/wiki/Module:Data/Civ6/GS/Resources"},
+    {"id": "civ6_scenario_gold", "title": "Gold Ore resource, Gifts of the Nile scenario", "url": "https://civilization.fandom.com/wiki/Gold_Ore_%28Civ6%29/Gifts_of_the_Nile"},
+    {"id": "civ6_gs_manual", "title": "2K official Civilization VI Gathering Storm manual", "url": "https://cdn.2kgames.com/manuals/civilization-vi/gathering_storm/2KGMKT_CIV6_Gathering_Storm_PC_Online_Manual_V7_US.pdf"},
+    {"id": "kai_mines", "title": "山梨県 甲斐金山遺跡（黒川金山・中山金山）", "url": "https://www.pref.yamanashi.jp/bunka/maibun/yamanashinobunkazai_sb0010.html"},
+    {"id": "nakayama_mine", "title": "身延町 中山金山保存管理計画", "url": "https://www.town.minobu.lg.jp/site/kinzan/1874.html"},
+    {"id": "toi_mine", "title": "土肥金山の歴史", "url": "https://www.toikinzan.com/about/"},
+    {"id": "hodatsu_study", "title": "金沢大学リポジトリ 宝達金山に関する研究論文", "url": "https://kanazawa-u.repo.nii.ac.jp/record/35554/files/Full-H-1121072706-kobayakawa-yugo.pdf"},
+    {"id": "sado_placer", "title": "佐渡市 西三川砂金山の戦国期開発", "url": "https://www.city.sado.niigata.jp/site/mine/52560.html"},
+    {"id": "iwami_unesco", "title": "UNESCO Iwami Ginzan Silver Mine", "url": "https://whc.unesco.org/en/list/1246/"},
+    {"id": "iwami_discovery", "title": "笠岡市 銀の道（石見銀山）", "url": "https://www.city.kasaoka.okayama.jp/soshiki/9/2742.html"},
+    {"id": "ikuno_mine", "title": "朝来市 史跡 生野銀山", "url": "https://www.city.asago.hyogo.jp/soshiki/24/1119.html"},
+    {"id": "sado_silver", "title": "新潟県 鶴子銀山", "url": "https://www.pref.niigata.lg.jp/site/sado-goldmine/sg-290.html"},
+    {"id": "nobesawa_mine", "title": "山形県 延沢銀山遺跡", "url": "https://www.pref.yamagata.jp/cgi-bin/yamagata-takara/?id=1133&m=detail"},
+    {"id": "ashio_mine", "title": "日光市 足尾銅山の歴史", "url": "https://www.city.nikko.lg.jp/soshiki/10/1041/2_1/1229.html"},
+    {"id": "tatara_shimane", "title": "文化庁 国指定文化財等データベース 奥出雲たたら製鉄及び棚田の文化的景観", "url": "https://kunishitei.bunka.go.jp/heritage/detail/412/00003855"},
+    {"id": "tatara_hoki", "title": "鳥取県史だより 伯耆のたたら製鉄遺跡", "url": "https://www.pref.tottori.lg.jp/280339.htm"},
+    {"id": "tatara_distribution", "title": "中国山地のたたら製鉄地域", "url": "https://tetsunomichi.gr.jp/history-and-tradition/tatara-outline/part-4/"},
+    {"id": "horse_nanbu", "title": "岩手県立図書館 企画展・岩手の馬文化", "url": "https://iplsv005.library.pref.iwate.jp/info/evecale/kikakuten/20190518_umacco.html"},
+    {"id": "horse_kiso", "title": "文化庁 日本遺産ポータル 木曽馬", "url": "https://japan-heritage.bunka.go.jp/ja/culturalproperties/result/2011/"},
+    {"id": "horse_kai", "title": "山梨県 県勢・沿革（甲斐三御牧）", "url": "https://www.pref.yamanashi.jp/toukei_2/book/13dai1-1.html"},
+    {"id": "horse_shimosa", "title": "関東農政局 北総の牧の歴史", "url": "https://www.maff.go.jp/kanto/nouson/sekkei/kokuei/hokuso/rekishi/02.html"},
+    {"id": "agriculture_proxy", "title": "國學院大學 戦国時代の農業技術・稲作に関する解説", "url": "https://www.kokugakuin.ac.jp/article/171751"},
+    {"id": "agriculture_water", "title": "農林水産省 農業水利の歴史と大河川氾濫原の開発", "url": "https://www.maff.go.jp/j/council/seisaku/nousin/bukai/h24_4/pdf/data1-2.pdf"},
+    {"id": "tea_uji", "title": "宇治市 宇治茶の歴史", "url": "https://www.city.uji.kyoto.jp/site/uji-cha/16216.html"},
+    {"id": "tea_kyoto", "title": "京都府 京都の茶生産の歴史", "url": "https://www.pref.kyoto.jp/chaken/history.html"},
+    {"id": "silk_kiryu", "title": "桐生市 桐生織物の歴史", "url": "https://www.city.kiryu.lg.jp/sangyou/1012348/1012405/1012412/index.html"},
+    {"id": "silk_kai", "title": "山梨県立博物館 郡内織物産地の歴史", "url": "https://www.pref.yamanashi.jp/kaiki/kaiki_museum/kaiki-museum/kaiki-guide3.htm"},
+    {"id": "silk_nishijin", "title": "京都市 文化史12 西陣織", "url": "https://www2.city.kyoto.lg.jp/somu/rekishi/fm/nenpyou/htmlsheet/bunka12.html"},
+    {"id": "lacquer_wajima", "title": "輪島塗漆器商工業協同組合 歴史", "url": "https://wajimanuri.or.jp/kumiai/file07/rekishi2.html"},
+    {"id": "lacquer_aizu", "title": "東北経済産業局 会津塗", "url": "https://www.tohoku.meti.go.jp/s_densan/fukusima_01.html"},
+    {"id": "salt_medieval", "title": "公益財団法人 塩事業センター 古代・中世の塩づくり", "url": "https://www.seto.or.jp/upload/publish/seto_vol_82.pdf"},
+    {"id": "salt_saltcenter", "title": "塩事業センター 日本の塩づくりの歴史", "url": "https://www.shiojigyo.com/siohyakka/made/history.html"},
+    {"id": "salt_ise", "title": "三重県 伊勢志摩の製塩", "url": "https://www.bunka.pref.mie.lg.jp/rekishi/kenshi/asp/arekore/detail80.html"},
+    {"id": "salt_ako", "title": "日本遺産 播州赤穂の製塩", "url": "https://japan-heritage.bunka.go.jp/ja/stories/story077/"},
+    {"id": "fishery_general", "title": "水産庁 我が国の魚食文化と漁業・漁村の歴史", "url": "https://www.jfa.maff.go.jp/j/koho/pr/mado/pdf/62.pdf"},
+    {"id": "fishery_tokyo_bay", "title": "国交省関東地方整備局 東京湾の漁業活動の変遷", "url": "https://www.ktr.mlit.go.jp/ktr_content/content/000621813.pdf"},
+    {"id": "whaling_ise", "title": "九州大学学術情報リポジトリ 日本在来捕鯨業研究要旨", "url": "https://api.lib.kyushu-u.ac.jp/opac_download_md/2348717/lit0273_abstract.pdf"},
+    {"id": "niter_trade", "title": "戦国日本の津々浦々 焔硝（輸入）と上井覚兼日記の史料紹介", "url": "https://proto.harisen.jp/mono/mono/enshou-yunyu.html"},
+    {"id": "sakai_trade", "title": "大阪21世紀協会 堺と鉄砲・南蛮貿易", "url": "https://www.osaka21.or.jp/web_magazine/osaka100/003.html"},
+    {"id": "forest_history", "title": "徳川林政史研究所 林政史コラム", "url": "https://rinseishi.tokugawa.or.jp/kenkyukatsudo/rinseishi_column/"},
+    {"id": "vegetation_gis", "title": "環境省 環境アセスメントデータベース・現存植生図", "url": "https://eadas.env.go.jp/eiadb/ebidbs/Service/About?title=Gis"},
+    {"id": "river_ishikari", "title": "北海道開発局 石狩川", "url": "https://www.hkd.mlit.go.jp/ky/kn/kawa_kei/ud49g70000001a6b.html"},
+    {"id": "river_kitakami", "title": "国交省北上川下流河川事務所 北上川概要・歴史", "url": "https://www.thr.mlit.go.jp/Bumon/J74201/homepage/history/kitakami.html"},
+    {"id": "river_mogami", "title": "国交省山形河川国道事務所 最上川概要", "url": "https://www.thr.mlit.go.jp/yamagata/river/kasenseibi/gaiyou/002/index.html"},
+    {"id": "river_tone", "title": "国交省関東地方整備局 利根川の水資源と水利用", "url": "https://www.ktr.mlit.go.jp/river/bousai/river_bousai00000065.html"},
+    {"id": "tone_old_course", "title": "国交省 利根川水系河川整備計画（近世以前の流路）", "url": "https://www.ktr.mlit.go.jp/ktr_content/content/000640560.pdf"},
+    {"id": "river_shinano", "title": "国交省信濃川河川事務所 信濃川水系概要", "url": "https://www.hrr.mlit.go.jp/shinage/shinanogawa/"},
+    {"id": "river_kiso", "title": "国交省 木曽川・長良川・揖斐川", "url": "https://www.mlit.go.jp/river/toukei_chousa/kasen/jiten/nihon_kawa/0509_kiso/0509_kiso_00.html"},
+    {"id": "river_yodo", "title": "国交省近畿地方整備局 淀川水系", "url": "https://www.kkr.mlit.go.jp/river/kasen/yodogawa.html"},
+    {"id": "river_hii", "title": "国交省 斐伊川", "url": "https://www.mlit.go.jp/river/toukei_chousa/kasen/jiten/nihon_kawa/0713_hiikawa/0713_hiikawa_00.html"},
+    {"id": "river_yoshino", "title": "国交省 吉野川", "url": "https://www.mlit.go.jp/river/toukei_chousa/kasen/jiten/nihon_kawa/0801_yoshino/0801_yoshino_00.html"},
+    {"id": "river_chikugo", "title": "国交省 筑後川", "url": "https://www.mlit.go.jp/river/toukei_chousa/kasen/jiten/nihon_kawa/0916_chikugo/0916_chikugo_00.html"},
+    {"id": "lake_biwa", "title": "滋賀県 琵琶湖の概要", "url": "https://www.pref.shiga.lg.jp/de51/2878.html"},
+    {"id": "lake_inawashiro", "title": "福島県 猪苗代湖調査", "url": "https://www.pref.fukushima.jp/sec/298/inawashiro-chousa.html"},
+    {"id": "gsi_lakes", "title": "国土地理院 湖沼データダウンロード", "url": "https://www.gsi.go.jp/kankyochiri/lakedatalist.html"},
+    {"id": "wetlands", "title": "環境省 日本のラムサール条約湿地", "url": "https://www.env.go.jp/nature/ramsar/conv/RamsarSites_in_Japan.html"},
+    {"id": "volcano_asama", "title": "気象庁 浅間山有史以降の火山活動", "url": "https://www.data.jma.go.jp/vois/data/tokyo/306_Asamayama/306_history.html"},
+    {"id": "volcano_fuji", "title": "気象庁 富士山有史以降の火山活動", "url": "https://www.data.jma.go.jp/vois/data/tokyo/314_Fujisan/314_history.html"},
+    {"id": "volcano_aso", "title": "気象庁 阿蘇山有史以降の火山活動", "url": "https://www.data.jma.go.jp/vois/data/fukuoka/503_Asosan/503_history.html"},
+    {"id": "volcano_sakurajima", "title": "気象庁 桜島有史以降の火山活動", "url": "https://www.data.jma.go.jp/vois/data/fukuoka/506_Sakurajima/506_history.html"},
+    {"id": "volcano_kirishima", "title": "気象庁 霧島山有史以降の火山活動", "url": "https://www.data.jma.go.jp/vois/data/fukuoka/505_Kirishimayama/505_history.html"},
+    {"id": "fuji_unesco", "title": "UNESCO Fujisan, sacred place and source of artistic inspiration", "url": "https://whc.unesco.org/en/list/1418/"}
+  ]
+}
