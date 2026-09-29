@@ -20,6 +20,7 @@
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
+| [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
 
