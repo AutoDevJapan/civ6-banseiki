@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -33,6 +34,32 @@ class DriverFeatureTests(unittest.TestCase):
                 runner._run_step(step)
             self.assertEqual([call.args[0] for call in lua.call_args_list], ["FrontEnd", "HostGame"])
             self.assertEqual(lua.call_args_list[1].args[1], code)
+
+    def test_build_setup_defaults_on_for_banseiki_only(self):
+        players = [{"leader": "L", "civ": "C", "human": True}]
+        base = {"action": "configure", "map_size": "M", "speed": "S", "seed": 1, "players": players}
+        cases = [("RULESET_JAC_BANSEIKI", {}, ["FrontEnd", "HostGame"]),
+                 ("RULESET_JAC_BANSEIKI", {"build_setup": False}, ["FrontEnd"]),
+                 ("RULESET_STANDARD", {}, ["FrontEnd"]),
+                 ("RULESET_STANDARD", {"build_setup": True}, ["FrontEnd", "HostGame"])]
+        for ruleset, extra, states in cases:
+            with self.subTest(ruleset=ruleset, extra=extra), tempfile.TemporaryDirectory() as folder:
+                runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+                with patch.object(runner, "_lua", return_value="true") as lua:
+                    runner._run_step({**base, "ruleset": ruleset, **extra})
+                self.assertEqual([call.args[0] for call in lua.call_args_list], states)
+
+    def test_start_turn_guard(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_lua", return_value="16603") as lua:
+                runner._check_start_turn(time.monotonic() + 60)  # other rulesets are not checked
+                lua.assert_not_called()
+                runner.ruleset = "RULESET_JAC_BANSEIKI"
+                with self.assertRaisesRegex(ScenarioError, "start turn is 16603, expected 1"):
+                    runner._check_start_turn(time.monotonic() + 60)
+            with patch.object(runner, "_lua", return_value="1"):
+                runner._check_start_turn(time.monotonic() + 60)
 
     def test_output_scoped_save_name_and_exact_name(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -78,7 +105,7 @@ class DriverFeatureTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.time.sleep"):
                 detail = runner._autoplay(2, 10, allow_human_elimination=True)
@@ -134,7 +161,7 @@ class DriverFeatureTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.time.sleep"):
                 detail = runner._autoplay(2, 10, research_metrics=True)
@@ -183,7 +210,7 @@ class DriverFeatureTests(unittest.TestCase):
             clock = iter(range(0, 1000, 2))
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch.object(runner, "_choose_dedication", return_value=None), patch(
                 "scenario.time.sleep"

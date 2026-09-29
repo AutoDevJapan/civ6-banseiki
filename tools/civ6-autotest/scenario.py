@@ -260,6 +260,14 @@ def _configure_code(step: dict) -> str:
     return "\n".join(lines)
 
 
+BANSEIKI_RULESET = "RULESET_JAC_BANSEIKI"
+
+
+def _builds_setup(step: dict) -> bool:
+    """build_setup defaults to on for the Banseiki ruleset, off elsewhere; an explicit value wins."""
+    return step.get("build_setup", step.get("ruleset") == BANSEIKI_RULESET)
+
+
 def _build_setup_code(players: list[dict]) -> str:
     """Run the official headless Create Game refresh, then check every configured slot."""
     lines = ["BuildHeadlessGameSetup()", "g_GameParameters:FullRefresh()"]
@@ -292,6 +300,7 @@ class Runner:
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
         self.metrics_runs = 0
         self.lua_captures: dict[str, str] = {}
+        self.ruleset: str | None = None
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -580,8 +589,38 @@ class Runner:
             print("Dismissed blocking Advisor popup", flush=True)
         return dismissed
 
+    # An AI leader's statement or deal proposal to the human opens these contexts and holds the
+    # AI's turn until the human answers, so autoplay stalls (live 2026-09-29, turn 31 on the 15 km map).
+    # The deal view goes first: while it is up the action view is in DEAL_MODE and ignores OnClose.
+    DIPLOMACY_CLOSERS = (
+        # Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129 OnLocalPlayerTurnEnd, the game's own
+        # turn-end path: OnRefuseDeal(true) rejects the AI proposal and closes the session
+        # (:589-613), then OnContinue hides the view (:2868-2870). Base: Base/Assets/UI/DiplomacyDealView.lua:3075-3085.
+        ("DiplomacyDealView", "OnLocalPlayerTurnEnd()", "AI deal proposal"),
+        # Base/Assets/UI/DiplomacyActionView.lua:2883-2886 OnClose, "Act like they pressed ESC".
+        ("DiplomacyActionView", "OnClose()", "AI diplomacy statement"),
+    )
+
+    def _close_diplomacy(self, deadline: float) -> list[str]:
+        # Each call is guarded by ContextPtr:IsHidden() and the handlers ignore repeats during their
+        # fade-out (CloseFocusedState checks BlackFadeAnim), so a repeat after a timeout is a no-op.
+        return self._retry_idempotent(lambda: self._close_diplomacy_once(deadline), deadline)
+
+    def _close_diplomacy_once(self, deadline: float) -> list[str]:
+        states = {state.casefold() for state in self._states(min(5, _remaining(deadline)))}
+        closed = []
+        for state, call, label in self.DIPLOMACY_CLOSERS:
+            if state.casefold() not in states:
+                continue
+            if self._lua(state, f"if ContextPtr:IsHidden() then return false end\n{call}\nreturn true",
+                         min(5, _remaining(deadline))) == "true":
+                closed.append(label)
+        return closed
+
     def _autoplay_status(self, deadline: float) -> AutoplayStatus:
-        return self._retry_idempotent(lambda: self._autoplay_status_once(deadline), deadline)
+        # Retry within 30 s only, so the autoplay loop can close an open diplomacy screen and ask again.
+        return self._retry_idempotent(lambda: self._autoplay_status_once(deadline),
+                                      min(deadline, time.monotonic() + 30))
 
     def _autoplay_status_once(self, deadline: float) -> AutoplayStatus:
         value = self._lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. "
@@ -649,8 +688,32 @@ class Runner:
             elimination_turn = None
             last_alive_turn = start_turn
             last_alive_check_turn = None
+            diplomacy_closes = 0
+            diplomacy_since_resume = False
+            status_failure = None
             while time.monotonic() < deadline:
-                status = self._autoplay_status(deadline)
+                closed = self._close_diplomacy(deadline)
+                if closed:
+                    diplomacy_closes += len(closed)
+                    diplomacy_since_resume = True
+                    self._log("autoplay_diplomacy", "OK", f"closed {', '.join(closed)} "
+                              f"(turn {status.turn if status else start_turn}, total {diplomacy_closes})")
+                    # ponytail: fixed cap per step; a view that keeps reopening means something else is wrong.
+                    if diplomacy_closes > 20 + 5 * turns:
+                        raise ScenarioError(f"Closed {diplomacy_closes} AI diplomacy screens in one autoplay step; "
+                                            "the game keeps reopening them")
+                elif status_failure is not None:
+                    raise status_failure
+                status_failure = None
+                try:
+                    status = self._autoplay_status(deadline)
+                except LuaExecutionError:
+                    raise
+                except (TunerError, OSError) as exc:
+                    # The read-only query may be starved by an open diplomacy screen: close it at the top
+                    # of the loop and ask again. If nothing was open, the failure stops the step as before.
+                    status_failure = exc
+                    continue
                 if recorder and status.turn != recorder.turn:
                     process = single_civ_process()
                     if process is None or process[0] != metrics_pid:
@@ -702,7 +765,7 @@ class Runner:
                         chosen = self._choose_dedication(human, deadline) if dedications < 3 else None
                         if chosen:
                             dedications += 1
-                        elif restarts >= 2:
+                        elif restarts >= 2 and not diplomacy_since_resume:
                             raise ScenarioError(f"Autoplay stopped early at turn {status.turn}/{target}: {status}")
                         remaining = target - status.turn
                         self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
@@ -711,8 +774,12 @@ class Runner:
                                   "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
                                   "AutoplayManager.SetActive(true)\nreturn true",
                                   min(5, _remaining(deadline)))
-                        if not chosen:
+                        if not chosen and not diplomacy_since_resume:
                             restarts += 1
+                        elif diplomacy_since_resume:
+                            self._log("autoplay_diplomacy", "OK",
+                                      f"resumed autoplay for {remaining} turns after closing diplomacy")
+                        diplomacy_since_resume = False
                         inactive_since = None
                 else:
                     inactive_since = None
@@ -845,6 +912,17 @@ class Runner:
         self._wait_frontend_ready(_remaining(deadline), skip_opening=True)
         return "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
 
+    def _check_start_turn(self, deadline: float) -> None:
+        """Banseiki must start at turn 1; without the Create Game setup the calendar override is lost."""
+        if self.ruleset != BANSEIKI_RULESET:
+            return
+        value = self._lua("InGame", "return tostring(GameConfiguration.GetStartTurn())",
+                          min(5, _remaining(deadline)))
+        if str(value).strip().strip('"') != "1":
+            raise ScenarioError(
+                f"{BANSEIKI_RULESET} start turn is {value}, expected 1: the calendar override was not applied "
+                "(configure without build_setup?)")
+
     def _run_step(self, step: dict) -> str:
         action = step["action"]
         if action == "manual":
@@ -861,11 +939,13 @@ class Runner:
             return "enabled/verified " + ", ".join(step["ids"])
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
-            if step.get("build_setup", False):
+            self.ruleset = step["ruleset"]
+            build = _builds_setup(step)
+            if build:
                 self._lua("HostGame", _build_setup_code(step["players"]), min(30, _remaining(deadline)))
             return (f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, "
                     f"players={len(step['players'])}"
-                    + ("; Create Game setup built and checked" if step.get("build_setup", False) else ""))
+                    + ("; Create Game setup built and checked" if build else ""))
         if action == "start_game" and self.owner_start:
             # The owner presses Start Game; the configured setup is shown, not reset (MainMenu's
             # OnAdvancedSetup would call SetToDefaults, so the popup is queued directly).
@@ -876,6 +956,7 @@ class Runner:
             print("OWNER ACTION: press Start Game on the Create Game screen", flush=True)
             wait = max(timeout, 3600.0)
             self._enter_game_after_loadscreen(before, wait, deadline=time.monotonic() + wait)
+            self._check_start_turn(deadline)
             return "owner pressed Start Game; single-player game reached InGame"
         if action == "start_game":
             before = self._loadscreen_count()
@@ -888,6 +969,7 @@ class Runner:
                 response_unknown = True
             self._enter_game_after_loadscreen(before, timeout, deadline=deadline,
                                               response_unknown=response_unknown)
+            self._check_start_turn(deadline)
             return "single-player game reached InGame"
         if action == "autoplay":
             return self._autoplay(step["turns"], timeout, deadline=deadline,
