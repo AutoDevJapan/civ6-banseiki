@@ -5,6 +5,7 @@ Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>,
           JAC_COOKER_DIR=<Civ6 SDK AssetModTools/Cooker directory>
 """
 import hashlib
+import math
 import os
 import shutil
 import struct
@@ -50,19 +51,22 @@ GROWTH_ORIGINALS = ART_LOCAL / "JAC_PoC_GrowthUI" / "Originals"
 PREVIEWS = BUILD / "previews"
 GROWTH_MOD = Path(os.environ.get("JAC_GROWTH_MOD", str(ROOT / "poc" / "JAC_PoC_GrowthUI"))).expanduser().resolve()
 
+# Keep this order aligned with Config/JAC_Japan1534_Players.xml's icon indices.
+LEADER_ORDER = (
+    "ODA_NOBUHIDE", "TAKEDA_NOBUTORA", "DATE_TANEMUNE", "ASHINA_MORIKIYO",
+    "HOJO_UJITSUNA", "YAMANOUCHI_UESUGI_NORIMASA", "NAGAO_TAMEKAGE",
+    "IMAGAWA_UJITERU", "MATSUDAIRA_KIYOYASU", "ASAKURA_TAKAKAGE",
+    "ASHIKAGA_YOSHIHARU", "MIYOSHI_NAGAYOSHI", "ROKKAKU_SADAYORI",
+    "HONGANJI_SHONYO", "OUCHI_YOSHITAKA", "AMAGO_TSUNEHISA",
+    "MORI_MOTONARI", "CHOSOKABE_KUNICHIKA", "OTOMO_YOSHIAKI",
+    "SHIMAZU_TAKAHISA", "RYUKYU_SHO_SEI", "AINU_TARIKONA",
+)
 LEADERS = {
-    "ODA_NOBUHIDE": {
-        "portrait": "oda_nobuhide_portrait.jpg",
-        "figure": "oda_nobuhide_figure.png",
-        "background": "oda_nobuhide_background.png",
-        "icon_crop": (235, 20, 815, 600),
-    },
-    "TAKEDA_NOBUTORA": {
-        "portrait": "takeda_nobutora_portrait.jpg",
-        "figure": "takeda_nobutora_figure.png",
-        "background": "takeda_nobutora_background.png",
-        "icon_crop": (230, 25, 810, 605),
-    },
+    key: {
+        kind: f"{key.lower()}/{key.lower()}_{kind}_codex.png"
+        for kind in ("portrait", "figure", "background")
+    }
+    for key in LEADER_ORDER
 }
 ABILITY_SOURCES = (
     "oda_clan_ability_generated.png",
@@ -203,7 +207,8 @@ def background(key, size):
 
 def leader_icon_master(key):
     src = Image.open(ORIGINALS / LEADERS[key]["portrait"]).convert("RGB")
-    face = src.crop(LEADERS[key]["icon_crop"])
+    edge = min(src.size)
+    face = ImageOps.fit(src, (edge, edge), method=Image.Resampling.LANCZOS)
     size = 512
     im = face.resize((size, size), Image.Resampling.LANCZOS).convert("RGBA")
     big = Image.new("L", (size * 4, size * 4))
@@ -228,11 +233,13 @@ def symbol_icon_master(filename):
     return white
 
 
-def atlas(masters, size):
-    """Single-row atlas in source order."""
-    out = Image.new("RGBA", (size * len(masters), size), (0, 0, 0, 0))
+def atlas(masters, size, per_row=None):
+    """Atlas in source order, with optional row width for many leaders."""
+    per_row = per_row or len(masters)
+    out = Image.new("RGBA", (size * per_row, size * math.ceil(len(masters) / per_row)), (0, 0, 0, 0))
     for i, m in enumerate(masters):
-        out.alpha_composite(m.resize((size, size), Image.Resampling.LANCZOS), (i * size, 0))
+        out.alpha_composite(m.resize((size, size), Image.Resampling.LANCZOS),
+                            ((i % per_row) * size, (i // per_row) * size))
     return out
 
 
@@ -316,6 +323,19 @@ def contact_sheet(include_growth):
     sheet.save(PREVIEWS / "contact-sheet.png")
     print(f"OK {PREVIEWS / 'contact-sheet.png'}: {len(pngs)} final images")
 
+    # Keep a readable face sheet: the 8x3 atlas is too small in the full sheet.
+    face_sheet = Image.new("RGB", (4 * 260, math.ceil(len(LEADER_ORDER) / 4) * 290), (34, 39, 48))
+    face_draw = ImageDraw.Draw(face_sheet)
+    for index, key in enumerate(LEADER_ORDER):
+        x, y = (index % 4) * 260, (index // 4) * 290
+        face = leader_icon_master(key).resize((220, 220), Image.Resampling.LANCZOS)
+        tile = Image.new("RGBA", (220, 220), (115, 123, 133, 255))
+        tile.alpha_composite(face)
+        face_sheet.paste(tile.convert("RGB"), (x + 20, y + 18))
+        face_draw.text((x + 12, y + 248), key, fill="white")
+    face_sheet.save(PREVIEWS / "portrait-sheet.png")
+    print(f"OK {PREVIEWS / 'portrait-sheet.png'}: {len(LEADER_ORDER)} faces")
+
 
 def cook(package, stewpot):
     cmd = [str(COOKER_DIR / "Civ6AssetCooker_FinalRelease.exe"), "--no_mt", "--mode", "XLP", "--platform", "Windows",
@@ -364,11 +384,11 @@ def main():
     (BUILD / "XLPs").mkdir(exist_ok=True)
     PREVIEWS.mkdir(parents=True, exist_ok=True)
 
-    order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
+    order = LEADER_ORDER
     leader_masters = [leader_icon_master(k) for k in order]
     civ_masters = [symbol_icon_master(name) for name in ("oda_mokko_generated.png", "takeda_bishi_generated.png")]
     ability_masters = [symbol_icon_master(name) for name in ABILITY_SOURCES]
-    icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s)) for s in LEADER_ICON_SIZES]
+    icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s, 8)) for s in LEADER_ICON_SIZES]
     for s in CIV_ICON_SIZES:
         icons.append(texture(f"JAC_Civs{s}", atlas(civ_masters, s)))
     for s in ABILITY_ICON_SIZES:

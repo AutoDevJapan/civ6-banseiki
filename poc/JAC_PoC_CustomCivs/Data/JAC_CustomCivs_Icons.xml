@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameInfo>
-	<!-- BLP は tools/jac_art/build_art.py でローカル素材から作る。0番=織田、1番=武田。文明アイコンは全サイズ白＋透明。 -->
+	<!-- 指導者アイコンは8列×3行。0番=織田、1番=武田、2〜21番=JAC_Japan1534_Icons.xml。 -->
 	<IconTextureAtlases>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders32.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="45" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders45.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="48" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders48.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="50" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders50.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="55" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders55.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="64" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders64.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="80" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders80.dds"/>
-		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="256" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Leaders256.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="32" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders32.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="45" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders45.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="48" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders48.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="50" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders50.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="55" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders55.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="64" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders64.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="80" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders80.dds"/>
+		<Row Name="ICON_ATLAS_JAC_LEADERS" IconSize="256" IconsPerRow="8" IconsPerColumn="3" Filename="JAC_Leaders256.dds"/>
 		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="22" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs22.dds"/>
 		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="30" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs30.dds"/>
 		<Row Name="ICON_ATLAS_JAC_CIVILIZATIONS" IconSize="32" IconsPerRow="2" IconsPerColumn="1" Filename="JAC_Civs32.dds"/>

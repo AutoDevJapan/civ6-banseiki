@@ -107,7 +107,15 @@ class JudgeTests(unittest.TestCase):
         self.assertTrue(all(c.passed for c in judge(logs, "generic")))
         logs["Lua.log"] += 'DiplomacyRibbon: Could not find icon in CivilizationIcon.UpdateIcon: icon="ICON_CIVILIZATION_JAC_AINU", iconSize=22\n'
         failed = {c.name for c in judge(logs, "generic") if not c.passed}
-        self.assertEqual(failed, {"Generic: JAC missing textures"})
+        self.assertEqual(failed, {"Generic: JAC missing texture"})
+    def test_missing_jac_texture_fails(self):
+        logs = self.sample()
+        logs["Lua.log"] += "LoadScreen: Failed to load background image texture: LEADER_JAC_MORI_MOTONARI_BACKGROUND\n"
+        logs["Lua.log"] += "LoadScreen: We are lacking a texture for LEADER_JAC_MORI_MOTONARI_NEUTRAL\n"
+        logs["Lua.log"] += "LoadScreen: We are lacking a texture for LEADER_HOJO_NEUTRAL\n"
+        checks = {c.name: c for c in judge(logs, "generic")}
+        self.assertFalse(checks["Generic: JAC missing texture"].passed)
+        self.assertEqual(checks["Generic: JAC missing texture"].detail, "2 matching lines")
 
     def test_error_none_is_not_a_failure(self):
         logs = self.sample()
@@ -210,6 +218,7 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(names, {
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
+            "leader-portraits.json",
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
             "unification-victory.json", "unification-registry-15km.json",
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",
