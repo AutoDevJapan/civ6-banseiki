@@ -100,11 +100,11 @@ python tools/jac_art/build_art.py
 
 1. 共通の準備に従い `poc/JAC_PoC_GrowthUI` を `Mods/JAC_PoC_GrowthUI` へジャンクションで配置する。この検証中は `JAC_PoC_Bundle0` を無効にし、本MODを有効にする
 2. Gathering Storm のシングルプレイを新規開始し、右上のバーで List of Reports のすぐ左のボタン（ツールチップ「手帳」）を押す。アイコンが欠けていないか、左上の「歴史年表」（History Timeline）ボタンと見分けられるかも見る
-3. 「人物帳」を押し、3言語の固定行と各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
+3. 「人物帳」を押し、各武将の全項目を確認する。ESC による閉鎖は要実機確認（自動操作では ESC がゲームメニューを開くため判定できない）
 4. 手帳をもう一度開き、開いたまま List of Reports を押す
 5. 4ターン進めてセーブし、メインメニューへ戻って同じセーブをロードする
 6. 手帳 → 人物帳を再度開き、セーブ前と同じ内容か確認してから1ターン進める
-7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言と固定3行を確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
+7. ゲームの表示言語を日本語・英語・ロシア語に順に切り替え、必要なら再起動して同じセーブを開き、各言語の文言がその言語だけで出ることを確認する。ロシア語では手帳の項目名がボタンからはみ出していないかも見る
 
 
 成功条件：
@@ -119,7 +119,7 @@ python tools/jac_art/build_art.py
 | 新規ゲームの `Lua.log` | `[JAC_POC] no saved state (new game)`、`[JAC_POC] assigned unit=...` が開始ユニット数に応じて1～3件、`[JAC_POC] initialized count=...` が出る。装備・Artifactの値も記録される |
 | 成長の `Lua.log` | `[JAC_POC] unit=<id> level=... xp=... personality=... trait=... equipment=... artifact=... player=... turn=...` がターンごとに出る。同じユニットで1ターンあたり20 XPを得る。Lv1の必要XPは30で、累計40 XPの時点ではLv2・残り10 XPとなる |
 | ロード後の `Lua.log` | `[JAC_POC] restored unit=...` の全項目がセーブ直前の記録と一致し、`restored count=...` と再表示時の `character journal shown count=` も一致する。ロード直後に `assigned unit=` は増えず、次ターンだけ経験値が増える |
-| 3言語 | 人物帳の表示が直近のログの記録と一致し、日本語・キリル文字・英語の固定3行に文字化けや欠落がない。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
+| 3言語 | 人物帳の表示が直近のログの記録と一致し、表示言語の文言だけが文字化けや欠落なく出る（他言語の訳を並べない。SSOT 14.2）。各表示言語でボタン・見出し・項目名・性格・特性名が切り替わる。項目名がボタン幅を超えると末尾が「…」で切られ、`[JAC_POC] notebooks label truncated key=...` が出る（出たらメニューとボタンの幅を広げるか、未実装の表記を短くする） |
 
 結果：**主要項目は成功**（2026-09-29、Steam 版 1.0.12.68、Gathering Storm、英語表示）。証跡は兄弟 worktree の `../civ6-autotest/tools/civ6-autotest/artifacts/run-11-growth-ui/`。自動シナリオ41手順とログ判定13/13が成功した。
 
@@ -133,7 +133,7 @@ python tools/jac_art/build_art.py
 | 新規ゲーム | `no saved state`、開始2ユニットへ `assigned`、`initialized count=2`。1体目の装備2件・Artifact、2体目の装備1件を確認 |
 | 成長 | 両ユニットともターン1～5に毎回20 XP。ターン2で Lv2・残り10 XP（Lv1必要量30）、保存時は Lv2・70 XP |
 | 保存・ロード | `restored count=2`。両ユニットの全記録と人物帳の表示が保存前の Lv2・70 XP に一致。追加の `assigned` はなく、次のターン6で Lv3・5 XP |
-| 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認 |
+| 3言語 | 英語表示では英語の項目名と日露英の固定3行を確認。日本語・ロシア語表示への切り替えは未確認。固定3行は、訳を並べて表示しない方針（SSOT 14.2）により 2026-09-29 に削除した |
 
 
 このブランチの追加自動実行は `tools/civ6-autotest/scenarios/growth-notebooks.json` を使い、`tools/civ6-autotest/artifacts/growth-run-13/` に保存した（41/41 ステップ、ログ判定 13/13 件）。詳細な確認結果は本節の表を参照。
