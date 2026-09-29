@@ -404,6 +404,8 @@ MOD の内容：
 
 ### 画像
 
+> **差し替え前の記録。** 以下は織田・武田の2人だけが自前の画像で、残る20人が織田の画像を共用していた時点の記録である。現行の22人の画像参照・出典・検証は [1534年日本22勢力の指導者肖像](leader-portraits.md) を参照する。
+
 [リポジトリルール](../repository-rules.md)の「画像」に従い、2人の指導者と2つの文明に新規生成した画像を割り当てた。2人の指導者は既存 Civ6 指導者画を画風だけの参照とし、同じ質感・照明の 3D 絵画調に揃えた。公式画像の人物や画素は MOD に含めない。
 
 | 画像 | テクスチャ名 | 使われる場所 |
@@ -548,7 +550,7 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 
 各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AI・勝利設定への処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。戦国ツリーPoCが有効なBanseikiでは、専用の空の勝利ドメイン、公式勝利7種の設定値とゲーム側の既定値の無効化、`TURNLIMIT_NONE` と最大ターン0で統一前の公式勝利を防ぐ。ターン上限は Banseiki 本体の `GAME_TURN_LIMIT` の設定更新を上書きする（`ConfigurationUpdates` には一意キーがなく、行を足すと `TURNLIMIT_GAMESPEED` と競合する）。登録済み全城（琉球王国・アイヌを含む）の支配による天下統一勝利は `VICTORY_JAC_SENGOKU_UNIFICATION` として実装した（[天下統一 PoC](unification-victory.md)）。2026-09-30 の実機で、検証地図の破却・再建・移管を経て織田の天下統一が成立すること（unify-15）と、15 km 地図が登録城56で始まること（unify-16）を確認した。開拓者開始・通常地図の本拠の条件、チーム・同盟での合算、マルチプレイは未確認。約200ターンの年表示は未実装。
 
-設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、最初の技術と制度の進捗を検査する。
+設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、開始時に与える技術4・社会制度3を持つこと、その次に研究できる技術と制度の進捗を検査する（開始時の知識を与える前は最初のノードを研究させていたが、与えた後は研究済みで経路が得られず失敗していた。実機 sengoku-cascade-deletes-03）。
 
 **2026-09-29 の提示された実機結果：** `RULESET_JAC_BANSEIKI` と日本マップでゲームがロードし、戦国技術32件・社会制度30件、公式技術・制度行0件、Gathering Stormの仕組みの存在を確認。50ターンの自動進行とセーブ／ロードが成功した。今回の公式勝利無効化を加える前の結果である。
 

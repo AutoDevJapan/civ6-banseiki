@@ -102,6 +102,18 @@
     <UpdateDatabase id="JAC_Japan_15km_Settlers_Rules" criteria="JAC_Japan_15km_Settlers">
       <File>Data/JAC_Japan_MapRules.xml</File>
     </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_20km_Historical_Feuds" criteria="JAC_Japan_20km_Historical">
+      <File>Data/JAC_Japan_Feuds.xml</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_Japan_20km_Historical_1534Relations" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_Japan_1534Relations.lua</File>
+    </AddGameplayScripts>
+    <UpdateDatabase id="JAC_Japan_15km_Historical_Feuds" criteria="JAC_Japan_15km_Historical">
+      <File>Data/JAC_Japan_Feuds.xml</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_Japan_15km_Historical_1534Relations" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_Japan_1534Relations.lua</File>
+    </AddGameplayScripts>
     <AddGameplayScripts id="JAC_Japan_20km_StartState" criteria="JAC_Japan_20km_Historical">
       <File>Scripts/JAC_Japan_StartState.lua</File>
     </AddGameplayScripts>
@@ -144,6 +156,8 @@
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>
     <File>Data/JAC_Japan_MapRules.xml</File>
+    <File>Data/JAC_Japan_Feuds.xml</File>
+    <File>Scripts/JAC_Japan_1534Relations.lua</File>
     <File>Data/JAC_Japan_Resources.xml</File>
     <File>Data/JAC_Japan_Resources_Icons.xml</File>
     <File>Text/JAC_Japan_Resources_Text.xml</File>

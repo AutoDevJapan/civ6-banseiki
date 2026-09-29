@@ -11,4 +11,7 @@ UPDATE Resource_Harvests SET PrereqTech='TECH_JAC_SENGOKU_ORE_PROSPECTING'
 WHERE ResourceType IN ('RESOURCE_COPPER','RESOURCE_STONE');
 UPDATE Resource_Harvests SET PrereqTech='TECH_JAC_SENGOKU_COASTAL_PILOTAGE'
 WHERE ResourceType IN ('RESOURCE_FISH','RESOURCE_CRABS');
--- Cattle, deer and sheep (animal husbandry) do not exist on the Japan maps; they keep no tech gate.
+-- Cattle, deer and sheep (official animal husbandry) are not placed on the Japan maps, but the ruleset also
+-- runs on normal maps. Provisional: T05 roads and packtrains, the only node that handles animals.
+UPDATE Resource_Harvests SET PrereqTech='TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS'
+WHERE ResourceType IN ('RESOURCE_CATTLE','RESOURCE_DEER','RESOURCE_SHEEP');
