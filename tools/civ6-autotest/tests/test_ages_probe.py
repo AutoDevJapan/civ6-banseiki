@@ -41,6 +41,14 @@ class AgesProbeTests(unittest.TestCase):
         self.assertIn("error('wrong ruleset", guard)
         self.assertIn("error('alive majors", guard)
 
+    def test_api_listing_separates_not_enumerable_from_absent(self):
+        # An engine object whose methods cannot be walked lists nothing; that must not read as "API absent" (§11 L2).
+        listing = next(step["code"] for step in self.steps
+                       if step["action"] == "ui_lua" and "local function list(label, obj)" in step["code"])
+        self.assertIn("NOT_ENUMERABLE (0 keys)", listing)
+        self.assertIn("NOT_ENUMERABLE ERR:", listing)
+        self.assertIn("'enumerated ' .. total", listing)
+
     def test_moments_cover_all_players(self):
         self.assertEqual(self.steps[-1]["action"], "ui_lua")
         self.assertIn("for pid = 0, 21 do", self.steps[-1]["code"])
