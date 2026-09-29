@@ -1,4 +1,4 @@
-"""Run a JSON Civ VI PoC scenario against an already-open single-player game."""
+"""Run a JSON Civ VI PoC scenario, restarting Civ VI when its mods changed."""
 
 from __future__ import annotations
 
@@ -13,13 +13,17 @@ import re
 import time
 
 from capture import CaptureError, capture_civ_window
-from click import InputError, VK_ESCAPE, press_key, require_single_civ_process
+from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ_window_close,
+                   require_single_civ_process)
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
+from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, newest_mod_file,
+                     restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
+                     wait_for_exit)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
 
-ACTIONS = {"enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
+ACTIONS = {"restart_game", "enable_mods", "configure", "start_game", "autoplay", "end_turn", "ui_lua",
            "screenshot", "save", "exit_to_menu", "load", "wait_for", "pause", "manual"}
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 MOD_ID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
@@ -87,7 +91,10 @@ def validate_scenario(data: dict) -> None:
         if not isinstance(step, dict) or step.get("action") not in ACTIONS:
             raise ScenarioError(f"Step {number}: unknown action")
         action = step["action"]
-        if action == "enable_mods":
+        if action == "restart_game":
+            if set(step) - {"action", "timeout"}:
+                raise ScenarioError(f"Step {number}: restart_game only accepts timeout")
+        elif action == "enable_mods":
             if not isinstance(step.get("ids"), list) or not step["ids"] or any(
                 not isinstance(item, str) or not MOD_ID.fullmatch(item) for item in step["ids"]
             ):
@@ -227,12 +234,15 @@ def _configure_code(step: dict) -> str:
 
 
 class Runner:
-    def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int):
+    def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int,
+                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR):
         self.scenario = scenario
         self.output = output
         self.logs = logs
         self.saves = saves
         self.port = port
+        self.auto_restart = auto_restart
+        self.mods_dir = mods_dir
         self.client: TunerClient | None = None
         self.baseline: dict | None = None
         self.log_step_baseline: dict | None = None
@@ -342,6 +352,56 @@ class Runner:
                 last = str(exc)
             time.sleep(min(0.5, max(0.0, end - time.monotonic())))
         raise ScenarioError(f"Timed out after {timeout}s waiting for {condition}; last: {last}")
+
+    def _wait_frontend_ready(self, timeout: float, *, skip_opening: bool = False) -> None:
+        """Retry only this read-only startup probe after a lost Tuner reply."""
+        deadline = time.monotonic() + timeout
+        next_click = time.monotonic() + 12
+        last = "FrontEnd not ready"
+        while time.monotonic() < deadline:
+            if skip_opening and time.monotonic() >= next_click:
+                click_fraction(0.5, 0.15)
+                next_click = time.monotonic() + 12
+            try:
+                value = self._lua("FrontEnd", "return UI.IsInFrontEnd()",
+                                  min(5, _remaining(deadline)))
+                if value == "true":
+                    return
+                last = f"FrontEnd returned {value!r}"
+            except LuaExecutionError:
+                raise
+            except (TunerError, OSError) as exc:
+                last = str(exc)
+                self._disconnect()
+            time.sleep(min(0.5, max(0, deadline - time.monotonic())))
+        raise ScenarioError(f"FrontEnd did not answer after {timeout}s; last: {last}")
+
+    def _launch_steam_and_wait(self, deadline: float) -> None:
+        """Steam can reject a launch while it is still releasing the prior game."""
+        attempts = 0
+        next_launch = 0.0
+        last = "no Civ VI process yet"
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            try:
+                process_present = single_civ_process() is not None
+            except InputError as exc:
+                if not str(exc).startswith("Multiple Civ VI processes found"):
+                    raise
+                process_present = True  # Never launch another copy during an overlap.
+            if not process_present and now >= next_launch:
+                if attempts >= 4:
+                    raise ScenarioError(f"Steam did not start Civ VI after {attempts} attempts; last: {last}")
+                launch_via_steam()
+                attempts += 1
+                next_launch = now + 45
+                print(f"Steam Civ VI launch attempt {attempts}", flush=True)
+            try:
+                wait_for_civ_window(min(deadline, time.monotonic() + 5))
+                return
+            except InputError as exc:
+                last = str(exc)
+        raise ScenarioError(f"Civ VI window did not appear after Steam launch; last: {last}")
 
     LOADSCREEN_READY = "LoadScreen: OnLoadGameViewStateDone"
 
@@ -526,14 +586,62 @@ class Runner:
         _remaining(deadline)
         return f"human turn {start}->{start + 1}"
 
+    def _restart_game(self, timeout: float) -> str:
+        deadline = time.monotonic() + timeout
+        old = single_civ_process()
+        if old is not None:
+            pid, started = old
+            graceful = False
+            try:
+                states = self._states(min(5, _remaining(deadline)))
+                state = next((name for name in states if name.casefold() == "frontend"), None)
+                if state is None:
+                    state = next((name for name in states if name.casefold() == "ingame"), None)
+                if state is not None:
+                    try:
+                        self._lua(state, "Events.UserConfirmedClose()\nreturn true",
+                                  min(5, _remaining(deadline)))
+                    except LuaResponseUnknown:
+                        # The quit event may have run; observe the process, never resend it.
+                        pass
+                    graceful = True
+            except (TunerError, InputError, OSError, ValueError) as exc:
+                print(f"FireTuner quit unavailable: {exc}", flush=True)
+            finally:
+                self._disconnect()
+            if not graceful and single_civ_process() == old:
+                try:
+                    request_civ_window_close()
+                except InputError as exc:
+                    print(f"Civ VI window quit unavailable: {exc}", flush=True)
+            if not wait_for_exit(pid, min(deadline, time.monotonic() + 15)):
+                terminate_civ_process(pid, started)
+                if not wait_for_exit(pid, min(deadline, time.monotonic() + 10)):
+                    raise ScenarioError(f"Civ VI process {pid} did not exit after termination")
+        _remaining(deadline)
+        if old is not None:
+            # Steam may still hold the previous game session after the EXE disappears.
+            time.sleep(min(8, _remaining(deadline)))
+        if single_civ_process() is not None:
+            raise ScenarioError("A Civ VI process appeared before Steam relaunch")
+        self._launch_steam_and_wait(deadline)
+        # Let the opening movie start before sending its skip click. Keep clear of the menu buttons.
+        time.sleep(min(8, _remaining(deadline)))
+        click_fraction(0.5, 0.15)
+        self._disconnect()
+        self._wait_frontend_ready(_remaining(deadline), skip_opening=True)
+        return "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
+
     def _run_step(self, step: dict) -> str:
         action = step["action"]
         if action == "manual":
             print("MANUAL / Computer Use (no timeout; waits until Enter): " + step["prompt"], flush=True)
             input("Press Enter after the action is complete: ")
             return step["prompt"]
-        timeout = float(step.get("timeout", 120))
+        timeout = float(step.get("timeout", 360 if action == "restart_game" else 120))
         deadline = time.monotonic() + timeout
+        if action == "restart_game":
+            return self._restart_game(_remaining(deadline))
         if action == "enable_mods":
             self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")),
                       min(5, _remaining(deadline)))
@@ -642,12 +750,32 @@ class Runner:
 
     def run(self) -> int:
         self.output.mkdir(parents=True, exist_ok=False)
-        self.baseline = snapshot_logs(self.logs)
-        (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
         self._log("start", "OK", self.scenario["name"])
         try:
-            require_single_civ_process()
-            self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"}, 10)
+            front_end_ready = False
+            if self.auto_restart:
+                folders = enabled_mod_folders(self.scenario, self.mods_dir)
+                newest = newest_mod_file(folders)
+                process = single_civ_process()
+                reason = restart_reason(newest, process[1] if process else None)
+                if reason is not None:
+                    self._log("auto_restart", "START", reason)
+                    detail = self._restart_game(360)
+                    latest = newest_mod_file(enabled_mod_folders(self.scenario, self.mods_dir))
+                    relaunched = single_civ_process()
+                    still_stale = restart_reason(latest, relaunched[1] if relaunched else None)
+                    if still_stale is not None:
+                        raise ScenarioError(f"Civ VI is still stale after restart: {still_stale}")
+                    self._log("auto_restart", "OK", detail)
+                    front_end_ready = True
+                else:
+                    self._log("auto_restart", "SKIP", "Civ VI process is newer than all scenario mod files")
+            self.baseline = snapshot_logs(self.logs)
+            (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
+            if self.scenario["steps"][0]["action"] != "restart_game":
+                require_single_civ_process()
+                if not front_end_ready:
+                    self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"}, 10)
             for index, step in enumerate(self.scenario["steps"], 1):
                 action = f"{index}/{len(self.scenario['steps'])} {step['action']}"
                 self._log(action, "START", json.dumps(step, ensure_ascii=False))
@@ -656,6 +784,12 @@ class Runner:
                         self.log_step_baseline = snapshot_logs(self.logs)
                         self.log_matches_consumed.clear()
                     detail = self._run_step(step)
+                    if step["action"] == "restart_game":
+                        self.baseline = snapshot_logs(self.logs)
+                        (self.output / "baseline.json").write_text(
+                            json.dumps(self.baseline, indent=2), encoding="utf-8")
+                        self.log_step_baseline = None
+                        self.log_matches_consumed.clear()
                 except (ScenarioError, TunerError, CaptureError, InputError, OSError, EOFError, ValueError) as exc:
                     self._log(action, "FAIL", str(exc))
                     return 1
@@ -682,13 +816,15 @@ class Runner:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a Civ VI PoC scenario; never starts Civ VI itself")
+    parser = argparse.ArgumentParser(description="Run a Civ VI PoC scenario with automatic mod freshness checks")
     parser.add_argument("scenario", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate JSON only; do not connect to the game")
     parser.add_argument("--output", type=Path, help="New directory for baseline, trace and screenshots")
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--saves", type=Path)
     parser.add_argument("--port", type=int, default=4318)
+    parser.add_argument("--mods", type=Path, default=DEFAULT_MODS_DIR, help="Installed Civ VI Mods directory")
+    parser.add_argument("--no-auto-restart", action="store_true", help="Skip startup freshness check (debugging only)")
     args = parser.parse_args()
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
@@ -699,7 +835,8 @@ def main() -> int:
         output = args.output or (Path(__file__).resolve().parent / "artifacts" /
                                  (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + args.scenario.stem))
         saves = args.saves or (Path.home() / "Documents" / "My Games" / "Sid Meier's Civilization VI" / "Saves" / "Single")
-        return Runner(data, output, args.logs or default_log_dir(), saves, args.port).run()
+        return Runner(data, output, args.logs or default_log_dir(), saves, args.port,
+                      auto_restart=not args.no_auto_restart, mods_dir=args.mods).run()
     except (OSError, json.JSONDecodeError, ScenarioError, ValueError) as exc:
         parser.exit(2, f"Scenario error: {exc}\n")
 

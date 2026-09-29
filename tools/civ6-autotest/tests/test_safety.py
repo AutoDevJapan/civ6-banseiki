@@ -194,7 +194,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             output = base / "missing" / "nested" / "run"
             runner = Runner({"name": "empty logs", "judge_profile": "generic", "steps": [
                 {"action": "wait_for", "condition": {"type": "state", "name": "FrontEnd"}}
-            ]}, output, logs, base, 4318)
+            ]}, output, logs, base, 4318, auto_restart=False)
             with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"):
                 self.assertEqual(runner.run(), 0)
                 with self.assertRaises(FileExistsError):
@@ -209,7 +209,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "one game", "steps": [{"action": "pause", "seconds": 0.1}]},
-                            base / "output", logs, base, 4318)
+                            base / "output", logs, base, 4318, auto_restart=False)
             with redirect_stdout(StringIO()), patch(
                 "scenario.require_single_civ_process", side_effect=civ_click.InputError("Multiple Civ VI processes")
             ), patch.object(runner, "_wait") as wait:
@@ -227,7 +227,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "one game", "steps": [{"action": "pause", "seconds": 0.1}]},
-                            base / "output", logs, base, 4318)
+                            base / "output", logs, base, 4318, auto_restart=False)
             with redirect_stdout(StringIO()), patch.object(civ_click, "_civ_process_ids", return_value=set()), patch.object(
                 runner, "_wait"
             ) as wait:
@@ -270,7 +270,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             except (OSError, NotImplementedError) as exc:
                 self.skipTest(f"directory symlinks unavailable: {exc}")
             runner = Runner({}, output, base, base, 4318)
-            with patch.object(runner, "_close_options_menu"), patch.object(
+            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.capture_civ_window") as capture:
                 with self.assertRaisesRegex(ScenarioError, "escapes output"):
@@ -288,7 +288,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 self.assertAlmostEqual(deadline, 10.01)
                 clock[0] = deadline + 0.01
 
-            with patch.object(runner, "_close_options_menu"), patch.object(
+            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.capture_civ_window", side_effect=slow_capture) as capture, patch(
                 "scenario.time.monotonic", side_effect=lambda: clock[0]
@@ -340,7 +340,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         client = Mock()
         client.list_states.return_value = ["InGame"]
         client.run_lua.return_value = LuaResult("true", "")
-        with patch.object(runner, "_connect", return_value=client):
+        with patch("scenario.require_single_civ_process"), patch.object(runner, "_connect", return_value=client):
             runner._wait({"type": "state", "name": "InGame"}, 0.1)
             runner._wait({"type": "lua", "state_name": "InGame", "code": "return true"}, 0.1)
         self.assertEqual(client.list_states.call_count, 2)
@@ -387,7 +387,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             for step in steps:
                 with self.subTest(action=step["action"]):
                     runner = Runner({"name": "framing", "steps": [step]}, base / step["action"],
-                                    logs, base, 4318)
+                                    logs, base, 4318, auto_restart=False)
                     original_wait = runner._wait
 
                     def wait_after_start(condition, timeout):
@@ -418,7 +418,8 @@ class ScenarioSafetyTests(unittest.TestCase):
                     step = {"action": action}
                     if action == "load":
                         step["name"] = "existing"
-                    runner = Runner({"name": action, "steps": [step]}, base / action, logs, base, 4318)
+                    runner = Runner({"name": action, "steps": [step]}, base / action, logs, base, 4318,
+                                    auto_restart=False)
                     with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
                         runner, "_loadscreen_count", return_value=0
                     ), patch.object(runner, "_lua", side_effect=TunerError("pre-send connection failed")) as run_lua, patch.object(
@@ -531,7 +532,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 trigger, {"action": "wait_for", "condition": condition, "timeout": 0.02},
                 trigger, {"action": "wait_for", "condition": condition, "timeout": 0.02},
             ]}
-            runner = Runner(scenario, base / "output", logs, base, 4318)
+            runner = Runner(scenario, base / "output", logs, base, 4318, auto_restart=False)
             original_wait = runner._wait
             original_run_step = runner._run_step
             emitted = False
@@ -792,7 +793,7 @@ class InputSafetyTests(unittest.TestCase):
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "input failure", "steps": [{"action": "start_game"}]},
-                            base / "output", logs, base, 4318)
+                            base / "output", logs, base, 4318, auto_restart=False)
             with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
                 runner, "_run_step", side_effect=civ_click.InputError("foreground lost")
             ):

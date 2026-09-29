@@ -18,6 +18,7 @@ KEYEVENTF_KEYUP = 0x0002
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
+WM_CLOSE = 0x0010
 INPUT_KEYBOARD = 1
 # Confirm this mode on Civ VI's loading screen before changing it.
 KEY_DELIVERY = "window"
@@ -211,6 +212,13 @@ def click_fraction(fx: float, fy: float) -> tuple[int, int]:
     finally:
         user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
     return x, y
+
+
+def request_civ_window_close() -> None:
+    """Ask the verified game window to close through the normal UI path."""
+    hwnd = find_civ_window()
+    if find_civ_window() != hwnd or not user32.PostMessageW(hwnd, WM_CLOSE, 0, 0):
+        raise InputError("Could not request Civ VI window close")
 
 
 def press_key(vk: int, *, deadline: float | None = None) -> None:
