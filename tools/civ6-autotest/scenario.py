@@ -381,7 +381,10 @@ class Runner:
         last = "FrontEnd not ready"
         while time.monotonic() < deadline:
             if skip_opening and time.monotonic() >= next_click:
-                click_fraction(0.5, 0.15)
+                try:
+                    click_fraction(0.5, 0.15)
+                except InputError:
+                    skip_opening = False  # focus refused: let the opening play to the end
                 next_click = time.monotonic() + 12
             try:
                 value = self._lua("FrontEnd", "return UI.IsInFrontEnd()",
@@ -448,9 +451,20 @@ class Runner:
                     time.sleep(min(0.5, max(0, end - time.monotonic())))
                     continue
                 _remaining(end)
-                press_key(VK_ESCAPE, deadline=end)
+                # Press Begin Game through the load screen's own Lua handler when that state
+                # exists: it needs no foreground window, which Windows may refuse (live
+                # 2026-09-29). Errors after sending still stop the run (no replay).
+                try:
+                    states = self._states(min(5, _remaining(end)))
+                except (TunerError, OSError):
+                    states = []
+                if any(state.casefold() == "loadscreen" for state in states):
+                    self._lua("LoadScreen", "OnActivateButtonClicked()\nreturn true", min(5, _remaining(end)))
+                    last = "Begin Game pressed via LoadScreen Lua"
+                else:
+                    press_key(VK_ESCAPE, deadline=end)
+                    last = "Esc sent on loading screen"
                 begin_game_sent = True
-                last = "Esc sent on loading screen"
                 # The FrontEnd connection can keep its old state list across the transition.
                 self._disconnect()
             try:
@@ -674,7 +688,10 @@ class Runner:
             return "Civ VI relaunched via Steam; opening played to the end; FrontEnd answered"
         # Let the opening movie start before sending its skip click. Keep clear of the menu buttons.
         time.sleep(min(8, _remaining(deadline)))
-        click_fraction(0.5, 0.15)
+        try:
+            click_fraction(0.5, 0.15)
+        except InputError as exc:  # focus refused; the opening ends by itself
+            print(f"Opening skip click unavailable ({exc}); waiting for the opening", flush=True)
         self._disconnect()
         self._wait_frontend_ready(_remaining(deadline), skip_opening=True)
         return "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"

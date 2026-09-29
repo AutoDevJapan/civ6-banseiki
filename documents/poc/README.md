@@ -10,6 +10,7 @@ SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状�
 | MOD の配置 | `Documents\My Games\Sid Meier's Civilization VI\Mods\<MOD名>` から、リポジトリの `poc/<MOD名>` へジャンクションを張る |
 | ログ | `%LOCALAPPDATA%\Firaxis Games\Sid Meier's Civilization VI\Logs\` の `Database.log`・`Modding.log`・`Lua.log` |
 | FireTuner | `AppOptions.txt` の `EnableTuner` を `1` にする（元のファイルは `AppOptions.txt.bak-20260928`） |
+| イントロ動画 | 自動検証では `AppOptions.txt` の `PlayIntroVideo` を `0` にし、起動時のオープニングを流さない（2026-09-29 変更、元のファイルは `AppOptions.txt.bak-20260929`）。Windows が Civ6 を前面に出すのを拒むと、スキップのクリックが届かないため |
 
 ジャンクションの作り方（PowerShell）:
 
