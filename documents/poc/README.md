@@ -323,7 +323,7 @@ BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修�
 
 SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検証。`poc/JAC_PoC_BanseikiRuleset` を独立した PoC MOD にした。ルールセットとステージング設定を既存のゲームプレイ PoC から分けることで、FrontEnd の設定登録を常時適用し、各 PoC のゲーム内アクションをルールセット条件で評価できる。3つの既存 MOD は `RULESET_JAC_BANSEIKI` と比較用の `RULESET_EXPANSION_2` の両方で読み込む。GS を残す理由は、既存シナリオの回帰確認と両ルールセットの差分調査である。**この PoC は設定と候補フィルターの機構を検証するもの**で、SSOT 2.2 の段階制限（異宇宙に行けるまでマップ別の固定指導者プール・固定プレイヤー数）は未実装。現在の開始画面ではプール設定と人数変更が可能で、AI も全プールの対応済み指導者を候補にする。
 
-新ルールセットの `Rulesets` 行は `RULESET_JAC_BANSEIKI`、`GameCore=Expansion2`、`IsScenario=0`、`SupportsSinglePlayer=1`、`SupportsMultiPlayer=1`。マルチプレイの実動作は未検証。勝利条件のドメインとマップ候補は GS を使う。GS が `RULESET_EXPANSION_2` 専用に宣言する通常オプション、災害の強度（`Realism`）、自然遺産・都市国家除外、公式の指導者プール1・2、および開始時代・ターン制限の設定更新を、このルールセットにも宣言する。
+新ルールセットの `Rulesets` 行は `RULESET_JAC_BANSEIKI`、`GameCore=Expansion2`、`IsScenario=0`、`SupportsSinglePlayer=1`、`SupportsMultiPlayer=1`。マルチプレイの実動作は未検証。基本の勝利条件ドメインとマップ候補は GS を使う。戦国ツリーPoCを有効にしたときだけ、勝利条件を下記の専用ドメインへ切り替える。GS が `RULESET_EXPANSION_2` 専用に宣言する通常オプション、災害の強度（`Realism`）、自然遺産・都市国家除外、公式の指導者プール1・2、および開始時代・ターン制限の設定更新を、このルールセットにも宣言する。
 
 指導者候補には `Players:Expansion2_Players` を共用する。これは公式と JAC の候補を持つドメインで、`RULESET_JAC_BANSEIKI` の `PlayerLeader` に `RulesetDomainOverrides` で指定する。織田・武田の行は `JAC_PoC_CustomCivs/Config/JAC_CustomCivs_Players.xml` に一度だけ登録し、新 MOD は CustomCivs を依存 MOD とする。`JAC_BanseikiHumanPool` 設定の既定は `JAC_BANSEIKI_ONLY`、もう一方は `JAC_ALL_POOLS`。`DomainValueFilterQueries` と `QueryParameters` がルールセット・プレイヤー ID・設定値を読み、シングルプレイの人間枠 0 かつ既定値のときだけ候補を織田信秀・武田信虎との積集合にする。AI 枠と「全プール」指定の人間枠には、下記の非対応指導者を除く公式・JAC の候補を残す。この仕組みは FrontEnd の設定 DB だけで動き、ゲームプレイ Lua や UI 差し替えは不要。
 
@@ -354,3 +354,17 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 全自動（`restart_game` から）で31手順すべて成功、判定2/2合格。設定画面で万世紀を選べ、既定の人間候補は万世紀プールの2人、すべてのプールでは81人（世宗を除外して82→81）。ルールセット選択後に `NO_DUPLICATE_LEADERS`=true・`NO_DUPLICATE_CIVILIZATIONS`=false。ゴルゴーとペリクレスが同時にギリシャとして開始。気候・世界会議が存在し、気候パネルを開閉できた。3ターン進行、セーブ、メニューへの復帰、ロード（Bundle0 の状態 turnsSeen=4 と万世紀ルールセットを復元）、ロード後1ターンが成功。
 
 シナリオ側で直した点：ルールセットの ConfigurationUpdates は設定画面のパラメータを組み立てた後に反映されるため、重複ルールの確認は HostGame の `BuildHeadlessGameSetup` の後に行う。設定値は真偽値で返る。HostGame の設定確認の後は設定が既定に戻るため、開始直前に `configure` をもう一度行う。`wait_for` は直前の手順のログ位置を使うため、読み込み時のログ待ちは開始の直後に置く。
+
+## JAC_PoC_SengokuTrees：戦国の技術・社会制度ツリー
+
+`poc/JAC_PoC_SengokuTrees` は `RULESET_JAC_BANSEIKI` だけで適用する独立PoC。設計案の技術32件・制度30件を元ID・AND前提・費用・行位置のまま登録した。4期は既存 Era ID の表示名を戦国用に変え、GSの時代システムを残す。**黄金／暗黒時代の戦国向け再設計は未実装で、このPoCはSSOT 3.2に未達。** 時代スコア・誓約・忠誠効果の再設計は次段階で行う。公式研究行は、必要な公式アイテムを戦国ノードへ再配線してから削除する。公式アイテムは新規Unit・建物の代用品で、効果量は暫定。制度の列は標準CivicsTreeが再計算するため、設計表の列位置の再現は未確認。
+
+各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AI・勝利設定への処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。戦国ツリーPoCが有効なBanseikiでは、専用の空の勝利ドメイン、公式勝利7種の設定値とゲーム側の既定値の無効化、`TURNLIMIT_NONE` と最大ターン0で統一前の公式勝利を防ぐ。ターン上限は Banseiki 本体の `GAME_TURN_LIMIT` の設定更新を上書きする（`ConfigurationUpdates` には一意キーがなく、行を足すと `TURNLIMIT_GAMESPEED` と競合する）。**次の実装段階は登録済み全城（琉球王国・アイヌを含む）の支配による天下統一勝利**。現PoCにその判定・勝利画面はなく、約200ターンの年表示も未実装。
+
+設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、最初の技術と制度の進捗を検査する。
+
+**2026-09-29 の提示された実機結果：** `RULESET_JAC_BANSEIKI` と日本マップでゲームがロードし、戦国技術32件・社会制度30件、公式技術・制度行0件、Gathering Stormの仕組みの存在を確認。50ターンの自動進行とセーブ／ロードが成功した。今回の公式勝利無効化を加える前の結果である。
+
+**2026-09-29 の自動実機結果（勝利無効化後）：** 上記シナリオ21手順が通り、判定2/2。公式勝利7種が無効、終了ターン0で画面上部のターン表示は「TURN 1」（上限の表示なし）、両ツリー画面は戦国ノードだけ（技術32・制度30）、3ターンの自動進行で最初の技術と制度が進んだ。対照として戦国ツリーPoCを外した同じ設定では、制覇・スコアなどの公式勝利が有効で、終了ターンは501だった。自動テストが作成画面を経ずに開始すると設定の組み立てが走らず、ターン上限は既定のまま残る。そのためシナリオは開始前に設定を組み立てる。
+
+**要実機確認：** 人が作成画面から始めたときのターン制限の表示と選択肢、500ターンを超える長期進行。ツリー画面の前提線、研究選択、Boostの操作も人が確認する。開始年は「4000 BC」のままで、1534年開始の暦は未実装。
