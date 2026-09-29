@@ -6,13 +6,13 @@ SSOT 15.2.1 に従い、22文明の図形を **白 RGB + 透明アルファ** �
 
 `python tools/jac_art/draw_crests.py` は SVG を作り、その単純な図形を 4 倍解像度で描画して PNG に縮小する。`python tools/jac_art/build_art.py` は PNG を 8列×3行の専用アトラス `JAC_Crests<サイズ>` に並べ、Cooker で `JAC_CustomCivs_Icons.blp` に入れる。同時に `tools/jac_art/build/previews/house-crests.png` に104pxと22pxの見本を保存する。BLP と中間 DDS/PNG・見本は Git 管理外。
 
-指導者肖像の作業（PR #55）と同じファイルを編集しないよう、家紋は別ファイルで上書きする。
+22家の文明アイコンは家紋ファイルだけで定義する。
 
-1. `Data/JAC_Crests_Icons.xml`：アトラス `ICON_ATLAS_JAC_CRESTS`（13サイズ）と、22家の `ICON_CIVILIZATION_JAC_<家>` を `<Replace>` で差し替える行。番号は `draw_crests.NAMES` の順。`UpdateIcons` の最後（FrontEnd・InGame とも）に読み込む
+1. `Data/JAC_Crests_Icons.xml`：アトラス `ICON_ATLAS_JAC_CRESTS`（13サイズ）と、22家の `ICON_CIVILIZATION_JAC_<家>` の `<Row>`。番号は `draw_crests.NAMES` の順。FrontEnd・InGame とも `UpdateIcons` で読み込む
 2. `Config/JAC_Crests_Players.xml`：追加20家の能力アイコン欄（`CivilizationAbilityIcon`・`LeaderAbilityIcon`）を `<Update>` でその家の家紋にする。`UpdateDatabase` の最後に読み込む。織田・武田は専用の能力アイコン4枚を維持する
-3. `JAC_Japan1534_Icons.xml`・`JAC_Japan1534_Players.xml`（`tools/japan_map_scale/write_custom_civs.py` の生成物）と `JAC_CustomCivs_Icons.xml` は変更しない。生成し直しても家紋は外れない
+3. `JAC_CustomCivs_Icons.xml` と `JAC_Japan1534_Icons.xml`（`tools/japan_map_scale/write_custom_civs.py` の生成物）には文明アイコンの行を置かない。公式 `Base/Assets/Database/IconManager.sql:31` ～ `:38` の `IconDefinitions` は主キーが `(Name, Atlas)` なので、別アトラスの同名行を `<Replace>` しても古い行は消えずに2行残り、実機（crests-01）では FrontEnd の織田が旧アトラス `JAC_Civs22` のままだった。`tools/jac_art/tests/test_frontend_art.py` は、MOD のアイコン定義に `<Row>` 以外の操作や重複名が無いこと、文明アイコンが家紋ファイルにしか無いことを確かめる
 
-旧アトラス `ICON_ATLAS_JAC_CIVILIZATIONS`（織田・武田の旧生成家紋 `oda_mokko_generated.png`・`takeda_bishi_generated.png`）は、#55 と衝突しないよう残している。上書き後はどのアイコンからも参照されない。#55 の取り込み後に削除する
+旧アトラス `ICON_ATLAS_JAC_CIVILIZATIONS`（`JAC_Civs<サイズ>`、織田・武田の旧生成家紋 `oda_mokko_generated.png`・`takeda_bishi_generated.png`）は削除した。`build_art.py` も作らない
 
 必要な13サイズは公式 `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Data/Expansion2_Icons_Civilizations.xml:4` ～ `:16` の文明アトラスに合わせた（22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256）。同じ13サイズと8列の例が Expansion1 の `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion1/Data/Expansion1_Icons_Civilizations.xml:4` ～ `:16` にあり、Base の `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Assets/UI/Icons/Icons_Civilizations.xml:4` ～ `:13` も参照した。公式 `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Assets/UI/Instances/CivilizationIcon.lua:57` ～ `:65` は `ICON_` + CivilizationType を組み立て、`IconManager:FindIconAtlas` で UI 寸法の画像を取得し、見つからなければ DataError を出す。FrontEnd と InGame の `UpdateArt`/`UpdateIcons` 登録は公式 `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Portugal/Portugal.modinfo:82`、`:131`、`:172`、`:188` の方式に合わせ、既存 CustomCivs の登録を利用した。公式素材そのものは同梱しない。
 

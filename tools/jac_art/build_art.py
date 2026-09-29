@@ -298,7 +298,7 @@ def growth_icon():
 
 def contact_sheet(include_growth):
     names = [f"JAC_Leaders{size}" for size in LEADER_ICON_SIZES]
-    names += [f"JAC_Civs{size}" for size in CIV_ICON_SIZES]
+    names += [f"JAC_Crests{size}" for size in CIV_ICON_SIZES]
     names += [f"JAC_Abilities{size}" for size in ABILITY_ICON_SIZES]
     for key in LEADERS:
         names += [f"LEADER_JAC_{key}_NEUTRAL", f"LEADER_JAC_{key}_BACKGROUND",
@@ -366,7 +366,6 @@ def main():
     growth_available = (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file()
     required = [ORIGINALS / value for leader in LEADERS.values()
                 for value in (leader["portrait"], leader["figure"], leader["background"])]
-    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png"]
     required += [ORIGINALS / "crests" / f"{name.lower()}.png" for name in CREST_NAMES]
     if growth_available:
         required.append(GROWTH_ORIGINALS / "notebooks_generated.png")
@@ -386,15 +385,12 @@ def main():
 
     order = LEADER_ORDER
     leader_masters = [leader_icon_master(k) for k in order]
-    civ_masters = [symbol_icon_master(name) for name in ("oda_mokko_generated.png", "takeda_bishi_generated.png")]
     ability_masters = [symbol_icon_master(name) for name in ABILITY_SOURCES]
     icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s, 8)) for s in LEADER_ICON_SIZES]
-    for s in CIV_ICON_SIZES:
-        icons.append(texture(f"JAC_Civs{s}", atlas(civ_masters, s)))
     for s in ABILITY_ICON_SIZES:
         icons.append(texture(f"JAC_Abilities{s}", atlas(ability_masters, s)))
 
-    # Data/JAC_Crests_Icons.xml replaces all 22 civilization icons with this atlas.
+    # Data/JAC_Crests_Icons.xml defines all 22 civilization icons on this atlas.
     crests = crest_masters()
     crest_contact_sheet(crests)
     for s in CIV_ICON_SIZES:

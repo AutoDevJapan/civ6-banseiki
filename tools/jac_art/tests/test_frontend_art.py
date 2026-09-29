@@ -36,21 +36,24 @@ def action_files(modinfo, context, action):
 
 def icon_records(files, allow_duplicates=False):
     definitions = {}
-    replaced = {}
     atlases = {}
     for path in files:
         xml = ET.parse(path)
+        # IconDefinitions' primary key is (Name, Atlas) (Base/Assets/Database/IconManager.sql),
+        # so Replace/Update on another atlas adds a second row and the older row keeps winning.
+        # Each mod icon must therefore be defined exactly once, as a plain Row.
+        if not allow_duplicates:
+            edits = [node.tag for node in xml.findall("./IconDefinitions/*") if node.tag != "Row"]
+            if edits:
+                raise AssertionError(f"{path}: IconDefinitions uses {edits}; define icons once with Row")
         for row in xml.findall("./IconDefinitions/Row"):
             name = row.attrib["Name"]
             if name in definitions and not allow_duplicates:
                 raise AssertionError(f"duplicate icon: {name}")
             definitions.setdefault(name, row.attrib)
-        # <Replace> files load after the Row files (modinfo order), so they win.
-        for row in xml.findall("./IconDefinitions/Replace"):
-            replaced[row.attrib["Name"]] = row.attrib
         for row in xml.findall("./IconTextureAtlases/Row"):
             atlases.setdefault(row.attrib["Name"], []).append(row.attrib)
-    return definitions | replaced, atlases
+    return definitions, atlases
 
 
 def package_textures(path, names):
@@ -76,8 +79,15 @@ class FrontEndArtTests(unittest.TestCase):
         modinfo = ET.parse(MOD / "JAC_PoC_CustomCivs.modinfo")
         for context in ("FrontEndActions", "InGameActions"):
             icon_files = [node.text for node in modinfo.findall(f"./{context}/UpdateIcons/File")]
-            self.assertEqual(icon_files[-1], "Data/JAC_Crests_Icons.xml", context)
+            self.assertIn("Data/JAC_Crests_Icons.xml", icon_files, context)
+            # Crest rows must be the only civilization icons, whatever the load order.
+            civ_icons = {row.attrib["Name"]: file for file in icon_files
+                         for row in ET.parse(MOD / file).findall("./IconDefinitions/Row")
+                         if row.attrib["Name"].startswith("ICON_CIVILIZATION_")}
+            self.assertEqual(civ_icons, {f"ICON_CIVILIZATION_JAC_{name}": "Data/JAC_Crests_Icons.xml"
+                                         for name in CREST_NAMES}, context)
         definitions, atlases = icon_records(MOD / file for file in icon_files)
+        self.assertNotIn("ICON_ATLAS_JAC_CIVILIZATIONS", atlases)
         rows = atlases["ICON_ATLAS_JAC_CRESTS"]
         self.assertEqual({int(row["IconSize"]) for row in rows}, official_sizes)
         self.assertTrue(all(int(row["IconsPerRow"]) == 8 and
