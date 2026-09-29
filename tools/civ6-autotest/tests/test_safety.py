@@ -445,6 +445,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                     step = {"action": action}
                     if action == "load":
                         step["name"] = "existing"
+                        step["exact_name"] = True
                     runner = Runner({"name": action, "steps": [step]}, base / action, logs, base, 4318,
                                     auto_restart=False)
                     with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
@@ -470,6 +471,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                     step = {"action": action}
                     if action == "load":
                         step["name"] = "existing"
+                        step["exact_name"] = True
                     with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
                         runner, "_lua", side_effect=LuaResponseUnknown("command may have run")
                     ) as run_lua, patch.object(runner, "_enter_game_after_loadscreen") as enter_game:
@@ -493,7 +495,8 @@ class ScenarioSafetyTests(unittest.TestCase):
             for action in ("start_game", "load"):
                 with self.subTest(action=action):
                     runner = Runner({}, base, base, base, 4318)
-                    step = {"action": action, **({"name": "existing"} if action == "load" else {})}
+                    step = {"action": action, **({"name": "existing", "exact_name": True}
+                                                if action == "load" else {})}
                     with patch.object(runner, "_loadscreen_count", return_value=0), patch.object(
                         runner, "_lua", side_effect=LuaExecutionError("Lua ERR")
                     ) as lua, patch.object(runner, "_enter_game_after_loadscreen") as enter_game:
