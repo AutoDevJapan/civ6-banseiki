@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="4785cfe4-8d9a-4deb-89ea-d2d566551fec" version="1">
+	<Properties>
+		<Name>LOC_JAC_ARBITRATION_MOD_NAME</Name>
+		<Teaser>LOC_JAC_ARBITRATION_MOD_DESCRIPTION</Teaser>
+		<Description>LOC_JAC_ARBITRATION_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<Dependencies>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+		<Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+		<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
+		<Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="LOC_JAC_SENGOKU_TREES_MOD_NAME"/>
+		<Mod id="403be889-1455-4de7-967b-ad54c0ff3431" title="LOC_JAC_JAPAN_SCALE_MOD_NAME"/>
+	</Dependencies>
+	<LocalizedText>
+		<Text id="LOC_JAC_ARBITRATION_MOD_NAME">
+			<en_US>JAC PoC: Court Ceasefire Rulings</en_US><ja_JP>JAC PoC：朝廷・将軍の停戦裁定</ja_JP><ru_RU>JAC PoC: решения двора о перемирии</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_ARBITRATION_MOD_DESCRIPTION">
+			<en_US>On the Japan maps, warring houses petition the Court for a ceasefire; the Ashikaga may call one until 1573.</en_US>
+			<ja_JP>日本マップで、戦争中の家が朝廷に停戦を請う。足利将軍家は1573年まで他家の停戦も発議できる。</ja_JP>
+			<ru_RU>На картах Японии воюющие дома просят двор о перемирии; Асикага могут объявлять его до 1573 года.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<!-- The Japan maps only, the same criteria as the World Congress removal (JAC_PoC_JapanMapScale.modinfo). -->
+	<ActionCriteria>
+		<Criteria id="JAC_Arbitration_20km_Historical">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Arbitration_15km_Historical">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Arbitration_20km_Settlers">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+		<Criteria id="JAC_Arbitration_15km_Settlers">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches>
+				<Group>Map</Group>
+				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
+				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value>
+			</ConfigurationValueMatches>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<UpdateText id="JAC_Arbitration_Text_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
+			<File>Text/JAC_CourtArbitration_Text.xml</File>
+		</UpdateText>
+		<AddGameplayScripts id="JAC_Arbitration_Scripts_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
+			<File>Scripts/JAC_CourtArbitration.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Arbitration_UI_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
+			<Properties><Context>InGame</Context></Properties>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		</AddUserInterfaces>
+		<UpdateText id="JAC_Arbitration_Text_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
+			<File>Text/JAC_CourtArbitration_Text.xml</File>
+		</UpdateText>
+		<AddGameplayScripts id="JAC_Arbitration_Scripts_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
+			<File>Scripts/JAC_CourtArbitration.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Arbitration_UI_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
+			<Properties><Context>InGame</Context></Properties>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		</AddUserInterfaces>
+		<UpdateText id="JAC_Arbitration_Text_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
+			<File>Text/JAC_CourtArbitration_Text.xml</File>
+		</UpdateText>
+		<AddGameplayScripts id="JAC_Arbitration_Scripts_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
+			<File>Scripts/JAC_CourtArbitration.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Arbitration_UI_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
+			<Properties><Context>InGame</Context></Properties>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		</AddUserInterfaces>
+		<UpdateText id="JAC_Arbitration_Text_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
+			<File>Text/JAC_CourtArbitration_Text.xml</File>
+		</UpdateText>
+		<AddGameplayScripts id="JAC_Arbitration_Scripts_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
+			<File>Scripts/JAC_CourtArbitration.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Arbitration_UI_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
+			<Properties><Context>InGame</Context></Properties>
+			<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		</AddUserInterfaces>
+		<!-- Lua は VFS 上でファイル名だけで引かれる（公式：Expansion2.modinfo の ImportFiles にある UI/Replacements/CitySupport.lua が
+		     Base/Assets/UI/CitySupport.lua を同名で置き換える）。UI 側を Scripts/JAC_CourtArbitration.lua と同名にすると、
+		     ゲームプレイ側がこの UI ファイルを読んでしまうので、名前を分ける（tests/test_lua_file_names.py）。 -->
+		<ImportFiles id="JAC_Arbitration_Files">
+			<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
+			<File>UI/JAC_CourtArbitrationPanel.lua</File>
+		</ImportFiles>
+	</InGameActions>
+	<Files>
+		<File>Text/JAC_CourtArbitration_Text.xml</File>
+		<File>Scripts/JAC_CourtArbitration.lua</File>
+		<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
+		<File>UI/JAC_CourtArbitrationPanel.xml</File>
+		<File>UI/JAC_CourtArbitrationPanel.lua</File>
+	</Files>
+</Mod>

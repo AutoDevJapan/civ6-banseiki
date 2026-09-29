@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal16" FontStyle="Shadow">
+	<!-- 朝廷・将軍の停戦裁定（SSOT 3.2）。請求と応否だけの最小の画面。枠は JAC_Notebooks.xml の人物帳と同じ形。 -->
+	<GridButton ID="OpenButton" Anchor="C,T" Offset="0,36" Size="220,30" Style="ButtonControl" String="LOC_JAC_ARB_BUTTON" Hidden="1"/>
+	<Grid ID="Panel" Anchor="C,C" Size="600,480"
+		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22"
+		Hidden="1" ConsumeAllMouse="1">
+		<Label Anchor="L,T" Offset="20,12" Style="FontFlair24" String="LOC_JAC_ARB_TITLE"/>
+		<GridButton ID="CloseButton" Anchor="R,T" Offset="12,10" Size="110,28" Style="ButtonControl" String="LOC_JAC_ARB_CLOSE"/>
+		<Label ID="Status" Anchor="L,T" Offset="20,50" WrapWidth="560" Style="FontNormal14"/>
+		<ScrollPanel ID="Scroll" Anchor="L,T" Offset="20,120" Size="560,340" Vertical="1">
+			<Stack ID="Rows" StackGrowth="Down" Padding="4"/>
+			<ScrollBar Style="Slider_Blue" Offset="-13,0" Anchor="R,T"/>
+		</ScrollPanel>
+	</Grid>
+
+	<Instance Name="RowInstance">
+		<Container ID="Root" Size="540,34">
+			<Box Size="parent,parent" Color="0,0,0,110"/>
+			<Label ID="Text" Anchor="L,C" Offset="8,0" WrapWidth="300" Style="FontNormal14"/>
+			<GridButton ID="Action" Anchor="R,C" Offset="4,0" Size="110,28" Style="ButtonControl"/>
+			<GridButton ID="Action2" Anchor="R,C" Offset="118,0" Size="110,28" Style="ButtonControl" Hidden="1"/>
+		</Container>
+	</Instance>
+</Context>

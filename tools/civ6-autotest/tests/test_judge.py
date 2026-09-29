@@ -235,6 +235,7 @@ class JudgeTests(unittest.TestCase):
             "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
             "japan-map-15km-200turn.json",
             "japan-prosperous-15km.json",
+            "court-arbitration.json", "probe-make-peace.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):
