@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SSOT 3.2 resources. Pattern: DLC/AustraliaScenario/Data/AustraliaScenario_Resources.xml:5,122,142-145,156,192
+     (RESOURCE_GOLD: Types + Resources + ValidTerrains + YieldChanges + Improvement_ValidResources).
+     tools/japan_map_scale/generate.py reads this file for the placement rules, so keep the tables plain Rows. -->
+<GameInfo>
+  <Types>
+    <Row Type="RESOURCE_JAC_GOLD" Kind="KIND_RESOURCE"/>
+    <Row Type="RESOURCE_JAC_LACQUER" Kind="KIND_RESOURCE"/>
+  </Types>
+  <Resources>
+    <!-- Frequency 0: never scattered by a random map generator; only the fixed map or the Lua API places them. -->
+    <Row ResourceType="RESOURCE_JAC_GOLD" Name="LOC_RESOURCE_JAC_GOLD_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" Frequency="0"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" Name="LOC_RESOURCE_JAC_LACQUER_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" Frequency="0"/>
+  </Resources>
+  <Resource_ValidTerrains>
+    <!-- Gold: mines on hills, placer gold (Sado Nishimikawa) on flat land; both take a mine (see Improvement_ValidResources). -->
+    <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_GRASS_HILLS"/>
+    <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_PLAINS_HILLS"/>
+    <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_GRASS"/>
+    <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_PLAINS"/>
+    <!-- Lacquer: a craft district marker, not a tree map (documents/research/japan-map-resources.md). -->
+    <Row ResourceType="RESOURCE_JAC_LACQUER" TerrainType="TERRAIN_GRASS"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" TerrainType="TERRAIN_PLAINS"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" TerrainType="TERRAIN_GRASS_HILLS"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" TerrainType="TERRAIN_PLAINS_HILLS"/>
+    <!-- Japanese silver is mined in temperate hills; the official rows allow only desert and tundra
+         (Base/Assets/Gameplay/Data/Resources.xml:276-279), which would hide Iwami, Ikuno and Sado. -->
+    <Row ResourceType="RESOURCE_SILVER" TerrainType="TERRAIN_GRASS_HILLS"/>
+    <Row ResourceType="RESOURCE_SILVER" TerrainType="TERRAIN_PLAINS_HILLS"/>
+  </Resource_ValidTerrains>
+  <Resource_ValidFeatures>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" FeatureType="FEATURE_FOREST"/>
+  </Resource_ValidFeatures>
+  <Resource_YieldChanges>
+    <!-- Gold +4 gold as the official scenario gold ore (AustraliaScenario_Resources.xml:156). -->
+    <Row ResourceType="RESOURCE_JAC_GOLD" YieldType="YIELD_GOLD" YieldChange="4"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" YieldType="YIELD_CULTURE" YieldChange="1"/>
+    <Row ResourceType="RESOURCE_JAC_LACQUER" YieldType="YIELD_GOLD" YieldChange="1"/>
+  </Resource_YieldChanges>
+  <Improvement_ValidResources>
+    <!-- SSOT 3.2: gold is mined like iron; lacquer takes the plantation like tea and silk (JAC_Sengoku_Unlocks.sql makes it buildable).
+         A resource listed here lets the improvement go on a tile its Improvement_ValidTerrains would refuse: official salt
+         grows only on flat land (Resources.xml:273-275) and is mined (Improvements.xml:236) although a mine accepts only
+         hills (Improvements.xml:105-109); the scenario gold is mined on flat plains too (AustraliaScenario_Resources.xml:144-145,192).
+         That is what lets placer gold on flat land take a mine. Lacquer keeps its forest like silk (Improvements.xml:263). -->
+    <Row ImprovementType="IMPROVEMENT_MINE" ResourceType="RESOURCE_JAC_GOLD"/>
+    <Row ImprovementType="IMPROVEMENT_PLANTATION" ResourceType="RESOURCE_JAC_LACQUER" MustRemoveFeature="false"/>
+  </Improvement_ValidResources>
+</GameInfo>

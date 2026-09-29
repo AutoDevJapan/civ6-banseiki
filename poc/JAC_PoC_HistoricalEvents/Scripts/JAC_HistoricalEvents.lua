@@ -1,23 +1,21 @@
--- SSOT 3.2: historical events fire in their historical year; a target faction that has already
--- researched the related tech/civic fires them earlier, one that has not gets a boost toward it then. Data: Data/JAC_HistoricalEvents_*.sql.
+-- SSOT 3.2: historical events happen in their historical year (and month, E6b); a target faction that has
+-- researched the related tech/civic gets the event's effects (earlier, if it researched first). When the year
+-- arrives, a faction without that research gets only a boost toward it, and the effects once it researches it.
+-- Data: Data/JAC_HistoricalEvents_*.sql.
 --
 -- Save/load and multiplayer: all state lives in Player/Game properties (saved with the game and
 -- shared by every machine); nothing is cached in Lua between turns. Evaluation runs only from
 -- GameEvents.OnGameTurnStarted, in a fixed order (events by due turn then type, players by ID),
 -- with no randomness and no local-player checks.
 
-local FIRED_PREFIX = "JAC_EVENT_FIRED_"          -- Player property: turn the event fired for that player (the flag)
+local FIRED_PREFIX = "JAC_EVENT_FIRED_"          -- Player property: turn the event's effects were given (the flag)
+local BOOSTED_PREFIX = "JAC_EVENT_BOOSTED_"      -- Player property: turn the year arrived without the research (boost only)
 local RESOURCES_PREFIX = "JAC_EVENT_RESOURCES_"  -- Game property: plot indices where the event placed resources
 local CIV_NAME_PREFIX = "JAC_CIV_NAME_"          -- Game property read by CustomCivs UI/JAC_CivNameOverride.lua
 local FIRE_COUNT = "JAC_EVENTS_FIRE_COUNT"       -- Game property: total firings (for verification)
 
 local function Log(message)
 	print("[JAC_EVENTS] " .. message)
-end
-
-local function Param(name, default)
-	local row = GameInfo.GlobalParameters[name]
-	return (row and tonumber(row.Value)) or default
 end
 
 -- The official calendar exposes only a display string (Calendar.MakeYearStr), so a year is turned into
@@ -32,8 +30,10 @@ end
 local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
 local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
 
-local function TurnForYear(year)
-	local target, months, turn = (year - START_YEAR) * 12, 0, 1
+-- Month (1-12, optional) is the month of the Japanese calendar as the sources give it; turn 1 is month 1
+-- of the start year. One standard turn is 4 months, coarser than the lunar/solar offset.
+local function TurnForYear(year, month)
+	local target, months, turn = (year - START_YEAR) * 12 + (month or 1) - 1, 0, 1
 	for row in GameInfo.GameSpeed_Turns() do
 		if row.GameSpeedType == SPEED then
 			local span = row.TurnsPerIncrement * row.MonthIncrement
@@ -52,7 +52,7 @@ end
 
 local function DueTurn(row)
 	if row.Turn then return row.Turn end
-	return TurnForYear(row.Year)
+	return TurnForYear(row.Year, row.Month)
 end
 
 local function GroupBy(tableName)
@@ -107,7 +107,7 @@ local function HasPrereq(player, event)
 	return false
 end
 
--- Owner decision 1a: a faction that has not researched the related tech/civic gets only its boost
+-- SSOT 3.2 (owner decision 1a): a faction that has not researched the related tech/civic gets only its boost
 -- (eureka/inspiration) when the year arrives. Tech: PlayerTechs:TriggerBoost(index, 1) as in
 -- AustraliaScenario.lua:784 (guards as in TechBoostsPanel.lua:91). Civic: the same call on
 -- PlayerCulture, guarded as in CivicBoostsPanel.lua:88 (no official Lua example of the civic call).
@@ -136,84 +136,51 @@ local function Notify(event, playerID)
 	end
 end
 
--- Nearest legal empty non-city plot to the target, ties broken by plot index.
-local function FindResourcePlot(target, resourceIndex, range)
-	local best, bestDistance
-	local x0, y0 = target:GetX(), target:GetY()
-	for dy = -range, range do
-		for dx = -range, range do
-			local plot = Map.GetPlot(x0 + dx, y0 + dy)
-			if plot then
-				local distance = Map.GetPlotDistance(x0, y0, plot:GetX(), plot:GetY())
-				if distance <= range and plot:GetResourceType() == -1 and not plot:IsCity()
-						and ResourceBuilder.CanHaveResource(plot, resourceIndex)
-						and (not best or distance < bestDistance
-							or (distance == bestDistance and plot:GetIndex() < best:GetIndex())) then
-					best, bestDistance = plot, distance
-				end
-			end
-		end
-	end
-	return best
-end
-
--- Prefer the site the resources mod reserved for this resource (ExposedMembers.JAC_Resources, published by
--- JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua). Looked up at fire time, so it may be absent: returns the
--- plot index when the reserved site holds the resource now, nil to fall back to the legal-plot search.
-local function RevealReservedSite(row)
-	local api = ExposedMembers and ExposedMembers.JAC_Resources
-	if not (api and row.SiteId) then
-		Log("resource site=" .. tostring(row.SiteId) .. " resources mod not loaded, searching legal plots")
-		return nil
-	end
-	local revealed = api.RevealSite(row.SiteId) or api.IsRevealed(row.SiteId)
-	for _, site in ipairs(api.GetSites()) do
-		if site.id == row.SiteId then
-			local plot = Map.GetPlotByIndex(site.plot)
-			if revealed and plot and plot:GetResourceType() == GameInfo.Resources[row.ResourceType].Index then
-				return site.plot
-			end
-		end
-	end
-	Log("resource site=" .. row.SiteId .. " not usable, searching legal plots")
-	return nil
-end
-
+-- Resources appear at the site the resources mod reserved (JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua,
+-- ExposedMembers.JAC_Resources; loaded only on the Japan maps). RevealSite is a no-op when the site is
+-- already revealed (by its own year/tech rule or an earlier event), so both paths agree on one tile.
 local function PlaceResources(event)
 	local key = RESOURCES_PREFIX .. event.row.EventType
 	if #event.resources == 0 or Game:GetProperty(key) ~= nil then return end
+	local api = ExposedMembers and ExposedMembers.JAC_Resources
 	local placed = {}
 	for _, row in ipairs(event.resources) do
-		local target = Map.GetPlotByIndex(row.PlotIndex)
-		local resource = GameInfo.Resources[row.ResourceType].Index
-		local reserved = RevealReservedSite(row)
-		local plot = reserved and Map.GetPlotByIndex(reserved)
-			or (target and FindResourcePlot(target, resource, row.SearchRange))
-		if plot then
-			if not reserved then ResourceBuilder.SetResourceType(plot, resource, row.Amount) end
-			table.insert(placed, plot:GetIndex())
-			Log(string.format("resource event=%s type=%s plot=%d target=%d via=%s", event.row.EventType,
-				row.ResourceType, plot:GetIndex(), row.PlotIndex, reserved and "site" or "search"))
-		else
-			Log(string.format("resource event=%s type=%s target=%d result=no_legal_plot", event.row.EventType,
-				row.ResourceType, row.PlotIndex))
+		if api then api.RevealSite(row.SiteId) end
+		local plot = nil
+		if api and api.IsRevealed(row.SiteId) then
+			for _, site in ipairs(api.GetSites()) do
+				if site.id == row.SiteId then plot = site.plot end
+			end
 		end
+		if plot then table.insert(placed, plot) end
+		Log(string.format("resource event=%s site=%s plot=%s", event.row.EventType, row.SiteId,
+			plot and tostring(plot) or (api and "not_placed" or "resources_mod_not_loaded")))
 	end
 	Game:SetProperty(key, placed)
 end
 
+-- reason "prereq" (has the research) or "due" (the year of an event without research): effects and the flag.
+-- reason "year": the year arrived without the research: boost only. The display-name switch and the
+-- resources still follow the year (SSOT 3.2: Nagao -> Uesugi in 1561 or earlier with the civic).
 local function Fire(event, player, playerID, civType, reason, turn)
-	player:SetProperty(FIRED_PREFIX .. event.row.EventType, turn)
-	for _, row in ipairs(event.modifiers) do player:AttachModifierByID(row.ModifierId) end
+	local boostedKey = BOOSTED_PREFIX .. event.row.EventType
+	local announced = player:GetProperty(boostedKey) ~= nil
+	local boost = ""
+	if reason == "year" then
+		player:SetProperty(boostedKey, turn)
+		boost = BoostMissing(player, event)
+	else
+		player:SetProperty(FIRED_PREFIX .. event.row.EventType, turn)
+		for _, row in ipairs(event.modifiers) do player:AttachModifierByID(row.ModifierId) end
+		Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
+	end
 	for _, row in ipairs(event.renames) do
 		if row.CivilizationType == civType then Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name) end
 	end
 	PlaceResources(event)
-	local boost = (reason == "year") and BoostMissing(player, event) or ""
-	Notify(event, playerID)
-	Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
-	Log(string.format("fired event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s", event.row.EventType,
-		playerID, civType, reason, turn, event.due, boost))
+	if not announced then Notify(event, playerID) end
+	Log(string.format("%s event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s",
+		reason == "year" and "boosted" or "fired", event.row.EventType, playerID, civType, reason, turn, event.due, boost))
 end
 
 -- Same hook and turn source as the official scenarios (AustraliaScenario.lua:1440-1455).
@@ -226,7 +193,14 @@ local function OnGameTurnStarted()
 			local civType = CivType(playerID)
 			if (not event.targets or event.targets[civType])
 					and player:GetProperty(FIRED_PREFIX .. event.row.EventType) == nil then
-				local reason = (turn >= event.due and "year") or (HasPrereq(player, event) and "prereq") or nil
+				local reason = nil
+				if HasPrereq(player, event) then
+					reason = "prereq"
+				elseif turn >= event.due and event.tech == nil and event.civic == nil then
+					reason = "due"
+				elseif turn >= event.due and player:GetProperty(BOOSTED_PREFIX .. event.row.EventType) == nil then
+					reason = "year"
+				end
 				if reason then Fire(event, player, playerID, civType, reason, turn) end
 			end
 		end

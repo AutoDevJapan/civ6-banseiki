@@ -13,10 +13,10 @@
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ja_JP"><Text>技術交流と領国競争</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="en_US"><Text>Exchange and Rival Domains</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ru_RU"><Text>Обмен знаниями и борьба владений</Text></Row>
-    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ja_JP"><Text>統一への広域戦</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="en_US"><Text>Campaigns for Unification</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ru_RU"><Text>Походы за объединение</Text></Row>
-    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ja_JP"><Text>統一への広域戦</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="en_US"><Text>Campaigns for Unification</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ru_RU"><Text>Походы за объединение</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_4_NAME" Language="ja_JP"><Text>統一事業</Text></Row>
@@ -361,9 +361,9 @@
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ja_JP"><Text>広域検地</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="en_US"><Text>Regional Land Survey</Text></Row>
-    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ru_RU"><Text>Общее межевание земель</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ja_JP"><Text>太閤検地</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="en_US"><Text>Taikō Land Survey</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ru_RU"><Text>Тайко-кэнти (межевание земель)</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
     <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
@@ -403,5 +403,14 @@
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ja_JP"><Text>ガレー船を1隻建造する。</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="en_US"><Text>Train a Galley.</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ru_RU"><Text>Постройте одну галеру.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="en_US"><Text>Tenka Fubu and Wide-Area Campaigns</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE" Language="ru_RU"><Text>«Тэнка фубу» и походы широкого масштаба</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="en_US"><Text>Tenka Fubu and Wide-Area Campaigns</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ru_RU"><Text>«Тэнка фубу» и походы широкого масштаба</Text></Row>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="ja_JP"><Text>政府の選択を記念する区域。自文明に1つだけ設置できる。この都市へのターン毎の忠誠心+8、隣接する区域へ隣接ボーナス+1。</Text></Replace>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="en_US"><Text>A district placed once in your empire to commemorate your government choices. Provides +8 Loyalty per turn to this city, and an increase of +1 to the adjacency bonuses being earned by any adjacent district.</Text></Replace>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="ru_RU"><Text>Район, построенный в вашей империи в память о решениях вашего правительства. Дает +8 лояльности за ход этому городу и +1 ко всем бонусам за соседство всем прилежащим районам.</Text></Replace>
   </LocalizedText>
 </GameInfo>

@@ -6,10 +6,12 @@ CREATE TABLE JAC_HistoricalEvents (
 	Pack TEXT NOT NULL,
 	-- Historical year. Converted to a turn by the Lua script from the game speed's calendar (GameSpeed_Turns).
 	Year INTEGER,
+	-- Month of the year (1-12) as the sources give it (SSOT 3.2: match the month as far as possible). NULL: month 1.
+	Month INTEGER CHECK (Month BETWEEN 1 AND 12),
 	-- Explicit turn; wins over Year when both are set.
 	Turn INTEGER,
-	-- A target faction that already has this tech or civic fires the event before its turn;
-	-- one that has not gets a boost toward it (not the tech itself) when the year arrives.
+	-- A target faction that has this tech or civic gets the event's effects (before its turn if it researched
+	-- first); one that has not gets only a boost toward it (not the tech itself) when the year arrives.
 	PrereqTech TEXT REFERENCES Technologies(TechnologyType),
 	PrereqCivic TEXT REFERENCES Civics(CivicType),
 	Name TEXT NOT NULL,
@@ -41,15 +43,11 @@ CREATE TABLE JAC_HistoricalEventRenames (
 	PRIMARY KEY (EventType, CivilizationType)
 );
 
--- Resources that appear on the map the first time the event fires for anyone.
--- PlotIndex is map-specific, so rows are loaded per map file (modinfo criteria).
+-- Reserved resource sites revealed the first time the event happens (fires or its year arrives) for anyone.
+-- SiteId is a site of the Japan maps' resources mod (JAC_PoC_JapanMapScale Scripts/JAC_ResourceSites.lua);
+-- the site knows its tile on each map, so one row serves every map.
 CREATE TABLE JAC_HistoricalEventResources (
 	EventType TEXT NOT NULL REFERENCES JAC_HistoricalEvents(EventType) ON DELETE CASCADE,
-	ResourceType TEXT NOT NULL REFERENCES Resources(ResourceType),
-	PlotIndex INTEGER NOT NULL,
-	-- The nearest legal plot within this range is used (ResourceBuilder.CanHaveResource).
-	SearchRange INTEGER NOT NULL DEFAULT 2,
-	Amount INTEGER NOT NULL DEFAULT 1,
-	SiteId TEXT,
-	PRIMARY KEY (EventType, ResourceType, PlotIndex)
+	SiteId TEXT NOT NULL,
+	PRIMARY KEY (EventType, SiteId)
 );

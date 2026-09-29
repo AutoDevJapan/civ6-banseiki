@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
-import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MOD = ROOT / "poc/JAC_PoC_HistoricalEvents"
-MAPS = ROOT / "poc/JAC_PoC_JapanMapScale/Maps"
-sys.path.insert(0, str(ROOT / "tools/japan_map_scale"))
-import generate  # noqa: E402  (projection and grid of the Japan maps)
+SITES_LUA = ROOT / "poc/JAC_PoC_JapanMapScale/Scripts/JAC_ResourceSites.lua"
 
 LANGUAGES = {"ja_JP", "en_US", "ru_RU"}
-PLOT_FILES = {20: "JAC_HistoricalEvents_Plots_20km.sql", 15: "JAC_HistoricalEvents_Plots_15km.sql"}
 
 
 def sengoku_types(kind: str) -> list[str]:
@@ -32,17 +27,15 @@ def load_db() -> sqlite3.Connection:
         CREATE TABLE GlobalParameters (Name TEXT PRIMARY KEY, Value TEXT);
         CREATE TABLE Technologies (TechnologyType TEXT PRIMARY KEY);
         CREATE TABLE Civics (CivicType TEXT PRIMARY KEY);
-        CREATE TABLE Resources (ResourceType TEXT PRIMARY KEY);
         CREATE TABLE Boosts (BoostID INTEGER PRIMARY KEY, TechnologyType TEXT, CivicType TEXT, Boost INTEGER NOT NULL,
             TriggerDescription TEXT NOT NULL, TriggerLongDescription TEXT NOT NULL, BoostClass TEXT NOT NULL,
             Unit1Type TEXT);
         CREATE TABLE Modifiers (ModifierId TEXT PRIMARY KEY, ModifierType TEXT NOT NULL);
         CREATE TABLE ModifierArguments (ModifierId TEXT, Name TEXT, Value TEXT, PRIMARY KEY (ModifierId, Name));
-        INSERT INTO Resources VALUES ('RESOURCE_COPPER');
     """)
     db.executemany("INSERT INTO Technologies VALUES (?)", [(t,) for t in sengoku_types("KIND_TECH")])
     db.executemany("INSERT INTO Civics VALUES (?)", [(c,) for c in sengoku_types("KIND_CIVIC")])
-    for name in ("JAC_HistoricalEvents_Schema.sql", "JAC_HistoricalEvents_Sengoku.sql", *PLOT_FILES.values()):
+    for name in ("JAC_HistoricalEvents_Schema.sql", "JAC_HistoricalEvents_Sengoku.sql"):
         db.executescript((MOD / "Data" / name).read_text(encoding="utf-8"))
     return db
 
@@ -70,21 +63,24 @@ class HistoricalEventTests(unittest.TestCase):
             stages.setdefault(row.findtext("GameSpeedType"), []).append(
                 (int(row.findtext("TurnsPerIncrement")), int(row.findtext("MonthIncrement"))))
 
-        def turn_for_year(speed: str, year: int) -> int:
+        def turn_for_year(speed: str, year: int, month: int | None = None) -> int:
             # Same algorithm as TurnForYear() in Scripts/JAC_HistoricalEvents.lua.
-            target, months, turn = (year - start) * 12, 0, 1
+            target, months, turn = (year - start) * 12 + (month or 1) - 1, 0, 1
             for turns, increment in stages[speed]:
                 if months + turns * increment >= target:
                     return turn + max(0, -(-(target - months) // increment))
                 months, turn = months + turns * increment, turn + turns
             return turn
 
-        def year_of_turn(speed: str, turn: int) -> int:  # the calendar's own year for a turn (test_sengoku_calendar)
+        def months_of_turn(speed: str, turn: int) -> int:  # months elapsed since January of the start year
             months, remaining = 0, turn - 1
             for turns, increment in stages[speed]:
                 used = min(remaining, turns)
                 months, remaining = months + used * increment, remaining - used
-            return start + months // 12
+            return months
+
+        def year_of_turn(speed: str, turn: int) -> int:  # the calendar's own year for a turn (test_sengoku_calendar)
+            return start + months_of_turn(speed, turn) // 12
 
         self.assertEqual(start, 1534)
         standard = [turn_for_year("GAMESPEED_STANDARD", year) for year in (1534, 1535, 1543, 1550, 1561, 1600)]
@@ -95,10 +91,20 @@ class HistoricalEventTests(unittest.TestCase):
                     turn = turn_for_year(speed, year)
                     self.assertEqual(year_of_turn(speed, turn), year)  # the first turn of that year
                     self.assertTrue(turn == 1 or year_of_turn(speed, turn - 1) == year - 1)
+        # SSOT 3.2 (month, E6b): the due turn is the first turn that reaches the month.
+        for speed in stages:
+            for month in range(1, 13):
+                with self.subTest(speed=speed, month=month):
+                    turn = turn_for_year(speed, 1543, month)
+                    target = 9 * 12 + month - 1
+                    self.assertGreaterEqual(months_of_turn(speed, turn), target)
+                    self.assertLess(months_of_turn(speed, turn - 1), target)
         db = load_db()
-        events = dict(db.execute("SELECT EventType, Year FROM JAC_HistoricalEvents"))
-        due = {e: turn_for_year("GAMESPEED_STANDARD", y) for e, y in events.items()}
-        self.assertEqual(due["JAC_EVENT_TEPPO_DENRAI"], 28)  # historical-events-20km.json expects due=28
+        events = {e: (y, m) for e, y, m in db.execute("SELECT EventType, Year, Month FROM JAC_HistoricalEvents")}
+        due = {e: turn_for_year("GAMESPEED_STANDARD", y, m) for e, (y, m) in events.items()}
+        # historical-events-15km.json expects Teppo (1543/8) due=30; Nagao -> Uesugi (1561/3) is turn 83.
+        self.assertEqual(due, {"JAC_EVENT_TEPPO_DENRAI": 30, "JAC_EVENT_ASHIO_COPPER": 49, "JAC_EVENT_NAGAO_UESUGI": 83})
+        self.assertIn("(month or 1) - 1", (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8"))
         self.assertTrue(all(1 < turn <= 230 for turn in due.values()), due)
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
         self.assertIn("GameInfo.GameSpeed_Turns()", lua)
@@ -106,18 +112,29 @@ class HistoricalEventTests(unittest.TestCase):
         # Live: the 1534 calendar starts the engine turn counter at GetStartTurn() (16603), not 1.
         self.assertIn("Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1", lua)
         self.assertEqual(len(re.findall(r"Game\.GetCurrentGameTurn\(\)", lua)), 1)  # only inside GameTurn()
-        scenario = (ROOT / "tools/civ6-autotest/scenarios/historical-events-20km.json").read_text(encoding="utf-8")
+        scenario = (ROOT / "tools/civ6-autotest/scenarios/historical-events-15km.json").read_text(encoding="utf-8")
         self.assertNotIn("Game.GetCurrentGameTurn()~=", scenario)  # raw turn compares break at start turn 16603
 
-    def test_resource_events_prefer_the_reserved_site_and_fall_back(self):
+    def test_resource_events_use_the_reserved_sites_of_the_resources_mod(self):
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
         self.assertIn("ExposedMembers.JAC_Resources", lua)
         self.assertIn("api.RevealSite(row.SiteId)", lua)
-        self.assertIn("FindResourcePlot(target, resource, row.SearchRange)", lua)  # fallback when the mod is absent
-        self.assertIn("resources mod not loaded", lua)
-        resources = ROOT / "poc/JAC_PoC_HistoricalEvents/Data"
-        for name in PLOT_FILES.values():
-            self.assertIn("'copper-ashio'", (resources / name).read_text(encoding="utf-8"))
+        self.assertNotIn("ResourceBuilder", lua)  # the resources mod is the only writer of reserved sites
+        # Every event site exists on every Japan grid of the resources mod, with the event's year and tech,
+        # so the event and the mod's own year/tech rule reveal the same site at the same time.
+        sites: dict[str, list[dict[str, str]]] = {}
+        for body in re.findall(r"\{ (id=.*?) \}", SITES_LUA.read_text(encoding="utf-8")):
+            fields = {k: v or n for k, v, n in re.findall(r'(\w+)=(?:"([^"]*)"|(\d+))', body)}
+            sites.setdefault(fields["id"], []).append(fields)
+        db = load_db()
+        rows = db.execute("SELECT r.SiteId, e.Year, e.PrereqTech FROM JAC_HistoricalEventResources r "
+                          "JOIN JAC_HistoricalEvents e USING (EventType)").fetchall()
+        self.assertEqual(rows, [("copper-ashio", 1550, "TECH_JAC_SENGOKU_ORE_PROSPECTING")])
+        for site_id, year, tech in rows:
+            with self.subTest(site=site_id):
+                self.assertEqual(len(sites[site_id]), 2)  # 20 km and 15 km grids
+                for site in sites[site_id]:
+                    self.assertEqual((int(site["year"]), site.get("tech")), (year, tech))
 
     def test_missing_prereq_gets_a_boost_not_the_tech(self):
         db = load_db()
@@ -144,29 +161,7 @@ class HistoricalEventTests(unittest.TestCase):
         for key in keys:
             self.assertEqual(languages[key], LANGUAGES, key)
 
-    def test_resource_plots_are_the_projected_sites(self):
-        sites = {point["id"]: point for group in json.loads(
-            (ROOT / "documents/spec/data/japan-map-resources.json").read_text(encoding="utf-8"))["resource_groups"]
-            for point in group["points"]}
-        manifests = {entry["km_per_tile"]: entry for entry in json.loads(
-            (MAPS / "manifest.json").read_text(encoding="utf-8"))}
-        for km, name in PLOT_FILES.items():
-            entry = manifests[km]
-            grid = generate.HexGrid(km, entry["width"], entry["height"], *entry["grid_origin_projected_km"])
-            db = sqlite3.connect(":memory:")
-            db.execute("CREATE TABLE JAC_HistoricalEventResources (EventType, ResourceType, PlotIndex, "
-                       "SearchRange, Amount, SiteId)")
-            db.executescript((MOD / "Data" / name).read_text(encoding="utf-8"))
-            rows = db.execute("SELECT ResourceType, PlotIndex, SiteId FROM JAC_HistoricalEventResources").fetchall()
-            self.assertTrue(rows)
-            for resource, plot, site_id in rows:
-                with self.subTest(km=km, site=site_id):
-                    site = sites[site_id]
-                    self.assertFalse(site["available_at_start"])
-                    self.assertEqual(site_id.split("-")[0], resource.removeprefix("RESOURCE_").lower())
-                    self.assertEqual(plot, grid.index(*grid.closest(*site["coordinates"])))
-
-    def test_modinfo_lists_files_and_uses_the_map_ids(self):
+    def test_modinfo_lists_files(self):
         text = (MOD / "JAC_PoC_HistoricalEvents.modinfo").read_text(encoding="utf-8")
         root = ET.fromstring(text)
         listed = {f.text for f in root.find("Files")}
@@ -174,10 +169,6 @@ class HistoricalEventTests(unittest.TestCase):
         self.assertEqual(listed, on_disk)
         used = {f.text for action in root.find("InGameActions") for f in action.findall("File")}
         self.assertEqual(used, on_disk)
-        japan = (ROOT / "poc/JAC_PoC_JapanMapScale/JAC_PoC_JapanMapScale.modinfo").read_text(encoding="utf-8")
-        values = set(re.findall(r"<Value>(\{[^<]+\.Civ6Map)</Value>", text))
-        self.assertEqual(values, set(re.findall(r"<Value>(\{[^<]+\.Civ6Map)</Value>", japan)))
-        self.assertEqual(len(values), 4)
 
     def test_lua_reads_only_existing_tables_and_properties(self):
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")

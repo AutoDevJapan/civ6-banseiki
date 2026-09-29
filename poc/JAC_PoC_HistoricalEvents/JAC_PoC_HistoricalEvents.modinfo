@@ -27,60 +27,12 @@
 		<Criteria id="JAC_Events_Banseiki">
 			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
 		</Criteria>
-		<Criteria id="JAC_Events_20km">
-			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
-			<ConfigurationValueMatches>
-				<Group>Map</Group>
-				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
-				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value>
-			</ConfigurationValueMatches>
-		</Criteria>
-		<Criteria id="JAC_Events_20km_Settlers">
-			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
-			<ConfigurationValueMatches>
-				<Group>Map</Group>
-				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
-				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value>
-			</ConfigurationValueMatches>
-		</Criteria>
-		<Criteria id="JAC_Events_15km">
-			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
-			<ConfigurationValueMatches>
-				<Group>Map</Group>
-				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
-				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
-			</ConfigurationValueMatches>
-		</Criteria>
-		<Criteria id="JAC_Events_15km_Settlers">
-			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
-			<ConfigurationValueMatches>
-				<Group>Map</Group>
-				<ConfigurationId>MAP_SCRIPT</ConfigurationId>
-				<Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value>
-			</ConfigurationValueMatches>
-		</Criteria>
 	</ActionCriteria>
 	<InGameActions>
 		<UpdateDatabase id="JAC_Events_Data" criteria="JAC_Events_Banseiki">
 			<Properties><LoadOrder>300</LoadOrder></Properties>
 			<File>Data/JAC_HistoricalEvents_Schema.sql</File>
 			<File>Data/JAC_HistoricalEvents_Sengoku.sql</File>
-		</UpdateDatabase>
-		<UpdateDatabase id="JAC_Events_Plots_20km" criteria="JAC_Events_20km">
-			<Properties><LoadOrder>310</LoadOrder></Properties>
-			<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
-		</UpdateDatabase>
-		<UpdateDatabase id="JAC_Events_Plots_20km_Settlers" criteria="JAC_Events_20km_Settlers">
-			<Properties><LoadOrder>310</LoadOrder></Properties>
-			<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
-		</UpdateDatabase>
-		<UpdateDatabase id="JAC_Events_Plots_15km" criteria="JAC_Events_15km">
-			<Properties><LoadOrder>310</LoadOrder></Properties>
-			<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
-		</UpdateDatabase>
-		<UpdateDatabase id="JAC_Events_Plots_15km_Settlers" criteria="JAC_Events_15km_Settlers">
-			<Properties><LoadOrder>310</LoadOrder></Properties>
-			<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
 		</UpdateDatabase>
 		<UpdateText id="JAC_Events_Text" criteria="JAC_Events_Banseiki">
 			<File>Text/JAC_HistoricalEvents_Text.xml</File>
@@ -95,8 +47,6 @@
 	<Files>
 		<File>Data/JAC_HistoricalEvents_Schema.sql</File>
 		<File>Data/JAC_HistoricalEvents_Sengoku.sql</File>
-		<File>Data/JAC_HistoricalEvents_Plots_20km.sql</File>
-		<File>Data/JAC_HistoricalEvents_Plots_15km.sql</File>
 		<File>Data/JAC_HistoricalEvents_Icons.xml</File>
 		<File>Text/JAC_HistoricalEvents_Text.xml</File>
 		<File>Scripts/JAC_HistoricalEvents.lua</File>

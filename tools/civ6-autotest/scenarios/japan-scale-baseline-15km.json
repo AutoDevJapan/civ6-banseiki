@@ -1,0 +1,204 @@
+{
+  "name": "JAC Japan map 15 km baseline survey, OUCHI human, 50 turns (Q28 scale research)",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "metrics": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=Game.GetCurrentGameTurn(); local out={'T'..t}; for i=0,21 do local p=Players[i]; local n=PlayerConfigurations[i]:GetLeaderTypeName():gsub('LEADER_JAC_',''); if p and p:IsAlive() then local pop=0; local cities=0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation() end; local mil=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then mil=mil+1 end end; local tr=p:GetTreasury(); local net=math.floor((tr:GetGoldYield()-tr:GetTotalMaintenance())*10)/10; out[#out+1]=i..':'..n..' c'..cities..' p'..pop..' u'..mil..' g'..math.floor(tr:GetGoldBalance())..' n'..net else out[#out+1]=i..':'..n..' DEAD' end end; return table.concat(out,'; ')"
+    }
+  ]
+}
