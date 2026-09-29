@@ -231,7 +231,7 @@ class Japan1534RelationsTests(unittest.TestCase):
         lua = LUA.read_text(encoding="utf-8")
         self.assertIn("local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true, friendship = true}", lua)
         self.assertRegex(lua, r"if ALLIED_KINDS\[kind\] then\s+diploA:SetHasAllied\(b, true\)\s+"
-                              r"Game:SetProperty\(AllianceKey\(relation\[1\], relation\[2\]\), true\)")
+                              r"Game:SetProperty\(AllianceKey\(relation\[1\], relation\[2\]\), Game.GetCurrentGameTurn\(\)\)")
         self.assertNotIn(":SetPermanentAlliance(", lua)  # permanent alliances cannot be dissolved by an event
         apply = lua.split("local function Apply()", 1)[1]
         self.assertLess(apply.index("SetHasAllied(b, true)"), apply.index("RecheckVisibilityOnAll()"))
@@ -248,7 +248,7 @@ class Japan1534RelationsTests(unittest.TestCase):
             self.assertEqual(set(re.findall(r"\{'([A-Z_]+)','([A-Z_]+)'\}", listed)), allies)
             self.assertIn("'DIPLO_STATE_ALLIED'", code)
             self.assertIn("PlayersVisibility[id[d[1]]]", code)
-            self.assertIn("Game:GetProperty('JAC_1534_ALLIANCE_'..x..'-'..y)~=true", code)
+            self.assertIn("type(Game:GetProperty('JAC_1534_ALLIANCE_'..x..'-'..y))~='number'", code)
             self.assertNotIn("~='DIPLO_STATE_DECLARED_FRIEND'", code)
         for code in codes[:3]:  # a far non-allied pair must not see each other
             self.assertIn("for _,d in ipairs({{'DATE','SHIMAZU'},{'SHIMAZU','DATE'}}) do local ok,city=seesNone", code)
@@ -322,10 +322,22 @@ class Japan1534RelationsTests(unittest.TestCase):
                         end.index("SetHasAllied(b, false)"))
         keep = body("local function KeepStartAlliances()")
         self.assertIn("IsStartAllianceActive(factionA, factionB)", keep)  # ended pairs are never renewed
-        self.assertLess(keep.index("IsAtWarWith(b)"), keep.index("pcall(Renew, diplo, b)"))
-        renew = body("local function Renew(diplo, b)")
-        self.assertIn("GetAllianceTurnsUntilExpiration(b)", renew)
-        self.assertLess(renew.index("SetHasAllied(b, false)"), renew.index("SetHasAllied(b, true)"))
+        self.assertLess(keep.index("IsAtWarWith(b)"), keep.index("pcall(Renew, diplo, b,"))
+        # GetAllianceTurnsUntilExpiration is nil in the gameplay context (live diplo-12), so count from the stored turn
+        self.assertNotIn("GetAllianceTurnsUntilExpiration(", lua)
+        self.assertIn('return type(Game:GetProperty(AllianceKey(factionA, factionB))) == "number"', lua)
+        self.assertIn('GameInfo.GlobalParameters["DIPLOMACY_ALLIANCE_TIME_LIMIT"]', lua)
+        self.assertIn("local turn, limit = Game.GetCurrentGameTurn(), AllianceTimeLimit()", keep)
+        self.assertIn("pcall(Renew, diplo, b, madeTurn, turn, limit)", keep)
+        self.assertIn("Game:SetProperty(key, turn)", keep)
+        self.assertIn('if result ~= "renewed" then Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1) end', keep)
+        renew = body("local function Renew(diplo, b, madeTurn, turn, limit)")
+        lapse, early = renew.split("\n\tend\n", 1)
+        self.assertIn("if not diplo:HasAllied(b) then", lapse)
+        self.assertIn('return "re-made after lapse"', lapse)
+        self.assertIn("if turn - madeTurn < limit - 1 then return nil end", early)  # renew one turn before the limit
+        self.assertLess(early.index("SetHasAllied(b, false)"), early.index("SetHasAllied(b, true)"))
+        self.assertIn('return "renewed"', early)
         # keys are order-insensitive and match the scenario's 'JAC_1534_ALLIANCE_'..x..'-'..y with x < y
         self.assertIn('local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"', lua)
         key = body("local function AllianceKey(factionA, factionB)")
@@ -339,6 +351,13 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertGreater(sum(s["turns"] for s in steps if s["action"] == "autoplay"), 30)
         self.assertIn("GameInfo.GlobalParameters['DIPLOMACY_ALLIANCE_TIME_LIMIT'].Value", steps[-1]["code"])
         self.assertIn("if elapsed<=limit then error", steps[-1]["code"])
+        # the alliance never lapsed (no "re-made after lapse") and every pair was renewed after the start turn
+        self.assertIn("local lapses=Game:GetProperty('JAC_1534_ALLIANCE_LAPSES'); if lapses~=nil then error", steps[-1]["code"])
+        self.assertIn("made<=GameConfiguration.GetStartTurn() then error", steps[-1]["code"])
+        self.assertIn('local LAPSES_KEY = "JAC_1534_ALLIANCE_LAPSES"', lua)
+        # live diplo-14: the Oda human seat died at turn 29 of 33; the largest house holds the seat as in japan-prosperous-15km
+        seats = next(s["players"] for s in steps if s["action"] == "configure")
+        self.assertEqual([p["civ"] for p in seats if p["human"]], ["CIVILIZATION_JAC_OUCHI"])
 
     def test_sengoku_tree_keeps_the_printing_access_bonus(self):
         sql = (ROOT / "poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8")

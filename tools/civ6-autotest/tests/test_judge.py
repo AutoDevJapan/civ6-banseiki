@@ -203,15 +203,17 @@ class JudgeTests(unittest.TestCase):
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
+            "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
             "japan-1534-relations.json", "probe-ally-vision.json", "probe-alliance-type.json",
             "japan-1534-relations-settlers.json",
             "japan-1534-feud-ui.json",
             "japan-resources.json",
-            "japan-no-world-congress.json",
+            "japan-no-world-congress.json", "japan-city-names.json",
             "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
             "japan-map-15km-200turn.json",
+            "japan-scale-baseline-15km.json", "japan-prosperous-15km.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

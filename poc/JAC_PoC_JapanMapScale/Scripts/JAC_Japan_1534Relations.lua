@@ -33,11 +33,11 @@ local RELATIONS = {
 -- 味方（開始時に同盟にし、期限なしで保つ組）。友好（島津と琉球王国）も含む（オーナー判断 2026-09-30・Discord H）
 local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true, friendship = true}
 
--- 味方の組ごとの Game プロパティ。true = 開始時の同盟が続いている、false = イベントなどで終わった。セーブに残る
+-- 味方の組ごとの Game プロパティ。数値 = 開始時の同盟が続いていて、その値のターンに結んだ（結び直した）、false = イベントなどで終わった。セーブに残る
 local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"
 
--- 通常の同盟の期限（DIPLOMACY_ALLIANCE_TIME_LIMIT = 30）の残りがこのターン数以下になったら結び直す
-local RENEW_AT = 2
+-- 期限切れで同盟が途切れ、結び直した回数（Game プロパティ。途切れなければ nil のまま）。実機シナリオが 0 を確かめる
+local LAPSES_KEY = "JAC_1534_ALLIANCE_LAPSES"
 
 local function Log(message)
 	print("[JAC_1534_RELATIONS] " .. message)
@@ -59,7 +59,13 @@ local function AllianceKey(factionA, factionB)
 end
 
 local function IsStartAllianceActive(factionA, factionB)
-	return Game:GetProperty(AllianceKey(factionA, factionB)) == true
+	return type(Game:GetProperty(AllianceKey(factionA, factionB))) == "number"
+end
+
+-- 通常の同盟の期限（ターン）。公式の既定は 30（Base/Assets/Gameplay/Data/GlobalParameters.xml:232）
+local function AllianceTimeLimit()
+	local row = GameInfo.GlobalParameters["DIPLOMACY_ALLIANCE_TIME_LIMIT"]
+	return (row and tonumber(row.Value)) or 30
 end
 
 -- 開始時の同盟を終わらせる。将来のイベント（裏切りなど）がゲームプレイのスクリプトから呼ぶ。
@@ -78,21 +84,24 @@ local function EndStartAlliance(factionA, factionB)
 	return true
 end
 
--- 同盟が切れていれば結び直し、期限が近ければ解いて結び直して期限を数え直す。結び直したら true
-local function Renew(diplo, b)
-	if diplo:HasAllied(b) then
-		local ok, left = pcall(function() return diplo:GetAllianceTurnsUntilExpiration(b) end)
-		-- 残りが読めない・負（期限なし）・まだ先なら何もしない。切れたら次のターンの初めに結び直す
-		if not ok or type(left) ~= "number" or left < 0 or left > RENEW_AT then return false end
-		diplo:SetHasAllied(b, false)
+-- 期限の1ターン前になったら、同盟を解いて結び直し、期限を数え直す（"renewed"）。万一切れていたら結び直す（"re-made after lapse"）。
+-- 期限の残りを読む GetAllianceTurnsUntilExpiration などはゲームプレイ側では nil（実機 diplo-12）なので、結んだターンから数える。
+-- 何かしたらログの語を返す
+local function Renew(diplo, b, madeTurn, turn, limit)
+	if not diplo:HasAllied(b) then
+		diplo:SetHasAllied(b, true)
+		return "re-made after lapse"
 	end
+	if turn - madeTurn < limit - 1 then return nil end
+	diplo:SetHasAllied(b, false)
 	diplo:SetHasAllied(b, true)
-	return true
+	return "renewed"
 end
 
 -- 毎ターンの初めに、続いている開始時の同盟を保つ。RELATIONS の順に処理する（全員で同じ順になる）
 local function KeepStartAlliances()
 	local players = MajorPlayersByFaction()
+	local turn, limit = Game.GetCurrentGameTurn(), AllianceTimeLimit()
 	for _, relation in ipairs(RELATIONS) do
 		local factionA, factionB = relation[1], relation[2]
 		local a, b = players[factionA], players[factionB]
@@ -102,13 +111,18 @@ local function KeepStartAlliances()
 				-- 同盟国どうしは通常の外交では宣戦できない。スクリプトなどで交戦になったら、同盟も終わりとする
 				EndStartAlliance(factionA, factionB)
 			else
-				local ok, result = pcall(Renew, diplo, b)
+				local key = AllianceKey(factionA, factionB)
+				local madeTurn = Game:GetProperty(key)
+				local ok, result = pcall(Renew, diplo, b, madeTurn, turn, limit)
 				if not ok then
 					Log(string.format("FAILED renew %s %s-%s: %s", relation[4], factionA, factionB, tostring(result)))
 				elseif result then
+					Game:SetProperty(key, turn)
+					if result ~= "renewed" then Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1) end
 					diplo:RecheckVisibilityOnAll()
 					Players[b]:GetDiplomacy():RecheckVisibilityOnAll()
-					Log(string.format("renewed %s %s-%s on turn %d", relation[4], factionA, factionB, Game.GetCurrentGameTurn()))
+					Log(string.format("%s %s %s-%s on turn %d (made on turn %d, limit %d)",
+						result, relation[4], factionA, factionB, turn, madeTurn, limit))
 				end
 			end
 		end
@@ -142,14 +156,14 @@ local function Apply()
 				ok = true -- 何もしない。減点は修正値が担う
 			else
 				-- 味方は友好宣言のあと通常の同盟にする。視界の共有は、両家が持つ特性 TRAIT_JAC_1534_ALLY_VISION が同盟に効かせる（オーナー判断G）。
-				-- 永久同盟（SetPermanentAlliance）は解く関数が無いので使わない。期限は KeepStartAlliances が毎ターン延ばす。
+				-- 永久同盟（SetPermanentAlliance）は解く関数が無いので使わない。期限は KeepStartAlliances が期限の1ターン前に結び直して延ばす。
 				-- 公式：DLC/VikingsScenario/Scripts/VikingScenario.lua:18〜:20
 				ok, err = pcall(function()
 					diploA:SetHasDeclaredFriendship(b, true)
 					diploB:SetHasDeclaredFriendship(a, true)
 					if ALLIED_KINDS[kind] then
 						diploA:SetHasAllied(b, true)
-						Game:SetProperty(AllianceKey(relation[1], relation[2]), true)
+						Game:SetProperty(AllianceKey(relation[1], relation[2]), Game.GetCurrentGameTurn())
 					end
 				end)
 			end

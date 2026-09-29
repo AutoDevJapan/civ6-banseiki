@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Historical maps only: every starting unit comes from the map's Units rows, so no
+     era/difficulty starting unit (settler, warrior, AI bonus units) is added.
+     Same as the official static-map scenarios, e.g. DLC/WarMachineScenario/Data/WarMachineScenario_RemoveData.xml:344-346. -->
 <GameInfo>
   <MajorStartingUnits>
-    <Delete Unit="UNIT_SETTLER"/>
+    <Delete/>
   </MajorStartingUnits>
 </GameInfo>
