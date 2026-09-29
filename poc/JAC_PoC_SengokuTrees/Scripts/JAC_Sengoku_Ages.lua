@@ -101,12 +101,21 @@ end
 
 local function PlotIndex(x, y) return Map.GetPlot(x, y):GetIndex() end
 
--- Cities of every alive major: plot key -> {owner, index}, and the city count per owner.
--- ponytail: majors only (the Japan maps have no city-states and no loyalty flips, SSOT 3.1); a city held by a
--- non-major looks razed and is re-registered without points when a house takes it.
+-- Every alive player's ID, sorted. PlayerManager.GetAlive has the city-states and the free cities too
+-- (gameplay use: DLC/NubiaScenario/Scripts/NubiaScenario.lua:83).
+local function AlivePlayerIDs()
+	local ids = {}
+	for _, player in ipairs(PlayerManager.GetAlive()) do table.insert(ids, player:GetID()) end
+	table.sort(ids)
+	return ids
+end
+
+-- Cities of every alive player: plot key -> {owner, index}, and the city count per owner. The pack runs on the
+-- Gathering Storm maps too (SSOT 3.1), where a castle can pass to a city-state or the free cities; its record
+-- keeps its history there, and only a house (a major with a ledger entry) scores (AddPoints).
 local function CurrentCities()
 	local cities, counts = {}, {}
-	for _, id in ipairs(AliveMajorIDs()) do
+	for _, id in ipairs(AlivePlayerIDs()) do
 		counts[id] = 0
 		for _, city in Players[id]:GetCities():Members() do  -- BlackDeathScenario.lua:136
 			local index = PlotIndex(city:GetX(), city:GetY())
@@ -213,7 +222,8 @@ end
 local function IntakeCities(l)
 	local cities, counts = CurrentCities()
 	for _, key in ipairs(SortedKeys(l.cities)) do
-		if cities[key] == nil then l.cities[key] = nil end  -- razed: no points (the capture event scored it)
+		-- Gone from every player's list: razed, no points (the capture event scored it).
+		if cities[key] == nil then l.cities[key] = nil end
 	end
 	for _, key in ipairs(SortedKeys(cities)) do
 		local owner = cities[key].owner

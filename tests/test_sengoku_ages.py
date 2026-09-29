@@ -203,8 +203,8 @@ local function citiesOf(id)
   return list
 end
 local function cityObject(c) return { GetX = function() return c.x end, GetY = function() return c.y end } end
-for i, civ in ipairs(civs) do
-  local id = i - 1
+FREE_CITIES = 62  -- a non-major player (the free cities; a city-state behaves the same here)
+local function makePlayer(id, civ)
   ALIVE[id], TEAM[id] = true, id
   local p = { research = { techs = {}, civics = {} } }
   p.GetID = function() return id end
@@ -227,11 +227,23 @@ for i, civ in ipairs(civs) do
   Players[id] = p
   PlayerConfigurations[id] = { GetCivilizationTypeName = function() return civ end }
 end
-PlayerManager = { GetAliveMajors = function()
+for i, civ in ipairs(civs) do makePlayer(i - 1, civ) end
+makePlayer(FREE_CITIES, "CIVILIZATION_FREE_CITIES")
+local function alive(ids)
   local list = {}
-  for id = 0, #civs - 1 do if ALIVE[id] then table.insert(list, Players[id]) end end
+  for _, id in ipairs(ids) do if ALIVE[id] then table.insert(list, Players[id]) end end
   return list
-end }
+end
+local majors = {}
+for i = 1, #civs do majors[i] = i - 1 end
+PlayerManager = {
+  GetAliveMajors = function() return alive(majors) end,
+  GetAlive = function()  -- the free cities come first, as the order is not the ID order live
+    local ids = { FREE_CITIES }
+    for _, id in ipairs(majors) do table.insert(ids, id) end
+    return alive(ids)
+  end,
+}
 ParameterTypes = { MESSAGE = "MESSAGE", SUMMARY = "SUMMARY" }
 NotificationTypes = { USER_DEFINED_2 = 2 }
 NOTES = {}
@@ -374,6 +386,36 @@ class LedgerTests(unittest.TestCase):
         self.turns(2)
         self.g.CAPTURE(1, 20, 20)
         self.assertEqual(self.parts(1), {"home": 6})
+
+    # --- castles held by a non-major (Gathering Storm maps, SSOT 3.1) ---
+
+    def test_castle_through_the_free_cities_keeps_its_history_and_regain_scores(self):
+        self.turns(1)
+        self.g.TRANSFER(self.g.FREE_CITIES, 2, 1)  # Oda's castle flips to the free cities (no event, a diff)
+        self.turns(2, 3)
+        record = self.g.LEDGER().cities["plot102"]
+        self.assertEqual((record.owner, record.original, record.n), (62, 0, 1))
+        self.assertIsNone(self.g.LEDGER().houses["p62"])
+        self.g.CAPTURE(0, 2, 1)  # Oda takes it back: its former own castle
+        self.turns(4)
+        self.assertEqual(self.parts(0), {"regain": 3})
+        self.assertEqual(self.g.LEDGER().cities["plot102"].n, 2)
+
+    def test_home_taken_from_a_city_state_is_still_a_home(self):
+        self.turns(1)
+        self.g.CAPTURE(self.g.FREE_CITIES, 1, 1)  # a non-major takes Oda's home: nobody scores
+        self.turns(2)
+        self.assertEqual(self.house(0).home, "plot101")
+        self.g.CAPTURE(1, 1, 1)  # Takeda takes it from the non-major
+        self.turns(3)
+        self.assertEqual(self.parts(1), {"home": 6})
+        self.assertEqual([self.score(p) for p in (0, 2, 3)], [0, 0, 0])
+
+    def test_castle_of_a_non_major_has_no_age_flags(self):
+        self.turns(1, 66)  # every house dark
+        self.assertEqual(self.plot(14, 12).GetProperty(None, "JAC_AGE_POLICY_VALOR"), 1)
+        self.g.TRANSFER(self.g.FREE_CITIES, 14, 12)
+        self.assertEqual(self.plot_properties()[1214], (0,) * 9)
 
     # --- research, events (§5.1) ---
 
