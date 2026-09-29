@@ -1,4 +1,6 @@
--- Provisional 1534 knowledge common to every major in the Sengoku pack.
+-- 1534 knowledge common to every major in the Sengoku pack.
+-- Scope (intended, owner-confirmed): granted on ALL maps of RULESET_JAC_BANSEIKI where the pack is active,
+-- not only Japan maps; the modinfo action criteria are ruleset-based (JAC_Sengoku_BanseikiOnly), never map-based.
 -- StartingCivics does not grant civics at an Ancient start (live 2026-09-29: 0 civics), so both are scripted
 -- like the official IndonesiaKhmerScenario.lua:31 (pCulture:SetCivic).
 local INITIALIZED_KEY = "JAC_SENGOKU_STARTING_KNOWLEDGE_GRANTED_V1";

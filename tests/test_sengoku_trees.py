@@ -210,6 +210,10 @@ class SengokuTreeTests(unittest.TestCase):
         script = meta.find("./InGameActions/AddGameplayScripts")
         self.assertIsNotNone(script)
         self.assertEqual(script.attrib["criteria"], "JAC_Sengoku_BanseikiOnly")
+        # Scope is the whole Banseiki ruleset (all maps), not map-based.
+        criteria = {c.attrib["id"]: c for c in meta.findall("./ActionCriteria/Criteria")}
+        self.assertEqual([c.tag for c in criteria["JAC_Sengoku_BanseikiOnly"]], ["RuleSetInUse"])
+        self.assertEqual(criteria["JAC_Sengoku_BanseikiOnly"].findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
         self.assertEqual([f.text for f in script.findall("File")],
                          ["Scripts/JAC_Sengoku_StartingKnowledge.lua"])
 
