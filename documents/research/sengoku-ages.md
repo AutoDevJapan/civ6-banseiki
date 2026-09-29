@@ -132,8 +132,12 @@ SSOT 3.2 に反映済みの決定。本書はこれを前提にし、別案は�
 | `THRESHOLD_SHIFT_PER_ANARCHY`・`…_INCOMPLETE_ERA_CIVIC`・`…_INCOMPLETE_ERA_TECH`・`…_INCOMPLETE_OLD_CIVIC`・`…_INCOMPLETE_OLD_TECH`・`…_MISSING_AMENITY` | 0（公式のまま） | 公式でも 0（`:248-260`）。他の MOD が変えても 0 に戻るよう、同じ値で上書きする |
 | `Eras_XP2.EraScoreThresholdShift` | 全行 0 | `ERA_ANCIENT` の −3（`Expansion2_Eras.xml:65`）を消し、式を補正なしにそろえる |
 | `COMMEMORATE_BASE_CHOICES_ALLOWED`・`COMMEMORATE_OPTIONS_MAX` | 0 | 公式の誓約ダイアログを出さない（Dramatic Ages と同じ） |
-| `Moments.EraScore` | 全行 0 | 公式の歴史的瞬間は年表の演出として残し、点は持たせない。`E` は 0 のままになる |
+| `Moments.EraScore` | 全行 0 | 公式の歴史的瞬間は年表の演出として残し、点は持たせない |
+| 時代スコアを加える Modifier の取り付け行 | 削除 | 瞬間以外の点の入口（型は `DLC/Expansion2/Data/Expansion1_Modifiers.xml:15-32,184-186`、`Expansion2_Modifiers.xml:80`）を塞ぐ。公式で取り付けているのは次の 3 か所だけ（2026-09-30 に公式 XML 全体を検索）：(a) 誓約の目標 `CommemorationModifiers` の `COMMEMORATION_*_QUEST*` 17 行（`Expansion1_Moments.xml`・`Expansion2_Moments.xml:149`。誓約を選べなくするので本来は効かないが、二重の備えで消す）、(b) タージ・マハル `BuildingModifiers` の `TAJ_MAHAL_EXTRA_ERA_SCORE`（`DLC/Expansion1/Data/Expansion1_Buildings_Major.xml:78`。2 点以上の瞬間ごとに +1 なので瞬間 0 点では効かないが消す）、(c) Dramatic Ages の `GameModifiers` 3 行（`Byzantium_Gaul_DramaticAges_MODE.xml:96-100`。技術・制度の完了と昇進ごとに +1。モードを使わない前提だが、モードで読み込まれても消えるよう `LoadOrder` を後にして消す） |
+
 | `DIPLOACTION_DECLARE_GOLDEN_AGE_WAR` | 削除 | 公式の黄金時代に結びついた外交行動を消す（`Byzantium_Gaul_DramaticAges_Expansion2_MODE.xml:7`） |
+
+瞬間の点と上の 3 か所をすべて 0・削除にして初めて `E` は 0 のままになる（瞬間の点だけでは足りない）。
 
 公式の年齢に結びついた効果も、万一の年齢の発生に備えて外す（二重の備え）：
 
@@ -163,19 +167,20 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 
 | 区分 | 条件 | 点 | 付く相手 | 重複の防止（キー） |
 |---|---|---:|---|---|
-| 本拠陥落 | 他の家の本拠（開始時の首都。開拓者から始める場合は最初の首都。§5.2）を奪う | 6 | 奪った家 | `cap:<タイル番号>:<ターン>` |
+| 本拠陥落 | 他の家の本拠（開始時の首都。開拓者から始める場合は最初の首都。§5.2）を奪う | 6 | 奪った家 | `cap:<タイル番号>:<n>`（下） |
 | 大名家滅亡 | 奪った城で相手の家の城が 0 になる | 8 | 最後の城を奪った家 | `ko:<滅んだ家>` |
-| 旧領回復 | 最初の持ち主が自分だった城（開始時の城、または自分で建てた城。§5.2）を取り戻す | 3 | 取り戻した家 | `cap:<タイル番号>:<ターン>` |
-| 支城の占領 | 上のどれにも当たらない城の奪取 | 2 | 奪った家 | `cap:<タイル番号>:<ターン>` |
+| 旧領回復 | 最初の持ち主が自分だった城（開始時の城、または自分で建てた城。§5.2）を取り戻す | 3 | 取り戻した家 | `cap:<タイル番号>:<n>`（下） |
+| 支城の占領 | 上のどれにも当たらない城の奪取 | 2 | 奪った家 | `cap:<タイル番号>:<n>`（下） |
 | 同盟 | 外交で Civ6 の同盟を新しく結ぶ（開始時の同盟とその結び直しは除く。§5.4） | 2 | 両方の家 | `ally:<小さい番号>:<大きい番号>:<期>` |
 | 史実イベント | イベントごとに決める（1〜3 の目安） | 表で定義 | イベントの対象の家 | `evt:<イベント ID>:<家>` |
 | 技術・社会制度 | 1 つ完了するごと（開始時に与えたものは除く） | 1 | 研究した家 | 完了数の差分 |
 | 誓約の達成 | 通常期・暗黒期の誓約の条件（§7.2） | 1 | 誓約した家 | 誓約ごとに定義 |
 
+- 奪取のキーの `<n>` は、そのタイルの城の記録に持たせる奪取の回数（記録するたびに 1 増やす）。ターンや新しい持ち主をキーにすると、同じターンに同じ城が A→B→A→B と奪い合われたとき 2 回目以降が同じキーになり点が漏れるため、回数で区別する。占領イベントと差分は同じ記録を書き換えるので、どちらが先に走っても 1 回の奪取は 1 つの `<n>` にしかならない（§5.2）。
 - 1 回の奪取は 1 区分だけで数える（本拠 > 旧領 > 支城の順）。大名家滅亡は、その奪取の区分に重ねて数える。
 - 奪取は戦闘に限らず、所有者が変わったものを数える（吸収・降伏・移管で城が移る場合も同じ。SSOT 9）。忠誠による離反は日本マップでは起きない（SSOT 3.1）。
 - 研究の点は Dramatic Ages の「技術・制度の完了ごと +1」に相当する床（`Byzantium_Gaul_DramaticAges_MODE.xml:96-131`）。戦わない家が毎回暗黒期になるのを避ける。
-- 史実イベントの点は、台帳の表（出来事ごとの点。`EventType` をキーにする）で持たせる。出来事の仕組み（PR #42、`poc/JAC_PoC_HistoricalEvents`。未マージ）は、効果を与えた家のプレイヤーのプロパティ `JAC_EVENT_FIRED_<EventType>` に与えたターンを書く（1 家 1 回。セーブに残る）。台帳はこれを読むだけで、出来事の側に書き込みを足さない（§5.2）。ひらめきだけの `JAC_EVENT_BOOSTED_<EventType>` は点にしない。
+- 史実イベントの点は、台帳の表（出来事ごとの点。`EventType` をキーにする）で持たせる。出来事の仕組み（PR #42、`poc/JAC_PoC_HistoricalEvents`。main にマージ済み：`poc/JAC_PoC_HistoricalEvents/Scripts/JAC_HistoricalEvents.lua:11-12`）は、効果を与えた家のプレイヤーのプロパティ `JAC_EVENT_FIRED_<EventType>` に与えたターンを書く（1 家 1 回。セーブに残る）。台帳はこれを読むだけで、出来事の側に書き込みを足さない（§5.2）。ひらめきだけの `JAC_EVENT_BOOSTED_<EventType>` は点にしない。
 
 ### 5.2 数え方（ターン開始時の差分）
 
@@ -188,7 +193,7 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 
 差分だけでは、占領してすぐ破却された城（公式では占領のときに破却を選べる）が次の記録の時点でタイルに無く、点が漏れる。最後の城なら大名家滅亡の点も漏れる。そこで次の 2 つのイベントで補う。
 
-- **占領** `GameEvents.CityConquered(capturerID, ownerID, cityID, x, y)`（`DLC/NubiaScenario/Scripts/NubiaScenario.lua:937,969`）：戦闘で城を奪ったその場で、§5.1 の区分で点を付け、城の記録の持ち主を奪った家に書き換える。負けた家の城が 0 になっていれば大名家滅亡（`ko:<家>`）もここで付ける。占領の直後に破却されても点は残る。記録を書き換えてあるので、次のターン開始の差分は同じ奪取を数えない。キーも差分と同じ `cap:<タイル番号>:<ターン>` を使い、どちらが先に走っても 1 回だけにする。
+- **占領** `GameEvents.CityConquered(capturerID, ownerID, cityID, x, y)`（`DLC/NubiaScenario/Scripts/NubiaScenario.lua:937,969`）：戦闘で城を奪ったその場で、§5.1 の区分で点を付け、城の記録の持ち主を奪った家に書き換える。負けた家の城が 0 になっていれば大名家滅亡（`ko:<家>`）もここで付ける。占領の直後に破却されても点は残る。記録を書き換えてあるので、次のターン開始の差分は同じ奪取を数えない。キーも差分と同じ `cap:<タイル番号>:<n>`（§5.1）を使い、どちらが先に走っても 1 回だけにする。同じターンに同じ城が何度奪われても、占領のたびに `<n>` が進むのでそのつど点になる。
 - **建設** `GameEvents.CityBuilt(playerID, cityID, x, y)`（`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:56,255`）：新しく建てた都市だけでなく、`CityManager.TransferCity` で持ち主が変わった都市でも出る（2026-09-29 の実機。[天下統一勝利 PoC](../poc/unification-victory.md) の記録方法 2）。そのため `CityBuilt` では点を付けず、(a) 記録に無いタイルなら新しい城として登録する（最初の持ち主＝`playerID`）、(b) §7.1 の年齢のプロパティをその家の都市に書き直す、の 2 つだけを行う。どちらも今の状態に合わせて書くだけなので、移管で何度呼ばれても結果は同じ。移管の点は次のターン開始の差分で数える。
 
 本拠：ターン 1 に首都がある家は、その首都を本拠にする。開拓者から始める設定（マルチプレイ。SSOT 3.1）で本拠が未登録の家は、最初の持ち主が自分で最初の首都の城（`City:GetOriginalOwner()`・`City:IsOriginalCapital()`：`DLC/Expansion2/UI/CityBanners/CityBannerManager.lua:1765`）を初めて記録したときに本拠にする。移管で受け取った他の家の首都は、最初の持ち主が違うので本拠にならない。この 2 つの関数をゲームプレイ側の Lua で呼べるかは**要実機確認**（UI 側の使用例しかない。呼べなければ、本拠が未登録の家が建てた最初の都市を本拠にする）。
@@ -213,7 +218,7 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 
 ### 5.4 同盟の点と天下統一同盟
 
-- 点になる「同盟」は、**外交（取引）で** Civ6 の同盟（研究・経済・軍事など、`DLC/Expansion2/Data/Expansion1_Alliances.xml:23-29`。戦国パックでは社会制度 C11 で解放：[ツリーの付け替え](../poc/sengoku-tree-unlocks.md)）を新しく結んだとき（Q37）。
+- 点になる「同盟」は、**外交（取引）で** Civ6 の同盟（研究・経済・軍事など、`DLC/Expansion2/Data/Expansion1_Alliances.xml:23-29`。戦国パックでは社会制度 C11 で解放：[ツリーの付け替え](../poc/sengoku-tree-unlocks.md)）を新しく結んだとき。友好宣言は暫定で点にしない（Q37）。
 - **開始時の同盟（味方 8 組）は点にしない。** SSOT 3.1 の味方 8 組は、友好宣言に加えて Civ6 の通常の同盟で始まり（`SetHasAllied`）、エンジンの期限（30 ターン）で解けるたびに Lua が同じターンの初めに結び直す（1 回目はターン 32、以後 31 ターンごと。[関係の実装メモ](../poc/japan-1534-relations.md)「開始時の同盟を期限なしで保つ」）。どちらも外交で結んだものではない。
 - 見分け方：組の Game プロパティ `JAC_1534_ALLIANCE_<勢力A>-<勢力B>`（勢力名は `CIVILIZATION_JAC_` を除いた名前の辞書順。値は結んだ・結び直したターンの数値か、イベントで終えた印の `false`。`JAC_Japan_1534Relations.lua:37,59`）を読む。台帳は組ごとに前のターンの状態を「同盟なし」「同盟あり」「開始時の同盟」の 3 つで記録し、毎ターン次の順で決める（ゲームプレイの Lua だけで、`HasAllied` とプロパティを読むだけなので全端末で同じ結果になる）。
   1. プロパティが数値の組：状態を「開始時の同盟」にし、点にしない。`HasAllied` は見ない。エンジンが期限で解いた直後と結び直した直後のどちらを見ても同じ結果になるので、`OnGameTurnStarted` の中で台帳と結び直しのどちらが先に走っても点が出ない（ターン 32 の切れ目も含む）。
@@ -318,8 +323,9 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 1. データ：公式の年齢・誓約を止める設定（§4.2）、`ERA_RENAISSANCE` の最長ターン（§4.3）、改元の表（名前・年・月、ja/en/ru）、年齢の効果・誓約・暗黒期の専用政策の `Modifiers` と、それを付ける共通の特性 `TRAIT_JAC_AGES`（§7）。
 2. ゲームプレイ Lua：台帳の初期化・ターン開始の差分・占領と建設のイベント・改元の判定・タイルのプロパティを書く関数・選択の受け付け（§5・§6・§7.1）。
 3. UI Lua：改元の画面と時代スコアの画面（§8）。家固有名の差し替えに足す。
-4. 自動テスト：データの断面（§4.2 の最終値：暗黒・黄金の基準値が −9999・9999、閾値の補正がすべて 0、`Eras_XP2.EraScoreThresholdShift` が全行 0、誓約の選択数・提示数が 0、`Moments.EraScore` が全行 0。公式の年齢の忠誠の `TraitModifiers` 2 行が無い、`RequiresDarkAge`・`RequiresGoldenAge` の政策が 0 件。改元の表が 8 行、Modifier がある）と、台帳の Lua を Python（lupa）で動かす単体テスト（奪取の区分、キーの重複防止、閾値の式、同盟の 1 期 1 回、開始時の同盟を数えない（ターン 32 の期限切れと結び直しを、台帳が先に走る順と後に走る順の両方で 0 点。プロパティが `false` になった後に残る同盟も 0 点で、エンジンが解いた後に外交で結び直せば 2 点。同じチームの組は 0 点）、出来事の点（フラグの 1 家 1 回、改元のターンのフラグは新しい期）、読み込み後に数え直さない、占領してすぐ破却した城の点と滅亡の点、占領イベントと差分で二重に数えない、移管で出る `CityBuilt` で点を付けない、開拓者から始めた家の本拠の登録、プロパティを書く関数を何度呼んでも同じで要の都市が家ごとに 1 つ）。
+4. 自動テスト：データの断面（§4.2 の最終値：暗黒・黄金の基準値が −9999・9999、閾値の補正がすべて 0、`Eras_XP2.EraScoreThresholdShift` が全行 0、誓約の選択数・提示数が 0、`Moments.EraScore` が全行 0。型に `ERA_SCORE` を含む Modifier を参照する取り付け行（`CommemorationModifiers`・`BuildingModifiers`・`GameModifiers`・`TraitModifiers`・`PolicyModifiers` など全表）が 0 件。公式の年齢の忠誠の `TraitModifiers` 2 行が無い、`RequiresDarkAge`・`RequiresGoldenAge` の政策が 0 件。改元の表が 8 行、Modifier がある）と、台帳の Lua を Python（lupa）で動かす単体テスト（奪取の区分、キーの重複防止、同じ城を同じターンに再奪取（A→B→A、A→B→A→B）してそのつど点になる、閾値の式、同盟の 1 期 1 回、開始時の同盟を数えない（ターン 32 の期限切れと結び直しを、台帳が先に走る順と後に走る順の両方で 0 点。プロパティが `false` になった後に残る同盟も 0 点で、エンジンが解いた後に外交で結び直せば 2 点。同じチームの組は 0 点）、出来事の点（フラグの 1 家 1 回、改元のターンのフラグは新しい期）、読み込み後に数え直さない、占領してすぐ破却した城の点と滅亡の点、占領イベントと差分で二重に数えない、移管で出る `CityBuilt` で点を付けない、開拓者から始めた家の本拠の登録、プロパティを書く関数を何度呼んでも同じで要の都市が家ごとに 1 つ）。
 5. 実機：約 200 ターンの自動進行で年齢の割合を測り、数値を決める。あわせて次を確かめる。
+   - 公式の時代スコアが入らない：毎ターン全勢力で今の期の公式の点（`GetPlayerCurrentEraScoreBreakdown` の合計）が 0（§4.2 の Modifier の削除が効いていること）。
    - 公式の年齢が起きない：毎ターン全勢力で `GetPlayerDarkAgeThreshold` ≤ `GetPlayerCurrentScore` ＜ `GetPlayerGoldenAgeThreshold`、公式の時代が切り替わるたびに `HasDarkAge`・`HasGoldenAge`・`HasHeroicGoldenAge` が偽（§4.2）。
    - 開始時の同盟：史実の領土の日本マップで、ターン 31〜34 と 62〜65 の台帳の同盟の点が 8 組とも 0 で、Lua.log に `re-made after lapse` が出ていること（§5.4）。
    - セーブ→読み込み：§6.1 の (1)〜(4)。都市はターン 1 からある城と、占領した城の両方を見る。

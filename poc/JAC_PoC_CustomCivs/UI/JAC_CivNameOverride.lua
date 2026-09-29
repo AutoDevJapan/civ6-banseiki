@@ -5,6 +5,17 @@
 local RENAME_NAME_PROPERTY = "JAC_POC_CUSTOM_CIVS_RENAMED_NAME"
 local TAKEDA_CIV = "CIVILIZATION_JAC_TAKEDA"
 local NAME_GETTERS = { "GetCivilizationShortDescription", "GetCivilizationDescription" }
+-- 史実の出来事（JAC_PoC_HistoricalEvents）が文明ごとに書く表示名。キーは JAC_CIV_NAME_<CivilizationType>。
+local CIV_NAME_PREFIX = "JAC_CIV_NAME_"
+
+-- 文明の表示名の上書き先（LOC キー）を返す。無ければ nil。
+function JAC_GetCivNameTarget(civType)
+	local target = Game:GetProperty(CIV_NAME_PREFIX .. tostring(civType))
+	if target == nil and civType == TAKEDA_CIV then
+		target = Game:GetProperty(RENAME_NAME_PROPERTY)
+	end
+	return target
+end
 
 function JAC_InstallCivNameOverride(contextName)
 	local config = PlayerConfigurations and PlayerConfigurations[0]
@@ -23,16 +34,14 @@ function JAC_InstallCivNameOverride(contextName)
 	for _, getter in ipairs(NAME_GETTERS) do
 		local original = methods[getter]
 		methods[getter] = function(self)
-			if self:GetCivilizationTypeName() == TAKEDA_CIV then
-				local target = Game:GetProperty(RENAME_NAME_PROPERTY)
-				if target then
-					if not applied then
-						applied = true
-						print(string.format("[JAC_POC] nameOverride context=%s result=applied getter=%s target=%s",
-							contextName, getter, tostring(target)))
-					end
-					return target
+			local target = JAC_GetCivNameTarget(self:GetCivilizationTypeName())
+			if target then
+				if not applied then
+					applied = true
+					print(string.format("[JAC_POC] nameOverride context=%s result=applied getter=%s target=%s",
+						contextName, getter, tostring(target)))
 				end
+				return target
 			end
 			return original(self)
 		end

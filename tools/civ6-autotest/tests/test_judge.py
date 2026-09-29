@@ -223,6 +223,7 @@ class JudgeTests(unittest.TestCase):
             "unification-victory.json", "unification-registry-15km.json",
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",
             "ages-probe.json",
+            "historical-events-15km.json",
             "house-crests.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",

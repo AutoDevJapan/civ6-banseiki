@@ -1,0 +1,248 @@
+-- SSOT 3.2: historical events happen in their historical year (and month, E6b); a target faction that has
+-- researched the related tech/civic gets the event's effects (earlier, if it researched first). When the year
+-- arrives, a faction without that research gets only a boost toward it, and the effects once it researches it.
+-- Data: Data/JAC_HistoricalEvents_*.sql.
+--
+-- Save/load and multiplayer: all state lives in Player/Game properties (saved with the game and
+-- shared by every machine); nothing is cached in Lua between turns. Evaluation runs only from
+-- GameEvents.OnGameTurnStarted, in a fixed order (events by due turn then type, players by ID),
+-- with no randomness and no local-player checks.
+
+local FIRED_PREFIX = "JAC_EVENT_FIRED_"          -- Player property: turn the event's effects were given (the flag)
+local BOOSTED_PREFIX = "JAC_EVENT_BOOSTED_"      -- Player property: turn the year arrived without the research (boost only)
+local RESOURCES_PREFIX = "JAC_EVENT_RESOURCES_"  -- Game property: plot indices where the event placed resources
+local CIV_NAME_PREFIX = "JAC_CIV_NAME_"          -- Game property read by CustomCivs UI/JAC_CivNameOverride.lua
+local FIRE_COUNT = "JAC_EVENTS_FIRE_COUNT"       -- Game property: total firings (for verification)
+
+local function Log(message)
+	print("[JAC_EVENTS] " .. message)
+end
+
+-- The official calendar exposes only a display string (Calendar.MakeYearStr), so a year is turned into
+-- a turn from the same table that drives the calendar: GameSpeed_Turns rows of the game speed in
+-- order (MonthIncrement months per turn for TurnsPerIncrement turns), rewritten for 1534 by
+-- SengokuTrees Data/JAC_Sengoku_Calendar.xml. Turn 1 is the start year; a turn's year is the start year
+-- plus the elapsed months / 12. Same method as GameSpeed_Turns in GameSpeeds.xml:64-103.
+-- The engine's turn counter does not start at 1 (the 1534 calendar starts it at GameConfiguration.GetStartTurn(),
+-- 16603 live), so every turn here is the game-relative one: current - start + 1, the same "keep turns
+-- starting at 1" the official top panel shows (Base/Assets/UI/TopPanel.lua:390). The start turn is part of
+-- the saved game configuration, so this is stable across save/load and game speeds.
+local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
+local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
+
+-- Month (1-12, optional) is the month of the Japanese calendar as the sources give it; turn 1 is month 1
+-- of the start year.
+-- One standard turn is 4 months, coarser than the lunar/solar offset.
+-- Stage order: the engine walks a speed's rows in rowid order (GameSpeedTurnCollection, ORDER BY rowid in
+-- 01_GameplaySchema.sql), which Lua cannot see, and GameInfo iteration order is not guaranteed. Every
+-- calendar (GameSpeeds.xml and JAC_Sengoku_Calendar.xml) lists a speed's stages from the longest turn to the
+-- shortest, so sorting by MonthIncrement descending gives the same order deterministically.
+local STAGES = {}
+for row in GameInfo.GameSpeed_Turns() do
+	if row.GameSpeedType == SPEED then table.insert(STAGES, row) end
+end
+table.sort(STAGES, function(a, b)
+	if a.MonthIncrement ~= b.MonthIncrement then return a.MonthIncrement > b.MonthIncrement end
+	return a.TurnsPerIncrement < b.TurnsPerIncrement
+end)
+
+local function TurnForYear(year, month)
+	local target, months, turn = (year - START_YEAR) * 12 + (month or 1) - 1, 0, 1
+	for _, row in ipairs(STAGES) do
+		local span = row.TurnsPerIncrement * row.MonthIncrement
+		if months + span >= target then
+			return turn + math.max(0, math.ceil((target - months) / row.MonthIncrement))
+		end
+		months, turn = months + span, turn + row.TurnsPerIncrement
+	end
+	return turn
+end
+
+local function GameTurn()
+	return Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1
+end
+
+local function DueTurn(row)
+	if row.Turn then return row.Turn end
+	return TurnForYear(row.Year, row.Month)
+end
+
+local function GroupBy(tableName)
+	local grouped = {}
+	for row in GameInfo[tableName]() do
+		local list = grouped[row.EventType]
+		if not list then list = {}; grouped[row.EventType] = list end
+		table.insert(list, row)
+	end
+	return grouped
+end
+
+local function LoadEvents()
+	local targets, modifiers = GroupBy("JAC_HistoricalEventTargets"), GroupBy("JAC_HistoricalEventModifiers")
+	local renames, resources = GroupBy("JAC_HistoricalEventRenames"), GroupBy("JAC_HistoricalEventResources")
+	local events = {}
+	for row in GameInfo.JAC_HistoricalEvents() do
+		local event = { row = row, due = DueTurn(row), targets = nil,
+			modifiers = modifiers[row.EventType] or {}, renames = renames[row.EventType] or {},
+			resources = resources[row.EventType] or {} }
+		if targets[row.EventType] then
+			event.targets = {}
+			for _, target in ipairs(targets[row.EventType]) do event.targets[target.CivilizationType] = true end
+		end
+		if row.PrereqTech then event.tech = GameInfo.Technologies[row.PrereqTech].Index end
+		if row.PrereqCivic then event.civic = GameInfo.Civics[row.PrereqCivic].Index end
+		for boost in GameInfo.Boosts() do
+			if row.PrereqTech and boost.TechnologyType == row.PrereqTech then event.techBoost = true end
+			if row.PrereqCivic and boost.CivicType == row.PrereqCivic then event.civicBoost = true end
+		end
+		table.insert(events, event)
+	end
+	table.sort(events, function(a, b)
+		if a.due ~= b.due then return a.due < b.due end
+		return a.row.EventType < b.row.EventType
+	end)
+	return events
+end
+
+local EVENTS = LoadEvents()
+
+local function CivType(playerID)
+	return PlayerConfigurations[playerID]:GetCivilizationTypeName()
+end
+
+local function SortedMajorIDs()
+	local ids = {}
+	for _, player in ipairs(PlayerManager.GetAliveMajors()) do table.insert(ids, player:GetID()) end
+	table.sort(ids)
+	return ids
+end
+
+local function HasPrereq(player, event)
+	if event.tech and player:GetTechs():HasTech(event.tech) then return true end
+	if event.civic and player:GetCulture():HasCivic(event.civic) then return true end
+	return false
+end
+
+-- SSOT 3.2 (owner decision 1a): a faction that has not researched the related tech/civic gets only its boost
+-- (eureka/inspiration) when the year arrives. Tech: PlayerTechs:TriggerBoost(index, 1) as in
+-- AustraliaScenario.lua:784. Civic: the same call on PlayerCulture (no official Lua example of the civic call).
+-- Only gameplay-side methods are used: CanTriggerBoost exists in the UI context only (TechBoostsPanel.lua:91)
+-- and is nil here (live Lua.log, events-06: "JAC_HistoricalEvents.lua:118: function expected instead of nil"),
+-- so "has a boost" is read from GameInfo.Boosts, and HasBoostBeenTriggered is the gameplay call of
+-- AustraliaScenario.lua:556. The boost runs in pcall: an engine error is logged and does not stop the turn
+-- loop for the other factions and events. Returns the log text and whether every boost went through;
+-- on an error the caller leaves the event unrecorded so the boost is retried next turn.
+local function BoostMissing(player, event)
+	local result, done = {}, true
+	local function try(kind, index, hasBoost, holder, has)
+		if index == nil or has then return end
+		local status
+		if not hasBoost then
+			status = "no_boost"
+		else
+			local ok, err = pcall(function()
+				if holder:HasBoostBeenTriggered(index) then return "already" end
+				holder:TriggerBoost(index, 1)
+				return "boosted"
+			end)
+			status = ok and err or ("error:" .. tostring(err))
+			if not ok then done = false end
+		end
+		table.insert(result, kind .. "=" .. status)
+	end
+	try("tech", event.tech, event.techBoost, player:GetTechs(), event.tech and player:GetTechs():HasTech(event.tech))
+	try("civic", event.civic, event.civicBoost, player:GetCulture(), event.civic and player:GetCulture():HasCivic(event.civic))
+	return table.concat(result, ","), done
+end
+
+local function Notify(event, playerID)
+	-- LOC keys, not looked-up strings: each machine localizes in its own language
+	-- (PiratesScenario_Shared_Script.lua:318-338 passes the keys the same way).
+	local data = { [ParameterTypes.MESSAGE] = event.row.Name, [ParameterTypes.SUMMARY] = event.row.Description }
+	local notifyAll = event.row.NotifyAll == true or event.row.NotifyAll == 1
+	local ids = notifyAll and SortedMajorIDs() or { playerID }
+	for _, id in ipairs(ids) do
+		NotificationManager.SendNotification(id, NotificationTypes.USER_DEFINED_1, data)
+	end
+end
+
+-- Resources appear at the site the resources mod reserved (JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua,
+-- ExposedMembers.JAC_Resources; loaded only on the Japan maps). RevealSite is a no-op when the site is
+-- already revealed (by its own year/tech rule or an earlier event), so both paths agree on one tile.
+-- The Sengoku pack runs on any map under the Banseiki ruleset (SSOT 3.2), but reserved sites exist only on
+-- the Japan maps: without the resources mod the event places nothing and records nothing.
+local function PlaceResources(event)
+	local key = RESOURCES_PREFIX .. event.row.EventType
+	if #event.resources == 0 or Game:GetProperty(key) ~= nil then return end
+	local api = ExposedMembers and ExposedMembers.JAC_Resources
+	if not api then
+		Log(string.format("resource event=%s skipped=resources_mod_not_loaded", event.row.EventType))
+		return
+	end
+	local placed = {}
+	for _, row in ipairs(event.resources) do
+		api.RevealSite(row.SiteId)
+		local plot = nil
+		if api.IsRevealed(row.SiteId) then
+			for _, site in ipairs(api.GetSites()) do
+				if site.id == row.SiteId then plot = site.plot end
+			end
+		end
+		if plot then table.insert(placed, plot) end
+		Log(string.format("resource event=%s site=%s plot=%s", event.row.EventType, row.SiteId,
+			plot and tostring(plot) or "not_placed"))
+	end
+	Game:SetProperty(key, placed)
+end
+
+-- reason "prereq" (has the research) or "due" (the year of an event without research): effects and the flag.
+-- reason "year": the year arrived without the research: boost only. The display-name switch and the
+-- resources still follow the year (SSOT 3.2: Nagao -> Uesugi in 1561 or earlier with the civic).
+local function Fire(event, player, playerID, civType, reason, turn)
+	local boostedKey = BOOSTED_PREFIX .. event.row.EventType
+	local announced = player:GetProperty(boostedKey) ~= nil
+	local boost, done = "", true
+	if reason == "year" then
+		boost, done = BoostMissing(player, event)
+		if done then player:SetProperty(boostedKey, turn) end
+	else
+		player:SetProperty(FIRED_PREFIX .. event.row.EventType, turn)
+		for _, row in ipairs(event.modifiers) do player:AttachModifierByID(row.ModifierId) end
+		Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
+	end
+	for _, row in ipairs(event.renames) do
+		if row.CivilizationType == civType then Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name) end
+	end
+	PlaceResources(event)
+	-- A failed boost is retried next turn; announce once, when it goes through.
+	if not announced and done then Notify(event, playerID) end
+	Log(string.format("%s event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s",
+		reason == "year" and "boosted" or "fired", event.row.EventType, playerID, civType, reason, turn, event.due, boost))
+end
+
+-- Same hook and turn source as the official scenarios (AustraliaScenario.lua:1440-1455).
+local function OnGameTurnStarted()
+	local turn = GameTurn()
+	local ids = SortedMajorIDs()
+	for _, event in ipairs(EVENTS) do
+		for _, playerID in ipairs(ids) do
+			local player = Players[playerID]
+			local civType = CivType(playerID)
+			if (not event.targets or event.targets[civType])
+					and player:GetProperty(FIRED_PREFIX .. event.row.EventType) == nil then
+				local reason = nil
+				if HasPrereq(player, event) then
+					reason = "prereq"
+				elseif turn >= event.due and event.tech == nil and event.civic == nil then
+					reason = "due"
+				elseif turn >= event.due and player:GetProperty(BOOSTED_PREFIX .. event.row.EventType) == nil then
+					reason = "year"
+				end
+				if reason then Fire(event, player, playerID, civType, reason, turn) end
+			end
+		end
+	end
+end
+
+Log(string.format("loaded events=%d startYear=%d speed=%s", #EVENTS, START_YEAR, SPEED))
+GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)
