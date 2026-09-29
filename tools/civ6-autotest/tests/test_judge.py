@@ -203,6 +203,7 @@ class JudgeTests(unittest.TestCase):
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
+            "unification-victory.json", "unification-registry-15km.json",
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",

@@ -1,10 +1,11 @@
 # 家固有名の表示切替（SSOT 3.2）
 
-SSOT 3.2「『太閤検地』のような特定の人物・家に結びつく名前は、その家以外では一般的な名前（『検地』など）で表示する」の実装メモ。2026-09-29 時点は**静的検査と Lua の模擬実行まで完了、実機確認待ち**（`Locale` 表へ書き込む最初の版は実機で失敗し、グローバル変数の差し替えへ作り直した）。
+SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では一般的な名前で表示する」の実装メモ。2026-09-29 時点は**静的検査と Lua の模擬実行まで完了、実機確認待ち**（`Locale` 表へ書き込む最初の版は実機で失敗し、グローバル変数の差し替えへ作り直した）。
 
 ## オーナー判断
 
 - B-5（2026-09-29）：エンジンが組み立てる文（通知の本文、シヴィロペディアの一部など）で一般名しか出ないのは**不可**。持ち主の家には、そこでも家固有名を出す
+- Q31（2026-09-30）：社会制度 C25「太閤検地」は、研究したすべての家に「太閤検地」と表示する。家固有名にせず、DB が指す名前そのものを「太閤検地」にした（一般名「広域検地」は廃止）
 
 ## 名前の棚卸し
 
@@ -12,10 +13,9 @@ SSOT 3.2「『太閤検地』のような特定の人物・家に結びつく名
 
 | 対象 | 一般名（既定・DB が指す） | 家固有名 | 表示する家 | 理由 |
 |---|---|---|---|---|
-| 社会制度 C25 `CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY` | 広域検地 / Regional Land Survey / Общее межевание земель | 太閤検地 / Taikō Land Survey / Тайко-кэнти (межевание земель) | 織田（暫定、[Q31](../questions.md)） | SSOT 3.2 の例そのもの。豊臣は勢力にないため、秀吉が仕えた織田を暫定の持ち主にした |
 | 時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 / Campaigns for Unification / Походы за объединение | 天下布武と広域戦 / Tenka Fubu and Wide-Area Campaigns / «Тэнка фубу» и походы широкого масштаба | 織田（暫定） | 「天下布武」は信長の印文。従来の日本語名が家固有だったため、一般名を作り直した |
 
-対象外と判断したもの（一般的な制度名・史実の出来事で、特定の人物・家の名ではない）：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
+対象外にしたもの：C25 太閤検地（オーナー判断 Q31。研究したすべての家に同じ名前で出す）。一般的な制度名・史実の出来事で、特定の人物・家の名ではないもの：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
 
 イベント（`documents/research/sengoku-events.md` は未作成）は同じ登録を使う。イベント名に人物・家の名（例：桶狭間の戦い、長篠の戦い）が付く場合は、イベント側の作業で一般名と家固有名を組にして登録する。
 
@@ -50,7 +50,7 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 ## エンジンが組み立てる文・Lua を通らない文の棚卸し（B-5）
 
-家固有名（C25 の名前、時代3の名前と説明）が UI の `Locale.Lookup` を通らずに画面へ出る経路を、公式 UI（Base・Expansion1・Expansion2）の `GetMessage`・`GetSummary`・`InstanceDescription`・`LocalizeAndSetText`・`LocalizeAndSetToolTip`・`GameInfo.Eras[` の全呼び出しから洗い出した。
+家固有名（時代3の名前と説明）が UI の `Locale.Lookup` を通らずに画面へ出る経路を、公式 UI（Base・Expansion1・Expansion2）の `GetMessage`・`GetSummary`・`InstanceDescription`・`LocalizeAndSetText`・`LocalizeAndSetToolTip`・`GameInfo.Eras[` の全呼び出しから洗い出した。
 
 | 経路 | 公式の該当箇所 | 対応 |
 |---|---|---|
@@ -88,11 +88,11 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 | 確認 | 期待 |
 |---|---|
 | `Lua.log` の `houseNames context=BoostUnlockedPopup result=installed` | 出る。他のコンテキスト（EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments・Civilopedia など）も `installed`（同じコンテキストで2回目以降は `already_installed`）。`error …` や `no_locale` は取り付け失敗。`error Attempt to modify read-only table` は `Locale` 表へ書き込む旧方式の失敗 |
-| 各 UI コンテキスト（TechTree・CivicsTree・CivicsChooser・ResearchChooser・WorldTracker・TechCivicCompletedPopup・BoostUnlockedPopup・NotificationPanel）で C25 の名前 | 織田：家固有名（太閤検地）。武田：一般名（広域検地）。`ui_lua` が書式文の引数（`LOC_UI_CIVIC_PROGRESS_COMPLETE_BLURB`）と `Locale.ToUpper` も確かめる |
+| 各 UI コンテキスト（TechTree・CivicsTree・CivicsChooser・ResearchChooser・WorldTracker・TechCivicCompletedPopup・BoostUnlockedPopup・NotificationPanel）で C25 の名前 | 織田・武田とも太閤検地（`_HOUSE` のテキストが無いことも確かめる）。`ui_lua` が書式文の引数（`LOC_UI_CIVIC_PROGRESS_COMPLETE_BLURB`）にも名前が入ることを確かめる |
 | 上のコンテキストと EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments の時代3（`ERA_MEDIEVAL`）の名前 | 織田：天下布武と広域戦。武田：統一への広域戦。HistoricMoments では記録済みの瞬間の説明も確かめる |
-| 社会制度ツリーのツールチップ（TechTree・CivicsTree の `ToolTipHelper.GetToolTip`） | 織田のみ家固有名を含む |
-| シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田は家固有名、武田は一般名 |
-| **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文（`GetMessage`／`GetSummary`）は一般名のまま。表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田：家固有名で一般名なし。武田：一般名で家固有名なし。`house-names-*-notification.png` に記録 |
+| 社会制度ツリーのツールチップ（TechTree・CivicsTree の `ToolTipHelper.GetToolTip`） | 織田・武田とも C25 の名前（太閤検地）を含む |
+| シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田・武田とも太閤検地 |
+| **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文と、表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田・武田とも太閤検地を含む。家固有名の通知での切り替えは、実機のシナリオでは確かめていない（`tests/test_house_names_lua.py` の模擬実行で時代3の名前を使って確かめる）。`house-names-*-notification.png` に記録 |
 | `house-names-*-civics-tree.png`・`-tech-tree.png` | ツリーの見た目の記録。C25 が未公開だと「???」で、名前はスクリーンショットでは見えない（名前の判定は `ui_lua`） |
 
 要実機確認：
@@ -105,5 +105,5 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 ## オーナーへの質問
 
-1. 「太閤検地」「天下布武」の持ち主を織田家（暫定）にしてよいか（[質問リスト](../questions.md)の Q31）。豊臣家は勢力に無い。織田家が秀吉の系譜を継ぐ扱いにするか、最後に天下を取った家が名乗る扱いにするか
+1. 「天下布武」の持ち主を織田家（暫定）にしてよいか
 2. 上記の棚卸しで対象外にした名前（刀狩・楽市楽座・軍役帳・朱印状）のうち、家固有にしたいものはあるか
