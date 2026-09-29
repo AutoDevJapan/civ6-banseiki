@@ -99,8 +99,7 @@ class SengokuResourceGateTests(unittest.TestCase):
         files = [item.text for item in action.findall("File")]
         self.assertEqual(files.index("Data/JAC_Sengoku_Trees.sql") + 1,
                          files.index("Data/JAC_Sengoku_Resources.sql"))
-        self.assertEqual(files.index("Data/JAC_Sengoku_Resources.sql") + 1,
-                         files.index("Data/JAC_Sengoku_Unlocks.sql"))
+        self.assertLess(files.index("Data/JAC_Sengoku_Resources.sql"), files.index("Data/JAC_Sengoku_Unlocks.sql"))
         self.assertIn("Data/JAC_Sengoku_Resources.sql", [item.text for item in root.findall("./Files/File")])
 
 

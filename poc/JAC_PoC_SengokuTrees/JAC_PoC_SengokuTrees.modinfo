@@ -32,6 +32,7 @@
 			<File>Data/JAC_Sengoku_Calendar.xml</File>
 			<File>Data/JAC_Sengoku_Trees.sql</File>
 			<File>Data/JAC_Sengoku_Resources.sql</File>
+			<File>Data/JAC_Sengoku_Cascade.sql</File>
 			<File>Data/JAC_Sengoku_Unlocks.sql</File>
 			<File>Data/JAC_Sengoku_Victories.sql</File>
 		</UpdateDatabase>
@@ -59,6 +60,7 @@
 		<File>Data/JAC_Sengoku_Calendar.xml</File>
 		<File>Data/JAC_Sengoku_Trees.sql</File>
 		<File>Data/JAC_Sengoku_Resources.sql</File>
+		<File>Data/JAC_Sengoku_Cascade.sql</File>
 		<File>Data/JAC_Sengoku_Unlocks.sql</File>
 		<File>Data/JAC_Sengoku_Victories.sql</File>
 		<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>

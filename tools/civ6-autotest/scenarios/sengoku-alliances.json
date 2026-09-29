@@ -1,0 +1,81 @@
+{
+  "name": "Banseiki Sengoku alliances survive the official-tree deletion and are gated by C11",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620951,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local C11='CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'; local ids={'DIPLOACTION_ALLIANCE','DIPLOACTION_ALLIANCE_MILITARY','DIPLOACTION_ALLIANCE_RESEARCH','DIPLOACTION_ALLIANCE_CULTURAL','DIPLOACTION_ALLIANCE_ECONOMIC','DIPLOACTION_ALLIANCE_RELIGIOUS','DIPLOACTION_RENEW_ALLIANCE'}; for _,id in ipairs(ids) do local r=GameInfo.DiplomaticActions[id]; if not r then error('alliance action deleted: '..id) end; if r.InitiatorPrereqCivic~=C11 or r.TargetPrereqCivic~=C11 then error('alliance gate '..id..': '..tostring(r.InitiatorPrereqCivic)..'/'..tostring(r.TargetPrereqCivic)) end end; local typed=0; for row in GameInfo.DiplomaticActions_XP1() do if row.AllianceType then typed=typed+1; if not GameInfo.DiplomaticActions[row.DiplomaticActionType] then error('typed alliance without action: '..row.DiplomaticActionType) end end end; if typed~=5 then error('typed alliances '..typed) end; local state=false; for row in GameInfo.DiplomaticStateActions() do if row.DiplomaticActionType=='DIPLOACTION_ALLIANCE' then state=true end end; if not state then error('DiplomaticStateActions lost DIPLOACTION_ALLIANCE') end; if GameInfo.DiplomaticActions['DIPLOACTION_OPEN_BORDERS'].InitiatorPrereqCivic~='CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE' then error('open borders gate') end; for r in GameInfo.DiplomaticActions() do for _,k in ipairs({'InitiatorPrereqCivic','TargetPrereqCivic','InitiatorObsoleteCivic'}) do if r[k] and not GameInfo.Civics[r[k]] then error('dangling '..r.DiplomaticActionType..'.'..k) end end; for _,k in ipairs({'InitiatorPrereqTech','TargetPrereqTech'}) do if r[k] and not GameInfo.Technologies[r[k]] then error('dangling '..r.DiplomaticActionType..'.'..k) end end end; if Players[0]:GetCulture():HasCivic(GameInfo.Civics[C11].Index) then error('C11 known at start') end; return '7 alliance actions gated by C11, 5 typed alliances, state actions kept'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if Game.GetCurrentGameTurn()~=1 then error('not turn 1') end; if not Players[0]:IsHuman() then error('player 0 is not the human') end; Players[0]:GetDiplomacy():SetHasMet(1); Players[1]:GetDiplomacy():SetHasMet(0); return tostring(Players[0]:GetDiplomacy():HasMet(1))"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetDiplomacy():HasMet(1)"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local function reasons() local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid('DIPLOACTION_ALLIANCE',1,true); local name=Locale.Lookup(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Name); local list,hit={},false; for _,s in ipairs((res and res.FailureReasons) or {}) do local text=Locale.Lookup(s); table.insert(list,text); if string.find(text,name,1,true) then hit=true end end; return ok,hit,table.concat(list,' / ') end; local ok,hit,text=reasons(); print('[JAC_ALLIANCE] before C11 valid='..tostring(ok)..' reasons='..text); if ok then error('alliance valid before C11') end; if not hit then error('C11 not named in failure reasons: '..text) end; return 'blocked by C11: '..text"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({0,1}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i) and Players[1]:GetCulture():HasCivic(i))"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetCulture():HasCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index)"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local function reasons() local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid('DIPLOACTION_ALLIANCE',1,true); local name=Locale.Lookup(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Name); local list,hit={},false; for _,s in ipairs((res and res.FailureReasons) or {}) do local text=Locale.Lookup(s); table.insert(list,text); if string.find(text,name,1,true) then hit=true end end; return ok,hit,table.concat(list,' / ') end; local ok,hit,text=reasons(); print('[JAC_ALLIANCE] after C11 valid='..tostring(ok)..' reasons='..text); if hit then error('C11 still blocks the alliance: '..text) end; return 'C11 no longer blocks; valid='..tostring(ok)..' remaining='..text"
+    }
+  ]
+}

@@ -99,7 +99,8 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Calendar.xml",
-            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Unlocks.sql",
+            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
+            "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
