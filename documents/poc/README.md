@@ -334,3 +334,13 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 静的検証は XML 6ファイルの解析、`banseiki-ruleset.json --check`（27ステップ）、自動テスト84件、`git diff --check` がすべて成功。これはゲーム内アクション追加後のGS中核読み込みを証明しない。
 
 最終の自動シナリオは `tools/civ6-autotest/scenarios/banseiki-ruleset.json`。ルールセットとプールの画面記録、設定値と候補リストの Lua 照会、織田（人間）・クレオパトラ（AI）・武田（AI）の開始、3 MOD のログ、気候画面と世界会議 API、数ターンの自動進行、保存・メニューへ戻る・ロードを検査する。未検証はこの最終シナリオのゲーム内部分、マルチプレイ、長期プレイでの海面上昇。
+
+## JAC_PoC_SengokuTrees：戦国の技術・社会制度ツリー
+
+`poc/JAC_PoC_SengokuTrees` は `RULESET_JAC_BANSEIKI` だけで適用する独立PoC。設計案の技術32件・制度30件を元ID・AND前提・費用・行位置のまま登録した。4期は既存 Era ID の表示名を戦国用に変え、GSの時代システムを残す。公式研究行は、必要な公式アイテムを戦国ノードへ再配線してから削除する。公式アイテムは新規Unit・建物の代用品で、効果量は暫定。制度の列は標準CivicsTreeが再計算するため、設計表の列位置の再現は未確認。
+
+各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AIへの処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。SSOT 3.2に従い、このPoCを含むBanseikiルールセットのターン上限は `TURNLIMIT_NONE` に変更した。これは約200ターンの年表示や統一勝利の実装ではない。
+
+設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、Banseiki開始、両公式ツリー画面の候補、最初の技術と制度の進捗を検査する。
+
+**実機結果：未実施。** 本作業ではCiv6/Steamを起動していない。現時点の「ロード可・プレイ可」は静的検証による目標で、ゲーム内での合格判定ではない。特に既存BanseikiルールセットのGS中核読み込みは前節の未検証事項のまま。
