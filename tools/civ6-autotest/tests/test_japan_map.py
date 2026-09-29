@@ -87,6 +87,15 @@ class JapanMapScenarioTests(unittest.TestCase):
         broken = dict(base, **{"Database.log": "ERROR JAC_JapanMapScale_InGameText invalid tag\n"})
         self.assertFalse(next(check.passed for check in judge(broken, "japan_map")
                               if check.name == "Japan map: Database.log"))
+        def modding_passes(extra):
+            logs = dict(base, **{"Modding.log": base["Modding.log"] + extra})
+            return next(check.passed for check in judge(logs, "japan_map") if check.name == "Japan map: Modding.log")
+        # Seen live: an official DLC warning followed by a JAC load line is not ours.
+        self.assertTrue(modding_passes("LocalizedText - Loading Text/CivRoyaleScenario_Translations_ConfigText_China.xml\n"
+                                       "Warning: LocalizedText - Failed loading XML.\n"
+                                       "UISettingHandler - Loading JAC_PoC_CustomCivs.dep\n"))
+        self.assertFalse(modding_passes("LocalizedText - Loading Text/JAC_JapanMapScale_Text.xml\n"
+                                        "Warning: LocalizedText - Failed loading XML.\n"))
         broken = dict(base, **{"Modding.log": base["Modding.log"] + "ERROR JAC_JapanMapScale_Config failed\n"})
         self.assertFalse(next(check.passed for check in judge(broken, "japan_map")
                               if check.name == "Japan map: Modding.log"))

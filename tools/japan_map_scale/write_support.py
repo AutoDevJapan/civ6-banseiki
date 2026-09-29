@@ -75,7 +75,9 @@ def scenarios() -> None:
                                   for s in item["starts"]) + "}"
         leaders = "{" + ",".join("'" + seat.leader + "'" for seat in SEATS) + "}"
         majors = ("local majors=#PlayerManager.GetAliveMajors(); "
-                  "local minors=#PlayerManager.GetAliveMinors(); if minors~=0 then "
+                  "local minors=0; for _,m in ipairs(PlayerManager.GetAliveMinors()) do "
+                  "if PlayerConfigurations[m:GetID()]:GetCivilizationTypeName()~='CIVILIZATION_FREE_CITIES' "
+                  "then minors=minors+1 end end; if minors~=0 then "  # GS Free Cities is a minor, not a city-state
                   "error('city-states present: '..minors) end; ")
         start_assertion = (grid_check + majors + "if majors~=22 then error('majors '..majors) end; "
                            "local expected=" + expected + "; local leaders=" + leaders + "; "

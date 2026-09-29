@@ -149,12 +149,24 @@ def _database_errors(database: str) -> list[str]:
 def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
     modding = logs["Modding.log"]
 
+    own = re.compile(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431", re.I)
+
     def related_errors(content: str) -> list[str]:
+        """An error is ours if it names our files, or the file loaded just before it is ours.
+
+        Neighbouring lines are not enough: in the first live run an official DLC warning
+        directly followed by a JAC mod's load line was misattributed.
+        """
         lines = content.splitlines()
-        return [line for index, line in enumerate(lines)
-                if re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I)
-                and re.search(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431",
-                              "\n".join(lines[max(0, index - 2):index + 5]), re.I)]
+        errors = []
+        for index, line in enumerate(lines):
+            if not re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I):
+                continue
+            source = next((earlier for earlier in reversed(lines[max(0, index - 5):index])
+                           if "Loading" in earlier), "")
+            if own.search(line) or own.search(source):
+                errors.append(line)
+        return errors
 
     errors = related_errors(modding)
     database_errors = related_errors(logs["Database.log"])

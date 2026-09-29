@@ -527,7 +527,8 @@ class Runner:
             "LuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\n"
             f"AutoplayManager.SetTurns({turns})\n"
             "AutoplayManager.SetReturnAsPlayer(human)\n"
-            "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
+            # Watch as the human so the leader ribbon keeps hiding unmet leaders (NONE shows everyone).
+            "AutoplayManager.SetObserveAsPlayer(human)\n"
             "AutoplayManager.SetActive(true)\n"
             "return tostring(startTurn) .. '|' .. tostring(human)"
         )
@@ -575,7 +576,7 @@ class Runner:
                         self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
                                   f"AutoplayManager.SetTurns({remaining})\n"
                                   f"AutoplayManager.SetReturnAsPlayer({human})\n"
-                                  "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
+                                  f"AutoplayManager.SetObserveAsPlayer({human})\n"
                                   "AutoplayManager.SetActive(true)\nreturn true",
                                   min(5, _remaining(deadline)))
                         restarts += 1
@@ -825,9 +826,11 @@ class Runner:
                     self._log("auto_restart", "SKIP", "Civ VI process is newer than all scenario mod files")
             self.baseline = snapshot_logs(self.logs)
             (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
-            if self.scenario["steps"][0]["action"] != "restart_game":
+            first = self.scenario["steps"][0]
+            if first["action"] != "restart_game":
                 require_single_civ_process()
-                if not front_end_ready:
+                # A scenario whose first step runs in InGame continues an already running game.
+                if not front_end_ready and not (first["action"] == "ui_lua" and first.get("state_name") == "InGame"):
                     self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"}, 10)
             for index, step in enumerate(self.scenario["steps"], 1):
                 action = f"{index}/{len(self.scenario['steps'])} {step['action']}"
