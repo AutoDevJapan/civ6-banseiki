@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from generate import MOD, ROOT, SCALES, SEATS
+from generate import EXTRA_CAPITAL_NAMES, MOD, ROOT, SCALES, SEATS
+from start_1534 import data as research_data
 
 
 MOD_ID = "403be889-1455-4de7-967b-ad54c0ff3431"
@@ -72,6 +73,12 @@ def text() -> None:
 def scenarios() -> None:
     manifest = json.loads((MOD / "Maps" / "manifest.json").read_text(encoding="utf-8"))
     output = ROOT / "tools" / "civ6-autotest" / "scenarios"
+    castle_counts = {seat.slug: 0 for seat in SEATS}
+    for castle in research_data()["castles"]:
+        castle_counts[castle["owner_faction_1534_draft"]] += 1
+    expected_counts = {seat.slug: castle_counts[seat.slug] +
+                       int(seat.slug in EXTRA_CAPITAL_NAMES) for seat in SEATS}
+    expected_total = sum(expected_counts.values())
     players = [{"leader": seat.leader, "civ": seat.civ, "human": i == 0}
                for i, seat in enumerate(SEATS)]
     for item in manifest:
@@ -82,6 +89,8 @@ def scenarios() -> None:
         counts = {seat.slug: 0 for seat in SEATS}
         for city in item["cities"]:
             counts[city["owner"]] += 1
+        if counts != expected_counts:
+            raise ValueError(f"{km} km city inventory differs from research: {counts}")
         expected = "{" + ",".join("{" + str(s["col"]) + "," + str(s["row"]) + "," +
                                   str(counts[s["seat"]]) + "}" for s in item["starts"]) + "}"
         leaders = "{" + ",".join("'" + seat.leader + "'" for seat in SEATS) + "}"
@@ -102,17 +111,20 @@ def scenarios() -> None:
                            "if #PlayerManager.GetAliveMajors()~=22 then error('major count') end; " +
                            "local expected=" + expected + "; local leaders=" + leaders +
                            "; local civs=" + civs + "; "
-                           "for i=0,21 do local p=Players[i]; if not p or not p:IsAlive() then "
+                           "local totalCities=0; for i=0,21 do local p=Players[i]; if not p or not p:IsAlive() then "
                            "error('missing player '..i) end; "
                            "if PlayerConfigurations[i]:GetLeaderTypeName()~=leaders[i+1] or "
                            "PlayerConfigurations[i]:GetCivilizationTypeName()~=civs[i+1] then "
                            "error('faction mismatch '..i) end; "
                            "local e=expected[i+1]; if p:GetCities():GetCount()~=e[3] then "
                            "error('city count '..i..'='..p:GetCities():GetCount()..' expected '..e[3]) end; "
+                           "totalCities=totalCities+p:GetCities():GetCount(); "
                            "local capital=p:GetCities():GetCapitalCity(); if not capital or "
                            "capital:GetX()~=e[1] or capital:GetY()~=e[2] then "
-                           "error('capital mismatch '..i) end end; " + land + settlers +
-                           "return '22 majors, 0 city-states, expected cities/capitals, all land owned, no settlers'")
+                           "error('capital mismatch '..i) end end; " +
+                           f"if totalCities~={expected_total} then error('total city count '..totalCities) end; " +
+                           land + settlers +
+                           f"return '22 majors, 0 city-states, {expected_total} cities/capitals, all land owned, no settlers'")
         snapshot = (grid_check + minors + land + settlers +
                     "if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then "
                     "error('50-turn state lost') end; "

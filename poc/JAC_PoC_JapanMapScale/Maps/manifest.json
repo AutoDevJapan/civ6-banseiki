@@ -287,6 +287,7 @@
         "name": "那古野城",
         "owner": "ODA",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -304,6 +305,7 @@
         "name": "米沢城",
         "owner": "DATE",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -321,6 +323,7 @@
         "name": "黒川城",
         "owner": "ASHINA",
         "capital": true,
+        "research_priority": 0,
         "province": "陸奥"
       },
       {
@@ -338,6 +341,7 @@
         "name": "小田原城",
         "owner": "HOJO",
         "capital": true,
+        "research_priority": 0,
         "province": "相模"
       },
       {
@@ -355,6 +359,7 @@
         "name": "平井城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": true,
+        "research_priority": 0,
         "province": "上野"
       },
       {
@@ -372,6 +377,7 @@
         "name": "躑躅ヶ崎館",
         "owner": "TAKEDA",
         "capital": true,
+        "research_priority": 0,
         "province": "甲斐"
       },
       {
@@ -389,6 +395,7 @@
         "name": "春日山城",
         "owner": "NAGAO",
         "capital": true,
+        "research_priority": 0,
         "province": "越後"
       },
       {
@@ -406,6 +413,7 @@
         "name": "駿府今川館の推定アンカー",
         "owner": "IMAGAWA",
         "capital": true,
+        "research_priority": 0,
         "province": "駿河"
       },
       {
@@ -423,6 +431,7 @@
         "name": "岡崎城",
         "owner": "MATSUDAIRA",
         "capital": true,
+        "research_priority": 0,
         "province": "三河"
       },
       {
@@ -440,6 +449,7 @@
         "name": "一乗谷朝倉館",
         "owner": "ASAKURA",
         "capital": true,
+        "research_priority": 0,
         "province": "越前"
       },
       {
@@ -457,6 +467,7 @@
         "name": "室町殿",
         "owner": "ASHIKAGA",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -474,6 +485,7 @@
         "name": "勝瑞守護所",
         "owner": "MIYOSHI",
         "capital": true,
+        "research_priority": 0,
         "province": "阿波"
       },
       {
@@ -491,6 +503,7 @@
         "name": "観音寺城",
         "owner": "ROKKAKU",
         "capital": true,
+        "research_priority": 0,
         "province": "近江"
       },
       {
@@ -508,6 +521,7 @@
         "name": "石山御坊",
         "owner": "HONGANJI",
         "capital": true,
+        "research_priority": 0,
         "province": "摂津"
       },
       {
@@ -525,6 +539,7 @@
         "name": "大内氏館",
         "owner": "OUCHI",
         "capital": true,
+        "research_priority": 0,
         "province": "周防"
       },
       {
@@ -542,6 +557,7 @@
         "name": "月山富田城",
         "owner": "AMAGO",
         "capital": true,
+        "research_priority": 0,
         "province": "出雲"
       },
       {
@@ -559,6 +575,7 @@
         "name": "吉田郡山城",
         "owner": "MORI",
         "capital": true,
+        "research_priority": 0,
         "province": "安芸"
       },
       {
@@ -576,6 +593,7 @@
         "name": "岡豊城",
         "owner": "CHOSOKABE",
         "capital": true,
+        "research_priority": 0,
         "province": "土佐"
       },
       {
@@ -593,6 +611,7 @@
         "name": "大友氏館",
         "owner": "OTOMO",
         "capital": true,
+        "research_priority": 0,
         "province": "豊後"
       },
       {
@@ -610,6 +629,7 @@
         "name": "清水城",
         "owner": "SHIMAZU",
         "capital": true,
+        "research_priority": 0,
         "province": "薩摩"
       },
       {
@@ -627,6 +647,7 @@
         "name": "首里城",
         "owner": "RYUKYU",
         "capital": true,
+        "research_priority": 0,
         "province": "琉球"
       },
       {
@@ -644,6 +665,7 @@
         "name": "ポロモイチャシ跡・二風谷拠点候補",
         "owner": "AINU",
         "capital": true,
+        "research_priority": 0,
         "province": "蝦夷地"
       },
       {
@@ -651,6 +673,7 @@
         "name": "桑折西山城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 1,
         "province": "陸奥",
         "lon": 140.51,
         "lat": 37.856,
@@ -664,32 +687,45 @@
         "name": "梁川城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 2,
         "province": "陸奥",
         "lon": 140.611,
         "lat": 37.855,
-        "col": 112,
+        "col": 113,
         "row": 29,
-        "plot": 4578,
-        "displacement_km": 9.5
+        "plot": 4579,
+        "displacement_km": 24.4,
+        "nudge": {
+          "from_plot": 4578,
+          "to_plot": 4579,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "ASHINA_INAWASHIRO",
         "name": "猪苗代城",
         "owner": "ASHINA",
         "capital": false,
+        "research_priority": 4,
         "province": "陸奥",
         "lon": 140.106,
         "lat": 37.562,
         "col": 110,
-        "row": 30,
-        "plot": 4730,
-        "displacement_km": 7.4
+        "row": 29,
+        "plot": 4576,
+        "displacement_km": 23.7,
+        "nudge": {
+          "from_plot": 4730,
+          "to_plot": 4576,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "DATE_YAMAGATA",
         "name": "山形城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 5,
         "province": "出羽",
         "lon": 140.328,
         "lat": 38.256,
@@ -703,6 +739,7 @@
         "name": "江戸城",
         "owner": "HOJO",
         "capital": false,
+        "research_priority": 11,
         "province": "武蔵",
         "lon": 139.754,
         "lat": 35.688,
@@ -716,6 +753,7 @@
         "name": "河越城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 12,
         "province": "武蔵",
         "lon": 139.492,
         "lat": 35.924,
@@ -729,19 +767,26 @@
         "name": "箕輪城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 13,
         "province": "上野",
         "lon": 138.952,
         "lat": 36.404,
         "col": 101,
-        "row": 29,
-        "plot": 4567,
-        "displacement_km": 5.1
+        "row": 30,
+        "plot": 4721,
+        "displacement_km": 24.3,
+        "nudge": {
+          "from_plot": 4567,
+          "to_plot": 4721,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "HOJO_KOGA",
         "name": "古河城",
         "owner": "HOJO",
         "capital": false,
+        "research_priority": 14,
         "province": "下総",
         "lon": 139.694,
         "lat": 36.187,
@@ -755,6 +800,7 @@
         "name": "小弓城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 15,
         "province": "下総",
         "lon": 140.15,
         "lat": 35.554,
@@ -768,6 +814,7 @@
         "name": "太田城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 16,
         "province": "常陸",
         "lon": 140.52,
         "lat": 36.546,
@@ -781,6 +828,7 @@
         "name": "上原城",
         "owner": "TAKEDA",
         "capital": false,
+        "research_priority": 17,
         "province": "信濃",
         "lon": 138.149,
         "lat": 36.009,
@@ -794,6 +842,7 @@
         "name": "掛川城",
         "owner": "IMAGAWA",
         "capital": false,
+        "research_priority": 19,
         "province": "遠江",
         "lon": 138.015,
         "lat": 34.777,
@@ -807,32 +856,45 @@
         "name": "勝幡城",
         "owner": "ODA",
         "capital": false,
+        "research_priority": 21,
         "province": "尾張",
         "lon": 136.729,
         "lat": 35.202,
         "col": 89,
-        "row": 31,
-        "plot": 4863,
-        "displacement_km": 8.6
+        "row": 30,
+        "plot": 4709,
+        "displacement_km": 28.6,
+        "nudge": {
+          "from_plot": 4863,
+          "to_plot": 4709,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "IMAGAWA_NAGOYA",
         "name": "那古野城",
         "owner": "IMAGAWA",
         "capital": false,
+        "research_priority": 22,
         "province": "尾張",
         "lon": 136.902,
         "lat": 35.184,
-        "col": 90,
-        "row": 30,
-        "plot": 4710,
-        "displacement_km": 12.9
+        "col": 91,
+        "row": 27,
+        "plot": 4249,
+        "displacement_km": 70.1,
+        "nudge": {
+          "from_plot": 4710,
+          "to_plot": 4249,
+          "distance_km": 60.0
+        }
       },
       {
         "id": "ASHIKAGA_KIRIYAMA",
         "name": "霧山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 24,
         "province": "伊勢",
         "lon": 136.289,
         "lat": 34.523,
@@ -846,6 +908,7 @@
         "name": "七尾城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 25,
         "province": "能登",
         "lon": 136.985,
         "lat": 37.009,
@@ -859,6 +922,7 @@
         "name": "桜洞城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 26,
         "province": "飛騨",
         "lon": 137.212,
         "lat": 35.88,
@@ -872,6 +936,7 @@
         "name": "後瀬山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 27,
         "province": "若狭",
         "lon": 135.739,
         "lat": 35.488,
@@ -885,6 +950,7 @@
         "name": "放生津城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 28,
         "province": "越中",
         "lon": 137.09,
         "lat": 36.777,
@@ -898,32 +964,45 @@
         "name": "桑実寺正覚院（臨時政庁）",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 29,
         "province": "近江",
         "lon": 136.154,
         "lat": 35.144,
-        "col": 88,
-        "row": 34,
-        "plot": 5324,
-        "displacement_km": 13.4
+        "col": 87,
+        "row": 35,
+        "plot": 5477,
+        "displacement_km": 28.4,
+        "nudge": {
+          "from_plot": 5324,
+          "to_plot": 5477,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "ROKKAKU_KAMAHABA",
         "name": "鎌刃城",
         "owner": "ROKKAKU",
         "capital": false,
+        "research_priority": 31,
         "province": "近江",
         "lon": 136.315,
         "lat": 35.297,
-        "col": 88,
-        "row": 33,
-        "plot": 5170,
-        "displacement_km": 9.0
+        "col": 89,
+        "row": 34,
+        "plot": 5325,
+        "displacement_km": 11.0,
+        "nudge": {
+          "from_plot": 5170,
+          "to_plot": 5325,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "MIYOSHI_SHIBAO",
         "name": "芝生城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 33,
         "province": "阿波",
         "lon": 133.97,
         "lat": 34.045,
@@ -937,6 +1016,7 @@
         "name": "八上城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 36,
         "province": "丹波",
         "lon": 135.256,
         "lat": 35.062,
@@ -950,19 +1030,26 @@
         "name": "高屋城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 37,
         "province": "河内",
         "lon": 135.61,
         "lat": 34.549,
-        "col": 83,
-        "row": 33,
-        "plot": 5165,
-        "displacement_km": 3.6
+        "col": 84,
+        "row": 32,
+        "plot": 5012,
+        "displacement_km": 16.9,
+        "nudge": {
+          "from_plot": 5165,
+          "to_plot": 5012,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "ASHIKAGA_OKISHIO",
         "name": "置塩城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 38,
         "province": "播磨",
         "lon": 134.683,
         "lat": 34.923,
@@ -976,19 +1063,26 @@
         "name": "天霧城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 39,
         "province": "讃岐",
         "lon": 133.736,
         "lat": 34.236,
-        "col": 76,
+        "col": 75,
         "row": 38,
-        "plot": 5928,
-        "displacement_km": 13.8
+        "plot": 5927,
+        "displacement_km": 29.8,
+        "nudge": {
+          "from_plot": 5928,
+          "to_plot": 5927,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "ASHIKAGA_YUZUKI",
         "name": "湯築城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 40,
         "province": "伊予",
         "lon": 132.787,
         "lat": 33.849,
@@ -1002,6 +1096,7 @@
         "name": "山吹城・石見銀山",
         "owner": "OUCHI",
         "capital": false,
+        "research_priority": 47,
         "province": "石見",
         "lon": 132.431,
         "lat": 35.104,
@@ -1015,6 +1110,7 @@
         "name": "津和野城（三本松城）",
         "owner": "OUCHI",
         "capital": false,
+        "research_priority": 48,
         "province": "石見",
         "lon": 131.764,
         "lat": 34.46,
@@ -1028,6 +1124,7 @@
         "name": "三石城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 49,
         "province": "備前",
         "lon": 134.27,
         "lat": 34.808,
@@ -1041,6 +1138,7 @@
         "name": "備中松山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 50,
         "province": "備中",
         "lon": 133.621,
         "lat": 34.812,
@@ -1054,19 +1152,26 @@
         "name": "伊作城",
         "owner": "SHIMAZU",
         "capital": false,
+        "research_priority": 51,
         "province": "薩摩",
         "lon": 130.363,
         "lat": 31.514,
-        "col": 55,
+        "col": 54,
         "row": 40,
-        "plot": 6215,
-        "displacement_km": 13.4
+        "plot": 6214,
+        "displacement_km": 16.7,
+        "nudge": {
+          "from_plot": 6215,
+          "to_plot": 6214,
+          "distance_km": 20.0
+        }
       },
       {
         "id": "SHIMAZU_OBI",
         "name": "飫肥城",
         "owner": "SHIMAZU",
         "capital": false,
+        "research_priority": 52,
         "province": "日向",
         "lon": 131.35,
         "lat": 31.629,
@@ -1080,314 +1185,23 @@
         "name": "中城グスク",
         "owner": "RYUKYU",
         "capital": false,
+        "research_priority": 53,
         "province": "琉球",
         "lon": 127.8,
         "lat": 26.284,
-        "col": 25,
+        "col": 26,
         "row": 30,
-        "plot": 4645,
-        "displacement_km": 10.4
+        "plot": 4646,
+        "displacement_km": 30.3,
+        "nudge": {
+          "from_plot": 4645,
+          "to_plot": 4646,
+          "distance_km": 20.0
+        }
       }
     ],
-    "close_city_pairs": [
-      [
-        "ODA_SEAT",
-        "MATSUDAIRA_OKAZAKI",
-        2
-      ],
-      [
-        "ODA_SEAT",
-        "ODA_SHOBATA",
-        1
-      ],
-      [
-        "ODA_SEAT",
-        "IMAGAWA_NAGOYA",
-        1
-      ],
-      [
-        "ODA_SEAT",
-        "ROKKAKU_KAMAHABA",
-        3
-      ],
-      [
-        "DATE_SEAT",
-        "ASHINA_KUROKAWA",
-        3
-      ],
-      [
-        "DATE_SEAT",
-        "DATE_KOORI",
-        2
-      ],
-      [
-        "DATE_SEAT",
-        "DATE_YANAGAWA",
-        3
-      ],
-      [
-        "DATE_SEAT",
-        "ASHINA_INAWASHIRO",
-        2
-      ],
-      [
-        "DATE_SEAT",
-        "DATE_YAMAGATA",
-        2
-      ],
-      [
-        "ASHINA_KUROKAWA",
-        "DATE_KOORI",
-        3
-      ],
-      [
-        "ASHINA_KUROKAWA",
-        "ASHINA_INAWASHIRO",
-        1
-      ],
-      [
-        "UESUGI_HIRAI",
-        "UESUGI_KAWAGOE",
-        3
-      ],
-      [
-        "UESUGI_HIRAI",
-        "UESUGI_MINOWA",
-        1
-      ],
-      [
-        "TAKEDA_TSUTSUJI",
-        "TAKEDA_UEHARA",
-        3
-      ],
-      [
-        "IMAGAWA_SUNPU",
-        "IMAGAWA_KAKEGAWA",
-        2
-      ],
-      [
-        "MATSUDAIRA_OKAZAKI",
-        "ODA_SHOBATA",
-        2
-      ],
-      [
-        "MATSUDAIRA_OKAZAKI",
-        "IMAGAWA_NAGOYA",
-        1
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ROKKAKU_KANNONJI",
-        2
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "HONGANJI_ISHIYAMA",
-        2
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ASHIKAGA_GOSEYAMA",
-        3
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ASHIKAGA_KUWANOMI",
-        2
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ROKKAKU_KAMAHABA",
-        3
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "MIYOSHI_YAGAMI",
-        3
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ASHIKAGA_TAKAYA",
-        3
-      ],
-      [
-        "MIYOSHI_SHOZUI",
-        "MIYOSHI_SHIBAO",
-        3
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ODA_SHOBATA",
-        3
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ASHIKAGA_KIRIYAMA",
-        3
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ASHIKAGA_KUWANOMI",
-        1
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ROKKAKU_KAMAHABA",
-        1
-      ],
-      [
-        "HONGANJI_ISHIYAMA",
-        "MIYOSHI_YAGAMI",
-        3
-      ],
-      [
-        "HONGANJI_ISHIYAMA",
-        "ASHIKAGA_TAKAYA",
-        1
-      ],
-      [
-        "OUCHI_YAMAGUCHI",
-        "OUCHI_TSUWANO",
-        2
-      ],
-      [
-        "MORI_KORIYAMA",
-        "OUCHI_YAMABUKI",
-        2
-      ],
-      [
-        "SHIMAZU_SHIMIZU",
-        "SHIMAZU_IZAKU",
-        1
-      ],
-      [
-        "RYUKYU_SHURI",
-        "RYUKYU_NAKAGUSUKU",
-        1
-      ],
-      [
-        "DATE_KOORI",
-        "DATE_YANAGAWA",
-        1
-      ],
-      [
-        "DATE_KOORI",
-        "ASHINA_INAWASHIRO",
-        2
-      ],
-      [
-        "DATE_KOORI",
-        "DATE_YAMAGATA",
-        2
-      ],
-      [
-        "DATE_YANAGAWA",
-        "ASHINA_INAWASHIRO",
-        3
-      ],
-      [
-        "DATE_YANAGAWA",
-        "DATE_YAMAGATA",
-        3
-      ],
-      [
-        "HOJO_EDO",
-        "UESUGI_KAWAGOE",
-        2
-      ],
-      [
-        "HOJO_EDO",
-        "HOJO_KOGA",
-        3
-      ],
-      [
-        "HOJO_EDO",
-        "UESUGI_OBOW",
-        3
-      ],
-      [
-        "UESUGI_KAWAGOE",
-        "HOJO_KOGA",
-        2
-      ],
-      [
-        "ODA_SHOBATA",
-        "IMAGAWA_NAGOYA",
-        1
-      ],
-      [
-        "ODA_SHOBATA",
-        "ASHIKAGA_KUWANOMI",
-        3
-      ],
-      [
-        "ODA_SHOBATA",
-        "ROKKAKU_KAMAHABA",
-        2
-      ],
-      [
-        "IMAGAWA_NAGOYA",
-        "ROKKAKU_KAMAHABA",
-        3
-      ],
-      [
-        "ASHIKAGA_NANAO",
-        "ASHIKAGA_HOJOZU",
-        2
-      ],
-      [
-        "ASHIKAGA_GOSEYAMA",
-        "ASHIKAGA_KUWANOMI",
-        3
-      ],
-      [
-        "ASHIKAGA_GOSEYAMA",
-        "MIYOSHI_YAGAMI",
-        3
-      ],
-      [
-        "ASHIKAGA_KUWANOMI",
-        "ROKKAKU_KAMAHABA",
-        1
-      ],
-      [
-        "MIYOSHI_SHIBAO",
-        "MIYOSHI_AMAGIRI",
-        1
-      ],
-      [
-        "MIYOSHI_YAGAMI",
-        "ASHIKAGA_OKISHIO",
-        3
-      ],
-      [
-        "ASHIKAGA_OKISHIO",
-        "ASHIKAGA_MITSUISHI",
-        2
-      ]
-    ],
-    "close_start_pairs": [
-      [
-        "ODA",
-        "MATSUDAIRA",
-        2
-      ],
-      [
-        "DATE",
-        "ASHINA",
-        3
-      ],
-      [
-        "ASHIKAGA",
-        "ROKKAKU",
-        2
-      ],
-      [
-        "ASHIKAGA",
-        "HONGANJI",
-        2
-      ]
-    ],
+    "close_city_pairs": [],
+    "close_start_pairs": [],
     "start_mode": "historical",
     "file": "JAC_Japan_20km.Civ6Map",
     "bytes": 520192,
@@ -1681,6 +1495,7 @@
         "name": "那古野城",
         "owner": "ODA",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -1698,6 +1513,7 @@
         "name": "米沢城",
         "owner": "DATE",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -1715,6 +1531,7 @@
         "name": "黒川城",
         "owner": "ASHINA",
         "capital": true,
+        "research_priority": 0,
         "province": "陸奥"
       },
       {
@@ -1732,6 +1549,7 @@
         "name": "小田原城",
         "owner": "HOJO",
         "capital": true,
+        "research_priority": 0,
         "province": "相模"
       },
       {
@@ -1749,6 +1567,7 @@
         "name": "平井城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": true,
+        "research_priority": 0,
         "province": "上野"
       },
       {
@@ -1766,6 +1585,7 @@
         "name": "躑躅ヶ崎館",
         "owner": "TAKEDA",
         "capital": true,
+        "research_priority": 0,
         "province": "甲斐"
       },
       {
@@ -1783,6 +1603,7 @@
         "name": "春日山城",
         "owner": "NAGAO",
         "capital": true,
+        "research_priority": 0,
         "province": "越後"
       },
       {
@@ -1800,6 +1621,7 @@
         "name": "駿府今川館の推定アンカー",
         "owner": "IMAGAWA",
         "capital": true,
+        "research_priority": 0,
         "province": "駿河"
       },
       {
@@ -1817,6 +1639,7 @@
         "name": "岡崎城",
         "owner": "MATSUDAIRA",
         "capital": true,
+        "research_priority": 0,
         "province": "三河"
       },
       {
@@ -1834,6 +1657,7 @@
         "name": "一乗谷朝倉館",
         "owner": "ASAKURA",
         "capital": true,
+        "research_priority": 0,
         "province": "越前"
       },
       {
@@ -1851,6 +1675,7 @@
         "name": "室町殿",
         "owner": "ASHIKAGA",
         "capital": true,
+        "research_priority": 0,
         "province": "代表本拠"
       },
       {
@@ -1868,6 +1693,7 @@
         "name": "勝瑞守護所",
         "owner": "MIYOSHI",
         "capital": true,
+        "research_priority": 0,
         "province": "阿波"
       },
       {
@@ -1885,6 +1711,7 @@
         "name": "観音寺城",
         "owner": "ROKKAKU",
         "capital": true,
+        "research_priority": 0,
         "province": "近江"
       },
       {
@@ -1902,6 +1729,7 @@
         "name": "石山御坊",
         "owner": "HONGANJI",
         "capital": true,
+        "research_priority": 0,
         "province": "摂津"
       },
       {
@@ -1919,6 +1747,7 @@
         "name": "大内氏館",
         "owner": "OUCHI",
         "capital": true,
+        "research_priority": 0,
         "province": "周防"
       },
       {
@@ -1936,6 +1765,7 @@
         "name": "月山富田城",
         "owner": "AMAGO",
         "capital": true,
+        "research_priority": 0,
         "province": "出雲"
       },
       {
@@ -1953,6 +1783,7 @@
         "name": "吉田郡山城",
         "owner": "MORI",
         "capital": true,
+        "research_priority": 0,
         "province": "安芸"
       },
       {
@@ -1970,6 +1801,7 @@
         "name": "岡豊城",
         "owner": "CHOSOKABE",
         "capital": true,
+        "research_priority": 0,
         "province": "土佐"
       },
       {
@@ -1987,6 +1819,7 @@
         "name": "大友氏館",
         "owner": "OTOMO",
         "capital": true,
+        "research_priority": 0,
         "province": "豊後"
       },
       {
@@ -2004,6 +1837,7 @@
         "name": "清水城",
         "owner": "SHIMAZU",
         "capital": true,
+        "research_priority": 0,
         "province": "薩摩"
       },
       {
@@ -2021,6 +1855,7 @@
         "name": "首里城",
         "owner": "RYUKYU",
         "capital": true,
+        "research_priority": 0,
         "province": "琉球"
       },
       {
@@ -2038,6 +1873,7 @@
         "name": "ポロモイチャシ跡・二風谷拠点候補",
         "owner": "AINU",
         "capital": true,
+        "research_priority": 0,
         "province": "蝦夷地"
       },
       {
@@ -2045,6 +1881,7 @@
         "name": "桑折西山城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 1,
         "province": "陸奥",
         "lon": 140.51,
         "lat": 37.856,
@@ -2058,32 +1895,45 @@
         "name": "梁川城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 2,
         "province": "陸奥",
         "lon": 140.611,
         "lat": 37.855,
-        "col": 149,
+        "col": 150,
         "row": 39,
-        "plot": 8105,
-        "displacement_km": 4.1
+        "plot": 8106,
+        "displacement_km": 17.9,
+        "nudge": {
+          "from_plot": 8105,
+          "to_plot": 8106,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "ASHINA_INAWASHIRO",
         "name": "猪苗代城",
         "owner": "ASHINA",
         "capital": false,
+        "research_priority": 4,
         "province": "陸奥",
         "lon": 140.106,
         "lat": 37.562,
-        "col": 145,
-        "row": 39,
-        "plot": 8101,
-        "displacement_km": 4.8
+        "col": 146,
+        "row": 38,
+        "plot": 7898,
+        "displacement_km": 17.6,
+        "nudge": {
+          "from_plot": 8101,
+          "to_plot": 7898,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "DATE_YAMAGATA",
         "name": "山形城",
         "owner": "DATE",
         "capital": false,
+        "research_priority": 5,
         "province": "出羽",
         "lon": 140.328,
         "lat": 38.256,
@@ -2097,6 +1947,7 @@
         "name": "江戸城",
         "owner": "HOJO",
         "capital": false,
+        "research_priority": 11,
         "province": "武蔵",
         "lon": 139.754,
         "lat": 35.688,
@@ -2110,6 +1961,7 @@
         "name": "河越城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 12,
         "province": "武蔵",
         "lon": 139.492,
         "lat": 35.924,
@@ -2123,6 +1975,7 @@
         "name": "箕輪城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 13,
         "province": "上野",
         "lon": 138.952,
         "lat": 36.404,
@@ -2136,6 +1989,7 @@
         "name": "古河城",
         "owner": "HOJO",
         "capital": false,
+        "research_priority": 14,
         "province": "下総",
         "lon": 139.694,
         "lat": 36.187,
@@ -2149,6 +2003,7 @@
         "name": "小弓城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 15,
         "province": "下総",
         "lon": 140.15,
         "lat": 35.554,
@@ -2162,6 +2017,7 @@
         "name": "太田城",
         "owner": "YAMANOUCHI_UESUGI",
         "capital": false,
+        "research_priority": 16,
         "province": "常陸",
         "lon": 140.52,
         "lat": 36.546,
@@ -2175,6 +2031,7 @@
         "name": "上原城",
         "owner": "TAKEDA",
         "capital": false,
+        "research_priority": 17,
         "province": "信濃",
         "lon": 138.149,
         "lat": 36.009,
@@ -2188,6 +2045,7 @@
         "name": "掛川城",
         "owner": "IMAGAWA",
         "capital": false,
+        "research_priority": 19,
         "province": "遠江",
         "lon": 138.015,
         "lat": 34.777,
@@ -2201,32 +2059,45 @@
         "name": "勝幡城",
         "owner": "ODA",
         "capital": false,
+        "research_priority": 21,
         "province": "尾張",
         "lon": 136.729,
         "lat": 35.202,
         "col": 119,
-        "row": 41,
-        "plot": 8483,
-        "displacement_km": 8.0
+        "row": 42,
+        "plot": 8687,
+        "displacement_km": 8.6,
+        "nudge": {
+          "from_plot": 8483,
+          "to_plot": 8687,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "IMAGAWA_NAGOYA",
         "name": "那古野城",
         "owner": "IMAGAWA",
         "capital": false,
+        "research_priority": 22,
         "province": "尾張",
         "lon": 136.902,
         "lat": 35.184,
-        "col": 119,
-        "row": 40,
-        "plot": 8279,
-        "displacement_km": 11.4
+        "col": 118,
+        "row": 39,
+        "plot": 8074,
+        "displacement_km": 25.2,
+        "nudge": {
+          "from_plot": 8279,
+          "to_plot": 8074,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "ASHIKAGA_KIRIYAMA",
         "name": "霧山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 24,
         "province": "伊勢",
         "lon": 136.289,
         "lat": 34.523,
@@ -2240,6 +2111,7 @@
         "name": "七尾城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 25,
         "province": "能登",
         "lon": 136.985,
         "lat": 37.009,
@@ -2253,6 +2125,7 @@
         "name": "桜洞城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 26,
         "province": "飛騨",
         "lon": 137.212,
         "lat": 35.88,
@@ -2266,6 +2139,7 @@
         "name": "後瀬山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 27,
         "province": "若狭",
         "lon": 135.739,
         "lat": 35.488,
@@ -2279,6 +2153,7 @@
         "name": "放生津城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 28,
         "province": "越中",
         "lon": 137.09,
         "lat": 36.777,
@@ -2292,32 +2167,45 @@
         "name": "桑実寺正覚院（臨時政庁）",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 29,
         "province": "近江",
         "lon": 136.154,
         "lat": 35.144,
         "col": 117,
-        "row": 44,
-        "plot": 9093,
-        "displacement_km": 10.3
+        "row": 43,
+        "plot": 8889,
+        "displacement_km": 21.1,
+        "nudge": {
+          "from_plot": 9093,
+          "to_plot": 8889,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "ROKKAKU_KAMAHABA",
         "name": "鎌刃城",
         "owner": "ROKKAKU",
         "capital": false,
+        "research_priority": 31,
         "province": "近江",
         "lon": 136.315,
         "lat": 35.297,
-        "col": 118,
+        "col": 119,
         "row": 44,
-        "plot": 9094,
-        "displacement_km": 2.8
+        "plot": 9095,
+        "displacement_km": 17.8,
+        "nudge": {
+          "from_plot": 9094,
+          "to_plot": 9095,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "MIYOSHI_SHIBAO",
         "name": "芝生城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 33,
         "province": "阿波",
         "lon": 133.97,
         "lat": 34.045,
@@ -2331,6 +2219,7 @@
         "name": "八上城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 36,
         "province": "丹波",
         "lon": 135.256,
         "lat": 35.062,
@@ -2344,19 +2233,26 @@
         "name": "高屋城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 37,
         "province": "河内",
         "lon": 135.61,
         "lat": 34.549,
-        "col": 110,
+        "col": 109,
         "row": 43,
-        "plot": 8882,
-        "displacement_km": 5.5
+        "plot": 8881,
+        "displacement_km": 20.3,
+        "nudge": {
+          "from_plot": 8882,
+          "to_plot": 8881,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "ASHIKAGA_OKISHIO",
         "name": "置塩城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 38,
         "province": "播磨",
         "lon": 134.683,
         "lat": 34.923,
@@ -2370,6 +2266,7 @@
         "name": "天霧城",
         "owner": "MIYOSHI",
         "capital": false,
+        "research_priority": 39,
         "province": "讃岐",
         "lon": 133.736,
         "lat": 34.236,
@@ -2383,6 +2280,7 @@
         "name": "湯築城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 40,
         "province": "伊予",
         "lon": 132.787,
         "lat": 33.849,
@@ -2396,6 +2294,7 @@
         "name": "山吹城・石見銀山",
         "owner": "OUCHI",
         "capital": false,
+        "research_priority": 47,
         "province": "石見",
         "lon": 132.431,
         "lat": 35.104,
@@ -2409,6 +2308,7 @@
         "name": "津和野城（三本松城）",
         "owner": "OUCHI",
         "capital": false,
+        "research_priority": 48,
         "province": "石見",
         "lon": 131.764,
         "lat": 34.46,
@@ -2422,6 +2322,7 @@
         "name": "三石城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 49,
         "province": "備前",
         "lon": 134.27,
         "lat": 34.808,
@@ -2435,6 +2336,7 @@
         "name": "備中松山城",
         "owner": "ASHIKAGA",
         "capital": false,
+        "research_priority": 50,
         "province": "備中",
         "lon": 133.621,
         "lat": 34.812,
@@ -2448,19 +2350,26 @@
         "name": "伊作城",
         "owner": "SHIMAZU",
         "capital": false,
+        "research_priority": 51,
         "province": "薩摩",
         "lon": 130.363,
         "lat": 31.514,
-        "col": 72,
+        "col": 71,
         "row": 53,
-        "plot": 10884,
-        "displacement_km": 8.0
+        "plot": 10883,
+        "displacement_km": 14.6,
+        "nudge": {
+          "from_plot": 10884,
+          "to_plot": 10883,
+          "distance_km": 15.0
+        }
       },
       {
         "id": "SHIMAZU_OBI",
         "name": "飫肥城",
         "owner": "SHIMAZU",
         "capital": false,
+        "research_priority": 52,
         "province": "日向",
         "lon": 131.35,
         "lat": 31.629,
@@ -2474,6 +2383,7 @@
         "name": "中城グスク",
         "owner": "RYUKYU",
         "capital": false,
+        "research_priority": 53,
         "province": "琉球",
         "lon": 127.8,
         "lat": 26.284,
@@ -2483,185 +2393,8 @@
         "displacement_km": 15.9
       }
     ],
-    "close_city_pairs": [
-      [
-        "ODA_SEAT",
-        "MATSUDAIRA_OKAZAKI",
-        2
-      ],
-      [
-        "ODA_SEAT",
-        "ODA_SHOBATA",
-        1
-      ],
-      [
-        "ODA_SEAT",
-        "IMAGAWA_NAGOYA",
-        1
-      ],
-      [
-        "DATE_SEAT",
-        "ASHINA_KUROKAWA",
-        3
-      ],
-      [
-        "DATE_SEAT",
-        "DATE_KOORI",
-        2
-      ],
-      [
-        "DATE_SEAT",
-        "DATE_YANAGAWA",
-        3
-      ],
-      [
-        "DATE_SEAT",
-        "ASHINA_INAWASHIRO",
-        3
-      ],
-      [
-        "ASHINA_KUROKAWA",
-        "ASHINA_INAWASHIRO",
-        1
-      ],
-      [
-        "UESUGI_HIRAI",
-        "UESUGI_MINOWA",
-        2
-      ],
-      [
-        "IMAGAWA_SUNPU",
-        "IMAGAWA_KAKEGAWA",
-        3
-      ],
-      [
-        "MATSUDAIRA_OKAZAKI",
-        "ODA_SHOBATA",
-        3
-      ],
-      [
-        "MATSUDAIRA_OKAZAKI",
-        "IMAGAWA_NAGOYA",
-        2
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ROKKAKU_KANNONJI",
-        2
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ASHIKAGA_GOSEYAMA",
-        3
-      ],
-      [
-        "ASHIKAGA_SEAT",
-        "ASHIKAGA_KUWANOMI",
-        3
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ASHIKAGA_KUWANOMI",
-        1
-      ],
-      [
-        "ROKKAKU_KANNONJI",
-        "ROKKAKU_KAMAHABA",
-        2
-      ],
-      [
-        "HONGANJI_ISHIYAMA",
-        "ASHIKAGA_TAKAYA",
-        1
-      ],
-      [
-        "OUCHI_YAMAGUCHI",
-        "OUCHI_TSUWANO",
-        3
-      ],
-      [
-        "SHIMAZU_SHIMIZU",
-        "SHIMAZU_IZAKU",
-        1
-      ],
-      [
-        "RYUKYU_SHURI",
-        "RYUKYU_NAKAGUSUKU",
-        2
-      ],
-      [
-        "DATE_KOORI",
-        "DATE_YANAGAWA",
-        1
-      ],
-      [
-        "DATE_KOORI",
-        "ASHINA_INAWASHIRO",
-        3
-      ],
-      [
-        "HOJO_EDO",
-        "UESUGI_KAWAGOE",
-        3
-      ],
-      [
-        "HOJO_EDO",
-        "UESUGI_OBOW",
-        2
-      ],
-      [
-        "UESUGI_KAWAGOE",
-        "HOJO_KOGA",
-        2
-      ],
-      [
-        "ODA_SHOBATA",
-        "IMAGAWA_NAGOYA",
-        1
-      ],
-      [
-        "ODA_SHOBATA",
-        "ROKKAKU_KAMAHABA",
-        3
-      ],
-      [
-        "ASHIKAGA_NANAO",
-        "ASHIKAGA_HOJOZU",
-        2
-      ],
-      [
-        "ASHIKAGA_KUWANOMI",
-        "ROKKAKU_KAMAHABA",
-        1
-      ],
-      [
-        "MIYOSHI_SHIBAO",
-        "MIYOSHI_AMAGIRI",
-        2
-      ],
-      [
-        "ASHIKAGA_OKISHIO",
-        "ASHIKAGA_MITSUISHI",
-        3
-      ]
-    ],
-    "close_start_pairs": [
-      [
-        "ODA",
-        "MATSUDAIRA",
-        2
-      ],
-      [
-        "DATE",
-        "ASHINA",
-        3
-      ],
-      [
-        "ASHIKAGA",
-        "ROKKAKU",
-        2
-      ]
-    ],
+    "close_city_pairs": [],
+    "close_start_pairs": [],
     "start_mode": "historical",
     "file": "JAC_Japan_15km.Civ6Map",
     "bytes": 724992,

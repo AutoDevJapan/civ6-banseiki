@@ -297,7 +297,9 @@ def create_schema(source: Path, target: Path) -> sqlite3.Connection:
     return db
 
 
-CITY_MIN_RANGE = 3  # GlobalParameters: no city within 3 hexes of another
+CITY_MIN_RANGE = 1  # Banseiki GlobalParameters: no city on an adjacent hex
+MIN_CITY_DISTANCE = CITY_MIN_RANGE + 1
+MAX_NUDGE_TILES = 3
 
 
 def hex_distance(a: tuple[int, int], b: tuple[int, int]) -> int:
@@ -369,12 +371,14 @@ def choose_cities(grid: HexGrid, passable: set[int], starts: list[dict],
         alias = SEAT_CASTLES.get(slug)
         name = sites[alias]["name"] if alias else EXTRA_CAPITAL_NAMES[slug]
         cities.append({**start, "id": alias or f"{slug}_SEAT", "name": name,
-                       "owner": slug, "capital": True, "province":
+                       "owner": slug, "capital": True, "research_priority": 0, "province":
                        sites[alias]["province_or_region"] if alias else "代表本拠"})
     available = [(grid.index(col, row), *grid.centre(col, row))
                  for row in range(grid.height) for col in range(grid.width)
                  if grid.index(col, row) in passable and grid.index(col, row) not in used]
-    for castle in castles:
+    # The numbered castle inventory in the research data is the priority order
+    # after the 22 capitals. Keep it when writing every city-related DB table.
+    for priority, castle in enumerate(castles, start=1):
         if castle["id"] in SEAT_CASTLES.values():
             continue
         target = project(float(castle["lon"]), float(castle["lat"]))
@@ -385,11 +389,61 @@ def choose_cities(grid: HexGrid, passable: set[int], starts: list[dict],
         used.add(plot)
         cities.append({"id": castle["id"], "name": castle["name"],
                        "owner": castle["owner_faction_1534_draft"], "capital": False,
+                       "research_priority": priority,
                        "province": castle["province_or_region"],
                        "lon": float(castle["lon"]), "lat": float(castle["lat"]),
                        "col": plot % grid.width, "row": plot // grid.width,
                        "plot": plot, "displacement_km": round(distance, 1)})
-    return cities
+    return ordered_cities(cities)
+
+
+def ordered_cities(cities: list[dict]) -> list[dict]:
+    """Capitals, then the numbered order of the 1534 research inventory."""
+    return sorted(cities, key=lambda city: (not city["capital"],
+                                           SEAT_INDEX[city["owner"]] if city["capital"]
+                                           else city["research_priority"]))
+
+
+def nudge_adjacent_cities(grid: HexGrid, land_tiles: set[int], passable: set[int],
+                          cities: list[dict]) -> None:
+    """Move only lower-priority cities, within their original owner's territory."""
+    # Fix the territory before moving any city: otherwise the nearest-city
+    # allocation could change while evaluating candidate plots.
+    original_owners = {plot: SEATS[owner].slug for plot, owner, _, _ in
+                       assign_land(grid, land_tiles, cities)}
+    occupied = {city["plot"] for city in cities}
+    placed: list[dict] = []
+    for city in cities:
+        if any(hex_distance((city["col"], city["row"]),
+                            (earlier["col"], earlier["row"])) < MIN_CITY_DISTANCE
+               for earlier in placed):
+            if city["capital"]:
+                raise ValueError(f"Adjacent capitals: {city['id']}")
+            before = city["plot"]
+            origin = grid.centre(city["col"], city["row"])
+            historical = project(city["lon"], city["lat"])
+            choices = []
+            for plot in passable:
+                if plot in occupied or original_owners[plot] != city["owner"]:
+                    continue
+                col, row = plot % grid.width, plot // grid.width
+                if any(hex_distance((col, row), (earlier["col"], earlier["row"]))
+                       < MIN_CITY_DISTANCE for earlier in placed):
+                    continue
+                xy = grid.centre(col, row)
+                move = math.dist(origin, xy)
+                if move <= MAX_NUDGE_TILES * grid.km + 1e-8:
+                    choices.append((move, math.dist(historical, xy), plot))
+            if not choices:
+                raise ValueError(f"No owned land within {MAX_NUDGE_TILES} tiles for {city['id']}")
+            move, displacement, plot = min(choices)
+            occupied.remove(before)
+            occupied.add(plot)
+            city.update(plot=plot, col=plot % grid.width, row=plot // grid.width,
+                        displacement_km=round(displacement, 1),
+                        nudge={"from_plot": before, "to_plot": plot,
+                               "distance_km": round(move, 1)})
+        placed.append(city)
 
 
 def close_city_pairs(cities: list[dict]) -> list[list]:
@@ -446,6 +500,24 @@ def assign_land(grid: HexGrid, land_tiles: set[int], cities: list[dict]) -> list
     return results
 
 
+def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
+                            allocations: list[tuple]) -> None:
+    """Insert city centres before ordinary owned plots, with capitals first."""
+    ordered = ordered_cities(cities)
+    db.executemany("INSERT INTO Cities VALUES (?, ?, ?)",
+                   ((SEAT_INDEX[city["owner"]], city["plot"],
+                     f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"] else city["name"])
+                    for city in ordered))
+    db.executemany("INSERT INTO Districts VALUES ('DISTRICT_CITY_CENTER', ?, ?)",
+                   ((city["plot"], city["plot"]) for city in ordered))
+    db.executemany("INSERT INTO CityAttributes VALUES (?, 'Population', 'Initial', '2')",
+                   ((city["plot"],) for city in ordered))
+    city_order = {city["plot"]: index for index, city in enumerate(ordered)}
+    db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
+                   sorted(allocations, key=lambda row: (0, city_order[row[0]])
+                          if row[0] in city_order else (1, row[0])))
+
+
 SEAT_INDEX = {seat.slug: index for index, seat in enumerate(SEATS)}
 
 
@@ -498,6 +570,7 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
     starts = choose_starts(grid, passable)
     castles = data()["castles"]
     cities = choose_cities(grid, passable, starts, castles)
+    nudge_adjacent_cities(grid, land_tiles, passable, cities)
     coast = set()
     for index in land_tiles:
         col, row = index % grid.width, index // grid.width
@@ -535,16 +608,7 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
                            ((i, seat.civ, seat.leader, "CIVILIZATION_LEVEL_FULL_CIV", "",
                              "Human" if i == 0 else "AI", "DIFFICULTY_PRINCE", "INVALID",
                              "RANDOM", 1) for i, seat in enumerate(SEATS)))
-            db.executemany("INSERT INTO Cities VALUES (?, ?, ?)",
-                           ((SEAT_INDEX[city["owner"]], city["plot"],
-                             f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"] else city["name"])
-                            for city in cities))
-            db.executemany("INSERT INTO Districts VALUES ('DISTRICT_CITY_CENTER', ?, ?)",
-                           ((city["plot"], city["plot"]) for city in cities))
-            db.executemany("INSERT INTO CityAttributes VALUES (?, 'Population', 'Initial', '2')",
-                           ((city["plot"],) for city in cities))
-            db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
-                           assign_land(grid, land_tiles, cities))
+            insert_historical_state(db, cities, assign_land(grid, land_tiles, cities))
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"Invalid SQLite map: {destination}")
         db.commit()

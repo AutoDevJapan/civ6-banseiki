@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+import re
 import sqlite3
 import sys
 import unittest
@@ -126,10 +127,18 @@ class GeneratedMapTests(unittest.TestCase):
                 cities = {city["id"]: city for city in item["cities"]}
                 self.assertEqual(len(cities), 56)
                 self.assertEqual(set(cities), set(expected_castles) | {"ODA_SEAT", "DATE_SEAT", "ASHIKAGA_SEAT"})
+                self.assertEqual([city["owner"] for city in item["cities"][:22]],
+                                 [seat.slug for seat in g.SEATS])
+                self.assertTrue(all(city["capital"] for city in item["cities"][:22]))
+                self.assertFalse(any(city["capital"] for city in item["cities"][22:]))
+                self.assertEqual([city["research_priority"] for city in item["cities"][22:]],
+                                 [i for i, castle in enumerate(draft["castles"], 1)
+                                  if castle["id"] not in g.SEAT_CASTLES.values()])
                 for castle_id, castle in expected_castles.items():
                     city = cities[castle_id]
                     self.assertEqual(city["owner"], castle["owner_faction_1534_draft"])
-                    self.assertLessEqual(city["displacement_km"], 20)
+                    self.assertLessEqual(city["displacement_km"],
+                                         20 + g.MAX_NUDGE_TILES * item["km_per_tile"])
                 for slug, castle_id in expected_capitals.items():
                     self.assertEqual(cities[castle_id]["owner"], slug)
                     self.assertTrue(cities[castle_id]["capital"])
@@ -138,8 +147,18 @@ class GeneratedMapTests(unittest.TestCase):
                     self.assertEqual(capital, (cities[castle_id]["plot"],))
                 players = db.execute("SELECT ID,CivilizationType,LeaderType FROM Players ORDER BY ID").fetchall()
                 self.assertEqual(players, [(i, seat.civ, seat.leader) for i, seat in enumerate(g.SEATS)])
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM Cities").fetchone()[0], 56)
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM Districts WHERE DistrictType='DISTRICT_CITY_CENTER'").fetchone()[0], 56)
+                expected_rows = sorted((g.SEAT_INDEX[city["owner"]], city["plot"],
+                                        f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
+                                        else city["name"]) for city in cities.values())
+                self.assertEqual(sorted(db.execute("SELECT Owner,Plot,Name FROM Cities")), expected_rows)
+                self.assertEqual(sorted(db.execute(
+                    "SELECT DistrictType,CityID,Plot FROM Districts")),
+                    sorted(("DISTRICT_CITY_CENTER", city["plot"], city["plot"])
+                           for city in cities.values()))
+                self.assertEqual(sorted(db.execute(
+                    "SELECT ID,Type,Name,Value FROM CityAttributes")),
+                    sorted((city["plot"], "Population", "Initial", "2")
+                           for city in cities.values()))
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Units").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotOwners").fetchone()[0], item["land_tiles"])
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Plots p LEFT JOIN PlotOwners o ON p.ID=o.ID WHERE p.ContinentType='CONTINENT_ASIA' AND o.ID IS NULL").fetchone()[0], 0)
@@ -156,10 +175,83 @@ class GeneratedMapTests(unittest.TestCase):
 
     def test_close_castle_pairs_report(self):
         self.assertEqual({item["km_per_tile"]: len(item["close_city_pairs"]) for item in self.manifest},
-                         {20: 55, 15: 32})
+                         {20: 0, 15: 0})
         for item in self.manifest:
             self.assertEqual(item["close_city_pairs"], g.close_city_pairs(item["cities"]))
-            self.assertTrue(all(1 <= pair[2] <= g.CITY_MIN_RANGE for pair in item["close_city_pairs"]))
+            self.assertTrue(all(g.hex_distance((a["col"], a["row"]), (b["col"], b["row"]))
+                                >= g.MIN_CITY_DISTANCE for i, a in enumerate(item["cities"])
+                                for b in item["cities"][i + 1:]))
+
+    def test_nudges_use_nearest_free_plot_of_the_original_owner(self):
+        japan = g.read_shapes(g.CACHE / "ne_10m_admin_0_countries.zip",
+                              "ne_10m_admin_0_countries", country="JPN")
+        for item in self.manifest:
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                grid = g.HexGrid.for_scale(item["km_per_tile"], japan)
+                land = {row[0] for row in db.execute(
+                    "SELECT ID FROM Plots WHERE ContinentType='CONTINENT_ASIA'")}
+                passable = {row[0] for row in db.execute(
+                    "SELECT ID FROM Plots WHERE ContinentType='CONTINENT_ASIA' AND IsImpassable=0")}
+                original = g.choose_cities(grid, passable, item["starts"], data()["castles"])
+                original_owners = {plot: g.SEATS[owner].slug for plot, owner, _, _ in
+                                   g.assign_land(grid, land, original)}
+                occupied = {city["plot"] for city in original}
+                placed = []
+                self.assertEqual([city["id"] for city in item["cities"]],
+                                 [city["id"] for city in original])
+                self.assertTrue(any("nudge" in city for city in item["cities"]))
+                for city, before in zip(item["cities"], original):
+                    self.assertEqual(city["displacement_km"], round(math.dist(
+                        g.project(city["lon"], city["lat"]),
+                        grid.centre(city["col"], city["row"])), 1))
+                    if "nudge" in city:
+                        self.assertFalse(city["capital"])
+                        self.assertEqual(city["nudge"]["from_plot"], before["plot"])
+                        self.assertEqual(city["nudge"]["to_plot"], city["plot"])
+                        move = math.dist(grid.centre(before["col"], before["row"]),
+                                         grid.centre(city["col"], city["row"]))
+                        self.assertEqual(city["nudge"]["distance_km"], round(move, 1))
+                        self.assertLessEqual(move, g.MAX_NUDGE_TILES * grid.km + 1e-8)
+                        self.assertEqual(original_owners[city["plot"]], city["owner"])
+                        self.assertIn(city["plot"], passable)
+                        candidates = []
+                        for plot in passable - occupied:
+                            if original_owners[plot] != city["owner"]:
+                                continue
+                            col, row = plot % grid.width, plot // grid.width
+                            if any(g.hex_distance((col, row), (earlier["col"], earlier["row"])) < 2
+                                   for earlier in placed):
+                                continue
+                            xy = grid.centre(col, row)
+                            distance = math.dist(grid.centre(before["col"], before["row"]), xy)
+                            if distance <= g.MAX_NUDGE_TILES * grid.km + 1e-8:
+                                candidates.append((distance, math.dist(
+                                    g.project(city["lon"], city["lat"]), xy), plot))
+                        self.assertEqual(city["plot"], min(candidates)[2])
+                        occupied.remove(before["plot"])
+                        occupied.add(city["plot"])
+                    else:
+                        self.assertEqual(city["plot"], before["plot"])
+                    placed.append(city)
+
+    def test_city_related_inserts_put_capitals_first(self):
+        class Recorder:
+            def __init__(self):
+                self.calls = []
+
+            def executemany(self, sql, rows):
+                self.calls.append((sql, list(rows)))
+
+        for item in self.manifest:
+            with self.subTest(km=item["km_per_tile"]), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+                allocations = db.execute("SELECT ID,Owner,CityOwner,CityWorking FROM PlotOwners").fetchall()
+                recorder = Recorder()
+                g.insert_historical_state(recorder, list(reversed(item["cities"])), allocations)
+                capital_plots = [city["plot"] for city in item["cities"][:22]]
+                self.assertEqual([row[1] for row in recorder.calls[0][1][:22]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[1][1][:22]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[2][1][:22]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[3][1][:22]], capital_plots)
 
     def test_hex_distance_matches_neighbours(self):
         grid = g.HexGrid(40, 20, 20, 0.0, 0.0)
@@ -207,6 +299,13 @@ class GeneratedMapTests(unittest.TestCase):
             self.assertEqual(scenario["steps"][1]["map_file"], file)
             self.assertEqual(scenario["steps"][1]["ruleset"], "RULESET_JAC_BANSEIKI")
             self.assertEqual(len(scenario["steps"][1]["players"]), 22)
+            expected = re.findall(r"\{(\d+),(\d+),(\d+)\}",
+                                  scenario["steps"][3]["code"].split("local expected=", 1)[1]
+                                  .split("; local leaders=", 1)[0])
+            self.assertEqual([int(count) for _, _, count in expected],
+                             [sum(city["owner"] == seat.slug for city in item["cities"])
+                              for seat in g.SEATS])
+            self.assertIn("if totalCities~=56", scenario["steps"][3]["code"])
             self.assertEqual(scenario["steps"][4]["turns"], 50)
             self.assertEqual(scenario["steps"][5]["capture_as"], "JAPAN_STATE")
             self.assertEqual(scenario["steps"][9]["equals_capture"], "JAPAN_STATE")
@@ -270,6 +369,33 @@ class GeneratedMapTests(unittest.TestCase):
             self.assertEqual(action.findtext("File"), "Data/JAC_Japan_NoSettlers.xml")
         removal = ET.parse(g.MOD / "Data/JAC_Japan_NoSettlers.xml").getroot()
         self.assertEqual(removal.find("./MajorStartingUnits/Delete").attrib, {"Unit": "UNIT_SETTLER"})
+
+    def test_banseiki_city_range_is_gameplay_only_and_ruleset_scoped(self):
+        ruleset_mod = g.MOD.parent / "JAC_PoC_BanseikiRuleset"
+        mod = ET.parse(ruleset_mod / "JAC_PoC_BanseikiRuleset.modinfo").getroot()
+        criterion = mod.find("./ActionCriteria/Criteria[@id='JAC_Banseiki_Ruleset']")
+        self.assertEqual(criterion.findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
+        action = mod.find("./InGameActions/UpdateDatabase[@id='JAC_Banseiki_CityRange']")
+        self.assertIsNotNone(action)
+        self.assertEqual(action.attrib["criteria"], criterion.attrib["id"])
+        self.assertEqual(action.findtext("File"), "Data/JAC_Banseiki_CityRange.sql")
+        self.assertIn(action.findtext("File"),
+                      [file.text for file in mod.findall("./Files/File")])
+        self.assertIsNone(mod.find("./FrontEndActions/UpdateDatabase[@id='JAC_Banseiki_CityRange']"))
+        sql = (ruleset_mod / action.findtext("File")).read_text(encoding="utf-8")
+        with sqlite3.connect(":memory:") as db:
+            db.execute("CREATE TABLE GlobalParameters (Name TEXT PRIMARY KEY, Value TEXT)")
+            db.executemany("INSERT INTO GlobalParameters VALUES (?, ?)",
+                           (("CITY_MIN_RANGE", "3"), ("CITY_MIN_DISTANCE_FOR_INCURSION", "8")))
+            db.executescript(sql)
+            self.assertEqual(db.execute("SELECT Value FROM GlobalParameters WHERE Name='CITY_MIN_RANGE'")
+                             .fetchone(), ("1",))
+            self.assertEqual(db.execute("SELECT Value FROM GlobalParameters WHERE Name='CITY_MIN_DISTANCE_FOR_INCURSION'")
+                             .fetchone(), ("8",))
+        official = (g.OFFICIAL.parents[2] / "Gameplay/Data/GlobalParameters.xml")
+        if official.exists():
+            rows = ET.parse(official).getroot().findall(".//*[@Name='CITY_MIN_RANGE']")
+            self.assertEqual([row.attrib["Value"] for row in rows], ["3"])
 
 
 if __name__ == "__main__":

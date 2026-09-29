@@ -29,6 +29,7 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertEqual(data["steps"][5]["capture_as"], "JAPAN_STATE")
                 self.assertEqual(data["steps"][9]["equals_capture"], "JAPAN_STATE")
                 self.assertIn("city count", data["steps"][3]["code"])
+                self.assertIn("if totalCities~=56 then", data["steps"][3]["code"])
                 self.assertIn("unowned land plot", data["steps"][3]["code"])
                 self.assertIn("settler in slot", data["steps"][3]["code"])
 

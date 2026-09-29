@@ -30,6 +30,9 @@
 		</Criteria>
 	</ActionCriteria>
 	<InGameActions>
+		<UpdateDatabase id="JAC_Banseiki_CityRange" criteria="JAC_Banseiki_Ruleset">
+			<File>Data/JAC_Banseiki_CityRange.sql</File>
+		</UpdateDatabase>
 		<UpdateText id="JAC_Banseiki_InGameText" criteria="JAC_Banseiki_Ruleset">
 			<File>Text/JAC_Banseiki_Text.xml</File>
 		</UpdateText>
@@ -44,6 +47,7 @@
 	</FrontEndActions>
 	<Files>
 		<File>Config/JAC_Banseiki_Config.xml</File>
+		<File>Data/JAC_Banseiki_CityRange.sql</File>
 		<File>Text/JAC_Banseiki_Text.xml</File>
 	</Files>
 </Mod>
