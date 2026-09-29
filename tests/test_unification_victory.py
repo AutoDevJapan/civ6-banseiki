@@ -5,13 +5,15 @@ from __future__ import annotations
 from contextlib import closing
 import json
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
 from tools.generate_unification_victory import (
-    CASTLE_FILES, CASTLE_SET, COUNTED_SET, RAZED_PREFIX, REBUILT, castle_sql, castles, registry_scenario, scenario, sql, verify_registry)
+    CASTLE_FILES, CASTLE_SET, COUNTED_SET, PACT_LEAD_PREFIX, PACT_RESULT, RAZED_PREFIX, REBUILT, UNIFIED, castle_sql,
+    castles, pact_scenario, registry_scenario, scenario, sql, verify_registry)
 import unification_test_map as test_map  # on sys.path via generate_unification_victory
 
 
@@ -53,7 +55,7 @@ class RequirementModel:
                                (VICTORY,)).fetchone()[0]
 
     def wins(self, team: int, cities: list[tuple], domination: bool = False) -> bool:
-        """cities: (owner, x, y) or (owner, x, y, rebuilt) where rebuilt means the city holds the marker."""
+        """cities: (owner, x, y[, rebuilt[, unified]]): the city holds the rebuilt / pact-unified marker."""
         self.world = cities, domination
         return self.test_set(self.root, team, None)
 
@@ -76,8 +78,8 @@ class RequirementModel:
         elif kind == "REQUIREMENT_CITY_LOCATION_MATCHES":
             result = city[1:] == (int(args["X"]), int(args["Y"]))
         elif kind == "REQUIREMENT_CITY_HAS_BUILDING":
-            self.assertion(args == {"BuildingType": REBUILT}, req)
-            result = len(city) > 3 and city[3]
+            slot = {REBUILT: 3, UNIFIED: 4}[args["BuildingType"]]
+            result = len(city) > slot and city[slot]
         elif kind == "REQUIREMENT_PLAYER_OWNS_OBJECT":
             result = city[0] == team
         elif kind == "REQUIREMENT_TEAM_DOMINATION_VICTORY":
@@ -163,11 +165,13 @@ class UnificationVictoryTests(unittest.TestCase):
         model = generated_model()
         counts = {req: args["Count"] for req, args in model.args.items() if "Count" in args}
         # Only existence (>=1) and absence (==0) tests: nothing depends on 56 or the test map's 4.
-        self.assertEqual(counts, {"JAC_UNIFICATION_CASTLES_EXIST": "1", "JAC_UNIFICATION_NO_CASTLES": "0"})
-        # Castles are plots; a building only ever excludes (the rebuilt marker, inverted), since
-        # the city centre has CaptureRemovesBuildings and a registering marker would be lost on capture.
+        self.assertEqual(counts, {"JAC_UNIFICATION_CASTLES_EXIST": "1", "JAC_UNIFICATION_NO_CASTLES": "0",
+                                  "JAC_UNIFICATION_PACT": "1"})
+        # Castles are plots; a building never registers a castle (the city centre has CaptureRemovesBuildings).
+        # It only excludes rebuilt cities, or marks the pact lead's capital (re-added by the pact script).
         self.assertEqual([(req, inv) for req, (kind, inv) in model.reqs.items()
-                          if kind == "REQUIREMENT_CITY_HAS_BUILDING"], [("JAC_UNIFICATION_CITY_NOT_REBUILT", True)])
+                          if kind == "REQUIREMENT_CITY_HAS_BUILDING"],
+                         [("JAC_UNIFICATION_CITY_PACT_UNIFIED", False), ("JAC_UNIFICATION_CITY_NOT_REBUILT", True)])
         self.assertEqual(model.sets[COUNTED_SET], "REQUIREMENTSET_TEST_ALL")
         self.assertEqual(model.members[COUNTED_SET],
                          ["JAC_UNIFICATION_CITY_ON_CASTLE_PLOT", "JAC_UNIFICATION_CITY_NOT_REBUILT"])
@@ -178,7 +182,10 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertEqual(model.members[CASTLE_SET], ["JAC_UNIFICATION_CASTLE_NONE"])
         self.assertEqual(model.args["JAC_UNIFICATION_CASTLE_NONE"], {"X": "-1", "Y": "-1"})
         self.assertEqual(model.sets[model.root], "REQUIREMENTSET_TEST_ANY")
-        self.assertEqual(model.members[model.root], ["JAC_UNIFICATION_CASTLES", "JAC_UNIFICATION_CAPITALS"])
+        self.assertEqual(model.members[model.root],
+                         ["JAC_UNIFICATION_CASTLES", "JAC_UNIFICATION_CAPITALS", "JAC_UNIFICATION_PACT"])
+        self.assertEqual(model.members["JAC_UNIFICATION_PACT_CITY"],
+                         ["JAC_UNIFICATION_CITY_OWNED", "JAC_UNIFICATION_CITY_PACT_UNIFIED"])
         self.assertEqual(model.reqs["JAC_UNIFICATION_ALL_CAPITALS"],
                          ("REQUIREMENT_TEAM_DOMINATION_VICTORY", False))
         self.assertEqual(model.reqs["JAC_UNIFICATION_CITY_NOT_CASTLE"], ("REQUIREMENT_REQUIREMENTSET_IS_MET", True))
@@ -186,14 +193,16 @@ class UnificationVictoryTests(unittest.TestCase):
             db.executescript(SCHEMA)
             db.executescript(script)
             self.assertEqual(db.execute("SELECT Type,Kind FROM Types").fetchall(),
-                             [(VICTORY, "KIND_VICTORY"), (REBUILT, "KIND_BUILDING")])
+                             [(VICTORY, "KIND_VICTORY"), (REBUILT, "KIND_BUILDING"), (UNIFIED, "KIND_BUILDING")])
             self.assertEqual(db.execute("SELECT * FROM Buildings").fetchall(),
-                             [(REBUILT, f"LOC_{REBUILT}_NAME", "DISTRICT_CITY_CENTER", 1, 1)])
+                             [(REBUILT, f"LOC_{REBUILT}_NAME", "DISTRICT_CITY_CENTER", 1, 1),
+                              (UNIFIED, f"LOC_{UNIFIED}_NAME", "DISTRICT_CITY_CENTER", 1, 1)])
             self.assertEqual(db.execute("SELECT RequirementSetId,EnabledByDefault,OneMoreTurn FROM Victories").fetchone(),
                              ("JAC_UNIFICATION_VICTORY_REQUIREMENTS", 1, 0))
             self.assertEqual(dict(db.execute("SELECT RequirementId,Text FROM RequirementStrings")), {
                 "JAC_UNIFICATION_CASTLES": "LOC_VICTORY_JAC_UNIFICATION_PROGRESS",
                 "JAC_UNIFICATION_CAPITALS": "LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS",
+                "JAC_UNIFICATION_PACT": "LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS",
             })
 
     def test_victory_follows_owned_castles_razes_and_settler_capitals(self):
@@ -247,6 +256,57 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertFalse(model.wins(oda, rebuilt_only))
         self.assertTrue(model.wins(oda, rebuilt_only, domination=True))
 
+    def test_pact_marker_lets_only_the_lead_team_win(self):
+        """天下統一同盟 (SSOT 3.1): the script marks the lead's capital once the pact holds every castle."""
+        model = generated_model(FOUR_SQL)
+        oda, date, ashina = 0, 1, 2
+        unmarked = [(oda, *FOUR[0]), (oda, *FOUR[1]), (date, *FOUR[2]), (date, *FOUR[3])]
+        pooled = [(oda, *FOUR[0], False, True)] + unmarked[1:]
+        self.assertTrue(model.wins(oda, pooled), "the lead's team owns the marked capital")
+        self.assertFalse(model.wins(date, pooled), "the partner does not win")
+        self.assertFalse(model.wins(ashina, pooled))
+        # Without the marker the same split wins for nobody (the per-team castle check).
+        self.assertFalse(any(model.wins(team, unmarked) for team in (oda, date, ashina)))
+        # A marked city owned by another team counts for that team only (capture removes it in play).
+        self.assertTrue(model.wins(date, [(date, *FOUR[0], False, True)] + unmarked[1:]))
+        self.assertFalse(model.wins(oda, [(date, *FOUR[0], False, True)] + unmarked[1:]))
+
+    def test_pact_script_and_panel_are_registered(self):
+        modinfo = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
+        scripts = {action.get("id"): [f.text for f in action.findall("File")]
+                   for action in modinfo.findall("./InGameActions/AddGameplayScripts")}
+        self.assertEqual(scripts["JAC_Sengoku_UnificationPact"], ["Scripts/JAC_Sengoku_UnificationPact.lua"])
+        ui = modinfo.find("./InGameActions/AddUserInterfaces[@id='JAC_Sengoku_UnificationPactUI']")
+        self.assertEqual(ui.findtext("./Properties/Context"), "InGame")
+        self.assertEqual([f.text for f in ui.findall("File")], ["UI/JAC_UnificationPact.xml"])
+        imported = [f.text for f in modinfo.findall("./InGameActions/ImportFiles/File")]
+        files = [f.text for f in modinfo.findall("./Files/File")]
+        for name in ("UI/JAC_UnificationPact.xml", "UI/JAC_UnificationPact.lua"):
+            self.assertIn(name, imported)
+            self.assertIn(name, files)
+        self.assertIn("Scripts/JAC_Sengoku_UnificationPact.lua", files)
+        # The panel only requests (MP-safe); state changes stay in the gameplay script; keys match.
+        pact = (TREE_MOD / "Scripts/JAC_Sengoku_UnificationPact.lua").read_text(encoding="utf-8")
+        panel = (TREE_MOD / "UI/JAC_UnificationPact.lua").read_text(encoding="utf-8")
+        for key in (f'"{PACT_LEAD_PREFIX}"', '"JAC_UNIFICATION_PACT_PROPOSAL_"', f'"{PACT_RESULT}"'):
+            self.assertIn(key, pact)
+            self.assertIn(key, panel)
+        self.assertIn(f'GameInfo.Buildings["{UNIFIED}"]', pact)
+        self.assertIn("PlayerOperations.EXECUTE_SCRIPT", panel)
+        for call in ("SetProperty", "CreateIncompleteBuilding", "TransferCity"):
+            self.assertNotIn(call, panel)
+        for event in ("JAC_UnificationPactPropose", "JAC_UnificationPactAccept"):
+            self.assertIn(f"GameEvents.{event}.Add(", pact)
+        # Every text the panel can show exists in all three languages (checked with the victory texts).
+        texts = {row.get("Tag") for row in ET.parse(TREE_MOD / "Text/JAC_Sengoku_Unification_Text.xml")
+                 .getroot().findall("./LocalizedText/Row")}
+        xml = (TREE_MOD / "UI/JAC_UnificationPact.xml").read_text(encoding="utf-8")
+        used = set(re.findall(r'"(LOC_JAC_UNIFICATION_PACT_[A-Z_]+)"', panel + xml)) - {"LOC_JAC_UNIFICATION_PACT_RESULT_"}
+        used |= {f"LOC_JAC_UNIFICATION_PACT_RESULT_{code}"
+                 for code in re.findall(r'SetProperty\(RESULT, "([A-Z_]+)"\)', pact)}
+        self.assertEqual(len(used), 11)
+        self.assertLessEqual(used, texts)
+
     def test_rebuilt_castle_script_marks_razed_plots_and_survives_capture(self):
         script = (TREE_MOD / "Scripts/JAC_Sengoku_RebuiltCastles.lua").read_text(encoding="utf-8")
         for needle in (f'"{CASTLE_SET}"', f'"{REBUILT}"', f'"{RAZED_PREFIX}"', "GameEvents.CityBuilt.Add(OnCityBuilt)",
@@ -291,7 +351,8 @@ class UnificationVictoryTests(unittest.TestCase):
             self.assertTrue(row.findtext("Text"))
         self.assertEqual(set(tags), {f"LOC_VICTORY_JAC_UNIFICATION_{part}" for part in
                                      ("NAME", "DESCRIPTION", "BLURB", "PROGRESS", "CAPITALS_PROGRESS")}
-                         | {f"LOC_{REBUILT}_NAME"})
+                         | {f"LOC_{REBUILT}_NAME", f"LOC_{UNIFIED}_NAME", "LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS"}
+                         | {tag for tag in tags if tag.startswith("LOC_JAC_UNIFICATION_PACT_")})
         self.assertTrue(all(langs == {"ja_JP", "en_US", "ru_RU"} for langs in tags.values()))
         modinfo = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
         self.assertEqual([row.text for row in modinfo.findall("./FrontEndActions/UpdateText/File")],
@@ -390,6 +451,27 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertIn("total~=56", registry["steps"][-1]["code"])
         self.assertNotIn("TransferCity", json.dumps(registry))
         self.assertNotIn("autoplay", [step["action"] for step in registry["steps"]])
+
+    def test_pact_live_scenario_forms_the_pact_through_the_panel(self):
+        data = json.loads((ROOT / "tools/civ6-autotest/scenarios/unification-pact.json").read_text(encoding="utf-8"))
+        self.assertEqual(data, pact_scenario())
+        steps = data["steps"]
+        self.assertEqual(steps[:5], scenario()["steps"][:5])
+        codes = [json.dumps(step, ensure_ascii=False) for step in steps]
+        propose = [i for i, code in enumerate(codes) if "JAC_RequestPact('Propose'" in code]
+        self.assertEqual(len(propose), 2)
+        self.assertTrue(all(steps[i]["state_name"] == "JAC_UnificationPact" for i in propose))
+        first = lambda needle: next(i for i, code in enumerate(codes) if needle in code)
+        not_allied, allied = first("NOT_ALLIED"), first("SetHasAllied(date,true)")
+        joined, held_out = first("=='JOINED'"), first("pact marked with 3 of 4 castles")
+        handover = first("TransferCity(last,date)")
+        self.assertTrue(propose[0] < not_allied < allied < propose[1] < joined < held_out < handover)
+        # Two transfers: Date's castle to Ashina before the pact, then Ashina's to the partner Date.
+        self.assertEqual(sum("TransferCity(" in code for code in codes), 2)
+        self.assertIn(UNIFIED, codes[handover + 1])
+        self.assertIn("AutoplayManager.SetActive(true)", codes[-3])
+        self.assertIn("winner~=Players[date]:GetTeam()", codes[-2])
+        self.assertEqual(steps[-1]["action"], "screenshot")
 
 
 if __name__ == "__main__":

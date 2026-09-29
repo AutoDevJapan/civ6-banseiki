@@ -19,5 +19,44 @@
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ja_JP"><Text>城跡に再建した都市</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="en_US"><Text>City Rebuilt on a Razed Castle</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ru_RU"><Text>Город, отстроенный на месте разрушенного замка</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ja_JP"><Text>天下統一同盟の主体として、同盟で登録城をすべて支配する</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="en_US"><Text>As the lead of a unification pact, hold every registered castle together with the pact</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ru_RU"><Text>Как глава союза объединения, контролировать вместе с союзом все зарегистрированные замки</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="ja_JP"><Text>天下統一同盟の達成</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="en_US"><Text>Unification Pact Achieved</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="ru_RU"><Text>Союз объединения достиг цели</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="ja_JP"><Text>天下統一同盟</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="en_US"><Text>Unification Pact</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="ru_RU"><Text>Союз объединения</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ja_JP"><Text>同盟の城を合算し、主体（申し込んだ家）だけが天下統一で勝利する。同盟は勝利まで続き、抜けられない。AI の家には、同盟を結んでいるときだけ申し込める。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="en_US"><Text>Pact members pool their castles; only the lead (the house that proposed) wins the unification. A pact lasts until victory and cannot be left. An AI house can be asked only while allied with you.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ru_RU"><Text>Участники союза объединяют свои замки; победу получает только глава (предложивший дом). Союз действует до победы, выйти из него нельзя. Дому ИИ можно предложить союз только при действующем альянсе.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="ja_JP"><Text>天下統一同盟には加わっていない。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="en_US"><Text>You are not in a unification pact.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="ru_RU"><Text>Вы не состоите в союзе объединения.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_MEMBER" Language="ja_JP"><Text>{1_Name}を主体とする天下統一同盟に加わっている。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_MEMBER" Language="en_US"><Text>You are in the unification pact led by {1_Name}.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_MEMBER" Language="ru_RU"><Text>Вы состоите в союзе объединения во главе с {1_Name}.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_IN_PACT" Language="ja_JP"><Text>{1_Name}の同盟</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_IN_PACT" Language="en_US"><Text>{1_Name}'s pact</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_IN_PACT" Language="ru_RU"><Text>Союз: {1_Name}</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_PROPOSE" Language="ja_JP"><Text>申し込む</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_PROPOSE" Language="en_US"><Text>Propose</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_PROPOSE" Language="ru_RU"><Text>Предложить</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_ACCEPT" Language="ja_JP"><Text>申し込みを受ける</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_ACCEPT" Language="en_US"><Text>Accept</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_ACCEPT" Language="ru_RU"><Text>Принять</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_PROPOSED" Language="ja_JP"><Text>申し込んだ。相手が受けると同盟が成立する。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_PROPOSED" Language="en_US"><Text>Proposed. The pact forms when they accept.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_PROPOSED" Language="ru_RU"><Text>Предложение отправлено. Союз заключится после согласия.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_JOINED" Language="ja_JP"><Text>天下統一同盟が成立した。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_JOINED" Language="en_US"><Text>The unification pact is formed.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_JOINED" Language="ru_RU"><Text>Союз объединения заключён.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NOT_ALLIED" Language="ja_JP"><Text>AI の家とは、同盟を結んでいるときだけ組める。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NOT_ALLIED" Language="en_US"><Text>An AI house joins only while allied with you.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NOT_ALLIED" Language="ru_RU"><Text>Дом ИИ вступает только при действующем альянсе.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ja_JP"><Text>この相手とは組めない（どちらかが別の同盟にいる、または同じチーム）。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="en_US"><Text>Not possible with this house (one of you is in another pact, or you share a team).</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ru_RU"><Text>С этим домом невозможно (кто-то уже в другом союзе или вы в одной команде).</Text></Row>
   </LocalizedText>
 </GameData>

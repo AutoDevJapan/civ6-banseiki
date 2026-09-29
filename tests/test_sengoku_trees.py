@@ -103,6 +103,7 @@ class SengokuTreeTests(unittest.TestCase):
             "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
+            "Scripts/JAC_Sengoku_UnificationPact.lua", "UI/JAC_UnificationPact.xml", "UI/JAC_UnificationPact.lua",
             "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
             "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",
