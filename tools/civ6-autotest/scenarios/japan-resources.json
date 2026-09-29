@@ -179,11 +179,6 @@
       "timeout": 600
     },
     {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "local w,h=Map.GetGridSize(); if w~=154 or h~=67 then error('map grid mismatch '..w..'x'..h) end; local sites={{'silver-ikuno',6089,'RESOURCE_SILVER',1542},{'silver-sado-tsurushi',6112,'RESOURCE_SILVER',1542},{'copper-ashio',4416,'RESOURCE_COPPER',1550},{'gold-izu-toi',3483,'RESOURCE_JAC_GOLD',1577},{'gold-noto-hodatsu',5948,'RESOURCE_JAC_GOLD',1586},{'lacquer-aizu',4882,'RESOURCE_JAC_LACQUER',1590},{'gold-sado-aikawa',5958,'RESOURCE_JAC_GOLD',1596},{'silver-nobesawa',5196,'RESOURCE_SILVER',1596}}; local shown=0; for _,s in ipairs(sites) do local t=Map.GetPlotByIndex(s[2]):GetResourceType(); if s[4]<=1542 then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; shown=shown+1 elseif t~=-1 then error('site released too early: '..s[1]) end end; return 'year 1542: '..shown..' of '..#sites..' deferred sites on the map'"
-    },
-    {
       "action": "wait_for",
       "condition": {
         "type": "log_line",
@@ -191,6 +186,11 @@
         "contains": "[JAC_RESOURCES] revealed silver-ikuno"
       },
       "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local w,h=Map.GetGridSize(); if w~=154 or h~=67 then error('map grid mismatch '..w..'x'..h) end; local sites={{'silver-ikuno',6089,'RESOURCE_SILVER',1542},{'silver-sado-tsurushi',6112,'RESOURCE_SILVER',1542},{'copper-ashio',4416,'RESOURCE_COPPER',1550},{'gold-izu-toi',3483,'RESOURCE_JAC_GOLD',1577},{'gold-noto-hodatsu',5948,'RESOURCE_JAC_GOLD',1586},{'lacquer-aizu',4882,'RESOURCE_JAC_LACQUER',1590},{'gold-sado-aikawa',5958,'RESOURCE_JAC_GOLD',1596},{'silver-nobesawa',5196,'RESOURCE_SILVER',1596}}; local shown=0; for _,s in ipairs(sites) do local t=Map.GetPlotByIndex(s[2]):GetResourceType(); if s[4]<=1542 then if t~=GameInfo.Resources[s[3]].Index then error('site not released: '..s[1]) end; shown=shown+1 elseif t~=-1 then error('site released too early: '..s[1]) end end; return 'year 1542: '..shown..' of '..#sites..' deferred sites on the map'"
     },
     {
       "action": "autoplay",

@@ -350,9 +350,10 @@ def resource_scenario() -> None:
         {"action": "ui_lua", "state_name": "InGame", "code": static},
         {"action": "ui_lua", "state_name": "InGame", "code": released(1541)},
         {"action": "autoplay", "turns": 1, "timeout": 600},
-        {"action": "ui_lua", "state_name": "InGame", "code": released(1542)},
+        # wait_for only sees log lines written after the previous step, so it must follow the autoplay (live 2026-09-29).
         {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
                                               "contains": "[JAC_RESOURCES] revealed silver-ikuno"}, "timeout": 30},
+        {"action": "ui_lua", "state_name": "InGame", "code": released(1542)},
         {"action": "autoplay", "turns": 8, "timeout": 900},
         {"action": "ui_lua", "state_name": "InGame", "code": released(1550)},
     ]
