@@ -14,6 +14,17 @@ POC = ROOT / "poc"
 RULESET = POC / "JAC_PoC_BanseikiRuleset"
 SENGOKU = POC / "JAC_PoC_SengokuTrees"
 LANGUAGES = ("ja_JP", "en_US", "ru_RU")
+# Context -> script it runs once our ReplaceUIScript file has installed the Locale wrapper.
+# NewTurnPanel is already replaced by Gathering Storm (Expansion2.modinfo, Expansion1_NewTurnPanel), so its replacement is loaded.
+REPLACED_CONTEXTS = {
+    "BoostUnlockedPopup": "BoostUnlockedPopup",
+    "EraProgressPanel": "EraProgressPanel",
+    "EraCompletePopup": "EraCompletePopup",
+    "EraReviewPopup": "EraReviewPopup",
+    "DedicationPopup": "DedicationPopup",
+    "NewTurnPanel": "NewTurnPanel_Expansion1",
+    "HistoricMoments": "HistoricMoments",
+}
 REGISTER = re.compile(r'^JAC_RegisterHouseName\("([A-Z0-9_]+)", "([A-Z0-9_]+)", "([A-Z0-9_]+)"\)$', re.MULTILINE)
 
 
@@ -100,13 +111,27 @@ class HouseNameTests(unittest.TestCase):
             self.assertEqual(len(hooks), 1, prefix)
             self.assertIn(f"UI/{hooks[0].name}", ruleset)
             self.assertIn("JAC_InstallHouseNames", hooks[0].read_text(encoding="utf-8"))
-        boost = (RULESET / "UI/JAC_BoostUnlockedPopup.lua").read_text(encoding="utf-8")
-        self.assertTrue(boost.rstrip().endswith('include("BoostUnlockedPopup")'))
-        self.assertIn("<LuaContext>BoostUnlockedPopup</LuaContext>", ruleset)
-        self.assertIn("<LuaReplace>UI/JAC_BoostUnlockedPopup.lua</LuaReplace>", ruleset)
+        # Contexts outside the include chains: ReplaceUIScript with a file that installs, then loads the script the context would run.
+        for context, script in REPLACED_CONTEXTS.items():
+            source = (RULESET / f"UI/JAC_{context}.lua").read_text(encoding="utf-8")
+            self.assertIn("JAC_InstallHouseNames", source, context)
+            self.assertTrue(source.rstrip().endswith(f'include("{script}")'), context)
+            self.assertIn(f"<LuaContext>{context}</LuaContext>", ruleset)
+            self.assertIn(f"<LuaReplace>UI/JAC_{context}.lua</LuaReplace>", ruleset)
+        self.assertEqual(ruleset.count("<ReplaceUIScript "), len(REPLACED_CONTEXTS))
+        import_block = ruleset.split('<ImportFiles id="JAC_Banseiki_HouseNamesFiles"')[1].split("</ImportFiles>")[0]
         files_block = ruleset.split("<Files>")[1]
         for path in sorted((RULESET / "UI").glob("*.lua")):
             self.assertIn(f"<File>UI/{path.name}</File>", files_block)
+            self.assertIn(f"<File>UI/{path.name}</File>", import_block)
+
+    def test_house_text_does_not_contain_a_generic_name(self):
+        # The Lua replaces generic text inside already-built strings; a house name containing a generic name would double up.
+        for language in LANGUAGES:
+            generics = {self.texts[generic][language] for generic, _, _, _ in self.registry}
+            for _, house, _, _ in self.registry:
+                for generic_text in generics:
+                    self.assertNotIn(generic_text, self.texts[house][language], f"{house} ({language})")
         sengoku = (SENGOKU / "JAC_PoC_SengokuTrees.modinfo").read_text(encoding="utf-8")
         self.assertEqual(sengoku.count("<File>UI/JAC_HouseNamesData_Sengoku.lua</File>"), 2)
         self.assertIn("<ImportFiles", sengoku)

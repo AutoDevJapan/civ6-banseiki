@@ -132,6 +132,64 @@
       "action": "ui_lua",
       "state_name": "InGame",
       "code": "LuaEvents.LaunchBar_CloseTechTree(); return true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraProgressPanel",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; print('[JAC_HOUSE] state=EraProgressPanel local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "NewTurnPanel",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; print('[JAC_HOUSE] state=NewTurnPanel local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; print('[JAC_HOUSE] state=EraCompletePopup local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraReviewPopup",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; print('[JAC_HOUSE] state=EraReviewPopup local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; print('[JAC_HOUSE] state=DedicationPopup local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HistoricMoments",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local era=Locale.Lookup(GameInfo.Eras['ERA_MEDIEVAL'].Name); local eg, eh = O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME'), O.Lookup('LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE'); if house and era~=eh then error('era name not switched: '..era) end; if not house and era~=eg then error('era house name leaked: '..era) end; local m=Game.GetHistoryManager(); local all=m:GetAllMomentsData(Game.GetLocalPlayer(),1) or {}; for _,v in ipairs(all) do if house and has(v.InstanceDescription,eg) then error('moment keeps the generic era: '..v.InstanceDescription) end; if not house and has(v.InstanceDescription,eh) then error('moment leaks the house era: '..v.InstanceDescription) end end; print('[JAC_HOUSE] state=HistoricMoments local='..who..' era='..era); return era"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "Civilopedia",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local id='CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY'; local section; for _,s in ipairs(GetSections()) do for _,p in ipairs(GetPages(s.SectionId)) do if p.PageId==id then section=s.SectionId; if house and p.Title~=hs then error('page title not switched: '..tostring(p.Title)) end; if not house and p.Title~=gs then error('page title leaked: '..tostring(p.Title)) end end end end; if section==nil then error('no Civilopedia page for '..id) end; NavigateTo(section,id); local head=Controls.PageHeaderCaption:GetText() or ''; if house and not has(head,Locale.ToUpper(hs)) then error('page header not switched: '..head) end; if not house and has(head,O.ToUpper(hs)) then error('page header leaked: '..head) end; if JAC_LocalHouseHasNames()~=house then error('JAC_LocalHouseHasNames is wrong') end; print('[JAC_HOUSE] state=Civilopedia local='..who..' header='..head); return head"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if not Players[0]:IsHuman() then error('player 0 is not the human') end; Players[0]:GetCulture():SetCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY'].Index, true); return 'civic granted to player 0'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "NotificationPanel",
+        "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); for _,id in ipairs(NotificationManager.GetList(Game.GetLocalPlayer()) or {}) do local n=NotificationManager.Find(Game.GetLocalPlayer(),id); if n and (has(n:GetMessage(),gs) or has(n:GetSummary(),gs) or has(n:GetMessage(),hs) or has(n:GetSummary(),hs)) then return true end end; return false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "NotificationPanel",
+      "code": "local house=true; local g='LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME'; local h=g..'_HOUSE'; local O=JAC_HouseNamesBaseLocale; if O==nil then error('Locale wrapper not installed in this context') end; local gs, hs = O.Lookup(g), O.Lookup(h); local has=function(s,t) return string.find(s or '',t,1,true)~=nil end; local who=PlayerConfigurations[Game.GetLocalPlayer()]:GetCivilizationTypeName(); local p=Game.GetLocalPlayer(); local found=0; for _,id in ipairs(NotificationManager.GetList(p) or {}) do local n=NotificationManager.Find(p,id); if n then local raw=(n:GetMessage() or '')..' | '..(n:GetSummary() or ''); if has(raw,gs) or has(raw,hs) then found=found+1; if has(raw,hs) then error('engine text already carries the house name: '..raw) end; local shown=Locale.ToUpper(Locale.Lookup(n:GetMessage()))..' | '..Locale.Lookup(n:GetSummary()); if house and (not has(shown,hs) or has(shown,gs)) then error('notification not switched: '..shown) end; if not house and (has(shown,hs) or has(shown,O.ToUpper(hs))) then error('notification leaked: '..shown) end; local e=GetNotificationEntry(p,id); local panel=''; if e and e.m_Instance then panel=(e.m_Instance.TitleInfo:GetText() or '')..' | '..(e.m_Instance.Summary:GetText() or ''); if house and has(panel,gs) then error('panel shows the generic name: '..panel) end; if not house and has(panel,hs) then error('panel leaks: '..panel) end end; print('[JAC_HOUSE] state=NotificationPanel local='..who..' type='..tostring(n:GetTypeName())..' raw='..raw..' shown='..shown..' panel='..panel) end end end; if found==0 then error('no notification names the civic') end; return found"
+    },
+    {
+      "action": "screenshot",
+      "path": "house-names-oda-notification.png"
     }
   ]
 }
