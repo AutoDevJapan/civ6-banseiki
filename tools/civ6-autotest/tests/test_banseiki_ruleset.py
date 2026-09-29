@@ -126,9 +126,11 @@ class BanseikiRulesetStaticTests(unittest.TestCase):
             left["civ"] == right["civ"] and left["leader"] != right["leader"]
             for i, left in enumerate(players) for right in players[i + 1:]
         ))
+        # The ruleset's ConfigurationUpdates apply once the setup parameters are built,
+        # so the check may run in HostGame after BuildHeadlessGameSetup (live 2026-09-29).
         frontend_checks = [
             step["code"] for step in steps[configure_index + 1:start_index]
-            if step["action"] == "ui_lua" and step["state_name"] == "FrontEnd"
+            if step["action"] == "ui_lua" and step["state_name"] in ("FrontEnd", "HostGame")
         ]
         self.assertTrue(any(
             "GameConfiguration.GetValue('NO_DUPLICATE_LEADERS')" in code
