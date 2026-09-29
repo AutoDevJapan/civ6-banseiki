@@ -171,7 +171,7 @@
       "condition": {
         "type": "lua",
         "state_name": "JAC_HistoricalEventsAdvisor",
-        "code": "return JAC_EVENTS_ADVISOR_SHOWN['JAC_EVENT_TENBUN_FAMINE@2'] == true"
+        "code": "return JAC_EVENTS_ADVISOR_SHOWN['JAC_EVENT_TENBUN_FAMINE@2#0'] == true"
       },
       "timeout": 60
     },

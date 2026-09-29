@@ -360,6 +360,18 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.g.UI_EVENT()
         self.assertEqual(len(self.raised()), 2)  # not again on later turns
 
+    def test_advisor_popup_for_each_hotseat_human_on_the_same_turn(self):
+        for pid in (0, 1):  # Oda and Nagao both research grain stores: Tenbun famine for both on turn 1
+            self.g.Players[pid].techs[self.tech("TECH_JAC_SENGOKU_GRAIN_STORES")] = True
+        self.run_turns(1, 1)
+        self.g.UI_EVENT()
+        self.g.LOCAL = 1  # hotseat hands the machine to the next human
+        self.g.UI_EVENT()
+        famine = [m for m in self.raised() if m.startswith("LOC_JAC_EVENT_TENBUN_FAMINE_NAME")]
+        self.assertEqual(len(famine), 2)
+        self.assertEqual(sorted(k for k in self.g.JAC_EVENTS_ADVISOR_SHOWN.keys() if "TENBUN" in k),
+                         ["JAC_EVENT_TENBUN_FAMINE@1#0", "JAC_EVENT_TENBUN_FAMINE@1#1"])
+
     def test_advisor_popup_on_the_year_for_the_boost_and_not_again_on_research(self):
         self.g.LOCAL = 1  # Nagao without the research
         self.run_turns(1, 19)  # Tenbun famine: 1540 = turn 19

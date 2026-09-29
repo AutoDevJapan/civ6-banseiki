@@ -30,7 +30,8 @@ end
 local FIRED_PREFIX = "JAC_EVENT_FIRED_"
 local BOOSTED_PREFIX = "JAC_EVENT_BOOSTED_"
 
--- Popups raised in this session ("EventType@turn"). Also read by the live scenario to assert what was shown.
+-- Popups raised in this session ("EventType@turn#player"). The player is part of the key so that in hotseat the
+-- next human still gets their own popup for the same event on the same turn. Also read by the live scenario.
 JAC_EVENTS_ADVISOR_SHOWN = {}
 
 -- Turn the event first happened for the player: the boost-only year (BOOSTED) or the effects (FIRED).
@@ -49,7 +50,7 @@ local function ShowDueAdvisors()
 	-- Game-relative turn, as the gameplay script and the official top panel count it (TopPanel.lua:390).
 	local turn = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1
 	for row in GameInfo.JAC_HistoricalEvents() do
-		local key = row.EventType .. "@" .. turn
+		local key = row.EventType .. "@" .. turn .. "#" .. playerID
 		if (row.Advisor == true or row.Advisor == 1) and not JAC_EVENTS_ADVISOR_SHOWN[key]
 				and HappenedTurn(player, row.EventType) == turn then
 			JAC_EVENTS_ADVISOR_SHOWN[key] = true
