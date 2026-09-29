@@ -12,6 +12,10 @@ hidden BUILDING_JAC_REBUILT_ON_CASTLE from Scripts/JAC_Sengoku_RebuiltCastles.lu
 and is excluded. Maps without registered castles
 (settler starts, ordinary maps) use the official domination rule: every original
 capital (SSOT 3.1).
+A 天下統一同盟 (unification pact, SSOT 3.1) pools castles across teams: once the pact's teams
+hold every counted castle, Scripts/JAC_Sengoku_UnificationPact.lua puts the hidden
+BUILDING_JAC_PACT_UNIFIED in the lead's capital, and the pact branch lets only the team
+owning that city (the lead's) win.
 """
 
 from __future__ import annotations
@@ -35,6 +39,10 @@ VICTORY = "VICTORY_JAC_SENGOKU_UNIFICATION"
 CASTLE_SET = "JAC_UNIFICATION_CITY_IS_CASTLE"  # city on a registered plot (castle files add to it)
 COUNTED_SET = "JAC_UNIFICATION_CITY_COUNTS"  # ... and not rebuilt on a razed castle
 REBUILT = "BUILDING_JAC_REBUILT_ON_CASTLE"
+UNIFIED = "BUILDING_JAC_PACT_UNIFIED"  # pact lead's capital, placed by JAC_Sengoku_UnificationPact.lua
+PACT_SCENARIO = SCENARIOS / "unification-pact.json"
+PACT_LEAD_PREFIX = "JAC_UNIFICATION_PACT_LEAD_"  # + player ID -> the pact lead's player ID (Game property)
+PACT_RESULT = "JAC_UNIFICATION_PACT_RESULT"  # player property: outcome of the player's last request
 RAZED_PREFIX = "JAC_UNIFICATION_RAZED_CASTLE_PLOT_"  # + plot index; Game property set by the script
 TEST_MAP = test_map.TEST_MOD / "Maps" / f"{test_map.MAP_NAME}.Civ6Map"
 REAL_MAP = MAP_MOD / "Maps/JAC_Japan_15km.Civ6Map"
@@ -99,9 +107,14 @@ def sql() -> str:
 -- the never-matching (-1,-1) entry keeps the set defined when no castle file is loaded.
 -- A city rebuilt on a razed castle's plot holds {REBUILT} (placed by
 -- Scripts/JAC_Sengoku_RebuiltCastles.lua) and is not counted (owner decision 3a).
-INSERT INTO Types (Type, Kind) VALUES ('{VICTORY}', 'KIND_VICTORY'), ('{REBUILT}', 'KIND_BUILDING');
+-- Pact branch (天下統一同盟, SSOT 3.1): the team owns a city holding {UNIFIED}, which
+-- Scripts/JAC_Sengoku_UnificationPact.lua puts in the pact lead's capital once the pact's teams
+-- together hold every counted castle. Partners do not own that city, so only the lead wins.
+INSERT INTO Types (Type, Kind) VALUES ('{VICTORY}', 'KIND_VICTORY'), ('{REBUILT}', 'KIND_BUILDING'),
+    ('{UNIFIED}', 'KIND_BUILDING');
 INSERT INTO Buildings (BuildingType, Name, PrereqDistrict, Cost, InternalOnly) VALUES
-    ('{REBUILT}', 'LOC_{REBUILT}_NAME', 'DISTRICT_CITY_CENTER', 1, 1);
+    ('{REBUILT}', 'LOC_{REBUILT}_NAME', 'DISTRICT_CITY_CENTER', 1, 1),
+    ('{UNIFIED}', 'LOC_{UNIFIED}_NAME', 'DISTRICT_CITY_CENTER', 1, 1);
 INSERT INTO Victories
     (VictoryType, Name, Description, Blurb, RequirementSetId, EnabledByDefault, OneMoreTurn, Icon)
 VALUES
@@ -114,12 +127,14 @@ INSERT INTO RequirementSets (RequirementSetId, RequirementSetType) VALUES
     ('JAC_UNIFICATION_CASTLE_REQUIREMENTS', 'REQUIREMENTSET_TEST_ALL'),
     ('JAC_UNIFICATION_CAPITAL_REQUIREMENTS', 'REQUIREMENTSET_TEST_ALL'),
     ('JAC_UNIFICATION_CITY_HELD', 'REQUIREMENTSET_TEST_ANY'),
-    ('{COUNTED_SET}', 'REQUIREMENTSET_TEST_ALL');
+    ('{COUNTED_SET}', 'REQUIREMENTSET_TEST_ALL'),
+    ('JAC_UNIFICATION_PACT_CITY', 'REQUIREMENTSET_TEST_ALL');
 INSERT OR IGNORE INTO RequirementSets (RequirementSetId, RequirementSetType) VALUES
     ('{CASTLE_SET}', 'REQUIREMENTSET_TEST_ANY');
 INSERT INTO RequirementSetRequirements (RequirementSetId, RequirementId) VALUES
     ('JAC_UNIFICATION_VICTORY_REQUIREMENTS', 'JAC_UNIFICATION_CASTLES'),
     ('JAC_UNIFICATION_VICTORY_REQUIREMENTS', 'JAC_UNIFICATION_CAPITALS'),
+    ('JAC_UNIFICATION_VICTORY_REQUIREMENTS', 'JAC_UNIFICATION_PACT'),
     ('JAC_UNIFICATION_CASTLE_REQUIREMENTS', 'JAC_UNIFICATION_CASTLES_EXIST'),
     ('JAC_UNIFICATION_CASTLE_REQUIREMENTS', 'JAC_UNIFICATION_CASTLES_OWNED'),
     ('JAC_UNIFICATION_CAPITAL_REQUIREMENTS', 'JAC_UNIFICATION_NO_CASTLES'),
@@ -128,10 +143,14 @@ INSERT INTO RequirementSetRequirements (RequirementSetId, RequirementId) VALUES
     ('JAC_UNIFICATION_CITY_HELD', 'JAC_UNIFICATION_CITY_OWNED'),
     ('{COUNTED_SET}', 'JAC_UNIFICATION_CITY_ON_CASTLE_PLOT'),
     ('{COUNTED_SET}', 'JAC_UNIFICATION_CITY_NOT_REBUILT'),
+    ('JAC_UNIFICATION_PACT_CITY', 'JAC_UNIFICATION_CITY_OWNED'),
+    ('JAC_UNIFICATION_PACT_CITY', 'JAC_UNIFICATION_CITY_PACT_UNIFIED'),
     ('{CASTLE_SET}', 'JAC_UNIFICATION_CASTLE_NONE');
 INSERT INTO Requirements (RequirementId, RequirementType, Inverse) VALUES
     ('JAC_UNIFICATION_CASTLES', 'REQUIREMENT_REQUIREMENTSET_IS_MET', 0),
     ('JAC_UNIFICATION_CAPITALS', 'REQUIREMENT_REQUIREMENTSET_IS_MET', 0),
+    ('JAC_UNIFICATION_PACT', 'REQUIREMENT_COLLECTION_COUNT_ATLEAST', 0),
+    ('JAC_UNIFICATION_CITY_PACT_UNIFIED', 'REQUIREMENT_CITY_HAS_BUILDING', 0),
     ('JAC_UNIFICATION_CASTLES_EXIST', 'REQUIREMENT_COLLECTION_COUNT_ATLEAST', 0),
     ('JAC_UNIFICATION_CASTLES_OWNED', 'REQUIREMENT_COLLECTION_ALL_MET', 0),
     ('JAC_UNIFICATION_NO_CASTLES', 'REQUIREMENT_COLLECTION_COUNT_EQUALS', 0),
@@ -144,6 +163,10 @@ INSERT INTO Requirements (RequirementId, RequirementType, Inverse) VALUES
 INSERT INTO RequirementArguments (RequirementId, Name, Value) VALUES
     ('JAC_UNIFICATION_CASTLES', 'RequirementSetId', 'JAC_UNIFICATION_CASTLE_REQUIREMENTS'),
     ('JAC_UNIFICATION_CAPITALS', 'RequirementSetId', 'JAC_UNIFICATION_CAPITAL_REQUIREMENTS'),
+    ('JAC_UNIFICATION_PACT', 'CollectionType', 'COLLECTION_ALL_CITIES'),
+    ('JAC_UNIFICATION_PACT', 'RequirementSetId', 'JAC_UNIFICATION_PACT_CITY'),
+    ('JAC_UNIFICATION_PACT', 'Count', '1'),
+    ('JAC_UNIFICATION_CITY_PACT_UNIFIED', 'BuildingType', '{UNIFIED}'),
     ('JAC_UNIFICATION_CASTLES_EXIST', 'CollectionType', 'COLLECTION_ALL_CITIES'),
     ('JAC_UNIFICATION_CASTLES_EXIST', 'RequirementSetId', '{COUNTED_SET}'),
     ('JAC_UNIFICATION_CASTLES_EXIST', 'Count', '1'),
@@ -159,7 +182,8 @@ INSERT INTO RequirementArguments (RequirementId, Name, Value) VALUES
     ('JAC_UNIFICATION_CASTLE_NONE', 'Y', '-1');
 INSERT INTO RequirementStrings (RequirementId, Context, Text) VALUES
     ('JAC_UNIFICATION_CASTLES', 'VictoryProgress', 'LOC_VICTORY_JAC_UNIFICATION_PROGRESS'),
-    ('JAC_UNIFICATION_CAPITALS', 'VictoryProgress', 'LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS');
+    ('JAC_UNIFICATION_CAPITALS', 'VictoryProgress', 'LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS'),
+    ('JAC_UNIFICATION_PACT', 'VictoryProgress', 'LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS');
 """
 
 
@@ -190,6 +214,15 @@ def _razed_lua(rows: list[tuple[int, int, int]]) -> str:
     coords = ",".join(f"{{{x},{y}}}" for x, y, _ in rows)
     return (f"local coords={{{coords}}}; local marker=GameInfo.Buildings['{REBUILT}'].Index; "
             f"local function razed(x,y) return Game:GetProperty('{RAZED_PREFIX}'..Map.GetPlot(x,y):GetIndex())==true end; ")
+
+
+def _player_lua(var: str, civ: str, label: str) -> str:
+    """Lua prelude: `var` is the slot of `civ`, dead or alive (a player losing its last city leaves
+    GetAliveIDs; unification-alliance-01 2026-09-29). Every slot that ever lived, as the official
+    Base/Assets/UI/ARXManager.lua:32 and Base/Assets/Maps/Utility/MapUtilities.lua:705 loop."""
+    return (f"local {var}=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do "
+            f"if PlayerConfigurations[id]:GetCivilizationTypeName()=='{civ}' then {var}=id end end; "
+            f"if not {var} then error('{label} missing') end; ")
 
 
 def _tally() -> str:
@@ -229,13 +262,11 @@ def scenario() -> dict:
     # DestroyCity is only a GameCore export string (worked live 2026-09-29); if it does not
     # remove the city, hand the city to Oda instead and let the rebuild step fail (no razed plot).
     raze = (
-        _castle_lua(rows) + "local target=nil; "
-        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[owner]:GetCivilizationTypeName()=='{players[1]['civ']}' then "
-        "local capital=Players[owner]:GetCities():GetCapitalCity(); "
-        "for _,city in Players[owner]:GetCities():Members() do "
+        _castle_lua(rows) + _player_lua("date", players[1]["civ"], "Date") + "local target=nil; "
+        "local capital=Players[date]:GetCities():GetCapitalCity(); "
+        "for _,city in Players[date]:GetCities():Members() do "
         "if castle(city) and (not capital or city:GetID()~=capital:GetID()) "
-        "then target=city end end end end; "
+        "then target=city end end; "
         "if not target then error('Date castle to raze missing') end; "
         "local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; "
         "if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; "
@@ -258,9 +289,7 @@ def scenario() -> dict:
         "if target then error('more than one razed plot') end; target=xy "
         "elseif not city then error('empty plot not recorded as razed: '..xy[1]..','..xy[2]) end end; "
         "if not target then error('no razed plot recorded (raze or turn-start scan failed)') end; "
-        "local builder=nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[id]:GetCivilizationTypeName()=='{players[2]['civ']}' then builder=id end end; "
-        "if not builder then error('Ashina missing') end; "
+        + _player_lua("builder", players[2]["civ"], "Ashina") +
         "Players[builder]:GetCities():Create(target[1],target[2]); "
         "if not CityManager.GetCityAt(target[1],target[2]) then error('rebuild failed') end; "
         "return 'rebuilt '..target[1]..','..target[2]..' for Ashina'"
@@ -277,12 +306,10 @@ def scenario() -> dict:
         "return 'rebuilt city marked; no winner'"
     )
     final = (
-        _castle_lua(rows) + "local last=nil; "
-        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[owner]:GetCivilizationTypeName()=='{players[1]['civ']}' then "
-        "for _,city in Players[owner]:GetCities():Members() do "
+        _castle_lua(rows) + _player_lua("date", players[1]["civ"], "Date") + "local last=nil; "
+        "for _,city in Players[date]:GetCities():Members() do "
         "if castle(city) then "
-        "if last then error('more than one castle held out') end; last=city end end end end; "
+        "if last then error('more than one castle held out') end; last=city end end; "
         "if not last then error('held out castle missing') end; "
         f"CityManager.TransferCity(last,{HUMAN}); return 'transferred the last castle'"
     )
@@ -368,6 +395,94 @@ def registry_scenario() -> dict:
     }
 
 
+def pact_scenario() -> dict:
+    """天下統一同盟 on the test map: Oda (human) leads, Date (AI) joins, the pact survives save/load,
+    pooled castles make only Oda win.
+
+    Requests go through the pact panel's UI.RequestPlayerOperation like a click; results are read from
+    the properties the gameplay script writes (a log_line wait only sees lines after the previous step).
+    """
+    start = scenario()["steps"][:5]  # enable, configure, setup, start_game, 4 castles with 2 held by Date
+    rows = castles(TEST_MAP)
+    date_civ, ashina_civ = start[1]["players"][1]["civ"], start[1]["players"][2]["civ"]
+    ids = _player_lua("date", date_civ, "Date") + _player_lua("ashina", ashina_civ, "Ashina")
+    propose = ids + "JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
+    result = ("return Players[{h}]:GetProperty('{r}')=='{{0}}'".format(h=HUMAN, r=PACT_RESULT))
+    not_allied = ids + result.format("NOT_ALLIED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..date)==nil"
+    joined = (ids + result.format("JOINED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..date)=={HUMAN}"
+              f" and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')=={HUMAN}")
+    # Ashina (outside the pact) takes Date's non-capital castle, so the pact holds 3 of 4 when it forms.
+    # Alliance as the 1534 relations script sets it (friendship, then SetHasAllied; live since #40).
+    prepare = (
+        ids + _castle_lua(rows) + "local capital=Players[date]:GetCities():GetCapitalCity(); local moved=nil; "
+        "for _,city in Players[date]:GetCities():Members() do "
+        "if castle(city) and city:GetID()~=capital:GetID() then moved=city end end; "
+        "if not moved then error('Date castle to move missing') end; "
+        "CityManager.TransferCity(moved,ashina); "
+        f"local a,b=Players[{HUMAN}]:GetDiplomacy(),Players[date]:GetDiplomacy(); "
+        f"a:SetHasMet(date); b:SetHasMet({HUMAN}); a:SetHasDeclaredFriendship(date,true); "
+        f"b:SetHasDeclaredFriendship({HUMAN},true); a:SetHasAllied(date,true); "
+        "if not a:HasAllied(date) then error('Oda and Date not allied') end; "
+        "return 'Ashina holds one castle; Oda and Date allied'"
+    )
+    unified = f"GameInfo.Buildings['{UNIFIED}'].Index"
+    held_out = (
+        f"local capital=Players[{HUMAN}]:GetCities():GetCapitalCity(); "
+        f"if capital:GetBuildings():HasBuilding({unified}) then error('pact marked with 3 of 4 castles') end; "
+        "if Game.GetWinningTeam()~=nil then error('winner while Ashina holds a castle') end; "
+        "return 'pact holds 3 of 4 castles; no winner'"
+    )
+    handover = (
+        ids + _castle_lua(rows) + "local last=nil; "
+        "for _,city in Players[ashina]:GetCities():Members() do if castle(city) then last=city end end; "
+        "if not last then error('Ashina castle missing') end; "
+        "CityManager.TransferCity(last,date); return 'Ashina castle handed to Date (pact partner)'"
+    )  # Ashina's only city: the outsider is eliminated on purpose, so later lookups include the dead
+    marked = f"return Players[{HUMAN}]:GetCities():GetCapitalCity():GetBuildings():HasBuilding({unified})"
+    won = (
+        ids + "local winner,v=Game.GetWinningTeam(); "
+        f"return winner==Players[{HUMAN}]:GetTeam() and winner~=Players[date]:GetTeam() and v~=nil "
+        f"and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='{VICTORY}'"
+    )
+    panel = "JAC_UnificationPact"
+    return {
+        "name": "Sengoku unification pact on the test map: the AI joins only when allied, pooled castles, only the lead wins",
+        "judge_profile": "generic",
+        "steps": [
+            *start,
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": panel, "code":
+             "return JAC_RequestPact~=nil"}, "timeout": 30},
+            {"action": "ui_lua", "state_name": panel, "code": propose},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": not_allied},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": prepare},
+            {"action": "ui_lua", "state_name": panel, "code": propose},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": held_out},
+            # The pact lives in Game/Player properties: they must come back from a save.
+            {"action": "save", "name": "jac-unification-pact"},
+            {"action": "exit_to_menu"},  # load runs from the main menu (live 2026-09-29)
+            {"action": "load", "name": "jac-unification-pact", "timeout": 300},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": held_out},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": panel, "code":
+             "return JAC_RequestPact~=nil"}, "timeout": 30},
+            {"action": "ui_lua", "state_name": panel, "code": "JAC_TogglePactPanel(); return true"},
+            {"action": "screenshot", "path": "unification-pact-panel.png"},
+            {"action": "ui_lua", "state_name": panel, "code": "JAC_TogglePactPanel(); return true"},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": handover},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "GameCore_Tuner", "code": marked},
+             "timeout": 30},
+            scenario()["steps"][-3],  # start one autoplay turn; the game ends during it (live 2026-09-29)
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": won},
+             "timeout": 300},
+            {"action": "screenshot", "path": "unification-pact-victory.png"},
+        ],
+    }
+
+
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text.encode("utf-8"))
@@ -385,6 +500,7 @@ def main() -> None:
         write(output, castle_sql(tag, castles(path)))
     write_json(SCENARIO, scenario())
     write_json(REGISTRY_SCENARIO, registry_scenario())
+    write_json(PACT_SCENARIO, pact_scenario())
 
 
 if __name__ == "__main__":

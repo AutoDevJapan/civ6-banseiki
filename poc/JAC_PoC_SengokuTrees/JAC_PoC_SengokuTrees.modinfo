@@ -43,6 +43,15 @@
 		<AddGameplayScripts id="JAC_Sengoku_RebuiltCastles" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
 		</AddGameplayScripts>
+		<AddGameplayScripts id="JAC_Sengoku_UnificationPact" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>Scripts/JAC_Sengoku_UnificationPact.lua</File>
+		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Sengoku_UnificationPactUI" criteria="JAC_Sengoku_BanseikiOnly">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/JAC_UnificationPact.xml</File>
+		</AddUserInterfaces>
 		<UpdateText id="JAC_Sengoku_Text" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Text/JAC_Sengoku_Text.xml</File>
 			<File>Text/JAC_Sengoku_Unification_Text.xml</File>
@@ -52,6 +61,8 @@
 		</UpdateIcons>
 		<ImportFiles id="JAC_Sengoku_HouseNames" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>UI/JAC_HouseNamesData_Sengoku.lua</File>
+			<File>UI/JAC_UnificationPact.xml</File>
+			<File>UI/JAC_UnificationPact.lua</File>
 		</ImportFiles>
 	</InGameActions>
 	<FrontEndActions>
@@ -74,6 +85,9 @@
 		<File>Data/JAC_Sengoku_Unification.sql</File>
 		<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>
 		<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
+		<File>Scripts/JAC_Sengoku_UnificationPact.lua</File>
+		<File>UI/JAC_UnificationPact.xml</File>
+		<File>UI/JAC_UnificationPact.lua</File>
 		<File>Data/JAC_Sengoku_Icons.xml</File>
 		<File>Config/JAC_Sengoku_Victories.xml</File>
 		<File>Config/JAC_Sengoku_Calendar.xml</File>

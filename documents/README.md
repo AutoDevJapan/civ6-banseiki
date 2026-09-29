@@ -29,6 +29,7 @@
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組み・データ形式・暦との関係・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
+| [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チームと天下統一同盟）：同盟の申し込み画面、主体だけが勝つ仕組み、公式根拠、実機確認項目 |
 | [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
 | [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
