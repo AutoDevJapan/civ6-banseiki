@@ -50,9 +50,11 @@ class SengokuCascadeTests(unittest.TestCase):
         cls.final = AUDIT._run_sengoku(cls.official, True)
 
     def test_no_diplomatic_action_is_lost(self):
+        # The one deliberate delete: the golden-age war goes with the official ages (Data/JAC_Sengoku_Ages.sql).
+        kept = "WHERE DiplomaticActionType <> 'DIPLOACTION_DECLARE_GOLDEN_AGE_WAR'"
         for table in ("DiplomaticActions", "DiplomaticActions_XP1", "DiplomaticStateActions"):
             self.assertNotIn(table, self.result)
-            before = self.official.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            before = self.official.execute(f"SELECT COUNT(*) FROM {table} {kept}").fetchone()[0]
             self.assertEqual(self.final.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], before, table)
         rows = dict(self.final.execute(
             "SELECT DiplomaticActionType, InitiatorPrereqCivic || '|' || TargetPrereqCivic FROM DiplomaticActions "

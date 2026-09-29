@@ -75,6 +75,20 @@ local function OnGameTurnStarted()
   end
 end
 
+-- The cities the victory counts as castles (on a registered plot, not rebuilt), for the pact check in
+-- JAC_Sengoku_UnificationPact.lua. Gameplay-to-gameplay through ExposedMembers, as JAC_Resources.lua.
+ExposedMembers.JAC_UnificationCastles = {
+  CountedCities = function()
+    local cities = {};
+    for _, plot in pairs(Registered()) do
+      local city = CityManager.GetCityAt(plot:GetX(), plot:GetY());
+      if city and not city:GetBuildings():HasBuilding(MARKER.Index) then table.insert(cities, city); end
+    end
+    return cities;
+  end,
+  HasCastles = function() return next(Registered()) ~= nil; end,  -- false on settler starts (Q64)
+};
+
 GameEvents.CityBuilt.Add(OnCityBuilt);
 GameEvents.CityConquered.Add(OnCityConquered);
 GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted);

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal14" FontStyle="Shadow">
+	<!-- 天下統一同盟（SSOT 3.1）。枠とボタンは JAC_Notebooks.xml と同じ部品。状態は Game のプロパティを読むだけ。 -->
+	<GridButton ID="PactToggle" Anchor="C,T" Offset="0,40" Size="180,28" Style="ButtonControl" String="LOC_JAC_UNIFICATION_PACT_TITLE"/>
+	<Grid ID="PactPanel" Anchor="C,T" Offset="0,72" Size="420,auto" SizePadding="0,16"
+		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22"
+		Hidden="1" ConsumeAllMouse="1">
+		<Stack ID="Rows" Anchor="L,T" Offset="10,10" StackGrowth="Down" Padding="4">
+			<Label ID="Status" WrapWidth="400"/>
+			<Label WrapWidth="400" String="LOC_JAC_UNIFICATION_PACT_RULES"/>
+		</Stack>
+	</Grid>
+	<Instance Name="PlayerRow">
+		<Container ID="Root" Size="400,30">
+			<Label ID="Name" Anchor="L,C" Offset="4,0"/>
+			<GridButton ID="Action" Anchor="R,C" Size="150,26" Style="ButtonControl"/>
+		</Container>
+	</Instance>
+</Context>
