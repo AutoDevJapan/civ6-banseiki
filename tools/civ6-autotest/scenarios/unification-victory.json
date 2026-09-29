@@ -128,9 +128,13 @@
       "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~=0 then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
     },
     {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=0 then error('positive castles '..owned..'/'..total) end; if total~=3 then error('raze not verified: '..total..' castles remain') end; return '天下統一 with 3 of 4 castles after the raze'"
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then return false end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; return total==3 and owned==total"
+      },
+      "timeout": 30
     },
     {
       "action": "ui_lua",

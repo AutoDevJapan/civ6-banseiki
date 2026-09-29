@@ -171,10 +171,15 @@ def scenario() -> dict:
         f"return winner==Players[{HUMAN}]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil "
         f"and GameInfo.Victories[v].VictoryType=='{VICTORY}'"
     )
+    # The transfer is not visible in InGame immediately (live 2026-09-29: "positive castles 2/3").
     razed = (
-        _count_code("positive", missing=0) +
-        f"if total~={total - 1} then error('raze not verified: '..total..' castles remain') end; "
-        f"return '天下統一 with {total - 1} of {total} castles after the raze'"
+        f"local marker=GameInfo.Buildings['{MARKER}']; if not marker then return false end; "
+        "local total=0; local owned=0; "
+        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
+        "for _,city in Players[owner]:GetCities():Members() do "
+        "if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; "
+        f"if owner=={HUMAN} then owned=owned+1 end end end end; "
+        f"return total=={total - 1} and owned==total"
     )
     configure = {**base["steps"][1], "map_file": test_map.MAP_FILE, "map_size": test_map.MAP_SIZE,
                  "seed": 620951, "players": players}
@@ -205,9 +210,8 @@ def scenario() -> dict:
             {"action": "load", "name": "jac-unification-negative", "timeout": 300},
             {"action": "ui_lua", "state_name": "InGame", "code": negative},
             {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": final},
-            # Ownership is checked while the game still runs; after victory the alive/city
-            # enumeration no longer matches (live 2026-09-29: "positive castles 2/3").
-            {"action": "ui_lua", "state_name": "InGame", "code": razed},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": razed},
+             "timeout": 30},
             {"action": "ui_lua", "state_name": "InGame", "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"},  # the game ends during this turn, so wait for the winner instead of autoplay completion (live 2026-09-29),
             {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": won},
              "timeout": 300},

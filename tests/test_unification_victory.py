@@ -261,8 +261,10 @@ class UnificationVictoryTests(unittest.TestCase):
         final = next(index for index, step in enumerate(steps)
                      if "transferred the last castle" in step.get("code", ""))
         # The game ends during that turn, so autoplay is started from Lua and the winner is awaited (live 2026-09-29).
-        self.assertEqual(actions[final + 1:final + 4], ["ui_lua", "ui_lua", "wait_for"])
-        self.assertIn("raze not verified", steps[final + 1]["code"])  # ownership checked before the game ends
+        self.assertEqual(actions[final + 1:final + 4], ["wait_for", "ui_lua", "wait_for"])
+        own = steps[final + 1]  # the transfer is not visible immediately: wait (live 2026-09-29 "positive castles 2/3")
+        self.assertEqual((own["condition"]["type"], own["condition"]["state_name"], own["timeout"]), ("lua", "InGame", 30))
+        self.assertIn("owned==total", own["condition"]["code"])
         self.assertIn("AutoplayManager.SetActive(true)", steps[final + 2]["code"])
         self.assertIn(VICTORY, steps[final + 3]["condition"]["code"])
         self.assertNotIn("castles", steps[-1].get("code", ""))  # nothing but the screenshot after victory
