@@ -22,7 +22,7 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 万世紀ルールセット用の開始状態。基準日は **天文3年5月12日**。日本列島の22勢力をそれぞれ専用の指導者・文明で登録した。島津は貴久を1勢力の代表とし、アイヌはタリコナを全域代表とするゲーム上の扱い。長尾の文明 ID は `CIVILIZATION_JAC_NAGAO` のまま維持する。人間と AI の指導者候補は、地図を選択すると `MapLeaders` に登録した22人に限定され、同じ指導者は重複できない。万世紀の通常の「人間は2人から選ぶ」フィルタは日本地図では適用しない。`MapSizes` で22人・都市国家0を固定する。
 
-開始方法は設定画面の地図一覧から「史実の領土」または「開拓者から」を選ぶ。各縮尺で前者を先に表示する。史実の領土版には22人の `Players`、草案の53城・拠点と追加の代表本拠3つからなる56都市、都市中心地区、全陸タイルの所有者、人口2を格納した。`Units` に開拓者は入れず、この地図と万世紀ルールセットの組み合わせに限る modinfo 条件で `MajorStartingUnits` の開拓者を除く。開拓者版は同じ地形・22開始位置で、都市・所有地を持たず、通常の開拓者初期配置を使う。シングルプレイの主経路は史実の領土版。マルチプレイは開拓者版を選択できる。別ルールセットの初期ユニット表は変更しない。**旧20 km版での都市消失は実機確認済み。修正後の15 km史実領土版の統合実機結果は下表のとおり。今回の資源配置と指導者選択の変更は静的検査済みで、実機では未確認。**
+開始方法は設定画面の地図一覧から「史実の領土」または「開拓者から」を選ぶ。各縮尺で前者を先に表示する。史実の領土版には22人の `Players`、草案の53城・拠点と追加の代表本拠3つからなる56都市、都市中心地区、全陸タイルの所有者、人口2を格納した。`Units` に開拓者は入れず、この地図と万世紀ルールセットの組み合わせに限る modinfo 条件で `MajorStartingUnits` の開拓者を除く。開拓者版は同じ地形・22開始位置で、都市・所有地を持たず、通常の開拓者初期配置を使う。シングルプレイの主経路は史実の領土版。マルチプレイは開拓者版を選択できる。別ルールセットの初期ユニット表は変更しない。**旧20 km版での都市消失は実機確認済み。修正後の15 km史実領土版の統合実機結果は下表のとおり。資源配置と指導者選択の変更後の再実機結果は後段の「2026-09-29 の再実機」にある。資源の画面表示と設定画面の22人の候補は未確認。**
 
 日本マップ4種は `Maps:JAC_Banseiki` に登録し、万世紀ルールセット側でこのドメインに `Maps:Expansion2Maps` を合併する。地図 MOD を無効にしても、万世紀から Gathering Storm の地図を選べる。万世紀の `Map` パラメータだけが専用ドメインを参照し、素の Gathering Storm には22勢力が必要な地図を表示しない。地図 MOD は Gathering Storm・CustomCivs・万世紀ルールセットを依存対象に宣言する。ローカル実装の根拠：`DLC/Expansion2/Config/Expansion2_StandardMaps.xml:3-4` のドメイン合併、`DLC/Expansion2/Config/Expansion2_Config.xml:10-12` と `Base/Assets/Configuration/Data/Schema/AdditionalTables.sql:308-312` のルールセット別置換。15 km史実領土版を選んだ実機開始は確認済み。地図4種すべての表示順は未確認。
 
@@ -34,11 +34,11 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 
 2026-09-29 のオーナー判断：城が密集する日本マップで、通常の Gathering Storm の忠誠心圧力による反乱・独立で都市を自由都市にしない。上限を5に下げても、織田の首都は1ターン目に -2.9/ターンで、都市が自由都市になることを実機で確認した。ローカルの公式テキストは忠誠心が0になると自由都市になると説明する（`DLC/Expansion2/Text/en_US/Expansion1_Civilopedia_Text.xml:167`）。近隣圧力以外にも不満・飢餓・占領などの減算がある（`DLC/Expansion2/Data/Expansion1_Happinesses.xml:5-11`、`DLC/Expansion2/Data/Expansion1_GlobalParameters.xml:75-87`）。
 
-対策は `JAC_Japan_MapRules.xml` に `MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN` の +100/ターンを追加し、`TRAIT_LEADER_MAJOR_CIV` に付ける。公式の Modifier 定義は対象を `COLLECTION_PLAYER_CITIES`、効果を `EFFECT_ADJUST_CITY_IDENTITY_PER_TURN` とする（`DLC/Expansion2/Data/Expansion1_Modifiers.xml:859-861`）。この共通 Trait は `LEADER_DEFAULT` に付き（`Base/Assets/Gameplay/Data/Leaders.xml:825-827`）、本 PoC の指導者はこれを継承する（`poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql:20-22`、`poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql:71-88`）。そのため22勢力の既存都市だけでなく、後から建設・占領した都市にも所有者を通じて適用し、保存・読込後もデータ定義から有効になる設計。+100は既定の忠誠心最大値100（`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:188-194`）に合わせ、通常の減算を毎ターン相殺するための値。15 km統合実機では開始時と50ターン進行の効果を確認した。今回拡張した都市別ロード比較は未実機。
+対策は `JAC_Japan_MapRules.xml` に `MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN` の +100/ターンを追加し、`TRAIT_LEADER_MAJOR_CIV` に付ける。公式の Modifier 定義は対象を `COLLECTION_PLAYER_CITIES`、効果を `EFFECT_ADJUST_CITY_IDENTITY_PER_TURN` とする（`DLC/Expansion2/Data/Expansion1_Modifiers.xml:859-861`）。この共通 Trait は `LEADER_DEFAULT` に付き（`Base/Assets/Gameplay/Data/Leaders.xml:825-827`）、本 PoC の指導者はこれを継承する（`poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql:20-22`、`poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql:71-88`）。そのため22勢力の既存都市だけでなく、後から建設・占領した都市にも所有者を通じて適用し、保存・読込後もデータ定義から有効になる設計。+100は既定の忠誠心最大値100（`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:188-194`）に合わせ、通常の減算を毎ターン相殺するための値。15 km統合実機では開始時と50ターン進行の効果を確認した。拡張した都市別の保存比較は、15 km（10ターン）と20 km（50ターン）の再実機で一致を確認した。
 
 宮殿は各勢力の首都1都市だけ（`Base/Assets/Gameplay/Data/Buildings.xml:98`）、総督による圧力無視は配属と昇進が必要（`DLC/Expansion2/Data/Expansion2_Governors.xml:71-72,99-100,135-137`、`DLC/Expansion2/Data/Expansion2_Modifiers.xml:383-385`）なので、全都市の対策には使わない。Gameplay Lua でターンごとに忠誠心を回復する方法は、GameCore の独立判定より先に必ず実行されることをローカルの Lua/XML から確認できないため採用しない。将来の特別なイベント・行動による離反は別機能として、対象都市の補正を明示的に上書きするか、独立・所有者変更をイベントから直接実行する余地を残す（シナリオの都市固有忠誠心補正例：`DLC/BlackDeathScenario/Data/BlackDeathScenario_GameplayData.xml:539,579-583`）。
 
-生成シナリオは開始時の全都市と50ターン後の残存都市の忠誠心変化が負でないことを調べる。50ターン後に自由都市の所有都市が0件であることに加え、公式 UI も使う `Events.CulturalIdentityCityConverted`（`DLC/Expansion2/UI/Loaders/TutorialLoader_Expansion1.lua:95-122`）で、途中に主要勢力が忠誠心によって都市を失った場合も失敗させる。戦争による占領はこのイベントの対象外として扱う。各勢力の都市数は開始時→50ターン後で報告する。15 km史実領土版の56都市、50ターンの自由都市0、保存・読込後の勢力別都市数・生存・陸所有者ハッシュは統合実機で確認済み。今回追加した都市別の位置・所有者・宮殿・守備隊・忠誠心の保存比較、開拓者版での新設都市、通常の Gathering Storm 地図への非波及は未実機。
+生成シナリオは開始時の全都市と50ターン後の残存都市の忠誠心変化が負でないことを調べる。50ターン後に自由都市の所有都市が0件であることに加え、公式 UI も使う `Events.CulturalIdentityCityConverted`（`DLC/Expansion2/UI/Loaders/TutorialLoader_Expansion1.lua:95-122`）で、途中に主要勢力が忠誠心によって都市を失った場合も失敗させる。戦争による占領はこのイベントの対象外として扱う。各勢力の都市数は開始時→50ターン後で報告する。15 km史実領土版の56都市、50ターンの自由都市0、保存・読込後の勢力別都市数・生存・陸所有者ハッシュは統合実機で確認済み。都市別の位置・所有者・宮殿・守備隊・忠誠心の保存比較は再実機で一致を確認した。開拓者版での新設都市、通常の Gathering Storm 地図への非波及は未実機。
 
 SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地図に初期外交状態はない。どの関係を初期化するかは[Q24](../questions.md)の判断待ちで、今回の生成器は外交を設定しない。
 
@@ -65,7 +65,7 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 | 六角 | 0／2 | 本願寺 | 0／1 |
 | 大内 | 2／3 | 毛利 | 0／1 |
 
-新しい地図は各城・本拠56都市を保持し、生成シナリオは勢力別の全都市数・合計56都市・首都位置・22主要文明・全陸領有・開拓者0を開始時に検査する。15 km史実領土版の統合実機結果は下表のとおり。20 kmの修正版と今回の追加変更は未実機。
+新しい地図は各城・本拠56都市を保持し、生成シナリオは勢力別の全都市数・合計56都市・首都位置・22主要文明・全陸領有・開拓者0を開始時に検査する。15 km史実領土版の統合実機結果は下表のとおり。20 kmの修正版と追加変更の再実機結果は後段の「2026-09-29 の再実機」にある。
 
 領土の判断は [`japan-1534-start.json`](../spec/data/japan-1534-start.json) の68令制国配分と53拠点に従う。海岸線・陸域・標高の元データと利用条件は下の旧縮尺試験の出典表と同じ。境界ポリゴンを直接使えるデータは採用できなかった。[CODH「旧国・旧郡境界データセット」](https://geoshape.ex.nii.ac.jp/kg/) は江戸末期の境界で、CC BY-NC の非商用条件がある。代わりに53拠点・22代表本拠の位置と、拠点がない国の概略中心33点（`TERRITORY_ANCHORS`）を使う最近接割当とし、その中心点の勢力が草案の配分表に載ることを生成時に検査する。北海道は二風谷と同じ連結島をアイヌ、南西諸島の南側は琉球として補正する。地理的な代理境界であり、郡境・1534年の実効支配を再現したものではない。陸の全タイルに22勢力のいずれか、さらに同勢力で最寄りの都市を `PlotOwners` の `CityOwner` / `CityWorking` として付ける。城座標・所有者・国配分の史料と留保は[調査記録](../research/japan-1534-start.md)にある。
 

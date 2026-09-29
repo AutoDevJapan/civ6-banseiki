@@ -178,8 +178,9 @@ def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
         for index, line in enumerate(lines):
             if not re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I):
                 continue
+            # "Unable to load <file>" also names the file whose load failed (seen in real logs).
             source = next((earlier for earlier in reversed(lines[max(0, index - 5):index])
-                           if "Loading" in earlier), "")
+                           if "Loading" in earlier or "Unable to load" in earlier), "")
             if own.search(_error_block(lines, index)) or own.search(source):
                 errors.append(line)
         return errors

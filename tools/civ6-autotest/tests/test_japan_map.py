@@ -171,6 +171,10 @@ class JapanMapScenarioTests(unittest.TestCase):
                                        "UISettingHandler - Loading JAC_PoC_CustomCivs.dep\n"))
         self.assertFalse(modding_passes("LocalizedText - Loading Text/JAC_JapanMapScale_Text.xml\n"
                                         "Warning: LocalizedText - Failed loading XML.\n"))
+        self.assertFalse(modding_passes("Warning: Unable to load Text/JAC_JapanMapScale_Text.xml\n"
+                                        "Warning: LocalizedText - Failed loading XML.\n"))
+        self.assertTrue(modding_passes("Warning: Unable to load ../../../DLC/Australia/Text/Australia_Translations_ConfigText_China.xml\n"
+                                       "Warning: LocalizedText - Failed loading XML.\n"))
         broken = dict(base, **{"Modding.log": base["Modding.log"] + "ERROR JAC_JapanMapScale_Config failed\n"})
         self.assertFalse(next(check.passed for check in judge(broken, "japan_map")
                               if check.name == "Japan map: Modding.log"))
