@@ -46,8 +46,9 @@ local function OnRequest(requester, params)
 	end
 	if requester == b then a, b = b, a end -- 当事者の請求では A を請求者にそろえる
 	local player = Players[requester]
-	-- ChangeFavor は公式 Lua に使用例が無い（GS の DLL に名前がある）。失敗したら何も払わせずに断る
-	local paid, err = pcall(function() player:ChangeFavor(-R.COST_FAVOR) end)
+	-- ゲームプレイ側の Favor は Player:GetDiplomacy():ChangeFavor（R.Favor の注記）。公式 Lua に使用例が無いので、
+	-- 失敗したら何も払わせずに断る
+	local paid, err = pcall(function() player:GetDiplomacy():ChangeFavor(-R.COST_FAVOR) end)
 	if not paid then
 		Log(string.format("FAILED favor payment player=%d: %s", requester, tostring(err)))
 		return

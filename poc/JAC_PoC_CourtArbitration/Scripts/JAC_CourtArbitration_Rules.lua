@@ -81,6 +81,15 @@ function R.Legitimacy(id)
 	return Players[id]:GetProperty(R.LEGITIMACY_KEY) or R.LEGITIMACY_START
 end
 
+-- 外交的支持（Favor）。文脈で置き場が違う（GameCore_XP2_FinalRelease.dll の Lua 登録）：
+-- UI の Player は GetFavor（XP2_Cache_Lua_IPlayer.cpp。公式 TopPanel_Expansion2.lua:169）、
+-- ゲームプレイ側は Player:GetDiplomacy() の GetFavor / ChangeFavor（XP2_Lua_IPlayerDiplomacy.cpp。公式 Lua に使用例なし）
+function R.Favor(id)
+	local player = Players[id]
+	if player.GetFavor then return player:GetFavor() end
+	return player:GetDiplomacy():GetFavor()
+end
+
 function R.TruceKey(a, b)
 	if a > b then a, b = b, a end
 	return R.TRUCE_PREFIX .. a .. "_" .. b
@@ -116,7 +125,7 @@ function R.CheckRequest(requester, a, b)
 		return false, "ONE_PER_TURN"
 	end
 	local player = Players[requester]
-	if player:GetFavor() < R.COST_FAVOR then return false, "FAVOR" end
+	if R.Favor(requester) < R.COST_FAVOR then return false, "FAVOR" end
 	if player:GetTreasury():GetGoldBalance() < R.COST_GOLD then return false, "GOLD" end
 	if R.Legitimacy(requester) < R.COST_LEGITIMACY then return false, "LEGITIMACY" end
 	return true

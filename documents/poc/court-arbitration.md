@@ -55,7 +55,13 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 
 ### 公式に使用例が無いもの・無い API
 
-- `Player:ChangeFavor`：公式 Lua に使用例が無い。GS の `DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` に名前がある。呼べなければ何も払わせずに請求を断る（`pcall`）。実機シナリオで効くことを確かめる。
+- 外交的支持（Favor）の読み書き：公式 Lua の使用例は UI 側の `Player:GetFavor()` だけ（`DLC/Expansion2/UI/Replacements/TopPanel_Expansion2.lua:169`、`DiplomacyRibbon_Expansion2.lua:77`）。実機の court-arbitration-02 では、ゲームプレイ側（`GameCore_Tuner`）の `Players[id]:GetFavor()` が `function expected instead of nil` で失敗した。
+  - `DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` の Lua 登録を、関数名の文字列を参照するコードと同じ場所で参照されるソースファイル名から調べると、次のとおり分かれている。
+    - UI の Player（`XP2_Cache_Lua_IPlayer.cpp`）：`GetFavor`・`GetFavorPerTurn`・`GetFavorPerTurnToolTip`・`GetFavorEnteringCongress`
+    - ゲームプレイ側の `Player:GetDiplomacy()`（`XP2_Lua_IPlayerDiplomacy.cpp`）：`GetFavor`・`ChangeFavor`・`GetFavorPerTurn`・`CalcFavorPerTurnFromAlliances`
+  - そのため Rules の `R.Favor(id)` は、Player に `GetFavor` があればそれを使い（UI）、無ければ `GetDiplomacy():GetFavor()` を使う（ゲームプレイ）。支払いは `GetDiplomacy():ChangeFavor(-20)`。公式 Lua に使用例が無いので、呼べなければ何も払わせずに請求を断る（`pcall`）。
+  - 代わりの道として、一度きりの修正値 `MODIFIER_PLAYER_ADD_FAVOR`（`DLC/Expansion2/Data/Expansion2_Modifiers.xml:59`）を `Player:AttachModifierByID` で付ける方法もある（ゲームプレイ側の使用例：`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1204`）。ただし量が修正値の定義で固定になり、読み取りはできないので、上の API が実機で効かないときだけ使う。
+  - シナリオの最初に、`GameCore_Tuner` と `InGame` の両方でこれらの関数があるかを型で返す確認の手順を置いた（失敗しない）。
 - 宣戦の検知：`Events.DiplomacyDeclareWar` は UI 側の使用例しか無い（`Base/Assets/UI/DiplomacyRibbon.lua:925`）。そのため停戦中の戦争は「次のターンの初めに講和し直す」だけで、宣戦した側に不利益は付けない。
 - 開戦事由・不満（Grievance）の付与：Lua には読み取り（`GetGrievancesAgainst`、`DLC/Expansion2/UI/Additions/DiplomacyActionView_AllianceRow.lua:46`）しか無く、修正値の効果も不満の生成倍率（`EFFECT_ADJUST_PLAYER_GRIEVANCE_GENERATION`）だけで、特定の相手への開戦事由を足すものが無い。討伐の大義は記録と通知だけにした（Q58）。
 
@@ -66,15 +72,16 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 
 ## テスト
 
-- `tests/test_court_arbitration.py`：全処理が日本マップ4種でだけ読み込まれること、使う文言キーが3言語そろうこと、UI スクリプトが構文として読めること。lupa でゲームプレイ側の Lua をターンごとに動かし、請求と費用、1ターン1件、将軍家の3倍と1573年（ターン120）以降、当事者以外・非交戦の拒否、費用不足と `ChangeFavor` の失敗で何も引かれないこと、AI の応否と拒否の不利益、人間の応否（無回答は拒否、二重回答は無視）、停戦中の戦争の講和し直しと期限切れ、戦争が先に終わった請求の無効を確かめる。
+- `tests/test_court_arbitration.py`：全処理が日本マップ4種でだけ読み込まれること、使う文言キーが3言語そろうこと、UI スクリプトが構文として読めること。lupa でゲームプレイ側の Lua をターンごとに動かし、請求と費用、1ターン1件、将軍家の3倍と1573年（ターン120）以降、当事者以外・非交戦の拒否、費用不足と `ChangeFavor` の失敗で何も引かれないこと、Favor を UI の Player とゲームプレイ側の外交オブジェクトのどちらからも読めること、AI の応否と拒否の不利益、人間の応否（無回答は拒否、二重回答は無視）、停戦中の戦争の講和し直しと期限切れ、戦争が先に終わった請求の無効を確かめる。
 
 ## 実機確認（メインセッション）
 
 シナリオ：`tools/civ6-autotest/scenarios/court-arbitration.json`（15 km 史実領土、足利将軍家を人間、ほか21勢力 AI）。
 
-1. 開始時に大内・大友（R01）が交戦中で、将軍家が裁定の力を持ち、室町幕府の終わりがターン120。ゲームプレイ側の `ChangeFavor(50)` で外交的支持が増える。
-2. 「朝廷に停戦を請う」ボタンが出て、一覧が開く（スクリーンショット `01-arbitration-panel.png` を人が見る）。
-3. UI から大内・大友の停戦を請求すると、`EXECUTE_SCRIPT` 経由で請求が置かれ、外交的支持 -20・金 -100・正当性 45 になり、力は3倍。
-4. テストのため長宗我部とアイヌを交戦させ、停戦期間中の扱いにしてから1ターン進めると、講和し直されている（`MakePeaceWith` がゲームプレイ側で効く）。
-5. 同じターンの初めに大内・大友の請求が裁かれる。応じれば停戦がターン32まで（3倍）、拒めば拒んだ側が正当性35・大義がターン12まで。AI の判断は都市数によるので、どちらかを受け入れる。
-6. 画面の見た目（ボタンの位置が他の UI と重ならないか）と通知の文面は、スクリーンショットで人が確かめる。マルチプレイでの応否は実機で未確認。
+1. `GameCore_Tuner` と `InGame` で Favor の関数があるかを記録する（`Player.GetFavor=…` `Diplomacy.ChangeFavor=…` の形。失敗しない）。
+2. 開始時に大内・大友（R01）が交戦中で、将軍家が裁定の力を持ち、室町幕府の終わりがターン120。ゲームプレイ側の `GetDiplomacy():ChangeFavor(50)` で外交的支持が増える（関数が無ければ、どれがあるかをエラーに出す）。
+3. 「朝廷に停戦を請う」ボタンが出て、一覧が開く（スクリーンショット `01-arbitration-panel.png` を人が見る）。
+4. UI から大内・大友の停戦を請求すると、`EXECUTE_SCRIPT` 経由で請求が置かれ、外交的支持 -20・金 -100・正当性 45 になり、力は3倍。
+5. テストのため長宗我部とアイヌを交戦させ、停戦期間中の扱いにしてから1ターン進めると、講和し直されている（`MakePeaceWith` がゲームプレイ側で効く）。
+6. 同じターンの初めに大内・大友の請求が裁かれる。応じれば停戦がターン32まで（3倍）、拒めば拒んだ側が正当性35・大義がターン12まで。AI の判断は都市数によるので、どちらかを受け入れる。
+7. 画面の見た目（ボタンの位置が他の UI と重ならないか）と通知の文面は、スクリーンショットで人が確かめる。マルチプレイでの応否は実機で未確認。

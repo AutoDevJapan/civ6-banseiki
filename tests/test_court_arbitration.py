@@ -94,8 +94,6 @@ for i, civ in ipairs(civs) do
   p.IsMajor = function() return true end
   p.IsAlive = function() return true end
   p.IsHuman = function() return p.human end
-  p.GetFavor = function() return p.favor end
-  p.ChangeFavor = function(_, n) if p.favorFails then error("no ChangeFavor") end; p.favor = p.favor + n end
   p.GetTreasury = function() return {
     GetGoldBalance = function() return p.gold end,
     ChangeGoldBalance = function(_, n) p.gold = p.gold + n end,
@@ -104,6 +102,9 @@ for i, civ in ipairs(civs) do
   p.GetDiplomacy = function() return {
     IsAtWarWith = function(_, o) return WAR[math.min(id, o) .. "_" .. math.max(id, o)] == true end,
     MakePeaceWith = function(_, o) SET_WAR(id, o, false) end,
+    -- Gameplay favor lives on the diplomacy object (XP2_Lua_IPlayerDiplomacy.cpp); the gameplay Player has no GetFavor.
+    GetFavor = function() return p.favor end,
+    ChangeFavor = function(_, n) if p.favorFails then error("no ChangeFavor") end; p.favor = p.favor + n end,
   } end
   p.GetProperty, p.SetProperty = properties()
   Players[id] = p
@@ -262,6 +263,13 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
         self.assertEqual((ouchi.gold, self.player(self.OUCHI, "JAC_LEGITIMACY")), (500, 50))
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
+
+    def test_favor_is_read_from_the_ui_player_or_the_gameplay_diplomacy(self):
+        R, ouchi = self.g.JAC_ARB, self.g.Players[self.OUCHI]
+        self.assertIsNone(ouchi.GetFavor)  # like GameCore_Tuner in court-arbitration-02
+        self.assertEqual(R.Favor(self.OUCHI), 100)
+        ouchi.GetFavor = self.lua.eval("function() return 7 end")  # UI Player (XP2_Cache_Lua_IPlayer.cpp)
+        self.assertEqual(R.Favor(self.OUCHI), 7)
 
     def test_a_clearly_winning_ai_refuses_and_is_penalized(self):
         self.g.Players[self.OTOMO].cities = 4  # 4 > 1.5 * 2
