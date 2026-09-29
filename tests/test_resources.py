@@ -145,7 +145,8 @@ class CustomResourceTests(unittest.TestCase):
             if action.attrib["id"].endswith("_Rules"):
                 self.assertEqual([item.text for item in action.findall("File")], ["Data/JAC_Japan_MapRules.xml"])
         # The site script runs only on the four Japan maps, with the same criteria as the other map actions.
-        scripts = root.findall("./InGameActions/AddGameplayScripts")
+        scripts = [action for action in root.findall("./InGameActions/AddGameplayScripts")
+                   if action.attrib["id"].endswith("_Resources_Scripts")]
         self.assertEqual(sorted(action.attrib["criteria"] for action in scripts),
                          sorted(f"JAC_Japan_{km}km_{mode}" for km in (15, 20) for mode in ("Historical", "Settlers")))
         for action in scripts:

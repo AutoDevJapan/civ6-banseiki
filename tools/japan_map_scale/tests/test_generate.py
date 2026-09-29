@@ -174,15 +174,14 @@ class GeneratedMapTests(unittest.TestCase):
                                         g.city_name_tag(city)) for city in cities.values())
                 self.assertEqual(sorted(db.execute("SELECT Owner,Plot,Name FROM Cities")), expected_rows)
                 self.assertEqual(sorted(db.execute(
-                    "SELECT DistrictType,CityID,Plot FROM Districts")),
+                    "SELECT DistrictType,CityID,Plot FROM Districts WHERE DistrictType='DISTRICT_CITY_CENTER'")),
                     sorted(("DISTRICT_CITY_CENTER", city["plot"], city["plot"])
                            for city in cities.values()))
-                self.assertEqual(sorted(db.execute(
-                    "SELECT ID,Type,Name,Value FROM CityAttributes")),
-                    sorted((city["plot"], "Population", "Initial", "2")
-                           for city in cities.values()))
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM Units").fetchone()[0], 22)  # one garrison per capital
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotOwners").fetchone()[0], item["land_tiles"])
+                # Population, other districts and units: tests/test_prosper_start.py
+                self.assertEqual(sorted(db.execute("SELECT ID,Type,Name FROM CityAttributes")),
+                                 sorted((city["plot"], "Population", "Initial") for city in cities.values()))
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotOwners o JOIN Plots p ON p.ID=o.ID "
+                                            "WHERE p.ContinentType='CONTINENT_ASIA'").fetchone()[0], item["land_tiles"])
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Plots p LEFT JOIN PlotOwners o ON p.ID=o.ID WHERE p.ContinentType='CONTINENT_ASIA' AND o.ID IS NULL").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Cities c JOIN Plots p ON c.Plot=p.ID WHERE p.ContinentType!='CONTINENT_ASIA' OR p.IsImpassable!=0").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotOwners o LEFT JOIN Cities c ON o.CityOwner=c.Plot WHERE c.Plot IS NULL OR c.Owner!=o.Owner OR o.CityWorking!=o.CityOwner").fetchone()[0], 0)
@@ -195,9 +194,12 @@ class GeneratedMapTests(unittest.TestCase):
                     self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM StartPositions").fetchone()[0], 22)
                 with sqlite3.connect(g.MOD / "Maps" / item["file"]) as historical:
-                    for table in ("PlotResources", "PlotFeatures", "PlotRivers"):
+                    for table in ("PlotResources", "PlotRivers"):
                         self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
                                          historical.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                    # No feature is cleared for districts/improvements (owner decision E1=b).
+                    self.assertEqual(set(db.execute("SELECT ID,FeatureType FROM PlotFeatures")),
+                                     set(historical.execute("SELECT ID,FeatureType FROM PlotFeatures")))
 
     def test_takeda_setup_slot_maps_to_static_city_and_territory_owners(self):
         for item in self.manifest:
@@ -350,7 +352,7 @@ class GeneratedMapTests(unittest.TestCase):
         for item in self.manifest:
             km = item["km_per_tile"]
             features = item["terrain_features"]
-            with self.subTest(km=km), sqlite3.connect(g.MOD / "Maps" / item["file"]) as db:
+            with self.subTest(km=km), sqlite3.connect(g.MOD / "Maps" / item["settler_file"]) as db,                     sqlite3.connect(g.MOD / "Maps" / item["file"]) as historical:
                 self.assertEqual(item["land_tiles"], expected[km]["land"])
                 self.assertEqual(len(features["lakes"]), 6)
                 lake_tiles = [plot for lake in features["lakes"] for plot in lake["tile_ids"]]
@@ -359,11 +361,11 @@ class GeneratedMapTests(unittest.TestCase):
                 for plot in lake_tiles:
                     self.assertEqual(db.execute("SELECT TerrainType,ContinentType FROM Plots WHERE ID=?",
                                                  (plot,)).fetchone(), ("TERRAIN_COAST", ""))
-                    self.assertIsNone(db.execute("SELECT ID FROM PlotOwners WHERE ID=?", (plot,)).fetchone())
+                    self.assertIsNone(historical.execute("SELECT ID FROM PlotOwners WHERE ID=?", (plot,)).fetchone())
                 feature_rows = db.execute("SELECT ID,FeatureType FROM PlotFeatures ORDER BY ID").fetchall()
                 feature_plots = {plot for plot, _ in feature_rows}
                 resource_plots = {row[0] for row in db.execute("SELECT ID FROM PlotResources")}
-                city_plots = {row[0] for row in db.execute("SELECT Plot FROM Cities")}
+                city_plots = {row[0] for row in historical.execute("SELECT Plot FROM Cities")}
                 overlap = feature_plots & resource_plots
                 self.assertEqual({db.execute("SELECT FeatureType FROM PlotFeatures WHERE ID=?", (plot,)).fetchone()[0]
                                   for plot in overlap}, {"FEATURE_FOREST"})
@@ -468,9 +470,8 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual([row[0] for row in recorder.calls[2][1][:22]], capital_plots)
                 self.assertIn("BUILDING_PALACE", recorder.calls[3][0])
                 self.assertEqual([row[0] for row in recorder.calls[3][1]], capital_plots)
-                self.assertIn("UNIT_WARRIOR", recorder.calls[4][0])
-                self.assertEqual([row[2] for row in recorder.calls[4][1]], capital_plots)
-                self.assertEqual([row[0] for row in recorder.calls[5][1][:22]], capital_plots)
+                self.assertIn("PlotOwners", recorder.calls[4][0])
+                self.assertEqual([row[0] for row in recorder.calls[4][1][:22]], capital_plots)
 
     def test_every_capital_and_only_capitals_have_a_palace(self):
         for item in self.manifest:
@@ -479,11 +480,6 @@ class GeneratedMapTests(unittest.TestCase):
                     "SELECT Plot FROM Buildings WHERE BuildingType='BUILDING_PALACE'")}
                 self.assertEqual(palaces, {city["plot"] for city in item["cities"] if city["capital"]})
                 self.assertEqual(len(palaces), 22)
-                garrisons = db.execute("SELECT UnitType, Owner, Plot FROM Units").fetchall()
-                self.assertEqual({(owner, plot) for _, owner, plot in garrisons},
-                                 {(g.SEAT_INDEX[city["owner"]], city["plot"])
-                                  for city in item["cities"] if city["capital"]})
-                self.assertEqual({unit for unit, _, _ in garrisons}, {"UNIT_WARRIOR"})
 
     def test_hex_distance_matches_neighbours(self):
         grid = g.HexGrid(40, 20, 20, 0.0, 0.0)
@@ -613,7 +609,8 @@ class GeneratedMapTests(unittest.TestCase):
             self.assertIn(selected, {f"{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{km}km.Civ6Map"
                                      for km in g.SCALES})
         removal = ET.parse(g.MOD / "Data/JAC_Japan_NoSettlers.xml").getroot()
-        self.assertEqual(removal.find("./MajorStartingUnits/Delete").attrib, {"Unit": "UNIT_SETTLER"})
+        # All starting units are removed (map Units rows only), like the official static scenarios.
+        self.assertEqual([d.attrib for d in removal.findall("./MajorStartingUnits/Delete")], [{}])
 
     def test_city_range_is_limited_to_four_japan_maps(self):
         ruleset_mod = g.MOD.parent / "JAC_PoC_BanseikiRuleset"
