@@ -201,6 +201,7 @@ def scenario() -> dict:
             {"action": "autoplay", "turns": 1, "timeout": 300},
             {"action": "ui_lua", "state_name": "InGame", "code": negative},
             {"action": "save", "name": "jac-unification-negative"},
+            {"action": "exit_to_menu"},  # load runs from the main menu (live 2026-09-29)
             {"action": "load", "name": "jac-unification-negative", "timeout": 300},
             {"action": "ui_lua", "state_name": "InGame", "code": negative},
             {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": final},

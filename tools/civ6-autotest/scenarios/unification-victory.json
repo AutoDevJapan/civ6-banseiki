@@ -109,6 +109,9 @@
       "name": "jac-unification-negative"
     },
     {
+      "action": "exit_to_menu"
+    },
+    {
       "action": "load",
       "name": "jac-unification-negative",
       "timeout": 300
