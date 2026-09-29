@@ -520,6 +520,11 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     # capital without it; official DLC/VikingsScenario/Maps/Viking.Civ6Map does the same).
     db.executemany("INSERT INTO Buildings VALUES ('BUILDING_PALACE', ?)",
                    ((city["plot"],) for city in ordered if city["capital"]))
+    # No settler on the historical start, so each capital gets one garrison;
+    # without any unit a faction cannot act on turn 1 (live 2026-09-29).
+    capitals = [city for city in ordered if city["capital"]]
+    db.executemany("INSERT INTO Units VALUES (?, 'UNIT_WARRIOR', ?, ?, NULL)",
+                   ((index, SEAT_INDEX[city["owner"]], city["plot"]) for index, city in enumerate(capitals)))
     city_order = {city["plot"]: index for index, city in enumerate(ordered)}
     db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
                    sorted(allocations, key=lambda row: (0, city_order[row[0]])
