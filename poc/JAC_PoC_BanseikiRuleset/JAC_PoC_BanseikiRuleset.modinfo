@@ -33,6 +33,20 @@
 		<UpdateText id="JAC_Banseiki_InGameText" criteria="JAC_Banseiki_Ruleset">
 			<File>Text/JAC_Banseiki_Text.xml</File>
 		</UpdateText>
+		<!-- 家固有名の表示切替（SSOT 3.2）。仕組みは documents/poc/house-names.md -->
+		<ImportFiles id="JAC_Banseiki_HouseNamesFiles" criteria="JAC_Banseiki_Ruleset">
+			<File>UI/JAC_HouseNames.lua</File>
+			<File>UI/TechAndCivicUnlockables_JAC_HouseNames.lua</File>
+			<File>UI/CivilopediaPage_JAC_HouseNames.lua</File>
+			<File>UI/JAC_BoostUnlockedPopup.lua</File>
+		</ImportFiles>
+		<ReplaceUIScript id="JAC_Banseiki_BoostUnlockedPopup" criteria="JAC_Banseiki_Ruleset">
+			<Properties>
+				<LoadOrder>100</LoadOrder>
+				<LuaContext>BoostUnlockedPopup</LuaContext>
+				<LuaReplace>UI/JAC_BoostUnlockedPopup.lua</LuaReplace>
+			</Properties>
+		</ReplaceUIScript>
 	</InGameActions>
 	<FrontEndActions>
 		<UpdateDatabase id="JAC_Banseiki_Settings">
@@ -45,5 +59,9 @@
 	<Files>
 		<File>Config/JAC_Banseiki_Config.xml</File>
 		<File>Text/JAC_Banseiki_Text.xml</File>
+		<File>UI/JAC_HouseNames.lua</File>
+		<File>UI/TechAndCivicUnlockables_JAC_HouseNames.lua</File>
+		<File>UI/CivilopediaPage_JAC_HouseNames.lua</File>
+		<File>UI/JAC_BoostUnlockedPopup.lua</File>
 	</Files>
 </Mod>

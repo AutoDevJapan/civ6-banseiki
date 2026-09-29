@@ -19,6 +19,7 @@
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
+| [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
