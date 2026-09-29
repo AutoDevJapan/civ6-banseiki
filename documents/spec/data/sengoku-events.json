@@ -7,7 +7,17 @@
   "month_note": "月は date_text の日付を西暦に換算した月（1582年10月4日まではユリウス暦、10月15日以降はグレゴリオ暦）。旧暦の月だけ分かるものはその月の15日、幅があるものは開始日で換算。date_text に旧暦表記・幅を残す",
   "confidence": "high/medium/low",
   "boost": "史実の年に、関係する研究を終えていない影響勢力へ与えるひらめき／着想（SSOT 3.2）。earlier_by のうち1つ。null は与えない",
-  "advisor_popup": "助言役のポップアップで薦める行動（和睦など）。null は通常の通知と Boost の表示だけ"
+  "advisor_popup": "助言役のポップアップで薦める行動（和睦など）。null は通常の通知と Boost の表示だけ",
+  "scope": {
+   "ruleset": "RULESET_JAC_BANSEIKI",
+   "pack": "sengoku",
+   "modinfo_criteria": "JAC_Sengoku_BanseikiOnly",
+   "maps": [
+    "JAC_Japan_15km"
+   ],
+   "note": "発火するのは万世紀ルールセットの戦国パックで、採用の15 km日本マップ（SSOT 3.4。20 kmは比較用）を使うゲームだけ。実装ではこの3つをガードする"
+  },
+  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない"
  },
  "events": [
   {
@@ -203,11 +213,16 @@
      "type": "tech",
      "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
      "short": "T14"
+    },
+    {
+     "type": "tech",
+     "id": "TECH_JAC_SENGOKU_CUPELLATION",
+     "short": "T09"
     }
    ],
    "house_specific": false,
    "effect_category": "resource",
-   "gameplay_effect": "但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルを地図に追加し、鉱山の建設を解放。T06／T14を先に研究した勢力は年より早く開発可能。",
+   "gameplay_effect": "但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルを地図に追加し、鉱山の建設を解放。T09（灰吹法）を最初に研究した勢力が出れば、年より早く地図に現れる（資源配置と同じ）。",
    "resource": {
     "resource_id": "RESOURCE_SILVER",
     "location": "生野・但馬 (35.167, 134.790)",
@@ -732,12 +747,12 @@
    ],
    "house_specific": false,
    "effect_category": "trade",
-   "gameplay_effect": "肥前・平戸が南蛮貿易の港になり、硝石（RESOURCE_NITER）の交易アクセスが港タイルで有効になる。先にC13／C19を研究した勢力は他の港（薩摩・豊後）でも交易可。",
+   "gameplay_effect": "肥前・平戸が南蛮貿易の港になる（1550年は通知と Boost だけ）。硝石（RESOURCE_NITER）の交易アクセスは、資源配置の開始年（1586年）から平戸の港タイルで有効になる。先にC13／C19を研究した勢力は他の港（薩摩・豊後）でも交易可。",
    "resource": {
     "resource_id": "RESOURCE_NITER",
     "location": "平戸・肥前 (33.368, 129.553)",
     "action": "trade_access",
-    "start_year": 1550
+    "start_year": 1586
    },
    "sources": [
     {
@@ -751,7 +766,7 @@
     }
    ],
    "confidence": "medium",
-   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。1586年の島津の玉薬購入記録も同資料に記載。",
+   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。平戸での開始年は、同資料が確認した1586年の島津家久の玉薬購入記録に合わせた。1550年のポルトガル船来航から有効にするかは Q55。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS",
@@ -1124,13 +1139,7 @@
    ],
    "house_specific": false,
    "effect_category": "resource",
-   "gameplay_effect": "甲斐の金山経営が拡大。金（RESOURCE_JAC_GOLD案）のタイルを追加し、金の収入が増える。T14で鉱山経営の産出が増加。",
-   "resource": {
-    "resource_id": "RESOURCE_JAC_GOLD",
-    "location": "黒川 (35.817, 138.825)／中山 (35.377, 138.464)",
-    "action": "reveal",
-    "start_year": 1560
-   },
+   "gameplay_effect": "甲斐の金山経営が拡大し、金の収入が増える。黒川・中山の金（RESOURCE_JAC_GOLD案）は資源配置で開始時から地図にある。T14で鉱山経営の産出が増加。",
    "sources": [
     {
      "title": "documents/research/japan-map-resources.md（資源の代表地点と年代）"
@@ -1140,7 +1149,7 @@
     }
    ],
    "confidence": "low",
-   "note": "japan-map-resources.mdの金候補（黒川・中山）。開始時に既に操業していた可能性があり、reveal年はオーナー確認。",
+   "note": "japan-map-resources.mdの金候補（黒川・中山）は15世紀末〜の操業で、資源配置では開始時から置く。このイベントはタイルを追加しない。",
    "boost": {
     "type": "tech",
     "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
@@ -1253,7 +1262,7 @@
     "resource_id": "RESOURCE_SILVER",
     "location": "石見銀山・石見 (35.103, 132.437)",
     "action": "ownership",
-    "start_year": 1533
+    "start_year": 1526
    },
    "sources": [
     {
@@ -1268,7 +1277,7 @@
     }
    ],
    "confidence": "high",
-   "note": "map-resources.mdによりRESOURCE_SILVERは石見の地形と合わない（砂漠・ツンドラ系のみ）。資源ノードの扱いは保留。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。",
+   "note": "石見銀山は1526年の発見で、資源配置では開始時から地図にある（SSOT 3.2 で銀を温帯の丘にも置けるようにした）。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。",
    "boost": {
     "type": "tech",
     "id": "TECH_JAC_SENGOKU_CUPELLATION",
@@ -1695,13 +1704,7 @@
    ],
    "house_specific": false,
    "effect_category": "trade",
-   "gameplay_effect": "肥前・長崎がポルトガル貿易の港になり、硝石（RESOURCE_NITER）・生糸の交易アクセスが港に加わる。大友・島津の影響下で交易量が増す。",
-   "resource": {
-    "resource_id": "RESOURCE_NITER",
-    "location": "長崎・肥前",
-    "action": "trade_access",
-    "start_year": 1571
-   },
+   "gameplay_effect": "肥前・長崎がポルトガル貿易の港になり、大友・島津の影響下で交易量が増す。長崎の硝石・生糸の交易アクセスは資源配置に無いため付けない（Q55）。",
    "sources": [
     {
      "title": "コトバンク『長崎』"
@@ -2709,13 +2712,7 @@
    ],
    "house_specific": false,
    "effect_category": "war",
-   "gameplay_effect": "伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆産業圏（RESOURCE_JAC_LACQUER）の所有が伊達へ移る。",
-   "resource": {
-    "resource_id": "RESOURCE_JAC_LACQUER",
-    "location": "会津 (37.490, 139.930)",
-    "action": "ownership",
-    "start_year": 1534
-   },
+   "gameplay_effect": "伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆（RESOURCE_JAC_LACQUER案）はまだ地図に無く、翌1590年の蒲生氏郷の入封（EV_AIZU_LACQUER）で現れる。",
    "sources": [
     {
      "title": "コトバンク『摺上原の戦い』"
@@ -3179,10 +3176,10 @@
    ],
    "house_specific": false,
    "effect_category": "resource",
-   "gameplay_effect": "佐渡の相川に金銀山が発見される（1601年に本格開発）。佐渡の鉱業の最終段階で、金銀のタイルを追加し、T14で産出が大きく増える。鶴子銀山（1542ごろ）は相川と近く、20kmタイルでは同じノードに統合する案。",
+   "gameplay_effect": "佐渡の相川に金銀山が発見される（1601年に本格開発）。佐渡の鉱業の最終段階で、金銀のタイルを追加し、T14で産出が大きく増える。鶴子銀山（1542年、銀）は別の資源で、採用の15 kmの地図では隣のタイルに置く。",
    "resource": {
     "resource_id": "RESOURCE_JAC_GOLD",
-    "location": "相川・佐渡 (37.927, 138.351)",
+    "location": "相川・佐渡 (38.032, 138.235)",
     "action": "reveal",
     "start_year": 1596
    },
@@ -3195,7 +3192,7 @@
     }
    ],
    "confidence": "medium",
-   "note": "map-resources.md: 相川銀鉱床は鶴子と近く、20kmタイルでは別ノードにしない。",
+   "note": "資源配置の gold-sado-aikawa（38.032, 138.235）。鶴子銀山（silver-sado-tsurushi、37.927, 138.351）とは別地点。",
    "boost": {
     "type": "tech",
     "id": "TECH_JAC_SENGOKU_CUPELLATION",

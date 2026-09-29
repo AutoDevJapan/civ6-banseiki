@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,9 @@ EVENTS = json.loads((ROOT / "documents/spec/data/sengoku-events.json").read_text
 START = json.loads((ROOT / "documents/spec/data/japan-1534-start.json").read_text(encoding="utf-8"))
 TREES_SQL = (ROOT / "poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Trees.sql").read_text(encoding="utf-8")
 FACTIONS = {f["id"] for f in START["factions"]}
+RESOURCES = json.loads((ROOT / "documents/spec/data/japan-map-resources.json").read_text(encoding="utf-8"))
+sys.path.insert(0, str(ROOT / "tools/japan_map_scale"))
+import generate  # noqa: E402  REVEAL_TECH / START_YEAR of the merged resource placement
 
 
 class SengokuEventTests(unittest.TestCase):
@@ -84,6 +88,50 @@ class SengokuEventTests(unittest.TestCase):
         ids = {e["id"] for e in EVENTS}
         text = json.dumps(EVENTS, ensure_ascii=False)
         self.assertEqual(set(re.findall(r"EV_[A-Z0-9_]+", text)) - ids, set())
+
+    def test_scope_is_machine_readable(self):
+        schema = json.loads((ROOT / "documents/spec/data/sengoku-events.json").read_text(encoding="utf-8"))["_schema"]
+        scope = schema["scope"]
+        self.assertEqual(scope["ruleset"], "RULESET_JAC_BANSEIKI")
+        self.assertEqual(scope["pack"], "sengoku")
+        self.assertEqual(scope["maps"], ["JAC_Japan_15km"])
+        self.assertTrue((ROOT / "poc/JAC_PoC_JapanMapScale/Maps/JAC_Japan_15km.Civ6Map").exists())
+
+    def test_resources_match_the_resource_placement(self):
+        # Events must agree with japan-map-resources.json on site, start year, and start visibility.
+        points = {}
+        for g in RESOURCES["resource_groups"]:
+            for p in g["points"]:
+                points[(g["civ6_id"], tuple(p["coordinates"]))] = p
+        trades = {(t["civ6_id"], tuple(t["coordinates"])): t for t in RESOURCES["trade_access"]}
+        seen = 0
+        for e in EVENTS:
+            r = e.get("resource")
+            if not r:
+                continue
+            seen += 1
+            m = re.search(r"\((-?[\d.]+), (-?[\d.]+)\)$", r["location"])
+            self.assertIsNotNone(m, e["id"])
+            key = (r["resource_id"], (float(m[2]), float(m[1])))  # location is (lat, lon); data is [lon, lat]
+            if r["action"] == "trade_access":
+                self.assertTrue(key in trades, (e["id"], key))
+                self.assertEqual(r["start_year"], trades[key]["available_from_year"], e["id"])
+                continue
+            self.assertTrue(key in points, (e["id"], key))
+            p = points[key]
+            deferred = generate._resource_is_deferred(p)
+            if r["action"] == "reveal":
+                self.assertTrue(deferred, e["id"])
+                self.assertEqual(r["start_year"], generate.reveal_year(p), e["id"])
+                tech = generate.REVEAL_TECH.get(p["id"])
+                if tech:
+                    self.assertIn(tech, {x["id"] for x in e["earlier_by"]}, e["id"])
+            else:
+                self.assertEqual(r["action"], "ownership", e["id"])
+                self.assertFalse(deferred, e["id"])  # ownership means the resource is on the map from 1534
+                if p.get("start_year") is not None:
+                    self.assertEqual(r["start_year"], p["start_year"], e["id"])
+        self.assertGreaterEqual(seen, 6)
 
 
 if __name__ == "__main__":

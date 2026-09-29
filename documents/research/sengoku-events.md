@@ -23,6 +23,7 @@
    - `boost`：史実の年に、影響勢力（`ALL` は全勢力）のうち、その研究を終えておらず Boost も済んでいない勢力に与えるひらめき（技術）／着想（社会制度）。`earlier_by` のうち1つを選んだ。表示は公式の Boost 画面（`BoostUnlockedPopup.lua` の技術 `ShowTechBoost`、進み具合の表示は122行目。社会制度は140行目の `ShowCivicBoost`）に任せる。済んでいるかは公式パネルと同じ `HasBoostBeenTriggered`／`CanTriggerBoost`（`TechBoostsPanel.lua:91`）で見る。Boost の量は公式の `Boosts.Boost`（`Technologies.xml:457` 以下）と同じ考え方で、閃き40%（ツリー設計案）の暫定値。
    - `advisor_popup`：助言役のポップアップ（公式の `AdvisorPopup.lua:94` `ShowAdvisorPopup`。`LuaEvents.TutorialUIRoot_AdvisorRaise` で開く、521行目）で薦める行動（日英露）。null のイベントは通常の通知と Boost の表示だけ。画面に出すのは人間の勢力だけで、AI には出さない。
    - Boost を付与するゲームプレイ側の関数（`TriggerBoost` など）と、チュートリアル外で助言ポップアップを開けるかは、ローカルの UI ファイルでは確認できていない（要実機確認）。
+   - 公式の `AdvisorPopup.lua:25-38, 94` は文字列ではなく `AdvisorItem`（`Message` などを持つ表）を受け取り、`TutorialUIRoot.lua:1565` はチュートリアル項目の `AdvisorInfo` を渡している。実装時に、`advisor_popup` の日英露の文字列からこの表を組み立てる変換を作る。
    - 下の表のとおり、59件のうち55件に Boost、19件に助言ポップアップを割り当てた。`earlier_by` が無い4件（大友二階崩れ・駿河侵攻・朝倉氏の滅亡・武田氏の滅亡）は Boost を与えない。和睦を薦める10件（島津貴久の薩摩統一戦・伊達氏天文の乱・夷狄商舶往還之法度（蠣崎氏とアイヌの交易取り決め）・三河一向一揆・石山合戦（石山本願寺と織田の戦い）・上杉謙信の死去と御館の乱・四国平定・九州平定・秀吉の琉球への服属要求と島津の仲介・小田原征伐と北条氏の滅亡）は、1534年の因縁の一覧（[1534年開始データ](japan-1534-start.md)の「当日の同盟・不仲」。関係の一覧は未作成）ができたら、因縁を解消するイベントとして対応づける。
 
 | ID | Boost | 助言ポップアップで薦めること |
@@ -95,7 +96,7 @@
 | 1536-05 | `EV_JINKAISHU` | 塵芥集の制定（伊達の分国法） | 伊達 | C05 | 制度 | ○ DATE → 分国法の制定 | high |
 | 1539〜1554 | `EV_SHIMAZU_UNIFY_1` | 島津貴久の薩摩統一戦 | 島津 | C02、C10 | 継承・内紛 |  | medium |
 | 1540 | `EV_TENBUN_FAMINE` | 天文の大飢饉 | 全勢力 | T07、T01 | 災害 |  | medium |
-| 1542 | `EV_IKUNO_SILVER` | 生野銀山の本格開発 | 足利将軍家、尼子 | T06、T14 | 資源開発 |  | medium |
+| 1542 | `EV_IKUNO_SILVER` | 生野銀山の本格開発 | 足利将軍家、尼子 | T06、T14、T09 | 資源開発 |  | medium |
 | 1542-07〜1548 | `EV_TENBUN_DATE` | 伊達氏天文の乱 | 伊達、蘆名 | C02 | 継承・内紛 |  | high |
 | 1543-09 | `EV_TEPPO` | 鉄砲伝来 | 全勢力 | T12 | 技術伝播 |  | high |
 | 1544 | `EV_KUNITOMO_GUN` | 国友・堺・根来の鉄砲鍛冶の成立 | 六角、足利将軍家、三好、本願寺 | T13 | 技術伝播 |  | medium |
@@ -191,9 +192,9 @@
 - 名称：生野銀山の本格開発 ／ Ikuno Silver Mine Opened ／ Начало разработки серебряного рудника Икуно
 - 史実：1542（天文11年（山名祐豊の開発と伝わる））。地域：但馬
 - 影響勢力：足利将軍家、尼子（中心：足利将軍家）
-- 早期解放の研究：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）
+- 早期解放の研究：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T09（`TECH_JAC_SENGOKU_CUPELLATION`）
 - 史実の年のBoost：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）。助言ポップアップ：なし
-- 案（暫定）：但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルを地図に追加し、鉱山の建設を解放。T06／T14を先に研究した勢力は年より早く開発可能。
+- 案（暫定）：但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルを地図に追加し、鉱山の建設を解放。T09（灰吹法）を最初に研究した勢力が出れば、年より早く地図に現れる（資源配置と同じ）。
 - 資源：`RESOURCE_SILVER`、生野・但馬 (35.167, 134.790)、`reveal`、1542年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『生野銀山』（確度：medium）
 - 補足：但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。
@@ -296,10 +297,10 @@
 - 影響勢力：大友、島津（中心：大友）
 - 早期解放の研究：C19（`CIVIC_JAC_SENGOKU_NANBAN_ENVOYS`）、C13（`CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS`）、T17（`TECH_JAC_SENGOKU_HARBOR_PILOTS`）
 - 史実の年のBoost：C13（`CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS`）。助言ポップアップ：なし
-- 案（暫定）：肥前・平戸が南蛮貿易の港になり、硝石（RESOURCE_NITER）の交易アクセスが港タイルで有効になる。先にC13／C19を研究した勢力は他の港（薩摩・豊後）でも交易可。
-- 資源：`RESOURCE_NITER`、平戸・肥前 (33.368, 129.553)、`trade_access`、1550年〜
+- 案（暫定）：肥前・平戸が南蛮貿易の港になる（1550年は通知と Boost だけ）。硝石（RESOURCE_NITER）の交易アクセスは、資源配置の開始年（1586年）から平戸の港タイルで有効になる。先にC13／C19を研究した勢力は他の港（薩摩・豊後）でも交易可。
+- 資源：`RESOURCE_NITER`、平戸・肥前 (33.368, 129.553)、`trade_access`、1586年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『平戸』；Wikipedia日本語版『南蛮貿易』（確度：medium）
-- 補足：japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。1586年の島津の玉薬購入記録も同資料に記載。
+- 補足：japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。平戸での開始年は、同資料が確認した1586年の島津家久の玉薬購入記録に合わせた。1550年のポルトガル船来航から有効にするかは Q55。
 
 ### 大寧寺の変 `EV_OUCHI_DAINEIJI`
 
@@ -369,10 +370,9 @@
 - 影響勢力：武田、北条（中心：武田）
 - 早期解放の研究：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）
 - 史実の年のBoost：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）。助言ポップアップ：なし
-- 案（暫定）：甲斐の金山経営が拡大。金（RESOURCE_JAC_GOLD案）のタイルを追加し、金の収入が増える。T14で鉱山経営の産出が増加。
-- 資源：`RESOURCE_JAC_GOLD`、黒川 (35.817, 138.825)／中山 (35.377, 138.464)、`reveal`、1560年〜
+- 案（暫定）：甲斐の金山経営が拡大し、金の収入が増える。黒川・中山の金（RESOURCE_JAC_GOLD案）は資源配置で開始時から地図にある。T14で鉱山経営の産出が増加。
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『甲州金』（確度：low）
-- 補足：japan-map-resources.mdの金候補（黒川・中山）。開始時に既に操業していた可能性があり、reveal年はオーナー確認。
+- 補足：japan-map-resources.mdの金候補（黒川・中山）は15世紀末〜の操業で、資源配置では開始時から置く。このイベントはタイルを追加しない。
 
 ### 長尾から上杉への継承（関東管領就任） `EV_NAGAO_TO_UESUGI`
 
@@ -393,9 +393,9 @@
 - 早期解放の研究：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T09（`TECH_JAC_SENGOKU_CUPELLATION`）、T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）
 - 史実の年のBoost：T09（`TECH_JAC_SENGOKU_CUPELLATION`）。助言ポップアップ：なし
 - 案（暫定）：石見銀山が毛利領となる。灰吹法（T09）により銀の産出が増え、鉄奉行と併せて資金源にする。1534年の石見は大内領のため、所有移転の候補。
-- 資源：`RESOURCE_SILVER`、石見銀山・石見 (35.103, 132.437)、`ownership`、1533年〜
+- 資源：`RESOURCE_SILVER`、石見銀山・石見 (35.103, 132.437)、`ownership`、1526年〜
 - 出典：[UNESCO 石見銀山遺跡とその文化的景観](https://whc.unesco.org/en/list/1246/)；documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『石見銀山』（確度：high）
-- 補足：map-resources.mdによりRESOURCE_SILVERは石見の地形と合わない（砂漠・ツンドラ系のみ）。資源ノードの扱いは保留。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。
+- 補足：石見銀山は1526年の発見で、資源配置では開始時から地図にある（SSOT 3.2 で銀を温帯の丘にも置けるようにした）。灰吹法(T09)は3.2の『開始前から石見に伝わる技術』。
 
 ### 三河一向一揆 `EV_MIKAWA_IKKI`
 
@@ -476,8 +476,7 @@
 - 影響勢力：大友、島津（中心：大友）
 - 早期解放の研究：C13（`CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS`）、C19（`CIVIC_JAC_SENGOKU_NANBAN_ENVOYS`）、C29（`CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION`）
 - 史実の年のBoost：C19（`CIVIC_JAC_SENGOKU_NANBAN_ENVOYS`）。助言ポップアップ：なし
-- 案（暫定）：肥前・長崎がポルトガル貿易の港になり、硝石（RESOURCE_NITER）・生糸の交易アクセスが港に加わる。大友・島津の影響下で交易量が増す。
-- 資源：`RESOURCE_NITER`、長崎・肥前、`trade_access`、1571年〜
+- 案（暫定）：肥前・長崎がポルトガル貿易の港になり、大友・島津の影響下で交易量が増す。長崎の硝石・生糸の交易アクセスは資源配置に無いため付けない（Q55）。
 - 出典：コトバンク『長崎』；Wikipedia日本語版『長崎港』（確度：high）
 - 補足：1534年配分で肥前は大友領。大村純忠らの影響で実際の帰属は複雑。
 
@@ -659,8 +658,7 @@
 - 影響勢力：蘆名、伊達（中心：蘆名、伊達）
 - 早期解放の研究：T22（`TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION`）、C10（`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER`）
 - 史実の年のBoost：C10（`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER`）。助言ポップアップ：なし
-- 案（暫定）：伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆産業圏（RESOURCE_JAC_LACQUER）の所有が伊達へ移る。
-- 資源：`RESOURCE_JAC_LACQUER`、会津 (37.490, 139.930)、`ownership`、1534年〜
+- 案（暫定）：伊達政宗が蘆名義広を破り会津を得る。蘆名の吸収条件例。会津の漆（RESOURCE_JAC_LACQUER案）はまだ地図に無く、翌1590年の蒲生氏郷の入封（EV_AIZU_LACQUER）で現れる。
 - 出典：コトバンク『摺上原の戦い』；Wikipedia日本語版『摺上原の戦い』（確度：high）
 
 ### 上杉景勝の佐渡平定と西三川砂金 `EV_SADO_SUBJUGATION`
@@ -742,10 +740,10 @@
 - 影響勢力：長尾（中心：長尾）
 - 早期解放の研究：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T09（`TECH_JAC_SENGOKU_CUPELLATION`）
 - 史実の年のBoost：T09（`TECH_JAC_SENGOKU_CUPELLATION`）。助言ポップアップ：なし
-- 案（暫定）：佐渡の相川に金銀山が発見される（1601年に本格開発）。佐渡の鉱業の最終段階で、金銀のタイルを追加し、T14で産出が大きく増える。鶴子銀山（1542ごろ）は相川と近く、20kmタイルでは同じノードに統合する案。
-- 資源：`RESOURCE_JAC_GOLD`、相川・佐渡 (37.927, 138.351)、`reveal`、1596年〜
+- 案（暫定）：佐渡の相川に金銀山が発見される（1601年に本格開発）。佐渡の鉱業の最終段階で、金銀のタイルを追加し、T14で産出が大きく増える。鶴子銀山（1542年、銀）は別の資源で、採用の15 kmの地図では隣のタイルに置く。
+- 資源：`RESOURCE_JAC_GOLD`、相川・佐渡 (38.032, 138.235)、`reveal`、1596年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『佐渡金山』（確度：medium）
-- 補足：map-resources.md: 相川銀鉱床は鶴子と近く、20kmタイルでは別ノードにしない。
+- 補足：資源配置の gold-sado-aikawa（38.032, 138.235）。鶴子銀山（silver-sado-tsurushi、37.927, 138.351）とは別地点。
 
 ### サン＝フェリペ号事件と二十六聖人の殉教 `EV_SAN_FELIPE`
 
@@ -803,18 +801,20 @@
 | 資源 | 場所（1534年配分） | イベント | 資源の開始年（`start_year`） | 反映方法 |
 |---|---|---|---|---|
 | `RESOURCE_SILVER` | 但馬 | 生野銀山の本格開発（`EV_IKUNO_SILVER`） | 1542 | reveal |
-| `RESOURCE_NITER` | 肥前、豊後、薩摩 | 平戸へのポルトガル船来航と南蛮貿易（`EV_HIRADO_PORTUGUESE`） | 1550 | trade_access |
-| `RESOURCE_JAC_GOLD` | 甲斐 | 甲州金の整備と黒川金山・中山金山の稼働（`EV_KOSHU_GOLD`） | 1560 | reveal |
-| `RESOURCE_SILVER` | 石見 | 毛利氏の石見銀山掌握（`EV_MORI_IWAMI`） | 1533 | ownership |
+| `RESOURCE_NITER` | 肥前、豊後、薩摩 | 平戸へのポルトガル船来航と南蛮貿易（`EV_HIRADO_PORTUGUESE`） | 1586 | trade_access |
+| `RESOURCE_SILVER` | 石見 | 毛利氏の石見銀山掌握（`EV_MORI_IWAMI`） | 1526 | ownership |
 | `RESOURCE_IRON` | 出雲、伯耆、石見 | 月山富田城の開城と尼子氏の滅亡（`EV_AMAGO_FALL`） | 1534 | ownership |
-| `RESOURCE_NITER` | 肥前 | 長崎の開港（`EV_NAGASAKI`） | 1571 | trade_access |
-| `RESOURCE_JAC_LACQUER` | 陸奥、出羽 | 摺上原の戦い（蘆名氏の滅亡）（`EV_SURIAGEHARA`） | 1534 | ownership |
 | `RESOURCE_JAC_GOLD` | 佐渡 | 上杉景勝の佐渡平定と西三川砂金（`EV_SADO_SUBJUGATION`） | 1593 | reveal |
 | `RESOURCE_JAC_LACQUER` | 陸奥 | 蒲生氏郷の会津入封と漆器産業（`EV_AIZU_LACQUER`） | 1590 | reveal |
 | `RESOURCE_JAC_GOLD` | 佐渡 | 相川金銀山の発見（`EV_AIKAWA`） | 1596 | reveal |
 
-- 石見銀山は灰吹法（T09、1533年導入、開始前）を3.2『開始前から石見に伝わる技術』として扱う。[japan-map-resources.md](japan-map-resources.md) は、公式の銀が砂漠・ツンドラ系の地形にしか置けないため石見の資源ノードを保留としている。本一覧の `EV_MORI_IWAMI` も所有移転の記録で、資源ノードの追加ではない。
-- 鶴子銀山（佐渡・1542年ごろ）と相川（1596年発見）は20kmタイルで近く、同じノードにする案。西三川砂金（1593ごろ）は `EV_SADO_SUBJUGATION`。
+- 地点と開始年は [資源配置の候補データ](../spec/data/japan-map-resources.json) に合わせ、`tests/test_sengoku_events.py` で照合する。開始時に地図にある資源（開始年が1534年以前、または開始時に置く扱い）は `reveal` にしない。
+- 石見銀山（1526年）は開始時から地図にある（SSOT 3.2 で銀を温帯の丘にも置けるようにした）。灰吹法（T09、1533年導入、開始前）は3.2『開始前から石見に伝わる技術』。`EV_MORI_IWAMI` は所有移転で、資源ノードの追加ではない。
+- 黒川・中山の金は開始時から地図にあるため、`EV_KOSHU_GOLD` はタイルを追加しない。
+- 会津の漆は1590年に現れる（資源配置では開始時に非表示）。1589年の `EV_SURIAGEHARA` の時点では地図に無いので、漆の所有移転は扱わない。
+- 硝石の平戸での交易アクセスは、資源配置と同じく1586年から。1550年の `EV_HIRADO_PORTUGUESE` は来航の通知と Boost だけ。長崎（`EV_NAGASAKI`）は資源配置に無いため交易アクセスを付けない。どちらを早めるかは Q55。
+- `reveal` の早期出現は、資源配置の `REVEAL_TECH`（`tools/japan_map_scale/generate.py`）の研究を最初の勢力が終えた時点。`earlier_by` はこの研究を含む。それ以外の `earlier_by` は Boost の候補で、資源を早く出さない。
+- 鶴子銀山（佐渡・1542年ごろ）と相川（1596年発見）は別の資源で、採用の15 kmの地図では隣り合う別タイル。西三川砂金（1593ごろ）は `EV_SADO_SUBJUGATION`。
 - 足尾銅山（1550年発見説）、土肥・宝達金山（1577／1586年）、伊勢湾の捕鯨（16世紀後半）、延沢銀山（1596〜1615）は、年代・確度が低く、イベントとしては採用しなかった。地図側で `start_year` を持たせる扱いに任せる（japan-map-resources.md 参照）。
 - 塩・茶・絹・米・馬・魚は、特定の年に『開発』されたと言える出来事が乏しく、イベントにしなかった。茶は北野大茶湯（`EV_KITANO_TEA`）で価値の上昇として扱う。
 
@@ -835,15 +835,15 @@
 
 ## 9. オーナー確認事項
 
-未決の事項は [質問リスト](../questions.md) の Q40〜Q43 に移した（豊臣期の固有名、楽市楽座の代表年、カトリックの登場の順、旧領の扱い）。松平→徳川、本能寺の変の後の織田、室町幕府の終わり、島津の当主、関ヶ原は SSOT 3.1・3.2 で決まっている。
+未決の事項は [質問リスト](../questions.md) の Q40〜Q43・Q55 に移した（豊臣期の固有名、楽市楽座の代表年、カトリックの登場の順、旧領の扱い、硝石の交易アクセスの開始年）。松平→徳川、本能寺の変の後の織田、室町幕府の終わり、島津の当主、関ヶ原は SSOT 3.1・3.2 で決まっている。
 
 ## 10. 実機確認の項目（実装後）
 
-1. イベント通知が勢力ごとに表示されること（全勢力向け1件、該当勢力向け1件）。
+1. イベント通知が勢力ごとに表示されること（全勢力向け1件、該当勢力向け1件）。万世紀ルールセットの戦国パックと15 kmの日本マップ以外（JSON の `_schema.scope`）では発火しないこと。
 2. `earlier_by` の研究完了時に、史実年より前にイベント効果が有効になること。
 3. 家固有名（安土城の築城→大規模城郭の築城など）が、持ち主の家と他の勢力で正しく切り替わり、太閤検地はすべての家に『太閤検地』と出ること。
 4. 資源イベント後に該当タイルの資源が現れること（`reveal`）。
 5. 史実の年に、`boost` の研究を終えていない影響勢力だけにひらめき／着想が付き、公式の Boost 画面が出ること。研究済み・Boost 済みの勢力には付かないこと。
-6. `advisor_popup` のあるイベントで、人間の勢力にだけ助言ポップアップが出て、薦めた行動（和睦など）が日英露で表示されること。
+6. `advisor_popup` のあるイベントで、人間の勢力にだけ助言ポップアップが出て、薦めた行動（和睦など）が日英露で表示されること。文字列から組み立てた `AdvisorItem` で、チュートリアル外でも開けること。
 7. イベントの発火後にセーブ・ロードしても、同じイベントが再び発火せず、Boost・家名の切り替え・資源の出現が二重に起きないこと。発火前のセーブをロードした場合は、同じ年・月に1回だけ発火すること。
 8. マルチプレイで、全端末が同じターンに同じイベントを発火し、Boost・家名・資源・外交状態が全端末で一致すること（SSOT 16 の「最初からマルチプレイで同期ずれしない書き方」の前提。[PoC README「マルチプレイ同期と決定性」](../poc/README.md#マルチプレイ同期と決定性)）。
