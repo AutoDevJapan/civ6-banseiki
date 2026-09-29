@@ -15,6 +15,7 @@
     },
     {
       "action": "configure",
+      "build_setup": false,
       "ruleset": "RULESET_JAC_BANSEIKI",
       "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
       "map_size": "MAPSIZE_HUGE",
