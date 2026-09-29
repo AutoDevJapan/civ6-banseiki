@@ -639,6 +639,7 @@ class Runner:
                 research_recorder = ResearchMetrics(self.output / f"autoplay-research-{self.metrics_runs}.jsonl")
                 research_recorder.sample(self._lua("InGame", RESEARCH_SAMPLE_CODE, min(10, _remaining(deadline))))
             restarts = 0
+            dedications = 0
             inactive_since = None
             status = None
             elimination_turn = None
@@ -695,7 +696,10 @@ class Runner:
                           (status.local_player == human or
                            (allow_human_elimination and elimination_turn is not None
                             and status.local_player < 0))):
-                        if restarts >= 2:
+                        chosen = self._choose_dedication(human, deadline) if dedications < 3 else None
+                        if chosen:
+                            dedications += 1
+                        elif restarts >= 2:
                             raise ScenarioError(f"Autoplay stopped early at turn {status.turn}/{target}: {status}")
                         remaining = target - status.turn
                         self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
@@ -704,7 +708,8 @@ class Runner:
                                   "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
                                   "AutoplayManager.SetActive(true)\nreturn true",
                                   min(5, _remaining(deadline)))
-                        restarts += 1
+                        if not chosen:
+                            restarts += 1
                         inactive_since = None
                 else:
                     inactive_since = None
@@ -736,6 +741,36 @@ class Runner:
         if research_recorder:
             detail += f"; research=autoplay-research-{self.metrics_runs}.jsonl"
         return detail
+
+    def _choose_dedication(self, human: int, deadline: float) -> str | None:
+        """Pick the human's pending era dedication (Gathering Storm), which autoplay never chooses.
+
+        Uses the official operation from DedicationPopup.lua OnConfirm (PlayerOperations.COMMEMORATE),
+        deterministically taking the first offered choices, then closes the modal popup with Escape.
+        Returns the chosen commemoration indices (logged), or None when nothing was pending.
+        """
+        lua = [
+            f"local h = {human}",
+            "if not (Game.GetEras and PlayerOperations and PlayerOperations.COMMEMORATE) then return 'none' end",
+            "local eras = Game.GetEras()",
+            "local n = eras:GetPlayerNumAllowedCommemorations(h)",
+            "local choices = eras:GetPlayerCommemorateChoices(h)",
+            "if n <= 0 or #choices == 0 then return 'none' end",
+            "local picked = {}",
+            "for i = 1, math.min(n, #choices) do",
+            "  local p = {}",
+            "  p[PlayerOperations.PARAM_COMMEMORATION_TYPE] = choices[i]",
+            "  UI.RequestPlayerOperation(h, PlayerOperations.COMMEMORATE, p)",
+            "  table.insert(picked, tostring(choices[i]))",
+            "end",
+            "return table.concat(picked, ',')",
+        ]
+        value = self._lua("InGame", "\n".join(lua), min(5, _remaining(deadline)))
+        if value == "none" or not value:
+            return None
+        self._log("autoplay_dedication", "OK", f"human={human} chose commemoration indices={value}")
+        press_key(VK_ESCAPE, deadline=deadline)
+        return value
 
     def _end_turn(self, timeout: float, *, deadline: float | None = None) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
