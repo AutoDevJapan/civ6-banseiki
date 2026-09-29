@@ -260,7 +260,9 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertTrue(negative[0] < actions.index("autoplay") < negative[1] < save < load < negative[2])
         final = next(index for index, step in enumerate(steps)
                      if "transferred the last castle" in step.get("code", ""))
-        self.assertEqual(actions[final + 1:final + 3], ["autoplay", "wait_for"])
+        # The game ends during that turn, so autoplay is started from Lua and the winner is awaited (live 2026-09-29).
+        self.assertEqual(actions[final + 1:final + 3], ["ui_lua", "wait_for"])
+        self.assertIn("AutoplayManager.SetActive(true)", steps[final + 1]["code"])
         self.assertIn(VICTORY, steps[final + 2]["condition"]["code"])
         self.assertIn("raze not verified", steps[-1]["code"])
 

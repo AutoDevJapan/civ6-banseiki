@@ -127,9 +127,9 @@
       "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~=0 then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
     },
     {
-      "action": "autoplay",
-      "turns": 1,
-      "timeout": 300
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"
     },
     {
       "action": "wait_for",
@@ -138,7 +138,7 @@
         "state_name": "InGame",
         "code": "local winner,v=Game.GetWinningTeam(); return winner==Players[0]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
       },
-      "timeout": 60
+      "timeout": 300
     },
     {
       "action": "screenshot",
