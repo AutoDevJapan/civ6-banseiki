@@ -132,6 +132,16 @@ DELETE FROM Policies WHERE PolicyType NOT IN (
 UPDATE Projects SET PrereqTech='TECH_JAC_SENGOKU_OUTER_DEFENSES', PrereqCivic=NULL
 WHERE ProjectType <> 'PROJECT_REPAIR_OUTER_DEFENSES' AND (PrereqTech IS NOT NULL OR PrereqCivic IS NOT NULL);
 
+-- Printing's +1 diplomatic access level (TechnologyModifiers TECH_PRINTING ->
+-- PRINTING_ADD_DIPLO_VISIBILITY, Base/Assets/Gameplay/Data/Technologies.xml:546-616, :670-672;
+-- source row SOURCE_TECH has PrereqTech=TECH_PRINTING, Gossip.xml:75) would be cascade-deleted with
+-- TECH_PRINTING. Move both to the closest Sengoku tech: Roads and Packtrains (T05), whose
+-- messengers and pack traders carry news between domains (and which unlocks UNIT_TRADER).
+UPDATE TechnologyModifiers SET TechnologyType='TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS'
+WHERE TechnologyType='TECH_PRINTING' AND ModifierId='PRINTING_ADD_DIPLO_VISIBILITY';
+UPDATE DiplomaticVisibilitySources SET PrereqTech='TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS'
+WHERE VisibilitySourceType='SOURCE_TECH' AND PrereqTech='TECH_PRINTING';
+
 -- Official tree rows are removed only after the retained gameplay objects are
 -- rewired. Other era and GS system tables are deliberately left in place.
 DELETE FROM Technologies WHERE TechnologyType NOT LIKE 'TECH_JAC_SENGOKU_%';
