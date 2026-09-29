@@ -28,7 +28,6 @@ import generate as g  # noqa: E402
 import prosperity as p  # noqa: E402
 
 SCENARIO_DIR = g.ROOT / "tools/civ6-autotest/scenarios"
-BASELINE_SCENARIO = SCENARIO_DIR / "japan-scale-baseline-15km.json"
 SCENARIO = SCENARIO_DIR / "japan-prosperous-15km.json"
 
 # Official placement rules (Base/Assets/Gameplay/Data/).
@@ -301,16 +300,16 @@ SURVIVORS = (
 
 
 def write_scenario(report: dict) -> None:
-    """The 50-turn AI autoplay survey of the baseline, plus a start check and a survivor line."""
-    data = json.loads(BASELINE_SCENARIO.read_text(encoding="utf-8"))
+    """Refresh the generated steps of the live scenario: the start check and the survivor line.
+
+    The rest (mods, setup, 50 turns of AI autoplay with a survey every 10 turns, OUCHI
+    human as the largest house) is kept as checked in.
+    """
+    data = json.loads(SCENARIO.read_text(encoding="utf-8"))
     steps = data["steps"]
     start = next(i for i, step in enumerate(steps) if step["action"] == "start_game")
-    # The driver on main has no allow_human_elimination option, so the human
-    # seat is the largest house (Ouchi) as in the baseline; the rest is AI autoplay.
-    steps.insert(start + 1, {"action": "ui_lua", "state_name": "InGame", "code": lua_start_check(report)})
-    steps.append({"action": "ui_lua", "state_name": "InGame", "code": SURVIVORS})
-    data["name"] = ("JAC Japan map 15 km prosperous 1534 start: start-state check, then 50 turns of AI "
-                    "autoplay (OUCHI human) with a survey every 10 turns and the survivors")
+    steps[start + 1]["code"] = lua_start_check(report)
+    steps[-1]["code"] = SURVIVORS
     SCENARIO.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

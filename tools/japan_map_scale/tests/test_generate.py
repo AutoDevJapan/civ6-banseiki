@@ -559,7 +559,7 @@ class GeneratedMapTests(unittest.TestCase):
         mod = g.MOD.parent / "JAC_PoC_CustomCivs"
         players = [row.attrib for filename in ("JAC_CustomCivs_Players.xml", "JAC_Japan1534_Players.xml")
                    for row in ET.parse(mod / "Config" / filename).getroot().findall("./Players/Row")]
-        icons = {row.attrib["Name"] for filename in ("JAC_CustomCivs_Icons.xml", "JAC_Japan1534_Icons.xml")
+        icons = {row.attrib["Name"] for filename in ("JAC_CustomCivs_Icons.xml", "JAC_Japan1534_Icons.xml", "JAC_Crests_Icons.xml")
                  for row in ET.parse(mod / "Data" / filename).getroot().findall("./IconDefinitions/Row")}
         self.assertEqual(len(players), 22)
         for seat in g.SEATS:

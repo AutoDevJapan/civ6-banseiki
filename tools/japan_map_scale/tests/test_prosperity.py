@@ -32,10 +32,13 @@ class ProsperityPlanTests(unittest.TestCase):
                 with self.subTest(city=c["id"]):
                     self.assertEqual([u["where"] for u in c["units"]].count("center"), 1)
                     self.assertGreaterEqual(c["pop_15km"], 2)
-                    self.assertLessEqual(c["pop_15km"], max(2, c["tiles_15km"] - 1))
+                    # owned land tiles minus the centre and mountains
+                    self.assertLessEqual(c["pop_15km"], max(2, c["land_15km"]))
                     self.assertEqual(c["capital"], "BUILDING_PALACE" in c["city_buildings"])
                     # a citizen or a district occupies a tile
-                    self.assertLessEqual(c["pop_15km"] + len(c["districts"]), max(2, c["tiles_15km"] - 1))
+                    self.assertLessEqual(c["pop_15km"] + len(c["districts"]), max(2, c["land_15km"]))
+                    # one improvement per worked tile (population minus districts)
+                    self.assertLessEqual(sum(c["improvements"].values()), c["pop_15km"] - len(c["districts"]))
 
     def test_only_buildings_and_units_kept_by_the_sengoku_trees(self):
         buildings = {"BUILDING_PALACE", "BUILDING_WALLS", "BUILDING_GRANARY", "BUILDING_MARKET",

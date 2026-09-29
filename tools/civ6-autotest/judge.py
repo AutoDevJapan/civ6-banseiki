@@ -102,6 +102,16 @@ def _jac_error_line(line: str) -> bool:
     )
 
 
+# UI.DataError texts from official CivilizationIcon.lua:62 and LoadScreen.lua:218/:248.
+MISSING_TEXTURE_MARKERS = ("Could not find icon", "We are lacking a texture",
+                           "Failed to load background image texture")
+
+
+def _missing_textures(lua: str) -> list[str]:
+    return [line for line in lua.splitlines()
+            if "JAC" in line and any(marker in line for marker in MISSING_TEXTURE_MARKERS)]
+
+
 def _runtime_errors(lua: str) -> list[str]:
     lines = lua.splitlines()
     found = []
@@ -376,7 +386,9 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
             raise ValueError(f"Missing log: {name}")
     jac_errors = [line for line in logs["Lua.log"].splitlines() if _jac_error_line(line)]
     runtime_errors = _runtime_errors(logs["Lua.log"])
-    missing = [line for line in logs["Lua.log"].splitlines() if TEXTURE_MISSING.search(line)]
+    # One check for #54 (icons) and #55 (leader textures): a JAC name in either kind of missing-art message.
+    missing = [line for line in logs["Lua.log"].splitlines()
+               if TEXTURE_MISSING.search(line) or _missing_textures(line)]
     checks = [
         Check("Generic: [JAC_POC] errors", not jac_errors, f"{len(jac_errors)} matching lines"),
         Check("Generic: JAC Runtime Error", not runtime_errors, f"{len(runtime_errors)} matching stack traces"),

@@ -86,9 +86,9 @@ def front_end() -> None:
 def icons() -> None:
     root = ET.Element("GameInfo")
     defs = ET.SubElement(root, "IconDefinitions")
+    # Civilization icons (house crests) live only in Data/JAC_Crests_Icons.xml:
+    # IconDefinitions is keyed by (Name, Atlas), so a second atlas row here would win.
     for index, seat in enumerate(EXTRA, 2):
-        ET.SubElement(defs, "Row", Name=f"ICON_{civ_id(seat.slug)}",
-                      Atlas="ICON_ATLAS_CIVILIZATIONS", Index="12")
         ET.SubElement(defs, "Row", Name=f"ICON_{leader_id(seat.slug)}",
                       Atlas="ICON_ATLAS_JAC_LEADERS", Index=str(index))
     write_xml(MOD / "Data/JAC_Japan1534_Icons.xml", root)

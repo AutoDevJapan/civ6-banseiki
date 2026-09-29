@@ -360,12 +360,14 @@ def build() -> dict:
             rec = info15["rec"]
             flat = max(0, rec["tiles"] - 1 - rec["mountain"] - rec["hills"] - rec["forest"])
             worked = max(0, plan["pop"] - len(plan["districts"]))
-            farms = min(flat, worked)
-            mines = min(rec["hills"], rec.get("res:RESOURCE_IRON", 0) + worked - farms)
+            # one improvement per worked tile: iron hills first, then flat farms, then hill mines
+            iron = min(rec["hills"], rec.get("res:RESOURCE_IRON", 0), worked)
+            farms = min(flat, worked - iron)
+            mines = min(rec["hills"], worked - farms)
             plans.append({
                 "id": city["id"], "name": city["name"], "capital": city["capital"],
                 "importance": plan["importance"], "target_pop": plan["target_pop"],
-                "tiles_15km": rec["tiles"], "tiles_20km": info20["rec"]["tiles"],
+                "tiles_15km": rec["tiles"], "tiles_20km": info20["rec"]["tiles"], "land_15km": plan["land"],
                 "pop_15km": plan["pop"],
                 "pop_20km": city_plan(slug, city, info20["rec"], info20["coastal"])["pop"],
                 "option2_pop_15km": max(2, min(4, plan["land"])),
