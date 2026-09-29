@@ -164,6 +164,13 @@ def _database_errors(database: str) -> list[str]:
 
 def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
     modding = logs["Modding.log"]
+    lua_lines = logs["Lua.log"].splitlines()
+    congress_paths = re.compile(
+        r"WorldCongress|CongressButton|ActionPanel_Expansion2|GovernmentScreen_Expansion2|"
+        r"GreatPeoplePopup_Expansion2|DiplomacyRibbon_Expansion2|DiplomacyActionView_Expansion2", re.I)
+    congress_errors = [line for index, line in enumerate(lua_lines)
+                       if ("Runtime Error" in line or "UI.DataError" in line)
+                       and congress_paths.search(_error_context(lua_lines, index))]
 
     own = re.compile(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431", re.I)
 
@@ -195,6 +202,8 @@ def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
         Check("Japan map: Database.log", not database_errors,
               f"{len(database_errors)} JAC-related database errors"),
         Check("Japan map: Modding.log", not errors, f"{len(errors)} JAC-related modding errors"),
+        Check("Japan map: GS Congress paths", not congress_errors,
+              f"{len(congress_errors)} World Congress-related UI or gameplay errors"),
     ]
 
 
