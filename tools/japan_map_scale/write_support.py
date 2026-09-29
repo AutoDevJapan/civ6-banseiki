@@ -78,14 +78,14 @@ def text() -> None:
         "Может входить во владения других держав без договора об открытых границах.")
     add("LOC_JAC_DIPLO_MODIFIER_1534_FEUD",
         "Old feud from 1534", "1534年の因縁", "Давняя вражда 1534 года")
-    # Access level source of the feud houses (write_feuds.py), shown on the diplomacy screen's Access Level tab.
-    add("LOC_JAC_VIZSOURCE_1534_FEUD",
-        "Watching old rivals since 1534", "1534年からの宿敵の見張り", "Надзор за давними врагами с 1534 года")
-    add("LOC_JAC_VIZSOURCE_ACTION_1534_FEUD",
-        "Start as a house with a 1534 feud.", "1534年の因縁を持つ家で始める。",
-        "Начать за дом с враждой 1534 года.")
-    add("LOC_JAC_GOSSIP_SOURCE_1534_FEUD",
-        "Our watchers report that", "見張りの者の知らせでは、", "Наши наблюдатели сообщают, что")
+    # Access level source of every house toward every other (write_feuds.py), shown on the diplomacy screen's Access Level tab.
+    add("LOC_JAC_VIZSOURCE_1534_ACCESS",
+        "Word travels between the houses", "諸家のあいだを行き交う噂", "Слухи, ходящие между домами")
+    add("LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
+        "Start on the 1534 Japan map.", "1534年の日本マップで始める。",
+        "Начать на карте Японии 1534 года.")
+    add("LOC_JAC_GOSSIP_SOURCE_1534_ACCESS",
+        "Word going around says that", "諸家に伝わる噂では、", "Ходят слухи, что")
     write_xml(MOD / "Text" / "JAC_JapanMapScale_Text.xml", root)
 
 

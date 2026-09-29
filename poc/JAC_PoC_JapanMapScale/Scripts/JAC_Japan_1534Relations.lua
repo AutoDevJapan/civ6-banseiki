@@ -1,6 +1,7 @@
 -- 日本マップ：1534年の同盟・婚姻・主従と交戦を、新規ゲームの開始時に1回だけ外交状態へ反映する。
 -- 元データ：documents/spec/data/japan-1534-relations.json（適用分だけをここに写す。テストで一致を確かめる）
--- 敵対・不仲（hostility）は、ここでは出会い済みにするだけ。「1534年の因縁」の好感度減点は Data/JAC_Japan_Feuds.xml（勢力別の特性の修正値）が担う。
+-- 22勢力は開始時にすべて互いに出会い済みにする（固定キャラだけが出る日本マップなので、全員が互いを知っている）。
+-- 敵対・不仲（hostility）は、ここでは何もしない。「1534年の因縁」の好感度減点と、全勢力の外交アクセスレベル +1 は Data/JAC_Japan_Feuds.xml が担う。
 -- 史実の領土の日本マップだけで読み込まれる（modinfo）。開拓者からの2種では何も適用しない。
 
 local PROPERTY_KEY = "JAC_JAPAN_1534_RELATIONS"
@@ -45,6 +46,12 @@ local function Apply()
 		return
 	end
 	local players = MajorPlayersByFaction()
+	-- 全員を互いに出会い済みにする（両方向。新規ゲームの開始時に1回だけ）
+	for _, a in pairs(players) do
+		for _, b in pairs(players) do
+			if a ~= b then Players[a]:GetDiplomacy():SetHasMet(b) end
+		end
+	end
 	local applied, missing, failed = 0, 0, 0
 	for _, relation in ipairs(RELATIONS) do
 		local a, b, kind, id = players[relation[1]], players[relation[2]], relation[3], relation[4]
@@ -53,13 +60,11 @@ local function Apply()
 			Log("missing player " .. id)
 		else
 			local diploA, diploB = Players[a]:GetDiplomacy(), Players[b]:GetDiplomacy()
-			diploA:SetHasMet(b)
-			diploB:SetHasMet(a)
 			local ok, err
 			if kind == "war" then
 				ok, err = pcall(function() diploA:DeclareWarOn(b, WarTypes.FORMAL_WAR, true) end)
 			elseif kind == "hostility" then
-				ok = true -- 出会い済みにするのみ。減点は修正値が担う
+				ok = true -- 何もしない。減点は修正値が担う
 			else
 				-- ponytail: 同盟・婚姻・主従・友好はすべて友好宣言で近似する。期限（30ターン）で切れる
 				ok, err = pcall(function()
@@ -76,7 +81,7 @@ local function Apply()
 			end
 		end
 	end
-	-- 出会い済みにした相手へのアクセスレベル（因縁の家の +1。Data/JAC_Japan_Feuds.xml）を開始ターンから反映する。
+	-- 出会い済みにした相手へのアクセスレベル（全勢力の +1。Data/JAC_Japan_Feuds.xml）を開始ターンから反映する。
 	-- 公式シナリオも出会い・代表団を設定した後に呼ぶ（DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1336〜:1339）
 	for _, id in pairs(players) do
 		Players[id]:GetDiplomacy():RecheckVisibilityOnAll()

@@ -100,32 +100,32 @@
     <Row Tag="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" Language="ru_RU">
       <Text>Давняя вражда 1534 года</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_1534_FEUD" Language="en_US">
-      <Text>Watching old rivals since 1534</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_1534_ACCESS" Language="en_US">
+      <Text>Word travels between the houses</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_1534_FEUD" Language="ja_JP">
-      <Text>1534年からの宿敵の見張り</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_1534_ACCESS" Language="ja_JP">
+      <Text>諸家のあいだを行き交う噂</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_1534_FEUD" Language="ru_RU">
-      <Text>Надзор за давними врагами с 1534 года</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_1534_ACCESS" Language="ru_RU">
+      <Text>Слухи, ходящие между домами</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_FEUD" Language="en_US">
-      <Text>Start as a house with a 1534 feud.</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" Language="en_US">
+      <Text>Start on the 1534 Japan map.</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_FEUD" Language="ja_JP">
-      <Text>1534年の因縁を持つ家で始める。</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" Language="ja_JP">
+      <Text>1534年の日本マップで始める。</Text>
     </Row>
-    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_FEUD" Language="ru_RU">
-      <Text>Начать за дом с враждой 1534 года.</Text>
+    <Row Tag="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" Language="ru_RU">
+      <Text>Начать на карте Японии 1534 года.</Text>
     </Row>
-    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_FEUD" Language="en_US">
-      <Text>Our watchers report that</Text>
+    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" Language="en_US">
+      <Text>Word going around says that</Text>
     </Row>
-    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_FEUD" Language="ja_JP">
-      <Text>見張りの者の知らせでは、</Text>
+    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" Language="ja_JP">
+      <Text>諸家に伝わる噂では、</Text>
     </Row>
-    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_FEUD" Language="ru_RU">
-      <Text>Наши наблюдатели сообщают, что</Text>
+    <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" Language="ru_RU">
+      <Text>Ходят слухи, что</Text>
     </Row>
   </LocalizedText>
 </GameData>

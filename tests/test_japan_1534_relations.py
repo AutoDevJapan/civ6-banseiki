@@ -159,7 +159,7 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertEqual(set(strings), set(mods))  # no row -> "Unknown Reason" on the diplomacy screen
         for row in strings.values():
             self.assertEqual((row["Context"], row["Text"]), ("Sample", write_feuds.SAMPLE_TAG))
-        self.assertNotIn("SHIMAZU", FEUDS.read_text(encoding="utf-8"))  # friendship is not a feud
+        self.assertNotIn("FEUD_SHIMAZU", FEUDS.read_text(encoding="utf-8"))  # friendship is not a feud
         # the checked-in file is what the generator writes
         fresh = write_feuds.build()
         ET.indent(fresh, space="  ")
@@ -168,10 +168,10 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertIn(write_feuds.TEXT_TAG, text)
         self.assertIn("1534年の因縁", text)
 
-    def test_feud_houses_start_with_limited_access_so_reasons_are_not_unknown(self):
+    def test_every_major_starts_with_limited_access_so_reasons_are_not_unknown(self):
         # At access level None the engine hides every reason, official ones too ("Unknown Reason",
-        # Civilopedia_Concepts_Text.xml:771). Each feud house gets +1 the way Printing grants it
-        # (Technologies.xml:546-616): MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY on its trait + a source row.
+        # Civilopedia_Concepts_Text.xml:771). All 22 houses get +1 the way Printing grants it
+        # (Technologies.xml:546-616): MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY on one trait + a source row.
         root = ET.parse(FEUDS).getroot()
         mod = write_feuds.ACCESS_MODIFIER
         rows = [row.attrib for row in root.findall("./Modifiers/Row") if row.attrib["ModifierId"] == mod]
@@ -180,11 +180,12 @@ class Japan1534RelationsTests(unittest.TestCase):
                 if row.attrib["ModifierId"] == mod}
         self.assertEqual(args, {"Amount": "1", "Source": write_feuds.ACCESS_SOURCE,
                                 "SourceType": "DIPLO_SOURCE_ALL_NAMES"})
-        feud_traits = {row.attrib["TraitType"] for row in root.findall("./CivilizationTraits/Row")}
-        holders = {row.attrib["TraitType"] for row in root.findall("./TraitModifiers/Row")
-                   if row.attrib["ModifierId"] == mod}
-        self.assertEqual(holders, feud_traits)  # every house whose AI carries a feud, both sides
-        self.assertEqual(len(holders), len({c for p in write_feuds.feud_pairs() for c in p}))
+        holders = {row.attrib["CivilizationType"] for row in root.findall("./CivilizationTraits/Row")
+                   if row.attrib["TraitType"] == write_feuds.ACCESS_TRAIT}
+        self.assertEqual(holders, {f"CIVILIZATION_JAC_{f}" for f in self.data["factions"]})
+        self.assertEqual(len(holders), 22)
+        self.assertEqual([(r.attrib["TraitType"], r.attrib["ModifierId"]) for r in root.findall("./TraitModifiers/Row")
+                          if r.attrib["ModifierId"] == mod], [(write_feuds.ACCESS_TRAIT, mod)])
         sources = [row.attrib for row in root.findall("./DiplomaticVisibilitySources/Row")]
         self.assertEqual([s["VisibilitySourceType"] for s in sources], [write_feuds.ACCESS_SOURCE])
         text = (MOD / "Text/JAC_JapanMapScale_Text.xml").read_text(encoding="utf-8")
@@ -194,7 +195,26 @@ class Japan1534RelationsTests(unittest.TestCase):
                 self.assertIn(f'Tag="{tag}" Language="{lang}"', text)
         # The source must not borrow an official row that the Sengoku tree removes (SOURCE_TECH = Printing).
         self.assertNotIn("PrereqTech", sources[0])
-        self.assertIn("RecheckVisibilityOnAll()", LUA.read_text(encoding="utf-8"))
+        lua = LUA.read_text(encoding="utf-8")
+        self.assertIn("RecheckVisibilityOnAll()", lua)
+        # everyone meets everyone once at new-game start (not a per-relation side effect)
+        self.assertRegex(lua, r"for _, a in pairs\(players\) do\s+for _, b in pairs\(players\) do\s+"
+                              r"if a ~= b then Players\[a\]:GetDiplomacy\(\):SetHasMet\(b\) end")
+        self.assertLess(lua.index("SetHasMet(b) end"), lua.index("for _, relation in ipairs(RELATIONS)"))
+
+    def test_ruleset_shares_ally_vision_by_default(self):
+        config = (ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml").read_text(encoding="utf-8")
+        row = re.search(r'<Row [^>]*ConfigurationId="GAME_ALLIES_SHARE_VISIBILITY"[^>]*/>', config).group(0)
+        self.assertIn('DefaultValue="1"', row)
+
+    def test_sengoku_tree_keeps_the_printing_access_bonus(self):
+        sql = (ROOT / "poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8")
+        tech = "TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS"
+        move = f"UPDATE TechnologyModifiers SET TechnologyType='{tech}'"
+        self.assertIn(move, sql)
+        self.assertIn("PRINTING_ADD_DIPLO_VISIBILITY", sql)
+        self.assertIn(f"UPDATE DiplomaticVisibilitySources SET PrereqTech='{tech}'", sql)
+        self.assertLess(sql.index(move), sql.index("DELETE FROM Technologies WHERE"))
 
     def test_feud_ui_scenario_rejects_unknown_reason_rows(self):
         path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-feud-ui.json"

@@ -17,7 +17,8 @@
 | 交戦中 | 双方 `SetHasMet` のあと `DeclareWarOn(相手, WarTypes.FORMAL_WAR, true)` | 公式シナリオと同じ。下記 |
 | 同盟・婚姻・主従 | 双方 `SetHasMet` のあと、双方から `SetHasDeclaredFriendship(相手, true)`（暫定） | DLL の Lua バインディングにある。公式の使用例はないため要実機確認 |
 | 友好（島津・琉球。R19） | 同盟と同じく双方 `SetHasDeclaredFriendship`（オーナー判断 4a） | 同上 |
-| 敵対・不仲（7組） | 双方 `SetHasMet` のみ。好感度の減点は下記の修正値 | 下記 |
+| 敵対・不仲（7組） | Lua では何もしない。好感度の減点は下記の修正値 | 下記 |
+| 全勢力の出会い | 開始時に1回だけ、22家すべてが互いに `SetHasMet`（両方向）。固定キャラだけが出る日本マップなので、全員が互いを知っている（オーナー判断 2026-09-29・Discord G）。ロード時は再適用しない | `Apply` の先頭。下記 |
 
 - 同盟を友好宣言で近似したのは、Civ6 の同盟を Lua で結ぶ手段が `SetPermanentAlliance`（解消できない永久同盟）しかないため。1534年の同盟は数年で崩れる（R02 は1537年に破綻）ので、永久同盟は採らない。友好宣言は標準で30ターンで切れ、その後は AI の判断に任せる（暫定）
 - 主従は Civ6 に対応する外交状態がない。友好宣言で近似し、主従そのものは SSOT 9 の関係宣言（従属国など）が実装されたときに置き換える（TODO）
@@ -39,10 +40,10 @@
 
 開始時に Civ6 の「非難」や「不満」を置く API はないため、公式のアジェンダと同じ仕組みで AI の好感度に固定の減点を付ける。外交画面の「関係」欄に「-10 1534年の因縁」の行が出る。
 
-- 仕組み：勢力別の特性 `TRAIT_JAC_1534_FEUD_<勢力>` を、その勢力の文明に `CivilizationTraits` で付け、特性に `MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER` の修正値 `JAC_1534_FEUD_<自分>_<相手>` を `TraitModifiers` で結ぶ。修正値の `SubjectRequirementSet`（相手プレイヤーへの条件）は「相手の文明が <相手>」で、`REQUIREMENT_PLAYER_TYPE_MATCHES` + `CivilizationType` を使う。理由の文言は `SimpleModifierDescription` = `LOC_JAC_DIPLO_MODIFIER_1534_FEUD`（「1534年の因縁」）。さらに修正値ごとに `ModifierStrings`（`Context="Sample"`、`Text=LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL` = `{diplomaticReason}`）の行が要る。公式は全エージェンダ修正値に付けている（`Base/Assets/Gameplay/Data/Agendas.xml:2296`〜`:2370`）。この行が無いと `GetDiplomaticModifiers` の `Text` が `LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON`（「理由不明」）になり、外交画面は灰色でそう表示する（`DiplomacyActionView.lua:915`）。2026-09-29 の実機（15 km 史実マップ、1〜2ターン目）で、-10 の行は出たが `Text` が Unknown Reason だった。公式の修正値（今川→北条の -4・9、武田→北条の -4「First impressions of you」）まで Unknown Reason になるのは、データの欠落ではなく公式の仕様：見る側のアクセスレベルが「なし」のあいだは、相手の好感度の理由をすべて伏せる（「Limited（限定的）の外交可視性を得ると、相手のあなたへの評価についての情報が分かる」`Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:771`、外交画面の説明「アクセスレベルを上げると、ここに追加の情報が出る」`Base/Assets/Text/en_US/DiplomacyPanel_Text.xml:177`）。出会ったばかりの家はアクセスレベルが「なし」で、戦国パックは公式の技術を消すので活版印刷の +1（`TECH_PRINTING` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）も得られない（2026-09-29 の実機ログ `DiplomacySummary.csv` も全行 Visibility=0）。そこで因縁のある9家に、活版印刷と同じ修正値 `MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY`（`Amount`=1、`Source`=`SOURCE_JAC_1534_FEUD`、`SourceType`=`DIPLO_SOURCE_ALL_NAMES`）を因縁の特性に付け、出会い済みの全勢力へのアクセスレベルを1段上げる（文明の特性に付ける前例：モンゴルの `TRAIT_TRADING_POST_DIPLO_VISIBILITY`、`DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:178`〜`:179`・`:352`〜`:353`・`:620`〜`:629`・`:1100`〜`:1102`）。アクセスレベルの画面に出る出所の行は `DiplomaticVisibilitySources` の `SOURCE_JAC_1534_FEUD`（「1534年からの宿敵の見張り」）。開始ターンから効くよう、Lua は出会い済みにした後で `RecheckVisibilityOnAll` を呼ぶ（公式：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1336`〜`:1339`）。副作用：9家は出会った相手の政体と自分への評価の理由が見え、限定的の噂を受け取る。好感度の数値は変わらない。代表団を置く案（`SetHasDelegationAt`）は好感度に +3（`STANDARD_DIPLOMATIC_DELEGATION`、`Base/Assets/Gameplay/Data/Leaders.xml:2756`〜`:2765`）が付いて因縁を薄めるので採らない。FireTuner の `GetDiplomaticModifiers` の `Text` も同じ理由で伏せられるので、シナリオの点数の判定（-10 の行の有無）はそのまま残し、文言とアクセスレベルは `japan-1534-feud-ui.json` が外交画面の表示で確かめる
+- 仕組み：勢力別の特性 `TRAIT_JAC_1534_FEUD_<勢力>` を、その勢力の文明に `CivilizationTraits` で付け、特性に `MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER` の修正値 `JAC_1534_FEUD_<自分>_<相手>` を `TraitModifiers` で結ぶ。修正値の `SubjectRequirementSet`（相手プレイヤーへの条件）は「相手の文明が <相手>」で、`REQUIREMENT_PLAYER_TYPE_MATCHES` + `CivilizationType` を使う。理由の文言は `SimpleModifierDescription` = `LOC_JAC_DIPLO_MODIFIER_1534_FEUD`（「1534年の因縁」）。さらに修正値ごとに `ModifierStrings`（`Context="Sample"`、`Text=LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL` = `{diplomaticReason}`）の行が要る。公式は全エージェンダ修正値に付けている（`Base/Assets/Gameplay/Data/Agendas.xml:2296`〜`:2370`）。この行が無いと `GetDiplomaticModifiers` の `Text` が `LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON`（「理由不明」）になり、外交画面は灰色でそう表示する（`DiplomacyActionView.lua:915`）。2026-09-29 の実機（15 km 史実マップ、1〜2ターン目）で、-10 の行は出たが `Text` が Unknown Reason だった。公式の修正値（今川→北条の -4・9、武田→北条の -4「First impressions of you」）まで Unknown Reason になるのは、データの欠落ではなく公式の仕様：見る側のアクセスレベルが「なし」のあいだは、相手の好感度の理由をすべて伏せる（「Limited（限定的）の外交可視性を得ると、相手のあなたへの評価についての情報が分かる」`Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:771`、外交画面の説明「アクセスレベルを上げると、ここに追加の情報が出る」`Base/Assets/Text/en_US/DiplomacyPanel_Text.xml:177`）。出会ったばかりの家はアクセスレベルが「なし」で、戦国パックは公式の技術を消すので活版印刷の +1（`TECH_PRINTING` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）も得られない（2026-09-29 の実機ログ `DiplomacySummary.csv` も全行 Visibility=0）。そこで、この日本マップでは22家すべてに、活版印刷と同じ修正値 `MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY`（`Amount`=1、`Source`=`SOURCE_JAC_1534_ACCESS`、`SourceType`=`DIPLO_SOURCE_ALL_NAMES`）を、全22文明が持つ特性 `TRAIT_JAC_1534_ACCESS` に付け、出会い済みの全勢力へのアクセスレベルを「限定的」に上げる（オーナー判断 2026-09-29・Discord G。仮：推奨案で実装、確認待ち）。文明の特性に付ける前例：モンゴルの `TRAIT_TRADING_POST_DIPLO_VISIBILITY`、`DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:178`〜`:179`・`:352`〜`:353`・`:620`〜`:629`・`:1100`〜`:1102`。アクセスレベルの画面に出る出所の行は `DiplomaticVisibilitySources` の `SOURCE_JAC_1534_ACCESS`（「諸家のあいだを行き交う噂」）。開始ターンから効くよう、Lua は全員を出会い済みにした後で `RecheckVisibilityOnAll` を呼ぶ（公式：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1336`〜`:1339`）。好感度の数値は変わらない（理由の見える範囲が広がるだけ）。代表団を置く案（`SetHasDelegationAt`）は好感度に +3（`STANDARD_DIPLOMATIC_DELEGATION`、`Base/Assets/Gameplay/Data/Leaders.xml:2756`〜`:2765`）が付いて因縁を薄めるので採らない。FireTuner の `GetDiplomaticModifiers` の `Text` も同じ理由で伏せられるので、シナリオの点数の判定（-10 の行の有無）はそのまま残し、文言とアクセスレベルは `japan-1534-feud-ui.json` が外交画面の表示で確かめる
 - 減点は両側にかける（北条→武田と武田→北条）。7組で14個。値は -10（公式の別政体 -6、友好宣言中の非難などの範囲に合わせた）
 - 減衰しない：`InitialValue` だけを付け、`ReductionTurns` を付けない。公式の `AGENDA_SAME_GOVERNMENT`（`Base/Assets/Gameplay/Data/Agendas.xml:813`・`:2247`）と同じく、条件（相手がその文明）が成り立つ間は値が変わらない。時間で薄まる `STANDARD_DIPLOMACY_JOINT_WAR`（`Base/Assets/Gameplay/Data/Leaders.xml:3160`〜`:3177`、`ReductionTurns` = 20）とは別の作り。因縁が解消する仕組み（和睦の儀式など）は作らない（MVP）
-- 開始時から効く：修正値は特性の付与と同時に有効になるはず（要実機確認）。ただし AI が相手を知らないと表示されないため、Lua が7組を `SetHasMet` で出会い済みにする
+- 開始時から効く：修正値は特性の付与と同時に有効になるはず（要実機確認）。ただし AI が相手を知らないと表示されないため、Lua が22家すべてを互いに `SetHasMet` で出会い済みにする
 - 適用範囲：`Data/JAC_Japan_Feuds.xml` を `UpdateDatabase` で史実の領土の2種にだけ読み込む（開拓者からでは特性・修正値が存在しない）
 - 生成：`tools/japan_map_scale/write_feuds.py` が JSON の敵対（`hostility`、high・medium、開始日を含むもの）から生成する。テストが JSON・XML・modinfo の一致を確かめる
 
@@ -57,10 +58,10 @@
 
 シナリオ：`tools/civ6-autotest/scenarios/japan-1534-relations.json`（15 km・史実の領土、織田が人間、22勢力）、`japan-1534-feud-ui.json`（北条が人間。公式の入口で武田との外交画面を開き、関係欄のラベルを読んで「-10 1534年の因縁」を確かめ、スクリーンショット `hojo-takeda-diplomacy.png` を撮る）と、開拓者から版の `japan-1534-relations-settlers.json`（何も適用されないこと）
 
-1. 開始直後：`JAC_JAPAN_1534_RELATIONS` が開始ターンに `Applied=16`・`Failed=0`・`Missing=0` で残る
+1. 開始直後：`JAC_JAPAN_1534_RELATIONS` が開始ターンに `Applied=16`・`Failed=0`・`Missing=0` で残る。22家の全組（22×21）が出会い済みで、アクセスレベルが1以上
 2. 大内と大友が相互に交戦中
 3. 北条・今川、大内・毛利、伊達・蘆名、足利・六角、島津・琉球が、双方向に `DIPLO_STATE_DECLARED_FRIEND`（`SetHasDeclaredFriendship` が効くかの確認を兼ねる）
-4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10 の行がある（点数で判定。文言は `japan-1534-feud-ui.json`）。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面の「関係」欄に「-10 1534年の因縁」が出ることは `japan-1534-feud-ui.json` が読み取る。同じシナリオは、開く前に北条の武田へのアクセスレベルが1以上であること、関係欄に「理由不明（Unknown Reason）」の行が1つも無いことも確かめる（読み取れなかった場合は、スクリーンショットを目で確認する。「理由不明」が出たら、まずアクセスレベルの画面に「1534年からの宿敵の見張り」があるかを見て、次に `ModifierStrings` の行を見直す）
+4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10 の行がある（点数で判定。文言は `japan-1534-feud-ui.json`）。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面の「関係」欄に「-10 1534年の因縁」が出ることは `japan-1534-feud-ui.json` が読み取る。同じシナリオは、開く前に北条の武田へのアクセスレベルが1以上であること、関係欄に「理由不明（Unknown Reason）」の行が1つも無いことも確かめる（読み取れなかった場合は、スクリーンショットを目で確認する。「理由不明」が出たら、まずアクセスレベルの画面に「諸家のあいだを行き交う噂」があるかを見て、次に `ModifierStrings` の行を見直す）
 5. 1ターン進めても 2〜4 が保たれる
 6. セーブ → メニュー → ロード後、プロパティの `Turn` が開始ターンのまま（再適用されていない）で、2〜4 が保たれる
 
@@ -72,6 +73,15 @@
 2. 2a：同盟・婚姻・主従は友好宣言で近似する（実装済み）
 3. 3a：史実の関係は史実の領土の日本マップにだけ適用し、開拓者からの2種には適用しない
 4. 4a：島津と琉球を友好（友好宣言）で始める。1534年時点の直接の文献は未確認（`research/japan-1534-relations.md` R19）
+
+## 全勢力の出会いと外交の見え方（オーナー判断 2026-09-29・Discord G）
+
+「日本マップには固定キャラだけが出るので、全員が互いを知っている。最終的に同盟国は視界を共有する」。
+
+1. 出会い：上記のとおり、開始時に22家が互いに出会い済み
+2. アクセスレベル：上記の `TRAIT_JAC_1534_ACCESS`（全22家に「限定的」）。関係の理由（「1534年の因縁」を含む）が最初から見える。仮：推奨案で実装、確認待ち
+3. 同盟国の視界共有：ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値は 1（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`、`AlliesShareVisibility`）。追加の実装は不要。テストが既定値 1 を確かめる
+4. 戦国パックの技術・制度ツリーは公式の技術をすべて消すので、`TECH_PRINTING` に付いた「アクセスレベル +1」（`TechnologyModifiers` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）と、出所の行 `SOURCE_TECH`（`Base/Assets/Gameplay/Data/Gossip.xml:75`、`PrereqTech=TECH_PRINTING`）が外部キーの連鎖削除で無くなる。`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql` が、削除の前に両方を戦国の技術 T05「街道と荷駄」`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` へ付け替える（全地図で有効）。理由：荷駄・使者が街道を通って諸家の噂を運ぶ、情報に最も近い戦国の技術で、交易商人（`UNIT_TRADER`）も解放する。公式でも交易路は別の出所 `SOURCE_TRADER` としてアクセスレベルを上げる。序盤の第I期（列2）なので、日本マップ以外でも早めに理由が見え始める。テストが付け替えを確かめる
 
 ## 未検証・注意
 
