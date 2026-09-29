@@ -177,7 +177,7 @@ class GeneratedMapTests(unittest.TestCase):
                     "SELECT ID,Type,Name,Value FROM CityAttributes")),
                     sorted((city["plot"], "Population", "Initial", "2")
                            for city in cities.values()))
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM Units").fetchone()[0], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM Units").fetchone()[0], 22)  # one garrison per capital
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM PlotOwners").fetchone()[0], item["land_tiles"])
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Plots p LEFT JOIN PlotOwners o ON p.ID=o.ID WHERE p.ContinentType='CONTINENT_ASIA' AND o.ID IS NULL").fetchone()[0], 0)
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM Cities c JOIN Plots p ON c.Plot=p.ID WHERE p.ContinentType!='CONTINENT_ASIA' OR p.IsImpassable!=0").fetchone()[0], 0)
@@ -392,7 +392,9 @@ class GeneratedMapTests(unittest.TestCase):
                 self.assertEqual([row[0] for row in recorder.calls[2][1][:22]], capital_plots)
                 self.assertIn("BUILDING_PALACE", recorder.calls[3][0])
                 self.assertEqual([row[0] for row in recorder.calls[3][1]], capital_plots)
-                self.assertEqual([row[0] for row in recorder.calls[4][1][:22]], capital_plots)
+                self.assertIn("UNIT_WARRIOR", recorder.calls[4][0])
+                self.assertEqual([row[2] for row in recorder.calls[4][1]], capital_plots)
+                self.assertEqual([row[0] for row in recorder.calls[5][1][:22]], capital_plots)
 
     def test_every_capital_and_only_capitals_have_a_palace(self):
         for item in self.manifest:
@@ -401,6 +403,11 @@ class GeneratedMapTests(unittest.TestCase):
                     "SELECT Plot FROM Buildings WHERE BuildingType='BUILDING_PALACE'")}
                 self.assertEqual(palaces, {city["plot"] for city in item["cities"] if city["capital"]})
                 self.assertEqual(len(palaces), 22)
+                garrisons = db.execute("SELECT UnitType, Owner, Plot FROM Units").fetchall()
+                self.assertEqual({(owner, plot) for _, owner, plot in garrisons},
+                                 {(g.SEAT_INDEX[city["owner"]], city["plot"])
+                                  for city in item["cities"] if city["capital"]})
+                self.assertEqual({unit for unit, _, _ in garrisons}, {"UNIT_WARRIOR"})
 
     def test_hex_distance_matches_neighbours(self):
         grid = g.HexGrid(40, 20, 20, 0.0, 0.0)
