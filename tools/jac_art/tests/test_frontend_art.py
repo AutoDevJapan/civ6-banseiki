@@ -60,8 +60,9 @@ class FrontEndArtTests(unittest.TestCase):
         self.assertEqual(action_files(modinfo, "InGameActions", "UpdateArt"),
                          {"JAC_PoC_CustomCivs.dep"})
 
-        players_files = action_files(modinfo, "FrontEndActions", "UpdateDatabase")
-        players = [row.attrib for file in players_files
+        player_paths = [node.text for node in modinfo.findall("./FrontEndActions/UpdateDatabase/File")]
+        players_files = set(player_paths)
+        players = [row.attrib for file in player_paths
                    for row in ET.parse(MOD / file).findall("./Players/Row")]
         self.assertEqual(len(players), 22)
         self.assertEqual(len({row["LeaderType"] for row in players}), 22)
@@ -69,6 +70,14 @@ class FrontEndArtTests(unittest.TestCase):
 
         self.assertTrue(BASE_ICONS.is_dir(), f"Civ6 icon XML missing: {BASE_ICONS}")
         mod_definitions, mod_atlases = icon_records(MOD / file for file in frontend_icons)
+        leader_atlases = mod_atlases["ICON_ATLAS_JAC_LEADERS"]
+        self.assertEqual({(int(row["IconsPerRow"]), int(row["IconsPerColumn"]))
+                          for row in leader_atlases}, {(8, 3)})
+        for index, player in enumerate(players):
+            leader = player["LeaderType"]
+            self.assertEqual(mod_definitions[player["LeaderIcon"]]["Index"], str(index))
+            self.assertEqual(player["Portrait"], f"{leader}_NEUTRAL")
+            self.assertEqual(player["PortraitBackground"], f"{leader}_BACKGROUND")
         base_definitions, base_atlases = icon_records(BASE_ICONS.glob("*.xml"),
                                                      allow_duplicates=True)
         dep = ET.parse(MOD / "JAC_PoC_CustomCivs.dep")
@@ -151,6 +160,8 @@ class FrontEndArtTests(unittest.TestCase):
             entry = row.find("./m_ChildCollections/Element/Element/m_Fields/m_Values/Element/m_EntryName")
             fallback_names[leader] = entry.attrib["text"]
         self.assertEqual(set(fallback_names), leaders)
+        for leader, entry in fallback_names.items():
+            self.assertEqual(entry, f"FALLBACK_NEUTRAL_JAC_{leader.removeprefix('LEADER_JAC_')}")
         fallback_package = MOD / "Platforms" / "Windows" / "BLPs" / "JAC_CustomCivs_Fallback.blp"
         self.assertTrue(fallback_package.is_file(), "build the ignored BLP packages first")
         self.assertEqual(package_textures(fallback_package, set(fallback_names.values())), [])
@@ -177,6 +188,11 @@ class FrontEndArtTests(unittest.TestCase):
                                  leaders - {"LEADER_JAC_ODA_NOBUHIDE", "LEADER_JAC_TAKEDA_NOBUTORA"})
             self.assertEqual({row[0] for row in loading_rows},
                              {row[0] for row in diplomacy_rows})
+            for leader, foreground, background in loading_rows:
+                self.assertEqual(foreground, f"{leader}_NEUTRAL")
+                self.assertEqual(background, f"{leader}_BACKGROUND")
+            for leader, background in diplomacy_rows:
+                self.assertEqual(background, f"{leader}_DIPLOMACY_BACKGROUND")
         leader_package = MOD / "Platforms" / "Windows" / "BLPs" / "JAC_CustomCivs_Leaders.blp"
         self.assertEqual(package_textures(leader_package, texture_names), [])
 

@@ -409,5 +409,8 @@
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="en_US"><Text>Tenka Fubu and Wide-Area Campaigns</Text></Row>
     <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE" Language="ru_RU"><Text>«Тэнка фубу» и походы широкого масштаба</Text></Row>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="ja_JP"><Text>政府の選択を記念する区域。自文明に1つだけ設置できる。この都市へのターン毎の忠誠心+8、隣接する区域へ隣接ボーナス+1。</Text></Replace>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="en_US"><Text>A district placed once in your empire to commemorate your government choices. Provides +8 Loyalty per turn to this city, and an increase of +1 to the adjacency bonuses being earned by any adjacent district.</Text></Replace>
+    <Replace Tag="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" Language="ru_RU"><Text>Район, построенный в вашей империи в память о решениях вашего правительства. Дает +8 лояльности за ход этому городу и +1 ко всем бонусам за соседство всем прилежащим районам.</Text></Replace>
   </LocalizedText>
 </GameInfo>

@@ -99,7 +99,8 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Calendar.xml",
-            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Unlocks.sql",
+            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
+            "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
             "Data/JAC_Sengoku_Icons.xml",
@@ -152,6 +153,17 @@ class SengokuTreeTests(unittest.TestCase):
             CREATE TABLE StartingCivics (Era TEXT, Civic TEXT);
             CREATE TABLE Policies (PolicyType TEXT PRIMARY KEY, PrereqCivic TEXT, PrereqTech TEXT);
             CREATE TABLE Projects (ProjectType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT);
+            CREATE TABLE DynamicModifiers (ModifierType TEXT PRIMARY KEY, EffectType TEXT);
+            CREATE TABLE Modifiers (ModifierId TEXT PRIMARY KEY, ModifierType TEXT);
+            CREATE TABLE CivicModifiers (CivicType TEXT, ModifierId TEXT);
+            CREATE TABLE GameModifiers (ModifierId TEXT PRIMARY KEY);
+            CREATE TABLE GreatPersonIndividualActionModifiers (GreatPersonIndividualType TEXT, ModifierId TEXT);
+            CREATE TABLE GoodyHutSubTypes (SubTypeGoodyHut TEXT PRIMARY KEY, ModifierID TEXT);
+            CREATE TABLE TraitModifiers (TraitType TEXT, ModifierId TEXT);
+            CREATE TABLE TechnologyModifiers (TechnologyType TEXT, ModifierId TEXT);
+            CREATE TABLE DiplomaticVisibilitySources (VisibilitySourceType TEXT PRIMARY KEY, PrereqTech TEXT);
+            INSERT INTO TechnologyModifiers VALUES ('TECH_PRINTING','PRINTING_ADD_DIPLO_VISIBILITY'),('TECH_PRINTING','PRINTING_BOOST_WRITING_TOURISM');
+            INSERT INTO DiplomaticVisibilitySources VALUES ('SOURCE_TECH','TECH_PRINTING'),('SOURCE_TRADER',NULL);
             INSERT INTO Technologies VALUES ('TECH_POTTERY','Pottery',NULL,25,'ERA_ANCIENT',0,NULL);
             INSERT INTO Civics VALUES ('CIVIC_CODE_OF_LAWS','Code of Laws',NULL,20,'ERA_ANCIENT',0,NULL);
             INSERT INTO Eras VALUES ('ERA_ANCIENT','Ancient',NULL),('ERA_CLASSICAL','Classical',NULL),('ERA_MEDIEVAL','Medieval',NULL),('ERA_RENAISSANCE','Renaissance',NULL);
@@ -183,6 +195,12 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
         starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
         self.assertEqual(starting_civics, ["CIVIC_JAC_SENGOKU_HOUSE_RULES"])
+        # Printing's +1 diplomatic access level moves to a Sengoku tech (the other Printing modifier is dropped)
+        self.assertEqual(db.execute("SELECT * FROM TechnologyModifiers").fetchall(),
+                         [("TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS", "PRINTING_ADD_DIPLO_VISIBILITY"),
+                          ("TECH_PRINTING", "PRINTING_BOOST_WRITING_TOURISM")])
+        self.assertEqual(db.execute("SELECT PrereqTech FROM DiplomaticVisibilitySources WHERE VisibilitySourceType='SOURCE_TECH'")
+                         .fetchone()[0], "TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS")
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Eras_XP2").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM ClimateParameters").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
