@@ -99,7 +99,8 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Calendar.xml",
-            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Unlocks.sql",
+            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
+            "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
             "Data/JAC_Sengoku_Icons.xml",
@@ -152,6 +153,13 @@ class SengokuTreeTests(unittest.TestCase):
             CREATE TABLE StartingCivics (Era TEXT, Civic TEXT);
             CREATE TABLE Policies (PolicyType TEXT PRIMARY KEY, PrereqCivic TEXT, PrereqTech TEXT);
             CREATE TABLE Projects (ProjectType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT);
+            CREATE TABLE DynamicModifiers (ModifierType TEXT PRIMARY KEY, EffectType TEXT);
+            CREATE TABLE Modifiers (ModifierId TEXT PRIMARY KEY, ModifierType TEXT);
+            CREATE TABLE CivicModifiers (CivicType TEXT, ModifierId TEXT);
+            CREATE TABLE GameModifiers (ModifierId TEXT PRIMARY KEY);
+            CREATE TABLE GreatPersonIndividualActionModifiers (GreatPersonIndividualType TEXT, ModifierId TEXT);
+            CREATE TABLE GoodyHutSubTypes (SubTypeGoodyHut TEXT PRIMARY KEY, ModifierID TEXT);
+            CREATE TABLE TraitModifiers (TraitType TEXT, ModifierId TEXT);
             CREATE TABLE TechnologyModifiers (TechnologyType TEXT, ModifierId TEXT);
             CREATE TABLE DiplomaticVisibilitySources (VisibilitySourceType TEXT PRIMARY KEY, PrereqTech TEXT);
             INSERT INTO TechnologyModifiers VALUES ('TECH_PRINTING','PRINTING_ADD_DIPLO_VISIBILITY'),('TECH_PRINTING','PRINTING_BOOST_WRITING_TOURISM');
