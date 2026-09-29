@@ -32,7 +32,7 @@ local function gameInfoTable(rows, key)
 end
 GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
-  GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD" } },
+  GameSpeeds = { [0] = { GameSpeedType = tables.Speed or "GAMESPEED_STANDARD" } },
   GameSpeed_Turns = gameInfoTable(tables.GameSpeed_Turns),
   Technologies = gameInfoTable(tables.Technologies, "TechnologyType"),
   Civics = gameInfoTable(tables.Civics, "CivicType"),
@@ -113,9 +113,9 @@ def tables() -> dict:
 
 @unittest.skipIf(lupa is None, "lupa is not installed")
 class HistoricalEventsTurnTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self, data: dict | None = None):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-        self.lua.execute(STUBS, self.lua.table_from(tables(), recursive=True),
+        self.lua.execute(STUBS, self.lua.table_from(data or tables(), recursive=True),
                          self.lua.table_from(CIVS), START_TURN)
         self.lua.execute((MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8"))
         self.g = self.lua.globals()
@@ -156,6 +156,34 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.run_turns(1, 30)
         self.assertEqual(self.boosts(), [(2, "tech", self.teppo, 1, 30)])
         self.assertTrue(any("player=1" in line and "boost=tech=error:" in line for line in self.g.LOG.values()))
+
+    def test_a_failed_boost_is_left_unrecorded_and_retried_next_turn(self):
+        self.g.FAIL_BOOST[1] = True
+        self.run_turns(1, 30)
+        self.assertIsNone(self.prop(1, "JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI"))
+        self.assertEqual(self.prop(2, "JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI"), 30)
+        self.g.FAIL_BOOST[1] = False
+        self.run_turns(31, 32)
+        self.assertEqual(self.boosts(), [(2, "tech", self.teppo, 1, 30), (1, "tech", self.teppo, 1, 31)])
+        self.assertEqual(self.prop(1, "JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI"), 31)
+
+    def test_resource_event_without_the_resources_mod_records_nothing(self):
+        self.run_turns(1, 49)  # Ashio copper (1550) is due on turn 49
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_EVENT_RESOURCES_JAC_EVENT_ASHIO_COPPER"))
+        self.assertIn("[JAC_EVENTS] resource event=JAC_EVENT_ASHIO_COPPER skipped=resources_mod_not_loaded",
+                      list(self.g.LOG.values()))
+
+    def test_calendar_stages_do_not_depend_on_row_order(self):
+        # Epic: 3 months/turn for 200 turns, then 2. Teppo (1543/8, 115 months) is turn 1 + ceil(115/3) = 40;
+        # walking the 2-month stage first would give 59.
+        data = tables()
+        data["Speed"] = "GAMESPEED_EPIC"
+        data["GameSpeed_Turns"].reverse()
+        self.setUp(data)
+        self.run_turns(1, 39)
+        self.assertEqual(self.boosts(), [])
+        self.run_turns(40, 40)
+        self.assertEqual(self.boosts(), [(1, "tech", self.teppo, 1, 40), (2, "tech", self.teppo, 1, 40)])
 
 
 if __name__ == "__main__":

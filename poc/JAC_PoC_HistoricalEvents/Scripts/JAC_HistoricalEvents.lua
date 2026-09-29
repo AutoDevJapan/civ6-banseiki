@@ -31,17 +31,29 @@ local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
 local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
 
 -- Month (1-12, optional) is the month of the Japanese calendar as the sources give it; turn 1 is month 1
--- of the start year. One standard turn is 4 months, coarser than the lunar/solar offset.
+-- of the start year.
+-- One standard turn is 4 months, coarser than the lunar/solar offset.
+-- Stage order: the engine walks a speed's rows in rowid order (GameSpeedTurnCollection, ORDER BY rowid in
+-- 01_GameplaySchema.sql), which Lua cannot see, and GameInfo iteration order is not guaranteed. Every
+-- calendar (GameSpeeds.xml and JAC_Sengoku_Calendar.xml) lists a speed's stages from the longest turn to the
+-- shortest, so sorting by MonthIncrement descending gives the same order deterministically.
+local STAGES = {}
+for row in GameInfo.GameSpeed_Turns() do
+	if row.GameSpeedType == SPEED then table.insert(STAGES, row) end
+end
+table.sort(STAGES, function(a, b)
+	if a.MonthIncrement ~= b.MonthIncrement then return a.MonthIncrement > b.MonthIncrement end
+	return a.TurnsPerIncrement < b.TurnsPerIncrement
+end)
+
 local function TurnForYear(year, month)
 	local target, months, turn = (year - START_YEAR) * 12 + (month or 1) - 1, 0, 1
-	for row in GameInfo.GameSpeed_Turns() do
-		if row.GameSpeedType == SPEED then
-			local span = row.TurnsPerIncrement * row.MonthIncrement
-			if months + span >= target then
-				return turn + math.max(0, math.ceil((target - months) / row.MonthIncrement))
-			end
-			months, turn = months + span, turn + row.TurnsPerIncrement
+	for _, row in ipairs(STAGES) do
+		local span = row.TurnsPerIncrement * row.MonthIncrement
+		if months + span >= target then
+			return turn + math.max(0, math.ceil((target - months) / row.MonthIncrement))
 		end
+		months, turn = months + span, turn + row.TurnsPerIncrement
 	end
 	return turn
 end
@@ -118,9 +130,10 @@ end
 -- and is nil here (live Lua.log, events-06: "JAC_HistoricalEvents.lua:118: function expected instead of nil"),
 -- so "has a boost" is read from GameInfo.Boosts, and HasBoostBeenTriggered is the gameplay call of
 -- AustraliaScenario.lua:556. The boost runs in pcall: an engine error is logged and does not stop the turn
--- loop for the other factions and events.
+-- loop for the other factions and events. Returns the log text and whether every boost went through;
+-- on an error the caller leaves the event unrecorded so the boost is retried next turn.
 local function BoostMissing(player, event)
-	local result = {}
+	local result, done = {}, true
 	local function try(kind, index, hasBoost, holder, has)
 		if index == nil or has then return end
 		local status
@@ -133,12 +146,13 @@ local function BoostMissing(player, event)
 				return "boosted"
 			end)
 			status = ok and err or ("error:" .. tostring(err))
+			if not ok then done = false end
 		end
 		table.insert(result, kind .. "=" .. status)
 	end
 	try("tech", event.tech, event.techBoost, player:GetTechs(), event.tech and player:GetTechs():HasTech(event.tech))
 	try("civic", event.civic, event.civicBoost, player:GetCulture(), event.civic and player:GetCulture():HasCivic(event.civic))
-	return table.concat(result, ",")
+	return table.concat(result, ","), done
 end
 
 local function Notify(event, playerID)
@@ -155,22 +169,28 @@ end
 -- Resources appear at the site the resources mod reserved (JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua,
 -- ExposedMembers.JAC_Resources; loaded only on the Japan maps). RevealSite is a no-op when the site is
 -- already revealed (by its own year/tech rule or an earlier event), so both paths agree on one tile.
+-- The Sengoku pack runs on any map under the Banseiki ruleset (SSOT 3.2), but reserved sites exist only on
+-- the Japan maps: without the resources mod the event places nothing and records nothing.
 local function PlaceResources(event)
 	local key = RESOURCES_PREFIX .. event.row.EventType
 	if #event.resources == 0 or Game:GetProperty(key) ~= nil then return end
 	local api = ExposedMembers and ExposedMembers.JAC_Resources
+	if not api then
+		Log(string.format("resource event=%s skipped=resources_mod_not_loaded", event.row.EventType))
+		return
+	end
 	local placed = {}
 	for _, row in ipairs(event.resources) do
-		if api then api.RevealSite(row.SiteId) end
+		api.RevealSite(row.SiteId)
 		local plot = nil
-		if api and api.IsRevealed(row.SiteId) then
+		if api.IsRevealed(row.SiteId) then
 			for _, site in ipairs(api.GetSites()) do
 				if site.id == row.SiteId then plot = site.plot end
 			end
 		end
 		if plot then table.insert(placed, plot) end
 		Log(string.format("resource event=%s site=%s plot=%s", event.row.EventType, row.SiteId,
-			plot and tostring(plot) or (api and "not_placed" or "resources_mod_not_loaded")))
+			plot and tostring(plot) or "not_placed"))
 	end
 	Game:SetProperty(key, placed)
 end
@@ -181,10 +201,10 @@ end
 local function Fire(event, player, playerID, civType, reason, turn)
 	local boostedKey = BOOSTED_PREFIX .. event.row.EventType
 	local announced = player:GetProperty(boostedKey) ~= nil
-	local boost = ""
+	local boost, done = "", true
 	if reason == "year" then
-		player:SetProperty(boostedKey, turn)
-		boost = BoostMissing(player, event)
+		boost, done = BoostMissing(player, event)
+		if done then player:SetProperty(boostedKey, turn) end
 	else
 		player:SetProperty(FIRED_PREFIX .. event.row.EventType, turn)
 		for _, row in ipairs(event.modifiers) do player:AttachModifierByID(row.ModifierId) end
@@ -194,7 +214,8 @@ local function Fire(event, player, playerID, civType, reason, turn)
 		if row.CivilizationType == civType then Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name) end
 	end
 	PlaceResources(event)
-	if not announced then Notify(event, playerID) end
+	-- A failed boost is retried next turn; announce once, when it goes through.
+	if not announced and done then Notify(event, playerID) end
 	Log(string.format("%s event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s",
 		reason == "year" and "boosted" or "fired", event.row.EventType, playerID, civType, reason, turn, event.due, boost))
 end

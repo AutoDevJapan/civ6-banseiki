@@ -1,6 +1,6 @@
 # 史実の出来事の仕組み（JAC_PoC_HistoricalEvents）
 
-SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究を終えた勢力はその年より早く使える」「史実の年が来たとき、関係する研究を終えていない勢力には、その研究へのひらめき（ブースト）だけを与える」「史実イベントは、暦の月までできるだけ合わせて起こす」と、3.1「長尾家が上杉家を継ぐ出来事で家名を切り替える」を、データ駆動で実装した PoC。`RULESET_JAC_BANSEIKI` のときだけ有効になる。
+SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究を終えた勢力はその年より早く使える」「史実の年が来たとき、関係する研究を終えていない勢力には、その研究へのひらめき（ブースト）だけを与える」「史実イベントは、暦の月までできるだけ合わせて起こす」と、3.1「長尾家が上杉家を継ぐ出来事で家名を切り替える」を、データ駆動で実装した PoC。`RULESET_JAC_BANSEIKI` のときだけ有効になる。地図では絞らない：史実の出来事は戦国パックの機能（SSOT 3.2）で、戦国パック（ツリー・暦。`JAC_PoC_SengokuTrees`）も万世紀ルールセットだけを条件にどの地図でも動くため、それに合わせる。日本マップ限定なのは資源の予約地点だけで、それは下の「資源を置く出来事」のとおり資源 MOD が無ければ何もしない。
 
 - MOD：`poc/JAC_PoC_HistoricalEvents`（ID `f6398d3b-707c-4d0a-8b19-e68333efa200`）
 - 依存：Gathering Storm、万世紀ルールセット、CustomCivs（長尾家と家名表示の上書き）、戦国ツリー（前提技術・社会制度の ID）
@@ -18,8 +18,8 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
    - フラグ：プレイヤーのプロパティ `JAC_EVENT_FIRED_<EventType>` に与えたターンを書く。これが「1勢力1回」の記録で、セーブに残る
    - 効果（モディファイア）：`JAC_HistoricalEventModifiers` のモディファイアを付ける。発生回数 `JAC_EVENTS_FIRE_COUNT` を1増やす
 4. ひらめきだけのとき（`year`）
-   - プロパティ `JAC_EVENT_BOOSTED_<EventType>` に年が来たターンを書く（効果のフラグは書かない）
-   - 前提の技術・社会制度のひらめきを発動する。ログの `boost=` に `tech=boosted`／`civic=boosted`（発動）か `no_boost`（`Boosts` の行が無い、または既に発動済み）を出す
+   - 前提の技術・社会制度のひらめきを発動する。ログの `boost=` に `tech=boosted`／`civic=boosted`（発動）、`already`（既に発動済み）、`no_boost`（`Boosts` の行が無い）か `error:…` を出す
+   - 発動できた（`boosted`／`already`／`no_boost`）ときだけ、プロパティ `JAC_EVENT_BOOSTED_<EventType>` に年が来たターンを書く（効果のフラグは書かない）。`error` のときは書かず、次のターンにもう一度試す。通知も発動できたターンに1回だけ送る
 5. どちらの場合も行うこと（出来事そのものは史実の年に起きるため）
    - 家名：`JAC_HistoricalEventRenames` の行がその勢力の文明なら、Game プロパティ `JAC_CIV_NAME_<CivilizationType>` に表示名の LOC キーを書く。CustomCivs の `UI/JAC_CivNameOverride.lua` がこれを読み、外交リボン・外交画面・ワールドランキング・都市バナーの文明名を差し替える。長尾→上杉は「1561年、または関連する社会制度を先に得る」（SSOT 3.2、オーナー判断2a）なので、年が来れば未研究でも切り替える
    - 資源：`JAC_HistoricalEventResources` の予約地点を、その出来事が誰かに初めて起きたときに1回だけ開示する（下の「資源を置く出来事」）
@@ -43,7 +43,7 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
 Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用の文字列（`Calendar.MakeYearStr`）しか出さない。公式の Pirates シナリオもターン数から年を計算している。そこで、暦を作っている表そのものから年をターンに換算する。
 
 - 暦は main にマージ済みの戦国パックの暦（[sengoku-calendar.md](sengoku-calendar.md)、PR #34）。`ERA_ANCIENT` の開始年が1534、ゲーム速度ごとに `GameSpeed_Turns`（`MonthIncrement` か月/ターンを `TurnsPerIncrement` ターン）が順に並ぶ
-- 換算（`Scripts/JAC_HistoricalEvents.lua` の `TurnForYear`）：ターン1を開始年の1月とし、ターン `t` の手前までに経過した月数が `(年 - 開始年) × 12 + (月 - 1)` に達する最初のターン。開始年は `GameInfo.StartEras['ERA_ANCIENT'].Year`、速度は `GameConfiguration.GetGameSpeedType()`、区間は `GameInfo.GameSpeed_Turns()` を速度で絞って行順に読む（行順は `GameSpeed_Turns` の `ORDER BY rowid`、`01_GameplaySchema.sql:3337`。速度は `InGameTopOptionsMenu.lua:442` と同じ取り方）
+- 換算（`Scripts/JAC_HistoricalEvents.lua` の `TurnForYear`）：ターン1を開始年の1月とし、ターン `t` の手前までに経過した月数が `(年 - 開始年) × 12 + (月 - 1)` に達する最初のターン。開始年は `GameInfo.StartEras['ERA_ANCIENT'].Year`、速度は `GameConfiguration.GetGameSpeedType()`、区間は `GameInfo.GameSpeed_Turns()` を速度で絞り、`MonthIncrement` の大きい順（同じなら `TurnsPerIncrement` の小さい順）に並べ替えて読む（速度は `InGameTopOptionsMenu.lua:442` と同じ取り方）。エンジンは区間を行の挿入順（`GameSpeedTurnCollection` の `ORDER BY rowid`、`01_GameplaySchema.sql:3337`）で使うが、Lua からは rowid が見えず、`GameInfo` の列挙順も保証されない。公式の `GameSpeeds.xml` も戦国の暦も、各速度の区間を1ターンの月数が長い順に並べているので、この並べ替えは挿入順と一致する（静的テストで戦国の暦の並びを固定し、Lupa のテストで行を逆順に渡しても同じターンになることを確かめる）。月数が後で長くなる区間を持つ暦を足すと、この前提が崩れる
 - エンジンの現在ターンは1から始まらない。1534年開始の暦では `Game.GetCurrentGameTurn()` と `GameConfiguration.GetStartTurn()` がともに 16603 から始まる（実機、2026-09-29。暦の文字列は「1534 AD」）。そこでスクリプトは、公式の上部パネルが「ターンを1から数える」ために行う `現在 - GetStartTurn() + 1`（`Base/Assets/UI/TopPanel.lua:390`）を `GameTurn()` に取り、上の換算・発生ターンのプロパティ・ログはすべてこの経過ターンで扱う。開始ターンはセーブに含まれる設定なので、セーブ・ロードでも速度が違っても変わらない。暦の年を数値で得る公式 API は無い（`Calendar` は文字列のみ）ので、年からの直接算出は採らない
 - 標準速度（4か月/ターン＝1年3ターン）では、月が無い出来事は `ターン = (年 - 1534) × 3 + 1`。鉄砲伝来1543年8月はターン30、足尾銅山1550年（月なし）はターン49、長尾家の上杉家継承1561年（閏）3月はターン83、1600年はターン199
 - ほかの速度も同じ表で自動的に換算する。1年あたりのターン数は Online 1.5、Quick 2、Epic 4（200ターンまで。以後6）、Marathon 6（200ターンまで。以後12）
@@ -55,7 +55,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 資源は、main の資源 MOD（[resources.md](resources.md)、`poc/JAC_PoC_JapanMapScale/Scripts/JAC_Resources.lua`）が生成器で予約した地点に置く。出来事の行は地点 ID（例 `copper-ashio`）だけを持ち、発生時に `ExposedMembers.JAC_Resources.RevealSite(SiteId)` を呼ぶ。置いたタイルは `GetSites()` の地点のタイル（15 km は 7482、20 km は 4416）で、Game プロパティ `JAC_EVENT_RESOURCES_<EventType>` に残す。ログは `resource event=… site=… plot=<タイル>`。
 
 - 資源 MOD は自分でも、地点の年か、いずれかの勢力の研究完了（初期知識を除く）で同じ地点を開示する。`RevealSite` は開示済みなら何もしないので、どちらが先でも同じタイルに1つだけ置かれる。出来事の年と前提技術は地点の `year`／`tech` と同じにしてある（テストで照合。足尾は1550年・T06 鉱脈採掘 `TECH_JAC_SENGOKU_ORE_PROSPECTING`）
-- 資源 MOD は日本マップ4種でだけ読み込まれる。ほかの地図ではログに `plot=resources_mod_not_loaded` を出して何も置かない
+- 資源 MOD は日本マップ4種でだけ読み込まれる。ほかの地図ではログに `resource event=… skipped=resources_mod_not_loaded` を出し、何も置かず、`JAC_EVENT_RESOURCES_<EventType>` も書かない（置いていない地点を置いたと記録しない）
 - 以前の「目標タイル周辺で置けるタイルを探す」処理と地図別の SQL（`PlotIndex`）は、資源 MOD の予約地点と別のタイルに置いてしまうため削除した
 - 石見銀山（1526年）は開始時から地図に置く（SSOT 3.2、資源 MOD）ので、出来事にはしない
 
@@ -140,5 +140,6 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/historical-
 
 1. 通知の見た目。`ICON_NOTIFICATION_USER_DEFINED_1` に `ICON_ATLAS_NOTIFICATIONS` の15番（公式 Black Death と同じ）を当てたが、絵柄が出来事に合うかは画面で見る。通知はターン終了で消える（公式の既定）
 2. 資源の開示は資源 MOD の実機確認（`japan-resources.json`）と同じ。`ResourceBuilder` が使えなければ資源 MOD 側のログに `SetResourceType failed` が出る
-3. 年による発生（`reason=year`）で `TriggerBoost` が効くか。技術はシナリオのターン30で確かめる。社会制度の `GetCulture():TriggerBoost` は公式の Lua 例が無いため、長尾家の上杉継承（ターン83）の前に別途確かめる
-4. マルチプレイでの同期
+3. 年による発生（`reason=year`）で `TriggerBoost` が効くか。技術はシナリオのターン30で確かめる。社会制度の `GetCulture():TriggerBoost` は公式の Lua 例が無いため、長尾家が社会制度「朝廷・将軍への取次」を未研究のまま1561年（ターン83）を迎える経路を別途確かめる（今のシナリオは長尾家に先に与えるので通らない）。失敗しても `boost=civic=error:…` がログに出て、次のターンに再試行する
+4. 標準以外の速度での暦の換算（区間の並び順の前提。上記「暦との関係」）
+5. マルチプレイでの同期
