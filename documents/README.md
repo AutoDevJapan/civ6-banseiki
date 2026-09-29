@@ -21,6 +21,7 @@
 | [`spec/data/japan-1534-prosperity.json`](spec/data/japan-1534-prosperity.json) | 上記の機械可読データ（22勢力・56都市）。生成は `tools/japan_map_scale/prosperity.py`、地図への反映は `prosper_start.py` |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
+| [`research/sengoku-ages.md`](research/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）設計。公式の時代システム調査、改元ごとの判定、Lua の武功の台帳（点・判定・保存・マルチプレイ同期）、家ごとの誓約と暗黒期の専用政策、画面の見せ方、現状を測る実機シナリオ |
 | [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント60件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |

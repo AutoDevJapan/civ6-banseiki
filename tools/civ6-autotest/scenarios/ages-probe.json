@@ -1,0 +1,208 @@
+{
+  "name": "JAC Sengoku ages probe: era length, era score per player at every era change (previous-era breakdown, all 22), Lua API surface (read only, Japan 15 km, Takeda human)",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local expected = {'LEADER_JAC_TAKEDA_NOBUTORA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ASHINA_MORIKIYO','LEADER_JAC_HOJO_UJITSUNA','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_NAGAO_TAMEKAGE','LEADER_JAC_IMAGAWA_UJITERU','LEADER_JAC_MATSUDAIRA_KIYOYASU','LEADER_JAC_ASAKURA_TAKAKAGE','LEADER_JAC_ASHIKAGA_YOSHIHARU','LEADER_JAC_MIYOSHI_NAGAYOSHI','LEADER_JAC_ROKKAKU_SADAYORI','LEADER_JAC_HONGANJI_SHONYO','LEADER_JAC_OUCHI_YOSHITAKA','LEADER_JAC_AMAGO_TSUNEHISA','LEADER_JAC_MORI_MOTONARI','LEADER_JAC_CHOSOKABE_KUNICHIKA','LEADER_JAC_OTOMO_YOSHIAKI','LEADER_JAC_SHIMAZU_TAKAHISA','LEADER_JAC_RYUKYU_SHO_SEI','LEADER_JAC_AINU_TARIKONA'}\nif GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('wrong ruleset: ' .. tostring(GameConfiguration.GetRuleSet())) end\nif #PlayerManager.GetAliveMajors() ~= #expected then error('alive majors ' .. #PlayerManager.GetAliveMajors() .. ' ~= ' .. #expected) end\nfor pid = 0, #expected - 1 do local n = PlayerConfigurations[pid]:GetLeaderTypeName(); if n ~= expected[pid + 1] then error('player ' .. pid .. ' is ' .. tostring(n) .. ', expected ' .. expected[pid + 1]) end end\n-- Snapshots come every <= 30 turns; an era shorter than that could hide an era change between two snapshots.\nlocal xp1 = {}; for row in GameInfo.Eras_XP1() do xp1[row.EraType] = row end\nfor _, era in ipairs({'ERA_ANCIENT','ERA_CLASSICAL','ERA_MEDIEVAL','ERA_RENAISSANCE'}) do local r = xp1[era]; if not r then error('Eras_XP1 row missing: ' .. era) end; if (r.GameEraMinimumTurns or 0) < 30 then error(era .. ' minimum turns ' .. tostring(r.GameEraMinimumTurns) .. ' < 30 (snapshot interval)') end end\nlocal out = {}\nlocal function try(label, f)\n  local ok, v = pcall(f)\n  out[#out+1] = label .. '=' .. (ok and tostring(v) or ('ERR:' .. tostring(v)))\nend\nfor _, name in ipairs({'GOLDEN_AGE_SCORE_BASE_THRESHOLD','DARK_AGE_SCORE_BASE_THRESHOLD','THRESHOLD_SHIFT_PER_CITY','THRESHOLD_SHIFT_PER_PAST_GOLDEN_AGE','THRESHOLD_SHIFT_PER_PAST_DARK_AGE','COMMEMORATE_BASE_CHOICES_ALLOWED','COMMEMORATE_OPTIONS_MAX','NEXT_ERA_TURN_COUNTDOWN','LOYALTY_FROM_EXCESS_SCORE_MULTIPLIER'}) do\n  try(name, function() return GlobalParameters[name] end)\nend\ntry('eras', function() local t = {}; for row in GameInfo.Eras() do t[#t+1] = row.EraType end; return table.concat(t, ',') end)\ntry('eras_xp1_min_max', function() local t = {}; for row in GameInfo.Eras_XP1() do t[#t+1] = row.EraType .. ':' .. tostring(row.GameEraMinimumTurns) .. '/' .. tostring(row.GameEraMaximumTurns) end; return table.concat(t, ',') end)\ntry('eras_xp2_shift', function() local t = {}; for row in GameInfo.Eras_XP2() do t[#t+1] = row.EraType .. ':' .. tostring(row.EraScoreThresholdShift) end; return table.concat(t, ',') end)\ntry('commemorations', function() local t = {}; for row in GameInfo.CommemorationTypes() do t[#t+1] = row.CommemorationType .. '[' .. tostring(row.MinimumGameEra) .. '-' .. tostring(row.MaximumGameEra) .. ']' end; return table.concat(t, ',') end)\ntry('dark_golden_policies', function() local d, g = 0, 0; for row in GameInfo.Policies_XP1() do if row.RequiresDarkAge then d = d + 1 end; if row.RequiresGoldenAge then g = g + 1 end end; return d .. ' dark / ' .. g .. ' golden' end)\ntry('policies_total', function() local n = 0; for row in GameInfo.Policies() do n = n + 1 end; return n end)\ntry('age_identity_modifiers', function() local t = {}; for row in GameInfo.TraitModifiers() do if row.ModifierId == 'GOLDEN_AGE_CITY_IDENTITY' or row.ModifierId == 'DARK_AGE_CITY_IDENTITY' then t[#t+1] = row.TraitType .. '>' .. row.ModifierId end end; return table.concat(t, ',') end)\ntry('moment_scores', function() local t = {}; for _, id in ipairs({'MOMENT_PLAYER_MET_MAJOR','MOMENT_PLAYER_MET_ALL_MAJORS','MOMENT_CITY_TRANSFERRED_FOREIGN_CAPITAL','MOMENT_CITY_TRANSFERRED_PLAYER_DEFEATED','MOMENT_CITY_TRANSFERRED_TO_ORIGINAL_OWNER','MOMENT_WAR_DECLARED_USING_CASUS_BELLI','MOMENT_BUILDING_CONSTRUCTED_GAME_ERA_WONDER'}) do local r = GameInfo.Moments[id]; t[#t+1] = id .. '=' .. tostring(r and r.EraScore) end; return table.concat(t, ',') end)\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local out = {}\nlocal pats = {'Era','Moment','Score','Commemor','Age','Property','Modifier','Boost','Dedic','Threshold','Loyalty'}\nlocal function hit(k) for _, p in ipairs(pats) do if string.find(k, p, 1, true) then return true end end return false end\nlocal function list(label, obj)\n  local names, total = {}, 0\n  local ok, err = pcall(function()\n    local mt = getmetatable(obj)\n    local src = mt and mt.__index\n    if type(src) ~= 'table' then src = obj end\n    if type(src) == 'table' then\n      for k, _ in pairs(src) do total = total + 1; if type(k) == 'string' and hit(k) then names[#names+1] = k end end\n    end\n  end)\n  table.sort(names)\n  -- An empty list only means 'absent' when the object could be enumerated at all.\n  local status = (not ok) and ('NOT_ENUMERABLE ERR:' .. tostring(err)) or (total == 0 and 'NOT_ENUMERABLE (0 keys)' or ('enumerated ' .. total .. ' keys'))\n  out[#out+1] = label .. ' ' .. status .. ' [' .. #names .. ']: ' .. table.concat(names, ',')\nend\nlist('Game', Game)\nlist('Eras', Game.GetEras())\nlist('HistoryManager', Game.GetHistoryManager())\nlist('Player', Players[0])\nlist('PlayerCulture', Players[0]:GetCulture())\nlist('PlayerTechs', Players[0]:GetTechs())\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local chunk = 0\nlocal eras = Game.GetEras()\nlocal turn = Game.GetCurrentGameTurn()\nlocal eraStart = eras:GetCurrentEraStartTurn()\nif eraStart > turn then error('era start ' .. eraStart .. ' is after turn ' .. turn) end\nlocal changed = chunk > 0 and eraStart > turn - chunk\nlocal out = {'turn=' .. turn .. ' era=' .. tostring(eras:GetCurrentEra()) .. ' final=' .. tostring(eras:GetFinalEra()) .. ' eraStart=' .. eraStart .. ' changedSinceLast=' .. tostring(changed) .. ' minEnd=' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. ' maxEnd=' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. ' countdown=' .. tostring(eras:GetNextEraCountdown())}\nlocal function flat(list) local t, sum = {}, 0; for _, src in ipairs(list) do for k, v in pairs(src) do t[#t+1] = tostring(k) .. '=' .. tostring(v); sum = sum + v end end; table.sort(t); return sum, table.concat(t, ';') end\nlocal alive = 0\nfor pid = 0, 21 do\n  local p = Players[pid]\n  local civ = tostring(PlayerConfigurations[pid]:GetCivilizationTypeName())\n  if p and p:IsAlive() then\n    alive = alive + 1\n    local cur, curSrc = flat(eras:GetPlayerCurrentEraScoreBreakdown(pid))\n    local prev, prevSrc = flat(eras:GetPlayerPreviousEraScoreBreakdown(pid))\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' cities=' .. p:GetCities():GetCount() .. ' score=' .. tostring(eras:GetPlayerCurrentScore(pid)) .. ' base=' .. tostring(eras:GetPlayerThresholdBaseline(pid)) .. ' golden>=' .. tostring(eras:GetPlayerGoldenAgeThreshold(pid)) .. ' dark>=' .. tostring(eras:GetPlayerDarkAgeThreshold(pid)) .. ' G=' .. tostring(eras:HasGoldenAge(pid)) .. ' D=' .. tostring(eras:HasDarkAge(pid)) .. ' H=' .. tostring(eras:HasHeroicGoldenAge(pid)) .. ' cur=' .. cur .. '{' .. curSrc .. '} prevEra=' .. prev .. '{' .. prevSrc .. '}'\n  else\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' dead'\n  end\nend\nif alive ~= #PlayerManager.GetAliveMajors() then error('listed ' .. alive .. ' alive players, engine reports ' .. #PlayerManager.GetAliveMajors()) end\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 30,
+      "allow_human_elimination": true,
+      "timeout": 5400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local chunk = 30\nlocal eras = Game.GetEras()\nlocal turn = Game.GetCurrentGameTurn()\nlocal eraStart = eras:GetCurrentEraStartTurn()\nif eraStart > turn then error('era start ' .. eraStart .. ' is after turn ' .. turn) end\nlocal changed = chunk > 0 and eraStart > turn - chunk\nlocal out = {'turn=' .. turn .. ' era=' .. tostring(eras:GetCurrentEra()) .. ' final=' .. tostring(eras:GetFinalEra()) .. ' eraStart=' .. eraStart .. ' changedSinceLast=' .. tostring(changed) .. ' minEnd=' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. ' maxEnd=' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. ' countdown=' .. tostring(eras:GetNextEraCountdown())}\nlocal function flat(list) local t, sum = {}, 0; for _, src in ipairs(list) do for k, v in pairs(src) do t[#t+1] = tostring(k) .. '=' .. tostring(v); sum = sum + v end end; table.sort(t); return sum, table.concat(t, ';') end\nlocal alive = 0\nfor pid = 0, 21 do\n  local p = Players[pid]\n  local civ = tostring(PlayerConfigurations[pid]:GetCivilizationTypeName())\n  if p and p:IsAlive() then\n    alive = alive + 1\n    local cur, curSrc = flat(eras:GetPlayerCurrentEraScoreBreakdown(pid))\n    local prev, prevSrc = flat(eras:GetPlayerPreviousEraScoreBreakdown(pid))\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' cities=' .. p:GetCities():GetCount() .. ' score=' .. tostring(eras:GetPlayerCurrentScore(pid)) .. ' base=' .. tostring(eras:GetPlayerThresholdBaseline(pid)) .. ' golden>=' .. tostring(eras:GetPlayerGoldenAgeThreshold(pid)) .. ' dark>=' .. tostring(eras:GetPlayerDarkAgeThreshold(pid)) .. ' G=' .. tostring(eras:HasGoldenAge(pid)) .. ' D=' .. tostring(eras:HasDarkAge(pid)) .. ' H=' .. tostring(eras:HasHeroicGoldenAge(pid)) .. ' cur=' .. cur .. '{' .. curSrc .. '} prevEra=' .. prev .. '{' .. prevSrc .. '}'\n  else\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' dead'\n  end\nend\nif alive ~= #PlayerManager.GetAliveMajors() then error('listed ' .. alive .. ' alive players, engine reports ' .. #PlayerManager.GetAliveMajors()) end\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 30,
+      "allow_human_elimination": true,
+      "timeout": 5400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local chunk = 30\nlocal eras = Game.GetEras()\nlocal turn = Game.GetCurrentGameTurn()\nlocal eraStart = eras:GetCurrentEraStartTurn()\nif eraStart > turn then error('era start ' .. eraStart .. ' is after turn ' .. turn) end\nlocal changed = chunk > 0 and eraStart > turn - chunk\nlocal out = {'turn=' .. turn .. ' era=' .. tostring(eras:GetCurrentEra()) .. ' final=' .. tostring(eras:GetFinalEra()) .. ' eraStart=' .. eraStart .. ' changedSinceLast=' .. tostring(changed) .. ' minEnd=' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. ' maxEnd=' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. ' countdown=' .. tostring(eras:GetNextEraCountdown())}\nlocal function flat(list) local t, sum = {}, 0; for _, src in ipairs(list) do for k, v in pairs(src) do t[#t+1] = tostring(k) .. '=' .. tostring(v); sum = sum + v end end; table.sort(t); return sum, table.concat(t, ';') end\nlocal alive = 0\nfor pid = 0, 21 do\n  local p = Players[pid]\n  local civ = tostring(PlayerConfigurations[pid]:GetCivilizationTypeName())\n  if p and p:IsAlive() then\n    alive = alive + 1\n    local cur, curSrc = flat(eras:GetPlayerCurrentEraScoreBreakdown(pid))\n    local prev, prevSrc = flat(eras:GetPlayerPreviousEraScoreBreakdown(pid))\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' cities=' .. p:GetCities():GetCount() .. ' score=' .. tostring(eras:GetPlayerCurrentScore(pid)) .. ' base=' .. tostring(eras:GetPlayerThresholdBaseline(pid)) .. ' golden>=' .. tostring(eras:GetPlayerGoldenAgeThreshold(pid)) .. ' dark>=' .. tostring(eras:GetPlayerDarkAgeThreshold(pid)) .. ' G=' .. tostring(eras:HasGoldenAge(pid)) .. ' D=' .. tostring(eras:HasDarkAge(pid)) .. ' H=' .. tostring(eras:HasHeroicGoldenAge(pid)) .. ' cur=' .. cur .. '{' .. curSrc .. '} prevEra=' .. prev .. '{' .. prevSrc .. '}'\n  else\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' dead'\n  end\nend\nif alive ~= #PlayerManager.GetAliveMajors() then error('listed ' .. alive .. ' alive players, engine reports ' .. #PlayerManager.GetAliveMajors()) end\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 25,
+      "allow_human_elimination": true,
+      "timeout": 5400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local chunk = 25\nlocal eras = Game.GetEras()\nlocal turn = Game.GetCurrentGameTurn()\nlocal eraStart = eras:GetCurrentEraStartTurn()\nif eraStart > turn then error('era start ' .. eraStart .. ' is after turn ' .. turn) end\nlocal changed = chunk > 0 and eraStart > turn - chunk\nlocal out = {'turn=' .. turn .. ' era=' .. tostring(eras:GetCurrentEra()) .. ' final=' .. tostring(eras:GetFinalEra()) .. ' eraStart=' .. eraStart .. ' changedSinceLast=' .. tostring(changed) .. ' minEnd=' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. ' maxEnd=' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. ' countdown=' .. tostring(eras:GetNextEraCountdown())}\nlocal function flat(list) local t, sum = {}, 0; for _, src in ipairs(list) do for k, v in pairs(src) do t[#t+1] = tostring(k) .. '=' .. tostring(v); sum = sum + v end end; table.sort(t); return sum, table.concat(t, ';') end\nlocal alive = 0\nfor pid = 0, 21 do\n  local p = Players[pid]\n  local civ = tostring(PlayerConfigurations[pid]:GetCivilizationTypeName())\n  if p and p:IsAlive() then\n    alive = alive + 1\n    local cur, curSrc = flat(eras:GetPlayerCurrentEraScoreBreakdown(pid))\n    local prev, prevSrc = flat(eras:GetPlayerPreviousEraScoreBreakdown(pid))\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' cities=' .. p:GetCities():GetCount() .. ' score=' .. tostring(eras:GetPlayerCurrentScore(pid)) .. ' base=' .. tostring(eras:GetPlayerThresholdBaseline(pid)) .. ' golden>=' .. tostring(eras:GetPlayerGoldenAgeThreshold(pid)) .. ' dark>=' .. tostring(eras:GetPlayerDarkAgeThreshold(pid)) .. ' G=' .. tostring(eras:HasGoldenAge(pid)) .. ' D=' .. tostring(eras:HasDarkAge(pid)) .. ' H=' .. tostring(eras:HasHeroicGoldenAge(pid)) .. ' cur=' .. cur .. '{' .. curSrc .. '} prevEra=' .. prev .. '{' .. prevSrc .. '}'\n  else\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' dead'\n  end\nend\nif alive ~= #PlayerManager.GetAliveMajors() then error('listed ' .. alive .. ' alive players, engine reports ' .. #PlayerManager.GetAliveMajors()) end\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 25,
+      "allow_human_elimination": true,
+      "timeout": 5400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local chunk = 25\nlocal eras = Game.GetEras()\nlocal turn = Game.GetCurrentGameTurn()\nlocal eraStart = eras:GetCurrentEraStartTurn()\nif eraStart > turn then error('era start ' .. eraStart .. ' is after turn ' .. turn) end\nlocal changed = chunk > 0 and eraStart > turn - chunk\nlocal out = {'turn=' .. turn .. ' era=' .. tostring(eras:GetCurrentEra()) .. ' final=' .. tostring(eras:GetFinalEra()) .. ' eraStart=' .. eraStart .. ' changedSinceLast=' .. tostring(changed) .. ' minEnd=' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. ' maxEnd=' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. ' countdown=' .. tostring(eras:GetNextEraCountdown())}\nlocal function flat(list) local t, sum = {}, 0; for _, src in ipairs(list) do for k, v in pairs(src) do t[#t+1] = tostring(k) .. '=' .. tostring(v); sum = sum + v end end; table.sort(t); return sum, table.concat(t, ';') end\nlocal alive = 0\nfor pid = 0, 21 do\n  local p = Players[pid]\n  local civ = tostring(PlayerConfigurations[pid]:GetCivilizationTypeName())\n  if p and p:IsAlive() then\n    alive = alive + 1\n    local cur, curSrc = flat(eras:GetPlayerCurrentEraScoreBreakdown(pid))\n    local prev, prevSrc = flat(eras:GetPlayerPreviousEraScoreBreakdown(pid))\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' cities=' .. p:GetCities():GetCount() .. ' score=' .. tostring(eras:GetPlayerCurrentScore(pid)) .. ' base=' .. tostring(eras:GetPlayerThresholdBaseline(pid)) .. ' golden>=' .. tostring(eras:GetPlayerGoldenAgeThreshold(pid)) .. ' dark>=' .. tostring(eras:GetPlayerDarkAgeThreshold(pid)) .. ' G=' .. tostring(eras:HasGoldenAge(pid)) .. ' D=' .. tostring(eras:HasDarkAge(pid)) .. ' H=' .. tostring(eras:HasHeroicGoldenAge(pid)) .. ' cur=' .. cur .. '{' .. curSrc .. '} prevEra=' .. prev .. '{' .. prevSrc .. '}'\n  else\n    out[#out+1] = 'p' .. pid .. ' ' .. civ .. ' dead'\n  end\nend\nif alive ~= #PlayerManager.GetAliveMajors() then error('listed ' .. alive .. ' alive players, engine reports ' .. #PlayerManager.GetAliveMajors()) end\nreturn table.concat(out, '\\n')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local out = {}\nlocal hm = Game.GetHistoryManager()\nfor pid = 0, 21 do\n  local counts, order = {}, {}\n  for _, m in ipairs(hm:GetAllMomentsData(pid, 0)) do\n    local info = GameInfo.Moments[m.Type]\n    local key = (info and info.MomentType or tostring(m.Type)) .. '@era' .. tostring(m.GameEra)\n    if not counts[key] then counts[key] = {n = 0, s = 0}; order[#order+1] = key end\n    counts[key].n = counts[key].n + 1\n    counts[key].s = counts[key].s + (m.EraScore or 0)\n  end\n  local t = {}\n  for _, key in ipairs(order) do t[#t+1] = key .. ' x' .. counts[key].n .. ' (+' .. counts[key].s .. ')' end\n  out[#out+1] = 'p' .. pid .. ' moments: ' .. table.concat(t, ', ')\nend\nreturn table.concat(out, '\\n')"
+    }
+  ]
+}
