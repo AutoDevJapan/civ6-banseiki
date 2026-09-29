@@ -97,14 +97,16 @@ class SengokuTreeTests(unittest.TestCase):
             self.assertTrue(all(row.findtext(lang) for lang in ("en_US", "ja_JP", "ru_RU")))
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
+            "Data/JAC_Sengoku_Calendar.xml",
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
-            "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
+            "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
+            "Text/JAC_Sengoku_Text.xml",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
         self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],
-                         ["Config/JAC_Sengoku_Victories.xml"])
+                         ["Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml"])
         self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-1],
                          "Data/JAC_Sengoku_Victories.sql")
         icons = ET.parse(MOD / "Data/JAC_Sengoku_Icons.xml").getroot()
