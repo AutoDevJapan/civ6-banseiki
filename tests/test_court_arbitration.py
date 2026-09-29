@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -84,8 +85,13 @@ local function properties()
 end
 Game = { GetCurrentGameTurn = function() return CURRENT_TURN end }
 Game.GetProperty, Game.SetProperty = properties()
-WAR = {}
-function SET_WAR(a, b, v) WAR[math.min(a, b) .. "_" .. math.max(a, b)] = v end
+WAR, WAR_CHANGED = {}, {}
+-- The engine's minimum war length (DIPLOMACY_WAR_MIN_TURNS): MakePeaceWith silently does nothing before it
+-- (court-arbitration-05). 0 = peace is always possible.
+MIN_WAR = 0
+local function pair(a, b) return math.min(a, b) .. "_" .. math.max(a, b) end
+function SET_WAR(a, b, v) WAR[pair(a, b)] = v; WAR_CHANGED[pair(a, b)] = CURRENT_TURN end
+local function canPeace(a, b) return CURRENT_TURN - (WAR_CHANGED[pair(a, b)] or 0) >= MIN_WAR end
 Players, PlayerConfigurations, MAJORS, PEACE_FAILS = {}, {}, {}, {}
 for i, civ in ipairs(civs) do
   local id = i - 1
@@ -101,7 +107,8 @@ for i, civ in ipairs(civs) do
   p.GetCities = function() return { GetCount = function() return p.cities end } end
   p.GetDiplomacy = function() return {
     IsAtWarWith = function(_, o) return WAR[math.min(id, o) .. "_" .. math.max(id, o)] == true end,
-    MakePeaceWith = function(_, o) SET_WAR(id, o, false) end,
+    MakePeaceWith = function(_, o) if canPeace(id, o) then SET_WAR(id, o, false) end end,
+    CanMakePeaceWith = function(_, o) return canPeace(id, o) end,
     -- Gameplay favor lives on the diplomacy object (XP2_Lua_IPlayerDiplomacy.cpp); the gameplay Player has no GetFavor.
     GetFavor = function() return p.favor end,
     ChangeFavor = function(_, n) if p.favorFails then error("no ChangeFavor") end; p.favor = p.favor + n end,
@@ -119,7 +126,7 @@ Locale = { Lookup = function(key, ...) return key end }
 ParameterTypes = { MESSAGE = "MESSAGE", SUMMARY = "SUMMARY" }
 NotificationTypes = { USER_DEFINED_1 = 1 }
 NOTES = {}
-NotificationManager = { SendNotification = function(id, _, data) table.insert(NOTES, { id, data.MESSAGE }) end }
+NotificationManager = { SendNotification = function(id, _, data) table.insert(NOTES, { id, data.MESSAGE, data.SUMMARY }) end }
 ExposedMembers = {}
 unpack = unpack or table.unpack
 LOG = {}
@@ -198,7 +205,7 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertEqual((ouchi.favor, ouchi.gold, self.player(self.OUCHI, "JAC_LEGITIMACY")), (80, 400, 45))
         pending = self.game("JAC_ARB_PENDING")
         self.assertEqual((pending.Requester, pending.A, pending.B, pending.Power), (0, 0, 1, 1))
-        self.assertEqual(list(self.g.NOTES[1].values()), [self.OTOMO, "LOC_JAC_ARB_NOTIFY_REQUEST_NAME"])
+        self.assertEqual(list(self.g.NOTES[1].values())[:2], [self.OTOMO, "LOC_JAC_ARB_NOTIFY_REQUEST_NAME"])
         self.assertEqual(len(self.g.NOTES), 1)  # only the respondent
         # One ruling per turn: a second request (even the other way round) is refused and not charged.
         self.g.REQUEST(self.OTOMO, self.OTOMO, self.OUCHI)
@@ -322,6 +329,68 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.next_turn()
         self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+
+    def test_peace_inside_the_minimum_war_length_is_deferred_and_the_truce_starts_at_peace(self):
+        # court-arbitration-05: MakePeaceWith did nothing on turn 2 for a war declared on turn 1.
+        self.g.MIN_WAR = 10
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)  # declared on turn 1 (engine turn = start turn)
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()  # turn 2
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertIsNone(self.game("JAC_ARB_TRUCE_0_1"))
+        self.assertEqual(self.game("JAC_ARB_AWAIT_0_1"), 30)
+        self.assertIn("[JAC_ARB] accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=deferred reason=min_war", self.log())
+        self.assertIn("LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY", [n[3] for n in self.g.NOTES.values()])
+        # The accepted pair cannot be petitioned (and charged) again while it waits.
+        self.assertEqual(self.lua.eval("select(2, JAC_ARB.CheckRequest(0, 0, 1))"), "AWAITING_PEACE")
+        self.next_turn(10)
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertIn("[JAC_ARB] peace deferred pair=0-1 turn=10 reason=min_war", self.log())
+        self.next_turn(11)  # 10 turns after the declaration
+        self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertIsNone(self.game("JAC_ARB_AWAIT_0_1"))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 11 + 30)
+        self.assertEqual(self.game("JAC_ARB_PEACE_TURN_0_1"), 11)
+        self.assertIn("[JAC_ARB] truce started pair=0-1 turn=11 until=41", self.log())
+
+    def test_a_pair_that_made_peace_on_its_own_while_waiting_starts_the_truce(self):
+        self.g.MIN_WAR = 10
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
+        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
+        self.next_turn()
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, False)
+        self.next_turn()
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 3 + 10)
+        self.assertIsNone(self.game("JAC_ARB_PEACE_TURN_0_1"))  # not made by the script
+
+    def test_a_truce_breach_inside_the_minimum_war_length_is_undone_when_allowed_even_after_the_truce(self):
+        self.g.MIN_WAR = 10
+        self.g.Game.SetProperty(None, "JAC_ARB_TRUCE_2_3", 5)  # like the live scenario: a war declared under a truce
+        self.g.SET_WAR(self.ASHIKAGA, self.MORI, True)  # turn 1
+        self.next_turn()
+        self.assertIn("[JAC_ARB] truce reimposed pair=2-3 turn=2 until=5 ok=false reason=min_war", self.log())
+        self.next_turn(10)
+        self.assertTrue(self.at_war(self.ASHIKAGA, self.MORI))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_2_3"), 5)  # kept past its end while the breach stands
+        self.next_turn(11)
+        self.assertFalse(self.at_war(self.ASHIKAGA, self.MORI))
+        self.assertIsNone(self.game("JAC_ARB_TRUCE_2_3"))
+        self.assertIn("[JAC_ARB] truce ended pair=2-3 turn=11", self.log())
+
+    def test_make_peace_probe_tries_every_variant_and_never_stops(self):
+        path = ROOT / "tools/civ6-autotest/scenarios/probe-make-peace.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        self.assertEqual([s["turns"] for s in steps if s["action"] == "autoplay"], [1, 9, 1])  # turns 1, 2, 11, 12
+        probes = [s["code"] for s in steps if s["action"] == "ui_lua"]
+        self.assertEqual([s["state_name"] for s in steps if s["action"] == "ui_lua"], ["GameCore_Tuner"] * 4)
+        self.assertIn("DIPLOMACY_WAR_MIN_TURNS", probes[0])
+        self.assertIn("GetMinPeaceDuration()", probes[0])
+        for variant in ("Try('F1','a',false)", "Try('F2','a',true)", "Try('F3','b',false)", "Try('R01','b',true)"):
+            self.assertIn(variant, probes[0])
+        for code in probes:
+            self.assertNotIn("error(", code)
+            # Runs against the stubs (most engine calls missing) and still returns a report.
+            self.assertTrue(self.lua.execute(code).startswith("turn="))
 
     def test_a_request_is_void_if_the_war_ended_before_the_ruling(self):
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)

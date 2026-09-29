@@ -37,6 +37,9 @@
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="ja_JP"><Text>両家は戦争中ではない。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="en_US"><Text>The two houses are not at war.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="ru_RU"><Text>Эти дома не воюют.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_AWAITING_PEACE" Language="ja_JP"><Text>両家は裁定に応じ、講和できるターンを待っている。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_AWAITING_PEACE" Language="en_US"><Text>The two houses have accepted a ruling and are waiting until peace is allowed.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_AWAITING_PEACE" Language="ru_RU"><Text>Эти дома приняли решение и ждут, когда мир станет возможен.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="ja_JP"><Text>他家どうしの停戦を発議できるのは、裁定の力を持つ将軍家だけ。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="en_US"><Text>Only the Shogunate, while it holds the power of ruling, may call a ceasefire between other houses.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="ru_RU"><Text>Объявлять перемирие между другими домами может только сёгунат, пока у него есть власть решать.</Text></Row>
@@ -64,6 +67,9 @@
 		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="ja_JP"><Text>{1_A}と{2_B}は朝廷の裁定に従い停戦した。{3_Turns}ターンの間、両家の戦争は認められない。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="en_US"><Text>{1_A} and {2_B} have accepted the Court's ruling and made peace. War between them is not allowed for {3_Turns} turns.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="ru_RU"><Text>{1_A} и {2_B} приняли решение двора и заключили мир. Война между ними запрещена на {3_Turns} ходов.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY" Language="ja_JP"><Text>{1_A}と{2_B}は朝廷の裁定に従った。開戦から間もないため、講和できるターンになったら講和し、そこから{3_Turns}ターンの間、両家の戦争は認められない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY" Language="en_US"><Text>{1_A} and {2_B} have accepted the Court's ruling. The war is too recent to end yet; peace will be made as soon as it is allowed, and war between them is then not allowed for {3_Turns} turns.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY" Language="ru_RU"><Text>{1_A} и {2_B} приняли решение двора. Война началась слишком недавно, чтобы её закончить; мир будет заключён, как только это станет возможно, и затем война между ними запрещена на {3_Turns} ходов.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ja_JP"><Text>停戦裁定の拒否</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="en_US"><Text>Ceasefire Ruling Refused</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ru_RU"><Text>Решение о перемирии отвергнуто</Text></Row>

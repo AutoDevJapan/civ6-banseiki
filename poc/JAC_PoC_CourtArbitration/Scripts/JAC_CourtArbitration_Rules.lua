@@ -32,6 +32,8 @@ R.PENDING_KEY = "JAC_ARB_PENDING"                   -- Game：審理中の請求
 R.LAST_REQUEST_KEY = "JAC_ARB_LAST_REQUEST_TURN"    -- Game：裁定は1ターンに1件まで
 R.LAST_EVENT_KEY = "JAC_ARB_LAST_EVENT"             -- Game：最後に届いた EXECUTE_SCRIPT（検証用の記録。判定には使わない）
 R.TRUCE_PREFIX = "JAC_ARB_TRUCE_"                   -- Game：<小さいID>_<大きいID> = 停戦が続く最後のターン
+R.AWAIT_PREFIX = "JAC_ARB_AWAIT_"                   -- Game：応諾済みで講和を待つ組 = 講和した時から数える停戦のターン数
+R.PEACE_PREFIX = "JAC_ARB_PEACE_TURN_"              -- Game：スクリプトが最後に講和させたターン（検証用の記録）
 
 -- ゲーム開始からのターン（1始まり）。エンジンのターンは 1534 年開始で 16603 から始まる
 -- （JAC_HistoricalEvents.lua の GameTurn と同じ。公式 TopPanel.lua:390 と同じ正規化）
@@ -91,10 +93,13 @@ function R.Favor(id)
 	return player:GetDiplomacy():GetFavor()
 end
 
-function R.TruceKey(a, b)
+local function PairKey(prefix, a, b)
 	if a > b then a, b = b, a end
-	return R.TRUCE_PREFIX .. a .. "_" .. b
+	return prefix .. a .. "_" .. b
 end
+function R.TruceKey(a, b) return PairKey(R.TRUCE_PREFIX, a, b) end
+function R.AwaitKey(a, b) return PairKey(R.AWAIT_PREFIX, a, b) end
+function R.PeaceTurnKey(a, b) return PairKey(R.PEACE_PREFIX, a, b) end
 
 -- 表示名の LOC キー。史実の出来事の家名切替（JAC_CIV_NAME_<文明>、CustomCivs UI/JAC_CivNameOverride.lua）を優先する
 function R.NameKey(id)
@@ -120,6 +125,7 @@ end
 function R.CheckRequest(requester, a, b)
 	if not (IsLiveMajor(requester) and IsLiveMajor(a) and IsLiveMajor(b)) or a == b then return false, "INVALID" end
 	if not Players[a]:GetDiplomacy():IsAtWarWith(b) then return false, "NOT_AT_WAR" end
+	if Game:GetProperty(R.AwaitKey(a, b)) ~= nil then return false, "AWAITING_PEACE" end
 	local turn = R.GameTurn()
 	if requester ~= a and requester ~= b and not R.IsEmpoweredShogun(requester, turn) then return false, "NOT_PARTY" end
 	if Game:GetProperty(R.PENDING_KEY) ~= nil or Game:GetProperty(R.LAST_REQUEST_KEY) == turn then

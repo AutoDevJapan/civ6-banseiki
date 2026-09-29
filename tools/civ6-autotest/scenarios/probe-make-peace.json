@@ -1,0 +1,181 @@
+{
+  "name": "Probe: why MakePeaceWith did nothing in court-arbitration-05. In gameplay (GameCore_Tuner) on the 15 km Japan map with the arbitration mod: the R01 war (Ouchi-Otomo, turn 1) and three fresh forced wars; MakePeaceWith(b), MakePeaceWith(b, true) and from both sides on turns 1, 2, 11 and 12, with CanMakePeaceWith, GetAtWarChangeTurn, IsAtWarWith after each call, and DIPLOMACY_WAR_MIN_TURNS / DIPLOMACY_PEACE_MIN_TURNS / GetMinPeaceDuration. Every read returns a value; nothing errors",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620973,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; local P={R01={'OUCHI','OTOMO'},F1={'CHOSOKABE','AINU'},F2={'RYUKYU','DATE'},F3={'SHIMAZU','ASHINA'}}; local ORDER={'R01','F1','F2','F3'}; local function D(n) return Players[id[n]]:GetDiplomacy() end; local function state(k) local a,b=P[k][1],P[k][2]; return k..'{war='..q(function() return D(a):IsAtWarWith(id[b]) end)..' can='..q(function() return D(a):CanMakePeaceWith(id[b]) end)..'/'..q(function() return D(b):CanMakePeaceWith(id[a]) end)..' changed='..q(function() return D(a):GetAtWarChangeTurn(id[b]) end)..'}' end; local function states() local s={} for _,k in ipairs(ORDER) do s[#s+1]=state(k) end return table.concat(s,' ') end; local function Try(k,from,withTrue) local a,b=P[k][1],P[k][2]; if from=='b' then a,b=b,a end; local r=q(function() if withTrue then D(a):MakePeaceWith(id[b],true) else D(a):MakePeaceWith(id[b]) end return 'called' end); return k..' '..a..':MakePeaceWith('..b..(withTrue and ',true' or '')..') '..r..' war_after='..q(function() return D(P[k][1]):IsAtWarWith(id[P[k][2]]) end) end; local out={'turn='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' engine='..Game.GetCurrentGameTurn()}; local function add(s) out[#out+1]=s end; add('params WAR_MIN='..q(function() return GameInfo.GlobalParameters['DIPLOMACY_WAR_MIN_TURNS'].Value end)..' PEACE_MIN='..q(function() return GameInfo.GlobalParameters['DIPLOMACY_PEACE_MIN_TURNS'].Value end)..' GetMinPeaceDuration='..q(function() return Game.GetGameDiplomacy():GetMinPeaceDuration() end)); for _,k in ipairs({'F1','F2','F3'}) do add(k..' DeclareWarOn '..q(function() D(P[k][1]):DeclareWarOn(id[P[k][2]],WarTypes.FORMAL_WAR,true) return 'called' end)) end; add('before '..states()); add(Try('F1','a',false)); add(Try('F2','a',true)); add(Try('F3','b',false)); add(Try('F3','a',false)); add(Try('R01','a',false)); add(Try('R01','b',false)); add(Try('R01','a',true)); add(Try('R01','b',true)); add('after '..states()); for _,line in ipairs(out) do print('[JAC_PEACE_PROBE] '..line) end; return table.concat(out,' | ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; local P={R01={'OUCHI','OTOMO'},F1={'CHOSOKABE','AINU'},F2={'RYUKYU','DATE'},F3={'SHIMAZU','ASHINA'}}; local ORDER={'R01','F1','F2','F3'}; local function D(n) return Players[id[n]]:GetDiplomacy() end; local function state(k) local a,b=P[k][1],P[k][2]; return k..'{war='..q(function() return D(a):IsAtWarWith(id[b]) end)..' can='..q(function() return D(a):CanMakePeaceWith(id[b]) end)..'/'..q(function() return D(b):CanMakePeaceWith(id[a]) end)..' changed='..q(function() return D(a):GetAtWarChangeTurn(id[b]) end)..'}' end; local function states() local s={} for _,k in ipairs(ORDER) do s[#s+1]=state(k) end return table.concat(s,' ') end; local function Try(k,from,withTrue) local a,b=P[k][1],P[k][2]; if from=='b' then a,b=b,a end; local r=q(function() if withTrue then D(a):MakePeaceWith(id[b],true) else D(a):MakePeaceWith(id[b]) end return 'called' end); return k..' '..a..':MakePeaceWith('..b..(withTrue and ',true' or '')..') '..r..' war_after='..q(function() return D(P[k][1]):IsAtWarWith(id[P[k][2]]) end) end; local out={'turn='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' engine='..Game.GetCurrentGameTurn()}; local function add(s) out[#out+1]=s end; add('before '..states()); add(Try('F1','a',false)); add(Try('R01','a',true)); add('after '..states()); for _,line in ipairs(out) do print('[JAC_PEACE_PROBE] '..line) end; return table.concat(out,' | ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 9,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; local P={R01={'OUCHI','OTOMO'},F1={'CHOSOKABE','AINU'},F2={'RYUKYU','DATE'},F3={'SHIMAZU','ASHINA'}}; local ORDER={'R01','F1','F2','F3'}; local function D(n) return Players[id[n]]:GetDiplomacy() end; local function state(k) local a,b=P[k][1],P[k][2]; return k..'{war='..q(function() return D(a):IsAtWarWith(id[b]) end)..' can='..q(function() return D(a):CanMakePeaceWith(id[b]) end)..'/'..q(function() return D(b):CanMakePeaceWith(id[a]) end)..' changed='..q(function() return D(a):GetAtWarChangeTurn(id[b]) end)..'}' end; local function states() local s={} for _,k in ipairs(ORDER) do s[#s+1]=state(k) end return table.concat(s,' ') end; local function Try(k,from,withTrue) local a,b=P[k][1],P[k][2]; if from=='b' then a,b=b,a end; local r=q(function() if withTrue then D(a):MakePeaceWith(id[b],true) else D(a):MakePeaceWith(id[b]) end return 'called' end); return k..' '..a..':MakePeaceWith('..b..(withTrue and ',true' or '')..') '..r..' war_after='..q(function() return D(P[k][1]):IsAtWarWith(id[P[k][2]]) end) end; local out={'turn='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' engine='..Game.GetCurrentGameTurn()}; local function add(s) out[#out+1]=s end; add('before '..states()); add(Try('F1','a',false)); add(Try('F2','a',true)); add(Try('F3','b',false)); add(Try('R01','a',false)); add('after '..states()); for _,line in ipairs(out) do print('[JAC_PEACE_PROBE] '..line) end; return table.concat(out,' | ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; local P={R01={'OUCHI','OTOMO'},F1={'CHOSOKABE','AINU'},F2={'RYUKYU','DATE'},F3={'SHIMAZU','ASHINA'}}; local ORDER={'R01','F1','F2','F3'}; local function D(n) return Players[id[n]]:GetDiplomacy() end; local function state(k) local a,b=P[k][1],P[k][2]; return k..'{war='..q(function() return D(a):IsAtWarWith(id[b]) end)..' can='..q(function() return D(a):CanMakePeaceWith(id[b]) end)..'/'..q(function() return D(b):CanMakePeaceWith(id[a]) end)..' changed='..q(function() return D(a):GetAtWarChangeTurn(id[b]) end)..'}' end; local function states() local s={} for _,k in ipairs(ORDER) do s[#s+1]=state(k) end return table.concat(s,' ') end; local function Try(k,from,withTrue) local a,b=P[k][1],P[k][2]; if from=='b' then a,b=b,a end; local r=q(function() if withTrue then D(a):MakePeaceWith(id[b],true) else D(a):MakePeaceWith(id[b]) end return 'called' end); return k..' '..a..':MakePeaceWith('..b..(withTrue and ',true' or '')..') '..r..' war_after='..q(function() return D(P[k][1]):IsAtWarWith(id[P[k][2]]) end) end; local out={'turn='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' engine='..Game.GetCurrentGameTurn()}; local function add(s) out[#out+1]=s end; add('before '..states()); for _,k in ipairs(ORDER) do if q(function() return D(P[k][1]):IsAtWarWith(id[P[k][2]]) end)=='true' then add(Try(k,'a',false)); add(Try(k,'a',true)) end end; add('after '..states()); for _,line in ipairs(out) do print('[JAC_PEACE_PROBE] '..line) end; return table.concat(out,' | ')"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "name": "Court ceasefire ruling on the 15 km Japan map: the Ashikaga human petitions through EXECUTE_SCRIPT, pays Favor/Gold/Legitimacy, the ruling is decided at the next turn start, and a war inside a truce is undone",
+  "name": "Court ceasefire ruling on the 15 km Japan map: the Ashikaga human petitions through EXECUTE_SCRIPT, pays Favor/Gold/Legitimacy, the ruling is decided at the next turn start; peace inside the engine's 10-turn minimum war length waits and is made on the first allowed turn (turn 11 or 12), for the ruling and for a war declared under a truce",
   "judge_profile": "japan_map",
   "steps": [
     {
@@ -197,7 +197,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local x,y=find('CIVILIZATION_JAC_CHOSOKABE'),find('CIVILIZATION_JAC_AINU'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; Players[x]:GetDiplomacy():DeclareWarOn(y,WarTypes.FORMAL_WAR,true); if not Players[x]:GetDiplomacy():IsAtWarWith(y) then error('forced war failed') end; Game:SetProperty(R.TruceKey(x,y),5); return 'forced war inside a test truce (until turn 5) between Chosokabe '..x..' and Ainu '..y"
+      "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local x,y=find('CIVILIZATION_JAC_CHOSOKABE'),find('CIVILIZATION_JAC_AINU'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; Players[x]:GetDiplomacy():DeclareWarOn(y,WarTypes.FORMAL_WAR,true); if not Players[x]:GetDiplomacy():IsAtWarWith(y) then error('forced war failed') end; Game:SetProperty(R.TruceKey(x,y),5); return 'forced war inside a test truce (until turn 5) between Chosokabe '..x..' and Ainu '..y..'; the engine lets it end only 10 turns later (DIPLOMACY_WAR_MIN_TURNS)'"
     },
     {
       "action": "autoplay",
@@ -207,11 +207,25 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local x,y=find('CIVILIZATION_JAC_CHOSOKABE'),find('CIVILIZATION_JAC_AINU'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; local turn=R.GameTurn(); if turn~=2 then error('elapsed turn '..turn) end; if Game:GetProperty('JAC_ARB_PENDING')~=nil then error('request not resolved') end; if Players[x]:GetDiplomacy():IsAtWarWith(y) then error('truce not reimposed (MakePeaceWith)') end; local war=Players[ouchi]:GetDiplomacy():IsAtWarWith(otomo); local truce=Game:GetProperty(R.TruceKey(ouchi,otomo)); if not war then if truce~=32 then error('accepted but truce='..tostring(truce)) end; return 'accepted: Ouchi-Otomo at peace until turn 32 (3x); test truce reimposed' end; if truce~=nil then error('refused but a truce was set') end; local refusers={}; for _,id in ipairs({ouchi,otomo}) do if Players[id]:GetProperty('JAC_LEGITIMACY')==35 and Players[id]:GetProperty('JAC_ARB_OUTLAW_UNTIL')==12 then table.insert(refusers,tostring(id)) end end; if #refusers==0 then error('refused but no refuser penalized') end; return 'refused by '..table.concat(refusers,',')..' (legitimacy 35, outlaw until 12); test truce reimposed'"
+      "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local x,y=find('CIVILIZATION_JAC_CHOSOKABE'),find('CIVILIZATION_JAC_AINU'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; local turn=R.GameTurn(); if turn~=2 then error('elapsed turn '..turn) end; if Game:GetProperty('JAC_ARB_PENDING')~=nil then error('request not resolved') end; if not Players[x]:GetDiplomacy():IsAtWarWith(y) then error('Chosokabe-Ainu at peace on turn 2: the minimum war length did not apply (see probe-make-peace)') end; if Game:GetProperty(R.TruceKey(x,y))~=5 then error('test truce dropped') end; local war=Players[ouchi]:GetDiplomacy():IsAtWarWith(otomo); local await=Game:GetProperty(R.AwaitKey(ouchi,otomo)); local truce=Game:GetProperty(R.TruceKey(ouchi,otomo)); if await~=nil then if not war or truce~=nil or await~=30 then error('accepted: war='..tostring(war)..' await='..tostring(await)..' truce='..tostring(truce)) end; Game:SetProperty('JAC_ARB_TEST_OUTCOME','accepted'); return 'accepted: Ouchi-Otomo wait for peace (30-turn truce from then); test breach still at war (minimum war length)' end; if not war then error('Ouchi-Otomo at peace on turn 2 without a waiting ruling (truce='..tostring(truce)..')') end; if truce~=nil then error('refused but a truce was set') end; local refusers={}; for _,id in ipairs({ouchi,otomo}) do if Players[id]:GetProperty('JAC_LEGITIMACY')==35 and Players[id]:GetProperty('JAC_ARB_OUTLAW_UNTIL')==12 then table.insert(refusers,tostring(id)) end end; if #refusers==0 then error('refused but no refuser penalized') end; Game:SetProperty('JAC_ARB_TEST_OUTCOME','refused'); return 'refused by '..table.concat(refusers,',')..' (legitimacy 35, outlaw until 12); test breach still at war (minimum war length)'"
     },
     {
       "action": "screenshot",
       "path": "02-after-ruling.png"
+    },
+    {
+      "action": "autoplay",
+      "turns": 10,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function find(civ) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==civ then return p:GetID() end end error(civ..' absent') end; local ouchi,otomo,ashikaga=find('CIVILIZATION_JAC_OUCHI'),find('CIVILIZATION_JAC_OTOMO'),find('CIVILIZATION_JAC_ASHIKAGA'); local x,y=find('CIVILIZATION_JAC_CHOSOKABE'),find('CIVILIZATION_JAC_AINU'); local R=ExposedMembers.JAC_CourtArbitration; if not R then error('arbitration script not loaded') end; local turn=R.GameTurn(); if turn~=12 then error('elapsed turn '..turn) end; if Players[x]:GetDiplomacy():IsAtWarWith(y) then error('truce breach not undone by turn 12 (MakePeaceWith)') end; local px=Game:GetProperty(R.PeaceTurnKey(x,y)); if px~=11 and px~=12 then error('Chosokabe-Ainu peace not made by the script: turn='..tostring(px)) end; if Game:GetProperty(R.TruceKey(x,y))~=nil then error('expired test truce not cleared') end; local msg='test breach undone on turn '..px; if Game:GetProperty('JAC_ARB_TEST_OUTCOME')~='accepted' then return msg..'; ruling was refused' end; if Players[ouchi]:GetDiplomacy():IsAtWarWith(otomo) then error('accepted ruling: Ouchi-Otomo still at war on turn 12') end; if Game:GetProperty(R.AwaitKey(ouchi,otomo))~=nil then error('waiting ruling not cleared') end; local p=Game:GetProperty(R.PeaceTurnKey(ouchi,otomo)); local truce=Game:GetProperty(R.TruceKey(ouchi,otomo)); if (p~=11 and p~=12) or truce~=p+30 then error('accepted ruling: peace turn='..tostring(p)..' truce='..tostring(truce)) end; return msg..'; accepted ruling: Ouchi-Otomo peace on turn '..p..', truce until '..truce"
+    },
+    {
+      "action": "screenshot",
+      "path": "03-after-minimum-war.png"
     }
   ]
 }
