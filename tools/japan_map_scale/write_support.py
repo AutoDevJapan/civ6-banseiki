@@ -99,12 +99,16 @@ def scenarios() -> None:
             raise ValueError(f"{km} km city inventory differs from research: {counts}")
         expected = "{" + ",".join("{" + str(s["col"]) + "," + str(s["row"]) + "," +
                                   str(counts[s["seat"]]) + "}" for s in item["starts"]) + "}"
+        initial_counts = "{" + ",".join(str(counts[seat.slug]) for seat in SEATS) + "}"
+        count_names = "{" + ",".join("'" + seat.slug + "'" for seat in SEATS) + "}"
         leaders = "{" + ",".join("'" + seat.leader + "'" for seat in SEATS) + "}"
         civs = "{" + ",".join("'" + seat.civ + "'" for seat in SEATS) + "}"
-        minors = ("local minors=0; for _,m in ipairs(PlayerManager.GetAliveMinors()) do "
-                  "if PlayerConfigurations[m:GetID()]:GetCivilizationTypeName()~='CIVILIZATION_FREE_CITIES' "
-                  "then minors=minors+1 end end; if minors~=0 then "
-                  "error('city-states present: '..minors) end; ")
+        minors = ("local minors=0; local freeCities=0; "
+                  "for _,m in ipairs(PlayerManager.GetAliveMinors()) do "
+                  "if PlayerConfigurations[m:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_FREE_CITIES' "
+                  "then freeCities=freeCities+m:GetCities():GetCount() else minors=minors+1 end end; "
+                  "if minors~=0 then error('city-states present: '..minors) end; "
+                  "if freeCities~=0 then error('Free Cities own '..freeCities..' cities') end; ")
         land = ("local land=0; for index=0,w*h-1 do local tile=Map.GetPlotByIndex(index); "
                 "if tile and not tile:IsWater() then land=land+1; if tile:GetOwner()<0 then "
                 "error('unowned land plot '..index) end end end; "
@@ -131,7 +135,24 @@ def scenarios() -> None:
         loyalty = (
             "local humanCapital=Players[0]:GetCities():GetCapitalCity(); "
             "local loyalty=humanCapital:GetCulturalIdentity():GetLoyaltyPerTurn(); "
-            "if loyalty < -5 then error('human capital loyalty strongly negative on turn 1: '..loyalty) end; "
+            "local minimumLoyaltyPerTurn=1000; for i=0,21 do "
+            "for _,city in Players[i]:GetCities():Members() do "
+            "local rate=city:GetCulturalIdentity():GetLoyaltyPerTurn(); "
+            "if rate<minimumLoyaltyPerTurn then minimumLoyaltyPerTurn=rate end; "
+            "if rate<0 then error('negative initial city loyalty/turn '..i..':'..city:GetID()..'='..rate) "
+            "end end end; "
+        )
+        # A Free City can be reabsorbed before turn 50; record loyalty conversions during autoplay.
+        loyalty_watch = (
+            "if JAC_JAPAN_LOYALTY_WATCH and JAC_JAPAN_LOYALTY_WATCH.handler then "
+            "Events.CulturalIdentityCityConverted.Remove(JAC_JAPAN_LOYALTY_WATCH.handler) end; "
+            "JAC_JAPAN_LOYALTY_WATCH={majorDefections={}}; "
+            "JAC_JAPAN_LOYALTY_WATCH.handler=function(playerID, cityID, fromPlayer) "
+            "local former=fromPlayer and Players[fromPlayer]; "
+            "if former and former:IsMajor() then "
+            "local lost=tostring(fromPlayer)..'->'..tostring(playerID)..':'..tostring(cityID); "
+            "table.insert(JAC_JAPAN_LOYALTY_WATCH.majorDefections,lost) end end; "
+            "Events.CulturalIdentityCityConverted.Add(JAC_JAPAN_LOYALTY_WATCH.handler); "
         )
         start_assertion = (grid_check + minors +
                            "if #PlayerManager.GetAliveMajors()~=22 then error('major count') end; " +
@@ -149,20 +170,34 @@ def scenarios() -> None:
                            "capital:GetX()~=e[1] or capital:GetY()~=e[2] then "
                            "error('capital mismatch '..i) end end; " +
                            f"if totalCities~={expected_total} then error('total city count '..totalCities) end; " +
-                           land + settlers + passage + loyalty +
+                           land + settlers + passage + loyalty + loyalty_watch +
                            f"return '22 majors, 0 city-states, {expected_total} cities/capitals, all land owned, no settlers; "
-                           "passage='..passage..'; capital loyalty/turn='..loyalty")
+                           "passage='..passage..'; capital loyalty/turn='..loyalty.."
+                           "'; minimum loyalty/turn='..minimumLoyaltyPerTurn")
         snapshot = (grid_check + minors + land + settlers +
                     "if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then "
                     "error('50-turn state lost') end; "
-                    "local values={tostring(#PlayerManager.GetAliveMajors())}; "
-                    "for i=0,21 do local p=Players[i]; values[#values+1]=tostring(p:GetCities():GetCount()); "
-                    "values[#values+1]=tostring(p:IsAlive()) end; "
+                    "local initialCounts=" + initial_counts + "; local names=" + count_names + "; "
+                    "local values={tostring(#PlayerManager.GetAliveMajors())}; local countReport={}; "
+                    "for i=0,21 do local p=Players[i]; local count=p:GetCities():GetCount(); "
+                    "values[#values+1]=tostring(count); values[#values+1]=tostring(p:IsAlive()); "
+                    "countReport[#countReport+1]=names[i+1]..'='..initialCounts[i+1]..'->'..count; "
+                    "for _,city in p:GetCities():Members() do "
+                    "local rate=city:GetCulturalIdentity():GetLoyaltyPerTurn(); "
+                    "if rate<0 then error('negative city loyalty/turn '..i..':'..city:GetID()..'='..rate) "
+                    "end end end; "
                     "local hash=0; "
                     "for index=0,w*h-1 do local tile=Map.GetPlotByIndex(index); "
                     "if tile and not tile:IsWater() then hash=(hash*131+tile:GetOwner()+1)%2147483647 end end; "
                     "values[#values+1]=tostring(hash); "
-                    "return table.concat(values, ',')")
+                    "return 'city counts (start->now)='..table.concat(countReport,'|')..'; state='.."
+                    "table.concat(values, ',')")
+        after_autoplay = (
+            "if not JAC_JAPAN_LOYALTY_WATCH then error('loyalty conversion watch lost') end; "
+            "if #JAC_JAPAN_LOYALTY_WATCH.majorDefections~=0 then "
+            "error('major cities lost by loyalty during autoplay: '.."
+            "table.concat(JAC_JAPAN_LOYALTY_WATCH.majorDefections,',')) end; " + snapshot
+        )
         name = f"JAC-JapanMap-{km}km-01"
         data = {"name": f"JAC Japan map scale {km} km, 22 players, 50 turns",
                 "judge_profile": "japan_map", "steps": [
@@ -176,7 +211,7 @@ def scenarios() -> None:
                     {"action": "start_game", "timeout": 600},
                     {"action": "ui_lua", "state_name": "InGame", "code": start_assertion},
                     {"action": "autoplay", "turns": 50, "metrics": True, "timeout": 7200},
-                    {"action": "ui_lua", "state_name": "InGame", "code": snapshot,
+                    {"action": "ui_lua", "state_name": "InGame", "code": after_autoplay,
                      "capture_as": "JAPAN_STATE"},
                     {"action": "save", "name": name, "timeout": 180},
                     {"action": "exit_to_menu", "timeout": 180},

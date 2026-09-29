@@ -39,7 +39,16 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertIn("not diplomacy:IsAtWarWith(owner)", first_turn)
                 self.assertIn("not diplomacy:HasOpenBordersFrom(owner)", first_turn)
                 self.assertIn("humanCapital:GetCulturalIdentity():GetLoyaltyPerTurn()", first_turn)
-                self.assertIn("if loyalty < -5 then error", first_turn)
+                self.assertIn("negative initial city loyalty/turn", first_turn)
+                self.assertIn("Events.CulturalIdentityCityConverted.Add(JAC_JAPAN_LOYALTY_WATCH.handler)", first_turn)
+                after_autoplay = data["steps"][5]["code"]
+                self.assertIn("freeCities=freeCities+m:GetCities():GetCount()", after_autoplay)
+                self.assertIn("Free Cities own ", after_autoplay)
+                self.assertIn("#JAC_JAPAN_LOYALTY_WATCH.majorDefections~=0", after_autoplay)
+                self.assertIn("negative city loyalty/turn", after_autoplay)
+                self.assertIn("city counts (start->now)=", after_autoplay)
+                self.assertIn("initialCounts=", after_autoplay)
+                self.assertIn("freeCities=freeCities+m:GetCities():GetCount()", data["steps"][9]["code"])
 
     def test_rejects_bad_map_file_and_metrics_flag(self):
         data = json.loads((SCENARIOS / "japan-map-20km.json").read_text(encoding="utf-8"))

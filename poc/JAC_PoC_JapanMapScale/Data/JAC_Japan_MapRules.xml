@@ -14,13 +14,16 @@
   </UnitAbilityModifiers>
   <Modifiers>
     <Row ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS" ModifierType="MODIFIER_PLAYER_UNITS_GRANT_ABILITY"/>
+    <Row ModifierId="JAC_JAPAN_CITY_LOYALTY_STABILITY" ModifierType="MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN"/>
   </Modifiers>
   <ModifierArguments>
     <Row ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS" Name="AbilityType" Value="ABILITY_JAC_DOMAIN_CROSSING"/>
+    <Row ModifierId="JAC_JAPAN_CITY_LOYALTY_STABILITY" Name="Amount" Value="100"/>
   </ModifierArguments>
   <TraitModifiers>
     <Delete TraitType="TRAIT_LEADER_MAJOR_CIV" ModifierId="STANDARD_DIPLOMATIC_INCURSION"/>
     <Row TraitType="TRAIT_LEADER_MAJOR_CIV" ModifierId="JAC_DOMAIN_CROSSING_ALL_UNITS"/>
+    <Row TraitType="TRAIT_LEADER_MAJOR_CIV" ModifierId="JAC_JAPAN_CITY_LOYALTY_STABILITY"/>
   </TraitModifiers>
   <GlobalParameters>
     <Update>
