@@ -105,6 +105,7 @@ end
 -- 毎ターンの初めに、組ごとに講和を試す。
 -- 1. 応諾済みで講和を待つ組（安全網：裁定の場で MakePeace が失敗したときだけできる）：講和できたターンから停戦を始める。
 -- 2. 停戦中に戦争になっている組：講和し直す。講和できなければ（安全網）、停戦が切れた後も講和できるまで試す。
+--    前のターンか同じターンにスクリプトが講和させた組は、1ターン待ってから講和し直す（往復の防止）。
 -- 宣戦した側はゲームプレイ側で分からない（宣戦のイベント Events.DiplomacyDeclareWar は UI 側の使用例しか無い）ため、
 -- 違反の不利益は付けない
 local function EnforceTruces(turn)
@@ -129,7 +130,14 @@ local function EnforceTruces(turn)
 			local untilTurn = Game:GetProperty(key)
 			if untilTurn ~= nil then
 				local peace, reason = true, nil
-				if Players[a]:GetDiplomacy():IsAtWarWith(b) then
+				local lastPeace = Game:GetProperty(R.PeaceTurnKey(a, b))
+				if Players[a]:GetDiplomacy():IsAtWarWith(b) and lastPeace ~= nil and lastPeace >= turn - 1 then
+					-- スクリプトが講和させたターンの中で戦争になった組（通常は講和後の最短期間 DIPLOMACY_PEACE_MIN_TURNS = 10
+					-- のため起きず、強制の DeclareWarOn でだけ起きる）は、講和と宣戦を続けて往復させないよう1ターン待つ。
+					-- court-arbitration-08 では、強制講和と同じターンに強制宣戦した後のターン処理でエンジンが止まった
+					peace = false
+					Log(string.format("truce breach deferred pair=%d-%d turn=%d peace_turn=%d", a, b, turn, lastPeace))
+				elseif Players[a]:GetDiplomacy():IsAtWarWith(b) then
 					peace, reason = MakePeace(a, b, turn)
 					Log(string.format("%struce reimposed pair=%d-%d turn=%d until=%d ok=%s%s", peace and "" or "SAFETY NET ",
 						a, b, turn, untilTurn, tostring(peace), peace and "" or " reason=" .. reason))

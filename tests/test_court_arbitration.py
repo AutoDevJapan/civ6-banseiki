@@ -325,11 +325,12 @@ class ArbitrationTurnTests(unittest.TestCase):
 
     def test_war_during_the_truce_is_undone_and_the_truce_ends_on_time(self):
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
-        self.next_turn()  # turn 2, truce until 12
+        self.next_turn()  # turn 2: peace, truce until 12
+        self.next_turn()  # a war on the turn of the peace would wait a turn (next test)
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.next_turn()
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
-        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=3 until=12 ok=true", self.log())
+        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=4 until=12 ok=true", self.log())
         self.next_turn(13)
         self.assertIsNone(self.game("JAC_ARB_TRUCE_0_1"))
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
@@ -348,12 +349,31 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertIsNone(self.game("JAC_ARB_AWAIT_0_1"))
         self.assertIn("[JAC_ARB] accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=true", self.log())
         # A war declared under the truce, still inside the minimum war length, is undone the next turn.
+        self.next_turn(12)
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.next_turn()
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
-        self.assertEqual(self.game("JAC_ARB_PEACE_TURN_0_1"), 3)
+        self.assertEqual(self.game("JAC_ARB_PEACE_TURN_0_1"), 13)
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 32)
-        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=3 until=32 ok=true", self.log())
+        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=13 until=32 ok=true", self.log())
+        self.assertFalse(any("SAFETY NET" in line for line in self.log()))
+
+    def test_a_war_on_the_turn_of_the_scripts_peace_is_undone_one_turn_later(self):
+        # court-arbitration-08: a war forced on the turn of a forced peace (impossible in normal play:
+        # DIPLOMACY_PEACE_MIN_TURNS) hung the engine. The script waits a turn instead of flipping straight back.
+        self.g.MIN_WAR = 10
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()  # turn 2: peace, truce until 32
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
+        self.next_turn()  # turn 3
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual((self.game("JAC_ARB_PEACE_TURN_0_1"), self.game("JAC_ARB_TRUCE_0_1")), (2, 32))
+        self.assertIn("[JAC_ARB] truce breach deferred pair=0-1 turn=3 peace_turn=2", self.log())
+        self.next_turn()  # turn 4
+        self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual((self.game("JAC_ARB_PEACE_TURN_0_1"), self.game("JAC_ARB_TRUCE_0_1")), (4, 32))
+        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=4 until=32 ok=true", self.log())
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 
     def test_safety_net_defers_peace_when_the_force_flag_does_nothing(self):
@@ -463,8 +483,11 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
                 self.assertIs(self.lua.execute(step["condition"]["code"]), True)
         self.assertIn("accepted-path pair CIVILIZATION_JAC_MORI 3 - CIVILIZATION_JAC_ODA 4", results[1])
         self.assertIn("accepted ruling: 3-4 made peace on turn 2", results[3])
-        self.assertEqual(results[-1], "refused by Ouchi (legitimacy 35, outlaw until 13); "
-                         "truce breach 3-4 undone on turn 3, truce still until 32")
+        self.assertEqual(results[-3], "refused by Ouchi (legitimacy 35, outlaw until 13); accepted pair 3-4 still at peace")
+        # The breach is forced only past the minimum peace length (court-arbitration-08 hung when forced on turn 2).
+        self.assertEqual(results[-2], "forced war inside the truce between 3 and 4 on turn 13")
+        self.assertEqual(results[-1], "truce breach 3-4 forced on turn 13 undone on turn 14, truce still until 32")
+        self.assertFalse(any("deferred" in line for line in self.log()))
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 
 
