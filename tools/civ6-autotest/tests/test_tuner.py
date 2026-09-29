@@ -138,6 +138,16 @@ class FramingTests(unittest.TestCase):
             left.close()
             right.close()
 
+    def test_empty_frame_is_skipped_not_fatal(self):
+        left, right = socket.socketpair()
+        try:
+            right.sendall(struct.pack("<Ii", 0, 3))
+            frame = recv_frame(left)
+            self.assertEqual(frame.payload, "")
+        finally:
+            left.close()
+            right.close()
+
     def test_send_nul_is_rejected(self):
         left, right = socket.socketpair()
         try:
