@@ -35,7 +35,7 @@ EXPECTED_RESIDUAL = {
     "CivicPrereqs": (80, 0), "CivicQuotes": (113, 0), "CivicRandomCosts": (10, 0), "Civics_XP2": (6, 0),
     "Improvement_BonusYieldChanges": (25, 0), "Improvement_Tourism": (11, 0), "Improvement_ValidFeatures": (1, 0),
     "Improvements": (0, 26), "RandomAgendaCivicTags": (2, 0), "RandomAgendasForCivic": (1, 0),
-    "Resource_Harvests": (0, 3), "Routes_XP2": (1, 0), "StartingBoostedCivics": (11, 0),
+    "Routes_XP2": (1, 0), "StartingBoostedCivics": (11, 0),
     "StartingBoostedTechnologies": (21, 0), "Technologies_XP2": (9, 0), "TechnologyModifiers": (14, 0),
     "TechnologyPrereqs": (95, 0), "TechnologyQuotes": (147, 0), "TechnologyRandomCosts": (12, 0), "Units": (0, 94),
 }

@@ -292,7 +292,6 @@ CASCADE_DROPS = (
     ("RandomAgendasForCivic / RandomAgendaCivicTags", "ナショナリズムで AI に追加される隠しアジェンダ",
      "AI の性格付けのみ"),
     ("Routes_XP2", "鉄道", "時代外"),
-    ("Resource_Harvests", "牛・鹿・羊の収穫", "日本マップに無い（JAC_Sengoku_Resources.sql の方針どおり）"),
 )
 
 

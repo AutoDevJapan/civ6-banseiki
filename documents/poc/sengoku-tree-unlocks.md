@@ -200,7 +200,6 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | Units / Buildings / Improvements | 研究ゲートが空になる公式行 | CanTrain=0・InternalOnly=1・Buildable=0。残した Unit は旧式化の研究だけが空になり、旧式化しない |
 | RandomAgendasForCivic / RandomAgendaCivicTags | ナショナリズムで AI に追加される隠しアジェンダ | AI の性格付けのみ |
 | Routes_XP2 | 鉄道 | 時代外 |
-| Resource_Harvests | 牛・鹿・羊の収穫 | 日本マップに無い（JAC_Sengoku_Resources.sql の方針どおり） |
 
 総督を無効にしても公式 UI は壊れない見込み：ランチバーの総督ボタンは `CAPABILITY_GOVERNORS` で出たままだが、通知の印は `CanAppoint()`・`CanPromote()` が真のときだけ出る（`DLC/Expansion1/UI/Replacements/LaunchBar_Expansion1.lua:129-136`）。総督画面は称号0でも `GetGovernorPoints()`・`CanAppoint()` で候補を任命不可として並べるだけで（`DLC/Expansion2/UI/Additions/GovernorPanel.lua:55-57`）、公式でも最初の制度を得るまでは称号0で始まる。政府の広場の説明文からは称号の一文を外した（生成ファイル `Text/JAC_Sengoku_Text.xml`）。偉人イレーネ・アダム・スミスの説明は付与の Modifier ごと消えるため、称号の行が出ない見込み。
 

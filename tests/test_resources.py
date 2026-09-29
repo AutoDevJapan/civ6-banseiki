@@ -17,7 +17,6 @@ SENGOKU = ROOT / "poc/JAC_PoC_SengokuTrees"
 GAME = Path("C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI")
 BASE_RESOURCES = GAME / "Base/Assets/Gameplay/Data/Resources.xml"
 XP2_RESOURCES = GAME / "DLC/Expansion2/Data/Expansion2_Resources.xml"
-ANIMAL_HARVESTS = {"RESOURCE_CATTLE", "RESOURCE_DEER", "RESOURCE_SHEEP"}  # not on the Japan maps
 
 
 def statements(path: Path) -> list[str]:
@@ -90,8 +89,12 @@ class SengokuResourceGateTests(unittest.TestCase):
                 tech = final_harvests[(resource, yield_type)]
                 if tech is not None:
                     self.assertIn(tech, sengoku_techs)
-                if official and resource not in ANIMAL_HARVESTS:
+                if official:
                     self.assertIsNotNone(tech, "harvest tech deleted, harvest open from turn 1")
+        # Not on the Japan maps, but the ruleset also runs on normal maps (provisional T05).
+        animals = {tech for (resource, _), tech in final_harvests.items()
+                   if resource in ("RESOURCE_CATTLE", "RESOURCE_DEER", "RESOURCE_SHEEP")}
+        self.assertEqual(animals, {"TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS"})
 
     def test_modinfo_runs_the_resource_gate_between_trees_and_unlocks(self):
         root = ET.parse(SENGOKU / "JAC_PoC_SengokuTrees.modinfo").getroot()
