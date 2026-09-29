@@ -56,8 +56,15 @@ class HouseNameTests(unittest.TestCase):
 
     def test_sengoku_names_are_registered(self):
         pairs = {(generic, civ) for generic, _, civ, _ in self.registry}
-        self.assertIn(("LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME", "CIVILIZATION_JAC_ODA"), pairs)
         self.assertIn(("LOC_JAC_SENGOKU_ERA_3_NAME", "CIVILIZATION_JAC_ODA"), pairs)
+
+    def test_taiko_survey_is_the_name_for_every_house(self):
+        # SSOT 3.2 (owner decision): every house that researches C25 sees 太閤検地, so it is the plain name, not a house name.
+        taiko = "LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME"
+        self.assertNotIn(taiko, {generic for generic, _, _, _ in self.registry})
+        self.assertNotIn(taiko + "_HOUSE", self.texts)
+        self.assertEqual(self.texts[taiko]["ja_JP"], "太閤検地")
+        self.assertEqual(self.texts[taiko]["en_US"], "Taikō Land Survey")
 
     def test_registry_is_well_formed(self):
         self.assertTrue(self.registry)
