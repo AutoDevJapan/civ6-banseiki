@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<!-- The VictoryDomain has no rows in Victories until the castle-unification victory exists. -->
+	<Rulesets>
+		<Update>
+			<Where RulesetType="RULESET_JAC_BANSEIKI"/>
+			<Set VictoryDomain="JAC_Sengoku_Victories" MaxTurns="0"/>
+		</Update>
+	</Rulesets>
+	<RulesetSupportedValues>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" Domain="StandardTurnLimits" Value="TURNLIMIT_NONE"/>
+	</RulesetSupportedValues>
+	<ConfigurationUpdates>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_TURN_LIMIT" TargetValue="TURNLIMIT_NONE" Hash="1"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_MAX_TURNS" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_DEFAULT" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_CONQUEST" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_TECHNOLOGY" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_CULTURE" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_RELIGIOUS" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_DIPLOMATIC" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_SCORE" TargetValue="0" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="DEFEAT_TIME" TargetValue="0" Hash="0"/>
+	</ConfigurationUpdates>
+</GameInfo>

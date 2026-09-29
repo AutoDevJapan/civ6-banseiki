@@ -96,9 +96,14 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Unlocks.sql",
-            "Data/JAC_Sengoku_Icons.xml", "Text/JAC_Sengoku_Text.xml",
+            "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Icons.xml",
+            "Config/JAC_Sengoku_Victories.xml", "Text/JAC_Sengoku_Text.xml",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
+        self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],
+                         ["Config/JAC_Sengoku_Victories.xml"])
+        self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-1],
+                         "Data/JAC_Sengoku_Victories.sql")
         icons = ET.parse(MOD / "Data/JAC_Sengoku_Icons.xml").getroot()
         icon_names = [row.get("Name") for row in icons.findall("./IconDefinitions/Row")]
         self.assertEqual(len(icon_names), 124)
@@ -175,13 +180,44 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
         db.close()
 
-    def test_banseiki_has_no_time_or_score_victory(self):
-        config = ET.parse(ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")
-        rows = config.findall("./ConfigurationUpdates/Row")
-        turn_limits = [row for row in rows if row.get("SourceValue") == "RULESET_JAC_BANSEIKI"
-                       and row.get("TargetId") == "GAME_TURN_LIMIT"]
-        self.assertEqual(len(turn_limits), 1)
-        self.assertEqual(turn_limits[0].get("TargetValue"), "TURNLIMIT_NONE")
+    def test_banseiki_sengoku_disables_official_victories_and_time_limit(self):
+        base = ET.parse(ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")
+        self.assertEqual(base.find("./Rulesets/Row").get("VictoryDomain"), "Expansion2_Victories")
+        config = ET.parse(MOD / "Config/JAC_Sengoku_Victories.xml")
+        update = config.find("./Rulesets/Update")
+        self.assertEqual(update.find("Where").attrib, {"RulesetType": "RULESET_JAC_BANSEIKI"})
+        self.assertEqual(update.find("Set").attrib,
+                         {"VictoryDomain": "JAC_Sengoku_Victories", "MaxTurns": "0"})
+        self.assertFalse(config.findall("./Victories/Row"))
+        self.assertEqual([row.attrib for row in config.findall("./RulesetSupportedValues/Row")], [{
+            "Ruleset": "RULESET_JAC_BANSEIKI", "Domain": "StandardTurnLimits", "Value": "TURNLIMIT_NONE"
+        }])
+
+        official = {"VICTORY_DEFAULT", "VICTORY_CONQUEST", "VICTORY_TECHNOLOGY",
+                    "VICTORY_CULTURE", "VICTORY_RELIGIOUS", "VICTORY_DIPLOMATIC", "VICTORY_SCORE"}
+        updates = config.findall("./ConfigurationUpdates/Row")
+        self.assertTrue(all(row.get("SourceGroup") == "Game" and row.get("SourceId") == "RULESET"
+                            and row.get("SourceValue") == "RULESET_JAC_BANSEIKI"
+                            and row.get("TargetGroup") == "Game" for row in updates))
+        values = {row.get("TargetId"): row.get("TargetValue") for row in updates}
+        self.assertEqual(len(values), len(updates))
+        self.assertEqual(values, {**dict.fromkeys(official | {"DEFEAT_TIME"}, "0"),
+                                  "GAME_TURN_LIMIT": "TURNLIMIT_NONE", "GAME_MAX_TURNS": "0"})
+
+        db = sqlite3.connect(":memory:")
+        db.executescript("""
+            CREATE TABLE Victories (VictoryType TEXT PRIMARY KEY, EnabledByDefault INT);
+            CREATE TABLE Defeats (DefeatType TEXT PRIMARY KEY, EnabledByDefault INT);
+            INSERT INTO Victories VALUES ('VICTORY_CUSTOM', 1);
+            INSERT INTO Defeats VALUES ('DEFEAT_DEFAULT', 1), ('DEFEAT_TIME', 1);
+        """)
+        db.executemany("INSERT INTO Victories VALUES (?, 1)", ((victory,) for victory in official))
+        db.executescript((MOD / "Data/JAC_Sengoku_Victories.sql").read_text(encoding="utf-8"))
+        self.assertEqual(dict(db.execute("SELECT VictoryType, EnabledByDefault FROM Victories")),
+                         {**dict.fromkeys(official, 0), "VICTORY_CUSTOM": 1})
+        self.assertEqual(dict(db.execute("SELECT DefeatType, EnabledByDefault FROM Defeats")),
+                         {"DEFEAT_DEFAULT": 1, "DEFEAT_TIME": 0})
+        db.close()
 
 
 if __name__ == "__main__":
