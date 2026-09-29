@@ -16,6 +16,8 @@ BANSEIKI_RULESET_ID = "bd7a82c5-6b38-4b69-a7f5-8dc9af534249"
 BUNDLE0_ID = "dfa0717e-4d0b-4370-b693-27fc6758571b"
 CUSTOM_CIVS_ID = "ba3a1c58-9287-4654-a22f-85f9e6841e9b"
 GROWTH_UI_ID = "7696e937-2044-4f3c-8e13-4e27632e2710"
+# Left on by other scenarios; the map checks here were verified without the Sengoku pack.
+SENGOKU_TREES_ID = "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7"
 
 
 def write_xml(path: Path, root: ET.Element) -> None:
@@ -263,7 +265,7 @@ def scenarios(human_slug: str = "ODA") -> None:
                 "judge_profile": "japan_map", "steps": [
                     {"action": "enable_mods",
                      "ids": [BANSEIKI_RULESET_ID, CUSTOM_CIVS_ID, GROWTH_UI_ID, MOD_ID],
-                     "disable_ids": [BUNDLE0_ID]},
+                     "disable_ids": [BUNDLE0_ID, SENGOKU_TREES_ID]},
                     {"action": "configure", "ruleset": "RULESET_JAC_BANSEIKI",
                      "map_file": "{" + MOD_ID + "}Maps/" + item["file"], "map_size": "MAPSIZE_HUGE",
                      "speed": "GAMESPEED_STANDARD", "seed": 620929 + km, "city_states": 0,
