@@ -3,7 +3,7 @@
   "status": "研究草案（オーナー確認前）。SSOT 3.2 の史実イベントの候補一覧。数値・効果は暫定。",
   "period": "1534-1600",
   "factions": "documents/spec/data/japan-1534-start.json の22勢力ID (ALL=全勢力)",
-  "earlier_by": "その研究を先に終えた勢力は、史実年より前にイベントの効果を使える (SSOT 3.2)",
+  "earlier_by": "その研究を先に終えた勢力は、史実年より前にイベントの効果を使える (SSOT 3.2)。開始時の知識（documents/poc/sengoku-starting-knowledge.md の技術4・社会制度3）は全勢力が最初から持つので含めない（boost も同じ。tools/generate_sengoku_events.py が拒否する）",
   "month_note": "月は date_text の日付を西暦に換算した月（1582年10月4日まではユリウス暦、10月15日以降はグレゴリオ暦）。旧暦の月だけ分かるものはその月の15日、幅があるものは開始日で換算。date_text に旧暦表記・幅を残す",
   "year_end": "史実の期間の終わりの年（表示用）。イベントは year／month に対応するターンで一度だけ発火し、year_end まで再発火したり効果を延ばしたりしない。続く効果は gameplay_effect に書く。year_end の無いイベントは一時点",
   "confidence": "high/medium/low",
@@ -98,11 +98,6 @@
    "earlier_by": [
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    },
-    {
-     "type": "civic",
      "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
      "short": "C10"
     }
@@ -122,8 +117,8 @@
    "note": "当主は SSOT 3.1 のとおり島津貴久（`japan-1534-start.json` は史実の名目上の当主・島津勝久のままで、SSOT に合わせる修正が別途必要）。",
    "boost": {
     "type": "civic",
-    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-    "short": "C02"
+    "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
+    "short": "C10"
    },
    "advisor_popup": {
     "ja": "分家と和睦し、薩摩の国人と盟約を結びましょう。",
@@ -155,16 +150,11 @@
      "type": "tech",
      "id": "TECH_JAC_SENGOKU_GRAIN_STORES",
      "short": "T07"
-    },
-    {
-     "type": "tech",
-     "id": "TECH_JAC_SENGOKU_IRRIGATION_WORKS",
-     "short": "T01"
     }
    ],
    "house_specific": false,
    "effect_category": "disaster",
-   "gameplay_effect": "食料の全国的な不作。研究済みの兵糧保存（T07）・用水普請（T01）で被害を軽減。未研究の家は食料と人口成長が数ターン低下（暫定）。",
+   "gameplay_effect": "食料の全国的な不作。研究済みの兵糧保存（T07）で被害を軽減（用水普請 T01 は開始時の知識で全勢力が持つため条件にしない）。未研究の家は食料と人口成長が数ターン低下（暫定）。",
    "sources": [
     {
      "title": "コトバンク『天文の飢饉』"
@@ -270,13 +260,7 @@
    "primary_factions": [
     "DATE"
    ],
-   "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    }
-   ],
+   "earlier_by": [],
    "house_specific": false,
    "effect_category": "succession",
    "gameplay_effect": "伊達稙宗と晴宗の父子対立が南奥全体へ広がる。伊達と蘆名の外交状態が揺れ、1548年の和睦で当主が晴宗へ交代。内紛中は伊達の戦力・生産が低下（暫定）。",
@@ -289,11 +273,7 @@
     }
    ],
    "confidence": "high",
-   "boost": {
-    "type": "civic",
-    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-    "short": "C02"
-   },
+   "boost": null,
    "advisor_popup": {
     "ja": "父子の争いを和睦で収め、蘆名との仲を立て直しましょう。",
     "en": "End the father–son war with a truce and mend ties with the Ashina.",
@@ -798,13 +778,7 @@
    "primary_factions": [
     "OUCHI"
    ],
-   "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    }
-   ],
+   "earlier_by": [],
    "house_specific": false,
    "effect_category": "succession",
    "gameplay_effect": "陶隆房（晴賢）が大内義隆を自害に追い込む。大内の当主・忠誠が動揺し、石見・周防・長門の城が家臣寄りに動く。毛利が独立性を高める契機。",
@@ -817,11 +791,7 @@
     }
    ],
    "confidence": "high",
-   "boost": {
-    "type": "civic",
-    "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-    "short": "C02"
-   },
+   "boost": null,
    "advisor_popup": {
     "ja": "離反しそうな家臣・国人と盟約を結び直しましょう。",
     "en": "Renew oaths with wavering retainers and kokujin.",
@@ -1900,11 +1870,6 @@
    "earlier_by": [
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    },
-    {
-     "type": "civic",
      "id": "CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER",
      "short": "C10"
     },
@@ -2018,11 +1983,6 @@
     "NAGAO"
    ],
    "earlier_by": [
-    {
-     "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES",
-     "short": "C02"
-    },
     {
      "type": "civic",
      "id": "CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES",

@@ -1,5 +1,5 @@
 {
-  "name": "Historical events on the 15 km Japan map: early firing by research, no re-fire after load, only a boost (not the tech, not the effects) at the year for factions without it",
+  "name": "Historical event list on the 15 km Japan map: early firing by research with the advisor popup for the human only, a rename, no re-fire after load, boosts in the year for factions without the research",
   "judge_profile": "generic",
   "steps": [
     {
@@ -147,14 +147,14 @@
       "condition": {
         "type": "log_line",
         "log": "Lua.log",
-        "contains": "[JAC_EVENTS] loaded events=3 startYear=1534 speed=GAMESPEED_STANDARD"
+        "contains": "[JAC_EVENTS] loaded events=60 startYear=1534 speed=GAMESPEED_STANDARD"
       },
       "timeout": 60
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local elapsed=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if elapsed~=1 then error('not elapsed turn 1: '..elapsed) end; if Game:GetProperty('JAC_EVENTS_FIRE_COUNT')~=nil then error('events fired before forcing: '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))) end; Players[0]:GetTechs():SetTech(GameInfo.Technologies['TECH_JAC_SENGOKU_FIREARMS_CONTACT'].Index,true); Players[0]:GetTechs():SetTech(GameInfo.Technologies['TECH_JAC_SENGOKU_ORE_PROSPECTING'].Index,true); Players[nagao]:GetCulture():SetCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS'].Index,true); return 'forced prereqs: Oda firearms+ore prospecting, Nagao court envoys (player '..nagao..')'"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; if el()~=1 then error('not elapsed turn 1: '..el()) end; if Game:GetProperty('JAC_EVENTS_FIRE_COUNT')~=nil then error('events fired before forcing') end; local nagao,shimazu=pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); Players[0]:GetTechs():SetTech(GameInfo.Technologies['TECH_JAC_SENGOKU_GRAIN_STORES'].Index,true); Players[nagao]:GetCulture():SetCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS'].Index,true); Players[shimazu]:GetCulture():SetCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER'].Index,true); return 'forced: Oda grain stores (famine, advisor), Nagao court envoys (Uesugi), Shimazu military service ledger (AI advisor)'"
     },
     {
       "action": "autoplay",
@@ -162,27 +162,50 @@
       "timeout": 900
     },
     {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=0; for row in GameInfo.JAC_HistoricalEvents() do for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetProperty('JAC_EVENT_FIRED_'..row.EventType)~=nil then n=n+1 end end end; if n~=Game:GetProperty('JAC_EVENTS_FIRE_COUNT') then error('fire count '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))..' ~= flags '..n) end; local oda,nagao,shimazu=pid('CIVILIZATION_JAC_ODA'),pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); if oda~=0 then error('Oda is not player 0') end; if f(oda,'TENBUN_FAMINE')~=2 then error('famine not fired early for Oda on turn 2: '..tostring(f(oda,'TENBUN_FAMINE'))) end; if f(nagao,'NAGAO_TO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; if f(shimazu,'SHIMAZU_UNIFY_1')~=2 then error('Shimazu event not fired on turn 2') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_ODA')~=nil then error('Oda renamed early') end; return 'elapsed='..el()..' fires='..Game:GetProperty('JAC_EVENTS_FIRE_COUNT')"
+    },
+    {
       "action": "wait_for",
       "condition": {
-        "type": "log_line",
-        "log": "Lua.log",
-        "contains": "[JAC_EVENTS] fired event=JAC_EVENT_TEPPO_DENRAI player=0 civ=CIVILIZATION_JAC_ODA reason=prereq turn=2 due=30"
+        "type": "lua",
+        "state_name": "JAC_HistoricalEventsAdvisor",
+        "code": "return JAC_EVENTS_ADVISOR_SHOWN['JAC_EVENT_TENBUN_FAMINE@2#0'] == true"
       },
       "timeout": 60
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local copper=GameInfo.Resources['RESOURCE_COPPER'].Index; local function fired(id,e) local v=Players[id]:GetProperty('JAC_EVENT_FIRED_'..e); return v end; if fired(0,'JAC_EVENT_TEPPO_DENRAI')~=2 then error('teppo not fired for Oda on turn 2: '..tostring(fired(0,'JAC_EVENT_TEPPO_DENRAI'))) end; if fired(0,'JAC_EVENT_ASHIO_COPPER')~=2 then error('Ashio not fired for Oda on turn 2') end; if fired(nagao,'JAC_EVENT_NAGAO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); if id~=0 and fired(id,'JAC_EVENT_TEPPO_DENRAI')~=nil then error('teppo fired early for player '..id) end end; local n=Game:GetProperty('JAC_EVENTS_FIRE_COUNT'); if n~=3 then error('fire count '..tostring(n)..' ~= 3') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; local plots=Game:GetProperty('JAC_EVENT_RESOURCES_JAC_EVENT_ASHIO_COPPER'); if type(plots)~='table' or #plots~=1 then error('Ashio copper not placed') end; local plot=Map.GetPlotByIndex(plots[1]); if plot:GetResourceType()~=copper then error('plot '..plots[1]..' has no copper') end; if plots[1]~=7482 then error('copper not on the reserved Ashio site 7482: '..plots[1]) end; if not ExposedMembers.JAC_Resources.IsRevealed('copper-ashio') then error('resources mod does not list copper-ashio as revealed') end; return 'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' fired=3 copperPlot='..plots[1]..' nagao='..nagao"
+      "state_name": "JAC_HistoricalEventsAdvisor",
+      "code": "local keys={}; for k in pairs(JAC_EVENTS_ADVISOR_SHOWN) do table.insert(keys,k) end; table.sort(keys); for _,k in ipairs(keys) do if k:find('SHIMAZU',1,true) or k:find('KANTO',1,true) then error('AI advisor shown to the human: '..k) end end; return table.concat(keys,',')"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "AdvisorPopup",
+        "code": "local t=Controls.InfoString:GetText() or ''; return IsBlockingInput() and (t:find(Locale.Lookup('LOC_JAC_EVENT_TENBUN_FAMINE_ADVISOR'),1,true)~=nil or t:find(Locale.Lookup('LOC_JAC_EVENT_TENSHO_QUAKE_ADVISOR'),1,true)~=nil)"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "screenshot",
+      "path": "advisor-popup.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "AdvisorPopup",
+      "code": "local t=Controls.InfoString:GetText(); if IsBlockingInput() then OnHideAdvisorDialog() end; return t"
     },
     {
       "action": "ui_lua",
       "state_name": "WorldRankings",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local n=PlayerConfigurations[nagao]:GetCivilizationShortDescription(); if n~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('Nagao display name not switched: '..tostring(n)) end; return 'Nagao shows '..Locale.Lookup(n)"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=PlayerConfigurations[pid('CIVILIZATION_JAC_NAGAO')]:GetCivilizationShortDescription(); if n~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('Nagao display name not switched: '..tostring(n)) end; return 'Nagao shows '..Locale.Lookup(n)"
     },
     {
       "action": "save",
-      "name": "JAC-Events-15km-01",
+      "name": "JAC-Events-15km-02",
       "timeout": 180
     },
     {
@@ -191,13 +214,13 @@
     },
     {
       "action": "load",
-      "name": "JAC-Events-15km-01",
+      "name": "JAC-Events-15km-02",
       "timeout": 600
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local copper=GameInfo.Resources['RESOURCE_COPPER'].Index; local function fired(id,e) local v=Players[id]:GetProperty('JAC_EVENT_FIRED_'..e); return v end; if fired(0,'JAC_EVENT_TEPPO_DENRAI')~=2 then error('teppo not fired for Oda on turn 2: '..tostring(fired(0,'JAC_EVENT_TEPPO_DENRAI'))) end; if fired(0,'JAC_EVENT_ASHIO_COPPER')~=2 then error('Ashio not fired for Oda on turn 2') end; if fired(nagao,'JAC_EVENT_NAGAO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); if id~=0 and fired(id,'JAC_EVENT_TEPPO_DENRAI')~=nil then error('teppo fired early for player '..id) end end; local n=Game:GetProperty('JAC_EVENTS_FIRE_COUNT'); if n~=3 then error('fire count '..tostring(n)..' ~= 3') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; local plots=Game:GetProperty('JAC_EVENT_RESOURCES_JAC_EVENT_ASHIO_COPPER'); if type(plots)~='table' or #plots~=1 then error('Ashio copper not placed') end; local plot=Map.GetPlotByIndex(plots[1]); if plot:GetResourceType()~=copper then error('plot '..plots[1]..' has no copper') end; if plots[1]~=7482 then error('copper not on the reserved Ashio site 7482: '..plots[1]) end; if not ExposedMembers.JAC_Resources.IsRevealed('copper-ashio') then error('resources mod does not list copper-ashio as revealed') end; return 'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' fired=3 copperPlot='..plots[1]..' nagao='..nagao"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=0; for row in GameInfo.JAC_HistoricalEvents() do for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetProperty('JAC_EVENT_FIRED_'..row.EventType)~=nil then n=n+1 end end end; if n~=Game:GetProperty('JAC_EVENTS_FIRE_COUNT') then error('fire count '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))..' ~= flags '..n) end; local oda,nagao,shimazu=pid('CIVILIZATION_JAC_ODA'),pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); if oda~=0 then error('Oda is not player 0') end; if f(oda,'TENBUN_FAMINE')~=2 then error('famine not fired early for Oda on turn 2: '..tostring(f(oda,'TENBUN_FAMINE'))) end; if f(nagao,'NAGAO_TO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; if f(shimazu,'SHIMAZU_UNIFY_1')~=2 then error('Shimazu event not fired on turn 2') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_ODA')~=nil then error('Oda renamed early') end; return 'elapsed='..el()..' fires='..Game:GetProperty('JAC_EVENTS_FIRE_COUNT')"
     },
     {
       "action": "autoplay",
@@ -207,27 +230,27 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local copper=GameInfo.Resources['RESOURCE_COPPER'].Index; local function fired(id,e) local v=Players[id]:GetProperty('JAC_EVENT_FIRED_'..e); return v end; if fired(0,'JAC_EVENT_TEPPO_DENRAI')~=2 then error('teppo not fired for Oda on turn 2: '..tostring(fired(0,'JAC_EVENT_TEPPO_DENRAI'))) end; if fired(0,'JAC_EVENT_ASHIO_COPPER')~=2 then error('Ashio not fired for Oda on turn 2') end; if fired(nagao,'JAC_EVENT_NAGAO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); if id~=0 and fired(id,'JAC_EVENT_TEPPO_DENRAI')~=nil then error('teppo fired early for player '..id) end end; local n=Game:GetProperty('JAC_EVENTS_FIRE_COUNT'); if n~=3 then error('fire count '..tostring(n)..' ~= 3') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; local plots=Game:GetProperty('JAC_EVENT_RESOURCES_JAC_EVENT_ASHIO_COPPER'); if type(plots)~='table' or #plots~=1 then error('Ashio copper not placed') end; local plot=Map.GetPlotByIndex(plots[1]); if plot:GetResourceType()~=copper then error('plot '..plots[1]..' has no copper') end; if plots[1]~=7482 then error('copper not on the reserved Ashio site 7482: '..plots[1]) end; if not ExposedMembers.JAC_Resources.IsRevealed('copper-ashio') then error('resources mod does not list copper-ashio as revealed') end; return 'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)..' fired=3 copperPlot='..plots[1]..' nagao='..nagao"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=0; for row in GameInfo.JAC_HistoricalEvents() do for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetProperty('JAC_EVENT_FIRED_'..row.EventType)~=nil then n=n+1 end end end; if n~=Game:GetProperty('JAC_EVENTS_FIRE_COUNT') then error('fire count '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))..' ~= flags '..n) end; local oda,nagao,shimazu=pid('CIVILIZATION_JAC_ODA'),pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); if oda~=0 then error('Oda is not player 0') end; if f(oda,'TENBUN_FAMINE')~=2 then error('famine not fired early for Oda on turn 2: '..tostring(f(oda,'TENBUN_FAMINE'))) end; if f(nagao,'NAGAO_TO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; if f(shimazu,'SHIMAZU_UNIFY_1')~=2 then error('Shimazu event not fired on turn 2') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_ODA')~=nil then error('Oda renamed early') end; if el()~=3 then error('not elapsed turn 3: '..el()) end; return 'no refire after load; elapsed='..el()..' fires='..Game:GetProperty('JAC_EVENTS_FIRE_COUNT')"
     },
     {
       "action": "ui_lua",
       "state_name": "WorldRankings",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local n=PlayerConfigurations[nagao]:GetCivilizationShortDescription(); if n~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('Nagao display name not switched: '..tostring(n)) end; return 'Nagao shows '..Locale.Lookup(n)"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=PlayerConfigurations[pid('CIVILIZATION_JAC_NAGAO')]:GetCivilizationShortDescription(); if n~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('Nagao display name lost after load: '..tostring(n)) end; return 'Nagao shows '..Locale.Lookup(n)"
     },
     {
       "action": "autoplay",
-      "turns": 27,
+      "turns": 16,
       "timeout": 1800
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local y=Calendar.MakeYearStr(Game.GetCurrentGameTurn()); if not string.find(y,'1543',1,true) then error('engine date is not 1543: '..tostring(y)) end; return y"
+      "code": "local y=Calendar.MakeYearStr(Game.GetCurrentGameTurn()); if not string.find(y,'1540',1,true) then error('engine date is not 1540: '..tostring(y)) end; return y"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local nagao=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_NAGAO' then nagao=p:GetID() end end; if nagao==nil then error('Nagao absent') end; local t=GameInfo.Technologies['TECH_JAC_SENGOKU_FIREARMS_CONTACT'].Index; local elapsed=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if elapsed~=30 then error('not elapsed turn 30: '..elapsed) end; local boosted=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); if not p:GetTechs():HasTech(t) then if p:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI')~=30 then error('player '..id..' without firearms not boosted on turn 30: '..tostring(p:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI'))) end; if not p:GetTechs():HasBoostBeenTriggered(t) then error('player '..id..' has no firearms boost') end; boosted=boosted+1 end end; if boosted==0 then error('every faction researched firearms; the boost-only path was not exercised') end; local np=Players[nagao]; if np:GetTechs():HasTech(t) then return 'turn 30: '..boosted..' factions boosted (Nagao researched firearms itself)' end; if np:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI')~=30 then error('Nagao not boosted on turn 30: '..tostring(np:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO_DENRAI'))) end; if np:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_TEPPO_DENRAI')~=nil then error('Nagao got the event effects without the tech') end; if not np:GetTechs():HasBoostBeenTriggered(t) then error('Nagao has no firearms boost') end; if not Players[0]:GetTechs():HasTech(t) then error('Oda lost the tech') end; return 'turn 30 (1543/8): '..boosted..' factions boosted; Nagao without the tech or the effects, Oda unchanged'"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; if el()~=19 then error('not elapsed turn 19: '..el()) end; local t=GameInfo.Technologies['TECH_JAC_SENGOKU_GRAIN_STORES'].Index; local boosted=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); local b=p:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TENBUN_FAMINE'); if f(id,'TENBUN_FAMINE')==nil then if b~=19 then error('player '..id..' neither fired nor boosted on turn 19: '..tostring(b)) end; if not p:GetTechs():HasBoostBeenTriggered(t) then error('player '..id..' has no grain-stores boost') end; boosted=boosted+1 end end; if boosted==0 then error('every faction researched grain stores; the boost-only path was not exercised') end; if f(0,'TENBUN_FAMINE')~=2 or Players[0]:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_TENBUN_FAMINE')~=nil then error('Oda famine flags changed') end; local date=pid('CIVILIZATION_JAC_DATE'); local c=GameInfo.Civics['CIVIC_JAC_SENGOKU_DOMAIN_LAW'].Index; local jin; if f(date,'JINKAISHU')~=nil and Players[date]:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_JINKAISHU')==nil then jin='Date researched domain law first (fired '..f(date,'JINKAISHU')..')' else if Players[date]:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_JINKAISHU')~=8 then error('Date not boosted on turn 8: '..tostring(Players[date]:GetProperty('JAC_EVENT_BOOSTED_JAC_EVENT_JINKAISHU'))) end; if not Players[date]:GetCulture():HasBoostBeenTriggered(c) then error('Date has no domain-law inspiration') end; jin='Date inspired on turn 8' end; return 'turn 19 (1540): '..boosted..' factions boosted toward grain stores; '..jin"
     }
   ]
 }

@@ -1009,6 +1009,11 @@ class Runner:
             if target.exists():
                 raise ScenarioError(f"Save already exists (will not overwrite): {target}")
             literal = _lua_string(name)
+            # A tutorial advisor raised at the local turn start (GREAT_PERSON_POINT) blocks input, and
+            # Network.SaveGame then never fires SaveComplete (live sengoku-events-list-06: autoplay returned
+            # before its loop dismissed the popup). Close it as the screenshot step does.
+            self._close_options_menu(deadline)
+            self._dismiss_advisor(deadline)
             code = (
                 "JAC_AUTOTEST_SAVE_DONE = false\n"
                 "if JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\n"

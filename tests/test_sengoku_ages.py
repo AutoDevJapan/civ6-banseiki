@@ -459,18 +459,18 @@ class LedgerTests(unittest.TestCase):
 
     def test_event_flags_score_once_per_house_and_the_reign_turn_flag_goes_to_the_new_period(self):
         self.turns(1, 30)
-        self.g.Players[0].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO_DENRAI", 30)
+        self.g.Players[0].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO", 30)
         self.turns(31, 40)
         self.assertEqual(self.parts(0), {"event": 2})
         self.turns(41, 65)
-        # Ashio fires for Oda on turn 65 (old period) and for Takeda on the 改元 turn 66 (new period).
-        self.g.Players[0].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_ASHIO_COPPER", 65)
-        self.g.Players[1].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_ASHIO_COPPER", 66)  # ran before the ledger
+        # Ikuno fires for Oda on turn 65 (old period) and for Takeda on the 改元 turn 66 (new period).
+        self.g.Players[0].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_IKUNO_SILVER", 65)
+        self.g.Players[1].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_IKUNO_SILVER", 66)  # ran before the ledger
         self.turns(66)
         history = self.g.LEDGER().history["r1"]
         self.assertEqual((history.p0.score, history.p1.score), (3, 0))
         self.assertEqual(self.parts(1), {"event": 1})
-        self.g.Players[2].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_ASHIO_COPPER", 66)  # ran after the ledger
+        self.g.Players[2].SetProperty(None, "JAC_EVENT_FIRED_JAC_EVENT_IKUNO_SILVER", 66)  # ran after the ledger
         self.turns(67, 70)
         self.assertEqual((self.score(0), self.score(1), self.score(2)), (0, 1, 1))
 
