@@ -9,7 +9,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import enabled_mod_folders, newest_mod_file, restart_reason, wait_for_civ_window
+from restart import (enabled_mod_folders, newest_mod_file, restart_reason, single_civ_process,
+                     wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
 
@@ -199,6 +200,17 @@ class RestartActionTests(unittest.TestCase):
         ):
             runner._launch_steam_and_wait(120)
         self.assertEqual(launch.call_count, 2)
+
+    def test_single_process_waits_for_exiting_process_to_disappear(self):
+        with patch("restart._civ_process_ids", side_effect=[{1, 2}, {1, 2}, {2}]), patch(
+            "restart.process_start_time", return_value=100.0
+        ), patch("restart.time.sleep"):
+            self.assertEqual(single_civ_process(), (2, 100.0))
+
+    def test_single_process_still_refuses_when_duplicates_persist(self):
+        with patch("restart._civ_process_ids", return_value={1, 2}), patch("restart.time.sleep"):
+            with self.assertRaisesRegex(InputError, "Multiple Civ VI processes"):
+                single_civ_process(settle=0)
 
     def test_window_wait_ignores_transient_duplicate_processes(self):
         with patch("restart.single_civ_process", side_effect=[

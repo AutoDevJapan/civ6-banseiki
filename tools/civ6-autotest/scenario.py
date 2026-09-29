@@ -422,7 +422,7 @@ class Runner:
                 last = str(exc)
                 self._disconnect()
             time.sleep(min(0.5, max(0, deadline - time.monotonic())))
-        raise ScenarioError(f"FrontEnd did not answer after {timeout}s; last: {last}")
+        raise ScenarioError(f"FrontEnd did not answer after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")
 
     def _launch_steam_and_wait(self, deadline: float) -> None:
         """Steam can reject a launch while it is still releasing the prior game."""
@@ -432,7 +432,7 @@ class Runner:
         while time.monotonic() < deadline:
             now = time.monotonic()
             try:
-                process_present = single_civ_process() is not None
+                process_present = single_civ_process(settle=0) is not None
             except InputError as exc:
                 if not str(exc).startswith("Multiple Civ VI processes found"):
                     raise
