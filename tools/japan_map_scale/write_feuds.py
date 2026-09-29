@@ -12,6 +12,15 @@ LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL = "{diplomaticReason}", filled with SimpleModif
 Base/Assets/Gameplay/Data/Agendas.xml:2296-2370 has one per agenda modifier. Without it
 GetDiplomaticModifiers returns LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON ("Unknown Reason"), which
 Base/Assets/UI/DiplomacyActionView.lua:915 shows in grey.
+
+The engine also hides every reason (official ones too) while the viewer has access level None:
+"If you gain Limited Diplomatic Visibility, you will find out some information about their opinion
+of you" (Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:771). Freshly met houses sit at None
+(no delegation yet, and the Sengoku tree deletes TECH_PRINTING with its +1 source), so the feud
+houses get +1 access on every met player the way Printing grants it: MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY
+with Amount/Source/SourceType (Base/Assets/Gameplay/Data/Technologies.xml:546-616) and a bare
+DiplomaticVisibilitySources row, attached to a civilization trait like Mongolia's
+(DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:178-179, :352-353, :620-629, :1100-1102).
 """
 
 from __future__ import annotations
@@ -26,6 +35,8 @@ DATA = ROOT / "documents/spec/data/japan-1534-relations.json"
 PENALTY = -10  # comparable to a denounced friend / different-government reason (-6); never decays
 TEXT_TAG = "LOC_JAC_DIPLO_MODIFIER_1534_FEUD"
 SAMPLE_TAG = "LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"  # "{diplomaticReason}", as every official agenda modifier uses
+ACCESS_MODIFIER = "JAC_1534_FEUD_DIPLO_VISIBILITY"
+ACCESS_SOURCE = "SOURCE_JAC_1534_FEUD"
 
 
 def feud_pairs() -> list[tuple[str, str]]:
@@ -54,7 +65,8 @@ def build() -> ET.Element:
         return ET.SubElement(root, name)
 
     for name in ("Types", "Traits", "CivilizationTraits", "Modifiers", "ModifierArguments", "TraitModifiers",
-                 "RequirementSets", "Requirements", "RequirementArguments", "RequirementSetRequirements", "ModifierStrings"):
+                 "RequirementSets", "Requirements", "RequirementArguments", "RequirementSetRequirements", "ModifierStrings",
+                 "DiplomaticVisibilitySources"):
         table(name)
     t = {child.tag: child for child in root}
     for c in civs:
@@ -78,6 +90,15 @@ def build() -> ET.Element:
             ET.SubElement(t["ModifierArguments"], "Row", ModifierId=mod, Name=name, Value=value)
         ET.SubElement(t["ModifierStrings"], "Row", ModifierId=mod, Context="Sample", Text=SAMPLE_TAG)
         ET.SubElement(t["TraitModifiers"], "Row", TraitType=f"TRAIT_JAC_1534_FEUD_{a}", ModifierId=mod)
+    # +1 access level (None -> Limited) so the feud reason is not "Unknown Reason".
+    ET.SubElement(t["Modifiers"], "Row", ModifierId=ACCESS_MODIFIER, ModifierType="MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY")
+    for name, value in (("Amount", "1"), ("Source", ACCESS_SOURCE), ("SourceType", "DIPLO_SOURCE_ALL_NAMES")):
+        ET.SubElement(t["ModifierArguments"], "Row", ModifierId=ACCESS_MODIFIER, Name=name, Value=value)
+    for c in civs:
+        ET.SubElement(t["TraitModifiers"], "Row", TraitType=f"TRAIT_JAC_1534_FEUD_{c}", ModifierId=ACCESS_MODIFIER)
+    ET.SubElement(t["DiplomaticVisibilitySources"], "Row", VisibilitySourceType=ACCESS_SOURCE,
+                  Description="LOC_JAC_VIZSOURCE_1534_FEUD", ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_FEUD",
+                  GossipString="LOC_JAC_GOSSIP_SOURCE_1534_FEUD")
     return root
 
 

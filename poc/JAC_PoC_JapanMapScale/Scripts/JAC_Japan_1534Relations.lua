@@ -76,6 +76,11 @@ local function Apply()
 			end
 		end
 	end
+	-- 出会い済みにした相手へのアクセスレベル（因縁の家の +1。Data/JAC_Japan_Feuds.xml）を開始ターンから反映する。
+	-- 公式シナリオも出会い・代表団を設定した後に呼ぶ（DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1336〜:1339）
+	for _, id in pairs(players) do
+		Players[id]:GetDiplomacy():RecheckVisibilityOnAll()
+	end
 	Game:SetProperty(PROPERTY_KEY, {Turn = Game.GetCurrentGameTurn(), Applied = applied, Missing = missing, Failed = failed})
 	Log(string.format("applied=%d missing=%d failed=%d", applied, missing, failed))
 end

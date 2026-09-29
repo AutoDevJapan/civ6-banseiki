@@ -48,6 +48,7 @@
     <Row ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_HONGANJI" />
     <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_MATSUDAIRA" />
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_ODA" />
+    <Row ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" ModifierType="MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY" />
   </Modifiers>
   <ModifierArguments>
     <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" Name="InitialValue" Value="-10" />
@@ -78,6 +79,9 @@
     <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Name="InitialValue" Value="-10" />
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" Name="Amount" Value="1" />
+    <Row ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" Name="Source" Value="SOURCE_JAC_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" Name="SourceType" Value="DIPLO_SOURCE_ALL_NAMES" />
   </ModifierArguments>
   <TraitModifiers>
     <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" />
@@ -94,6 +98,15 @@
     <Row TraitType="TRAIT_JAC_1534_FEUD_ROKKAKU" ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" />
     <Row TraitType="TRAIT_JAC_1534_FEUD_ODA" ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" />
     <Row TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HONGANJI" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_IMAGAWA" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_NAGAO" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ODA" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ROKKAKU" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" ModifierId="JAC_1534_FEUD_DIPLO_VISIBILITY" />
   </TraitModifiers>
   <RequirementSets>
     <Row RequirementSetId="JAC_1534_PLAYER_IS_HOJO" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
@@ -155,4 +168,7 @@
     <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
   </ModifierStrings>
+  <DiplomaticVisibilitySources>
+    <Row VisibilitySourceType="SOURCE_JAC_1534_FEUD" Description="LOC_JAC_VIZSOURCE_1534_FEUD" ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_FEUD" GossipString="LOC_JAC_GOSSIP_SOURCE_1534_FEUD" />
+  </DiplomaticVisibilitySources>
 </GameInfo>
