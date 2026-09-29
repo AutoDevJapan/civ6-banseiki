@@ -43,6 +43,16 @@ class SengokuCalendarTests(unittest.TestCase):
         self.assertEqual(values[0].get("Domain"), "JAC_Sengoku_Calendar")
         self.assertEqual(values[0].get("Value"), "CALENDAR_STANDARD_FROM_START_ERA")
 
+    def test_start_era_is_restricted_to_ancient(self):
+        rows = [row.attrib for row in self.config.findall("./RulesetSupportedValues/Row")]
+        self.assertEqual(rows, [{"Ruleset": RULESET, "Domain": "StandardEras", "Value": "ERA_ANCIENT"}])
+        ruleset = ET.parse(ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml").getroot()
+        starts = [row.get("TargetValue") for row in ruleset.iter("Row")
+                  if row.get("TargetId") == "GAME_START_ERA" and row.get("SourceValue") == RULESET]
+        self.assertEqual(starts, ["ERA_ANCIENT"])
+        scenario = (ROOT / "tools/civ6-autotest/scenarios/sengoku-calendar.json").read_text(encoding="utf-8")
+        self.assertIn("Parameters.GameStartEra", scenario)
+
     def test_speed_curves_reach_1600_and_cover_long_games(self):
         self.assertIsNotNone(self.gameplay.find("./GameSpeed_Turns/Delete"))
         curves = {}

@@ -12,7 +12,7 @@ SSOT 3.1 の開始時点は **天文3年5月12日**、3.2 の進行目安は標�
 
 - `Base/Assets/Gameplay/Data/Eras.xml:25-29` では `StartEras` の `ERA_ANCIENT` に `Year="-4000"` が入る。`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2545-2560` によると `StartEras` の暦の起点は整数 `Year` で、月日を指定する列はない。
 - `Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1403-1408` に `GameSpeed_Turns(GameSpeedType, MonthIncrement, TurnsPerIncrement)` がある。`Base/Assets/Gameplay/Data/GameSpeeds.xml:17-61` は速度ごとのコスト倍率、同ファイル `:64-103` と `:141-179` は既定の暦進行例。`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:3337` は速度別の暦区間を行順に取得する。
-- 公式の戦争シナリオは `DLC/WarMachineScenario/Data/WarMachineScenario_GameplayData.xml:380-395` で `StartEras.Year` を1914に更新し、同ファイル `:642-649` で `GameSpeed_Turns` を削除・再登録する。同シナリオの `DLC/WarMachineScenario/Data/WarMachineScenario_Config.xml:23-27,51-54` はルールセット専用 `GameCalendar` ドメインで `CALENDAR_STANDARD_FROM_START_ERA` を選ぶ。戦国パックもこの方式を採用した。
+- 公式の戦争シナリオは `DLC/WarMachineScenario/Data/WarMachineScenario_GameplayData.xml:380-395` で `StartEras.Year` を1914に更新し、同ファイル `:642-649` で `GameSpeed_Turns` を削除・再登録する。同シナリオの `DLC/WarMachineScenario/Data/WarMachineScenario_Config.xml:23-27,51-54` はルールセット専用 `GameCalendar` ドメインで `CALENDAR_STANDARD_FROM_START_ERA` を選ぶ。戦国パックもこの方式を採用した。同ファイル `:33` は `RulesetSupportedValues` の `StandardEras` で開始時代を1つに絞っており、戦国パックも `JAC_Sengoku_Calendar.xml` で `RULESET_JAC_BANSEIKI` の開始時代を `ERA_ANCIENT` だけにする（開始年1534は `ERA_ANCIENT` にだけ設定しているため、他の時代を選ぶと1534年開始にならない）。`GameStartEra` のドメインは `Base/Assets/Configuration/Data/SetupParameters.xml:10` の `StandardEras`。ルールセット本体の `GAME_START_ERA` は `ERA_ANCIENT` で競合しない。
 - 基本設定の `GameCalendar` は `Base/Assets/Configuration/Data/SetupParameters.xml:43` で非表示・既定 `CALENDAR_STANDARD`。Gathering Storm のゲーム上部の年表示は `DLC/Expansion2/UI/Replacements/TopPanel.lua:383-401` で現在ターンと `Calendar.MakeYearStr(turn)` を使う。`Base/Assets/Gameplay/Data/Calendar.xml:5-10` には月単位カレンダーもあるが、開始月日を設定する列はない。`DLC/BlackDeathScenario/Data/BlackDeathScenario_Config.xml:24,35-38` は月表示の公式例。
 - ライブシナリオの開始ターン判定は `DLC/Expansion2/UI/Additions/DedicationPopup.lua:37` と同じ `GameConfiguration.GetStartTurn()`、都市建設は `Base/Assets/UI/Panels/UnitPanel.lua:2636-2641` と同じ `UnitManager.RequestOperation(..., UnitOperationTypes.FOUND_CITY)` を使う。`Base/Assets/UI/GreatWorksSupport.lua:20` は `GameConfiguration.GetCalendarType()` の使用例。
 
@@ -32,7 +32,7 @@ SSOT 3.1 の開始時点は **天文3年5月12日**、3.2 の進行目安は標�
 
 `python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-calendar.json --check` は構文検証のみ。実機では同シナリオを実行し、次を確認する。
 
-1. FrontEnd で戦国パックのカレンダーが `CALENDAR_STANDARD_FROM_START_ERA` に切り替わる。
+1. FrontEnd で戦国パックのカレンダーが `CALENDAR_STANDARD_FROM_START_ERA` に切り替わり、開始時代の選択肢が `ERA_ANCIENT` だけになる。
 2. 開始ターンで `GameInfo.StartEras['ERA_ANCIENT'].Year == 1534`、`Calendar.MakeYearStr` の文字列が1534年を含む。
 3. 標準速度で3ターン進めた後、同じ関数の文字列が1535年を含む。これは年の進行と区間順の短い実機確認であり、200ターンのプレイバランスは検証しない。
 
