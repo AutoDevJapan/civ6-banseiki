@@ -15,7 +15,7 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
 1. 毎ターンの開始（`GameEvents.OnGameTurnStarted`）に、全出来事 × 生存中の主要勢力を調べる
 2. 対象勢力（`JAC_HistoricalEventTargets`。一覧の `affected_factions`。`ALL` は行なしで全主要勢力）のうち、まだ効果を受けていない勢力を、次の順に判定する
    - 前提の技術・社会制度（`JAC_HistoricalEventPrereqTechs`／`JAC_HistoricalEventPrereqCivics`。一覧の `earlier_by`）の**いずれか1つ**を持っている → 出来事の効果を与える（`reason=prereq`。研究を先に終えた勢力は年より早い）
-   - 前提の無い出来事（4件：大友二階崩れ・駿河侵攻・朝倉氏の滅亡・武田氏の滅亡）で、史実の年（と月）のターンに達した → 効果を与える（`reason=due`）
+   - 前提の無い出来事（6件：伊達氏天文の乱・大友二階崩れ・大寧寺の変・駿河侵攻・朝倉氏の滅亡・武田氏の滅亡）で、史実の年（と月）のターンに達した → 効果を与える（`reason=due`）
    - 前提があり、年に達したが未研究 → 出来事のひらめき（`BoostTech`／`BoostCivic`。一覧の `boost`）**だけ**を与える（`reason=year`。1勢力1回）。効果は、その勢力が後で前提のどれかを研究したターンに `reason=prereq` で与える
 3. 効果を与えるとき（`prereq`／`due`）
    - フラグ：プレイヤーのプロパティ `JAC_EVENT_FIRED_<EventType>` に与えたターンを書く。これが「1勢力1回」の記録で、セーブに残る
@@ -45,7 +45,20 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
 
 生成の対応：`affected_factions` → 対象、`earlier_by` → 前提、`boost` → `Boost*`、`house_specific`・`house`・`generic_name` → `House`・`GenericName`、`advisor_popup` → `Description`・`Advisor=1`、`rename` → 家名、`resource` → 資源（地点 ID は `japan-map-resources.json` の座標で引き、`reveal` は資源 MOD の予約地点に無ければ生成を止める）。`gameplay_effect`・`year_end`・`regions`・`sources` などは生成に使わない。
 
-`Boosts` の行が無いとひらめきは発動できないため、ツリー側に行の無い30件の技術・社会制度に仮の行（`BOOST_TRIGGER_NONE_LATE_GAME_CRITICAL_TECH`、40%、`LOC_JAC_EVENT_BOOST_PLACEHOLDER`）を足している（**暫定**）。この種類は公式でも自然には満たされない（`Base/Assets/Gameplay/Data/Technologies.xml:440,505`）ので、出来事のひらめき以外で発動しない。以前の仮の行（ガレー船の生産で発動）は、30件がガレー船1隻でまとめて発動してしまうため替えた。ツリー側に行がある T09・T10 は足さない。実際のひらめき条件はツリー側で決める。
+開始時の知識（[sengoku-starting-knowledge.md](sengoku-starting-knowledge.md)の技術4・社会制度3）は、全勢力が1534年の開始時から持つため、前提にも Boost にも使わない。前提にすると全勢力でターン1に `reason=prereq` で起きてしまい（実機 sengoku-events-list-01：島津貴久の薩摩統一戦と天文の大飢饉が、シナリオの強制より前にターン1で22家に発生）、Boost にすると無駄になる。一覧（JSON）から外し、生成スクリプトは開始時の知識を付与する `JAC_Sengoku_StartingKnowledge.lua` から同じ一覧を読んで、含む出来事があれば生成を止める。外した出来事は次のとおり。
+
+| 出来事 | 外した前提 | 残った前提 | Boost |
+|---|---|---|---|
+| 島津貴久の薩摩統一戦 `EV_SHIMAZU_UNIFY_1` | C02 国人盟約 | C10 軍役帳 | C02 → C10 |
+| 天文の大飢饉 `EV_TENBUN_FAMINE` | T01 用水普請 | T07 兵糧保存 | T07（変更なし） |
+| 伊達氏天文の乱 `EV_TENBUN_DATE` | C02 国人盟約 | なし（史実の年だけで起きる） | C02 → なし |
+| 大寧寺の変 `EV_OUCHI_DAINEIJI` | C02 国人盟約 | なし（史実の年だけで起きる） | C02 → なし |
+| 四万十川の戦い `EV_SHIMANTO` | C02 国人盟約 | C10 軍役帳、T10 | C10（変更なし） |
+| 上杉謙信の死去と御館の乱 `EV_KENSHIN_DEATH` | C02 国人盟約 | C11 | C11（変更なし） |
+
+ゲームプレイ側の Lua には、開始時に持っていた前提を無視する仕組みは入れていない（開始時の知識を各勢力のプロパティに記録して保存・ロードをまたいで持つ必要があり、データ側で防げるため）。`tests/test_historical_events_lua.py` が実際の付与スクリプトを動かしてターン1に何も起きないことを確かめる。
+
+`Boosts` の行が無いとひらめきは発動できないため、ツリー側に行の無い29件の技術・社会制度に仮の行（`BOOST_TRIGGER_NONE_LATE_GAME_CRITICAL_TECH`、40%、`LOC_JAC_EVENT_BOOST_PLACEHOLDER`）を足している（**暫定**）。この種類は公式でも自然には満たされない（`Base/Assets/Gameplay/Data/Technologies.xml:440,505`）ので、出来事のひらめき以外で発動しない。以前の仮の行（ガレー船の生産で発動）は、まとめてガレー船1隻で発動してしまうため替えた。ツリー側に行がある T09・T10 は足さない。実際のひらめき条件はツリー側で決める。
 
 ## 暦との関係
 
@@ -157,7 +170,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/historical-
 | 手順 | 確かめること |
 |---|---|
 | 開始直後 | `Lua.log` に `[JAC_EVENTS] loaded events=60 startYear=1534 speed=GAMESPEED_STANDARD`。ターン1で出来事は1件も起きていない |
-| ターン1に強制 | 織田（人間）に技術「兵糧保存」、長尾家に社会制度「朝廷・将軍への取次」、島津家（AI）に社会制度「国人盟約」を与える（GameCore_Tuner） |
+| ターン1に強制 | 織田（人間）に技術「兵糧保存」、長尾家に社会制度「朝廷・将軍への取次」、島津家（AI）に社会制度「軍役帳」を与える（「国人盟約」は開始時の知識のため前提から外した）（GameCore_Tuner） |
 | 1ターン進めた後 | 織田に天文の大飢饉（助言あり）、長尾家に上杉継承、島津家に薩摩統一戦（助言あり）がターン2で起きる。長尾家の表示名が上杉。発生回数と全フラグの数が一致（2度起きていない） |
 | 助言ポップアップ | `JAC_HistoricalEventsAdvisor` の `JAC_EVENTS_ADVISOR_SHOWN` に `JAC_EVENT_TENBUN_FAMINE@2` があり、島津・長尾（AI）の助言は無い。公式の `AdvisorPopup` が入力を止めて表示中で、本文が大飢饉（または天正地震）の助言の文。スクリーンショット `advisor-popup.png` を撮ってから閉じる |
 | セーブ→メニュー→ロード | 同じ確認がロード直後にも通る |

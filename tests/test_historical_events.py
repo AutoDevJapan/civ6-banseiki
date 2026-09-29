@@ -76,6 +76,26 @@ class HistoricalEventTests(unittest.TestCase):
                 self.assertEqual(path.read_text(encoding="utf-8"), content,
                                  "run python tools/generate_sengoku_events.py")
 
+    def test_no_prerequisite_or_boost_is_starting_knowledge(self):
+        # Live sengoku-events-list-01: prerequisites every house has at the start (C02, T01) fired events on turn 1.
+        start = GEN.starting_knowledge()
+        self.assertEqual(len(start), 7)  # 4 techs + 3 civics (documents/poc/sengoku-starting-knowledge.md)
+        db = load_db()
+        used = {r for (r,) in db.execute("SELECT TechnologyType FROM JAC_HistoricalEventPrereqTechs UNION "
+                                         "SELECT CivicType FROM JAC_HistoricalEventPrereqCivics UNION "
+                                         "SELECT BoostTech FROM JAC_HistoricalEvents UNION "
+                                         "SELECT BoostCivic FROM JAC_HistoricalEvents")}
+        self.assertEqual(used & start, set())
+
+    def test_generator_refuses_starting_knowledge_in_the_list(self):
+        original = GEN.starting_knowledge
+        GEN.starting_knowledge = lambda: {"TECH_JAC_SENGOKU_GRAIN_STORES"}  # Tenbun famine's prerequisite
+        try:
+            with self.assertRaisesRegex(SystemExit, "EV_TENBUN_FAMINE"):
+                GEN.build()
+        finally:
+            GEN.starting_knowledge = original
+
     def test_sql_loads_with_valid_references(self):
         db = load_db()
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
@@ -109,9 +129,9 @@ class HistoricalEventTests(unittest.TestCase):
                 expected = set() if "ALL" in e["affected_factions"] else {
                     f"CIVILIZATION_JAC_{f}" for f in e["affected_factions"]}
                 self.assertEqual(targets, expected)  # no rows: every major faction
-        # E5a: 19 events carry the advisor line, 56 a boost (documents/research/sengoku-events.md §2.6).
+        # E5a: 19 events carry the advisor line, 54 a boost (documents/research/sengoku-events.md §2.6).
         self.assertEqual(db.execute("SELECT SUM(Advisor), COUNT(BoostTech) + COUNT(BoostCivic) "
-                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 56))
+                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 54))
 
     def test_renames_are_the_ssot_stages(self):
         # SSOT 3.2: Nagao->Uesugi, Matsudaira->Tokugawa, Oda->Hashiba->Toyotomi (Q56 option 1 dates, provisional).

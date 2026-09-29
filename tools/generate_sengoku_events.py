@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVENTS_JSON = ROOT / "documents/spec/data/sengoku-events.json"
 RESOURCES_JSON = ROOT / "documents/spec/data/japan-map-resources.json"
 SITES_LUA = ROOT / "poc/JAC_PoC_JapanMapScale/Scripts/JAC_ResourceSites.lua"
+STARTING_KNOWLEDGE_LUA = ROOT / "poc/JAC_PoC_SengokuTrees/Scripts/JAC_Sengoku_StartingKnowledge.lua"
 MOD = ROOT / "poc/JAC_PoC_HistoricalEvents"
 LANGS = (("ja", "ja_JP"), ("en", "en_US"), ("ru", "ru_RU"))
 
@@ -75,8 +76,24 @@ def site_of(resource: dict, points: dict, trades: dict) -> str:
     return table[key]
 
 
+def starting_knowledge() -> set[str]:
+    """Techs/civics every house has from the start (documents/poc/sengoku-starting-knowledge.md), read from the
+    script that grants them."""
+    lua = STARTING_KNOWLEDGE_LUA.read_text(encoding="utf-8")
+    found = set(re.findall(r'"((?:TECH|CIVIC)_JAC_SENGOKU_[A-Z_]+)"', lua))
+    assert found, "no starting knowledge found in " + str(STARTING_KNOWLEDGE_LUA)
+    return found
+
+
 def build() -> tuple[str, str]:
     events = json.loads(EVENTS_JSON.read_text(encoding="utf-8"))["events"]
+    # A node every house knows at the start cannot mean "researched earlier than history": as a prerequisite it
+    # fires the event on turn 1 for everyone, as a boost it is wasted. The list must not name one.
+    start = starting_knowledge()
+    for e in events:
+        known = sorted({r["id"] for r in e["earlier_by"] + [e["boost"] or {"id": None}]} & start)
+        if known:
+            raise SystemExit(f"{e['id']}: earlier_by/boost names starting knowledge {known}")
     points, trades, reserved = resource_sites()
     rows, prereq_techs, prereq_civics, targets, renames, resources, boosts = [], [], [], [], [], [], {}
     text = {key: dict(zip((l for _, l in LANGS), values)) for key, values in FIXED_TEXT.items()}

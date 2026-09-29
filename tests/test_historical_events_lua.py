@@ -11,7 +11,7 @@ import re
 import unittest
 import xml.etree.ElementTree as ET
 
-from tests.test_historical_events import MOD, ROOT, load_db
+from tests.test_historical_events import MOD, ROOT, load_db, turn_for_year
 
 try:
     import lupa
@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - depends on the environment
     lupa = None
 
 START_TURN = 16603  # live 1534 calendar: the engine turn counter starts here, not at 1
+STARTING_KNOWLEDGE = ROOT / "poc/JAC_PoC_SengokuTrees/Scripts/JAC_Sengoku_StartingKnowledge.lua"
 CIVS = ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_NAGAO", "CIVILIZATION_JAC_DATE", "CIVILIZATION_JAC_SHIMAZU"]
 TABLES = ("JAC_HistoricalEvents", "JAC_HistoricalEventPrereqTechs", "JAC_HistoricalEventPrereqCivics",
           "JAC_HistoricalEventTargets",
@@ -63,6 +64,7 @@ for i, civ in ipairs(civs) do
     AttachModifierByID = function() end,
     GetTechs = function() return {
       HasTech = function(_, t) return techs[t] == true end,
+      SetTech = function(_, t, v) techs[t] = v end,
       HasBoostBeenTriggered = function(_, t) return triggered[t] == true end,
       TriggerBoost = function(_, t, source)
         if FAIL_BOOST[id] then error("engine refused") end
@@ -71,6 +73,7 @@ for i, civ in ipairs(civs) do
     } end,
     GetCulture = function() return {
       HasCivic = function(_, c) return civics[c] == true end,
+      SetCivic = function(_, c, v) civics[c] = v end,
       HasBoostBeenTriggered = function(_, c) return triggered["c" .. c] == true end,
       TriggerBoost = function(_, c, source)
         if FAIL_BOOST[id] then error("engine refused") end
@@ -94,7 +97,10 @@ LOG = {}
 function print(line) LOG[#LOG + 1] = line end
 -- UI side
 Locale = { Lookup = function(k) return k end }
-LuaEvents = { TutorialUIRoot_AdvisorRaise = function(item) table.insert(RAISED, item) end }
+local newGame = {}
+LuaEvents = { TutorialUIRoot_AdvisorRaise = function(item) table.insert(RAISED, item) end,
+  NewGameInitialized = { Add = function(f) table.insert(newGame, f) end } }
+function NEW_GAME_INITIALIZED() for _, f in ipairs(newGame) do f() end end
 local uiHandlers = {}
 Events = {
   LocalPlayerTurnBegin = { Add = function(f) table.insert(uiHandlers, f) end },
@@ -196,16 +202,31 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.assertEqual(len(self.boosts("tech", self.teppo)), 3)
 
     def test_any_one_of_the_prerequisites_fires_the_event_early(self):
-        # Tenbun famine: grain stores OR irrigation works. Nagao has only the second one.
-        self.g.Players[1].techs[self.tech("TECH_JAC_SENGOKU_IRRIGATION_WORKS")] = True
+        # Christianity (1549/8): Nanban envoys OR port merchant councils. Nagao has only the second one.
+        councils, envoys = self.civic("CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS"), self.civic("CIVIC_JAC_SENGOKU_NANBAN_ENVOYS")
+        self.g.Players[1].civics[councils] = True
         self.run_turns(1, 1)
-        self.assertEqual(self.prop(1, "JAC_EVENT_FIRED_JAC_EVENT_TENBUN_FAMINE"), 1)
-        self.assertIsNone(self.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TENBUN_FAMINE"))
-        # At the year (1540, turn 19) the others get the event's boost (grain stores), not irrigation works.
-        self.run_turns(2, 19)
-        grain = self.tech("TECH_JAC_SENGOKU_GRAIN_STORES")
-        self.assertEqual([b[0] for b in self.boosts("tech", grain)], [0, 2, 3])
-        self.assertEqual(self.boosts("tech", self.tech("TECH_JAC_SENGOKU_IRRIGATION_WORKS")), [])
+        self.assertEqual(self.prop(1, "JAC_EVENT_FIRED_JAC_EVENT_CHRISTIAN"), 1)
+        self.assertIsNone(self.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_CHRISTIAN"))
+        # At the year the others get the event's boost (Nanban envoys), not port merchant councils.
+        due = turn_for_year(1549, 8)
+        self.run_turns(2, due)
+        self.assertEqual([b[0] for b in self.boosts("civic", envoys)], [0, 2, 3])
+        self.assertEqual(self.boosts("civic", councils), [])
+
+    def test_starting_knowledge_fires_no_event_on_turn_1(self):
+        # Live sengoku-events-list-01: with the 1534 starting knowledge granted, Shimazu unification (C02) and the
+        # Tenbun famine (T01) fired for every house on turn 1. The real granting script runs here.
+        self.g.Players[0].techs[self.teppo] = None  # no scenario forcing, only the starting knowledge
+        self.lua.execute(STARTING_KNOWLEDGE.read_text(encoding="utf-8"))
+        self.g.NEW_GAME_INITIALIZED()
+        granted = {i: (sum(1 for v in p.techs.values() if v), sum(1 for v in p.civics.values() if v))
+                   for i, p in self.g.Players.items()}
+        self.assertEqual(granted, {i: (4, 3) for i in range(len(CIVS))})
+        self.run_turns(1, 1)
+        self.assertIsNone(self.game("JAC_EVENTS_FIRE_COUNT"))
+        self.assertEqual(list(self.g.BOOSTS.values()), [])
+        self.assertEqual([line for line in self.log() if "reason=" in line], [])
 
     def test_events_without_prerequisites_happen_in_their_year_for_their_targets_only(self):
         # Asakura fall (1573/9, Asakura and Oda) has no earlier_by and no boost.
@@ -321,7 +342,7 @@ class HistoricalEventsTurnTests(unittest.TestCase):
 
     def test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens(self):
         self.g.Players[0].techs[self.tech("TECH_JAC_SENGOKU_GRAIN_STORES")] = True  # Tenbun famine, early
-        self.g.Players[3].civics[self.civic("CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES")] = True  # Shimazu (AI) only
+        self.g.Players[3].civics[self.civic("CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER")] = True  # Shimazu (AI) only
         self.run_turns(1, 1)
         self.assertEqual(self.prop(3, "JAC_EVENT_FIRED_JAC_EVENT_SHIMAZU_UNIFY_1"), 1)
         self.g.UI_EVENT()  # LocalPlayerTurnBegin and LocalPlayerChanged: shown once
