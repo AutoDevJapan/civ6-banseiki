@@ -285,6 +285,49 @@ class RestartActionTests(unittest.TestCase):
         close.assert_called_once_with()
         terminate.assert_called_once_with(12, 100.0)
 
+    def test_restart_without_process_launches_then_waits_for_frontend(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        events = []
+        with patch("scenario.single_civ_process", return_value=None), patch(
+            "scenario.terminate_civ_process"
+        ) as terminate, patch("scenario.request_civ_window_close") as close, patch.object(
+            runner, "_states"
+        ) as states, patch("scenario.launch_via_steam", side_effect=lambda: events.append("launch")), patch(
+            "scenario.wait_for_civ_window", side_effect=lambda *_: events.append("window")
+        ), patch("scenario.click_fraction", side_effect=lambda *_: events.append("skip")), patch(
+            "scenario.time.sleep"
+        ), patch.object(runner, "_wait_frontend_ready", side_effect=lambda *a, **k: events.append("frontend")):
+            runner._restart_game(360)
+        self.assertEqual(events, ["launch", "window", "skip", "frontend"])
+        for unused in (terminate, close, states):
+            unused.assert_not_called()
+
+    def test_restart_still_refuses_when_several_processes_persist(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch("scenario.single_civ_process", side_effect=InputError("Multiple Civ VI processes found (2)")), patch(
+            "scenario.terminate_civ_process"
+        ) as terminate, patch("scenario.launch_via_steam") as launch:
+            with self.assertRaises(InputError):
+                runner._restart_game(360)
+        terminate.assert_not_called()
+        launch.assert_not_called()
+
+    def test_run_launches_civ_when_not_running_and_first_step_needs_game(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (base / name).write_text("", encoding="utf-8")
+            runner = Runner({"name": "cold", "steps": [{"action": "pause", "seconds": 0.1}]},
+                            base / "output", base, base, 4318, auto_restart=False)
+            with patch("scenario.single_civ_process", return_value=None), patch(
+                "scenario.require_single_civ_process"
+            ), patch.object(runner, "_restart_game", return_value="ready") as restart, patch.object(
+                runner, "_wait"
+            ) as wait, patch.object(runner, "_run_step", return_value="ok"):
+                runner.run()
+            restart.assert_called_once_with(360)
+            wait.assert_not_called()  # the restart already proved FrontEnd answers
+
 
 if __name__ == "__main__":
     unittest.main()

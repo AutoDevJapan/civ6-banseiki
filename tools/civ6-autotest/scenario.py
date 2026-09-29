@@ -973,6 +973,11 @@ class Runner:
             (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
             first = self.scenario["steps"][0]
             if first["action"] != "restart_game":
+                if not front_end_ready and single_civ_process() is None:
+                    # No Civ VI at all (e.g. --no-auto-restart): start it through Steam like a normal restart.
+                    self._log("launch", "START", "Civ VI is not running")
+                    self._log("launch", "OK", self._restart_game(360))
+                    front_end_ready = True
                 require_single_civ_process()
                 # A scenario whose first step runs in InGame continues an already running game.
                 if not front_end_ready and not (first["action"] == "ui_lua" and first.get("state_name") == "InGame"):
