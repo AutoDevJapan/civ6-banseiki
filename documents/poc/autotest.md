@@ -24,7 +24,11 @@ python -m unittest discover -s tools/civ6-autotest/tests -v
 
 ### FireTuner の一時的なタイムアウト
 
-`autoplay` が途中で止まる問題（2026-09-29、15 km 日本地図＋戦国パックで 31 ターン目に `Autoplay stopped early`）。原因は時代の切り替わりで人間プレイヤーに出る奉献（Dedication、Gathering Storm）の選択が未決のまま残ることと推定している（`DLC/Expansion2/UI/Additions/DedicationPopup.lua`。自動進行は人間の代わりに選ばない。実機での確定は未了）。ドライバは、停止が 5 秒続いたとき、まず公式の操作 `UI.RequestPlayerOperation(human, PlayerOperations.COMMEMORATE, {[PlayerOperations.PARAM_COMMEMORATION_TYPE] = idx})` を、`Game.GetEras():GetPlayerCommemorateChoices()` の先頭から `GetPlayerNumAllowedCommemorations()` 件だけ決定的に送り、Escape でポップアップを閉じて、残りターン数で自動進行を再開する。選んだ番号はステップログ `autoplay_dedication` に残す。選択肢が無ければ従来どおり再開のみ（最大 2 回）。奉献の選択は 1 ステップ内で最大 3 回までで、その後もステップ期限内に進まなければ失敗にする。単体テストは `tests/test_dedication.py`（偽の状態列）。
+`autoplay` が途中で止まる問題（2026-09-29、15 km 日本地図＋戦国パックで 31 ターン目に `Autoplay stopped early`）。原因は実機で確定した。人間（大内、枠 14）に AI の指導者（足利）が外交の声明（「Your people are lazy and unworthy...」と Goodbye ボタン）を出し、`DiplomacyActionView` と `LeaderScene` が表示されたまま、AI（枠 10）の手番が人間の返事を待って終わらない。そのため自動進行が途中で止まる（`active=False` で残りターンあり）か、問い合わせがタイムアウトする。`DiplomacyActionView` の Lua 状態で `OnClose()`（`Base/Assets/UI/DiplomacyActionView.lua:2883-2886`、ESC と同じ処理）を呼ぶと閉じ、次の AI（枠 11）の手番へ進んだ。
+
+ドライバは、自動進行の監視ループの各回と、状態の問い合わせが失敗したときに、表示中の外交画面を公式の処理で閉じる。AI からの取引の提案（`DiplomacyDealView`）を先に、ゲーム自身のターン終了処理 `OnLocalPlayerTurnEnd()`（`DLC/Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129`。`OnRefuseDeal(true)` で拒否してセッションを閉じ、`OnContinue` で隠す。素のゲームは `Base/Assets/UI/DiplomacyDealView.lua:3075-3085`）で断る。取引画面が出ている間は `DiplomacyActionView` が `DEAL_MODE` で `OnClose` を無視するため、この順番にしている。次に声明を `OnClose()` で閉じる。どちらも `ContextPtr:IsHidden()` で守り、閉じる途中の再呼び出しは公式の処理側でも無視されるので、タイムアウト後の再試行は冪等になる。閉じた内容はステップログ `autoplay_diplomacy` に残す（例：`closed AI diplomacy statement (turn 31, total 1)`）。外交画面が原因で自動進行が止まったときは、再開の上限（2 回）に数えずに残りターン数で再開する。1 ステップで閉じた回数が `20 + 5 × ターン数` を超えたら失敗にする。状態の問い合わせは 30 秒の枠で再試行し、失敗したときに閉じる画面が無ければ従来どおり止める。取引の拒否は実機では未確認（要実機確認）。単体テストは `tests/test_diplomacy.py`（偽の Tuner）。
+
+時代の切り替わりで人間プレイヤーに出る奉献（Dedication、Gathering Storm）の選択も、自動進行は人間の代わりに選ばない（`DLC/Expansion2/UI/Additions/DedicationPopup.lua`）。これで止まった例は実機では確認していない。ドライバは、停止が 5 秒続いたとき、まず公式の操作 `UI.RequestPlayerOperation(human, PlayerOperations.COMMEMORATE, {[PlayerOperations.PARAM_COMMEMORATION_TYPE] = idx})` を、`Game.GetEras():GetPlayerCommemorateChoices()` の先頭から `GetPlayerNumAllowedCommemorations()` 件だけ決定的に送り、Escape でポップアップを閉じて、残りターン数で自動進行を再開する。選んだ番号はステップログ `autoplay_dedication` に残す。選択肢が無ければ従来どおり再開のみ（最大 2 回）。奉献の選択は 1 ステップ内で最大 3 回までで、その後もステップ期限内に進まなければ失敗にする。単体テストは `tests/test_dedication.py`（偽の状態列）。
 
 ゲームが重いと、FireTuner が 5 秒以内に返事できず `No Lua acknowledgment ...` になることがある（2026-09-29、15 km 日本地図の 10 ターン自動進行で発生。ゲーム自体は生きていた）。`autoplay` の状態問い合わせとアドバイザーポップアップの解除は読み取り専用または冪等（`IsBlockingInput()` で守られている）なので、接続を張り直してバックオフ付きで再試行し、ステップの期限が切れたときだけ失敗にする。ゲームの状態を変えるコマンド（自動進行の開始、オプションメニューを閉じる操作など）は再送せず、従来どおり `LuaResponseUnknown` で止める。
 
@@ -60,8 +64,8 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 |---|---|---|
 | `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
-| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式。`build_setup: true` は HostGame で Create Game の設定をビルド・更新し、全指定枠が維持されたことを検査して設定を閉じる |
-| `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
+| `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式。`build_setup` は HostGame で Create Game の設定をビルド・更新し、全指定枠が維持されたことを検査して設定を閉じる。`RULESET_JAC_BANSEIKI` では既定で true（明示的な `false` で無効）、他のルールセットでは既定 false。ビルドしないと暦の上書き（CALENDAR_STANDARD_FROM_START_ERA）が効かず、開始ターンが 16603 になって長い AI オートプレイが 31 ターン付近で止まった（2026-09-29 実機） |
+| `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ。直前の `configure` が `RULESET_JAC_BANSEIKI` なら `GameConfiguration.GetStartTurn()` が 1 でなければ失敗する |
 | `autoplay` | `turns`、任意で `metrics: true`, `research_metrics: true`, `allow_human_elimination: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` はターン時間とプロセスメモリ、`research_metrics` は各メジャーの技術・社会制度の研究状態を JSONL に記録する。`allow_human_elimination` は人間勢力の滅亡をログに残し、目標ターンまで監視を続ける |
 | `ui_lua` | `state_name`, `code` | 指定 Lua 状態で任意のコードを1回実行する |
 | `screenshot` | `path` | Civ6 のウィンドウだけを PNG に保存する。出力先からの相対パス |

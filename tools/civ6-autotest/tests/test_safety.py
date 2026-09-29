@@ -35,7 +35,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner, "_lua", side_effect=["false", "true"]
         ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
-        ), patch.object(runner, "_dismiss_advisor"), patch(
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
@@ -49,7 +49,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner, "_lua", side_effect=["true", "true"]
         ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
-        ), patch.object(runner, "_dismiss_advisor"), patch(
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
@@ -80,7 +80,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner, "_lua", return_value="true"
         ), patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
-        ), patch.object(runner, "_dismiss_advisor"), patch(
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
@@ -94,7 +94,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             runner, "_lua", return_value="true"
         ), patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
-        ), patch.object(runner, "_dismiss_advisor"), patch(
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1)
@@ -297,7 +297,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             except (OSError, NotImplementedError) as exc:
                 self.skipTest(f"directory symlinks unavailable: {exc}")
             runner = Runner({}, output, base, base, 4318)
-            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(
+            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.capture_civ_window") as capture:
                 with self.assertRaisesRegex(ScenarioError, "escapes output"):
@@ -315,7 +315,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 self.assertAlmostEqual(deadline, 10.01)
                 clock[0] = deadline + 0.01
 
-            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(
+            with patch("scenario.require_single_civ_process"), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.capture_civ_window", side_effect=slow_capture) as capture, patch(
                 "scenario.time.monotonic", side_effect=lambda: clock[0]
@@ -604,7 +604,7 @@ class ScenarioSafetyTests(unittest.TestCase):
 
         with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(
             runner, "_close_options_menu", return_value=False
-        ), patch.object(runner, "_dismiss_advisor", return_value=False):
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor", return_value=False):
             with self.assertRaisesRegex(OSError, "connection reset"):
                 runner._autoplay(3, 10)
         self.assertEqual(sum("AutoplayManager.SetActive(true)" in code for code in commands), 1)
@@ -629,7 +629,7 @@ class ScenarioSafetyTests(unittest.TestCase):
 
                     with patch.object(runner, "_lua", side_effect=run_lua), patch.object(
                         runner, "_close_options_menu", return_value=False
-                    ), patch.object(runner, "_dismiss_advisor", return_value=False):
+                    ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor", return_value=False):
                         with self.assertRaises(type(error)):
                             runner._autoplay(3, 10)
                     self.assertEqual(sum("SetActive(true)" in code for code in commands), 1)
@@ -648,7 +648,7 @@ class ScenarioSafetyTests(unittest.TestCase):
 
         with patch.object(runner, "_lua", side_effect=slow_first_lua), patch.object(
             runner, "_close_options_menu", return_value=False
-        ), patch.object(runner, "_dismiss_advisor", return_value=False):
+        ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor", return_value=False):
             with self.assertRaisesRegex(ScenarioError, "deadline"):
                 runner._autoplay(3, 0.01)
             with self.assertRaisesRegex(ScenarioError, "deadline"):

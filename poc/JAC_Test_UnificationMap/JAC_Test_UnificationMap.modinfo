@@ -41,6 +41,10 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
+    <!-- City banners on the test map use the castle name tags in this file. -->
+    <UpdateText id="JAC_Test_UnificationMap_InGameText" criteria="JAC_Test_UnificationMap_InUse">
+      <File>Text/JAC_Test_UnificationMap_Text.xml</File>
+    </UpdateText>
     <UpdateDatabase id="JAC_Test_UnificationMap_Castles" criteria="JAC_Test_UnificationMap_InUse">
       <Properties><LoadOrder>300</LoadOrder></Properties>
       <File>Data/JAC_Unification_Test_Castles.sql</File>

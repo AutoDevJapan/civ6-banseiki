@@ -35,7 +35,7 @@ def make_runner(statuses, pending):
         patch.object(runner, "_lua", side_effect=lua),
         patch.object(runner, "_autoplay_status", side_effect=status),
         patch.object(runner, "_close_options_menu", return_value=False),
-        patch.object(runner, "_dismiss_advisor", return_value=False),
+        patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor", return_value=False),
         patch.object(runner, "_log"),
         patch("scenario.time.monotonic", side_effect=lambda: clock[0]),
         patch("scenario.time.sleep", side_effect=sleep),

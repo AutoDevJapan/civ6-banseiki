@@ -115,8 +115,10 @@ class UnificationVictoryTests(unittest.TestCase):
                 path = MAP_MOD / "Maps" / item["file"]
                 with closing(sqlite3.connect(path)) as db:
                     width = db.execute("SELECT Width FROM Map").fetchone()[0]
-                    self.assertEqual(db.execute("SELECT COUNT(*) FROM Buildings WHERE BuildingType "
-                                                "NOT IN ('BUILDING_PALACE')").fetchone()[0], 0)
+                    # Starting buildings (SSOT 3.1) are fine; the rebuilt marker would drop a castle
+                    # from the count, and the registry is the plots, never a building.
+                    self.assertEqual(db.execute("SELECT COUNT(*) FROM Buildings WHERE BuildingType IN (?, ?)",
+                                                (REBUILT, "BUILDING_JAC_REGISTERED_CASTLE")).fetchone()[0], 0)
                 plots = {city["plot"] for city in item["cities"]}
                 self.assertEqual({y * width + x for x, y, _ in castles(path)}, plots)
                 self.assertTrue({"RYUKYU", "AINU"} <= {city["owner"] for city in item["cities"]})

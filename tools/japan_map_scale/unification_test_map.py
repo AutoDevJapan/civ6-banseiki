@@ -26,10 +26,10 @@ LAND = {row * WIDTH + col for row in range(2, HEIGHT - 2) for col in range(2, WI
 # scenario razes that one), Ashina starts with only a settler and no castle.
 # Castles are >= 9 tiles apart, beyond the official CITY_MIN_RANGE of 3.
 CASTLES = (
-    {"owner": "ODA", "col": 6, "row": 5, "capital": True, "name": "", "research_priority": 0},
-    {"owner": "DATE", "col": 25, "row": 5, "capital": True, "name": "", "research_priority": 0},
-    {"owner": "ODA", "col": 6, "row": 14, "capital": False, "name": "検証城（織田）", "research_priority": 1},
-    {"owner": "DATE", "col": 25, "row": 14, "capital": False, "name": "検証城（伊達）", "research_priority": 2},
+    {"owner": "ODA", "col": 6, "row": 5, "capital": True, "research_priority": 0},
+    {"owner": "DATE", "col": 25, "row": 5, "capital": True, "research_priority": 0},
+    {"owner": "ODA", "col": 6, "row": 14, "capital": False, "name_tag": "LOC_JAC_TEST_UNIFICATION_CASTLE_ODA", "research_priority": 1},
+    {"owner": "DATE", "col": 25, "row": 14, "capital": False, "name_tag": "LOC_JAC_TEST_UNIFICATION_CASTLE_DATE", "research_priority": 2},
 )
 PLAYERS = ("ODA", "DATE", "ASHINA")
 STARTS = {"ODA": (6, 5), "DATE": (25, 5), "ASHINA": (16, 10)}

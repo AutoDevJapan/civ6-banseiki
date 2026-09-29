@@ -7,5 +7,11 @@
     <Row Tag="LOC_JAC_TEST_UNIFICATION_MAP_DESCRIPTION" Language="ja_JP"><Text>自動テスト用。3勢力・登録城4つ。</Text></Row>
     <Row Tag="LOC_JAC_TEST_UNIFICATION_MAP_DESCRIPTION" Language="en_US"><Text>For automated tests: 3 factions, 4 registered castles.</Text></Row>
     <Row Tag="LOC_JAC_TEST_UNIFICATION_MAP_DESCRIPTION" Language="ru_RU"><Text>Для автотестов: 3 державы, 4 зарегистрированных замка.</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_ODA" Language="ja_JP"><Text>検証城（織田）</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_ODA" Language="en_US"><Text>Test Castle (Oda)</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_ODA" Language="ru_RU"><Text>Тестовый замок (Ода)</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_DATE" Language="ja_JP"><Text>検証城（伊達）</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_DATE" Language="en_US"><Text>Test Castle (Date)</Text></Row>
+    <Row Tag="LOC_JAC_TEST_UNIFICATION_CASTLE_DATE" Language="ru_RU"><Text>Тестовый замок (Датэ)</Text></Row>
   </LocalizedText>
 </GameData>
