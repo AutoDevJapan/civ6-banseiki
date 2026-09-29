@@ -96,6 +96,17 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 
 長時間（300ターン相当）の安定性と、20 km との比較は未実施。
 
+### 全 MOD の200ターン健全性検査（`japan-15km-200turn-full.json`）
+
+`poc/` の MOD のうち、この設定に当てはまるものをすべて有効にして（万世紀・CustomCivs・GrowthUI・戦国ツリー・JapanMapScale・HistoricalEvents・CourtArbitration。Bundle0 は他の日本シナリオと同じく無効、試験用の `JAC_Test_UnificationMap` は対象外）、15 km 史実地図・22勢力で200ターンを自動進行する。人間の席は `japan-prosperous-15km.json` と同じ大内（滅亡で打ち切られにくい）。`allow_human_elimination` は有効なので、人間の勢力が滅んでも最後まで進む。
+
+`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-15km-200turn-full.json` で実行する。50ターンごとに要約を2行出す。要約はエラーにならず、失敗した場合も `summary failed: <理由>` を返す。
+
+1. `GameCore_Tuner` の行：`T+<経過ターン> engine=<内部ターン> alive=<生存勢力数> dead=[滅亡した家] cities=[家=都市数,…] ages reign=<改元の番号>:<ReignType> last(G/N/D/H)=<直近の判定の黄金/通常/暗黒/英雄の家数> events=<史実イベントの発火数> lapses=<開始時同盟の失効数> arb pending=<審理中> truce=<停戦中の組> await=<講和待ちの組> peace=<講和させた組> outlaw=<討伐対象の家> lastReq=<最後の請求ターン> winner=<勝利チーム。未決は -1>`
+2. `InGame` の行：`year=<暦の表示> localPlayer=<操作プレイヤー> officialEraScore=<公式の時代スコアの合計>`。万世紀では公式の時代スコアは常に0なので、`OK` 以外（`NONZERO [家ID=値,…]`）は不具合として扱う
+
+最後の手順だけが合否を決め、200ターンに届かない（`T+201` 未満）か生存勢力が0ならエラーにする。ターンごとの時間とメモリは `autoplay-metrics-<N>.jsonl`、研究の推移は `autoplay-research-<N>.jsonl`（N は50ターン区切りの番号）に出る。
+
 ### 資源・河川・湖沼・植生・火山
 
 生成器は[資源候補JSON](../spec/data/japan-map-resources.json)の50陸上・17海上候補、河川10本、湖沼6か所、森林・湿地規則、火山候補を両縮尺へ反映する。史実領土版と開拓者版は同じ資源・地形データを持つ。開始地図にはCiv6既定資源だけを書き、資源は都市中心タイルに置かない。
