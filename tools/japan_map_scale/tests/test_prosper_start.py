@@ -216,6 +216,7 @@ class ProsperousMapTests(unittest.TestCase):
         validate_scenario(data)
         with tempfile.TemporaryDirectory() as tmp:
             original, ps.SCENARIO = ps.SCENARIO, Path(tmp) / "s.json"
+            shutil.copy(original, ps.SCENARIO)
             try:
                 ps.write_scenario(ps.report_for(15))
                 self.assertEqual(json.loads(ps.SCENARIO.read_text(encoding="utf-8")), data)

@@ -49,6 +49,25 @@ class AgesProbeTests(unittest.TestCase):
         self.assertIn("NOT_ENUMERABLE ERR:", listing)
         self.assertIn("'enumerated ' .. total", listing)
 
+    def test_changed_since_last_boundary(self):
+        # The previous record was taken at turn - chunk and already saw an era that started on that turn,
+        # so only an era starting after it counts as a change since the last record.
+        try:
+            import lupa
+        except ImportError:
+            self.skipTest("lupa is not installed")
+        records = [s["code"] for s in self.steps if s["action"] == "ui_lua" and "changedSinceLast" in s["code"]]
+        self.assertGreaterEqual(len(records), 4)
+        for code in records:
+            line = re.search(r"^local changed = (.+)$", code, re.M).group(1)
+            changed = lupa.LuaRuntime().eval(f"function(chunk, eraStart, turn) return {line} end")
+            with self.subTest(expr=line):
+                self.assertFalse(changed(0, 1, 1))     # first record
+                self.assertFalse(changed(30, 30, 60))  # started on the previous record's turn
+                self.assertTrue(changed(30, 31, 60))   # first turn after the previous record
+                self.assertTrue(changed(30, 60, 60))   # started on this record's turn
+                self.assertFalse(changed(30, 1, 60))
+
     def test_moments_cover_all_players(self):
         self.assertEqual(self.steps[-1]["action"], "ui_lua")
         self.assertIn("for pid = 0, 21 do", self.steps[-1]["code"])
