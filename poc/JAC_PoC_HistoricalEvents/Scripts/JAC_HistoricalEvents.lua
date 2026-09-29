@@ -1,5 +1,5 @@
 -- SSOT 3.2: historical events fire in their historical year; a target faction that has already
--- researched the related tech/civic fires them earlier. Data: Data/JAC_HistoricalEvents_*.sql.
+-- researched the related tech/civic fires them earlier, one that has not gets a boost toward it then. Data: Data/JAC_HistoricalEvents_*.sql.
 --
 -- Save/load and multiplayer: all state lives in Player/Game properties (saved with the game and
 -- shared by every machine); nothing is cached in Lua between turns. Evaluation runs only from
@@ -20,15 +20,31 @@ local function Param(name, default)
 	return (row and tonumber(row.Value)) or default
 end
 
--- The official calendar exposes only a display string (Calendar.MakeYearStr), so years map to turns
--- here, like the official Pirates scenario's TopPanel. ponytail: one rate for all eras and speeds;
--- replace with the calendar's own table when the 1534 calendar lands.
-local START_YEAR = Param("JAC_EVENTS_START_YEAR", 1534)
-local TURNS_PER_YEAR = Param("JAC_EVENTS_TURNS_PER_YEAR", 3)
+-- The official calendar exposes only a display string (Calendar.MakeYearStr), so a year is turned into
+-- a turn from the same table that drives the calendar: GameSpeed_Turns rows of the game speed in
+-- order (MonthIncrement months per turn for TurnsPerIncrement turns), rewritten for 1534 by
+-- SengokuTrees Data/JAC_Sengoku_Calendar.xml. Turn 1 is the start year; a turn's year is the start year
+-- plus the elapsed months / 12. Same method as GameSpeed_Turns in GameSpeeds.xml:64-103.
+local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
+local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
+
+local function TurnForYear(year)
+	local target, months, turn = (year - START_YEAR) * 12, 0, 1
+	for row in GameInfo.GameSpeed_Turns() do
+		if row.GameSpeedType == SPEED then
+			local span = row.TurnsPerIncrement * row.MonthIncrement
+			if months + span >= target then
+				return turn + math.max(0, math.ceil((target - months) / row.MonthIncrement))
+			end
+			months, turn = months + span, turn + row.TurnsPerIncrement
+		end
+	end
+	return turn
+end
 
 local function DueTurn(row)
 	if row.Turn then return row.Turn end
-	return (row.Year - START_YEAR) * TURNS_PER_YEAR + 1
+	return TurnForYear(row.Year)
 end
 
 local function GroupBy(tableName)
@@ -81,6 +97,24 @@ local function HasPrereq(player, event)
 	if event.tech and player:GetTechs():HasTech(event.tech) then return true end
 	if event.civic and player:GetCulture():HasCivic(event.civic) then return true end
 	return false
+end
+
+-- Owner decision 1a: a faction that has not researched the related tech/civic gets only its boost
+-- (eureka/inspiration) when the year arrives. Tech: PlayerTechs:TriggerBoost(index, 1) as in
+-- AustraliaScenario.lua:784 (guards as in TechBoostsPanel.lua:91). Civic: the same call on
+-- PlayerCulture, guarded as in CivicBoostsPanel.lua:88 (no official Lua example of the civic call).
+local function BoostMissing(player, event)
+	local result = {}
+	local function try(kind, index, holder, has)
+		if index and not has then
+			local ok = holder:CanTriggerBoost(index) and not holder:HasBoostBeenTriggered(index)
+			if ok then holder:TriggerBoost(index, 1) end
+			table.insert(result, kind .. (ok and "=boosted" or "=no_boost"))
+		end
+	end
+	try("tech", event.tech, player:GetTechs(), event.tech and player:GetTechs():HasTech(event.tech))
+	try("civic", event.civic, player:GetCulture(), event.civic and player:GetCulture():HasCivic(event.civic))
+	return table.concat(result, ",")
 end
 
 local function Notify(event, playerID)
@@ -143,10 +177,11 @@ local function Fire(event, player, playerID, civType, reason, turn)
 		if row.CivilizationType == civType then Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name) end
 	end
 	PlaceResources(event)
+	local boost = (reason == "year") and BoostMissing(player, event) or ""
 	Notify(event, playerID)
 	Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
-	Log(string.format("fired event=%s player=%d civ=%s reason=%s turn=%d due=%d", event.row.EventType,
-		playerID, civType, reason, turn, event.due))
+	Log(string.format("fired event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s", event.row.EventType,
+		playerID, civType, reason, turn, event.due, boost))
 end
 
 -- Same hook and turn source as the official scenarios (AustraliaScenario.lua:1440-1455).
@@ -166,5 +201,5 @@ local function OnGameTurnStarted()
 	end
 end
 
-Log(string.format("loaded events=%d startYear=%d turnsPerYear=%d", #EVENTS, START_YEAR, TURNS_PER_YEAR))
+Log(string.format("loaded events=%d startYear=%d speed=%s", #EVENTS, START_YEAR, SPEED))
 GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)

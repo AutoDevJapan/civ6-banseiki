@@ -1,0 +1,18 @@
+{
+  "name": "Banseiki Sengoku calendar: 1534 start and 1535 after three turns",
+  "judge_profile": "generic",
+  "steps": [
+    {"action": "enable_mods", "ids": ["bd7a82c5-6b38-4b69-a7f5-8dc9af534249", "ba3a1c58-9287-4654-a22f-85f9e6841e9b", "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7"]},
+    {"action": "configure", "ruleset": "RULESET_JAC_BANSEIKI", "map_size": "MAPSIZE_SMALL", "speed": "GAMESPEED_STANDARD", "seed": 620953, "players": [
+      {"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": true},
+      {"leader": "LEADER_JAC_TAKEDA_NOBUTORA", "civ": "CIVILIZATION_JAC_TAKEDA", "human": false}
+    ]},
+    {"action": "ui_lua", "state_name": "HostGame", "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); local calendar=GameConfiguration.GetCalendarType(); if calendar~='CALENDAR_STANDARD_FROM_START_ERA' and calendar~=DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA') then error('wrong calendar: '..tostring(calendar)) end; local era=g_GameParameters.Parameters.GameStartEra; if not era or not era.Values or #era.Values~=1 then error('start era must offer exactly one value') end; local ev=era.Values[1].Value; if ev~='ERA_ANCIENT' and ev~=DB.MakeHash('ERA_ANCIENT') then error('wrong start era: '..tostring(ev)) end; HideGameSetup(); return 'start-era calendar selected; only ERA_ANCIENT offered'"},
+    {"action": "start_game", "timeout": 240},
+    {"action": "ui_lua", "state_name": "InGame", "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; if GameInfo.StartEras['ERA_ANCIENT'].Year~=1534 then error('wrong start year') end; local turn=Game.GetCurrentGameTurn(); if turn~=GameConfiguration.GetStartTurn() then error('not at start turn') end; local date=Calendar.MakeYearStr(turn); if not string.find(date,'1534',1,true) or string.find(date,'4000',1,true) then error('wrong start date: '..tostring(date)) end; return 'start date='..date"},
+    {"action": "ui_lua", "state_name": "InGame", "code": "local p=Players[Game.GetLocalPlayer()]; local s=nil; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units['UNIT_SETTLER'].Index then s=u; break end end; if not s then error('missing settler') end; UnitManager.RequestOperation(s,UnitOperationTypes.FOUND_CITY); return 'capital requested'"},
+    {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": "return Players[Game.GetLocalPlayer()]:GetCities():GetCount()>=1"}, "timeout": 30},
+    {"action": "autoplay", "turns": 3, "timeout": 300},
+    {"action": "ui_lua", "state_name": "InGame", "code": "local turn=Game.GetCurrentGameTurn(); if turn-GameConfiguration.GetStartTurn()~=3 then error('unexpected elapsed turns: '..tostring(turn)) end; local date=Calendar.MakeYearStr(turn); if not string.find(date,'1535',1,true) then error('wrong date after three turns: '..tostring(date)) end; return 'after three turns date='..date"}
+  ]
+}

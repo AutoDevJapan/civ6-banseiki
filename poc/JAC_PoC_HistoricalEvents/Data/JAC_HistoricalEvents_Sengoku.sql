@@ -1,10 +1,7 @@
 -- Sengoku pack sample events. Values are provisional (暫定); see documents/poc/historical-events.md.
 
--- Year -> turn: turn = (Year - START_YEAR) * TURNS_PER_YEAR + 1 (standard speed, ~200 turns for 1534-1600).
--- OR IGNORE so the calendar implementation can own these rows once it exists.
-INSERT OR IGNORE INTO GlobalParameters (Name, Value) VALUES
-	('JAC_EVENTS_START_YEAR', '1534'),
-	('JAC_EVENTS_TURNS_PER_YEAR', '3');
+-- Year -> turn: Scripts/JAC_HistoricalEvents.lua converts Year with the game speed's GameSpeed_Turns rows
+-- (SengokuTrees calendar, 1534 start; standard speed = 3 turns per year).
 
 INSERT INTO JAC_HistoricalEvents (EventType, Pack, Year, PrereqTech, PrereqCivic, Name, Description, NotifyAll) VALUES
 	('JAC_EVENT_TEPPO_DENRAI', 'SENGOKU', 1543, 'TECH_JAC_SENGOKU_FIREARMS_CONTACT', NULL,
@@ -20,11 +17,19 @@ INSERT INTO JAC_HistoricalEventTargets (EventType, CivilizationType) VALUES
 INSERT INTO JAC_HistoricalEventRenames (EventType, CivilizationType, Name) VALUES
 	('JAC_EVENT_NAGAO_UESUGI', 'CIVILIZATION_JAC_NAGAO', 'LOC_JAC_EVENT_UESUGI_CIV_NAME');
 
--- At the historical year the firearms knowledge reaches every faction that has not researched it.
--- Same modifier type and argument as the official Maori trait (Expansion2_Civilizations_Major.xml:479-481, 973-975).
-INSERT INTO Modifiers (ModifierId, ModifierType) VALUES
-	('JAC_EVENT_TEPPO_DENRAI_GRANT_TECH', 'MODIFIER_PLAYER_GRANT_SPECIFIC_TECHNOLOGY');
-INSERT INTO ModifierArguments (ModifierId, Name, Value) VALUES
-	('JAC_EVENT_TEPPO_DENRAI_GRANT_TECH', 'TechType', 'TECH_JAC_SENGOKU_FIREARMS_CONTACT');
-INSERT INTO JAC_HistoricalEventModifiers (EventType, ModifierId) VALUES
-	('JAC_EVENT_TEPPO_DENRAI', 'JAC_EVENT_TEPPO_DENRAI_GRANT_TECH');
+-- Owner decision 1a: when the year arrives, a faction without the related tech/civic gets its boost
+-- (eureka/inspiration) through PlayerTechs/PlayerCulture:TriggerBoost, which needs a Boosts row.
+-- Placeholder rows (暫定, the real boosts belong to the tech/civic tree); skipped if the tree defines one.
+INSERT INTO Boosts (TechnologyType, Boost, TriggerDescription, TriggerLongDescription, BoostClass, Unit1Type)
+SELECT t.TechnologyType, 40, 'LOC_JAC_EVENT_BOOST_PLACEHOLDER', 'LOC_JAC_EVENT_BOOST_PLACEHOLDER',
+	'BOOST_TRIGGER_TRAIN_UNIT', 'UNIT_GALLEY'
+FROM Technologies t
+WHERE t.TechnologyType IN ('TECH_JAC_SENGOKU_FIREARMS_CONTACT', 'TECH_JAC_SENGOKU_MINE_MANAGEMENT')
+	AND NOT EXISTS (SELECT 1 FROM Boosts b WHERE b.TechnologyType = t.TechnologyType);
+
+INSERT INTO Boosts (CivicType, Boost, TriggerDescription, TriggerLongDescription, BoostClass, Unit1Type)
+SELECT c.CivicType, 40, 'LOC_JAC_EVENT_BOOST_PLACEHOLDER', 'LOC_JAC_EVENT_BOOST_PLACEHOLDER',
+	'BOOST_TRIGGER_TRAIN_UNIT', 'UNIT_GALLEY'
+FROM Civics c
+WHERE c.CivicType = 'CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS'
+	AND NOT EXISTS (SELECT 1 FROM Boosts b WHERE b.CivicType = c.CivicType);

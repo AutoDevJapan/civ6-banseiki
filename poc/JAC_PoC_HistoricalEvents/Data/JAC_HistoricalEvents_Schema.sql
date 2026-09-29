@@ -4,11 +4,12 @@
 CREATE TABLE JAC_HistoricalEvents (
 	EventType TEXT NOT NULL PRIMARY KEY,
 	Pack TEXT NOT NULL,
-	-- Historical year. Converted to a turn with JAC_EVENTS_START_YEAR / JAC_EVENTS_TURNS_PER_YEAR.
+	-- Historical year. Converted to a turn by the Lua script from the game speed's calendar (GameSpeed_Turns).
 	Year INTEGER,
 	-- Explicit turn; wins over Year when both are set.
 	Turn INTEGER,
-	-- A target faction that already has this tech or civic fires the event before its turn.
+	-- A target faction that already has this tech or civic fires the event before its turn;
+	-- one that has not gets a boost toward it (not the tech itself) when the year arrives.
 	PrereqTech TEXT REFERENCES Technologies(TechnologyType),
 	PrereqCivic TEXT REFERENCES Civics(CivicType),
 	Name TEXT NOT NULL,

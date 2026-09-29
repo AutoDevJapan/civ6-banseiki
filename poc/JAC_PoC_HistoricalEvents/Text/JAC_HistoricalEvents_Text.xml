@@ -25,5 +25,8 @@
 		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="ja_JP"><Text>上杉</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="en_US"><Text>Uesugi</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_UESUGI_CIV_NAME" Language="ru_RU"><Text>Уэсуги</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_BOOST_PLACEHOLDER" Language="ja_JP"><Text>史実の出来事が起きる（暫定）。</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_BOOST_PLACEHOLDER" Language="en_US"><Text>A historical event takes place (placeholder).</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_BOOST_PLACEHOLDER" Language="ru_RU"><Text>Происходит историческое событие (временно).</Text></Row>
 	</LocalizedText>
 </GameInfo>
