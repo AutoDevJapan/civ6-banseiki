@@ -170,6 +170,14 @@ class HouseNamesLuaTests(unittest.TestCase):
                 self.assertEqual(self.lookup(lua, engine), engine)
                 self.assertFalse(lua.globals().JAC_LocalHouseHasNames())
 
+    def test_load_screen_without_game_keeps_generic_names(self):
+        # LoadScreen.lua:473 (OnLoadGameViewStateDone) runs before Game exists; an error there hangs the load.
+        lua = self.runtime("CIVILIZATION_JAC_ODA", extra="Game = nil; PlayerConfigurations = nil")
+        generic = self.texts[CIVIC]
+        self.assertEqual(self.lookup(lua, CIVIC), generic)
+        self.assertEqual(lua.globals().JAC_ApplyHouseNames(generic), generic)
+        self.assertFalse(lua.globals().JAC_LocalHouseHasNames())
+
     def test_civilopedia_parts_receive_house_text_only_for_the_owner(self):
         pedia = (UI / "CivilopediaPage_JAC_HouseNames.lua").read_text(encoding="utf-8")
         calls = r"""
