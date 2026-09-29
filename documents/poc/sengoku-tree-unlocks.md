@@ -170,8 +170,8 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | CivicModifiers | `CivicType`=`CIVIC_DIPLOMATIC_SERVICE`<br>`ModifierId`=`CIVIC_GRANT_SPY` | スパイ枠が0で、C12で解放したスパイを作れない | `CivicType`=`CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE` | 設計 C12 諜報 |
 | TechnologyModifiers | `TechnologyType`=`TECH_MATHEMATICS`<br>`ModifierId`=`MATHEMATICS_ADJUST_SEA_MOVEMENT` | 艦船の移動力+1が無い | `TechnologyType`=`TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING` | 暫定 T10 和船 |
 | TechnologyModifiers | `TechnologyType`=`TECH_CARTOGRAPHY`<br>`ModifierId`=`CARTOGRAPHY_GRANT_OCEAN_NAVIGATION` | 外洋タイルへ入れない | `TechnologyType`=`TECH_JAC_SENGOKU_ATAKEBUNE` | 暫定 T27 大型軍船 |
-| TechnologyModifiers | `TechnologyType`=`TECH_PRINTING`<br>`ModifierId`=`PRINTING_ADD_DIPLO_VISIBILITY` | 外交上の可視度+1が無い | `TechnologyType`=`TECH_JAC_SENGOKU_SURVEY_STANDARDS` | 暫定 T31 |
-| DiplomaticVisibilitySources | `VisibilitySourceType`=`SOURCE_TECH` | 同上の可視度の出所が消える | `PrereqTech`=`TECH_JAC_SENGOKU_SURVEY_STANDARDS` | 暫定 T31（上と対） |
+| TechnologyModifiers | `TechnologyType`=`TECH_PRINTING`<br>`ModifierId`=`PRINTING_ADD_DIPLO_VISIBILITY` | 外交上の可視度+1が無い | `TechnologyType`=`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` | T05 街道と荷駄（#40 で実機確認済みの付け先に合わせる） |
+| DiplomaticVisibilitySources | `VisibilitySourceType`=`SOURCE_TECH` | 同上の可視度の出所が消える | `PrereqTech`=`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` | T05（上と対） |
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_MINE`<br>`PrereqTech`=`TECH_APPRENTICESHIP` | 鉱山の生産力+1が無い | `PrereqTech`=`TECH_JAC_SENGOKU_MINE_MANAGEMENT` | 設計 T14 鉱山産出 |
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_QUARRY`<br>`PrereqTech`=`TECH_GUNPOWDER` | 採石場の生産力+1が無い | `PrereqTech`=`TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE` | 暫定 T29 石垣 |
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_FISHING_BOATS`<br>`PrereqTech`=`TECH_CARTOGRAPHY` | 漁船のゴールド+2が無い | `PrereqTech`=`TECH_JAC_SENGOKU_HARBOR_PILOTS` | 暫定 T17 港 |

@@ -160,6 +160,10 @@ class SengokuTreeTests(unittest.TestCase):
             CREATE TABLE GreatPersonIndividualActionModifiers (GreatPersonIndividualType TEXT, ModifierId TEXT);
             CREATE TABLE GoodyHutSubTypes (SubTypeGoodyHut TEXT PRIMARY KEY, ModifierID TEXT);
             CREATE TABLE TraitModifiers (TraitType TEXT, ModifierId TEXT);
+            CREATE TABLE TechnologyModifiers (TechnologyType TEXT, ModifierId TEXT);
+            CREATE TABLE DiplomaticVisibilitySources (VisibilitySourceType TEXT PRIMARY KEY, PrereqTech TEXT);
+            INSERT INTO TechnologyModifiers VALUES ('TECH_PRINTING','PRINTING_ADD_DIPLO_VISIBILITY'),('TECH_PRINTING','PRINTING_BOOST_WRITING_TOURISM');
+            INSERT INTO DiplomaticVisibilitySources VALUES ('SOURCE_TECH','TECH_PRINTING'),('SOURCE_TRADER',NULL);
             INSERT INTO Technologies VALUES ('TECH_POTTERY','Pottery',NULL,25,'ERA_ANCIENT',0,NULL);
             INSERT INTO Civics VALUES ('CIVIC_CODE_OF_LAWS','Code of Laws',NULL,20,'ERA_ANCIENT',0,NULL);
             INSERT INTO Eras VALUES ('ERA_ANCIENT','Ancient',NULL),('ERA_CLASSICAL','Classical',NULL),('ERA_MEDIEVAL','Medieval',NULL),('ERA_RENAISSANCE','Renaissance',NULL);
@@ -191,6 +195,12 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
         starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
         self.assertEqual(starting_civics, ["CIVIC_JAC_SENGOKU_HOUSE_RULES"])
+        # Printing's +1 diplomatic access level moves to a Sengoku tech (the other Printing modifier is dropped)
+        self.assertEqual(db.execute("SELECT * FROM TechnologyModifiers").fetchall(),
+                         [("TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS", "PRINTING_ADD_DIPLO_VISIBILITY"),
+                          ("TECH_PRINTING", "PRINTING_BOOST_WRITING_TOURISM")])
+        self.assertEqual(db.execute("SELECT PrereqTech FROM DiplomaticVisibilitySources WHERE VisibilitySourceType='SOURCE_TECH'")
+                         .fetchone()[0], "TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS")
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Eras_XP2").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM ClimateParameters").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
