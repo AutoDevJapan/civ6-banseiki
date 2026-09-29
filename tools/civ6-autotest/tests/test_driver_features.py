@@ -79,6 +79,25 @@ class DriverFeatureTests(unittest.TestCase):
                     a._run_step({"action": "save", **step})
             lua.assert_not_called()
 
+    def test_save_dismisses_blocking_advisor_before_saving(self):
+        # Live sengoku-events-list-06: an advisor left open after autoplay kept SaveComplete from firing.
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            order = []
+            name = runner._save_name({"name": "JAC-Test"})
+
+            def lua(state, code, timeout):
+                order.append("save" if "Network.SaveGame" in code else state)
+                if "Network.SaveGame" in code:
+                    runner._save_path(name).write_bytes(b"save")
+                return "true"
+
+            with patch.object(runner, "_lua", side_effect=lua), patch.object(runner, "_wait"), \
+                    patch.object(runner, "_close_options_menu", side_effect=lambda d: order.append("menu")), \
+                    patch.object(runner, "_dismiss_advisor", side_effect=lambda d: order.append("advisor")):
+                runner._run_step({"action": "save", "name": "JAC-Test"})
+            self.assertEqual(order[:3], ["menu", "advisor", "save"])
+
     def test_flag_validation(self):
         config = json.loads((SCENARIOS / "sengoku-trees.json").read_text(encoding="utf-8"))
         config["steps"][1]["build_setup"] = "yes"
