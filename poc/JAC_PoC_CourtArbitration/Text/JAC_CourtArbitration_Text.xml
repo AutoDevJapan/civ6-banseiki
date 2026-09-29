@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<LocalizedText>
+		<Row Tag="LOC_JAC_ARB_BUTTON" Language="ja_JP"><Text>朝廷に停戦を請う</Text></Row>
+		<Row Tag="LOC_JAC_ARB_BUTTON" Language="en_US"><Text>Petition the Court for a Ceasefire</Text></Row>
+		<Row Tag="LOC_JAC_ARB_BUTTON" Language="ru_RU"><Text>Просить двор о перемирии</Text></Row>
+		<Row Tag="LOC_JAC_ARB_TITLE" Language="ja_JP"><Text>朝廷・将軍の停戦裁定</Text></Row>
+		<Row Tag="LOC_JAC_ARB_TITLE" Language="en_US"><Text>Ceasefire Ruling of the Court and Shogun</Text></Row>
+		<Row Tag="LOC_JAC_ARB_TITLE" Language="ru_RU"><Text>Решение двора и сёгуна о перемирии</Text></Row>
+		<Row Tag="LOC_JAC_ARB_CLOSE" Language="ja_JP"><Text>閉じる</Text></Row>
+		<Row Tag="LOC_JAC_ARB_CLOSE" Language="en_US"><Text>Close</Text></Row>
+		<Row Tag="LOC_JAC_ARB_CLOSE" Language="ru_RU"><Text>Закрыть</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="ja_JP"><Text>正当性 {1_Legitimacy}、外交的支持 {2_Favor}、金 {3_Gold}。裁定の費用：外交的支持 {4_CostFavor}、金 {5_CostGold}、正当性 {6_CostLegitimacy}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="en_US"><Text>Legitimacy {1_Legitimacy}, Diplomatic Favor {2_Favor}, Gold {3_Gold}. Cost of a ruling: {4_CostFavor} Favor, {5_CostGold} Gold, {6_CostLegitimacy} Legitimacy</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="ru_RU"><Text>Легитимность {1_Legitimacy}, дипломатическая поддержка {2_Favor}, золото {3_Gold}. Цена решения: поддержка {4_CostFavor}, золото {5_CostGold}, легитимность {6_CostLegitimacy}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ja_JP"><Text>将軍家は他家どうしの停戦も発議でき、{1_Year}年までは裁定の力が3倍になる。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="en_US"><Text>The Shogunate may also call ceasefires between other houses; its rulings are three times as strong until {1_Year}.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ru_RU"><Text>Сёгунат может объявлять перемирие и между другими домами; до {1_Year} года сила его решений утроена.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_PAIR" Language="ja_JP"><Text>{1_A}と{2_B}の停戦</Text></Row>
+		<Row Tag="LOC_JAC_ARB_PAIR" Language="en_US"><Text>Ceasefire between {1_A} and {2_B}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_PAIR" Language="ru_RU"><Text>Перемирие: {1_A} и {2_B}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REQUEST" Language="ja_JP"><Text>裁定を請う</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REQUEST" Language="en_US"><Text>Petition</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REQUEST" Language="ru_RU"><Text>Просить</Text></Row>
+		<Row Tag="LOC_JAC_ARB_INCOMING" Language="ja_JP"><Text>{1_Requester}が、{2_A}と{3_B}の停戦裁定を求めている</Text></Row>
+		<Row Tag="LOC_JAC_ARB_INCOMING" Language="en_US"><Text>{1_Requester} asks for a ceasefire ruling between {2_A} and {3_B}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_INCOMING" Language="ru_RU"><Text>{1_Requester} просит решения о перемирии между {2_A} и {3_B}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ACCEPT" Language="ja_JP"><Text>応じる</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ACCEPT" Language="en_US"><Text>Accept</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ACCEPT" Language="ru_RU"><Text>Принять</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REFUSE" Language="ja_JP"><Text>拒む</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REFUSE" Language="en_US"><Text>Refuse</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REFUSE" Language="ru_RU"><Text>Отказать</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_INVALID" Language="ja_JP"><Text>この組では請求できない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_INVALID" Language="en_US"><Text>This pair cannot be petitioned.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_INVALID" Language="ru_RU"><Text>Для этой пары прошение невозможно.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="ja_JP"><Text>両家は戦争中ではない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="en_US"><Text>The two houses are not at war.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_AT_WAR" Language="ru_RU"><Text>Эти дома не воюют.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="ja_JP"><Text>他家どうしの停戦を発議できるのは、裁定の力を持つ将軍家だけ。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="en_US"><Text>Only the Shogunate, while it holds the power of ruling, may call a ceasefire between other houses.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NOT_PARTY" Language="ru_RU"><Text>Объявлять перемирие между другими домами может только сёгунат, пока у него есть власть решать.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="ja_JP"><Text>裁定は1ターンに1件まで。次のターンに請求できる。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="en_US"><Text>Only one ruling per turn. Petition again next turn.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="ru_RU"><Text>Не более одного решения за ход. Попробуйте в следующем ходу.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="ja_JP"><Text>外交的支持が足りない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="en_US"><Text>Not enough Diplomatic Favor.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="ru_RU"><Text>Недостаточно дипломатической поддержки.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="ja_JP"><Text>金が足りない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="en_US"><Text>Not enough Gold.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="ru_RU"><Text>Недостаточно золота.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ja_JP"><Text>正当性が足りない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="en_US"><Text>Not enough Legitimacy.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ru_RU"><Text>Недостаточно легитимности.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="ja_JP"><Text>停戦裁定の請求</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="en_US"><Text>Ceasefire Petition</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="ru_RU"><Text>Прошение о перемирии</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY" Language="ja_JP"><Text>{1_Requester}が、{2_A}と{3_B}の停戦裁定を朝廷に求めた。このターンのうちに「朝廷に停戦を請う」の画面で応否を答える。答えなければ拒んだものとみなす。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY" Language="en_US"><Text>{1_Requester} has petitioned the Court for a ceasefire between {2_A} and {3_B}. Answer this turn in the Court ceasefire screen; no answer counts as a refusal.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY" Language="ru_RU"><Text>{1_Requester} просит двор о перемирии между {2_A} и {3_B}. Ответьте в этом ходу на экране двора; без ответа это считается отказом.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME" Language="ja_JP"><Text>停戦裁定の成立</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME" Language="en_US"><Text>Ceasefire Ruling Accepted</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME" Language="ru_RU"><Text>Решение о перемирии принято</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="ja_JP"><Text>{1_A}と{2_B}は朝廷の裁定に従い停戦した。{3_Turns}ターンの間、両家の戦争は認められない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="en_US"><Text>{1_A} and {2_B} have accepted the Court's ruling and made peace. War between them is not allowed for {3_Turns} turns.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ACCEPTED_SUMMARY" Language="ru_RU"><Text>{1_A} и {2_B} приняли решение двора и заключили мир. Война между ними запрещена на {3_Turns} ходов.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ja_JP"><Text>停戦裁定の拒否</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="en_US"><Text>Ceasefire Ruling Refused</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ru_RU"><Text>Решение о перемирии отвергнуто</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ja_JP"><Text>{1_Refuser}は{2_A}と{3_B}の停戦裁定を拒み、正当性を失った。諸家には{1_Refuser}を討つ大義が立つ。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="en_US"><Text>{1_Refuser} refused the ceasefire ruling between {2_A} and {3_B} and lost Legitimacy. The other houses now have cause to subdue {1_Refuser}.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ru_RU"><Text>{1_Refuser} отверг решение о перемирии между {2_A} и {3_B} и потерял легитимность. У других домов появился повод выступить против {1_Refuser}.</Text></Row>
+	</LocalizedText>
+</GameInfo>

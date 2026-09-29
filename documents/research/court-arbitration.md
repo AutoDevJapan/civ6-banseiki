@@ -1,6 +1,6 @@
 # 朝廷・将軍による裁定（停戦裁定・所領安堵）の設計案
 
-SSOT 3.2 の決定（2026-09-29）を実現する設計案。設計のみで実装はしない。無効化の実装は [`../poc/japan-no-world-congress.md`](../poc/japan-no-world-congress.md)。
+SSOT 3.2 の決定（2026-09-29）を実現する設計案。設計のみで実装はしない。無効化の実装は [`../poc/japan-no-world-congress.md`](../poc/japan-no-world-congress.md)。停戦裁定の最小実装は [`../poc/court-arbitration.md`](../poc/court-arbitration.md)（所領安堵は未実装）。
 
 ## 決定済み（SSOT 3.2、オーナー決定）
 
