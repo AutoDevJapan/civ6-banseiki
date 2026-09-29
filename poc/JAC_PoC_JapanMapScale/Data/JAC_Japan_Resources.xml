@@ -13,7 +13,7 @@
     <Row ResourceType="RESOURCE_JAC_LACQUER" Name="LOC_RESOURCE_JAC_LACQUER_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" Frequency="0"/>
   </Resources>
   <Resource_ValidTerrains>
-    <!-- Gold: mines on hills, placer gold (Sado Nishimikawa) on flat land. Provisional. -->
+    <!-- Gold: mines on hills, placer gold (Sado Nishimikawa) on flat land; both take a mine (see Improvement_ValidResources). -->
     <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_GRASS_HILLS"/>
     <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_PLAINS_HILLS"/>
     <Row ResourceType="RESOURCE_JAC_GOLD" TerrainType="TERRAIN_GRASS"/>
@@ -38,8 +38,12 @@
     <Row ResourceType="RESOURCE_JAC_LACQUER" YieldType="YIELD_GOLD" YieldChange="1"/>
   </Resource_YieldChanges>
   <Improvement_ValidResources>
-    <!-- The Sengoku pack keeps only farm, mine, quarry, fishing boat and fort buildable, so both use the mine (provisional). -->
+    <!-- SSOT 3.2: gold is mined like iron; lacquer takes the plantation like tea and silk (JAC_Sengoku_Unlocks.sql makes it buildable).
+         A resource listed here lets the improvement go on a tile its Improvement_ValidTerrains would refuse: official salt
+         grows only on flat land (Resources.xml:273-275) and is mined (Improvements.xml:236) although a mine accepts only
+         hills (Improvements.xml:105-109); the scenario gold is mined on flat plains too (AustraliaScenario_Resources.xml:144-145,192).
+         That is what lets placer gold on flat land take a mine. Lacquer keeps its forest like silk (Improvements.xml:263). -->
     <Row ImprovementType="IMPROVEMENT_MINE" ResourceType="RESOURCE_JAC_GOLD"/>
-    <Row ImprovementType="IMPROVEMENT_MINE" ResourceType="RESOURCE_JAC_LACQUER"/>
+    <Row ImprovementType="IMPROVEMENT_PLANTATION" ResourceType="RESOURCE_JAC_LACQUER" MustRemoveFeature="false"/>
   </Improvement_ValidResources>
 </GameInfo>

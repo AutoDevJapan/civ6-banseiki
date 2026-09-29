@@ -105,7 +105,19 @@
     <UpdateText id="JAC_Japan_Resources_Text" criteria="JAC_JapanMapScale_Banseiki">
       <File>Text/JAC_Japan_Resources_Text.xml</File>
     </UpdateText>
-    <AddGameplayScripts id="JAC_Japan_Resources_Scripts" criteria="JAC_JapanMapScale_Banseiki">
+    <AddGameplayScripts id="JAC_Japan_20km_Resources_Scripts" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_20km_Settlers_Resources_Scripts" criteria="JAC_Japan_20km_Settlers">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_Resources_Scripts" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_ResourceSites.lua</File>
+      <File>Scripts/JAC_Resources.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_Settlers_Resources_Scripts" criteria="JAC_Japan_15km_Settlers">
       <File>Scripts/JAC_ResourceSites.lua</File>
       <File>Scripts/JAC_Resources.lua</File>
     </AddGameplayScripts>

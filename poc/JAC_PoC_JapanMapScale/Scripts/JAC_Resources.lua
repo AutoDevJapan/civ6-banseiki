@@ -8,6 +8,7 @@
 --   ExposedMembers.JAC_Resources.RevealForTech(tech)  place every site tied to that tech type
 --   ExposedMembers.JAC_Resources.GetSites()           the sites of this map (array of {id, resource, plot, year, tech})
 --   ExposedMembers.JAC_Resources.IsRevealed(siteId)
+--   ExposedMembers.JAC_Resources.CurrentYear()        calendar year of the current turn
 -- Until the events framework calls these, OnTurnBegin reveals sites by calendar year and by tech.
 
 local REVEALED_KEY = "JAC_RESOURCE_SITES_REVEALED"
@@ -123,20 +124,46 @@ local function RevealByResearch()
 	end)
 end
 
-local function CurrentYear(turn)
-	-- Test hook (tools/civ6-autotest/scenarios/japan-resources.json): the year of turn 1, +1 year per turn.
-	local testYear = GameConfiguration.GetValue("JAC_RESOURCES_TEST_YEAR")
-	if testYear ~= nil then
-		return testYear + turn - 1
+-- Calendar year of the current turn, from the same data the engine dates turns with:
+-- the start era's StartEras.Year (01_GameplaySchema.sql:2545-2560; 1534 under the Sengoku pack,
+-- JAC_Sengoku_Calendar.xml) plus the months of the elapsed turns taken from GameSpeed_Turns in row order
+-- (01_GameplaySchema.sql:1403-1408, :3337). Elapsed turns are counted from GameConfiguration.GetStartTurn()
+-- because a 1534 start puts the engine turn near 16603 (TopPanel.lua:387-389 normalizes the same way).
+-- No official Lua calls a turn-to-year function; Calendar.MakeYearStr only returns display text.
+local function StartYear()
+	local era = GameInfo.Eras[GameConfiguration.GetStartEra()]
+	for row in GameInfo.StartEras() do
+		if era ~= nil and row.EraType == era.EraType then
+			return row.Year
+		end
 	end
-	-- The calendar still starts at 4000 BC, so no site is due until the calendar work sets 1534.
-	local ok, year = pcall(function() return Calendar.GetTurnYearForGame(turn) end)
-	return ok and year or nil
+	return nil
 end
 
-local function OnTurnBegin(turn)
+local function CurrentYear()
+	local startYear = StartYear()
+	local speed = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()]
+	if startYear == nil or speed == nil then
+		return nil
+	end
+	local left = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn()
+	local months = 0
+	for row in GameInfo.GameSpeed_Turns() do
+		if left <= 0 then
+			break
+		end
+		if row.GameSpeedType == speed.GameSpeedType then
+			local turns = math.min(left, row.TurnsPerIncrement)
+			months = months + turns * row.MonthIncrement
+			left = left - turns
+		end
+	end
+	return startYear + math.floor(months / 12)
+end
+
+local function OnTurnBegin()
 	RevealByResearch()
-	local year = CurrentYear(turn)
+	local year = CurrentYear()
 	if year ~= nil then
 		RevealDue(year)
 	end
@@ -148,6 +175,7 @@ ExposedMembers.JAC_Resources = {
 	RevealForTech = RevealForTech,
 	GetSites = GetSites,
 	IsRevealed = IsRevealed,
+	CurrentYear = CurrentYear,
 }
 
 Events.TurnBegin.Add(OnTurnBegin)

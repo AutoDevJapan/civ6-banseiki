@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 import re
 import sqlite3
 import unittest
@@ -137,21 +138,29 @@ class CustomResourceTests(unittest.TestCase):
         listed = {item.text for item in root.findall("./Files/File")}
         used = set()
         for action in root.find("InGameActions"):
-            if action.attrib["id"].startswith("JAC_Japan_Resources") or action.attrib["id"].endswith("_Scripts"):
+            if action.attrib["id"].startswith("JAC_Japan_Resources"):
                 self.assertEqual(action.attrib["criteria"], "JAC_JapanMapScale_Banseiki")
                 used.update(item.text for item in action.findall("File"))
+        for action in root.findall("./InGameActions/UpdateDatabase[@criteria]"):
+            if action.attrib["id"].endswith("_Rules"):
+                self.assertEqual([item.text for item in action.findall("File")], ["Data/JAC_Japan_MapRules.xml"])
+        # The site script runs only on the four Japan maps, with the same criteria as the other map actions.
+        scripts = root.findall("./InGameActions/AddGameplayScripts")
+        self.assertEqual(sorted(action.attrib["criteria"] for action in scripts),
+                         sorted(f"JAC_Japan_{km}km_{mode}" for km in (15, 20) for mode in ("Historical", "Settlers")))
+        for action in scripts:
+            self.assertEqual([item.text for item in action.findall("File")],
+                             ["Scripts/JAC_ResourceSites.lua", "Scripts/JAC_Resources.lua"])
+            used.update(item.text for item in action.findall("File"))
+            criteria = root.find(f"./ActionCriteria/Criteria[@id='{action.attrib['criteria']}']")
+            self.assertEqual(criteria.findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
+            self.assertIn("Maps/JAC_Japan_", criteria.findtext("./ConfigurationValueMatches/Value"))
         self.assertEqual(used, {"Data/JAC_Japan_Resources.xml", "Data/JAC_Japan_Resources_Icons.xml",
                                 "Text/JAC_Japan_Resources_Text.xml", "Scripts/JAC_ResourceSites.lua",
                                 "Scripts/JAC_Resources.lua"})
         self.assertLessEqual(used, listed)
         for name in used:
             self.assertTrue((JAPAN / name).is_file(), name)
-        for action in root.findall("./InGameActions/UpdateDatabase[@criteria]"):
-            if action.attrib["id"].endswith("_Rules"):
-                self.assertEqual([item.text for item in action.findall("File")], ["Data/JAC_Japan_MapRules.xml"])
-        scripts = root.find("./InGameActions/AddGameplayScripts")
-        self.assertEqual([item.text for item in scripts.findall("File")],
-                         ["Scripts/JAC_ResourceSites.lua", "Scripts/JAC_Resources.lua"])
 
 
 class DeferredSiteDataTests(unittest.TestCase):
@@ -218,14 +227,39 @@ class DeferredSiteDataTests(unittest.TestCase):
         for name in ("RevealSite", "RevealDue", "RevealForTech", "GetSites", "IsRevealed"):
             self.assertIn(f"{name} = {name},", block)
         scenario = (ROOT / "tools/civ6-autotest/scenarios/japan-resources.json").read_text(encoding="utf-8")
-        self.assertIn("JAC_RESOURCES_TEST_YEAR", lua)
-        self.assertIn("JAC_RESOURCES_TEST_YEAR", scenario)
+        # The real calendar drives the release; no test-only year override is left in the normal path.
+        self.assertNotIn("TEST_YEAR", lua)
+        self.assertNotIn("TEST_YEAR", scenario)
+        for fragment in ("GameConfiguration.GetStartTurn()", "GameInfo.StartEras()", "GameInfo.GameSpeed_Turns()",
+                         "CurrentYear = CurrentYear,"):
+            self.assertIn(fragment, lua)
         # The scenario waits for these Lua.log lines: "[JAC_RESOURCES] loaded" and "[JAC_RESOURCES] revealed <id>".
         self.assertIn('print("[JAC_RESOURCES] " .. message)', lua)
         self.assertIn('Log("loaded")', lua)
         self.assertIn('Log(string.format("revealed %s: ', lua)
         for line in ("[JAC_RESOURCES] loaded", "[JAC_RESOURCES] revealed silver-ikuno"):
             self.assertIn(line, scenario)
+
+    def test_the_scenario_turns_reach_1542_on_the_sengoku_calendar(self):
+        # Same walk as CurrentYear() in JAC_Resources.lua, over the Sengoku GameSpeed_Turns rows.
+        calendar = ET.parse(SENGOKU / "Data/JAC_Sengoku_Calendar.xml").getroot()
+        start = int(calendar.findtext("./StartEras/Update/Set/Year"))
+        rows = [(row.findtext("GameSpeedType"), int(row.findtext("MonthIncrement")), int(row.findtext("TurnsPerIncrement")))
+                for row in calendar.findall("./GameSpeed_Turns/Row")]
+
+        def year(speed: str, elapsed: int) -> int:
+            months = 0
+            for kind, increment, turns in rows:
+                if kind == speed and elapsed > 0:
+                    step = min(elapsed, turns)
+                    months, elapsed = months + step * increment, elapsed - step
+            return start + months // 12
+
+        scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/japan-resources.json").read_text(encoding="utf-8"))
+        turns = sum(step["turns"] for step in scenario["steps"] if step["action"] == "autoplay")
+        self.assertEqual((start, year("GAMESPEED_STANDARD", 0), year("GAMESPEED_STANDARD", 3)), (1534, 1534, 1535))
+        self.assertEqual(year("GAMESPEED_STANDARD", turns), 1542)
+        self.assertEqual(year("GAMESPEED_STANDARD", turns - 1), 1541)  # the check lands on the first 1542 turn
 
     def test_custom_resources_are_on_the_map_at_the_start(self):
         for item in self.manifest:
@@ -236,6 +270,77 @@ class DeferredSiteDataTests(unittest.TestCase):
                                    ("lacquer-wajima", "RESOURCE_JAC_LACQUER"), ("silver-iwami", "RESOURCE_SILVER")):
                 self.assertEqual(rows[records[site]["plot"]], resource)
 
+
+BASE_IMPROVEMENTS = GAME / "Base/Assets/Gameplay/Data/Improvements.xml"
+# SSOT 3.2: gold is mined like iron; tea, silk and lacquer take the plantation.
+IMPROVEMENT_FOR = {"RESOURCE_JAC_GOLD": "IMPROVEMENT_MINE", "RESOURCE_JAC_LACQUER": "IMPROVEMENT_PLANTATION",
+                   "RESOURCE_TEA": "IMPROVEMENT_PLANTATION", "RESOURCE_SILK": "IMPROVEMENT_PLANTATION"}
+
+
+def valid_resources() -> dict[tuple[str, str], bool]:
+    """(improvement, resource) -> MustRemoveFeature (schema default 1, 01_GameplaySchema.sql:1837-1843)."""
+    rows = {}
+    for path in (BASE_IMPROVEMENTS, JAPAN / "Data/JAC_Japan_Resources.xml"):
+        for row in ET.parse(path).getroot().findall("./Improvement_ValidResources/Row"):
+            rows[(row.attrib["ImprovementType"], row.attrib["ResourceType"])] = \
+                row.attrib.get("MustRemoveFeature", "true") != "false"
+    return rows
+
+
+@unittest.skipUnless(BASE_IMPROVEMENTS.is_file() and BASE_RESOURCES.is_file(), "official Civ6 data not installed")
+class ImprovementTests(unittest.TestCase):
+    def test_a_listed_resource_lets_a_mine_go_on_flat_land(self):
+        # The rule JAC gold relies on: salt only exists on flat land and is only improved by a mine,
+        # while a mine's own terrains are hills. Without the Improvement_ValidResources override salt could never be mined.
+        improvements = ET.parse(BASE_IMPROVEMENTS).getroot()
+        mine_terrains = {row.attrib["TerrainType"] for row in improvements.findall("./Improvement_ValidTerrains/Row")
+                         if row.attrib["ImprovementType"] == "IMPROVEMENT_MINE"}
+        self.assertTrue(mine_terrains and all(terrain.endswith("_HILLS") for terrain in mine_terrains))
+        salt = {row.attrib["TerrainType"] for row in ET.parse(BASE_RESOURCES).getroot().findall("./Resource_ValidTerrains/Row")
+                if row.attrib["ResourceType"] == "RESOURCE_SALT"}
+        self.assertTrue(salt and not salt & mine_terrains)
+        self.assertEqual([imp for imp, res in valid_resources() if res == "RESOURCE_SALT"], ["IMPROVEMENT_MINE"])
+
+    def test_plantation_and_mine_are_buildable_under_the_sengoku_pack(self):
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE Improvements (ImprovementType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT, Buildable INT)")
+        for row in ET.parse(BASE_IMPROVEMENTS).getroot().findall("./Improvements/Row"):
+            db.execute("INSERT INTO Improvements VALUES (?, ?, ?, ?)",
+                       (row.attrib["ImprovementType"], row.attrib.get("PrereqTech"), row.attrib.get("PrereqCivic"),
+                        int(row.attrib.get("Buildable", "true") == "true")))
+        for statement in statements(SENGOKU / "Data/JAC_Sengoku_Unlocks.sql"):
+            if statement.startswith("UPDATE Improvements"):
+                db.execute(statement)
+        rows = {kind: (tech, buildable) for kind, tech, buildable in
+                db.execute("SELECT ImprovementType, PrereqTech, Buildable FROM Improvements")}
+        self.assertEqual(rows["IMPROVEMENT_PLANTATION"], ("TECH_JAC_SENGOKU_IRRIGATION_WORKS", 1))
+        self.assertEqual(rows["IMPROVEMENT_MINE"], ("TECH_JAC_SENGOKU_ORE_PROSPECTING", 1))
+
+    def test_every_gold_lacquer_tea_silk_tile_can_take_its_improvement(self):
+        rules = valid_resources()
+        lua = (JAPAN / "Scripts/JAC_ResourceSites.lua").read_text(encoding="utf-8")
+        reserved = {size: {int(plot): resource for resource, plot in re.findall(r'resource="(\w+)", plot=(\d+)', body)}
+                    for size, body in re.findall(r'\["(\d+x\d+)"\] = \{(.*?)\n\t\},', lua, re.S)}
+        checked = Counter()
+        for path in sorted((JAPAN / "Maps").glob("*.Civ6Map")):
+            with sqlite3.connect(path) as db:
+                width, height = db.execute("SELECT Width, Height FROM Map").fetchone()
+                terrain = dict(db.execute("SELECT ID, TerrainType FROM Plots"))
+                features = dict(db.execute("SELECT ID, FeatureType FROM PlotFeatures"))
+                tiles = dict(db.execute("SELECT ID, ResourceType FROM PlotResources"))
+            later = reserved[f"{width}x{height}"]
+            self.assertFalse(set(later) & set(tiles), path.name)
+            for plot, resource in [*tiles.items(), *later.items()]:
+                if resource not in IMPROVEMENT_FOR:
+                    continue
+                improvement = IMPROVEMENT_FOR[resource]
+                with self.subTest(map=path.name, plot=plot, resource=resource):
+                    self.assertIn((improvement, resource), rules)
+                    if plot in features:  # the builder must not need to clear it
+                        self.assertFalse(rules[(improvement, resource)], features[plot])
+                    self.assertFalse(terrain[plot].startswith(("TERRAIN_COAST", "TERRAIN_OCEAN")))
+                    checked[resource] += 1
+        self.assertTrue(all(checked[resource] for resource in IMPROVEMENT_FOR), checked)
 
 if __name__ == "__main__":
     unittest.main()
