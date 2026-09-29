@@ -98,6 +98,9 @@ def generate(key: str, cli: str) -> None:
         return
     if any(path.exists() for path in images.values()):
         raise RuntimeError(f"{key}: partial existing output; inspect before retrying")
+    # danger-full-access on purpose: on this Windows PC the image tool runs in a nested app-server
+    # sandbox that fails with "Access is denied" under workspace-write. The prompt and -C confine
+    # output to this directory; validate() and the hash log below check what was written.
     command = [cli, "exec", "--json", "--ignore-user-config", "--skip-git-repo-check",
                "-s", "danger-full-access", "-C", str(directory), "-"]
     environment = os.environ.copy()

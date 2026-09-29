@@ -1,5 +1,5 @@
 {
-  "name": "Banseiki 1534 leader portraits: 22 art mappings at game start",
+  "name": "Banseiki 1534 leader portraits: 22 art mappings at game start, plus one diplomacy screen",
   "judge_profile": "generic",
   "steps": [
     {
@@ -153,6 +153,70 @@
     {
       "action": "screenshot",
       "path": "leader-portraits-ribbon.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local id,oda; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local l=PlayerConfigurations[p:GetID()]:GetLeaderTypeName(); if l=='LEADER_JAC_MATSUDAIRA_KIYOYASU' then id=p:GetID() elseif l=='LEADER_JAC_ODA_NOBUHIDE' then oda=p:GetID() end end; if id==nil or oda==nil then error('Oda or Matsudaira missing') end; Players[oda]:GetDiplomacy():SetHasMet(id); Players[id]:GetDiplomacy():SetHasMet(oda); return 'met Matsudaira '..id"
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "BoostUnlockedPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return ContextPtr:IsHidden()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local id,oda; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local l=PlayerConfigurations[p:GetID()]:GetLeaderTypeName(); if l=='LEADER_JAC_MATSUDAIRA_KIYOYASU' then id=p:GetID() elseif l=='LEADER_JAC_ODA_NOBUHIDE' then oda=p:GetID() end end; if id==nil or oda==nil then error('Oda or Matsudaira missing') end; if Game.GetLocalPlayer()~=oda then error('local player is not Oda') end; if not Players[oda]:GetDiplomacy():HasMet(id) then error('Oda has not met Matsudaira') end; LuaEvents.DiplomacyRibbon_OpenDiplomacyActionView(id); return 'opened diplomacy with Matsudaira '..id"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return Controls.AlphaIn:IsStopped() and Controls.SlideIn:IsStopped()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "LeaderScene",
+      "code": "local n,bad=0,0; local function walk(x,d) if d>6 then return end; if x:GetID()=='Background_Image' then n=n+1; if not x:HasTexture() then bad=bad+1 end end; for _,c in ipairs(x:GetChildren() or {}) do walk(c,d+1) end end; walk(Controls.Backgrounds,0); if n==0 then error('no diplomacy background layer') end; if bad>0 then error(bad..' of '..n..' diplomacy background layers lack a texture') end; if not Controls.TopLetterbox:IsHidden() then error('letterbox shown for a JAC leader') end; return n..' background layer(s) loaded'"
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-portraits-diplomacy-matsudaira.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "Close(); return true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return ContextPtr:IsHidden()"
+      },
+      "timeout": 30
     }
   ]
 }

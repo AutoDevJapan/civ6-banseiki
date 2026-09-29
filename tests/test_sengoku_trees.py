@@ -85,6 +85,7 @@ class SengokuTreeTests(unittest.TestCase):
         required |= {f"LOC_JAC_SENGOKU_ERA_{i}_{suffix}" for i in range(1, 5)
                      for suffix in ("NAME", "DESCRIPTION")}
         required |= {f"LOC_JAC_SENGOKU_BOOST_{short}" for short in MODULE.BOOSTS}
+        required |= {house for _, house, _, _ in MODULE.HOUSE_NAMES}
         self.assertEqual(set(translations), required)
         for key, text in translations.items():
             self.assertEqual(set(text), {"ja_JP", "en_US", "ru_RU"}, key)
@@ -98,17 +99,20 @@ class SengokuTreeTests(unittest.TestCase):
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
             "Data/JAC_Sengoku_Calendar.xml",
-            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Unlocks.sql",
-            "Data/JAC_Sengoku_Victories.sql",
-            "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
+            "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
+            "Data/JAC_Sengoku_Unlocks.sql",
+            "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
+            "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
+            "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
-            "Text/JAC_Sengoku_Text.xml",
+            "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",
+            "UI/JAC_HouseNamesData_Sengoku.lua",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
         self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],
                          ["Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml"])
         self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-1],
-                         "Data/JAC_Sengoku_Victories.sql")
+                         "Data/JAC_Sengoku_Unification.sql")
         icons = ET.parse(MOD / "Data/JAC_Sengoku_Icons.xml").getroot()
         icon_names = [row.get("Name") for row in icons.findall("./IconDefinitions/Row")]
         self.assertEqual(len(icon_names), 124)
@@ -149,6 +153,17 @@ class SengokuTreeTests(unittest.TestCase):
             CREATE TABLE StartingCivics (Era TEXT, Civic TEXT);
             CREATE TABLE Policies (PolicyType TEXT PRIMARY KEY, PrereqCivic TEXT, PrereqTech TEXT);
             CREATE TABLE Projects (ProjectType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT);
+            CREATE TABLE DynamicModifiers (ModifierType TEXT PRIMARY KEY, EffectType TEXT);
+            CREATE TABLE Modifiers (ModifierId TEXT PRIMARY KEY, ModifierType TEXT);
+            CREATE TABLE CivicModifiers (CivicType TEXT, ModifierId TEXT);
+            CREATE TABLE GameModifiers (ModifierId TEXT PRIMARY KEY);
+            CREATE TABLE GreatPersonIndividualActionModifiers (GreatPersonIndividualType TEXT, ModifierId TEXT);
+            CREATE TABLE GoodyHutSubTypes (SubTypeGoodyHut TEXT PRIMARY KEY, ModifierID TEXT);
+            CREATE TABLE TraitModifiers (TraitType TEXT, ModifierId TEXT);
+            CREATE TABLE TechnologyModifiers (TechnologyType TEXT, ModifierId TEXT);
+            CREATE TABLE DiplomaticVisibilitySources (VisibilitySourceType TEXT PRIMARY KEY, PrereqTech TEXT);
+            INSERT INTO TechnologyModifiers VALUES ('TECH_PRINTING','PRINTING_ADD_DIPLO_VISIBILITY'),('TECH_PRINTING','PRINTING_BOOST_WRITING_TOURISM');
+            INSERT INTO DiplomaticVisibilitySources VALUES ('SOURCE_TECH','TECH_PRINTING'),('SOURCE_TRADER',NULL);
             INSERT INTO Technologies VALUES ('TECH_POTTERY','Pottery',NULL,25,'ERA_ANCIENT',0,NULL);
             INSERT INTO Civics VALUES ('CIVIC_CODE_OF_LAWS','Code of Laws',NULL,20,'ERA_ANCIENT',0,NULL);
             INSERT INTO Eras VALUES ('ERA_ANCIENT','Ancient',NULL),('ERA_CLASSICAL','Classical',NULL),('ERA_MEDIEVAL','Medieval',NULL),('ERA_RENAISSANCE','Renaissance',NULL);
@@ -180,6 +195,12 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
         starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
         self.assertEqual(starting_civics, ["CIVIC_JAC_SENGOKU_HOUSE_RULES"])
+        # Printing's +1 diplomatic access level moves to a Sengoku tech (the other Printing modifier is dropped)
+        self.assertEqual(db.execute("SELECT * FROM TechnologyModifiers").fetchall(),
+                         [("TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS", "PRINTING_ADD_DIPLO_VISIBILITY"),
+                          ("TECH_PRINTING", "PRINTING_BOOST_WRITING_TOURISM")])
+        self.assertEqual(db.execute("SELECT PrereqTech FROM DiplomaticVisibilitySources WHERE VisibilitySourceType='SOURCE_TECH'")
+                         .fetchone()[0], "TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS")
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Eras_XP2").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM ClimateParameters").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM Resolutions").fetchone()[0], 1)
@@ -243,7 +264,13 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(update.find("Where").attrib, {"RulesetType": "RULESET_JAC_BANSEIKI"})
         self.assertEqual(update.find("Set").attrib,
                          {"VictoryDomain": "JAC_Sengoku_Victories", "MaxTurns": "0"})
-        self.assertFalse(config.findall("./Victories/Row"))
+        self.assertEqual([row.attrib for row in config.findall("./Victories/Row")], [{
+            "Domain": "JAC_Sengoku_Victories",
+            "VictoryType": "VICTORY_JAC_SENGOKU_UNIFICATION",
+            "Name": "LOC_VICTORY_JAC_UNIFICATION_NAME",
+            "Description": "LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION",
+            "ReadOnly": "true", "EnabledByDefault": "true",
+        }])
         self.assertEqual([row.attrib for row in config.findall("./RulesetSupportedValues/Row")], [{
             "Ruleset": "RULESET_JAC_BANSEIKI", "Domain": "StandardTurnLimits", "Value": "TURNLIMIT_NONE"
         }])

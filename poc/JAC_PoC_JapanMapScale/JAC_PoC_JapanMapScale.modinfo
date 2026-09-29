@@ -75,6 +75,15 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
+    <!-- Registered castles by plot; after the victory SQL (JAC_PoC_SengokuTrees, LoadOrder 200). -->
+    <UpdateDatabase id="JAC_Japan_20km_Castles" criteria="JAC_Japan_20km_Historical">
+      <Properties><LoadOrder>300</LoadOrder></Properties>
+      <File>Data/JAC_Japan_20km_Castles.sql</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_15km_Castles" criteria="JAC_Japan_15km_Historical">
+      <Properties><LoadOrder>300</LoadOrder></Properties>
+      <File>Data/JAC_Japan_15km_Castles.sql</File>
+    </UpdateDatabase>
     <UpdateDatabase id="JAC_Japan_20km_NoSettlers" criteria="JAC_Japan_20km_Historical">
       <File>Data/JAC_Japan_NoSettlers.xml</File>
     </UpdateDatabase>
@@ -93,6 +102,24 @@
     <UpdateDatabase id="JAC_Japan_15km_Settlers_Rules" criteria="JAC_Japan_15km_Settlers">
       <File>Data/JAC_Japan_MapRules.xml</File>
     </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_20km_Historical_Feuds" criteria="JAC_Japan_20km_Historical">
+      <File>Data/JAC_Japan_Feuds.xml</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_Japan_20km_Historical_1534Relations" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_Japan_1534Relations.lua</File>
+    </AddGameplayScripts>
+    <UpdateDatabase id="JAC_Japan_15km_Historical_Feuds" criteria="JAC_Japan_15km_Historical">
+      <File>Data/JAC_Japan_Feuds.xml</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_Japan_15km_Historical_1534Relations" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_Japan_1534Relations.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_20km_StartState" criteria="JAC_Japan_20km_Historical">
+      <File>Scripts/JAC_Japan_StartState.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_Japan_15km_StartState" criteria="JAC_Japan_15km_Historical">
+      <File>Scripts/JAC_Japan_StartState.lua</File>
+    </AddGameplayScripts>
     <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_Banseiki">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
     </UpdateText>
@@ -123,15 +150,20 @@
     </AddGameplayScripts>
   </InGameActions>
   <Files>
+    <File>Data/JAC_Japan_20km_Castles.sql</File>
+    <File>Data/JAC_Japan_15km_Castles.sql</File>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>
     <File>Data/JAC_Japan_MapRules.xml</File>
+    <File>Data/JAC_Japan_Feuds.xml</File>
+    <File>Scripts/JAC_Japan_1534Relations.lua</File>
     <File>Data/JAC_Japan_Resources.xml</File>
     <File>Data/JAC_Japan_Resources_Icons.xml</File>
     <File>Text/JAC_Japan_Resources_Text.xml</File>
     <File>Scripts/JAC_ResourceSites.lua</File>
     <File>Scripts/JAC_Resources.lua</File>
+    <File>Scripts/JAC_Japan_StartState.lua</File>
     <File>Maps/JAC_Japan_20km.Civ6Map</File>
     <File>Maps/JAC_Japan_20km.lua</File>
     <File>Maps/JAC_Japan_20km_Settlers.Civ6Map</File>

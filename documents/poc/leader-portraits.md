@@ -33,6 +33,16 @@
 | 尚清王 | 約37歳 | 琉球の王服と冠。日本の武家装束と区別 |
 | タリコナ | 生年不詳、成人として暫定描画 | アイヌの植物繊維衣。全道共通当主という史実主張はしない |
 
+## 適用範囲（公式 Gathering Storm と万世紀）
+
+肖像・アイコン・ロード画面・外交画面の画像は、万世紀（`RULESET_JAC_BANSEIKI`）だけでなく、公式 Gathering Storm（`RULESET_EXPANSION_2`）でも有効になる。この範囲は本書の差し替えより前から `JAC_PoC_CustomCivs` の設計であり、本書の変更では広げていない。
+
+1. ゲーム内の画像・データは `poc/JAC_PoC_CustomCivs/JAC_PoC_CustomCivs.modinfo` の条件 `JAC_CustomCivs_GatheringStorm`（`RuleSetInUse` が `RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI`）で読み込む。PoC 束1（#20、`bf1c617`）で `RULESET_EXPANSION_2` として作られ、万世紀ルールセットの PoC（#28、`3f3c1ad`）で万世紀を足した
+2. 設定画面の登録は `Players:Expansion2_Players` ドメインで行い、公式 GS と万世紀が `RulesetDomainOverrides` でこのドメインを選ぶ（同 modinfo の FrontEndActions の注記、[PoC 記録](README.md#jac_poc_customcivsカスタム勢力)）。標準ルールセットでは候補0件、GS では JAC の指導者が候補に入ることを実機で確かめている（同記録の「ルールセット境界の再確認」）
+3. CustomCivs の実機検証（`clans-notebooks.json`・`clans-both-ai.json`・旧[画像の実機表示](README.md#新しい画像の実機表示)）は公式 GS で公式指導者と並べて行っており、GS での比較実行は意図した使い方である
+
+22勢力が必要な日本マップだけは万世紀専用で、素の GS の地図候補には出ない（[PoC 記録](README.md#jac_poc_japanmapscale1534年開始状態現行)）。画像の適用範囲を万世紀だけに絞るかは CustomCivs 全体の範囲の問題として扱い、この差し替えでは変えない。
+
 ## 生成と組み込み
 
 生成元は Git 外の `civ6-art-local/JAC_PoC_CustomCivs/Originals/<leader>/` に置く。全画像は生成画像（本リポジトリで生成）で、SSOT 15.2.1 で決めた生成手段だけを使い、API キーと他の画像サービスを使わない。各 PNG の実際のプロンプト、生成開始・完了時刻、出力名・SHA-256 は同じローカルストアの `generation-log.jsonl` に記録する。立ち姿のマゼンタ背景を `tools/jac_art/build_art.py` が Pillow で透過し、頭部アイコン・ロード画面前景・外交フォールバックを作る。背景はロード画面用 1920×1080 と外交用 1600×1000 に切り出す。生成元 PNG と Cooker 出力 BLP は Git 管理外で、公開・再配布の可否は既存の[質問 D11](../questions.md)の判断待ち。
@@ -125,9 +135,11 @@
 
 2026-09-29 の静的結果：元 PNG は **22人×3点＝66点**、生成ログも66件で各 SHA-256 が一致し、66点相互に同一ハッシュはない。Civ6 SDK Asset Cooker は `JAC_CustomCivs_Icons.blp`（34テクスチャ、7,530,496 B）、`JAC_CustomCivs_Leaders.blp`（66テクスチャ、343,945,216 B）、`JAC_CustomCivs_Fallback.blp`（22テクスチャ、51,407,872 B）を生成した。BLP と `portrait-sheet.png` は Git 除外。`python -m unittest discover -s tests -t .` は10件、`python -m unittest discover -s tools/civ6-autotest/tests` は98件、`python -m unittest discover -s tools/japan_map_scale/tests` は25件（2件スキップ）、`python -m unittest discover -s tools/jac_art/tests -v` は2件成功した。下記シナリオの `--check` も6手順で成功。これはゲーム内表示の証拠ではない。
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/leader-portraits.json --check` はシナリオJSONの形式を検査する。実行時には万世紀ルールセットと15 km史実領土地図で22人を開始し、全員のロード前景・ロード背景・外交背景が各自のテクスチャ名を参照すること、22人が重複なく存在することを Lua で調べ、指導者リボンのスクリーンショットを保存する。初期画面だけを対象とし、AI 自動進行はしない。`HostGame` の設定組み立ては公式 `Base/Assets/UI/FrontEnd/GameSetupLogic.lua:689-725` と `Base/Assets/UI/FrontEnd/MainMenu.lua:455-463` の手順に合わせた。画像の**画素や見た目そのもの**はこの Lua 判定では検査できない。
+`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/leader-portraits.json --check` はシナリオJSONの形式を検査する。実行時には万世紀ルールセットと15 km史実領土地図で22人を開始し、全員のロード前景・ロード背景・外交背景が各自のテクスチャ名を参照すること、22人が重複なく存在することを Lua で調べ、指導者リボンのスクリーンショットを保存する。続けて織田と松平を接触済みにし、松平の外交画面を開いて `LeaderScene` の背景レイヤーがテクスチャを持つこと、上下のレターボックスが隠れていることを調べ、スクリーンショットを保存する。初期画面だけを対象とし、AI 自動進行はしない。一般判定（`generic`）は、公式 `Base/Assets/UI/FrontEnd/LoadScreen.lua:218,248` の `Failed to load background image texture: …`・`We are lacking a texture for …` のうち `JAC_` を含むテクスチャ名の行があれば失敗にする。外交画面の手順（`LeaderScene` コンテキストへの Lua 実行を含む）は実機で未確認。`HostGame` の設定組み立ては公式 `Base/Assets/UI/FrontEnd/GameSetupLogic.lua:689-725` と `Base/Assets/UI/FrontEnd/MainMenu.lua:455-463` の手順に合わせた。画像の**画素や見た目そのもの**はこの Lua 判定では検査できない。
 
 メインセッションの目視確認：ロード時に若年の上杉憲政・三好長慶、老年の尼子経久、琉球王・アイヌ代表の容貌と装束を見て、各指導者のアイコンに頭部欠け・他人の顔・色抜き縁・背景の欠損がないか確かめる。外交画面を開ける各相手について2D人物と固有背景、黒帯や `We are lacking a texture` エラーの有無を確認する。ゲームと Steam はこの作業ツリーでは起動していない。
+
+20勢力の文明アイコン（家紋）は公式アトラスの index 12（日本）を仮に参照しており、固有家紋への差し替えは PR #54 で扱う。本書の範囲は指導者の肖像・立ち絵・背景だけ。
 
 ## オーナーへの確認事項
 

@@ -23,8 +23,21 @@ ERAS = ("ERA_ANCIENT", "ERA_CLASSICAL", "ERA_MEDIEVAL", "ERA_RENAISSANCE")
 ERA_NAMES = (
     ("領国の基盤", "Foundations of the Domain", "Основы владения"),
     ("技術交流と領国競争", "Exchange and Rival Domains", "Обмен знаниями и борьба владений"),
-    ("天下布武と広域戦", "Campaigns for Unification", "Походы за объединение"),
+    ("統一への広域戦", "Campaigns for Unification", "Походы за объединение"),
     ("統一事業", "The Work of Unification", "Объединение страны"),
+)
+
+# SSOT 3.2: names tied to one person or house.  The database always points at
+# the generic text; UI/JAC_HouseNamesData_Sengoku.lua swaps in the house text
+# (see documents/poc/house-names.md).  Each entry is
+# (generic tag, house tag, owner civilization, (ja, en, ru) house text).
+# C25 太閤検地 is not here: the owner decided every house that researches it
+# sees 太閤検地 (SSOT 3.2), so it is the civic's plain name.
+HOUSE_NAMES = (
+    ("LOC_JAC_SENGOKU_ERA_3_NAME", "LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE",
+     "CIVILIZATION_JAC_ODA", ("天下布武と広域戦", "Tenka Fubu and Wide-Area Campaigns", "«Тэнка фубу» и походы широкого масштаба")),
+    ("LOC_JAC_SENGOKU_ERA_3_DESCRIPTION", "LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE",
+     "CIVILIZATION_JAC_ODA", ("天下布武と広域戦", "Tenka Fubu and Wide-Area Campaigns", "«Тэнка фубу» и походы широкого масштаба")),
 )
 
 # Draft translations. The owners have not approved terminology or effect values.
@@ -43,7 +56,7 @@ RU_NAMES = (
     "Советы портовых купцов", "Чайные встречи и ценности", "Указы для призамковых городов", "Посланники ко двору и сёгуну",
     "Свободные рынки", "Гарантии храмовых земель", "Посланники к южным варварам", "Межевание владений",
     "Организация стрелков", "Чайная дипломатия", "Союзные походы", "Посредничество в перемириях",
-    "Общее межевание земель", "Грамоты с красной печатью", "Изъятие мечей", "Разделение воинов и земледельцев",
+    "Тайко-кэнти (межевание земель)", "Грамоты с красной печатью", "Изъятие мечей", "Разделение воинов и земледельцев",
     "Управление портами", "Подтверждение земельных прав",
 )
 
@@ -87,10 +100,7 @@ def read_design() -> list[Node]:
         column = int(m["column"])
         cost = (TECH_COSTS if short.startswith("T") else CIVIC_COSTS)[column - 1]
         prerequisites = () if m["prereqs"] == "—" else tuple(names[p.strip()] for p in m["prereqs"].split(","))
-        ja, en = m["ja"], m["en"]
-        if short == "C25":  # SSOT 3.2: non-Toyotomi houses must see a generic term.
-            ja, en = "広域検地", "Regional Land Survey"
-        nodes.append(Node(short, m["id"], ja, en, ru, prerequisites, column,
+        nodes.append(Node(short, m["id"], m["ja"], m["en"], ru, prerequisites, column,
                           int(m["row"]), cost, ERAS[(column - 1) // 3],
                           m["unlock"], m["boost"]))
     return nodes
@@ -163,6 +173,145 @@ OFFICIAL_UNLOCKS = {
 }
 
 
+def _c(name: str) -> str:
+    return "CIVIC_JAC_SENGOKU_" + name
+
+
+def _t(name: str) -> str:
+    return "TECH_JAC_SENGOKU_" + name
+
+
+# Official rows that reference a deleted official tech/civic through ON DELETE CASCADE or
+# SET NULL/DEFAULT (01_GameplaySchema.sql, Expansion2_Schema.sql) and would otherwise vanish or
+# lose their gate.  Emitted as Data/JAC_Sengoku_Cascade.sql, which the modinfo loads before
+# JAC_Sengoku_Unlocks.sql deletes the official trees.  Each entry is (table, WHERE columns,
+# SET columns, impact without the remap, basis).  "設計 Cnn" = the design table names the node;
+# "暫定" = design is silent, closest era/theme chosen (Industrial+ items go to the last node);
+# "決定" = the owner decided the gate (SSOT 3.2).
+# tools/sengoku_cascade_audit.py and tests/test_sengoku_cascade.py check the residual losses.
+CASCADE_REMAPS = (
+    ("DiplomaticActions", {"InitiatorPrereqCivic": "CIVIC_CIVIL_SERVICE"},
+     {"InitiatorPrereqCivic": _c("OATHS_AND_ALLIANCES")},
+     "同盟7種（通常・軍事・研究・文化・経済・宗教・更新）が行ごと消え、子の DiplomaticActions_XP1 と"
+     "DiplomaticStateActions も連鎖して消える。どの家も同盟を結べない", "設計 C11 同盟"),
+    ("DiplomaticActions", {"TargetPrereqCivic": "CIVIC_CIVIL_SERVICE"},
+     {"TargetPrereqCivic": _c("OATHS_AND_ALLIANCES")}, "同上（相手側の前提）", "設計 C11 同盟"),
+    ("DiplomaticActions", {"DiplomaticActionType": "DIPLOACTION_OPEN_BORDERS"},
+     {"InitiatorPrereqCivic": _c("PASSES_AND_PASSAGE")}, "国境開放の取引ができない", "暫定 C04 関所・通行"),
+    ("DiplomaticActions", {"DiplomaticActionType": "DIPLOACTION_DECLARE_WAR_OF_RETRIBUTION"},
+     {"InitiatorPrereqCivic": _c("OATHS_AND_ALLIANCES")}, "開戦事由「報復」が消える", "決定 C11（暫定の対応を維持。SSOT 3.2）"),
+    ("DiplomaticActions", {"DiplomaticActionType": ("DIPLOACTION_JOINT_WAR", "DIPLOACTION_THIRD_PARTY_WAR",
+                                                    "DIPLOACTION_DECLARE_LIBERATION_WAR")},
+     {"InitiatorPrereqCivic": _c("COALITION_CAMPAIGNS")}, "共同戦線・参戦要請・開戦事由「解放」が消える",
+     "決定 C23 連合出陣（暫定の対応を維持。SSOT 3.2）"),
+    ("DiplomaticActions", {"DiplomaticActionType": "DIPLOACTION_RESIDENT_EMBASSY"},
+     {"InitiatorPrereqCivic": _c("COURT_AND_SHOGUNATE_ENVOYS")}, "大使館を置けない", "暫定 C16 使節"),
+    ("DiplomaticActions", {"DiplomaticActionType": "DIPLOACTION_DIPLOMATIC_DELEGATION"},
+     {"InitiatorObsoleteCivic": _c("COURT_AND_SHOGUNATE_ENVOYS")}, "代表団が消える（公式の参照は旧式化の制度だけ）",
+     "暫定 C16 使節（大使館と入れ替わり）"),
+    ("DiplomaticActions", {"DiplomaticActionType": "DIPLOACTION_DECLARE_HOLY_WAR"},
+     {"InitiatorPrereqCivic": _c("SHRINE_LAND_GUARANTEES")}, "開戦事由「聖戦」が消える", "決定 C18 宗教対立（暫定の対応を維持。SSOT 3.2）"),
+    ("DiplomaticActions", {"DiplomaticActionType": ("DIPLOACTION_DECLARE_PROTECTORATE_WAR",
+                                                    "DIPLOACTION_DECLARE_RECONQUEST_WAR")},
+     {"InitiatorPrereqCivic": _c("MILITARY_SERVICE_LEDGER")}, "開戦事由「保護」「再征服」が消える", "決定 C10（暫定の対応を維持。SSOT 3.2）"),
+    ("DiplomaticActions", {"DiplomaticActionType": ("DIPLOACTION_DECLARE_COLONIAL_WAR",
+                                                    "DIPLOACTION_DECLARE_TERRITORIAL_WAR",
+                                                    "DIPLOACTION_DECLARE_IDEOLOGICAL_WAR")},
+     {"InitiatorPrereqCivic": _c("LAND_TENURE_CONFIRMATION")}, "近代以降の開戦事由3種が消える",
+     "決定 最終C30（暫定の対応を維持。SSOT 3.2）"),
+    ("CivicModifiers", {"CivicType": "CIVIC_EARLY_EMPIRE", "ModifierId": "CIVIC_ENFORCE_BORDERS"},
+     {"CivicType": _c("PASSES_AND_PASSAGE")}, "国境が開いたままになり、他家のUnitが領内へ自由に入れる", "暫定 C04 関所"),
+    ("CivicModifiers", {"CivicType": "CIVIC_FOREIGN_TRADE", "ModifierId": "CIVIC_GRANT_ONE_TRADE_ROUTE"},
+     {"CivicType": _c("PASSES_AND_PASSAGE")}, "交易路枠が商業区・港まで0で、T05の交易商を作れない",
+     "暫定 C04（T05と同じ時期）"),
+    ("CivicModifiers", {"CivicType": "CIVIC_MILITARY_TRADITION", "ModifierId": "CIVIC_GRANT_COMBAT_ADJACENCY_BONUS"},
+     {"CivicType": _c("MILITARY_SERVICE_LEDGER")}, "側面攻撃・援護ボーナスが無い", "暫定 C10"),
+    ("CivicModifiers", {"CivicType": "CIVIC_DIPLOMATIC_SERVICE", "ModifierId": "CIVIC_GRANT_SPY"},
+     {"CivicType": _c("LOCAL_LEAGUES_AND_INTELLIGENCE")}, "スパイ枠が0で、C12で解放したスパイを作れない",
+     "設計 C12 諜報"),
+    ("TechnologyModifiers", {"TechnologyType": "TECH_MATHEMATICS", "ModifierId": "MATHEMATICS_ADJUST_SEA_MOVEMENT"},
+     {"TechnologyType": _t("WOODEN_SHIPBUILDING")}, "艦船の移動力+1が無い", "暫定 T10 和船"),
+    ("TechnologyModifiers", {"TechnologyType": "TECH_CARTOGRAPHY", "ModifierId": "CARTOGRAPHY_GRANT_OCEAN_NAVIGATION"},
+     {"TechnologyType": _t("ATAKEBUNE")}, "外洋タイルへ入れない", "暫定 T27 大型軍船"),
+    ("TechnologyModifiers", {"TechnologyType": "TECH_PRINTING", "ModifierId": "PRINTING_ADD_DIPLO_VISIBILITY"},
+     {"TechnologyType": _t("ROADS_AND_PACKTRAINS")}, "外交上の可視度+1が無い", "T05 街道と荷駄（#40 で実機確認済みの付け先に合わせる）"),
+    ("DiplomaticVisibilitySources", {"VisibilitySourceType": "SOURCE_TECH"},
+     {"PrereqTech": _t("ROADS_AND_PACKTRAINS")}, "同上の可視度の出所が消える", "T05（上と対）"),
+    ("Improvement_BonusYieldChanges", {"ImprovementType": "IMPROVEMENT_MINE", "PrereqTech": "TECH_APPRENTICESHIP"},
+     {"PrereqTech": _t("MINE_MANAGEMENT")}, "鉱山の生産力+1が無い", "設計 T14 鉱山産出"),
+    ("Improvement_BonusYieldChanges", {"ImprovementType": "IMPROVEMENT_QUARRY", "PrereqTech": "TECH_GUNPOWDER"},
+     {"PrereqTech": _t("KEEP_AND_STONE_BASE")}, "採石場の生産力+1が無い", "暫定 T29 石垣"),
+    ("Improvement_BonusYieldChanges", {"ImprovementType": "IMPROVEMENT_FISHING_BOATS", "PrereqTech": "TECH_CARTOGRAPHY"},
+     {"PrereqTech": _t("HARBOR_PILOTS")}, "漁船のゴールド+2が無い", "暫定 T17 港"),
+    ("Improvement_BonusYieldChanges", {"ImprovementType": "IMPROVEMENT_PLANTATION", "PrereqCivic": "CIVIC_FEUDALISM"},
+     {"PrereqCivic": _c("DOMAIN_LAND_SURVEYS")}, "プランテーションの食料+1が無い", "暫定 C20（封建制の代理）"),
+    ("Improvement_ValidTerrains", {"ImprovementType": "IMPROVEMENT_FARM", "PrereqCivic": "CIVIC_CIVIL_ENGINEERING"},
+     {"PrereqCivic": None, "PrereqTech": _t("IRRIGATION_WORKS")}, "丘陵（平原・草原）に農場を作れない",
+     "決定 T01 用水普請（最初から。SSOT 3.2）"),
+    ("Adjacency_YieldChanges", {"PrereqCivic": "CIVIC_FEUDALISM"},
+     {"PrereqCivic": _c("DOMAIN_LAND_SURVEYS")}, "前提が空になり、農場の隣接食料+1が1ターン目から付く",
+     "暫定 C20（封建制の代理）"),
+    ("Adjacency_YieldChanges", {"PrereqTech": "TECH_REPLACEABLE_PARTS"},
+     {"PrereqTech": _t("OUTER_DEFENSES")}, "近代の隣接食料+1も1ターン目から付く（計+2）", "暫定 最終T32"),
+    ("Adjacency_YieldChanges", {"ObsoleteTech": "TECH_REPLACEABLE_PARTS"},
+     {"ObsoleteTech": _t("OUTER_DEFENSES")}, "中世の隣接が旧式化しない（上と対）", "暫定 最終T32"),
+    ("Features", {"FeatureType": "FEATURE_FOREST"},
+     {"RemoveTech": _t("ORE_PROSPECTING"), "AddCivic": _c("LAND_TENURE_CONFIRMATION")},
+     "森の伐採が研究なしで可能。植林の制度が空（空の意味は要実機確認）", "暫定 伐採T06（採掘の代理）・植林C30"),
+    ("Features", {"FeatureType": "FEATURE_JUNGLE"}, {"RemoveTech": _t("IRON_FORGING")},
+     "熱帯雨林の伐採が研究なしで可能", "暫定 T03（青銅器の代理）"),
+    ("Features", {"FeatureType": "FEATURE_MARSH"}, {"RemoveTech": _t("IRRIGATION_WORKS")},
+     "湿原の除去が研究なしで可能", "暫定 T01（灌漑の代理）"),
+    ("Resources", {"ResourceType": ("RESOURCE_ANTIQUITY_SITE", "RESOURCE_SHIPWRECK")},
+     {"PrereqCivic": _c("LAND_TENURE_CONFIRMATION")}, "遺跡・沈没船が1ターン目から見える", "暫定 最終C30（考古学は範囲外）"),
+    ("UnitCommands", {"CommandType": ("UNITCOMMAND_FORM_CORPS", "UNITCOMMAND_FORM_ARMY")},
+     {"PrereqCivic": None, "PrereqTech": _t("REGIONAL_SUPPLY")}, "軍団・大軍団を編成できない",
+     "決定 T30 広域兵站（SSOT 3.2）"),
+)
+
+# Remaining cascade losses, deliberately not remapped: (tables, rows, reason).  Documentation only;
+# tests/test_sengoku_cascade.py pins the residual row counts.
+CASCADE_DROPS = (
+    ("Boosts / CivicPrereqs / TechnologyPrereqs / CivicQuotes / TechnologyQuotes / CivicRandomCosts / "
+     "TechnologyRandomCosts / Civics_XP2 / Technologies_XP2 / StartingBoostedCivics / StartingBoostedTechnologies",
+     "削除した公式ノード自身の付随行", "なし（ノードごと消える）"),
+    ("CivicModifiers", "影響力トークン、観光、遺物、スパイ2人目以降、外交勝利点・好感度",
+     "都市国家・観光・外交勝利は戦国パックで使わない。スパイの追加枠は要検討"),
+    ("CivicModifiers ほか", "総督称号の付与（公式制度14件、政府の広場とその建物、女王の図書館、偉人イレーネ・アダム・スミス、"
+     "部族の村、スレイマン）", "SSOT 3.2 の決定で総督は戦国向けに作り直すまで無効。付け替えず、"
+     "`JAC_Sengoku_Unlocks.sql` が付与する Modifier ごと削除する（監査の差分には出ない）"),
+    ("TechnologyModifiers", "乗船移動（横帆船・蒸気・内燃）、都市防御（鋼鉄）、観光、スパイ（コンピュータ）、GDR昇進、未来技術",
+     "時代外"),
+    ("Improvement_BonusYieldChanges", "産業以降の改善ボーナス、建設不可の改善（キャンプ・牧草地・固有改善）",
+     "時代外または Buildable=0"),
+    ("Improvement_Tourism / Improvement_ValidFeatures", "観光・製材所", "観光は不使用、製材所は Buildable=0"),
+    ("Adjacency_YieldChanges", "公式文明の固有改善（クルガン・シャトー・モアイ・巨石人頭像・万里の長城）の時期",
+     "Buildable=0 のため影響なし"),
+    ("Units / Buildings / Improvements", "研究ゲートが空になる公式行", "CanTrain=0・InternalOnly=1・Buildable=0。"
+     "残した Unit は旧式化の研究だけが空になり、旧式化しない"),
+    ("RandomAgendasForCivic / RandomAgendaCivicTags", "ナショナリズムで AI に追加される隠しアジェンダ",
+     "AI の性格付けのみ"),
+    ("Routes_XP2", "鉄道", "時代外"),
+)
+
+
+def _sql_value(value) -> str:
+    return "NULL" if value is None else sql_quote(value)
+
+
+def make_cascade_sql() -> str:
+    out = ["-- Generated by tools/generate_sengoku_trees.py (CASCADE_REMAPS). Loaded before",
+           "-- JAC_Sengoku_Unlocks.sql deletes the official trees, so these rows keep a Sengoku gate",
+           "-- instead of being cascade-deleted or nulled (01_GameplaySchema.sql, Expansion2_Schema.sql).",
+           "-- See documents/poc/sengoku-tree-unlocks.md for the audit table; mappings marked 暫定 are provisional."]
+    for table, where, values, _, basis in CASCADE_REMAPS:
+        conditions = [f"{k} IN ({', '.join(map(sql_quote, v))})" if isinstance(v, tuple) else f"{k}={sql_quote(v)}"
+                      for k, v in where.items()]
+        sets = ", ".join(f"{k}={_sql_value(v)}" for k, v in values.items())
+        out.append(f"-- {basis}\nUPDATE {table} SET {sets} WHERE {' AND '.join(conditions)};")
+    return "\n".join(out) + "\n"
+
+
 def make_sql(nodes: list[Node]) -> str:
     out = [
         "-- Generated by tools/generate_sengoku_trees.py from the research design.",
@@ -214,7 +363,26 @@ def make_text(nodes: list[Node]) -> str:
         ))
     for short, definition in BOOSTS.items():
         out += text_row(f"LOC_JAC_SENGOKU_BOOST_{short}", definition["text"])
+    for _, house_tag, _, translations in HOUSE_NAMES:
+        out += text_row(house_tag, translations)
+    # SSOT 3.2: governors are disabled, so drop the title from the Government Plaza text
+    # (official: DLC/Expansion2/Text/Expansion2_Translations_Text.xml, en_US/Expansion1_Districts_Text.xml).
+    out += [row.replace("<Row ", "<Replace ").replace("</Row>", "</Replace>") for row in text_row(
+        "LOC_DISTRICT_GOVERNMENT_DESCRIPTION", (
+            "政府の選択を記念する区域。自文明に1つだけ設置できる。この都市へのターン毎の忠誠心+8、隣接する区域へ隣接ボーナス+1。",
+            "A district placed once in your empire to commemorate your government choices. Provides +8 Loyalty per "
+            "turn to this city, and an increase of +1 to the adjacency bonuses being earned by any adjacent district.",
+            "Район, построенный в вашей империи в память о решениях вашего правительства. Дает +8 лояльности за ход "
+            "этому городу и +1 ко всем бонусам за соседство всем прилежащим районам.",
+        ))]
     out += ['  </LocalizedText>', '</GameInfo>']
+    return "\n".join(out) + "\n"
+
+
+def make_house_names() -> str:
+    out = ["-- Generated by tools/generate_sengoku_trees.py (HOUSE_NAMES).  SSOT 3.2 house-specific names;",
+           "-- the mechanism is UI/JAC_HouseNames.lua in the ruleset mod."]
+    out += [f'JAC_RegisterHouseName("{generic}", "{house}", "{civ}")' for generic, house, civ, _ in HOUSE_NAMES]
     return "\n".join(out) + "\n"
 
 
@@ -237,7 +405,7 @@ def make_unlock_matrix(nodes: list[Node]) -> str:
         "",
         "設計案の各行を、現行の公式アイテムへ接続した範囲。公式アイテムの能力値・名称・時代感は暫定の代理表現であり、"
         "設計案固有の建物・Unit・政策・操作・効果はすべて TODO。未接続ノードも研究自体は可能。",
-        "特にC25はSSOT 3.2に従い、豊臣以外にも表示するPoCでは「広域検地」と呼ぶ。家ごとの表示分岐はTODO。",
+        "C25「太閤検地」は、研究したすべての家に同じ名前で表示する（SSOT 3.2）。",
         "",
         "| ノード | 設計案の解放 | 現行PoCの公式代理 | 残課題 |",
         "|---|---|---|---|",
@@ -259,15 +427,78 @@ def make_unlock_matrix(nodes: list[Node]) -> str:
         boost_condition = n.proposed_boost.replace("|", "\\|")
         out.append(f"| {n.short} {n.ja} | {boost_condition} | {status} |")
     out += ["", "具体的な原案は[設計表](../research/sengoku-tech-civic-tree.md)の各行を参照。", ""]
+    out += make_cascade_doc()
     return "\n".join(out)
+
+
+def _cell(values: dict) -> str:
+    return "<br>".join(f"`{k}`=" + ("、".join(f"`{x}`" for x in v) if isinstance(v, tuple)
+                                    else "NULL" if v is None else f"`{v}`") for k, v in values.items())
+
+
+def make_cascade_doc() -> list[str]:
+    out = [
+        "## 公式ツリー削除に伴う連鎖削除の監査",
+        "",
+        "`JAC_Sengoku_Unlocks.sql` の最後で公式の技術・社会制度を削除すると、外部キーで参照する公式行が消えるか、前提が空になる。"
+        "公式スキーマで `Civics(CivicType)`・`Technologies(TechnologyType)` を参照する外部キーは68件（XP1スキーマは0件）。",
+        "",
+        "- `ON DELETE CASCADE`（行ごと消える）：`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql` の Boosts:391,399-401、"
+        "Civics_XP2:630、CivicModifiers:636、CivicPrereqs:643-644、CivicQuotes:651、CivicRandomCosts:657、"
+        "DiplomaticActions:923-927、DiplomaticVisibilitySources:1010、Improvement_BonusYieldChanges:1773-1774、"
+        "Improvement_Tourism:1800-1801、Improvement_ValidFeatures:1834-1835、Improvement_ValidTerrains:1853-1854、"
+        "Policies.PrereqTech:2170、StartingBoostedCivics:2575、StartingBoostedTechnologies:2582、StartingCivics:2601、"
+        "Technologies_XP2:2680、TechnologyModifiers:2686、TechnologyPrereqs:2692-2693、TechnologyQuotes:2700、"
+        "TechnologyRandomCosts:2706、UnitCommands:2992-2993、UnitOperations:3028-3029。"
+        "`DLC/Expansion2/Data/Expansion2_Schema.sql` の RandomAgendaCivicTags:688、RandomAgendasForCivic:703、"
+        "Resource_Consumption:882、Routes_XP2:899",
+        "- `ON DELETE SET NULL`（前提が空＝最初から解放）：01_GameplaySchema.sql の Adjacency_YieldChanges:40-43、"
+        "Features:1259-1260、Resources:2342-2343、Resource_Harvests:2367",
+        "- `ON DELETE SET DEFAULT`（既定値 NULL＝同上）：01_GameplaySchema.sql の Buildings:473,475、Districts:1056-1057、"
+        "Governments:1467、Improvements:1752-1753、Policies.PrereqCivic:2168、Projects:2201-2202、Units:2903-2917",
+        "",
+        "Districts・Governments・Policies・Projects・StartingCivics・Resources の研究ゲートと Units・Buildings・Improvements の"
+        "残す行は従来どおり `JAC_Sengoku_Unlocks.sql` と `JAC_Sengoku_Resources.sql` で付け替える。"
+        "それ以外で実害がある行は生成ファイル `Data/JAC_Sengoku_Cascade.sql`（`CASCADE_REMAPS`）が削除前に戦国ノードへ付け替える。"
+        "監査は `python tools/sengoku_cascade_audit.py`（公式 Base＋GS のデータで戦国SQLを外部キー有効のまま実行し、"
+        "公式ツリーの削除だけによる差分を出す）、固定は `tests/test_sengoku_cascade.py`。"
+        "他の DLC と他の MOD は監査の対象外。「暫定」は設計案に記載がなく、同じ時代枠（公式 Era ID と戦国の期の対応）"
+        "と内容の近さで選んだもの。「決定」はオーナーが決めたもの（SSOT 3.2）。GS は防衛協定と研究協定を `Expansion2_RemoveData.xml` で削除済みのため対象外。",
+        "",
+        "### 付け替えた行",
+        "",
+        "| 表 | 対象の公式行 | 付け替えない場合の影響 | 付け替え先 | 根拠 |",
+        "|---|---|---|---|---|",
+    ]
+    out += [f"| {table} | {_cell(where)} | {impact} | {_cell(values)} | {basis} |"
+            for table, where, values, impact, basis in CASCADE_REMAPS]
+    out += ["", "### 付け替えずに失う行", "", "| 表 | 失う行 | 影響と理由 |", "|---|---|---|"]
+    out += [f"| {table} | {rows} | {reason} |" for table, rows, reason in CASCADE_DROPS]
+    out += ["", "総督を無効にしても公式 UI は壊れない見込み：ランチバーの総督ボタンは `CAPABILITY_GOVERNORS` で出たままだが、"
+            "通知の印は `CanAppoint()`・`CanPromote()` が真のときだけ出る（`DLC/Expansion1/UI/Replacements/"
+            "LaunchBar_Expansion1.lua:129-136`）。総督画面は称号0でも `GetGovernorPoints()`・`CanAppoint()` で候補を任命不可として"
+            "並べるだけで（`DLC/Expansion2/UI/Additions/GovernorPanel.lua:55-57`）、公式でも最初の制度を得るまでは称号0で始まる。"
+            "政府の広場の説明文からは称号の一文を外した（生成ファイル `Text/JAC_Sengoku_Text.xml`）。偉人イレーネ・アダム・スミスの"
+            "説明は付与の Modifier ごと消えるため、称号の行が出ない見込み。",
+            "", "2026-09-29 の自動実機結果（sengoku-cascade-deletes-02）：同盟7件が C11 で残ること、総督称号の付与元が無く称号0、"
+            "丘陵の農場が T01、軍団と大軍団が T30 で解放されることを `GameInfo` で確かめた。同盟の提案可否は、C11 が無いときの"
+            "失敗理由の一覧が空で C11 の名前を照合できず失敗した。そのため友好宣言を済ませた上で、C11 を両者なし→開始側だけ→両者ありと"
+            "変えて有効性を比べる確認に作り直した。",
+            "", "**要実機確認**：作り直した同盟の提案可否の確認（`tools/civ6-autotest/scenarios/sengoku-alliances.json`）は未実行。"
+            "総督画面を開いてもエラーが出ないことは"
+            "実機で確かめる。連鎖削除の差分は SQLite での再現で、ゲーム本体の外部キー処理と一致するかは実機の"
+            "`GameInfo` で確かめる。", ""]
+    return out
 
 
 def outputs() -> dict[Path, str]:
     nodes = read_design()
     return {
         MOD / "Data/JAC_Sengoku_Trees.sql": make_sql(nodes),
+        MOD / "Data/JAC_Sengoku_Cascade.sql": make_cascade_sql(),
         MOD / "Text/JAC_Sengoku_Text.xml": make_text(nodes),
         MOD / "Data/JAC_Sengoku_Icons.xml": make_icons(nodes),
+        MOD / "UI/JAC_HouseNamesData_Sengoku.lua": make_house_names(),
         ROOT / "documents/poc/sengoku-tree-unlocks.md": make_unlock_matrix(nodes),
     }
 

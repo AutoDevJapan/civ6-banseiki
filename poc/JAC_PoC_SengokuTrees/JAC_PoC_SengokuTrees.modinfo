@@ -32,18 +32,27 @@
 			<File>Data/JAC_Sengoku_Calendar.xml</File>
 			<File>Data/JAC_Sengoku_Trees.sql</File>
 			<File>Data/JAC_Sengoku_Resources.sql</File>
+			<File>Data/JAC_Sengoku_Cascade.sql</File>
 			<File>Data/JAC_Sengoku_Unlocks.sql</File>
 			<File>Data/JAC_Sengoku_Victories.sql</File>
+			<File>Data/JAC_Sengoku_Unification.sql</File>
 		</UpdateDatabase>
 		<AddGameplayScripts id="JAC_Sengoku_StartingKnowledge" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>
 		</AddGameplayScripts>
+		<AddGameplayScripts id="JAC_Sengoku_RebuiltCastles" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
+		</AddGameplayScripts>
 		<UpdateText id="JAC_Sengoku_Text" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Text/JAC_Sengoku_Text.xml</File>
+			<File>Text/JAC_Sengoku_Unification_Text.xml</File>
 		</UpdateText>
 		<UpdateIcons id="JAC_Sengoku_Icons" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Data/JAC_Sengoku_Icons.xml</File>
 		</UpdateIcons>
+		<ImportFiles id="JAC_Sengoku_HouseNames" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>UI/JAC_HouseNamesData_Sengoku.lua</File>
+		</ImportFiles>
 	</InGameActions>
 	<FrontEndActions>
 		<UpdateDatabase id="JAC_Sengoku_VictorySettings">
@@ -51,17 +60,25 @@
 			<File>Config/JAC_Sengoku_Victories.xml</File>
 			<File>Config/JAC_Sengoku_Calendar.xml</File>
 		</UpdateDatabase>
+		<UpdateText id="JAC_Sengoku_VictoryText">
+			<File>Text/JAC_Sengoku_Unification_Text.xml</File>
+		</UpdateText>
 	</FrontEndActions>
 	<Files>
 		<File>Data/JAC_Sengoku_Calendar.xml</File>
 		<File>Data/JAC_Sengoku_Trees.sql</File>
 		<File>Data/JAC_Sengoku_Resources.sql</File>
+		<File>Data/JAC_Sengoku_Cascade.sql</File>
 		<File>Data/JAC_Sengoku_Unlocks.sql</File>
 		<File>Data/JAC_Sengoku_Victories.sql</File>
+		<File>Data/JAC_Sengoku_Unification.sql</File>
 		<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>
+		<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
 		<File>Data/JAC_Sengoku_Icons.xml</File>
 		<File>Config/JAC_Sengoku_Victories.xml</File>
 		<File>Config/JAC_Sengoku_Calendar.xml</File>
 		<File>Text/JAC_Sengoku_Text.xml</File>
+		<File>Text/JAC_Sengoku_Unification_Text.xml</File>
+		<File>UI/JAC_HouseNamesData_Sengoku.lua</File>
 	</Files>
 </Mod>

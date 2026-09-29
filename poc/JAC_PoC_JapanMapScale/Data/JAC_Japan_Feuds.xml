@@ -1,0 +1,207 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameInfo>
+  <Types>
+    <Row Type="TRAIT_JAC_1534_FEUD_HOJO" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_HONGANJI" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_IMAGAWA" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_MATSUDAIRA" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_NAGAO" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_ODA" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_ROKKAKU" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_TAKEDA" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_ACCESS" Kind="KIND_TRAIT" />
+    <Row Type="TRAIT_JAC_1534_ALLY_VISION" Kind="KIND_TRAIT" />
+  </Types>
+  <Traits>
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HONGANJI" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_IMAGAWA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_NAGAO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ODA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ROKKAKU" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" />
+    <Row TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+  </Traits>
+  <CivilizationTraits>
+    <Row CivilizationType="CIVILIZATION_JAC_HOJO" TraitType="TRAIT_JAC_1534_FEUD_HOJO" />
+    <Row CivilizationType="CIVILIZATION_JAC_HONGANJI" TraitType="TRAIT_JAC_1534_FEUD_HONGANJI" />
+    <Row CivilizationType="CIVILIZATION_JAC_IMAGAWA" TraitType="TRAIT_JAC_1534_FEUD_IMAGAWA" />
+    <Row CivilizationType="CIVILIZATION_JAC_MATSUDAIRA" TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" />
+    <Row CivilizationType="CIVILIZATION_JAC_NAGAO" TraitType="TRAIT_JAC_1534_FEUD_NAGAO" />
+    <Row CivilizationType="CIVILIZATION_JAC_ODA" TraitType="TRAIT_JAC_1534_FEUD_ODA" />
+    <Row CivilizationType="CIVILIZATION_JAC_ROKKAKU" TraitType="TRAIT_JAC_1534_FEUD_ROKKAKU" />
+    <Row CivilizationType="CIVILIZATION_JAC_TAKEDA" TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" />
+    <Row CivilizationType="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" />
+    <Row CivilizationType="CIVILIZATION_JAC_ODA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_DATE" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHINA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_HOJO" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_TAKEDA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_NAGAO" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_IMAGAWA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_MATSUDAIRA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASAKURA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHIKAGA" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_MIYOSHI" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_ROKKAKU" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_HONGANJI" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_OUCHI" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_AMAGO" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_MORI" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_CHOSOKABE" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_OTOMO" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_SHIMAZU" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_RYUKYU" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_AINU" TraitType="TRAIT_JAC_1534_ACCESS" />
+    <Row CivilizationType="CIVILIZATION_JAC_AMAGO" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASAKURA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHIKAGA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ASHINA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_DATE" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_HOJO" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_IMAGAWA" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_MORI" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_OUCHI" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_ROKKAKU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_RYUKYU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+    <Row CivilizationType="CIVILIZATION_JAC_SHIMAZU" TraitType="TRAIT_JAC_1534_ALLY_VISION" />
+  </CivilizationTraits>
+  <Modifiers>
+    <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_TAKEDA" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_HOJO" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_HOJO" />
+    <Row ModifierId="JAC_1534_FEUD_IMAGAWA_TAKEDA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_TAKEDA" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_IMAGAWA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_IMAGAWA" />
+    <Row ModifierId="JAC_1534_FEUD_HOJO_YAMANOUCHI_UESUGI" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_YAMANOUCHI_UESUGI" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_HOJO" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_HOJO" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_YAMANOUCHI_UESUGI" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_YAMANOUCHI_UESUGI" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_NAGAO" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_NAGAO" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_HONGANJI" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_HONGANJI" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_NAGAO" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_NAGAO" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_ROKKAKU" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_ROKKAKU" />
+    <Row ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_HONGANJI" />
+    <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_MATSUDAIRA" />
+    <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" ModifierType="MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER" SubjectRequirementSetId="JAC_1534_PLAYER_IS_ODA" />
+    <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" ModifierType="MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY" />
+    <Row ModifierId="JAC_1534_ALLY_SHARED_VIS" ModifierType="MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS" />
+  </Modifiers>
+  <ModifierArguments>
+    <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_HOJO" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_HOJO" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_IMAGAWA_TAKEDA" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_IMAGAWA_TAKEDA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_IMAGAWA" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_IMAGAWA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_HOJO_YAMANOUCHI_UESUGI" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_HOJO_YAMANOUCHI_UESUGI" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_HOJO" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_HOJO" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_YAMANOUCHI_UESUGI" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_YAMANOUCHI_UESUGI" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_NAGAO" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_NAGAO" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_HONGANJI" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_HONGANJI" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_NAGAO" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_NAGAO" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_ROKKAKU" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_ROKKAKU" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Name="InitialValue" Value="-10" />
+    <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Name="SimpleModifierDescription" Value="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" />
+    <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="Amount" Value="1" />
+    <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="Source" Value="SOURCE_JAC_1534_ACCESS" />
+    <Row ModifierId="JAC_1534_DIPLO_VISIBILITY" Name="SourceType" Value="DIPLO_SOURCE_ALL_NAMES" />
+    <Row ModifierId="JAC_1534_ALLY_SHARED_VIS" Name="ShareVis" Value="true" />
+  </ModifierArguments>
+  <TraitModifiers>
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" ModifierId="JAC_1534_FEUD_TAKEDA_HOJO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_IMAGAWA" ModifierId="JAC_1534_FEUD_IMAGAWA_TAKEDA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_TAKEDA" ModifierId="JAC_1534_FEUD_TAKEDA_IMAGAWA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HOJO" ModifierId="JAC_1534_FEUD_HOJO_YAMANOUCHI_UESUGI" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_HOJO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_NAGAO" ModifierId="JAC_1534_FEUD_NAGAO_YAMANOUCHI_UESUGI" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_YAMANOUCHI_UESUGI" ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_NAGAO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_NAGAO" ModifierId="JAC_1534_FEUD_NAGAO_HONGANJI" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HONGANJI" ModifierId="JAC_1534_FEUD_HONGANJI_NAGAO" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_HONGANJI" ModifierId="JAC_1534_FEUD_HONGANJI_ROKKAKU" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ROKKAKU" ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_ODA" ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" />
+    <Row TraitType="TRAIT_JAC_1534_FEUD_MATSUDAIRA" ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" />
+    <Row TraitType="TRAIT_JAC_1534_ACCESS" ModifierId="JAC_1534_DIPLO_VISIBILITY" />
+    <Row TraitType="TRAIT_JAC_1534_ALLY_VISION" ModifierId="JAC_1534_ALLY_SHARED_VIS" />
+  </TraitModifiers>
+  <RequirementSets>
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_HOJO" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_HONGANJI" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_IMAGAWA" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_MATSUDAIRA" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_NAGAO" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_ODA" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_ROKKAKU" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_TAKEDA" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_YAMANOUCHI_UESUGI" RequirementSetType="REQUIREMENTSET_TEST_ALL" />
+  </RequirementSets>
+  <Requirements>
+    <Row RequirementId="JAC_1534_REQ_IS_HOJO" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_HONGANJI" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_IMAGAWA" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_MATSUDAIRA" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_NAGAO" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_ODA" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_ROKKAKU" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_TAKEDA" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+    <Row RequirementId="JAC_1534_REQ_IS_YAMANOUCHI_UESUGI" RequirementType="REQUIREMENT_PLAYER_TYPE_MATCHES" />
+  </Requirements>
+  <RequirementArguments>
+    <Row RequirementId="JAC_1534_REQ_IS_HOJO" Name="CivilizationType" Value="CIVILIZATION_JAC_HOJO" />
+    <Row RequirementId="JAC_1534_REQ_IS_HONGANJI" Name="CivilizationType" Value="CIVILIZATION_JAC_HONGANJI" />
+    <Row RequirementId="JAC_1534_REQ_IS_IMAGAWA" Name="CivilizationType" Value="CIVILIZATION_JAC_IMAGAWA" />
+    <Row RequirementId="JAC_1534_REQ_IS_MATSUDAIRA" Name="CivilizationType" Value="CIVILIZATION_JAC_MATSUDAIRA" />
+    <Row RequirementId="JAC_1534_REQ_IS_NAGAO" Name="CivilizationType" Value="CIVILIZATION_JAC_NAGAO" />
+    <Row RequirementId="JAC_1534_REQ_IS_ODA" Name="CivilizationType" Value="CIVILIZATION_JAC_ODA" />
+    <Row RequirementId="JAC_1534_REQ_IS_ROKKAKU" Name="CivilizationType" Value="CIVILIZATION_JAC_ROKKAKU" />
+    <Row RequirementId="JAC_1534_REQ_IS_TAKEDA" Name="CivilizationType" Value="CIVILIZATION_JAC_TAKEDA" />
+    <Row RequirementId="JAC_1534_REQ_IS_YAMANOUCHI_UESUGI" Name="CivilizationType" Value="CIVILIZATION_JAC_YAMANOUCHI_UESUGI" />
+  </RequirementArguments>
+  <RequirementSetRequirements>
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_HOJO" RequirementId="JAC_1534_REQ_IS_HOJO" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_HONGANJI" RequirementId="JAC_1534_REQ_IS_HONGANJI" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_IMAGAWA" RequirementId="JAC_1534_REQ_IS_IMAGAWA" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_MATSUDAIRA" RequirementId="JAC_1534_REQ_IS_MATSUDAIRA" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_NAGAO" RequirementId="JAC_1534_REQ_IS_NAGAO" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_ODA" RequirementId="JAC_1534_REQ_IS_ODA" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_ROKKAKU" RequirementId="JAC_1534_REQ_IS_ROKKAKU" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_TAKEDA" RequirementId="JAC_1534_REQ_IS_TAKEDA" />
+    <Row RequirementSetId="JAC_1534_PLAYER_IS_YAMANOUCHI_UESUGI" RequirementId="JAC_1534_REQ_IS_YAMANOUCHI_UESUGI" />
+  </RequirementSetRequirements>
+  <ModifierStrings>
+    <Row ModifierId="JAC_1534_FEUD_HOJO_TAKEDA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_HOJO" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_IMAGAWA_TAKEDA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_TAKEDA_IMAGAWA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_HOJO_YAMANOUCHI_UESUGI" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_HOJO" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_YAMANOUCHI_UESUGI" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_YAMANOUCHI_UESUGI_NAGAO" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_NAGAO_HONGANJI" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_NAGAO" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_HONGANJI_ROKKAKU" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_ROKKAKU_HONGANJI" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_ODA_MATSUDAIRA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+    <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
+  </ModifierStrings>
+  <DiplomaticVisibilitySources>
+    <Row VisibilitySourceType="SOURCE_JAC_1534_ACCESS" Description="LOC_JAC_VIZSOURCE_1534_ACCESS" ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" FromCitizen="true" TraitType="TRAIT_JAC_1534_ACCESS" />
+  </DiplomaticVisibilitySources>
+</GameInfo>

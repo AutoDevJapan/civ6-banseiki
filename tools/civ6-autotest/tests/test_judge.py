@@ -101,6 +101,15 @@ class JudgeTests(unittest.TestCase):
         failed = {c.name for c in judge(logs, "generic") if not c.passed}
         self.assertEqual(failed, {"Generic: [JAC_POC] errors", "Generic: JAC Runtime Error"})
 
+    def test_missing_jac_texture_fails(self):
+        logs = self.sample()
+        logs["Lua.log"] += "LoadScreen: Failed to load background image texture: LEADER_JAC_MORI_MOTONARI_BACKGROUND\n"
+        logs["Lua.log"] += "LoadScreen: We are lacking a texture for LEADER_JAC_MORI_MOTONARI_NEUTRAL\n"
+        logs["Lua.log"] += "LoadScreen: We are lacking a texture for LEADER_HOJO_NEUTRAL\n"
+        checks = {c.name: c for c in judge(logs, "generic")}
+        self.assertFalse(checks["Generic: JAC missing texture"].passed)
+        self.assertEqual(checks["Generic: JAC missing texture"].detail, "2 matching lines")
+
     def test_error_none_is_not_a_failure(self):
         logs = self.sample()
         logs["Lua.log"] += "JAC: [JAC_POC] result=unavailable error=none\n"
@@ -204,12 +213,18 @@ class JudgeTests(unittest.TestCase):
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
             "leader-portraits.json",
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
+            "unification-victory.json", "unification-registry-15km.json",
+            "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
+            "japan-1534-relations.json", "probe-ally-vision.json", "probe-alliance-type.json", "probe-alliance-expiry.json",
+            "japan-1534-relations-settlers.json",
+            "japan-1534-feud-ui.json",
             "japan-resources.json",
-            "japan-no-world-congress.json",
+            "japan-no-world-congress.json", "japan-city-names.json",
             "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
             "japan-map-15km-200turn.json",
+            "japan-scale-baseline-15km.json", "japan-prosperous-15km.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

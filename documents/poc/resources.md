@@ -25,9 +25,9 @@
 | 米・小麦・バナナの収穫 | `TECH_JAC_SENGOKU_IRRIGATION_WORKS`（今回） |
 | 銅・石材の収穫 | `TECH_JAC_SENGOKU_ORE_PROSPECTING`（今回） |
 | 魚・蟹の収穫 | `TECH_JAC_SENGOKU_COASTAL_PILOTAGE`（今回） |
-| 牛・鹿・羊の収穫 | なし（日本マップに置かない） |
+| 牛・鹿・羊の収穫 | `TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS`（T05、暫定。日本マップには置かないが、通常マップでも戦国ツリーが読み込まれるため公式の畜産の代わりに付け替える） |
 
-- 日本マップに置く資源の型（魚・馬・鉄・米・塩・絹・茶・鯨・銀・金・漆）で、戦国以外の技術を指すものは残らない。テストは `tests/test_resources.py`（公式データから `Resources` と `Resource_Harvests` の前提技術を読み、モデル DB で「付け替え → 公式技術の削除」を再現して確かめる）。
+- 日本マップに置く資源の型（魚・馬・鉄・米・塩・絹・茶・鯨・銀・金・漆）に限らず、公式の `Resources`・`Resource_Harvests` で戦国以外の技術を指すものは残らない（馬の出現だけは設計どおり前提なし）。テストは `tests/test_resources.py`（公式データから `Resources` と `Resource_Harvests` の前提技術を読み、モデル DB で「付け替え → 公式技術の削除」を再現して確かめる）。
 - 資源ゲートは「種類」単位なので、**地点単位の後発**（生野・鶴子・延沢・足尾・相川など）は次の Lua で扱う。
 
 ## 2. 後発地点（Lua API と地点データ）
