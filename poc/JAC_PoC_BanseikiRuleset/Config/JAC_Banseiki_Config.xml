@@ -28,6 +28,9 @@
 	<ConfigurationUpdates>
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_START_ERA" TargetValue="ERA_ANCIENT" Hash="1"/>
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_TURN_LIMIT" TargetValue="TURNLIMIT_GAMESPEED" Hash="1"/>
+		<!-- SSOT 2.2: a leader appears at most once; a civilization may repeat. -->
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="NO_DUPLICATE_LEADERS" TargetValue="1" Hash="0"/>
+		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="NO_DUPLICATE_CIVILIZATIONS" TargetValue="0" Hash="0"/>
 	</ConfigurationUpdates>
 	<!-- SetupParameters runs this query for each player. In single player, player 0 is the human.
 	     The filter is absent for every AI slot and when the human selects all pools. -->
