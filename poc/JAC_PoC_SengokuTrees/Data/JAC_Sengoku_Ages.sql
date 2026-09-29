@@ -97,9 +97,9 @@ CREATE TABLE JAC_SengokuAgeEventScores (
   Score INTEGER NOT NULL CHECK (Score > 0)
 );
 INSERT INTO JAC_SengokuAgeEventScores (EventType, Score) VALUES
-  ('JAC_EVENT_TEPPO_DENRAI', 2),
-  ('JAC_EVENT_ASHIO_COPPER', 1),
-  ('JAC_EVENT_NAGAO_UESUGI', 3);
+  ('JAC_EVENT_TEPPO', 2),
+  ('JAC_EVENT_IKUNO_SILVER', 1),
+  ('JAC_EVENT_NAGAO_TO_UESUGI', 3);
 
 -- §7.2: dark-age policies. The ledger gives a dark house the lowest Priority (the choice screen is a
 -- follow-up). A city-wide effect is on while the city centre's plot property <PolicyType> is 1; a house-wide

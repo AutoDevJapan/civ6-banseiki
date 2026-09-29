@@ -43,6 +43,16 @@
 		<AddGameplayScripts id="JAC_Events_Scripts" criteria="JAC_Events_Banseiki">
 			<File>Scripts/JAC_HistoricalEvents.lua</File>
 		</AddGameplayScripts>
+		<AddUserInterfaces id="JAC_Events_AdvisorUI" criteria="JAC_Events_Banseiki">
+			<Properties>
+				<Context>InGame</Context>
+			</Properties>
+			<File>UI/JAC_HistoricalEventsAdvisor.xml</File>
+		</AddUserInterfaces>
+		<ImportFiles id="JAC_Events_UIFiles" criteria="JAC_Events_Banseiki">
+			<File>UI/JAC_HistoricalEventsAdvisor.xml</File>
+			<File>UI/JAC_HistoricalEventsAdvisor.lua</File>
+		</ImportFiles>
 	</InGameActions>
 	<Files>
 		<File>Data/JAC_HistoricalEvents_Schema.sql</File>
@@ -50,5 +60,7 @@
 		<File>Data/JAC_HistoricalEvents_Icons.xml</File>
 		<File>Text/JAC_HistoricalEvents_Text.xml</File>
 		<File>Scripts/JAC_HistoricalEvents.lua</File>
+		<File>UI/JAC_HistoricalEventsAdvisor.xml</File>
+		<File>UI/JAC_HistoricalEventsAdvisor.lua</File>
 	</Files>
 </Mod>
