@@ -400,6 +400,8 @@ def main() -> None:
     scenarios()
     scenarios("TAKEDA")
     resource_scenario()
+    import prosper_start
+    prosper_start.write_scenario(prosper_start.report_for(15))
 
 
 if __name__ == "__main__":
