@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Registered like the Japan maps (tools/japan_map_scale/write_support.py), but in a
+     separate test-only mod: the map is listed only while this mod is enabled. -->
+<GameInfo>
+  <Maps>
+    <Row Domain="Maps:JAC_Banseiki" File="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" Name="LOC_JAC_TEST_UNIFICATION_MAP_NAME" Description="LOC_JAC_TEST_UNIFICATION_MAP_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="999"/>
+  </Maps>
+  <MapSizes>
+    <Row Domain="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" MapSizeType="MAPSIZE_DUEL" Name="LOC_MAPSIZE_DUEL_NAME" Description="LOC_MAPSIZE_DUEL_DESCRIPTION" MinPlayers="3" MaxPlayers="3" DefaultPlayers="3" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10"/>
+  </MapSizes>
+  <MapDomainOverrides>
+    <Row Map="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" ParameterId="MapSize" Domain="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map"/>
+  </MapDomainOverrides>
+  <MapLeaders>
+    <Row Map="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" LeaderType="LEADER_JAC_ODA_NOBUHIDE"/>
+    <Row Map="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" LeaderType="LEADER_JAC_DATE_TANEMUNE"/>
+    <Row Map="{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map" LeaderType="LEADER_JAC_ASHINA_MORIKIYO"/>
+  </MapLeaders>
+</GameInfo>

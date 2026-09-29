@@ -380,7 +380,7 @@ CASTLE_NAMES = {
 
 def city_name_tag(city: dict) -> str:
     """The LOC tag written into Cities.Name; the text files carry en/ja/ru rows."""
-    return (f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
+    return city.get("name_tag") or (f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"]
             else f"LOC_JAC_1534_CITY_{city['id']}")
 
 # Province centres used only where the 53-castle draft has no site. These are
