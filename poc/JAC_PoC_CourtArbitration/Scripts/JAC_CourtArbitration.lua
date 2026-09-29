@@ -3,8 +3,8 @@
 --    までは他家どうしの停戦も発議でき、その裁定の力（停戦の再宣戦制限のターン数）は3倍になる。
 -- 2. 請求者は外交的支持・金・正当性を払う。請求は UI から EXECUTE_SCRIPT で届き、次のターンの初めに裁く。
 -- 3. 答える側：人間は画面で応否を送る（届かなければ拒否）。AI は Rules の暫定規則で決める。
--- 4. 全員が応じれば講和し、停戦中に戦争になっていれば毎ターンの初めに講和し直す。エンジンの最短の戦争期間
---    （開戦から10ターン）の中は講和できないので、講和できるターンまで毎ターン試す。拒んだ勢力は正当性を失い、
+-- 4. 全員が応じればその場で講和し（最短の戦争期間を越える MakePeaceWith(相手, true)）、停戦中に戦争になって
+--    いれば毎ターンの初めに講和し直す。拒んだ勢力は正当性を失い、
 --    ほかの家に「討伐の大義」が立つ（記録と通知のみ。エンジンに特定の相手への開戦事由を足す API が無い：Q58）。
 --
 -- マルチプレイ：状態はすべて Game / Player プロパティ（セーブに残り、全員で共有）。変更は GameEvents
@@ -84,13 +84,15 @@ local function OnRespond(playerID, params)
 	Log(string.format("answer player=%d accept=%s", playerID, tostring(pending[key])))
 end
 
--- 講和させ、できたら true。公式：DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:767（MakePeaceWith）、
--- 同 :795 で CanMakePeaceWith を先に確かめている。エンジンは開戦から DIPLOMACY_WAR_MIN_TURNS（10、
--- Base/Assets/Gameplay/Data/GlobalParameters.xml:260）の間は講和させず、MakePeaceWith はエラーも出さずに何もしない
--- （court-arbitration-05）。そのため呼んだ後に IsAtWarWith で確かめ、できなければ理由を返して次のターンに試し直す
+-- 講和させ、できたら true。公式：DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:767（MakePeaceWith）。
+-- エンジンは開戦から DIPLOMACY_WAR_MIN_TURNS（10、Base/Assets/Gameplay/Data/GlobalParameters.xml:260）の間、
+-- 引数1つの MakePeaceWith をエラーも出さずに無視する（court-arbitration-05）。第2引数 true はこれを越えて
+-- その場で講和させる（実機 court-arbitration-06 の probe-make-peace：ターン1に宣戦した琉球・伊達と、開始時から
+-- 交戦中の大内・大友が、true 付きでだけ同じターンに講和した）。念のため呼んだ後に IsAtWarWith で確かめ、
+-- できなければ理由を返す（呼び出し側が次のターンに試し直す安全網。実機では起きていない）
 local function MakePeace(a, b, turn)
 	local diplo = Players[a]:GetDiplomacy()
-	local ok, err = pcall(function() diplo:MakePeaceWith(b) end)
+	local ok, err = pcall(function() diplo:MakePeaceWith(b, true) end)
 	if not ok then return false, "error: " .. tostring(err) end
 	if diplo:IsAtWarWith(b) then
 		local known, can = pcall(function() return diplo:CanMakePeaceWith(b) end)
@@ -101,8 +103,8 @@ local function MakePeace(a, b, turn)
 end
 
 -- 毎ターンの初めに、組ごとに講和を試す。
--- 1. 応諾済みで講和を待つ組（エンジンの最短の戦争期間の中）：講和できたターンから停戦を始める。
--- 2. 停戦中に戦争になっている組：講和し直す。最短の戦争期間で講和できなければ、停戦が切れた後も講和できるまで試す。
+-- 1. 応諾済みで講和を待つ組（安全網：裁定の場で MakePeace が失敗したときだけできる）：講和できたターンから停戦を始める。
+-- 2. 停戦中に戦争になっている組：講和し直す。講和できなければ（安全網）、停戦が切れた後も講和できるまで試す。
 -- 宣戦した側はゲームプレイ側で分からない（宣戦のイベント Events.DiplomacyDeclareWar は UI 側の使用例しか無い）ため、
 -- 違反の不利益は付けない
 local function EnforceTruces(turn)
@@ -120,7 +122,7 @@ local function EnforceTruces(turn)
 					Game:SetProperty(R.TruceKey(a, b), turn + truceTurns)
 					Log(string.format("truce started pair=%d-%d turn=%d until=%d", a, b, turn, turn + truceTurns))
 				else
-					Log(string.format("peace deferred pair=%d-%d turn=%d reason=%s", a, b, turn, reason))
+					Log(string.format("SAFETY NET peace deferred pair=%d-%d turn=%d reason=%s", a, b, turn, reason))
 				end
 			end
 			local key = R.TruceKey(a, b)
@@ -129,8 +131,8 @@ local function EnforceTruces(turn)
 				local peace, reason = true, nil
 				if Players[a]:GetDiplomacy():IsAtWarWith(b) then
 					peace, reason = MakePeace(a, b, turn)
-					Log(string.format("truce reimposed pair=%d-%d turn=%d until=%d ok=%s%s", a, b, turn, untilTurn,
-						tostring(peace), peace and "" or " reason=" .. reason))
+					Log(string.format("%struce reimposed pair=%d-%d turn=%d until=%d ok=%s%s", peace and "" or "SAFETY NET ",
+						a, b, turn, untilTurn, tostring(peace), peace and "" or " reason=" .. reason))
 				end
 				if peace and turn > untilTurn then
 					Game:SetProperty(key, nil)
@@ -176,12 +178,13 @@ local function Resolve(turn)
 		if peace then
 			Game:SetProperty(R.TruceKey(a, b), turn + truceTurns)
 		else
-			-- 最短の戦争期間の中：講和できるターンの初めに講和し、そこから停戦を数える（EnforceTruces）
+			-- 安全網（MakePeaceWith(相手, true) が効かなかったとき）：講和できるターンの初めに講和し、
+			-- そこから停戦を数える（EnforceTruces）
 			Game:SetProperty(R.AwaitKey(a, b), truceTurns)
 			summary = "LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY"
 		end
-		Log(string.format("accepted pair=%d-%d turn=%d truce_turns=%d power=%d peace=%s", a, b, turn, truceTurns,
-			pending.Power, peace and "true" or "deferred reason=" .. reason))
+		Log(string.format("%saccepted pair=%d-%d turn=%d truce_turns=%d power=%d peace=%s", peace and "" or "SAFETY NET ",
+			a, b, turn, truceTurns, pending.Power, peace and "true" or "deferred reason=" .. reason))
 		Notify(everyone, "LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME", summary, R.NameKey(a), R.NameKey(b), truceTurns)
 	else
 		for _, id in ipairs(refusers) do

@@ -86,9 +86,11 @@ end
 Game = { GetCurrentGameTurn = function() return CURRENT_TURN end }
 Game.GetProperty, Game.SetProperty = properties()
 WAR, WAR_CHANGED = {}, {}
--- The engine's minimum war length (DIPLOMACY_WAR_MIN_TURNS): MakePeaceWith silently does nothing before it
--- (court-arbitration-05). 0 = peace is always possible.
-MIN_WAR = 0
+-- The engine's minimum war length (DIPLOMACY_WAR_MIN_TURNS): MakePeaceWith(b) silently does nothing before it
+-- (court-arbitration-05); MakePeaceWith(b, true) makes peace at once (probe-make-peace, court-arbitration-06).
+-- 0 = peace is always possible. FORCE_IGNORED simulates an engine where the second argument does nothing,
+-- to exercise the script's retry-each-turn safety net.
+MIN_WAR, FORCE_IGNORED = 0, false
 local function pair(a, b) return math.min(a, b) .. "_" .. math.max(a, b) end
 function SET_WAR(a, b, v) WAR[pair(a, b)] = v; WAR_CHANGED[pair(a, b)] = CURRENT_TURN end
 local function canPeace(a, b) return CURRENT_TURN - (WAR_CHANGED[pair(a, b)] or 0) >= MIN_WAR end
@@ -107,7 +109,10 @@ for i, civ in ipairs(civs) do
   p.GetCities = function() return { GetCount = function() return p.cities end } end
   p.GetDiplomacy = function() return {
     IsAtWarWith = function(_, o) return WAR[math.min(id, o) .. "_" .. math.max(id, o)] == true end,
-    MakePeaceWith = function(_, o) if canPeace(id, o) then SET_WAR(id, o, false) end end,
+    DeclareWarOn = function(_, o) SET_WAR(id, o, true) end,
+    MakePeaceWith = function(_, o, force)
+      if (force == true and not FORCE_IGNORED) or canPeace(id, o) then SET_WAR(id, o, false) end
+    end,
     CanMakePeaceWith = function(_, o) return canPeace(id, o) end,
     -- Gameplay favor lives on the diplomacy object (XP2_Lua_IPlayerDiplomacy.cpp); the gameplay Player has no GetFavor.
     GetFavor = function() return p.favor end,
@@ -124,6 +129,7 @@ end
 PlayerManager = { GetAliveMajors = function() return MAJORS end }
 Locale = { Lookup = function(key, ...) return key end }
 ParameterTypes = { MESSAGE = "MESSAGE", SUMMARY = "SUMMARY" }
+WarTypes = { FORMAL_WAR = 0 }
 NotificationTypes = { USER_DEFINED_1 = 1 }
 NOTES = {}
 NotificationManager = { SendNotification = function(id, _, data) table.insert(NOTES, { id, data.MESSAGE, data.SUMMARY }) end }
@@ -330,22 +336,42 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.next_turn()
         self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
 
-    def test_peace_inside_the_minimum_war_length_is_deferred_and_the_truce_starts_at_peace(self):
-        # court-arbitration-05: MakePeaceWith did nothing on turn 2 for a war declared on turn 1.
+    def test_forced_peace_ends_a_war_inside_the_minimum_war_length_at_once(self):
+        # court-arbitration-06: MakePeaceWith(b, true) made peace on the declaration turn; MakePeaceWith(b) did not.
         self.g.MIN_WAR = 10
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)  # declared on turn 1 (engine turn = start turn)
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()  # turn 2
+        self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 2 + 30)
+        self.assertEqual(self.game("JAC_ARB_PEACE_TURN_0_1"), 2)
+        self.assertIsNone(self.game("JAC_ARB_AWAIT_0_1"))
+        self.assertIn("[JAC_ARB] accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=true", self.log())
+        # A war declared under the truce, still inside the minimum war length, is undone the next turn.
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
+        self.next_turn()
+        self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual(self.game("JAC_ARB_PEACE_TURN_0_1"), 3)
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 32)
+        self.assertIn("[JAC_ARB] truce reimposed pair=0-1 turn=3 until=32 ok=true", self.log())
+        self.assertFalse(any("SAFETY NET" in line for line in self.log()))
+
+    def test_safety_net_defers_peace_when_the_force_flag_does_nothing(self):
+        self.g.MIN_WAR, self.g.FORCE_IGNORED = 10, True
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
         self.next_turn()  # turn 2
         self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
         self.assertIsNone(self.game("JAC_ARB_TRUCE_0_1"))
         self.assertEqual(self.game("JAC_ARB_AWAIT_0_1"), 30)
-        self.assertIn("[JAC_ARB] accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=deferred reason=min_war", self.log())
+        self.assertIn("[JAC_ARB] SAFETY NET accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=deferred reason=min_war",
+                      self.log())
         self.assertIn("LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY", [n[3] for n in self.g.NOTES.values()])
         # The accepted pair cannot be petitioned (and charged) again while it waits.
         self.assertEqual(self.lua.eval("select(2, JAC_ARB.CheckRequest(0, 0, 1))"), "AWAITING_PEACE")
         self.next_turn(10)
         self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
-        self.assertIn("[JAC_ARB] peace deferred pair=0-1 turn=10 reason=min_war", self.log())
+        self.assertIn("[JAC_ARB] SAFETY NET peace deferred pair=0-1 turn=10 reason=min_war", self.log())
         self.next_turn(11)  # 10 turns after the declaration
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
         self.assertIsNone(self.game("JAC_ARB_AWAIT_0_1"))
@@ -354,7 +380,7 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertIn("[JAC_ARB] truce started pair=0-1 turn=11 until=41", self.log())
 
     def test_a_pair_that_made_peace_on_its_own_while_waiting_starts_the_truce(self):
-        self.g.MIN_WAR = 10
+        self.g.MIN_WAR, self.g.FORCE_IGNORED = 10, True
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
         self.next_turn()
@@ -363,12 +389,12 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 3 + 10)
         self.assertIsNone(self.game("JAC_ARB_PEACE_TURN_0_1"))  # not made by the script
 
-    def test_a_truce_breach_inside_the_minimum_war_length_is_undone_when_allowed_even_after_the_truce(self):
-        self.g.MIN_WAR = 10
-        self.g.Game.SetProperty(None, "JAC_ARB_TRUCE_2_3", 5)  # like the live scenario: a war declared under a truce
+    def test_safety_net_undoes_a_truce_breach_when_allowed_even_after_the_truce(self):
+        self.g.MIN_WAR, self.g.FORCE_IGNORED = 10, True
+        self.g.Game.SetProperty(None, "JAC_ARB_TRUCE_2_3", 5)
         self.g.SET_WAR(self.ASHIKAGA, self.MORI, True)  # turn 1
         self.next_turn()
-        self.assertIn("[JAC_ARB] truce reimposed pair=2-3 turn=2 until=5 ok=false reason=min_war", self.log())
+        self.assertIn("[JAC_ARB] SAFETY NET truce reimposed pair=2-3 turn=2 until=5 ok=false reason=min_war", self.log())
         self.next_turn(10)
         self.assertTrue(self.at_war(self.ASHIKAGA, self.MORI))
         self.assertEqual(self.game("JAC_ARB_TRUCE_2_3"), 5)  # kept past its end while the breach stands
@@ -398,6 +424,48 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.next_turn()
         self.assertIn("[JAC_ARB] void request pair=0-1 turn=2 (no longer at war)", self.log())
         self.assertIsNone(self.game("JAC_ARB_TRUCE_0_1"))
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
+class LiveScenarioOnStubsTests(unittest.TestCase):
+    """Plays the gameplay steps of scenarios/court-arbitration.json against the stubs, so a slip in the
+    scenario's Lua shows here instead of after a long live run. UI-only steps (panel buttons, the human's
+    turn) are skipped; the panel's request goes straight to the gameplay event."""
+
+    # 0 Ouchi, 1 Otomo, 2 Ashikaga, 3 Mori, 4 Oda, 5 Takeda
+    CIVS = CIVS + ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_TAKEDA"]
+    OUCHI, OTOMO = ArbitrationTurnTests.OUCHI, ArbitrationTurnTests.OTOMO
+    next_turn, log = ArbitrationTurnTests.next_turn, ArbitrationTurnTests.log
+
+    def setUp(self):
+        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        rules = (MOD / "Scripts/JAC_CourtArbitration_Rules.lua").as_posix()
+        self.lua.execute(STUBS, self.lua.table_from(calendar(), recursive=True), self.lua.table_from(self.CIVS),
+                         START_TURN, rules)
+        self.lua.execute((MOD / "Scripts/JAC_CourtArbitration.lua").read_text(encoding="utf-8"))
+        self.g = self.lua.globals()
+        self.g.MIN_WAR = 10
+        self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
+        self.g.Players[self.OUCHI].cities = 4  # Ouchi refuses Otomo (4 > 1.5 * 2), as live (court-arbitration-07)
+        self.turn = 1
+        self.g.START_TURN(1)
+
+    def test_scenario_steps_pass_on_the_stubs(self):
+        self.lua.execute("function JAC_RequestArbitration(a, b) REQUEST(2, a, b); return true end")
+        steps = json.loads((ROOT / "tools/civ6-autotest/scenarios/court-arbitration.json").read_text(encoding="utf-8"))["steps"]
+        results = []
+        for step in steps:
+            if step["action"] == "autoplay":
+                self.next_turn(self.turn + step["turns"])
+            elif step["action"] == "ui_lua" and "Controls." not in step["code"] and step["state_name"] != "InGame":
+                results.append(self.lua.execute(step["code"]))
+            elif step["action"] == "wait_for" and step["condition"]["state_name"] == "GameCore_Tuner":
+                self.assertIs(self.lua.execute(step["condition"]["code"]), True)
+        self.assertIn("accepted-path pair CIVILIZATION_JAC_MORI 3 - CIVILIZATION_JAC_ODA 4", results[1])
+        self.assertIn("accepted ruling: 3-4 made peace on turn 2", results[3])
+        self.assertEqual(results[-1], "refused by Ouchi (legitimacy 35, outlaw until 13); "
+                         "truce breach 3-4 undone on turn 3, truce still until 32")
+        self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 
 
 if __name__ == "__main__":
