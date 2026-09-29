@@ -1,8 +1,8 @@
 """Build the small test-only map for the live unification-victory scenario.
 
-The castle registry is written by the same generate.insert_historical_state()
-as the 1534 Japan maps, so the marker rows come from the map data exactly
-like the real maps. The map lives in its own test mod that players do not enable.
+The preplaced cities are written by the same generate.insert_historical_state()
+as the 1534 Japan maps, so the castle registry (the map's Cities rows) comes
+from the map data exactly like the real maps. The map lives in its own test mod that players do not enable.
 """
 
 from __future__ import annotations
@@ -95,9 +95,7 @@ def build(destination: Path = TEST_MOD / "Maps" / f"{MAP_NAME}.Civ6Map",
 def castle_rows(path: Path = TEST_MOD / "Maps" / f"{MAP_NAME}.Civ6Map") -> dict[int, int]:
     """Registered castle plot -> map owner ID, read back from the map file."""
     with closing(sqlite3.connect(path)) as db:
-        return dict(db.execute(
-            "SELECT Cities.Plot, Cities.Owner FROM Cities JOIN Buildings ON Buildings.Plot=Cities.Plot "
-            "WHERE Buildings.BuildingType='BUILDING_JAC_REGISTERED_CASTLE'"))
+        return dict(db.execute("SELECT Plot, Owner FROM Cities"))
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from tools.generate_unification_victory import registry_scenario, scenario, sql
-from tools.japan_map_scale.registered_castles import MARKER, verify_or_stamp
+from tools.generate_unification_victory import (
+    CASTLE_FILES, CASTLE_SET, COUNTED_SET, REBUILT, castle_sql, castles, registry_scenario, scenario, sql, verify_registry)
 import unification_test_map as test_map  # on sys.path via generate_unification_victory
 
 
@@ -22,6 +22,8 @@ TEST_MOD = ROOT / "poc/JAC_Test_UnificationMap"
 VICTORY = "VICTORY_JAC_SENGOKU_UNIFICATION"
 SCHEMA = """
     CREATE TABLE Types (Type TEXT PRIMARY KEY, Kind TEXT);
+    CREATE TABLE Buildings (BuildingType TEXT PRIMARY KEY, Name TEXT NOT NULL, PrereqDistrict TEXT,
+        Cost INT NOT NULL, InternalOnly INT NOT NULL DEFAULT 0);
     CREATE TABLE Victories (VictoryType TEXT PRIMARY KEY, Name TEXT, Description TEXT,
         Blurb TEXT, RequirementSetId TEXT, EnabledByDefault INT, OneMoreTurn INT, Icon TEXT);
     CREATE TABLE RequirementSets (RequirementSetId TEXT PRIMARY KEY, RequirementSetType TEXT);
@@ -50,7 +52,8 @@ class RequirementModel:
         self.root = db.execute("SELECT RequirementSetId FROM Victories WHERE VictoryType=?",
                                (VICTORY,)).fetchone()[0]
 
-    def wins(self, team: int, cities: list[tuple[int, bool]], domination: bool = False) -> bool:
+    def wins(self, team: int, cities: list[tuple], domination: bool = False) -> bool:
+        """cities: (owner, x, y) or (owner, x, y, rebuilt) where rebuilt means the city holds the marker."""
         self.world = cities, domination
         return self.test_set(self.root, team, None)
 
@@ -70,9 +73,11 @@ class RequirementModel:
             result = {"REQUIREMENT_COLLECTION_ALL_MET": lambda: all(met),
                       "REQUIREMENT_COLLECTION_COUNT_ATLEAST": lambda: sum(met) >= int(args["Count"]),
                       "REQUIREMENT_COLLECTION_COUNT_EQUALS": lambda: sum(met) == int(args["Count"])}[kind]()
+        elif kind == "REQUIREMENT_CITY_LOCATION_MATCHES":
+            result = city[1:] == (int(args["X"]), int(args["Y"]))
         elif kind == "REQUIREMENT_CITY_HAS_BUILDING":
-            self.assertion(args["BuildingType"] == MARKER, req)
-            result = city[1]
+            self.assertion(args == {"BuildingType": REBUILT}, req)
+            result = len(city) > 3 and city[3]
         elif kind == "REQUIREMENT_PLAYER_OWNS_OBJECT":
             result = city[0] == team
         elif kind == "REQUIREMENT_TEAM_DOMINATION_VICTORY":
@@ -87,55 +92,68 @@ class RequirementModel:
             raise AssertionError(f"Unexpected arguments on {req}")
 
 
-def generated_model() -> RequirementModel:
+def generated_model(*castle_scripts: str) -> RequirementModel:
+    """Victory SQL, then the castle SQL of the map in use (modinfo LoadOrder 200 -> 300)."""
     db = sqlite3.connect(":memory:")
     db.executescript(SCHEMA)
     db.executescript(sql())
+    for script in castle_scripts:
+        db.executescript(script)
     return RequirementModel(db)
+
+
+# Four castles as on the test map: Oda holds the first two, Date the rest.
+FOUR = [(6, 5), (6, 14), (25, 5), (25, 14)]
+FOUR_SQL = castle_sql("T", [(x, y, 0) for x, y in FOUR])
 
 
 class UnificationVictoryTests(unittest.TestCase):
     def test_map_cities_are_the_registry_and_settler_maps_have_none(self):
         manifest = json.loads((MAP_MOD / "Maps/manifest.json").read_text(encoding="utf-8"))
-        counts = set()
         for item in manifest:
             with self.subTest(scale=item["km_per_tile"]):
-                with sqlite3.connect(MAP_MOD / "Maps" / item["file"]) as db:
-                    city_plots = {row[0] for row in db.execute("SELECT Plot FROM Cities")}
-                    marker_plots = {row[0] for row in db.execute(
-                        "SELECT Plot FROM Buildings WHERE BuildingType=?", (MARKER,))}
-                    self.assertEqual(marker_plots, city_plots)
-                    self.assertEqual(city_plots, {city["plot"] for city in item["cities"]})
-                    self.assertTrue({"RYUKYU", "AINU"} <= {city["owner"] for city in item["cities"]})
-                    self.assertEqual(item["bytes"], (MAP_MOD / "Maps" / item["file"]).stat().st_size)
-                    self.assertTrue(city_plots)
-                    counts.add(len(city_plots))
-                with sqlite3.connect(MAP_MOD / "Maps" / item["settler_file"]) as db:
+                path = MAP_MOD / "Maps" / item["file"]
+                with closing(sqlite3.connect(path)) as db:
+                    width = db.execute("SELECT Width FROM Map").fetchone()[0]
+                    self.assertEqual(db.execute("SELECT COUNT(*) FROM Buildings WHERE BuildingType "
+                                                "NOT IN ('BUILDING_PALACE')").fetchone()[0], 0)
+                plots = {city["plot"] for city in item["cities"]}
+                self.assertEqual({y * width + x for x, y, _ in castles(path)}, plots)
+                self.assertTrue({"RYUKYU", "AINU"} <= {city["owner"] for city in item["cities"]})
+                self.assertEqual(item["bytes"], path.stat().st_size)
+                with closing(sqlite3.connect(MAP_MOD / "Maps" / item["settler_file"])) as db:
                     self.assertEqual(db.execute("SELECT COUNT(*) FROM Cities").fetchone()[0], 0)
-                    self.assertEqual(db.execute(
-                        "SELECT COUNT(*) FROM Buildings WHERE BuildingType=?", (MARKER,)).fetchone()[0], 0)
-        self.assertEqual(counts, {56})
-        self.assertEqual(verify_or_stamp(), 56)
+        self.assertEqual(verify_registry(), 56)
 
-        data = ET.parse(MAP_MOD / "Data/JAC_RegisteredCastle.xml").getroot()
-        self.assertEqual(data.find("./Types/Row").attrib,
-                         {"Type": MARKER, "Kind": "KIND_BUILDING"})
-        self.assertEqual(data.find("./Buildings/Row").get("InternalOnly"), "1")
-        self.assertEqual(data.find("./Buildings/Row").get("PrereqDistrict"), "DISTRICT_CITY_CENTER")
-        self.assertEqual(data.find("./Buildings/Row").get("Name"),
-                         "LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME")
+        # Each castle file is generated from its map and loads only with that historical map.
         modinfo = ET.parse(MAP_MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
-        self.assertIn("Data/JAC_RegisteredCastle.xml", [row.text for row in modinfo.findall("./Files/File")])
-        self.assertEqual([row.get("criteria") for row in modinfo.findall("./InGameActions/UpdateDatabase")
-                          if row.findtext("File") == "Data/JAC_RegisteredCastle.xml"],
-                         ["JAC_JapanMapScale_Banseiki"])
-        self.assertIn("Text/JAC_RegisteredCastle_Text.xml", [row.text for row in modinfo.findall("./InGameActions/UpdateText/File")])
-        marker_text = ET.parse(MAP_MOD / "Text/JAC_RegisteredCastle_Text.xml").getroot()
-        rows = marker_text.findall("./LocalizedText/Row")
-        self.assertEqual({row.get("Language") for row in rows},
-                         {"ja_JP", "en_US", "ru_RU"})
-        self.assertTrue(all(row.get("Tag") == "LOC_BUILDING_JAC_REGISTERED_CASTLE_NAME" and
-                            row.findtext("Text") for row in rows))
+        criteria = {c.get("id"): c.findtext("./ConfigurationValueMatches/Value")
+                    for c in modinfo.findall("./ActionCriteria/Criteria")}
+        test_modinfo = ET.parse(TEST_MOD / "JAC_Test_UnificationMap.modinfo").getroot()
+        criteria.update({c.get("id"): c.findtext("./ConfigurationValueMatches/Value")
+                         for c in test_modinfo.findall("./ActionCriteria/Criteria")})
+        actions = {}
+        for info, folder in ((modinfo, MAP_MOD), (test_modinfo, TEST_MOD)):
+            files = {row.text for row in info.findall("./Files/File")}
+            for action in info.findall("./InGameActions/UpdateDatabase"):
+                for file in action.findall("File"):
+                    if file.text.endswith("_Castles.sql"):
+                        self.assertIn(file.text, files)
+                        self.assertEqual(action.findtext("./Properties/LoadOrder"), "300")
+                        actions[folder / file.text] = criteria[action.get("criteria")]
+        for path, (tag, output) in CASTLE_FILES.items():
+            with self.subTest(castle_file=output.name):
+                self.assertEqual(output.read_text(encoding="utf-8"), castle_sql(tag, castles(path)))
+                mod = MAP_MOD if path.parent.parent == MAP_MOD else TEST_MOD
+                mod_id = (modinfo if mod == MAP_MOD else test_modinfo).get("id")
+                self.assertEqual(actions.pop(output), f"{{{mod_id}}}Maps/{path.name}")
+        self.assertEqual(actions, {})
+        self.assertFalse((MAP_MOD / "Data/JAC_RegisteredCastle.xml").exists())
+        # The castle files (LoadOrder 300) come after the victory SQL.
+        tree = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
+        order = next(action.findtext("./Properties/LoadOrder") for action in tree.iter("UpdateDatabase")
+                     if "Data/JAC_Sengoku_Unification.sql" in [f.text for f in action.findall("File")])
+        self.assertLess(int(order), 300)
 
     def test_checked_in_sql_is_generated_without_a_castle_count(self):
         script = (TREE_MOD / "Data/JAC_Sengoku_Unification.sql").read_text(encoding="utf-8")
@@ -144,15 +162,31 @@ class UnificationVictoryTests(unittest.TestCase):
         counts = {req: args["Count"] for req, args in model.args.items() if "Count" in args}
         # Only existence (>=1) and absence (==0) tests: nothing depends on 56 or the test map's 4.
         self.assertEqual(counts, {"JAC_UNIFICATION_CASTLES_EXIST": "1", "JAC_UNIFICATION_NO_CASTLES": "0"})
+        # Castles are plots; a building only ever excludes (the rebuilt marker, inverted), since
+        # the city centre has CaptureRemovesBuildings and a registering marker would be lost on capture.
+        self.assertEqual([(req, inv) for req, (kind, inv) in model.reqs.items()
+                          if kind == "REQUIREMENT_CITY_HAS_BUILDING"], [("JAC_UNIFICATION_CITY_NOT_REBUILT", True)])
+        self.assertEqual(model.sets[COUNTED_SET], "REQUIREMENTSET_TEST_ALL")
+        self.assertEqual(model.members[COUNTED_SET],
+                         ["JAC_UNIFICATION_CITY_ON_CASTLE_PLOT", "JAC_UNIFICATION_CITY_NOT_REBUILT"])
+        self.assertEqual({req: args["RequirementSetId"] for req, args in model.args.items()
+                          if args.get("RequirementSetId") in (CASTLE_SET, COUNTED_SET)}, {
+            "JAC_UNIFICATION_CASTLES_EXIST": COUNTED_SET, "JAC_UNIFICATION_NO_CASTLES": COUNTED_SET,
+            "JAC_UNIFICATION_CITY_NOT_CASTLE": COUNTED_SET, "JAC_UNIFICATION_CITY_ON_CASTLE_PLOT": CASTLE_SET})
+        self.assertEqual(model.members[CASTLE_SET], ["JAC_UNIFICATION_CASTLE_NONE"])
+        self.assertEqual(model.args["JAC_UNIFICATION_CASTLE_NONE"], {"X": "-1", "Y": "-1"})
         self.assertEqual(model.sets[model.root], "REQUIREMENTSET_TEST_ANY")
         self.assertEqual(model.members[model.root], ["JAC_UNIFICATION_CASTLES", "JAC_UNIFICATION_CAPITALS"])
         self.assertEqual(model.reqs["JAC_UNIFICATION_ALL_CAPITALS"],
                          ("REQUIREMENT_TEAM_DOMINATION_VICTORY", False))
-        self.assertEqual(model.reqs["JAC_UNIFICATION_CITY_UNMARKED"], ("REQUIREMENT_CITY_HAS_BUILDING", True))
+        self.assertEqual(model.reqs["JAC_UNIFICATION_CITY_NOT_CASTLE"], ("REQUIREMENT_REQUIREMENTSET_IS_MET", True))
         with sqlite3.connect(":memory:") as db:
             db.executescript(SCHEMA)
             db.executescript(script)
-            self.assertEqual(db.execute("SELECT Type,Kind FROM Types").fetchall(), [(VICTORY, "KIND_VICTORY")])
+            self.assertEqual(db.execute("SELECT Type,Kind FROM Types").fetchall(),
+                             [(VICTORY, "KIND_VICTORY"), (REBUILT, "KIND_BUILDING")])
+            self.assertEqual(db.execute("SELECT * FROM Buildings").fetchall(),
+                             [(REBUILT, f"LOC_{REBUILT}_NAME", "DISTRICT_CITY_CENTER", 1, 1)])
             self.assertEqual(db.execute("SELECT RequirementSetId,EnabledByDefault,OneMoreTurn FROM Victories").fetchone(),
                              ("JAC_UNIFICATION_VICTORY_REQUIREMENTS", 1, 0))
             self.assertEqual(dict(db.execute("SELECT RequirementId,Text FROM RequirementStrings")), {
@@ -161,23 +195,79 @@ class UnificationVictoryTests(unittest.TestCase):
             })
 
     def test_victory_follows_owned_castles_razes_and_settler_capitals(self):
-        model = generated_model()
+        model = generated_model(FOUR_SQL)
         oda, date = 0, 1
-        four = [(oda, True), (oda, True), (date, True), (date, True)]
+        four = [(oda, *FOUR[0]), (oda, *FOUR[1]), (date, *FOUR[2]), (date, *FOUR[3])]
         self.assertFalse(model.wins(oda, four))
-        self.assertFalse(model.wins(oda, four[:2] + [(oda, True), (date, True)]), "one castle missing")
-        self.assertTrue(model.wins(oda, [(oda, True)] * 4))
-        # Razed castle: the city and its marker are gone, so 3 of the original 4 suffice.
-        self.assertTrue(model.wins(oda, [(oda, True)] * 3))
-        # Later-founded cities never carry the marker and do not block or count.
-        self.assertTrue(model.wins(oda, [(oda, True)] * 3 + [(date, False), (2, False)]))
-        self.assertFalse(model.wins(date, [(oda, True)] * 3 + [(date, False)]))
+        self.assertFalse(model.wins(oda, four[:2] + [(oda, *FOUR[2]), (date, *FOUR[3])]), "one castle missing")
+        self.assertTrue(model.wins(oda, [(oda, x, y) for x, y in FOUR]))
+        # Razed castle: no city stands on its plot, so 3 of the original 4 suffice.
+        self.assertTrue(model.wins(oda, [(oda, x, y) for x, y in FOUR[:3]]))
+        # Later-founded cities off the registered plots do not block or count.
+        self.assertTrue(model.wins(oda, [(oda, x, y) for x, y in FOUR[:3]] + [(date, 16, 10), (2, 12, 8)]))
+        self.assertFalse(model.wins(date, [(oda, x, y) for x, y in FOUR[:3]] + [(date, 16, 10)]))
         # Historical maps: capitals are castles, so domination alone never decides there.
-        self.assertFalse(model.wins(oda, four[:3] + [(date, True)], domination=True))
-        # Settler starts / ordinary maps: no registered castle -> official domination rule.
-        self.assertFalse(model.wins(oda, [(oda, False), (date, False)]))
-        self.assertFalse(model.wins(oda, [(oda, False)]))
-        self.assertTrue(model.wins(oda, [(oda, False), (date, False)], domination=True))
+        self.assertFalse(model.wins(oda, four, domination=True))
+        # Settler starts / ordinary maps: no castle file loaded -> official domination rule.
+        bare = generated_model()
+        self.assertFalse(bare.wins(oda, [(oda, *FOUR[0]), (date, *FOUR[2])]))
+        self.assertFalse(bare.wins(oda, [(oda, *FOUR[0])]))
+        self.assertTrue(bare.wins(oda, [(oda, *FOUR[0]), (date, *FOUR[2])], domination=True))
+
+    def test_captured_or_transferred_castle_still_counts(self):
+        """Capture keeps the plot and changes only the owner; nothing in the check can be lost."""
+        model = generated_model(FOUR_SQL)
+        oda, date = 0, 1
+        before = [(oda, *FOUR[0]), (oda, *FOUR[1]), (date, *FOUR[2])]  # 4th castle razed
+        self.assertFalse(model.wins(oda, before))
+        self.assertFalse(model.wins(date, before))
+        captured = before[:2] + [(oda, *FOUR[2])]  # Oda takes Date's capital (capture or TransferCity)
+        self.assertTrue(model.wins(oda, captured))
+        self.assertFalse(model.wins(date, captured))
+        # The capture also works the other way: Date taking Oda's castles.
+        self.assertTrue(model.wins(date, [(date, x, y) for x, y in FOUR]))
+        # Old design check: had the marker vanished on capture, a castle captured by Date would
+        # have dropped out and Oda would win with the rest; now Oda must retake it.
+        self.assertFalse(model.wins(oda, [(oda, *FOUR[0]), (oda, *FOUR[1]), (oda, *FOUR[2]), (date, *FOUR[3])]))
+
+    def test_city_rebuilt_on_a_razed_castle_does_not_count(self):
+        """Owner decision 3a (SSOT 3.1): a razed castle drops out, even if a city is rebuilt on its plot."""
+        model = generated_model(FOUR_SQL)
+        oda, date = 0, 1
+        held = [(oda, x, y) for x, y in FOUR[:3]]  # 4th castle razed
+        self.assertTrue(model.wins(oda, held + [(date, *FOUR[3], True)]), "Date's rebuilt city blocks nothing")
+        self.assertFalse(model.wins(date, held + [(date, *FOUR[3], True)]))
+        self.assertTrue(model.wins(oda, held + [(oda, *FOUR[3], True)]))
+        # Without the marker (e.g. capture removed it before the script re-added it) it would block.
+        self.assertFalse(model.wins(oda, held + [(date, *FOUR[3])]))
+        # Only rebuilt cities left on registered plots: nothing counts, so the capital rule decides.
+        rebuilt_only = [(oda, x, y, True) for x, y in FOUR[:2]]
+        self.assertFalse(model.wins(oda, rebuilt_only))
+        self.assertTrue(model.wins(oda, rebuilt_only, domination=True))
+
+    def test_rebuilt_castle_script_marks_razed_plots_and_survives_capture(self):
+        script = (TREE_MOD / "Scripts/JAC_Sengoku_RebuiltCastles.lua").read_text(encoding="utf-8")
+        for needle in (f'"{CASTLE_SET}"', f'"{REBUILT}"', "GameEvents.CityBuilt.Add(OnCityBuilt)",
+                       "GameEvents.CityConquered.Add(OnCityConquered)",
+                       "GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)", "Game:SetProperty(RAZED_PREFIX",
+                       "Game:GetProperty(RAZED_PREFIX", "CreateIncompleteBuilding(MARKER.Index",
+                       "Game.GetCurrentGameTurn() <= GameConfiguration.GetStartTurn()"):
+            self.assertIn(needle, script)
+        self.assertNotIn("CityRemovedFromMap.Add", script)  # UI-side, no plot (see the script header)
+        modinfo = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
+        scripts = {action.get("id"): [f.text for f in action.findall("File")]
+                   for action in modinfo.findall("./InGameActions/AddGameplayScripts")}
+        self.assertEqual(scripts["JAC_Sengoku_RebuiltCastles"], ["Scripts/JAC_Sengoku_RebuiltCastles.lua"])
+        self.assertIn("Scripts/JAC_Sengoku_RebuiltCastles.lua", [f.text for f in modinfo.findall("./Files/File")])
+
+    def test_castle_files_do_not_depend_on_load_order(self):
+        for scripts in ((sql(), FOUR_SQL), (FOUR_SQL, sql())):
+            db = sqlite3.connect(":memory:")
+            db.executescript(SCHEMA)
+            for script in scripts:
+                db.executescript(script)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM RequirementSetRequirements WHERE RequirementSetId=?",
+                                        (CASTLE_SET,)).fetchone()[0], 5)
 
     def test_victory_is_in_sengoku_domain_and_visible_in_official_rankings(self):
         config = ET.parse(TREE_MOD / "Config/JAC_Sengoku_Victories.xml").getroot()
@@ -190,7 +280,8 @@ class UnificationVictoryTests(unittest.TestCase):
             tags.setdefault(row.get("Tag"), set()).add(row.get("Language"))
             self.assertTrue(row.findtext("Text"))
         self.assertEqual(set(tags), {f"LOC_VICTORY_JAC_UNIFICATION_{part}" for part in
-                                     ("NAME", "DESCRIPTION", "BLURB", "PROGRESS", "CAPITALS_PROGRESS")})
+                                     ("NAME", "DESCRIPTION", "BLURB", "PROGRESS", "CAPITALS_PROGRESS")}
+                         | {f"LOC_{REBUILT}_NAME"})
         self.assertTrue(all(langs == {"ja_JP", "en_US", "ru_RU"} for langs in tags.values()))
         modinfo = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
         self.assertEqual([row.text for row in modinfo.findall("./FrontEndActions/UpdateText/File")],
@@ -198,10 +289,10 @@ class UnificationVictoryTests(unittest.TestCase):
 
     def test_test_map_registry_comes_from_map_data_and_stays_in_a_test_only_mod(self):
         path = TEST_MOD / "Maps" / f"{test_map.MAP_NAME}.Civ6Map"
-        castles = test_map.castle_rows(path)
-        self.assertEqual(sorted(castles.values()), [0, 0, 1, 1])
+        registry = test_map.castle_rows(path)
+        self.assertEqual(sorted(registry.values()), [0, 0, 1, 1])
+        self.assertEqual({(x, y) for x, y, _ in castles(path)}, set(FOUR))
         with closing(sqlite3.connect(path)) as db:
-            self.assertEqual({row[0] for row in db.execute("SELECT Plot FROM Cities")}, set(castles))
             self.assertEqual(db.execute("SELECT ID,LeaderType FROM Players ORDER BY ID").fetchall(),
                              [(0, "LEADER_JAC_ODA_NOBUHIDE"), (1, "LEADER_JAC_DATE_TANEMUNE"),
                               (2, "LEADER_JAC_ASHINA_MORIKIYO")])
@@ -209,12 +300,12 @@ class UnificationVictoryTests(unittest.TestCase):
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             capitals = {row[0] for row in db.execute(
                 "SELECT Plot FROM Buildings WHERE BuildingType='BUILDING_PALACE'")}
-        self.assertEqual({castles[plot] for plot in capitals}, {0, 1})
+        self.assertEqual({registry[plot] for plot in capitals}, {0, 1})
         if test_map.OFFICIAL.is_file():  # regenerate with the same tooling and compare
             with tempfile.TemporaryDirectory(dir=ROOT) as folder:
                 fresh = Path(folder) / path.name
                 test_map.build(fresh)
-                self.assertEqual(test_map.castle_rows(fresh), castles)
+                self.assertEqual(test_map.castle_rows(fresh), registry)
                 with closing(sqlite3.connect(fresh)) as a, closing(sqlite3.connect(path)) as b:
                     for table in ("Plots", "PlotOwners", "Units", "StartPositions", "Buildings"):
                         query = f"SELECT * FROM {table} ORDER BY 1, 2"
@@ -225,6 +316,7 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertIn("TEST", modinfo.findtext("./LocalizedText/Text/en_US"))
         self.assertEqual({row.text for row in modinfo.findall("./Files/File")}, {
             "Config/JAC_Test_UnificationMap_Config.xml", "Text/JAC_Test_UnificationMap_Text.xml",
+            "Data/JAC_Unification_Test_Castles.sql",
             f"Maps/{test_map.MAP_NAME}.Civ6Map", f"Maps/{test_map.MAP_NAME}.lua"})
         config = ET.parse(TEST_MOD / "Config/JAC_Test_UnificationMap_Config.xml").getroot()
         self.assertEqual([row.get("File") for row in config.findall("./Maps/Row")], [test_map.MAP_FILE])
@@ -265,12 +357,15 @@ class UnificationVictoryTests(unittest.TestCase):
         own = steps[final + 1]  # the transfer is not visible immediately: wait (live 2026-09-29 "positive castles 2/3")
         self.assertEqual((own["condition"]["type"], own["condition"]["state_name"], own["timeout"]), ("lua", "InGame", 30))
         self.assertIn("owned==total", own["condition"]["code"])
+        # Castles are found by plot in every live check, never by a building.
+        self.assertNotIn("HasBuilding", json.dumps(data))
+        self.assertIn("['25,5']=true", own["condition"]["code"])
         self.assertIn("AutoplayManager.SetActive(true)", steps[final + 2]["code"])
         self.assertIn(VICTORY, steps[final + 3]["condition"]["code"])
         self.assertNotIn("castles", steps[-1].get("code", ""))  # nothing but the screenshot after victory
 
         registry = json.loads((folder / "unification-registry-15km.json").read_text(encoding="utf-8"))
-        self.assertEqual(registry, registry_scenario(verify_or_stamp()))
+        self.assertEqual(registry, registry_scenario())
         self.assertEqual(registry["steps"][1]["map_file"],
                          "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map")
         self.assertIn("total~=56", registry["steps"][-1]["code"])

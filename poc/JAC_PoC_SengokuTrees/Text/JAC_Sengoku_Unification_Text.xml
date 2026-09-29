@@ -16,5 +16,8 @@
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="ja_JP"><Text>登録城のない地図では、全勢力の本拠を支配する</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="en_US"><Text>On maps without registered castles, control every original capital</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="ru_RU"><Text>На картах без зарегистрированных замков контролировать все исходные столицы</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ja_JP"><Text>城跡に再建した都市</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="en_US"><Text>City Rebuilt on a Razed Castle</Text></Row>
+    <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ru_RU"><Text>Город, отстроенный на месте разрушенного замка</Text></Row>
   </LocalizedText>
 </GameData>

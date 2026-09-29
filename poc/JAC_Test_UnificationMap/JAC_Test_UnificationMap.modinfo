@@ -22,6 +22,16 @@
       <ru_RU>Карта для автотестов. Не включайте для игры.</ru_RU>
     </Text>
   </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_Test_UnificationMap_InUse">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
   <FrontEndActions>
     <UpdateDatabase id="JAC_Test_UnificationMap_Config">
       <File>Config/JAC_Test_UnificationMap_Config.xml</File>
@@ -30,10 +40,17 @@
       <File>Text/JAC_Test_UnificationMap_Text.xml</File>
     </UpdateText>
   </FrontEndActions>
+  <InGameActions>
+    <UpdateDatabase id="JAC_Test_UnificationMap_Castles" criteria="JAC_Test_UnificationMap_InUse">
+      <Properties><LoadOrder>300</LoadOrder></Properties>
+      <File>Data/JAC_Unification_Test_Castles.sql</File>
+    </UpdateDatabase>
+  </InGameActions>
   <Files>
     <File>Config/JAC_Test_UnificationMap_Config.xml</File>
     <File>Text/JAC_Test_UnificationMap_Text.xml</File>
     <File>Maps/JAC_Unification_Test.Civ6Map</File>
     <File>Maps/JAC_Unification_Test.lua</File>
+    <File>Data/JAC_Unification_Test_Castles.sql</File>
   </Files>
 </Mod>

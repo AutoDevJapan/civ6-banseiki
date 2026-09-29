@@ -38,6 +38,9 @@
 		<AddGameplayScripts id="JAC_Sengoku_StartingKnowledge" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>
 		</AddGameplayScripts>
+		<AddGameplayScripts id="JAC_Sengoku_RebuiltCastles" criteria="JAC_Sengoku_BanseikiOnly">
+			<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
+		</AddGameplayScripts>
 		<UpdateText id="JAC_Sengoku_Text" criteria="JAC_Sengoku_BanseikiOnly">
 			<File>Text/JAC_Sengoku_Text.xml</File>
 			<File>Text/JAC_Sengoku_Unification_Text.xml</File>
@@ -63,6 +66,7 @@
 		<File>Data/JAC_Sengoku_Victories.sql</File>
 		<File>Data/JAC_Sengoku_Unification.sql</File>
 		<File>Scripts/JAC_Sengoku_StartingKnowledge.lua</File>
+		<File>Scripts/JAC_Sengoku_RebuiltCastles.lua</File>
 		<File>Data/JAC_Sengoku_Icons.xml</File>
 		<File>Config/JAC_Sengoku_Victories.xml</File>
 		<File>Config/JAC_Sengoku_Calendar.xml</File>

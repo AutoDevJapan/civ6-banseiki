@@ -55,17 +55,17 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total~=4 or total-owned~=2 then error('initial castles '..owned..'/'..total) end; if not Game.IsVictoryEnabled('VICTORY_JAC_SENGOKU_UNIFICATION') then error('unification victory disabled') end; if Game.GetWinningTeam()~=nil then error('winner at start') end; return 'registered=4, two held by Date'"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total~=4 or total-owned~=2 then error('initial castles '..owned..'/'..total) end; if not Game.IsVictoryEnabled('VICTORY_JAC_SENGOKU_UNIFICATION') then error('unification victory disabled') end; if Game.GetWinningTeam()~=nil then error('winner at start') end; return 'registered=4, two held by Date'"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local target=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then local capital=Players[owner]:GetCities():GetCapitalCity(); for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) and (not capital or city:GetID()~=capital:GetID()) then target=city end end end end; if not target then error('Date castle to raze missing') end; local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; if CityManager.GetCity(owner,id) then how='fallback transfer (DestroyCity did not raze)'; CityManager.TransferCity(CityManager.GetCity(owner,id),0) end; return 'raze: '..how"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local target=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then local capital=Players[owner]:GetCities():GetCapitalCity(); for _,city in Players[owner]:GetCities():Members() do if castle(city) and (not capital or city:GetID()~=capital:GetID()) then target=city end end end end; if not target then error('Date castle to raze missing') end; local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; if CityManager.GetCity(owner,id) then how='fallback transfer (DestroyCity did not raze)'; CityManager.TransferCity(CityManager.GetCity(owner,id),0) end; return 'raze: '..how"
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "ui_lua",
@@ -103,7 +103,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "save",
@@ -120,19 +120,19 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~=0 then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
+      "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~=0 then for _,city in Players[owner]:GetCities():Members() do if castle(city) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
     },
     {
       "action": "wait_for",
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then return false end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; return total==3 and owned==total"
+        "code": "local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if castle(city) then total=total+1; if owner==0 then owned=owned+1 end end end end; return total==3 and owned==total"
       },
       "timeout": 30
     },
