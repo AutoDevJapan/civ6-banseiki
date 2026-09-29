@@ -185,6 +185,6 @@
     <Row ModifierId="JAC_1534_FEUD_MATSUDAIRA_ODA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL" />
   </ModifierStrings>
   <DiplomaticVisibilitySources>
-    <Row VisibilitySourceType="SOURCE_JAC_1534_ACCESS" Description="LOC_JAC_VIZSOURCE_1534_ACCESS" ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" />
+    <Row VisibilitySourceType="SOURCE_JAC_1534_ACCESS" Description="LOC_JAC_VIZSOURCE_1534_ACCESS" ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS" GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" FromCitizen="true" TraitType="TRAIT_JAC_1534_ACCESS" />
   </DiplomaticVisibilitySources>
 </GameInfo>

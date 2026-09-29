@@ -172,14 +172,25 @@ class Japan1534RelationsTests(unittest.TestCase):
         # At access level None the engine hides every reason, official ones too ("Unknown Reason",
         # Civilopedia_Concepts_Text.xml:771). All 22 houses get +1 the way Printing grants it
         # (Technologies.xml:546-616): MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY on one trait + a source row.
+        # Official rows, field by field (Base/Assets/Gameplay/Data/):
+        #   Technologies.xml:546-549 Modifiers  PRINTING_ADD_DIPLO_VISIBILITY: ModifierId, ModifierType only
+        #   Technologies.xml:603-617 Arguments  Amount=1, Source=SOURCE_TECH, SourceType=DIPLO_SOURCE_ALL_NAMES
+        #   Leaders.xml:1698-1701 / :4011-4025  Catherine: same columns, Source=SOURCE_TRAIT
+        #   Gossip.xml:78 SOURCE_TRAIT: Description, ActionDescription, GossipString, FromCitizen=true,
+        #                 TraitType=FLYING_SQUADRON_TRAIT (the trait that carries the modifier, Leaders.xml:1088)
+        official_modifier = {"ModifierId": "PRINTING_ADD_DIPLO_VISIBILITY",
+                             "ModifierType": "MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY"}
+        official_args = {"Amount": "1", "Source": "SOURCE_TECH", "SourceType": "DIPLO_SOURCE_ALL_NAMES"}
+        official_source = {"VisibilitySourceType": "SOURCE_TRAIT", "Description": "LOC_VIZSOURCE_TRAIT",
+                           "ActionDescription": "LOC_VIZSOURCE_ACTION_TRAIT", "GossipString": "LOC_GOSSIP_SOURCE_TRAIT",
+                           "FromCitizen": "true", "TraitType": "FLYING_SQUADRON_TRAIT"}
         root = ET.parse(FEUDS).getroot()
         mod = write_feuds.ACCESS_MODIFIER
         rows = [row.attrib for row in root.findall("./Modifiers/Row") if row.attrib["ModifierId"] == mod]
-        self.assertEqual(rows, [{"ModifierId": mod, "ModifierType": "MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY"}])
+        self.assertEqual(rows, [{**official_modifier, "ModifierId": mod}])
         args = {row.attrib["Name"]: row.attrib["Value"] for row in root.findall("./ModifierArguments/Row")
                 if row.attrib["ModifierId"] == mod}
-        self.assertEqual(args, {"Amount": "1", "Source": write_feuds.ACCESS_SOURCE,
-                                "SourceType": "DIPLO_SOURCE_ALL_NAMES"})
+        self.assertEqual(args, {**official_args, "Source": write_feuds.ACCESS_SOURCE})
         holders = {row.attrib["CivilizationType"] for row in root.findall("./CivilizationTraits/Row")
                    if row.attrib["TraitType"] == write_feuds.ACCESS_TRAIT}
         self.assertEqual(holders, {f"CIVILIZATION_JAC_{f}" for f in self.data["factions"]})
@@ -188,6 +199,12 @@ class Japan1534RelationsTests(unittest.TestCase):
                           if r.attrib["ModifierId"] == mod], [(write_feuds.ACCESS_TRAIT, mod)])
         sources = [row.attrib for row in root.findall("./DiplomaticVisibilitySources/Row")]
         self.assertEqual([s["VisibilitySourceType"] for s in sources], [write_feuds.ACCESS_SOURCE])
+        # Every official source row names its grant (PrereqTech / TraitType / ...); the bare row gave access 0
+        # live on 2026-09-29. Ours copies SOURCE_TRAIT column for column, gated on the trait that carries it.
+        self.assertEqual(set(sources[0]), set(official_source))
+        self.assertEqual(sources[0]["FromCitizen"], official_source["FromCitizen"])
+        self.assertEqual(sources[0]["TraitType"], write_feuds.ACCESS_TRAIT)
+        self.assertIn(write_feuds.ACCESS_TRAIT, {r.attrib["TraitType"] for r in root.findall("./Traits/Row")})
         text = (MOD / "Text/JAC_JapanMapScale_Text.xml").read_text(encoding="utf-8")
         for key in ("Description", "ActionDescription", "GossipString"):
             tag = sources[0][key]

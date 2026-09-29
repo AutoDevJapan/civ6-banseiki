@@ -18,9 +18,14 @@ The engine also hides every reason (official ones too) while the viewer has acce
 of you" (Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:771). Freshly met houses sit at None
 (no delegation yet, and the Sengoku tree moves TECH_PRINTING's +1 to a later tech), so on these maps
 EVERY major gets +1 access on every met player the way Printing grants it: MODIFIER_PLAYER_ADD_DIPLO_VISIBILITY
-with Amount/Source/SourceType (Base/Assets/Gameplay/Data/Technologies.xml:546-616) and a bare
-DiplomaticVisibilitySources row, attached to one trait that all 22 civilizations carry, like Mongolia's
-(DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:178-179, :352-353, :620-629, :1100-1102).
+with Amount/Source/SourceType (Base/Assets/Gameplay/Data/Technologies.xml:546-616), attached to one
+trait that all 22 civilizations carry, like Mongolia's (DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:178-179,
+:352-353, :620-629). The source row must name what grants it: every official row carries one gate
+(PrereqTech, TraitType, GreatPersonIndividualType, Trader/Delegate/Ally/Spy, or the XP1 TradePostTrait;
+Base/Assets/Gameplay/Data/Gossip.xml:75-81, Expansion1_Civilizations_Major.xml:1100-1105). A bare row (no gate)
+gave access level 0 live on 2026-09-29. The row copies Catherine de Medici's SOURCE_TRAIT, the official
+"+1 access on every met civ from turn 1" (Gossip.xml:78: TraitType + FromCitizen; Base/Assets/Gameplay/Data/Leaders.xml:1088,
+:1698-1701, :4011-4025).
 Opinion values are untouched. The Lua script has all majors meet each other at game start.
 """
 
@@ -103,7 +108,7 @@ def build() -> ET.Element:
     ET.SubElement(t["TraitModifiers"], "Row", TraitType=ACCESS_TRAIT, ModifierId=ACCESS_MODIFIER)
     ET.SubElement(t["DiplomaticVisibilitySources"], "Row", VisibilitySourceType=ACCESS_SOURCE,
                   Description="LOC_JAC_VIZSOURCE_1534_ACCESS", ActionDescription="LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
-                  GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS")
+                  GossipString="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS", FromCitizen="true", TraitType=ACCESS_TRAIT)
     return root
 
 
