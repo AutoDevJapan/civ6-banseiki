@@ -31,7 +31,7 @@ ALLIANCES = ("DIPLOACTION_ALLIANCE", "DIPLOACTION_ALLIANCE_MILITARY", "DIPLOACTI
              "DIPLOACTION_RENEW_ALLIANCE")
 # Rows the tree deletion still removes (lost) or nulls (changed); documented in CASCADE_DROPS.
 EXPECTED_RESIDUAL = {
-    "Adjacency_YieldChanges": (0, 12), "Boosts": (126, 0), "Buildings": (0, 70), "CivicModifiers": (35, 0),
+    "Adjacency_YieldChanges": (0, 12), "Boosts": (126, 0), "Buildings": (0, 70), "CivicModifiers": (27, 0),
     "CivicPrereqs": (80, 0), "CivicQuotes": (113, 0), "CivicRandomCosts": (10, 0), "Civics_XP2": (6, 0),
     "Improvement_BonusYieldChanges": (25, 0), "Improvement_Tourism": (11, 0), "Improvement_ValidFeatures": (1, 0),
     "Improvements": (0, 26), "RandomAgendaCivicTags": (2, 0), "RandomAgendasForCivic": (1, 0),
@@ -64,6 +64,30 @@ class SengokuCascadeTests(unittest.TestCase):
 
     def test_only_documented_rows_are_lost(self):
         self.assertEqual({t: (len(d["lost"]), len(d["changed"])) for t, d in self.result.items()}, EXPECTED_RESIDUAL)
+
+    def test_no_governor_title_source_remains(self):
+        # SSOT 3.2: governors are disabled in the Sengoku pack until redesigned.
+        query = ("SELECT ModifierId FROM Modifiers WHERE ModifierType IN (SELECT ModifierType FROM DynamicModifiers "
+                 "WHERE EffectType='EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS')")
+        sources = {r[0] for r in self.official.execute(query)}
+        self.assertEqual(len(sources), 15)
+        self.assertEqual(self.final.execute(query).fetchall(), [])
+        for (table,) in self.final.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+            for column in (c[1] for c in self.final.execute(f'PRAGMA table_info("{table}")')):
+                if column.lower() == "modifierid":
+                    used = {r[0] for r in self.final.execute(f'SELECT "{column}" FROM "{table}"')}
+                    self.assertEqual(used & sources, set(), table)
+
+    def test_owner_decided_gates(self):
+        # SSOT 3.2: hill farms from T01, corps and armies from T30.
+        hills = self.final.execute("SELECT TerrainType, PrereqTech, PrereqCivic FROM Improvement_ValidTerrains "
+                                   "WHERE ImprovementType='IMPROVEMENT_FARM' AND TerrainType LIKE '%_HILLS'").fetchall()
+        self.assertEqual(sorted(hills), [("TERRAIN_GRASS_HILLS", "TECH_JAC_SENGOKU_IRRIGATION_WORKS", None),
+                                         ("TERRAIN_PLAINS_HILLS", "TECH_JAC_SENGOKU_IRRIGATION_WORKS", None)])
+        corps = self.final.execute("SELECT CommandType, PrereqTech, PrereqCivic FROM UnitCommands "
+                                   "WHERE CommandType IN ('UNITCOMMAND_FORM_CORPS', 'UNITCOMMAND_FORM_ARMY')").fetchall()
+        self.assertEqual(sorted(corps), [(c, "TECH_JAC_SENGOKU_REGIONAL_SUPPLY", None)
+                                         for c in ("UNITCOMMAND_FORM_ARMY", "UNITCOMMAND_FORM_CORPS")])
 
     def test_nulled_items_are_not_available(self):
         hidden = {"Units": "CanTrain=0", "Buildings": "InternalOnly=1", "Improvements": "Buildable=0"}
@@ -111,6 +135,12 @@ class AllianceScenarioTests(unittest.TestCase):
         self.assertLess(grant[0], checks[1])
         self.assertEqual(steps[grant[0]]["state_name"], "GameCore_Tuner")
         self.assertIn(C11, steps[grant[0]]["code"])
+        decided = [s["code"] for s in steps if "EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS" in s.get("code", "")]
+        self.assertEqual(len(decided), 1)
+        self.assertLess(codes.index(decided[0]), grant[0])
+        for needle in ("GetGovernorPoints", "TECH_JAC_SENGOKU_IRRIGATION_WORKS", "TECH_JAC_SENGOKU_REGIONAL_SUPPLY",
+                       "UNITCOMMAND_FORM_CORPS", "UNITCOMMAND_FORM_ARMY"):
+            self.assertIn(needle, decided[0])
 
 
 if __name__ == "__main__":

@@ -148,7 +148,7 @@
 - `ON DELETE SET NULL`（前提が空＝最初から解放）：01_GameplaySchema.sql の Adjacency_YieldChanges:40-43、Features:1259-1260、Resources:2342-2343、Resource_Harvests:2367
 - `ON DELETE SET DEFAULT`（既定値 NULL＝同上）：01_GameplaySchema.sql の Buildings:473,475、Districts:1056-1057、Governments:1467、Improvements:1752-1753、Policies.PrereqCivic:2168、Projects:2201-2202、Units:2903-2917
 
-Districts・Governments・Policies・Projects・StartingCivics・Resources の研究ゲートと Units・Buildings・Improvements の残す行は従来どおり `JAC_Sengoku_Unlocks.sql` と `JAC_Sengoku_Resources.sql` で付け替える。それ以外で実害がある行は生成ファイル `Data/JAC_Sengoku_Cascade.sql`（`CASCADE_REMAPS`）が削除前に戦国ノードへ付け替える。監査は `python tools/sengoku_cascade_audit.py`（公式 Base＋GS のデータで戦国SQLを外部キー有効のまま実行し、公式ツリーの削除だけによる差分を出す）、固定は `tests/test_sengoku_cascade.py`。他の DLC と他の MOD は監査の対象外。「暫定」は設計案に記載がなく、同じ時代枠（公式 Era ID と戦国の期の対応）と内容の近さで選んだもの。GS は防衛協定と研究協定を `Expansion2_RemoveData.xml` で削除済みのため対象外。
+Districts・Governments・Policies・Projects・StartingCivics・Resources の研究ゲートと Units・Buildings・Improvements の残す行は従来どおり `JAC_Sengoku_Unlocks.sql` と `JAC_Sengoku_Resources.sql` で付け替える。それ以外で実害がある行は生成ファイル `Data/JAC_Sengoku_Cascade.sql`（`CASCADE_REMAPS`）が削除前に戦国ノードへ付け替える。監査は `python tools/sengoku_cascade_audit.py`（公式 Base＋GS のデータで戦国SQLを外部キー有効のまま実行し、公式ツリーの削除だけによる差分を出す）、固定は `tests/test_sengoku_cascade.py`。他の DLC と他の MOD は監査の対象外。「暫定」は設計案に記載がなく、同じ時代枠（公式 Era ID と戦国の期の対応）と内容の近さで選んだもの。「決定」はオーナーが決めたもの（SSOT 3.2）。GS は防衛協定と研究協定を `Expansion2_RemoveData.xml` で削除済みのため対象外。
 
 ### 付け替えた行
 
@@ -157,23 +157,17 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | DiplomaticActions | `InitiatorPrereqCivic`=`CIVIC_CIVIL_SERVICE` | 同盟7種（通常・軍事・研究・文化・経済・宗教・更新）が行ごと消え、子の DiplomaticActions_XP1 とDiplomaticStateActions も連鎖して消える。どの家も同盟を結べない | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` | 設計 C11 同盟 |
 | DiplomaticActions | `TargetPrereqCivic`=`CIVIC_CIVIL_SERVICE` | 同上（相手側の前提） | `TargetPrereqCivic`=`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` | 設計 C11 同盟 |
 | DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_OPEN_BORDERS` | 国境開放の取引ができない | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE` | 暫定 C04 関所・通行 |
-| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_WAR_OF_RETRIBUTION` | 開戦事由「報復」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` | 暫定 C11（Q34） |
-| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_JOINT_WAR`、`DIPLOACTION_THIRD_PARTY_WAR`、`DIPLOACTION_DECLARE_LIBERATION_WAR` | 共同戦線・参戦要請・開戦事由「解放」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS` | 暫定 C23 連合出陣（Q34） |
+| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_WAR_OF_RETRIBUTION` | 開戦事由「報復」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` | 決定 C11（暫定の対応を維持。SSOT 3.2） |
+| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_JOINT_WAR`、`DIPLOACTION_THIRD_PARTY_WAR`、`DIPLOACTION_DECLARE_LIBERATION_WAR` | 共同戦線・参戦要請・開戦事由「解放」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS` | 決定 C23 連合出陣（暫定の対応を維持。SSOT 3.2） |
 | DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_RESIDENT_EMBASSY` | 大使館を置けない | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS` | 暫定 C16 使節 |
 | DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DIPLOMATIC_DELEGATION` | 代表団が消える（公式の参照は旧式化の制度だけ） | `InitiatorObsoleteCivic`=`CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS` | 暫定 C16 使節（大使館と入れ替わり） |
-| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_HOLY_WAR` | 開戦事由「聖戦」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES` | 暫定 C18 宗教対立（Q34） |
-| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_PROTECTORATE_WAR`、`DIPLOACTION_DECLARE_RECONQUEST_WAR` | 開戦事由「保護」「再征服」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER` | 暫定 C10（Q34） |
-| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_COLONIAL_WAR`、`DIPLOACTION_DECLARE_TERRITORIAL_WAR`、`DIPLOACTION_DECLARE_IDEOLOGICAL_WAR` | 近代以降の開戦事由3種が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION` | 暫定 最終C30（Q34） |
+| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_HOLY_WAR` | 開戦事由「聖戦」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES` | 決定 C18 宗教対立（暫定の対応を維持。SSOT 3.2） |
+| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_PROTECTORATE_WAR`、`DIPLOACTION_DECLARE_RECONQUEST_WAR` | 開戦事由「保護」「再征服」が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER` | 決定 C10（暫定の対応を維持。SSOT 3.2） |
+| DiplomaticActions | `DiplomaticActionType`=`DIPLOACTION_DECLARE_COLONIAL_WAR`、`DIPLOACTION_DECLARE_TERRITORIAL_WAR`、`DIPLOACTION_DECLARE_IDEOLOGICAL_WAR` | 近代以降の開戦事由3種が消える | `InitiatorPrereqCivic`=`CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION` | 決定 最終C30（暫定の対応を維持。SSOT 3.2） |
 | CivicModifiers | `CivicType`=`CIVIC_EARLY_EMPIRE`<br>`ModifierId`=`CIVIC_ENFORCE_BORDERS` | 国境が開いたままになり、他家のUnitが領内へ自由に入れる | `CivicType`=`CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE` | 暫定 C04 関所 |
 | CivicModifiers | `CivicType`=`CIVIC_FOREIGN_TRADE`<br>`ModifierId`=`CIVIC_GRANT_ONE_TRADE_ROUTE` | 交易路枠が商業区・港まで0で、T05の交易商を作れない | `CivicType`=`CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE` | 暫定 C04（T05と同じ時期） |
 | CivicModifiers | `CivicType`=`CIVIC_MILITARY_TRADITION`<br>`ModifierId`=`CIVIC_GRANT_COMBAT_ADJACENCY_BONUS` | 側面攻撃・援護ボーナスが無い | `CivicType`=`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER` | 暫定 C10 |
 | CivicModifiers | `CivicType`=`CIVIC_DIPLOMATIC_SERVICE`<br>`ModifierId`=`CIVIC_GRANT_SPY` | スパイ枠が0で、C12で解放したスパイを作れない | `CivicType`=`CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE` | 設計 C12 諜報 |
-| CivicModifiers | `CivicType`=`CIVIC_EARLY_EMPIRE`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_DOMAIN_LAW` | 暫定 総督称号（Q32） |
-| CivicModifiers | `CivicType`=`CIVIC_STATE_WORKFORCE`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES` | 暫定 総督称号（Q32） |
-| CivicModifiers | `CivicType`=`CIVIC_RECORDED_HISTORY`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES` | 暫定 総督称号（Q32） |
-| CivicModifiers | `CivicType`=`CIVIC_DEFENSIVE_TACTICS`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER` | 暫定 総督称号（Q32） |
-| CivicModifiers | `CivicType`=`CIVIC_GUILDS`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_FREE_MARKETS` | 暫定 総督称号（Q32） |
-| CivicModifiers | `CivicType`=`CIVIC_MEDIEVAL_FAIRES`<br>`ModifierId`=`CIVIC_GRANT_PLAYER_GOVERNOR_POINTS` | 総督称号を得られない（GSの総督が機能しない） | `CivicType`=`CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS` | 暫定 総督称号（Q32） |
 | TechnologyModifiers | `TechnologyType`=`TECH_MATHEMATICS`<br>`ModifierId`=`MATHEMATICS_ADJUST_SEA_MOVEMENT` | 艦船の移動力+1が無い | `TechnologyType`=`TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING` | 暫定 T10 和船 |
 | TechnologyModifiers | `TechnologyType`=`TECH_CARTOGRAPHY`<br>`ModifierId`=`CARTOGRAPHY_GRANT_OCEAN_NAVIGATION` | 外洋タイルへ入れない | `TechnologyType`=`TECH_JAC_SENGOKU_ATAKEBUNE` | 暫定 T27 大型軍船 |
 | TechnologyModifiers | `TechnologyType`=`TECH_PRINTING`<br>`ModifierId`=`PRINTING_ADD_DIPLO_VISIBILITY` | 外交上の可視度+1が無い | `TechnologyType`=`TECH_JAC_SENGOKU_SURVEY_STANDARDS` | 暫定 T31 |
@@ -182,7 +176,7 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_QUARRY`<br>`PrereqTech`=`TECH_GUNPOWDER` | 採石場の生産力+1が無い | `PrereqTech`=`TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE` | 暫定 T29 石垣 |
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_FISHING_BOATS`<br>`PrereqTech`=`TECH_CARTOGRAPHY` | 漁船のゴールド+2が無い | `PrereqTech`=`TECH_JAC_SENGOKU_HARBOR_PILOTS` | 暫定 T17 港 |
 | Improvement_BonusYieldChanges | `ImprovementType`=`IMPROVEMENT_PLANTATION`<br>`PrereqCivic`=`CIVIC_FEUDALISM` | プランテーションの食料+1が無い | `PrereqCivic`=`CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS` | 暫定 C20（封建制の代理） |
-| Improvement_ValidTerrains | `ImprovementType`=`IMPROVEMENT_FARM`<br>`PrereqCivic`=`CIVIC_CIVIL_ENGINEERING` | 丘陵（平原・草原）に農場を作れない | `PrereqCivic`=NULL<br>`PrereqTech`=`TECH_JAC_SENGOKU_RIVER_CONTROL` | 暫定 T15 治水（Q33） |
+| Improvement_ValidTerrains | `ImprovementType`=`IMPROVEMENT_FARM`<br>`PrereqCivic`=`CIVIC_CIVIL_ENGINEERING` | 丘陵（平原・草原）に農場を作れない | `PrereqCivic`=NULL<br>`PrereqTech`=`TECH_JAC_SENGOKU_IRRIGATION_WORKS` | 決定 T01 用水普請（最初から。SSOT 3.2） |
 | Adjacency_YieldChanges | `PrereqCivic`=`CIVIC_FEUDALISM` | 前提が空になり、農場の隣接食料+1が1ターン目から付く | `PrereqCivic`=`CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS` | 暫定 C20（封建制の代理） |
 | Adjacency_YieldChanges | `PrereqTech`=`TECH_REPLACEABLE_PARTS` | 近代の隣接食料+1も1ターン目から付く（計+2） | `PrereqTech`=`TECH_JAC_SENGOKU_OUTER_DEFENSES` | 暫定 最終T32 |
 | Adjacency_YieldChanges | `ObsoleteTech`=`TECH_REPLACEABLE_PARTS` | 中世の隣接が旧式化しない（上と対） | `ObsoleteTech`=`TECH_JAC_SENGOKU_OUTER_DEFENSES` | 暫定 最終T32 |
@@ -190,14 +184,15 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | Features | `FeatureType`=`FEATURE_JUNGLE` | 熱帯雨林の伐採が研究なしで可能 | `RemoveTech`=`TECH_JAC_SENGOKU_IRON_FORGING` | 暫定 T03（青銅器の代理） |
 | Features | `FeatureType`=`FEATURE_MARSH` | 湿原の除去が研究なしで可能 | `RemoveTech`=`TECH_JAC_SENGOKU_IRRIGATION_WORKS` | 暫定 T01（灌漑の代理） |
 | Resources | `ResourceType`=`RESOURCE_ANTIQUITY_SITE`、`RESOURCE_SHIPWRECK` | 遺跡・沈没船が1ターン目から見える | `PrereqCivic`=`CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION` | 暫定 最終C30（考古学は範囲外） |
-| UnitCommands | `CommandType`=`UNITCOMMAND_FORM_CORPS`、`UNITCOMMAND_FORM_ARMY` | 軍団・大軍団を編成できない | `PrereqCivic`=`CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION` | 暫定 最終C30（Q35） |
+| UnitCommands | `CommandType`=`UNITCOMMAND_FORM_CORPS`、`UNITCOMMAND_FORM_ARMY` | 軍団・大軍団を編成できない | `PrereqCivic`=NULL<br>`PrereqTech`=`TECH_JAC_SENGOKU_REGIONAL_SUPPLY` | 決定 T30 広域兵站（SSOT 3.2） |
 
 ### 付け替えずに失う行
 
 | 表 | 失う行 | 影響と理由 |
 |---|---|---|
 | Boosts / CivicPrereqs / TechnologyPrereqs / CivicQuotes / TechnologyQuotes / CivicRandomCosts / TechnologyRandomCosts / Civics_XP2 / Technologies_XP2 / StartingBoostedCivics / StartingBoostedTechnologies | 削除した公式ノード自身の付随行 | なし（ノードごと消える） |
-| CivicModifiers | 影響力トークン、観光、遺物、スパイ2人目以降、総督の近代以降分、外交勝利点・好感度 | 都市国家・観光・外交勝利は戦国パックで使わない。スパイ・総督の追加枠は Q32 と合わせて判断 |
+| CivicModifiers | 影響力トークン、観光、遺物、スパイ2人目以降、外交勝利点・好感度 | 都市国家・観光・外交勝利は戦国パックで使わない。スパイの追加枠は要検討 |
+| CivicModifiers ほか | 総督称号の付与（公式制度14件、政府の広場とその建物、女王の図書館、偉人イレーネ・アダム・スミス、部族の村、スレイマン） | SSOT 3.2 の決定で総督は戦国向けに作り直すまで無効。付け替えず、`JAC_Sengoku_Unlocks.sql` が付与する Modifier ごと削除する（監査の差分には出ない） |
 | TechnologyModifiers | 乗船移動（横帆船・蒸気・内燃）、都市防御（鋼鉄）、観光、スパイ（コンピュータ）、GDR昇進、未来技術 | 時代外 |
 | Improvement_BonusYieldChanges | 産業以降の改善ボーナス、建設不可の改善（キャンプ・牧草地・固有改善） | 時代外または Buildable=0 |
 | Improvement_Tourism / Improvement_ValidFeatures | 観光・製材所 | 観光は不使用、製材所は Buildable=0 |
@@ -207,4 +202,6 @@ Districts・Governments・Policies・Projects・StartingCivics・Resources の�
 | Routes_XP2 | 鉄道 | 時代外 |
 | Resource_Harvests | 牛・鹿・羊の収穫 | 日本マップに無い（JAC_Sengoku_Resources.sql の方針どおり） |
 
-**要実機確認**：同盟の提案可否は `tools/civ6-autotest/scenarios/sengoku-alliances.json` で確かめる（未実行）。連鎖削除の差分は SQLite での再現で、ゲーム本体の外部キー処理と一致するかは実機の`GameInfo` で確かめる。
+総督を無効にしても公式 UI は壊れない見込み：ランチバーの総督ボタンは `CAPABILITY_GOVERNORS` で出たままだが、通知の印は `CanAppoint()`・`CanPromote()` が真のときだけ出る（`DLC/Expansion1/UI/Replacements/LaunchBar_Expansion1.lua:129-136`）。総督画面は称号0でも `GetGovernorPoints()`・`CanAppoint()` で候補を任命不可として並べるだけで（`DLC/Expansion2/UI/Additions/GovernorPanel.lua:55-57`）、公式でも最初の制度を得るまでは称号0で始まる。政府の広場の説明文からは称号の一文を外した（生成ファイル `Text/JAC_Sengoku_Text.xml`）。偉人イレーネ・アダム・スミスの説明は付与の Modifier ごと消えるため、称号の行が出ない見込み。
+
+**要実機確認**：同盟の提案可否と、総督称号の付与元が無いこと・丘陵の農場が T01・軍団と大軍団が T30 で解放されることは `tools/civ6-autotest/scenarios/sengoku-alliances.json` で確かめる（未実行）。総督画面を開いてもエラーが出ないことは実機で確かめる。連鎖削除の差分は SQLite での再現で、ゲーム本体の外部キー処理と一致するかは実機の`GameInfo` で確かめる。

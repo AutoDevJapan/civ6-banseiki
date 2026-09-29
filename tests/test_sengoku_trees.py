@@ -152,6 +152,13 @@ class SengokuTreeTests(unittest.TestCase):
             CREATE TABLE StartingCivics (Era TEXT, Civic TEXT);
             CREATE TABLE Policies (PolicyType TEXT PRIMARY KEY, PrereqCivic TEXT, PrereqTech TEXT);
             CREATE TABLE Projects (ProjectType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT);
+            CREATE TABLE DynamicModifiers (ModifierType TEXT PRIMARY KEY, EffectType TEXT);
+            CREATE TABLE Modifiers (ModifierId TEXT PRIMARY KEY, ModifierType TEXT);
+            CREATE TABLE CivicModifiers (CivicType TEXT, ModifierId TEXT);
+            CREATE TABLE GameModifiers (ModifierId TEXT PRIMARY KEY);
+            CREATE TABLE GreatPersonIndividualActionModifiers (GreatPersonIndividualType TEXT, ModifierId TEXT);
+            CREATE TABLE GoodyHutSubTypes (SubTypeGoodyHut TEXT PRIMARY KEY, ModifierID TEXT);
+            CREATE TABLE TraitModifiers (TraitType TEXT, ModifierId TEXT);
             INSERT INTO Technologies VALUES ('TECH_POTTERY','Pottery',NULL,25,'ERA_ANCIENT',0,NULL);
             INSERT INTO Civics VALUES ('CIVIC_CODE_OF_LAWS','Code of Laws',NULL,20,'ERA_ANCIENT',0,NULL);
             INSERT INTO Eras VALUES ('ERA_ANCIENT','Ancient',NULL),('ERA_CLASSICAL','Classical',NULL),('ERA_MEDIEVAL','Medieval',NULL),('ERA_RENAISSANCE','Renaissance',NULL);
