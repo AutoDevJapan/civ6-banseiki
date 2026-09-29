@@ -10,6 +10,7 @@
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
 | [`research/civ6-modding-readiness.md`](research/civ6-modding-readiness.md) | 実装着手の準備度調査。手元の Civ6 環境、Civ6 MOD の技術的制約、SSOT の不足 |
+| [`research/court-arbitration.md`](research/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定・所領安堵の設計案（選択肢と推奨） |
 | [`research/japan-1534-start.md`](research/japan-1534-start.md) | 1534年日本マップの当主・城・旧国割当の出典付きレビュー草案 |
 | [`spec/data/japan-1534-start.json`](spec/data/japan-1534-start.json) | 史料上の留保を含む開始データ。53拠点・勢力割当を日本地図の生成器が参照 |
 | [`research/japan-map-resources.md`](research/japan-map-resources.md) | 日本マップの資源・河川・湖沼・植生・火山の調査と出典 |
@@ -19,6 +20,7 @@
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
+| [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
