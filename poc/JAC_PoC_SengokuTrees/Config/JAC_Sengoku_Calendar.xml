@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<RulesetDomainOverrides>
+		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="GameCalendar" Domain="JAC_Sengoku_Calendar"/>
+	</RulesetDomainOverrides>
+	<DomainValues>
+		<Row Domain="JAC_Sengoku_Calendar" Value="CALENDAR_STANDARD_FROM_START_ERA" Name="LOC_EMPTY" Description="LOC_EMPTY" SortIndex="1"/>
+	</DomainValues>
+</GameInfo>
