@@ -16,6 +16,7 @@
 | [`spec/data/japan-map-resources.json`](spec/data/japan-map-resources.json) | 上記調査の機械可読な候補・配置規則 |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
+| [`research/sengoku-ages.md`](research/sengoku-ages.md) | 戦国パックの時代（黄金・暗黒・英雄）再設計案。公式の時代システム調査、4期の名称・ターン、時代スコア源、誓約、効果、選択肢と推奨。オーナー確認前の下書き |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
