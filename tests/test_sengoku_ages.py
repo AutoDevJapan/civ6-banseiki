@@ -482,28 +482,31 @@ class LedgerTests(unittest.TestCase):
         self.turns(1, 66)
         r1 = self.g.LEDGER().history["r1"]
         self.assertEqual((r1.turn, r1.length), (66, 65))
-        # Imagawa: 3 cities, L = 65: golden ceil(31 x 65 / 50) = 41, dark ceil(17 x 1.3) = 23; no points -> dark.
-        self.assertEqual((r1.p3.golden, r1.p3.dark, r1.p3.age), (41, 23, "DARK"))
-        self.assertEqual((r1.p2.golden, r1.p2.dark), (38, 20))  # Hojo: 1 city
-        # 永禄 at turn 73, L = 7; one past dark age: shift 3 - 5 = -2 -> golden ceil(26 x 0.14) = 4, dark ceil(12 x 0.14) = 2.
+        # Imagawa: 3 cities, L = 65: golden ceil(31 x 65 / 300) = 7, dark ceil(17 x 65 / 300) = 4; no points -> dark.
+        self.assertEqual((r1.p3.golden, r1.p3.dark, r1.p3.age), (7, 4, "DARK"))
+        self.assertEqual((r1.p2.golden, r1.p2.dark), (7, 4))  # Hojo: 1 city
+        # 永禄 at turn 73, L = 7; one past dark age: shift 3 - 5 = -2 -> dark ceil(12 x 7 / 300) = 1, golden
+        # ceil(26 x 7 / 300) = 1 raised to dark + 1 = 2 (a normal age stays possible).
         self.g.Players[3].research.techs[1] = True
         self.g.Players[3].research.techs[2] = True
         self.g.Players[3].research.techs[3] = True
         self.g.Players[3].research.techs[4] = True
         self.turns(67, 73)
         r2 = self.g.LEDGER().history["r2"]
-        self.assertEqual((r2.length, r2.p3.golden, r2.p3.dark, r2.p3.score), (7, 4, 2, 4))
+        self.assertEqual((r2.length, r2.p3.golden, r2.p3.dark, r2.p3.score), (7, 2, 1, 4))
         self.assertEqual(r2.p3.age, "HEROIC")  # golden right after dark
         self.assertEqual((self.house(3).golden, self.house(3).dark), (1, 1))
-        # Oda: 2 cities, one past dark: golden ceil(25 x 0.14) = 4, dark ceil(11 x 0.14) = 2.
-        self.assertEqual((r2.p0.golden, r2.p0.dark, r2.p0.age), (4, 2, "DARK"))
+        # Oda: 2 cities, one past dark: dark ceil(11 x 7 / 300) = 1, golden 2.
+        self.assertEqual((r2.p0.golden, r2.p0.dark, r2.p0.age), (2, 1, "DARK"))
         self.assertEqual(self.house(0).dark, 2)
-        # Hojo after two dark ages at 元亀 (L = 37): shift 1 - 10 -> dark ceil(5 x 0.74) = 4; never below 1.
+        # Hojo after two dark ages at 元亀 (L = 37): shift 1 - 10 -> golden ceil(19 x 37 / 300) = 3,
+        # dark ceil(5 x 37 / 300) = 1.
         self.turns(74, 110)
-        self.assertEqual(self.g.LEDGER().history["r3"].p2.dark, 4)
+        r3 = self.g.LEDGER().history["r3"]
+        self.assertEqual((r3.p2.golden, r3.p2.dark), (3, 1))
         self.house(2).dark = 9
-        self.turns(111, 119)  # 天正, L = 9: (14 + 1 - 50) < 0 -> 1
-        self.assertEqual((self.g.LEDGER().history["r4"].p2.golden, self.g.LEDGER().history["r4"].p2.dark), (1, 1))
+        self.turns(111, 119)  # 天正, L = 9: (14 + 1 - 50) < 0 -> dark 1, golden 2
+        self.assertEqual((self.g.LEDGER().history["r4"].p2.golden, self.g.LEDGER().history["r4"].p2.dark), (2, 1))
 
     def test_reign_turns_follow_the_calendar(self):
         self.turns(1, 200)
@@ -553,6 +556,38 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         self.turns(7, 8)
         self.assertEqual(self.parts(1), {"castle": 2, "research": 1})
+
+
+# Live 2026-09-29 (ages-impl-01, 15 km Japan map, 22 AI houses, standard speed): at the 弘治 judgement (turn 66,
+# L = 65) per house (score, cities). Scores are research 3-9 plus event 0-3 points; no castle or alliance points.
+# The old thresholds (official 28/14 per 50 turns) made every house dark.
+KOJI_OBSERVED = [(4, 4), (4, 3), (6, 8), (4, 5), (11, 7), (12, 8), (6, 3), (7, 6), (3, 4), (6, 2), (9, 14),
+                 (7, 6), (6, 3), (3, 1), (5, 6), (9, 4), (4, 2), (4, 4), (3, 4), (6, 5), (5, 2), (5, 4)]
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
+class KojiDistributionTests(unittest.TestCase):
+    def test_observed_koji_scores_land_mostly_normal(self):
+        lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        civs = [f"CIVILIZATION_JAC_H{i}" for i in range(len(KOJI_OBSERVED))]
+        lua.execute(STUBS, lua.table_from(ages_tables(), recursive=True), lua.table_from(civs), START_TURN)
+        g = lua.globals()
+        for pid, (_, cities) in enumerate(KOJI_OBSERVED):
+            for n in range(cities):
+                g.FOUND(pid, n, pid, n == 0, True)
+        lua.execute((MOD / "Scripts/JAC_Sengoku_Ages.lua").read_text(encoding="utf-8"))
+        for turn in range(1, 67):
+            if turn == 30:  # every point as research (the ledger adds research and events alike)
+                for pid, (score, _) in enumerate(KOJI_OBSERVED):
+                    research = g.Players[pid].research
+                    for i in range(score):
+                        (research.techs if i < 10 else research.civics)[i % 10] = True
+            g.START_TURN(turn)
+        r1 = g.LEDGER().history["r1"]
+        self.assertEqual([r1[f"p{pid}"].score for pid in range(len(KOJI_OBSERVED))], [s for s, _ in KOJI_OBSERVED])
+        ages = [r1[f"p{pid}"].age for pid in range(len(KOJI_OBSERVED))]
+        counts = {age: ages.count(age) for age in ("GOLDEN", "NORMAL", "DARK")}
+        self.assertEqual(counts, {"GOLDEN": 3, "NORMAL": 15, "DARK": 4})
 
 
 if __name__ == "__main__":

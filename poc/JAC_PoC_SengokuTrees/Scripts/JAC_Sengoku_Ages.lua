@@ -23,6 +23,11 @@ local GOLDEN_FLAG = "JAC_AGE_GOLDEN"               -- plot properties read by Da
 -- the official GlobalParameters.
 local POINTS = { home = 6, ko = 8, regain = 3, castle = 2, ally = 2, research = 1 }
 local GOLDEN_BASE, DARK_BASE, PAST_AGE_SHIFT, STANDARD_LENGTH = 28, 14, 5, 50
+-- Official era points per ledger point (§5.3). The ledger scores far less than the official era score: live
+-- 2026-09-29 (15 km map, 22 AI houses, turns 1-65) the houses had 3-12 points (research ~0.08 a turn, a few
+-- event points, no castles or alliances), median 5.5 with median 4 cities. The official middle of a normal age
+-- for that house is (21 + 4) x 65 / 50 = 32.5, and 32.5 / 5.5 ~ 6. Provisional.
+local OFFICIAL_PER_POINT = 6
 
 local function Log(message)
 	print("[JAC_AGES] " .. message)
@@ -279,10 +284,12 @@ local function Notify(id, reign, age, policy)
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.
+-- Golden stays above dark, so a short period keeps a normal age between them.
 local function Thresholds(house, cities, length)
 	local shift = cities + PAST_AGE_SHIFT * house.golden - PAST_AGE_SHIFT * house.dark
-	return math.max(1, math.ceil((GOLDEN_BASE + shift) * length / STANDARD_LENGTH)),
-		math.max(1, math.ceil((DARK_BASE + shift) * length / STANDARD_LENGTH))
+	local per = STANDARD_LENGTH * OFFICIAL_PER_POINT
+	local dark = math.max(1, math.ceil((DARK_BASE + shift) * length / per))
+	return math.max(dark + 1, math.ceil((GOLDEN_BASE + shift) * length / per)), dark
 end
 
 local function Judge(l, index)
