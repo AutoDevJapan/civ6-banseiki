@@ -35,6 +35,7 @@ VICTORY = "VICTORY_JAC_SENGOKU_UNIFICATION"
 CASTLE_SET = "JAC_UNIFICATION_CITY_IS_CASTLE"  # city on a registered plot (castle files add to it)
 COUNTED_SET = "JAC_UNIFICATION_CITY_COUNTS"  # ... and not rebuilt on a razed castle
 REBUILT = "BUILDING_JAC_REBUILT_ON_CASTLE"
+RAZED_PREFIX = "JAC_UNIFICATION_RAZED_CASTLE_PLOT_"  # + plot index; Game property set by the script
 TEST_MAP = test_map.TEST_MOD / "Maps" / f"{test_map.MAP_NAME}.Civ6Map"
 REAL_MAP = MAP_MOD / "Maps/JAC_Japan_15km.Civ6Map"
 # Map -> (requirement tag, castle SQL). Each SQL loads only with its map (modinfo criteria).
@@ -184,6 +185,13 @@ def _castle_lua(rows: list[tuple[int, int, int]]) -> str:
             "local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; ")
 
 
+def _razed_lua(rows: list[tuple[int, int, int]]) -> str:
+    """GameCore prelude: registered coordinates, the rebuilt marker, and the script's razed record."""
+    coords = ",".join(f"{{{x},{y}}}" for x, y, _ in rows)
+    return (f"local coords={{{coords}}}; local marker=GameInfo.Buildings['{REBUILT}'].Index; "
+            f"local function razed(x,y) return Game:GetProperty('{RAZED_PREFIX}'..Map.GetPlot(x,y):GetIndex())==true end; ")
+
+
 def _tally() -> str:
     return ("local total=0; local owned=0; "
             "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
@@ -218,9 +226,8 @@ def scenario() -> dict:
         f"return 'registered={total}, two held by Date'"
     )
     # Raze Date's non-capital castle so the condition must shrink to the survivors.
-    # DestroyCity is only a GameCore export string (unverified); if it does not remove
-    # the city, hand the city to Oda instead so the victory checks still run, and
-    # let the wait after the last transfer fail on the castle total.
+    # DestroyCity is only a GameCore export string (worked live 2026-09-29); if it does not
+    # remove the city, hand the city to Oda instead and let the rebuild step fail (no razed plot).
     raze = (
         _castle_lua(rows) + "local target=nil; "
         "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
@@ -241,9 +248,38 @@ def scenario() -> dict:
         "if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; "
         "return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     )
+    # The turn-start scan (JAC_Sengoku_RebuiltCastles.lua) recorded the razed plot before the save.
+    # Found a city there for Ashina the way the official Tuner places cities
+    # (Players[p]:GetCities():Create(x, y), Base/Assets/UI/Tuner/TunerMapPanel.lua:119).
+    rebuild = (
+        _razed_lua(rows) + "local target=nil; "
+        "for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); "
+        "if razed(xy[1],xy[2]) then if city then error('razed plot has a city') end; "
+        "if target then error('more than one razed plot') end; target=xy "
+        "elseif not city then error('empty plot not recorded as razed: '..xy[1]..','..xy[2]) end end; "
+        "if not target then error('no razed plot recorded (raze or turn-start scan failed)') end; "
+        "local builder=nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do "
+        f"if PlayerConfigurations[id]:GetCivilizationTypeName()=='{players[2]['civ']}' then builder=id end end; "
+        "if not builder then error('Ashina missing') end; "
+        "Players[builder]:GetCities():Create(target[1],target[2]); "
+        "if not CityManager.GetCityAt(target[1],target[2]) then error('rebuild failed') end; "
+        "return 'rebuilt '..target[1]..','..target[2]..' for Ashina'"
+    )
+    # After a turn start the rebuilt city holds the marker; the original castles never do.
+    rebuilt = (
+        _razed_lua(rows) + "local n=0; "
+        "for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); "
+        "if city and razed(xy[1],xy[2]) then n=n+1; "
+        "if not city:GetBuildings():HasBuilding(marker) then error('rebuilt city unmarked') end "
+        "elseif city and city:GetBuildings():HasBuilding(marker) then error('original castle marked') end end; "
+        "if n~=1 then error('rebuilt cities '..n) end; "
+        "if Game.GetWinningTeam()~=nil then error('winner before the last castle') end; "
+        "return 'rebuilt city marked; no winner'"
+    )
     final = (
         _castle_lua(rows) + "local last=nil; "
-        f"for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~={HUMAN} then "
+        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
+        f"if PlayerConfigurations[owner]:GetCivilizationTypeName()=='{players[1]['civ']}' then "
         "for _,city in Players[owner]:GetCities():Members() do "
         "if castle(city) then "
         "if last then error('more than one castle held out') end; last=city end end end end; "
@@ -255,14 +291,26 @@ def scenario() -> dict:
         f"return winner==Players[{HUMAN}]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil "
         f"and GameInfo.Victories[v].VictoryType=='{VICTORY}'"
     )
-    # The transfer is not visible in InGame immediately (live 2026-09-29: "positive castles 2/3").
-    # The transferred castle must still count: the plot, not a building, registers it.
-    razed = _castle_lua(rows) + _tally() + f"return total=={total - 1} and owned==total"
+    # Checked in GameCore: the game ends on the transfer and InGame kept showing "2/3" afterwards
+    # (live 2026-09-29, unify-08/11/12/13). GameEvents.CityBuilt fires on TransferCity (unify-13),
+    # so the transferred castle must stay unmarked.
+    transferred = (
+        _razed_lua(rows) + "local owned=0; local rebuilt=0; "
+        "for _,xy in ipairs(coords) do local city=CityManager.GetCityAt(xy[1],xy[2]); "
+        "if razed(xy[1],xy[2]) then rebuilt=rebuilt+1; "
+        "if not city or not city:GetBuildings():HasBuilding(marker) then error('rebuilt city lost') end; "
+        f"if city:GetOwner()=={HUMAN} then error('rebuilt city owned by Oda') end "
+        "else if not city then error('castle missing at '..xy[1]..','..xy[2]) end; "
+        "if city:GetBuildings():HasBuilding(marker) then error('castle marked as rebuilt: '..xy[1]..','..xy[2]) end; "
+        f"if city:GetOwner()=={HUMAN} then owned=owned+1 end end end; "
+        f"if rebuilt~=1 or owned~={total - 1} then error('after transfer owned '..owned..', rebuilt '..rebuilt) end; "
+        f"return 'all {total - 1} castles held by Oda, none marked; rebuilt city marked'"
+    )
     configure = {**base["steps"][1], "map_file": test_map.MAP_FILE, "map_size": test_map.MAP_SIZE,
                  "seed": 620951, "players": players}
     enable = {**base["steps"][0], "ids": [*base["steps"][0]["ids"], test_map.TEST_MOD_ID]}
     return {
-        "name": "Sengoku unification victory on the test map: raze, one castle missing, save/load, then all",
+        "name": "Sengoku unification victory on the test map: raze, one castle missing, save/load, rebuild, then all",
         "judge_profile": "generic",
         "steps": [
             enable, configure, _setup_step(setup, players[1]["leader"]),
@@ -286,9 +334,11 @@ def scenario() -> dict:
             {"action": "exit_to_menu"},  # load runs from the main menu (live 2026-09-29)
             {"action": "load", "name": "jac-unification-negative", "timeout": 300},
             {"action": "ui_lua", "state_name": "InGame", "code": negative},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": rebuild},
+            {"action": "autoplay", "turns": 1, "timeout": 300},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": rebuilt},
             {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": final},
-            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": razed},
-             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": transferred},
             {"action": "ui_lua", "state_name": "InGame", "code": "local human=Game.GetLocalPlayer(); AutoplayManager.SetTurns(1); AutoplayManager.SetReturnAsPlayer(human); AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE); AutoplayManager.SetActive(true); return true"},  # the game ends during this turn, so wait for the winner instead of autoplay completion (live 2026-09-29),
             {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": won},
              "timeout": 300},

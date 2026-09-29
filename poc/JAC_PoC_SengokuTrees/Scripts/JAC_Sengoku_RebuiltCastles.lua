@@ -3,17 +3,21 @@
 -- The victory requirements skip cities holding BUILDING_JAC_REBUILT_ON_CASTLE
 -- (tools/generate_unification_victory.py); this script only places that marker.
 --
--- A razed plot is recorded when a city is founded on it (GameEvents.CityBuilt, official use
--- DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:56,255). Founding needs an empty plot, so after
--- the start turn a registered plot gets a new city only once its castle was razed. The only official
--- removal event, Events.CityRemovedFromMap(playerID, cityID), is UI-side
--- (Base/Assets/UI/WorldView/CityBannerManager.lua:1929,2900) and carries no plot.
+-- A registered plot is razed once a turn starts with no city on it. Capture and transfer never leave
+-- the plot empty, so those castles keep counting. GameEvents.CityBuilt is not a "founded" signal:
+-- it also fires on CityManager.TransferCity (live 2026-09-29, unify-13), so it only re-marks.
+-- Founding needs a unit on the empty plot after the city is gone, so the turn-start scan
+-- (GameEvents.OnGameTurnStarted, DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246) sees the
+-- empty plot first. Events.CityRemovedFromMap has no plot and only UI-side use
+-- (Base/Assets/UI/WorldView/CityBannerManager.lua:1929,2900), so it is not used.
+-- ponytail: a raze and a refound on the same plot within one turn is missed; add a per-player scan
+-- (GameEvents.PlayerTurnStarted) if that shows up in play.
 -- The record is one saved Game property per plot index (as JAC_Sengoku_StartingKnowledge.lua).
 --
 -- Capture removes city-centre buildings (Base/Assets/Gameplay/Data/Districts.xml:43), so the marker is
--- re-added on GameEvents.CityConquered (DLC/NubiaScenario/Scripts/NubiaScenario.lua:937,969) and, for
--- transfers or a capture handled before the buildings are removed, on every GameEvents.OnGameTurnStarted
--- (DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246).
+-- re-added on GameEvents.CityConquered (DLC/NubiaScenario/Scripts/NubiaScenario.lua:937,969),
+-- GameEvents.CityBuilt (DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:56,255; also transfers)
+-- and every turn start.
 local CASTLE_SET = "JAC_UNIFICATION_CITY_IS_CASTLE";
 local MARKER = GameInfo.Buildings["BUILDING_JAC_REBUILT_ON_CASTLE"];
 local RAZED_PREFIX = "JAC_UNIFICATION_RAZED_CASTLE_PLOT_";
@@ -47,25 +51,28 @@ local function MarkRebuilt(plotIndex)
   local city = CityManager.GetCityAt(plot:GetX(), plot:GetY());
   if city and not city:GetBuildings():HasBuilding(MARKER.Index) then
     city:GetBuildQueue():CreateIncompleteBuilding(MARKER.Index, plotIndex, 100);
+    print("JAC_Sengoku_RebuiltCastles: marked city rebuilt on razed castle " .. plot:GetX() .. "," .. plot:GetY());
   end
 end
 
-local function OnCityBuilt(playerID, cityID, x, y)
-  local plot = Map.GetPlot(x, y);
-  if not plot or not Registered()[plot:GetIndex()] then return; end
-  if Game.GetCurrentGameTurn() <= GameConfiguration.GetStartTurn() then return; end  -- map-placed castles
-  Game:SetProperty(RAZED_PREFIX .. plot:GetIndex(), true);
-  MarkRebuilt(plot:GetIndex());
-  print("JAC_Sengoku_RebuiltCastles: city rebuilt on razed castle " .. x .. "," .. y);
-end
-
-local function OnCityConquered(capturerID, ownerID, cityID, x, y)
+local function MarkAt(x, y)
   local plot = Map.GetPlot(x, y);
   if plot then MarkRebuilt(plot:GetIndex()); end
 end
 
+local function OnCityBuilt(playerID, cityID, x, y) MarkAt(x, y); end
+local function OnCityConquered(capturerID, ownerID, cityID, x, y) MarkAt(x, y); end
+
 local function OnGameTurnStarted()
-  for plotIndex in pairs(Registered()) do MarkRebuilt(plotIndex); end
+  local scan = Game.GetCurrentGameTurn() > GameConfiguration.GetStartTurn();  -- map-placed castles
+  for plotIndex, plot in pairs(Registered()) do
+    if scan and not Game:GetProperty(RAZED_PREFIX .. plotIndex)
+        and not CityManager.GetCityAt(plot:GetX(), plot:GetY()) then
+      Game:SetProperty(RAZED_PREFIX .. plotIndex, true);
+      print("JAC_Sengoku_RebuiltCastles: registered castle razed at " .. plot:GetX() .. "," .. plot:GetY());
+    end
+    MarkRebuilt(plotIndex);
+  end
 end
 
 GameEvents.CityBuilt.Add(OnCityBuilt);

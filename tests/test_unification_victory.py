@@ -11,7 +11,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from tools.generate_unification_victory import (
-    CASTLE_FILES, CASTLE_SET, COUNTED_SET, REBUILT, castle_sql, castles, registry_scenario, scenario, sql, verify_registry)
+    CASTLE_FILES, CASTLE_SET, COUNTED_SET, RAZED_PREFIX, REBUILT, castle_sql, castles, registry_scenario, scenario, sql, verify_registry)
 import unification_test_map as test_map  # on sys.path via generate_unification_victory
 
 
@@ -247,13 +247,21 @@ class UnificationVictoryTests(unittest.TestCase):
 
     def test_rebuilt_castle_script_marks_razed_plots_and_survives_capture(self):
         script = (TREE_MOD / "Scripts/JAC_Sengoku_RebuiltCastles.lua").read_text(encoding="utf-8")
-        for needle in (f'"{CASTLE_SET}"', f'"{REBUILT}"', "GameEvents.CityBuilt.Add(OnCityBuilt)",
+        for needle in (f'"{CASTLE_SET}"', f'"{REBUILT}"', f'"{RAZED_PREFIX}"', "GameEvents.CityBuilt.Add(OnCityBuilt)",
                        "GameEvents.CityConquered.Add(OnCityConquered)",
-                       "GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)", "Game:SetProperty(RAZED_PREFIX",
+                       "GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)",
                        "Game:GetProperty(RAZED_PREFIX", "CreateIncompleteBuilding(MARKER.Index",
-                       "Game.GetCurrentGameTurn() <= GameConfiguration.GetStartTurn()"):
+                       "local function OnCityConquered(capturerID, ownerID, cityID, x, y)",
+                       "local function OnCityBuilt(playerID, cityID, x, y)"):
             self.assertIn(needle, script)
         self.assertNotIn("CityRemovedFromMap.Add", script)  # UI-side, no plot (see the script header)
+        # CityBuilt also fires on TransferCity (live 2026-09-29, unify-13), so a raze is recorded only
+        # by the turn-start scan finding the registered plot empty, never by a city appearing on it.
+        scan = script[script.index("local function OnGameTurnStarted"):script.index("GameEvents.CityBuilt.Add")]
+        self.assertEqual(script.count("Game:SetProperty(RAZED_PREFIX"), 1)
+        self.assertIn("Game:SetProperty(RAZED_PREFIX", scan)
+        self.assertIn("not CityManager.GetCityAt(plot:GetX(), plot:GetY())", scan)
+        self.assertIn("Game.GetCurrentGameTurn() > GameConfiguration.GetStartTurn()", scan)  # map-placed castles
         modinfo = ET.parse(TREE_MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
         scripts = {action.get("id"): [f.text for f in action.findall("File")]
                    for action in modinfo.findall("./InGameActions/AddGameplayScripts")}
@@ -352,14 +360,23 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertTrue(negative[0] < actions.index("autoplay") < negative[1] < save < load < negative[2])
         final = next(index for index, step in enumerate(steps)
                      if "transferred the last castle" in step.get("code", ""))
-        # The game ends during that turn, so autoplay is started from Lua and the winner is awaited (live 2026-09-29).
-        self.assertEqual(actions[final + 1:final + 4], ["wait_for", "ui_lua", "wait_for"])
-        own = steps[final + 1]  # the transfer is not visible immediately: wait (live 2026-09-29 "positive castles 2/3")
-        self.assertEqual((own["condition"]["type"], own["condition"]["state_name"], own["timeout"]), ("lua", "InGame", 30))
-        self.assertIn("owned==total", own["condition"]["code"])
-        # Castles are found by plot in every live check, never by a building.
-        self.assertNotIn("HasBuilding", json.dumps(data))
-        self.assertIn("['25,5']=true", own["condition"]["code"])
+        # After the load: rebuild on the razed plot, one turn start marks it, then the last transfer.
+        rebuild = next(index for index, step in enumerate(steps) if "GetCities():Create(" in step.get("code", ""))
+        self.assertTrue(load < rebuild < final)
+        self.assertEqual(actions[rebuild:final], ["ui_lua", "autoplay", "ui_lua"])
+        self.assertIn(RAZED_PREFIX, steps[rebuild]["code"])
+        self.assertIn("rebuilt city unmarked", steps[rebuild + 2]["code"])
+        # The game ends on the transfer and InGame kept "2/3" (live 2026-09-29), so the owners and
+        # markers are read in GameCore; autoplay is started from Lua and the winner is awaited.
+        self.assertEqual(actions[final + 1:final + 4], ["ui_lua", "ui_lua", "wait_for"])
+        own = steps[final + 1]
+        self.assertEqual(own["state_name"], "GameCore_Tuner")
+        self.assertIn("{25,5}", own["code"])
+        self.assertIn("castle marked as rebuilt", own["code"])  # CityBuilt fires on TransferCity (unify-13)
+        self.assertIn("owned~=3", own["code"])
+        self.assertTrue(all(steps[i]["state_name"] == "GameCore_Tuner" for i in (rebuild, rebuild + 2, final, final + 1)))
+        # Castles are found by plot; a building only marks rebuilt cities.
+        self.assertNotIn("BUILDING_JAC_REGISTERED_CASTLE", json.dumps(data))
         self.assertIn("AutoplayManager.SetActive(true)", steps[final + 2]["code"])
         self.assertIn(VICTORY, steps[final + 3]["condition"]["code"])
         self.assertNotIn("castles", steps[-1].get("code", ""))  # nothing but the screenshot after victory
