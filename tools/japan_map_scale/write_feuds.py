@@ -6,6 +6,12 @@ player (Base/Assets/Gameplay/Data/Agendas.xml:451, :813; the reason text comes f
 SimpleModifierDescription). InitialValue without ReductionTurns never decays while the subject
 matches (Agendas.xml:2247 AGENDA_SAME_GOVERNMENT). The subject test is
 REQUIREMENT_PLAYER_TYPE_MATCHES + CivilizationType (DLC/GranColombia_Maya/Data/GranColombia_Maya_Civilizations.xml:403,414).
+
+The reason only reaches the diplomacy screen through a ModifierStrings row (Context "Sample", Text
+LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL = "{diplomaticReason}", filled with SimpleModifierDescription):
+Base/Assets/Gameplay/Data/Agendas.xml:2296-2370 has one per agenda modifier. Without it
+GetDiplomaticModifiers returns LOC_TOOLTIP_DIPLOMACY_UNKNOWN_REASON ("Unknown Reason"), which
+Base/Assets/UI/DiplomacyActionView.lua:915 shows in grey.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from write_support import write_xml
 DATA = ROOT / "documents/spec/data/japan-1534-relations.json"
 PENALTY = -10  # comparable to a denounced friend / different-government reason (-6); never decays
 TEXT_TAG = "LOC_JAC_DIPLO_MODIFIER_1534_FEUD"
+SAMPLE_TAG = "LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"  # "{diplomaticReason}", as every official agenda modifier uses
 
 
 def feud_pairs() -> list[tuple[str, str]]:
@@ -47,7 +54,7 @@ def build() -> ET.Element:
         return ET.SubElement(root, name)
 
     for name in ("Types", "Traits", "CivilizationTraits", "Modifiers", "ModifierArguments", "TraitModifiers",
-                 "RequirementSets", "Requirements", "RequirementArguments", "RequirementSetRequirements"):
+                 "RequirementSets", "Requirements", "RequirementArguments", "RequirementSetRequirements", "ModifierStrings"):
         table(name)
     t = {child.tag: child for child in root}
     for c in civs:
@@ -69,6 +76,7 @@ def build() -> ET.Element:
                       SubjectRequirementSetId=f"JAC_1534_PLAYER_IS_{b}")
         for name, value in (("InitialValue", str(PENALTY)), ("SimpleModifierDescription", TEXT_TAG)):
             ET.SubElement(t["ModifierArguments"], "Row", ModifierId=mod, Name=name, Value=value)
+        ET.SubElement(t["ModifierStrings"], "Row", ModifierId=mod, Context="Sample", Text=SAMPLE_TAG)
         ET.SubElement(t["TraitModifiers"], "Row", TraitType=f"TRAIT_JAC_1534_FEUD_{a}", ModifierId=mod)
     return root
 

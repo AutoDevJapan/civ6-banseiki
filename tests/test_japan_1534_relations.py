@@ -154,6 +154,10 @@ class Japan1534RelationsTests(unittest.TestCase):
             self.assertLess(int(args[(mod_id, "InitialValue")]), 0)
             self.assertNotIn((mod_id, "ReductionTurns"), args)  # never decays while the pair stands
             self.assertEqual(args[(mod_id, "SimpleModifierDescription")], write_feuds.TEXT_TAG)
+        strings = {row.attrib["ModifierId"]: row.attrib for row in root.findall("./ModifierStrings/Row")}
+        self.assertEqual(set(strings), set(mods))  # no row -> "Unknown Reason" on the diplomacy screen
+        for row in strings.values():
+            self.assertEqual((row["Context"], row["Text"]), ("Sample", write_feuds.SAMPLE_TAG))
         self.assertNotIn("SHIMAZU", FEUDS.read_text(encoding="utf-8"))  # friendship is not a feud
         # the checked-in file is what the generator writes
         fresh = write_feuds.build()
