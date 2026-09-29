@@ -78,7 +78,7 @@ class DriverFeatureTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.time.sleep"):
                 detail = runner._autoplay(2, 10, allow_human_elimination=True)
@@ -134,7 +134,7 @@ class DriverFeatureTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.time.sleep"):
                 detail = runner._autoplay(2, 10, research_metrics=True)
@@ -183,7 +183,7 @@ class DriverFeatureTests(unittest.TestCase):
             clock = iter(range(0, 1000, 2))
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch.object(runner, "_choose_dedication", return_value=None), patch(
                 "scenario.time.sleep"

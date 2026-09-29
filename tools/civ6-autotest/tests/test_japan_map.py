@@ -152,7 +152,7 @@ class JapanMapScenarioTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.single_civ_process", return_value=(123, 0.0)), patch(
                 "scenario.process_memory", return_value={"private_bytes": 100, "working_set_bytes": 80}
@@ -175,7 +175,7 @@ class JapanMapScenarioTests(unittest.TestCase):
 
             with patch.object(runner, "_lua", side_effect=lua), patch.object(
                 runner, "_autoplay_status", return_value=AutoplayStatus(52, False, True, 0, -1)
-            ), patch.object(runner, "_close_options_menu"), patch.object(
+            ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
                 runner, "_dismiss_advisor"
             ), patch("scenario.time.sleep"):
                 with self.assertRaisesRegex(ScenarioError, "eliminated during autoplay"):

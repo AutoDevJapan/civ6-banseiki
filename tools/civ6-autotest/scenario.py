@@ -580,8 +580,38 @@ class Runner:
             print("Dismissed blocking Advisor popup", flush=True)
         return dismissed
 
+    # An AI leader's statement or deal proposal to the human opens these contexts and holds the
+    # AI's turn until the human answers, so autoplay stalls (live 2026-09-29, turn 31 on the 15 km map).
+    # The deal view goes first: while it is up the action view is in DEAL_MODE and ignores OnClose.
+    DIPLOMACY_CLOSERS = (
+        # Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129 OnLocalPlayerTurnEnd, the game's own
+        # turn-end path: OnRefuseDeal(true) rejects the AI proposal and closes the session
+        # (:589-613), then OnContinue hides the view (:2868-2870). Base: Base/Assets/UI/DiplomacyDealView.lua:3075-3085.
+        ("DiplomacyDealView", "OnLocalPlayerTurnEnd()", "AI deal proposal"),
+        # Base/Assets/UI/DiplomacyActionView.lua:2883-2886 OnClose, "Act like they pressed ESC".
+        ("DiplomacyActionView", "OnClose()", "AI diplomacy statement"),
+    )
+
+    def _close_diplomacy(self, deadline: float) -> list[str]:
+        # Each call is guarded by ContextPtr:IsHidden() and the handlers ignore repeats during their
+        # fade-out (CloseFocusedState checks BlackFadeAnim), so a repeat after a timeout is a no-op.
+        return self._retry_idempotent(lambda: self._close_diplomacy_once(deadline), deadline)
+
+    def _close_diplomacy_once(self, deadline: float) -> list[str]:
+        states = {state.casefold() for state in self._states(min(5, _remaining(deadline)))}
+        closed = []
+        for state, call, label in self.DIPLOMACY_CLOSERS:
+            if state.casefold() not in states:
+                continue
+            if self._lua(state, f"if ContextPtr:IsHidden() then return false end\n{call}\nreturn true",
+                         min(5, _remaining(deadline))) == "true":
+                closed.append(label)
+        return closed
+
     def _autoplay_status(self, deadline: float) -> AutoplayStatus:
-        return self._retry_idempotent(lambda: self._autoplay_status_once(deadline), deadline)
+        # Retry within 30 s only, so the autoplay loop can close an open diplomacy screen and ask again.
+        return self._retry_idempotent(lambda: self._autoplay_status_once(deadline),
+                                      min(deadline, time.monotonic() + 30))
 
     def _autoplay_status_once(self, deadline: float) -> AutoplayStatus:
         value = self._lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. "
@@ -649,8 +679,32 @@ class Runner:
             elimination_turn = None
             last_alive_turn = start_turn
             last_alive_check_turn = None
+            diplomacy_closes = 0
+            diplomacy_since_resume = False
+            status_failure = None
             while time.monotonic() < deadline:
-                status = self._autoplay_status(deadline)
+                closed = self._close_diplomacy(deadline)
+                if closed:
+                    diplomacy_closes += len(closed)
+                    diplomacy_since_resume = True
+                    self._log("autoplay_diplomacy", "OK", f"closed {', '.join(closed)} "
+                              f"(turn {status.turn if status else start_turn}, total {diplomacy_closes})")
+                    # ponytail: fixed cap per step; a view that keeps reopening means something else is wrong.
+                    if diplomacy_closes > 20 + 5 * turns:
+                        raise ScenarioError(f"Closed {diplomacy_closes} AI diplomacy screens in one autoplay step; "
+                                            "the game keeps reopening them")
+                elif status_failure is not None:
+                    raise status_failure
+                status_failure = None
+                try:
+                    status = self._autoplay_status(deadline)
+                except LuaExecutionError:
+                    raise
+                except (TunerError, OSError) as exc:
+                    # The read-only query may be starved by an open diplomacy screen: close it at the top
+                    # of the loop and ask again. If nothing was open, the failure stops the step as before.
+                    status_failure = exc
+                    continue
                 if recorder and status.turn != recorder.turn:
                     process = single_civ_process()
                     if process is None or process[0] != metrics_pid:
@@ -702,7 +756,7 @@ class Runner:
                         chosen = self._choose_dedication(human, deadline) if dedications < 3 else None
                         if chosen:
                             dedications += 1
-                        elif restarts >= 2:
+                        elif restarts >= 2 and not diplomacy_since_resume:
                             raise ScenarioError(f"Autoplay stopped early at turn {status.turn}/{target}: {status}")
                         remaining = target - status.turn
                         self._lua("InGame", "JAC_AUTOTEST_AUTO_DONE = false\n"
@@ -711,8 +765,12 @@ class Runner:
                                   "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
                                   "AutoplayManager.SetActive(true)\nreturn true",
                                   min(5, _remaining(deadline)))
-                        if not chosen:
+                        if not chosen and not diplomacy_since_resume:
                             restarts += 1
+                        elif diplomacy_since_resume:
+                            self._log("autoplay_diplomacy", "OK",
+                                      f"resumed autoplay for {remaining} turns after closing diplomacy")
+                        diplomacy_since_resume = False
                         inactive_since = None
                 else:
                     inactive_since = None

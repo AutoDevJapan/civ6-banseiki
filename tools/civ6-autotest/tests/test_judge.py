@@ -236,7 +236,7 @@ class AutoplayTests(unittest.TestCase):
                 return next(statuses)
             return "true"
 
-        with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(
+        with patch.object(runner, "_lua", side_effect=fake_lua), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(
             runner, "_dismiss_advisor", return_value=False
         ), patch.object(runner, "_close_options_menu", return_value=False), patch("scenario.time.sleep"):
             detail = runner._autoplay(3, 10)
