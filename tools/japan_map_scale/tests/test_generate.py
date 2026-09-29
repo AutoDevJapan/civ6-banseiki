@@ -610,7 +610,8 @@ class GeneratedMapTests(unittest.TestCase):
             self.assertIn(selected, {f"{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{km}km.Civ6Map"
                                      for km in g.SCALES})
         removal = ET.parse(g.MOD / "Data/JAC_Japan_NoSettlers.xml").getroot()
-        self.assertEqual(removal.find("./MajorStartingUnits/Delete").attrib, {"Unit": "UNIT_SETTLER"})
+        # All starting units are removed (map Units rows only), like the official static scenarios.
+        self.assertEqual([d.attrib for d in removal.findall("./MajorStartingUnits/Delete")], [{}])
 
     def test_city_range_is_limited_to_four_japan_maps(self):
         ruleset_mod = g.MOD.parent / "JAC_PoC_BanseikiRuleset"

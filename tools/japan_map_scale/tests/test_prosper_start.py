@@ -11,6 +11,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
@@ -225,9 +226,26 @@ class ProsperousMapTests(unittest.TestCase):
         self.assertEqual([pl["leader"] for pl in steps[1]["players"] if pl["human"]], ["LEADER_JAC_OUCHI_YOSHITAKA"])
         self.assertEqual(steps[3]["action"], "ui_lua")
         self.assertIn("ungarrisoned cities", steps[3]["code"])
+        self.assertIn("stacked plots", steps[3]["code"])
+        self.assertIn(f"Game:GetProperty('{ps.START_STATE_KEY}')", steps[3]["code"])
         self.assertIn("LEADER_JAC_ODA_NOBUHIDE={2,5,4,", steps[3]["code"])
         self.assertEqual(sum(s["turns"] for s in steps if s["action"] == "autoplay"), 50)
         self.assertIn("SURVIVORS", steps[-1]["code"])
+
+    def test_start_state_script_runs_only_on_the_historical_maps(self):
+        # AI players act on turn 1 before a UI step runs, so the live check reads what this
+        # gameplay script recorded at load (before turn 1) under the same property key.
+        script = (g.MOD / "Scripts/JAC_Japan_StartState.lua").read_text(encoding="utf-8")
+        self.assertIn(f'local KEY = "{ps.START_STATE_KEY}"', script)
+        self.assertIn("GameConfiguration.GetStartTurn()", script)
+        mod = ET.parse(g.MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
+        criteria = {c.attrib["id"]: c.findtext("./ConfigurationValueMatches/Value")
+                    for c in mod.findall("./ActionCriteria/Criteria")}
+        actions = mod.findall("./InGameActions/AddGameplayScripts")
+        self.assertEqual([a.findtext("File") for a in actions], ["Scripts/JAC_Japan_StartState.lua"] * 2)
+        self.assertEqual({criteria[a.attrib["criteria"]] for a in actions},
+                         {f"{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{km}km.Civ6Map" for km in g.SCALES})
+        self.assertIn("Scripts/JAC_Japan_StartState.lua", [f.text for f in mod.findall("./Files/File")])
 
 
 if __name__ == "__main__":

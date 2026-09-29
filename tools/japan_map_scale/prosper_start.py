@@ -241,30 +241,32 @@ def report_for(km: int) -> dict:
         return apply_file(copy, km)
 
 
+START_STATE_KEY = "JAC_JAPAN_START_STATE"  # written by poc/JAC_PoC_JapanMapScale/Scripts/JAC_Japan_StartState.lua
+
+
 def lua_start_check(report: dict) -> str:
-    """Lua for the live scenario: the loaded game matches the map rows (per leader)."""
+    """Lua for the live scenario: the state recorded at load (per leader) matches the map rows.
+
+    AI players move garrisons and buy units on turn 1 before any UI step runs (live run
+    2026-09-29), so the check reads the record the gameplay script made before turn 1.
+    """
     expected = ",".join(
         "{l}={{{cities},{pop},{units},{districts},{walls},{improvements},{gold}}}".format(
             l=g.SEATS[g.SEAT_INDEX[slug]].leader, **row) for slug, row in report.items())
     return (
         "local E={" + expected + "}; "
-        "local w,h=Map.GetGridSize(); local walls=GameInfo.Buildings['BUILDING_WALLS'].Index; "
-        "local cc=GameInfo.Districts['DISTRICT_CITY_CENTER'].Index; local out={'START'}; local bad={}; "
-        "local imps={}; for i=0,Map.GetPlotCount()-1 do local pl=Map.GetPlotByIndex(i); "
-        "if pl:GetImprovementType()>=0 then imps[pl:GetOwner()]=(imps[pl:GetOwner()] or 0)+1 end end; "
-        "for i=0,21 do local p=Players[i]; local leader=PlayerConfigurations[i]:GetLeaderTypeName(); local e=E[leader]; "
-        "if not p or not p:IsAlive() or not e then error('missing player '..i..' '..tostring(leader)) end; "
-        "local mil={}; local units=0; for _,u in p:GetUnits():Members() do local info=GameInfo.Units[u:GetUnitType()]; "
-        "if (info.Combat or 0)>0 or (info.RangedCombat or 0)>0 then units=units+1; mil[u:GetY()*w+u:GetX()]=true end end; "
-        "local cities,pop,wl,gar=0,0,0,0; for _,c in p:GetCities():Members() do cities=cities+1; pop=pop+c:GetPopulation(); "
-        "if c:GetBuildings():HasBuilding(walls) then wl=wl+1 end; if mil[c:GetY()*w+c:GetX()] then gar=gar+1 end end; "
-        "local ds=0; for _,d in p:GetDistricts():Members() do if d:IsComplete() and d:GetType()~=cc then ds=ds+1 end end; "
-        "local gold=math.floor(p:GetTreasury():GetGoldBalance()); "
-        "local got={cities,pop,units,ds,wl,imps[i] or 0,gold}; local names={'cities','pop','units','districts','walls','improvements'}; "
-        "if gar~=cities then bad[#bad+1]=leader..' ungarrisoned cities '..(cities-gar) end; "
+        f"local s=Game:GetProperty('{START_STATE_KEY}'); "
+        "if s==nil then error('no start state recorded (JAC_Japan_StartState.lua)') end; "
+        "local S={}; for id,vals in string.gmatch(s,'(%d+)=([%d,%-]+)') do local t={}; "
+        "for v in string.gmatch(vals,'%-?%d+') do t[#t+1]=tonumber(v) end; S[tonumber(id)]=t end; "
+        "local out={'START'}; local bad={}; local names={'cities','pop','units','districts','walls','improvements'}; "
+        "for i=0,21 do local leader=PlayerConfigurations[i]:GetLeaderTypeName(); local e=E[leader]; local got=S[i]; "
+        "if not got or not e then error('missing player '..i..' '..tostring(leader)) end; "
+        "if got[8]~=got[1] then bad[#bad+1]=leader..' ungarrisoned cities '..(got[1]-got[8]) end; "
+        "if got[9]>0 then bad[#bad+1]=leader..' stacked plots '..got[9] end; "
         "for k=1,6 do if got[k]~=e[k] then bad[#bad+1]=leader..' '..names[k]..' '..got[k]..' expected '..e[k] end end; "
-        "if gold<e[7] then bad[#bad+1]=leader..' gold '..gold..' expected >= '..e[7] end; "
-        "out[#out+1]=leader:gsub('LEADER_JAC_','')..' '..table.concat(got,'/') end; "
+        "if got[7]<e[7] then bad[#bad+1]=leader..' gold '..got[7]..' expected >= '..e[7] end; "
+        "out[#out+1]=leader:gsub('LEADER_JAC_','')..' '..table.concat(got,'/',1,7) end; "
         "if #bad>0 then error(table.concat(bad,'; ')) end; return table.concat(out,'; ')"
     )
 
