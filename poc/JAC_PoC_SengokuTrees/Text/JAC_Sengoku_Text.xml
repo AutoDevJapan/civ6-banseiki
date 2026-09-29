@@ -1,0 +1,407 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_NAME" Language="ja_JP"><Text>領国の基盤</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_NAME" Language="en_US"><Text>Foundations of the Domain</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_NAME" Language="ru_RU"><Text>Основы владения</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_DESCRIPTION" Language="ja_JP"><Text>領国の基盤</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_DESCRIPTION" Language="en_US"><Text>Foundations of the Domain</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_1_DESCRIPTION" Language="ru_RU"><Text>Основы владения</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_NAME" Language="ja_JP"><Text>技術交流と領国競争</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_NAME" Language="en_US"><Text>Exchange and Rival Domains</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_NAME" Language="ru_RU"><Text>Обмен знаниями и борьба владений</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ja_JP"><Text>技術交流と領国競争</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="en_US"><Text>Exchange and Rival Domains</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_2_DESCRIPTION" Language="ru_RU"><Text>Обмен знаниями и борьба владений</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="en_US"><Text>Campaigns for Unification</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_NAME" Language="ru_RU"><Text>Походы за объединение</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ja_JP"><Text>天下布武と広域戦</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="en_US"><Text>Campaigns for Unification</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_3_DESCRIPTION" Language="ru_RU"><Text>Походы за объединение</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_NAME" Language="ja_JP"><Text>統一事業</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_NAME" Language="en_US"><Text>The Work of Unification</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_NAME" Language="ru_RU"><Text>Объединение страны</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_DESCRIPTION" Language="ja_JP"><Text>統一事業</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_DESCRIPTION" Language="en_US"><Text>The Work of Unification</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_ERA_4_DESCRIPTION" Language="ru_RU"><Text>Объединение страны</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_NAME" Language="ja_JP"><Text>用水普請</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_NAME" Language="en_US"><Text>Irrigation Works</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_NAME" Language="ru_RU"><Text>Ирригационные работы</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRRIGATION_WORKS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_NAME" Language="ja_JP"><Text>沿岸航法</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_NAME" Language="en_US"><Text>Coastal Pilotage</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_NAME" Language="ru_RU"><Text>Прибрежное мореходство</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_COASTAL_PILOTAGE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_NAME" Language="ja_JP"><Text>砂鉄鍛冶</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_NAME" Language="en_US"><Text>Iron Forging</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_NAME" Language="ru_RU"><Text>Ковка железа</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_IRON_FORGING_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_NAME" Language="ja_JP"><Text>堀切・土塁</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_NAME" Language="en_US"><Text>Earthwork Forts</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_NAME" Language="ru_RU"><Text>Земляные укрепления</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_EARTHWORK_FORTS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_NAME" Language="ja_JP"><Text>街道と荷駄</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_NAME" Language="en_US"><Text>Roads and Packtrains</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_NAME" Language="ru_RU"><Text>Дороги и вьючные обозы</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_NAME" Language="ja_JP"><Text>鉱脈採掘</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_NAME" Language="en_US"><Text>Ore Prospecting</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_NAME" Language="ru_RU"><Text>Поиск рудных жил</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ORE_PROSPECTING_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_NAME" Language="ja_JP"><Text>兵糧保存</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_NAME" Language="en_US"><Text>Grain Stores</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_NAME" Language="ru_RU"><Text>Хранение зерна</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_GRAIN_STORES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_NAME" Language="ja_JP"><Text>山城縄張</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_NAME" Language="en_US"><Text>Hill Fort Layout</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_NAME" Language="ru_RU"><Text>Планировка горной крепости</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CASTLE_LAYOUT_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_NAME" Language="ja_JP"><Text>灰吹法</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_NAME" Language="en_US"><Text>Cupellation</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_NAME" Language="ru_RU"><Text>Купелирование</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_CUPELLATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_NAME" Language="ja_JP"><Text>和船建造</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_NAME" Language="en_US"><Text>Wooden Shipbuilding</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_NAME" Language="ru_RU"><Text>Строительство деревянных судов</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WOODEN_SHIPBUILDING_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_NAME" Language="ja_JP"><Text>武具製作</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_NAME" Language="en_US"><Text>Armor and Blades</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_NAME" Language="ru_RU"><Text>Оружие и доспехи</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ARMOR_AND_BLADES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_NAME" Language="ja_JP"><Text>鉄砲伝来</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_NAME" Language="en_US"><Text>Firearms Contact</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_NAME" Language="ru_RU"><Text>Знакомство с огнестрельным оружием</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIREARMS_CONTACT_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_NAME" Language="ja_JP"><Text>鉄砲鍛冶</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_NAME" Language="en_US"><Text>Matchlock Craft</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_NAME" Language="ru_RU"><Text>Изготовление фитильных ружей</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_CRAFT_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_NAME" Language="ja_JP"><Text>金銀山経営</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_NAME" Language="en_US"><Text>Mine Management</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_NAME" Language="ru_RU"><Text>Управление рудниками</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MINE_MANAGEMENT_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_NAME" Language="ja_JP"><Text>河川治水</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_NAME" Language="en_US"><Text>River Control</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_NAME" Language="ru_RU"><Text>Укрощение рек</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIVER_CONTROL_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_NAME" Language="ja_JP"><Text>畝状竪堀</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_NAME" Language="en_US"><Text>Ridge Ditches</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_NAME" Language="ru_RU"><Text>Ряды оборонительных рвов</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_RIDGE_DITCHES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_NAME" Language="ja_JP"><Text>水先と港湾</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_NAME" Language="en_US"><Text>Harbor Pilots</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_NAME" Language="ru_RU"><Text>Лоцманы и гавани</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_HARBOR_PILOTS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_NAME" Language="ja_JP"><Text>湯治と薬療</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_NAME" Language="en_US"><Text>Baths and Medicine</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_NAME" Language="ru_RU"><Text>Купальни и лечение</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_BATH_AND_MEDICINE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_NAME" Language="ja_JP"><Text>兵站路網</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_NAME" Language="en_US"><Text>Supply Roads</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_NAME" Language="ru_RU"><Text>Сеть снабжения</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SUPPLY_ROADS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_NAME" Language="ja_JP"><Text>軍船建造</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_NAME" Language="en_US"><Text>Warship Construction</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_NAME" Language="ru_RU"><Text>Строительство военных судов</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_WARSHIP_CONSTRUCTION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_NAME" Language="ja_JP"><Text>石垣普請</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_NAME" Language="en_US"><Text>Stone Ramparts</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_NAME" Language="ru_RU"><Text>Каменные стены</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_STONE_RAMPARTS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_NAME" Language="ja_JP"><Text>鉄砲量産</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_NAME" Language="en_US"><Text>Matchlock Production</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_NAME" Language="ru_RU"><Text>Массовое производство ружей</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_MATCHLOCK_PRODUCTION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_NAME" Language="ja_JP"><Text>玉薬生産</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_NAME" Language="en_US"><Text>Shot and Powder</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_NAME" Language="ru_RU"><Text>Пули и порох</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SHOT_AND_POWDER_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_NAME" Language="ja_JP"><Text>港湾補給</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_NAME" Language="en_US"><Text>Port Supply</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_NAME" Language="ru_RU"><Text>Снабжение через порты</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_PORT_SUPPLY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_NAME" Language="ja_JP"><Text>枡形虎口</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_NAME" Language="en_US"><Text>Angled Gateways</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_NAME" Language="ru_RU"><Text>Угловые ворота</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ANGLED_GATEWAYS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_NAME" Language="ja_JP"><Text>陣城普請</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_NAME" Language="en_US"><Text>Field Forts</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_NAME" Language="ru_RU"><Text>Полевые укрепления</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_FIELD_FORTS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_NAME" Language="ja_JP"><Text>安宅船</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_NAME" Language="en_US"><Text>Atakebune</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_NAME" Language="ru_RU"><Text>Атакэбунэ</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_ATAKEBUNE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_NAME" Language="ja_JP"><Text>城攻め大筒</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_NAME" Language="en_US"><Text>Siege Artillery</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_NAME" Language="ru_RU"><Text>Осадная артиллерия</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SIEGE_ARTILLERY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_NAME" Language="ja_JP"><Text>本丸石垣</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_NAME" Language="en_US"><Text>Keep and Stone Base</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_NAME" Language="ru_RU"><Text>Главная башня и каменное основание</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_KEEP_AND_STONE_BASE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_NAME" Language="ja_JP"><Text>広域兵站</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_NAME" Language="en_US"><Text>Regional Supply</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_NAME" Language="ru_RU"><Text>Региональное снабжение</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_REGIONAL_SUPPLY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_NAME" Language="ja_JP"><Text>検地尺の標準化</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_NAME" Language="en_US"><Text>Survey Standards</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_NAME" Language="ru_RU"><Text>Единые меры для межевания</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_SURVEY_STANDARDS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_NAME" Language="ja_JP"><Text>惣構</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_NAME" Language="en_US"><Text>Outer Defenses</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_NAME" Language="ru_RU"><Text>Внешние укрепления</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_TECH_JAC_SENGOKU_OUTER_DEFENSES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_NAME" Language="ja_JP"><Text>家中掟</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_NAME" Language="en_US"><Text>House Rules</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_NAME" Language="ru_RU"><Text>Правила дома</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_HOUSE_RULES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_NAME" Language="ja_JP"><Text>国人盟約</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_NAME" Language="en_US"><Text>Kokujin Leagues</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_NAME" Language="ru_RU"><Text>Союзы местных землевладельцев</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_KOKUJIN_LEAGUES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_NAME" Language="ja_JP"><Text>寺社と信徒</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_NAME" Language="en_US"><Text>Temples and Believers</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_NAME" Language="ru_RU"><Text>Святилища и верующие</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLES_AND_BELIEVERS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_NAME" Language="ja_JP"><Text>関所と通行</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_NAME" Language="en_US"><Text>Passes and Passage</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_NAME" Language="ru_RU"><Text>Заставы и проезд</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_NAME" Language="ja_JP"><Text>分国法</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_NAME" Language="en_US"><Text>Domain Law</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_NAME" Language="ru_RU"><Text>Законы владения</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAW_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_NAME" Language="ja_JP"><Text>惣村自治</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_NAME" Language="en_US"><Text>Village Assemblies</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_NAME" Language="ru_RU"><Text>Сельские собрания</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_NAME" Language="ja_JP"><Text>学問と記録</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_NAME" Language="en_US"><Text>Learning and Records</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_NAME" Language="ru_RU"><Text>Учёба и записи</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_NAME" Language="ja_JP"><Text>寺内町自治</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_NAME" Language="en_US"><Text>Temple Town Autonomy</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_NAME" Language="ru_RU"><Text>Самоуправление храмовых городов</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEMPLE_TOWN_AUTONOMY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_NAME" Language="ja_JP"><Text>修験の講</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_NAME" Language="en_US"><Text>Mountain Pilgrimage</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_NAME" Language="ru_RU"><Text>Горные паломничества</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MOUNTAIN_PILGRIMAGE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_NAME" Language="ja_JP"><Text>軍役帳</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_NAME" Language="en_US"><Text>Military Service Ledger</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_NAME" Language="ru_RU"><Text>Реестр воинской повинности</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_NAME" Language="ja_JP"><Text>起請文と同盟</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_NAME" Language="en_US"><Text>Oaths and Alliances</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_NAME" Language="ru_RU"><Text>Клятвы и союзы</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_NAME" Language="ja_JP"><Text>郡中惣と密偵</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_NAME" Language="en_US"><Text>Local Leagues and Intelligence</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_NAME" Language="ru_RU"><Text>Местные союзы и разведка</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_NAME" Language="ja_JP"><Text>港町会合</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_NAME" Language="en_US"><Text>Port Merchant Councils</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_NAME" Language="ru_RU"><Text>Советы портовых купцов</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_NAME" Language="ja_JP"><Text>茶会と名物</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_NAME" Language="en_US"><Text>Tea Gatherings and Treasures</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_NAME" Language="ru_RU"><Text>Чайные встречи и ценности</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_GATHERINGS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_NAME" Language="ja_JP"><Text>城下町の集住</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_NAME" Language="en_US"><Text>Castle Town Ordinances</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_NAME" Language="ru_RU"><Text>Указы для призамковых городов</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_NAME" Language="ja_JP"><Text>朝廷・将軍への取次</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_NAME" Language="en_US"><Text>Court and Shogunate Envoys</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_NAME" Language="ru_RU"><Text>Посланники ко двору и сёгуну</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_NAME" Language="ja_JP"><Text>楽市楽座</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_NAME" Language="en_US"><Text>Free Markets</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_NAME" Language="ru_RU"><Text>Свободные рынки</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_FREE_MARKETS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_NAME" Language="ja_JP"><Text>寺社領安堵</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_NAME" Language="en_US"><Text>Shrine Land Guarantees</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_NAME" Language="ru_RU"><Text>Гарантии храмовых земель</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SHRINE_LAND_GUARANTEES_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_NAME" Language="ja_JP"><Text>南蛮使節</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_NAME" Language="en_US"><Text>Nanban Envoys</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_NAME" Language="ru_RU"><Text>Посланники к южным варварам</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_NANBAN_ENVOYS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_NAME" Language="ja_JP"><Text>領国検地</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_NAME" Language="en_US"><Text>Domain Land Surveys</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_NAME" Language="ru_RU"><Text>Межевание владений</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_DOMAIN_LAND_SURVEYS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_NAME" Language="ja_JP"><Text>鉄砲衆編制</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_NAME" Language="en_US"><Text>Gun Corps Organization</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_NAME" Language="ru_RU"><Text>Организация стрелков</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_NAME" Language="ja_JP"><Text>茶の湯外交</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_NAME" Language="en_US"><Text>Tea Diplomacy</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_NAME" Language="ru_RU"><Text>Чайная дипломатия</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TEA_DIPLOMACY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_NAME" Language="ja_JP"><Text>連合軍役</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_NAME" Language="en_US"><Text>Coalition Campaigns</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_NAME" Language="ru_RU"><Text>Союзные походы</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_COALITION_CAMPAIGNS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_NAME" Language="ja_JP"><Text>停戦裁定</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_NAME" Language="en_US"><Text>Truce Arbitration</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_NAME" Language="ru_RU"><Text>Посредничество в перемириях</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ja_JP"><Text>広域検地</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="en_US"><Text>Regional Land Survey</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME" Language="ru_RU"><Text>Общее межевание земель</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_NAME" Language="ja_JP"><Text>朱印状</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_NAME" Language="en_US"><Text>Red Seal Writs</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_NAME" Language="ru_RU"><Text>Грамоты с красной печатью</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_RED_SEAL_WRITS_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_NAME" Language="ja_JP"><Text>刀狩</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_NAME" Language="en_US"><Text>Sword Hunt</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_NAME" Language="ru_RU"><Text>Изъятие мечей</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_SWORD_HUNT_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_NAME" Language="ja_JP"><Text>兵農分離</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_NAME" Language="en_US"><Text>Warrior–Farmer Separation</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_NAME" Language="ru_RU"><Text>Разделение воинов и земледельцев</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_NAME" Language="ja_JP"><Text>港市の統制</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_NAME" Language="en_US"><Text>Port Administration</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_NAME" Language="ru_RU"><Text>Управление портами</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_PORT_ADMINISTRATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_NAME" Language="ja_JP"><Text>所領安堵</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_NAME" Language="en_US"><Text>Land Tenure Confirmation</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_NAME" Language="ru_RU"><Text>Подтверждение земельных прав</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_DESCRIPTION" Language="ja_JP"><Text>戦国ツリーPoC。解放先と効果量は暫定です。</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_DESCRIPTION" Language="en_US"><Text>Sengoku tree PoC. Unlocks and effect values are provisional.</Text></Row>
+    <Row Tag="LOC_CIVIC_JAC_SENGOKU_LAND_TENURE_CONFIRMATION_DESCRIPTION" Language="ru_RU"><Text>Пробный образец древа Сэнгоку. Открываемые объекты и эффекты предварительны.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T09" Language="ja_JP"><Text>銀を採掘する。</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T09" Language="en_US"><Text>Mine silver.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T09" Language="ru_RU"><Text>Добудьте серебро.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ja_JP"><Text>ガレー船を1隻建造する。</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="en_US"><Text>Train a Galley.</Text></Row>
+    <Row Tag="LOC_JAC_SENGOKU_BOOST_T10" Language="ru_RU"><Text>Постройте одну галеру.</Text></Row>
+  </LocalizedText>
+</GameInfo>

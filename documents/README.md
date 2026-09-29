@@ -13,7 +13,11 @@
 | [`research/japan-1534-start.md`](research/japan-1534-start.md) | 1534年日本マップの当主・城・旧国割当の出典付きレビュー草案 |
 | [`spec/data/japan-1534-start.json`](spec/data/japan-1534-start.json) | 上記草案の機械可読版（未採用） |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
+| [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
+| [`research/japan-map-resources.md`](research/japan-map-resources.md) | 日本マップの資源・河川・湖沼の配置候補と出典。オーナー確認前の下書き。機械可読版は [`spec/data/japan-map-resources.json`](spec/data/japan-map-resources.json) |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
+| [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
+| [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
