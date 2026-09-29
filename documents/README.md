@@ -34,6 +34,7 @@
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
 | [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |
 | [`poc/resources.md`](poc/resources.md) | 資源の出現（SSOT 3.2）。戦国ツリー下の技術ゲート、後発地点の Lua API とデータ、独自資源（金・漆）、実機確認項目 |
+| [`poc/house-crests.md`](poc/house-crests.md) | 1534年日本22勢力の家紋・出典・原画・アートビルド・実機確認項目 |
 | [`poc/japan-prosperous-start.md`](poc/japan-prosperous-start.md) | 日本マップ（史実開始）の栄えた1534年開始の実装：人口・建物・区域・改善・部隊・初期金、規模の見直しと実機シナリオ（Q28） |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |

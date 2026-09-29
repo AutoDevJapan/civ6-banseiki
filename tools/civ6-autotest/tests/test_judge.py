@@ -101,6 +101,13 @@ class JudgeTests(unittest.TestCase):
         failed = {c.name for c in judge(logs, "generic") if not c.passed}
         self.assertEqual(failed, {"Generic: [JAC_POC] errors", "Generic: JAC Runtime Error"})
 
+    def test_missing_jac_icon_or_texture_fails(self):
+        logs = self.sample()
+        logs["Lua.log"] += 'DiplomacyRibbon: Could not find icon in CivilizationIcon.UpdateIcon: icon="ICON_CIVILIZATION_CHINA", iconSize=22\n'
+        self.assertTrue(all(c.passed for c in judge(logs, "generic")))
+        logs["Lua.log"] += 'DiplomacyRibbon: Could not find icon in CivilizationIcon.UpdateIcon: icon="ICON_CIVILIZATION_JAC_AINU", iconSize=22\n'
+        failed = {c.name for c in judge(logs, "generic") if not c.passed}
+        self.assertEqual(failed, {"Generic: JAC missing texture"})
     def test_missing_jac_texture_fails(self):
         logs = self.sample()
         logs["Lua.log"] += "LoadScreen: Failed to load background image texture: LEADER_JAC_MORI_MOTONARI_BACKGROUND\n"
@@ -215,6 +222,7 @@ class JudgeTests(unittest.TestCase):
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
             "unification-victory.json", "unification-registry-15km.json",
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",
+            "house-crests.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
             "japan-1534-relations.json", "probe-ally-vision.json", "probe-alliance-type.json", "probe-alliance-expiry.json",
