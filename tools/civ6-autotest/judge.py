@@ -15,6 +15,7 @@ import re
 LOG_NAMES = ("Lua.log", "Database.log", "Modding.log")
 BUNDLE0_ID = "dfa0717e-4d0b-4370-b693-27fc6758571b"
 GROWTH_ID = "7696e937-2044-4f3c-8e13-4e27632e2710"
+JAPAN_MAP_ID = "403be889-1455-4de7-967b-ad54c0ff3431"
 TURN = re.compile(r"\bturn=(\d+)\s+firstTurn=(\d+)\s+turnsSeen=(\d+)")
 RESTORED = re.compile(r"\brestored firstTurn=(\d+) lastTurn=(\d+) turnsSeen=(\d+)")
 GROWTH_RECORD = re.compile(
@@ -133,16 +134,68 @@ def _growth_ui_errors(lua: str) -> list[str]:
     return found
 
 
+def _error_block(lines: list[str], index: int) -> str:
+    """Keep Civ6's following XML/SQL diagnostic lines with their error."""
+    block = [lines[index]]
+    for line in lines[index + 1:]:
+        if re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I):
+            break
+        message = re.sub(r"^\[[\d.]+\](?:\s+\[[^]]+\])?:?\s*", "", line).strip()
+        if (line[:1].isspace() or re.search(r"\bfrom file\b", message, re.I) or re.match(
+                r"(?:from file\b|in XMLSerializer\b|while executing\b|near\b|at line\b)",
+                message, re.I)):
+            block.append(line)
+        else:
+            break
+    return "\n".join(block)
+
+
 def _database_errors(database: str) -> list[str]:
     lines = database.splitlines()
     found = []
     for index, line in enumerate(lines):
         if "ERROR" not in line.upper():
             continue
-        context = "\n".join(lines[index:index + 7])
+        context = _error_block(lines, index)
         if re.search(r"JAC[_\\/.-]|JAC_PoC", context, re.I):
             found.append(line)
     return found
+
+
+def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
+    modding = logs["Modding.log"]
+
+    own = re.compile(r"JAC[_\\/.-]|403be889-1455-4de7-967b-ad54c0ff3431", re.I)
+
+    def related_errors(content: str) -> list[str]:
+        """An error is ours if it names our files, or the file loaded just before it is ours.
+
+        Neighbouring lines are not enough: in the first live run an official DLC warning
+        directly followed by a JAC mod's load line was misattributed.
+        """
+        lines = content.splitlines()
+        errors = []
+        for index, line in enumerate(lines):
+            if not re.search(r"\b(?:ERROR|FAILED|FAILURE|EXCEPTION)\b", line, re.I):
+                continue
+            # "Unable to load <file>" also names the file whose load failed (seen in real logs).
+            source = next((earlier for earlier in reversed(lines[max(0, index - 5):index])
+                           if "Loading" in earlier or "Unable to load" in earlier), "")
+            if own.search(_error_block(lines, index)) or own.search(source):
+                errors.append(line)
+        return errors
+
+    errors = related_errors(modding)
+    database_errors = related_errors(logs["Database.log"])
+    return [
+        Check("Japan map: mod registered", JAPAN_MAP_ID.lower() in modding.lower(),
+              "Modding.log contains mod ID"),
+        Check("Japan map: in-game text applied", "Applying Component - JAC_JapanMapScale_InGameText (UpdateText)" in modding,
+              "map names loaded under the running ruleset"),
+        Check("Japan map: Database.log", not database_errors,
+              f"{len(database_errors)} JAC-related database errors"),
+        Check("Japan map: Modding.log", not errors, f"{len(errors)} JAC-related modding errors"),
+    ]
 
 
 def _bundle0_checks(logs: dict[str, str]) -> list[Check]:
@@ -319,6 +372,8 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
         if type(expected_units) is not int or expected_units < 1:
             raise ValueError("growth judge needs a positive expected_units count")
         checks.extend(_growth_checks(logs, expected_units))
+    elif profile == "japan_map":
+        checks.extend(_japan_map_checks(logs))
     elif profile != "generic":
         raise ValueError(f"Unknown judge profile: {profile}")
     return checks
@@ -336,7 +391,7 @@ def main() -> int:
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--snapshot", type=Path, help="Write baseline before a manual run, then exit")
-    parser.add_argument("--profile", choices=("bundle0", "generic", "growth"), default="bundle0")
+    parser.add_argument("--profile", choices=("bundle0", "generic", "growth", "japan_map"), default="bundle0")
     parser.add_argument("--expected-units", type=int, help="Required unit count for the growth profile")
     args = parser.parse_args()
     log_dir = args.logs or default_log_dir()

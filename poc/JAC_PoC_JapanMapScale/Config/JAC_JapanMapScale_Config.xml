@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameInfo>
+  <Maps>
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" Name="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="120" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_20_SETTLERS_NAME" Description="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="170" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" Name="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Description="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="115" />
+    <Row Domain="Maps:JAC_Banseiki" File="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" Name="LOC_JAC_JAPAN_15_SETTLERS_NAME" Description="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Image="Map_Earth" StaticMap="1" RequiresUniqueLeaders="1" SortIndex="165" />
+  </Maps>
+  <MapSizes>
+    <Row Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" MapSizeType="MAPSIZE_HUGE" Name="LOC_MAPSIZE_HUGE_NAME" Description="LOC_MAPSIZE_HUGE_DESCRIPTION" MinPlayers="22" MaxPlayers="22" DefaultPlayers="22" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10" />
+    <Row Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" MapSizeType="MAPSIZE_HUGE" Name="LOC_MAPSIZE_HUGE_NAME" Description="LOC_MAPSIZE_HUGE_DESCRIPTION" MinPlayers="22" MaxPlayers="22" DefaultPlayers="22" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10" />
+    <Row Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" MapSizeType="MAPSIZE_HUGE" Name="LOC_MAPSIZE_HUGE_NAME" Description="LOC_MAPSIZE_HUGE_DESCRIPTION" MinPlayers="22" MaxPlayers="22" DefaultPlayers="22" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10" />
+    <Row Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" MapSizeType="MAPSIZE_HUGE" Name="LOC_MAPSIZE_HUGE_NAME" Description="LOC_MAPSIZE_HUGE_DESCRIPTION" MinPlayers="22" MaxPlayers="22" DefaultPlayers="22" MinCityStates="0" MaxCityStates="0" DefaultCityStates="0" SortIndex="10" />
+  </MapSizes>
+  <MapDomainOverrides>
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" ParameterId="MapSize" Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" ParameterId="MapSize" Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" ParameterId="MapSize" Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" ParameterId="MapSize" Domain="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" />
+  </MapDomainOverrides>
+  <MapLeaders>
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_ODA_NOBUHIDE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_DATE_TANEMUNE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_ASHINA_MORIKIYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_HOJO_UJITSUNA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_TAKEDA_NOBUTORA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_NAGAO_TAMEKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_IMAGAWA_UJITERU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_MATSUDAIRA_KIYOYASU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_ASAKURA_TAKAKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_ASHIKAGA_YOSHIHARU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_MIYOSHI_NAGAYOSHI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_ROKKAKU_SADAYORI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_HONGANJI_SHONYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_OUCHI_YOSHITAKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_AMAGO_TSUNEHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_MORI_MOTONARI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_CHOSOKABE_KUNICHIKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_OTOMO_YOSHIAKI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_SHIMAZU_TAKAHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_RYUKYU_SHO_SEI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map" LeaderType="LEADER_JAC_AINU_TARIKONA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ODA_NOBUHIDE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_DATE_TANEMUNE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASHINA_MORIKIYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_HOJO_UJITSUNA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_TAKEDA_NOBUTORA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_NAGAO_TAMEKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_IMAGAWA_UJITERU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MATSUDAIRA_KIYOYASU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASAKURA_TAKAKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASHIKAGA_YOSHIHARU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MIYOSHI_NAGAYOSHI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ROKKAKU_SADAYORI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_HONGANJI_SHONYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_OUCHI_YOSHITAKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_AMAGO_TSUNEHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MORI_MOTONARI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_CHOSOKABE_KUNICHIKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_OTOMO_YOSHIAKI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_SHIMAZU_TAKAHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_RYUKYU_SHO_SEI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map" LeaderType="LEADER_JAC_AINU_TARIKONA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_ODA_NOBUHIDE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_DATE_TANEMUNE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_ASHINA_MORIKIYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_HOJO_UJITSUNA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_TAKEDA_NOBUTORA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_NAGAO_TAMEKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_IMAGAWA_UJITERU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_MATSUDAIRA_KIYOYASU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_ASAKURA_TAKAKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_ASHIKAGA_YOSHIHARU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_MIYOSHI_NAGAYOSHI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_ROKKAKU_SADAYORI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_HONGANJI_SHONYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_OUCHI_YOSHITAKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_AMAGO_TSUNEHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_MORI_MOTONARI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_CHOSOKABE_KUNICHIKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_OTOMO_YOSHIAKI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_SHIMAZU_TAKAHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_RYUKYU_SHO_SEI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map" LeaderType="LEADER_JAC_AINU_TARIKONA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ODA_NOBUHIDE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_DATE_TANEMUNE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASHINA_MORIKIYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_HOJO_UJITSUNA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_TAKEDA_NOBUTORA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_NAGAO_TAMEKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_IMAGAWA_UJITERU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MATSUDAIRA_KIYOYASU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASAKURA_TAKAKAGE" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ASHIKAGA_YOSHIHARU" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MIYOSHI_NAGAYOSHI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_ROKKAKU_SADAYORI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_HONGANJI_SHONYO" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_OUCHI_YOSHITAKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_AMAGO_TSUNEHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_MORI_MOTONARI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_CHOSOKABE_KUNICHIKA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_OTOMO_YOSHIAKI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_SHIMAZU_TAKAHISA" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_RYUKYU_SHO_SEI" />
+    <Row Map="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map" LeaderType="LEADER_JAC_AINU_TARIKONA" />
+  </MapLeaders>
+</GameInfo>

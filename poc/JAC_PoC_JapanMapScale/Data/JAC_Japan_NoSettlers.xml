@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <MajorStartingUnits>
+    <Delete Unit="UNIT_SETTLER"/>
+  </MajorStartingUnits>
+</GameInfo>

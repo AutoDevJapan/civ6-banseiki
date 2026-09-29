@@ -10,7 +10,6 @@ import shutil
 import struct
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -19,6 +18,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "poc" / "JAC_PoC_CustomCivs"
 BUILD = Path(__file__).resolve().parent / "build"
+STAGING = BUILD / "cooked"
 STEWPOT = MOD / "Platforms" / "Windows" / "BLPs"
 COOKER_DIR = Path(os.environ.get("JAC_COOKER_DIR", r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker")).expanduser().resolve()
 
@@ -45,7 +45,7 @@ def local_art_root():
 ART_LOCAL = local_art_root()
 ORIGINALS = ART_LOCAL / "JAC_PoC_CustomCivs" / "Originals"
 GROWTH_ORIGINALS = ART_LOCAL / "JAC_PoC_GrowthUI" / "Originals"
-FINAL = ART_LOCAL / "final-01"
+PREVIEWS = BUILD / "previews"
 GROWTH_MOD = Path(os.environ.get("JAC_GROWTH_MOD", str(ROOT / "poc" / "JAC_PoC_GrowthUI"))).expanduser().resolve()
 
 LEADERS = {
@@ -164,7 +164,7 @@ def write_xlp(package, cls, names):
 def texture(name, im, cls="UserInterface"):
     write_dds(BUILD / "Textures" / f"{name}.dds", im)
     write_tex(name, im.size, cls)
-    im.save(FINAL / f"{name}.png")
+    im.save(PREVIEWS / f"{name}.png")
     return name
 
 
@@ -247,7 +247,7 @@ def growth_icon():
     out.alpha_composite(cut, ((26 - cut.width) // 2, (26 - cut.height) // 2))
     dest = GROWTH_MOD / "UI" / "Textures" / "JAC_Notebooks_Hook.dds"
     write_dds(dest, out)
-    out.save(FINAL / "JAC_Notebooks_Hook.png")
+    out.save(PREVIEWS / "JAC_Notebooks_Hook.png")
     print(f"OK {dest} {dest.stat().st_size} bytes")
 
 
@@ -261,7 +261,7 @@ def contact_sheet(include_growth):
                   f"FALLBACK_NEUTRAL_JAC_{key}"]
     if include_growth:
         names.append("JAC_Notebooks_Hook")
-    pngs = [FINAL / f"{name}.png" for name in names]
+    pngs = [PREVIEWS / f"{name}.png" for name in names]
     cols, cell_w, cell_h = 4, 420, 320
     rows = (len(pngs) + cols - 1) // cols
     sheet = Image.new("RGB", (cols * cell_w, rows * cell_h), (34, 39, 48))
@@ -275,8 +275,8 @@ def contact_sheet(include_growth):
         pane = Image.new("RGBA", (cell_w - 36, cell_h - 55), (115, 123, 133, 255))
         pane.alpha_composite(image, ((pane.width - image.width) // 2, (pane.height - image.height) // 2))
         sheet.paste(pane.convert("RGB"), (x + 18, y + 43))
-    sheet.save(FINAL / "contact-sheet.png")
-    print(f"OK {FINAL / 'contact-sheet.png'}: {len(pngs)} final images")
+    sheet.save(PREVIEWS / "contact-sheet.png")
+    print(f"OK {PREVIEWS / 'contact-sheet.png'}: {len(pngs)} final images")
 
 
 def cook(package, stewpot):
@@ -321,9 +321,9 @@ def main():
         print(f"SKIP GrowthUI DDS: mod folder absent at {GROWTH_MOD} (set JAC_GROWTH_MOD to override)")
 
     shutil.rmtree(BUILD, ignore_errors=True)
-    (BUILD / "Textures").mkdir(parents=True)
-    (BUILD / "XLPs").mkdir()
-    FINAL.mkdir(parents=True, exist_ok=True)
+    (BUILD / "Textures").mkdir(parents=True, exist_ok=True)
+    (BUILD / "XLPs").mkdir(exist_ok=True)
+    PREVIEWS.mkdir(parents=True, exist_ok=True)
 
     order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
     leader_masters = [leader_icon_master(k) for k in order]
@@ -349,19 +349,18 @@ def main():
         "JAC_CustomCivs_Leaders": ("UITexture", leaders),
         "JAC_CustomCivs_Fallback": ("LeaderFallback", fallbacks),
     }
-    with tempfile.TemporaryDirectory(prefix="blp-staging-", dir=BUILD) as staging_dir:
-        staging = Path(staging_dir)
-        for package, (cls, names) in packages.items():
-            write_xlp(package, cls, names)
-            started_ns = time.time_ns()
-            cook(package, staging)
-            verify_blp(package, names, started_ns, staging)
+    STAGING.mkdir(exist_ok=True)
+    for package, (cls, names) in packages.items():
+        write_xlp(package, cls, names)
+        started_ns = time.time_ns()
+        cook(package, STAGING)
+        verify_blp(package, names, started_ns, STAGING)
 
-        STEWPOT.mkdir(parents=True, exist_ok=True)
-        for package in packages:
-            destination = STEWPOT / f"{package}.blp"
-            (staging / destination.name).replace(destination)
-            print(f"Installed {destination}")
+    STEWPOT.mkdir(parents=True, exist_ok=True)
+    for package in packages:
+        destination = STEWPOT / f"{package}.blp"
+        (STAGING / destination.name).replace(destination)
+        print(f"Installed {destination}")
 
     if growth_available:
         growth_icon()

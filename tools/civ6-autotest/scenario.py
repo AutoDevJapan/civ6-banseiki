@@ -17,6 +17,7 @@ from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ
                    require_single_civ_process)
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
+from metrics import TurnMetrics, process_memory
 from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, newest_mod_file,
                      restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
@@ -28,6 +29,7 @@ ACTIONS = {"restart_game", "enable_mods", "configure", "start_game", "autoplay",
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 MOD_ID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 TYPE_ID = re.compile(r"^[A-Z][A-Z0-9_]+$")
+MAP_FILE = re.compile(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$")
 
 
 class ScenarioError(RuntimeError):
@@ -79,8 +81,8 @@ def _safe_relative_path(value: str) -> Path:
 def validate_scenario(data: dict) -> None:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
         raise ScenarioError("Scenario needs a name")
-    if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth"):
-        raise ScenarioError("judge_profile must be bundle0, generic or growth")
+    if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth", "japan_map"):
+        raise ScenarioError("judge_profile must be bundle0, generic, growth or japan_map")
     if data.get("judge_profile") == "growth":
         if type(data.get("expected_units")) is not int or data["expected_units"] < 1:
             raise ScenarioError("growth scenario needs a positive expected_units count")
@@ -109,6 +111,11 @@ def validate_scenario(data: dict) -> None:
                     raise ScenarioError(f"Step {number}: invalid {key}")
             if type(step.get("seed")) is not int or not -2**31 <= step["seed"] < 2**31:
                 raise ScenarioError(f"Step {number}: seed must be a signed 32-bit integer")
+            if "map_file" in step and (not isinstance(step["map_file"], str)
+                                       or not MAP_FILE.fullmatch(step["map_file"])):
+                raise ScenarioError(f"Step {number}: invalid map_file")
+            if "city_states" in step and (type(step["city_states"]) is not int or not 0 <= step["city_states"] <= 24):
+                raise ScenarioError(f"Step {number}: city_states must be an integer from 0 to 24")
             players = step.get("players")
             if not isinstance(players, list) or len(players) < 2 or sum(p.get("human") is True for p in players if isinstance(p, dict)) != 1:
                 raise ScenarioError(f"Step {number}: specify at least two players and exactly one human")
@@ -120,9 +127,14 @@ def validate_scenario(data: dict) -> None:
         elif action == "autoplay":
             if type(step.get("turns")) is not int or step["turns"] < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
+            if "metrics" in step and type(step["metrics"]) is not bool:
+                raise ScenarioError(f"Step {number}: metrics must be boolean")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
+            for key in ("capture_as", "equals_capture"):
+                if key in step and (not isinstance(step[key], str) or not TYPE_ID.fullmatch(step[key])):
+                    raise ScenarioError(f"Step {number}: invalid {key}")
             try:
                 validate_lua_code(step["code"])
             except ValueError as exc:
@@ -210,6 +222,8 @@ def _configure_code(step: dict) -> str:
         "GameConfiguration.SetToDefaults()",
         f"GameConfiguration.SetRuleSet({_lua_string(step['ruleset'])})",
         "GameConfiguration.UpdateEnabledMods()",
+        *([f"MapConfiguration.SetValue('MAP_SCRIPT', {_lua_string(step['map_file'])})"]
+          if "map_file" in step else []),
         f"MapConfiguration.SetMapSize({_lua_string(step['map_size'])})",
         f"GameConfiguration.SetGameSpeedType({_lua_string(step['speed'])})",
         f"MapConfiguration.SetValue('RANDOM_SEED', {step['seed']})",
@@ -217,6 +231,10 @@ def _configure_code(step: dict) -> str:
         f"MapConfiguration.SetMaxMajorPlayers({len(players)})",
         f"GameConfiguration.SetParticipatingPlayerCount({len(players)} + GameConfiguration.GetHiddenPlayerCount())",
     ]
+    if "city_states" in step:  # otherwise the map size default (18 on Huge) survives a FireTuner setup
+        count = step["city_states"]
+        lines += [f"GameConfiguration.SetValue('CITY_STATE_COUNT', {count})",
+                  f"if GameConfiguration.GetValue('CITY_STATE_COUNT') ~= {count} then error('city-state count not applied') end"]
     for index, player in enumerate(players):
         leader, civ = _lua_string(player["leader"]), _lua_string(player["civ"])
         slot = "SS_TAKEN" if player["human"] else "SS_COMPUTER"
@@ -235,8 +253,9 @@ def _configure_code(step: dict) -> str:
 
 class Runner:
     def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int,
-                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR):
+                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False):
         self.scenario = scenario
+        self.owner_start = owner_start
         self.output = output
         self.logs = logs
         self.saves = saves
@@ -247,6 +266,8 @@ class Runner:
         self.baseline: dict | None = None
         self.log_step_baseline: dict | None = None
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
+        self.metrics_runs = 0
+        self.lua_captures: dict[str, str] = {}
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -360,7 +381,10 @@ class Runner:
         last = "FrontEnd not ready"
         while time.monotonic() < deadline:
             if skip_opening and time.monotonic() >= next_click:
-                click_fraction(0.5, 0.15)
+                try:
+                    click_fraction(0.5, 0.15)
+                except InputError:
+                    skip_opening = False  # focus refused: let the opening play to the end
                 next_click = time.monotonic() + 12
             try:
                 value = self._lua("FrontEnd", "return UI.IsInFrontEnd()",
@@ -427,9 +451,20 @@ class Runner:
                     time.sleep(min(0.5, max(0, end - time.monotonic())))
                     continue
                 _remaining(end)
-                press_key(VK_ESCAPE, deadline=end)
+                # Press Begin Game through the load screen's own Lua handler when that state
+                # exists: it needs no foreground window, which Windows may refuse (live
+                # 2026-09-29). Errors after sending still stop the run (no replay).
+                try:
+                    states = self._states(min(5, _remaining(end)))
+                except (TunerError, OSError):
+                    states = []
+                if any(state.casefold() == "loadscreen" for state in states):
+                    self._lua("LoadScreen", "OnActivateButtonClicked()\nreturn true", min(5, _remaining(end)))
+                    last = "Begin Game pressed via LoadScreen Lua"
+                else:
+                    press_key(VK_ESCAPE, deadline=end)
+                    last = "Esc sent on loading screen"
                 begin_game_sent = True
-                last = "Esc sent on loading screen"
                 # The FrontEnd connection can keep its old state list across the transition.
                 self._disconnect()
             try:
@@ -491,7 +526,8 @@ class Runner:
                           min(5, _remaining(deadline)))
         return _parse_autoplay_status(value)
 
-    def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None) -> str:
+    def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
+                  record_metrics: bool = False) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
         # An open partial screen and the base game's advisor can both hold input.
         self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true",
@@ -509,6 +545,8 @@ class Runner:
             "LuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\n"
             f"AutoplayManager.SetTurns({turns})\n"
             "AutoplayManager.SetReturnAsPlayer(human)\n"
+            # NONE shows every leader in the ribbon during autoplay, but observing as the human
+            # left the game without a local player after autoplay (live 2026-09-29), so keep NONE.
             "AutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\n"
             "AutoplayManager.SetActive(true)\n"
             "return tostring(startTurn) .. '|' .. tostring(human)"
@@ -520,12 +558,34 @@ class Runner:
             except ValueError as exc:
                 raise ScenarioError(f"Unexpected autoplay start: {start_value!r}") from exc
             target = start_turn + turns
+            recorder = None
+            if record_metrics:
+                self.metrics_runs += 1
+                process = single_civ_process()
+                if process is None:
+                    raise ScenarioError("Civ VI process disappeared before metrics sampling")
+                metrics_pid = process[0]
+                recorder = TurnMetrics(self.output / f"autoplay-metrics-{self.metrics_runs}.jsonl", start_turn)
+                recorder.start(process_memory(metrics_pid))
             restarts = 0
             inactive_since = None
             status = None
             while time.monotonic() < deadline:
                 status = self._autoplay_status(deadline)
+                if recorder and status.turn != recorder.turn:
+                    process = single_civ_process()
+                    if process is None or process[0] != metrics_pid:
+                        raise ScenarioError("Civ VI process changed during metrics sampling")
+                    recorder.sample(status.turn, process_memory(metrics_pid))
                 _remaining(deadline)
+                if status.turn > target or (status.local_player < 0 and not status.active and status.event):
+                    # Autoplay cannot return to a player the AI lost with; turns then keep running
+                    # without a local player (live 2026-09-29, Oda eliminated before turn 51).
+                    alive = self._lua("InGame", f"return tostring(Players[{human}]:IsAlive())",
+                                      min(5, _remaining(deadline)))
+                    if alive == "false":
+                        raise ScenarioError(f"Human player {human} was eliminated during autoplay "
+                                            f"(stopped at turn {status.turn}, target {target})")
                 if status.turn > target:
                     raise ScenarioError(f"Autoplay overshot turn {target}: {status}")
                 if (status.event and status.turn == target and not status.active
@@ -550,7 +610,7 @@ class Runner:
                         inactive_since = None
                 else:
                     inactive_since = None
-                time.sleep(min(0.5, max(0, deadline - time.monotonic())))
+                time.sleep(min(0.1 if recorder else 0.5, max(0, deadline - time.monotonic())))
             else:
                 raise ScenarioError(f"Autoplay timed out at turn {status.turn if status else '?'} / {target}; last: {status}")
         except (LuaResponseUnknown, LuaExecutionError):
@@ -568,7 +628,11 @@ class Runner:
         self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
                   "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
         _remaining(deadline)
-        return f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
+        detail = f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
+        if recorder:
+            detail += (f"; metrics=autoplay-metrics-{self.metrics_runs}.jsonl"
+                       f" observed={recorder.observed_turns} missed={recorder.missed_turns}")
+        return detail
 
     def _end_turn(self, timeout: float, *, deadline: float | None = None) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
@@ -625,9 +689,17 @@ class Runner:
         if single_civ_process() is not None:
             raise ScenarioError("A Civ VI process appeared before Steam relaunch")
         self._launch_steam_and_wait(deadline)
+        if self.owner_start:
+            # The owner is using the PC: Windows refuses to move focus, so let the opening finish.
+            self._disconnect()
+            self._wait_frontend_ready(_remaining(deadline), skip_opening=False)
+            return "Civ VI relaunched via Steam; opening played to the end; FrontEnd answered"
         # Let the opening movie start before sending its skip click. Keep clear of the menu buttons.
         time.sleep(min(8, _remaining(deadline)))
-        click_fraction(0.5, 0.15)
+        try:
+            click_fraction(0.5, 0.15)
+        except InputError as exc:  # focus refused; the opening ends by itself
+            print(f"Opening skip click unavailable ({exc}); waiting for the opening", flush=True)
         self._disconnect()
         self._wait_frontend_ready(_remaining(deadline), skip_opening=True)
         return "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
@@ -649,6 +721,17 @@ class Runner:
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
             return f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, players={len(step['players'])}"
+        if action == "start_game" and self.owner_start:
+            # The owner presses Start Game; the configured setup is shown, not reset (MainMenu's
+            # OnAdvancedSetup would call SetToDefaults, so the popup is queued directly).
+            before = self._loadscreen_count()
+            self._lua("FrontEnd", "if not UI.IsInFrontEnd() then error('main menu required') end\n"
+                      "UIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\n"
+                      "return true", min(5, _remaining(deadline)))
+            print("OWNER ACTION: press Start Game on the Create Game screen", flush=True)
+            wait = max(timeout, 3600.0)
+            self._enter_game_after_loadscreen(before, wait, deadline=time.monotonic() + wait)
+            return "owner pressed Start Game; single-player game reached InGame"
         if action == "start_game":
             before = self._loadscreen_count()
             response_unknown = False
@@ -662,11 +745,18 @@ class Runner:
                                               response_unknown=response_unknown)
             return "single-player game reached InGame"
         if action == "autoplay":
-            return self._autoplay(step["turns"], timeout, deadline=deadline)
+            return self._autoplay(step["turns"], timeout, deadline=deadline,
+                                  record_metrics=step.get("metrics", False))
         if action == "end_turn":
             return self._end_turn(timeout, deadline=deadline)
         if action == "ui_lua":
             value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
+            if "equals_capture" in step:
+                key = step["equals_capture"]
+                if key not in self.lua_captures or value != self.lua_captures[key]:
+                    raise ScenarioError(f"ui_lua snapshot mismatch for {key}: {value!r} != {self.lua_captures.get(key)!r}")
+            if "capture_as" in step:
+                self.lua_captures[step["capture_as"]] = value
             return f"ran Lua in {step['state_name']}; return={value}"
         if action == "screenshot":
             require_single_civ_process()
@@ -772,9 +862,11 @@ class Runner:
                     self._log("auto_restart", "SKIP", "Civ VI process is newer than all scenario mod files")
             self.baseline = snapshot_logs(self.logs)
             (self.output / "baseline.json").write_text(json.dumps(self.baseline, indent=2), encoding="utf-8")
-            if self.scenario["steps"][0]["action"] != "restart_game":
+            first = self.scenario["steps"][0]
+            if first["action"] != "restart_game":
                 require_single_civ_process()
-                if not front_end_ready:
+                # A scenario whose first step runs in InGame continues an already running game.
+                if not front_end_ready and not (first["action"] == "ui_lua" and first.get("state_name") == "InGame"):
                     self._wait({"type": "lua", "state_name": "FrontEnd", "code": "return UI.IsInFrontEnd()"}, 10)
             for index, step in enumerate(self.scenario["steps"], 1):
                 action = f"{index}/{len(self.scenario['steps'])} {step['action']}"
@@ -825,6 +917,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=4318)
     parser.add_argument("--mods", type=Path, default=DEFAULT_MODS_DIR, help="Installed Civ VI Mods directory")
     parser.add_argument("--no-auto-restart", action="store_true", help="Skip startup freshness check (debugging only)")
+    parser.add_argument("--owner-start", action="store_true",
+                        help="Open the configured Create Game screen and wait for the owner to press Start Game")
     args = parser.parse_args()
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
@@ -836,7 +930,8 @@ def main() -> int:
                                  (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + args.scenario.stem))
         saves = args.saves or (Path.home() / "Documents" / "My Games" / "Sid Meier's Civilization VI" / "Saves" / "Single")
         return Runner(data, output, args.logs or default_log_dir(), saves, args.port,
-                      auto_restart=not args.no_auto_restart, mods_dir=args.mods).run()
+                      auto_restart=not args.no_auto_restart, mods_dir=args.mods,
+                      owner_start=args.owner_start).run()
     except (OSError, json.JSONDecodeError, ScenarioError, ValueError) as exc:
         parser.exit(2, f"Scenario error: {exc}\n")
 

@@ -1,0 +1,3187 @@
+{
+  "_schema": {
+    "status": "owner-review draft; not SSOT",
+    "year": 1534,
+    "specific_start_date": null,
+    "coordinate_order": "longitude, latitude",
+    "coordinate_format": "WGS84 decimal degree strings, exactly 3 fractional digits; historic site representative points, sometimes proxies",
+    "factions": "head and lifespan uncertainty, historical seat candidate, current generate.py SEATS, core territories, contested note and per-claim source URLs",
+    "castles": "owner_faction_1534_draft is game assignment; historical_holder is separately recorded; location and ownership have separate URLs",
+    "province_allocations": "68 old provinces; split parts identify districts or a district subarea; judgement=true means author choice, not documented 1534 sovereignty",
+    "extra_regions": "Ezo, Amami, Ryukyu are outside the 68-province inventory; no polygon or final tile boundary is asserted"
+  },
+  "factions": [
+    {
+      "id": "DATE",
+      "name": "伊達",
+      "head": {
+        "name": "伊達稙宗",
+        "birth_year": 1488,
+        "death_year": 1565,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E4%BC%8A%E9%81%94%E7%A8%99%E5%AE%97-93717"
+        ]
+      },
+      "seat": {
+        "name": "桑折西山城",
+        "lon": "140.510",
+        "lat": "37.856",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000236100.html",
+          "https://www.town.koori.fukushima.jp/site/kanko/1064.html"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Yonezawa",
+        "lon": "140.106",
+        "lat": "37.914",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "陸奥伊達郡・信夫郡を核とする南奥、出羽置賜の伊達家所領",
+      "contested_or_caveat": "陸奥北部・出羽庄内/秋田・相馬/大崎/葛西は独立性が強い。現行米沢本拠は1548/49年以後。",
+      "source_urls": [
+        "https://www.city.fukushima-date.lg.jp/soshiki/87/825.html"
+      ]
+    },
+    {
+      "id": "ASHINA",
+      "name": "蘆名",
+      "head": {
+        "name": "蘆名盛舜",
+        "birth_year": 1490,
+        "death_year": 1553,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E7%9B%9B%E8%88%9C-1049893"
+        ]
+      },
+      "seat": {
+        "name": "黒川城",
+        "lon": "139.932",
+        "lat": "37.487",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000336500.html",
+          "https://kotobank.jp/word/%E8%8B%A5%E6%9D%BE%E5%9F%8E-180408"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Kurokawa",
+        "lon": "139.930",
+        "lat": "37.494",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "陸奥会津盆地・猪苗代方面。会津郡・耶麻郡・河沼郡・大沼郡の中核",
+      "contested_or_caveat": "南会津の山内・長沼等は独立的。安積・岩瀬等の盛氏期の進出を遡及しない。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E6%B0%8F-25298",
+        "https://www.bunka.go.jp/seisaku/bunkazai/rekishibunka/pdf/mishima.pdf"
+      ]
+    },
+    {
+      "id": "HOJO",
+      "name": "北条",
+      "head": {
+        "name": "北条氏綱",
+        "birth_year": 1487,
+        "death_year": 1541,
+        "uncertainty": "生年1486説もある。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%8C%97%E6%9D%A1%E6%B0%8F%E7%B6%B1-132131"
+        ]
+      },
+      "seat": {
+        "name": "小田原城",
+        "lon": "139.154",
+        "lat": "35.251",
+        "status": "史実候補",
+        "source_urls": [
+          "https://odawara-digital-museum.jp/archive/detail/8_43184/",
+          "https://www.city.odawara.kanagawa.jp/public/detail/11199/"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Odawara",
+        "lon": "139.157",
+        "lat": "35.252",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "相模・伊豆、武蔵江戸城周辺",
+      "contested_or_caveat": "河越取得は1537年、房総支配は後年。安房里見義堯は1534年には北条の支援を受けた独立領主。",
+      "source_urls": [
+        "https://www.city.odawara.kanagawa.jp/public/detail/11077/",
+        "https://www.city.tateyama.chiba.jp/satomi/youyaku/2shou/2shou_4/2shou_4min.html"
+      ]
+    },
+    {
+      "id": "YAMANOUCHI_UESUGI",
+      "name": "山内上杉",
+      "head": {
+        "name": "上杉憲政",
+        "birth_year": null,
+        "death_year": 1579,
+        "uncertainty": "1523年生説があるが、同一事典群に生年不詳説。没年1575説もある。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E4%B8%8A%E6%9D%89%E6%86%B2%E6%94%BF-33790"
+        ]
+      },
+      "seat": {
+        "name": "平井城",
+        "lon": "139.030",
+        "lat": "36.219",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/10/100000102700.html",
+          "https://kotobank.jp/word/%E5%B9%B3%E4%BA%95%E5%9F%8E-180254"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Hirai",
+        "lon": "139.063",
+        "lat": "36.202",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "上野平井周辺、武蔵北部の山内上杉系・従属国衆",
+      "contested_or_caveat": "扇谷上杉の河越は別家。下野・常陸・上総の代理配分を直轄としない。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E5%B1%B1%E5%86%85%E4%B8%8A%E6%9D%89%E6%B0%8F-3132612",
+        "https://kotobank.jp/word/%E4%B8%8B%E9%87%8E%E5%9B%BD-75387"
+      ]
+    },
+    {
+      "id": "TAKEDA",
+      "name": "武田",
+      "head": {
+        "name": "武田信虎",
+        "birth_year": 1494,
+        "death_year": 1574,
+        "uncertainty": "生年1498説もある。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E6%AD%A6%E7%94%B0%E4%BF%A1%E8%99%8E-93064"
+        ]
+      },
+      "seat": {
+        "name": "躑躅ヶ崎館",
+        "lon": "138.577",
+        "lat": "35.687",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/19/190000068600.html",
+          "https://kotobank.jp/word/%E6%AD%A6%E7%94%B0%E6%B0%8F%E9%A4%A8%E8%B7%A1-1444362"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Tsutsujigasaki",
+        "lon": "138.568",
+        "lat": "35.677",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "甲斐の大半。穴山・小山田など一門/従属国衆を含む",
+      "contested_or_caveat": "信濃の諏訪・小笠原・村上等は1534年には独立。諏訪攻略は1542年。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E4%BF%A1%E6%BF%83%E5%9B%BD-74561",
+        "https://kotobank.jp/word/%E7%A9%B4%E5%B1%B1%E6%B0%8F-1143272"
+      ]
+    },
+    {
+      "id": "NAGAO",
+      "name": "長尾",
+      "head": {
+        "name": "長尾為景",
+        "birth_year": null,
+        "death_year": null,
+        "uncertainty": "没年1536・1540・1541・1542頃の異説。1536年晴景へ家督譲渡。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E9%95%B7%E5%B0%BE%E7%82%BA%E6%99%AF-17157"
+        ]
+      },
+      "seat": {
+        "name": "春日山城",
+        "lon": "138.206",
+        "lat": "37.147",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/15/150000114000.html",
+          "https://kotobank.jp/word/%E6%98%A5%E6%97%A5%E5%B1%B1%E5%9F%8E%E8%B7%A1-1443585"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Kasugayama",
+        "lon": "138.206",
+        "lat": "37.148",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "越後頸城の春日山周辺、府中長尾家と協力する長尾諸家",
+      "contested_or_caveat": "上条定憲は反為景。揚北衆・佐渡本間氏は独立的。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E4%B8%8A%E6%9D%A1%E5%9F%8E-180034",
+        "https://www.city.shibata.lg.jp/_res/projects/default_project/_page_/001/023/583/keikaku.pdf"
+      ]
+    },
+    {
+      "id": "IMAGAWA",
+      "name": "今川",
+      "head": {
+        "name": "今川氏輝",
+        "birth_year": 1513,
+        "death_year": 1536,
+        "uncertainty": "寿桂尼が政務を補佐。",
+        "source_urls": [
+          "https://shukutoku.repo.nii.ac.jp/record/1022/files/fukushicomkenkyukiyo_051_165_179.pdf"
+        ]
+      },
+      "seat": {
+        "name": "駿府の今川館（位置未確定）",
+        "lon": "138.383",
+        "lat": "34.979",
+        "status": "後世駿府城の代用点",
+        "source_urls": [
+          "https://sitereports.nabunken.go.jp/files/attach/29/29758/21595_1_%E9%A7%BF%E5%BA%9C%E5%9F%8E%E8%B7%A1.pdf",
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/22/220000168700.html"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Sunpu",
+        "lon": "138.383",
+        "lat": "34.979",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "駿河・遠江。掛川の朝比奈氏など",
+      "contested_or_caveat": "三河東部の国衆への影響と松平清康の服属関係が競合。今川館の正確な地点は未確定。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E4%BB%8A%E5%B7%9D%E6%B0%8F-32206",
+        "https://kotobank.jp/word/%E4%B8%89%E6%B2%B3%E5%9B%BD-138334"
+      ]
+    },
+    {
+      "id": "ODA",
+      "name": "織田",
+      "head": {
+        "name": "織田信秀",
+        "birth_year": 1511,
+        "death_year": 1552,
+        "uncertainty": "1508–1551説・1510年生説もある。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E7%B9%94%E7%94%B0%E4%BF%A1%E7%A7%80-40523"
+        ]
+      },
+      "seat": {
+        "name": "勝幡城",
+        "lon": "136.729",
+        "lat": "35.202",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/23/230000184300.html",
+          "https://www.city.inazawa.aichi.jp/0000002744.html"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Nagoya",
+        "lon": "136.900",
+        "lat": "35.184",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "尾張海東・海西郡の勝幡・津島周辺を核とする弾正忠家",
+      "contested_or_caveat": "清洲/岩倉織田は別家。那古野城の1534年所有は1532奪取説と1538奪取説で異なる。",
+      "source_urls": [
+        "https://www.museum.city.nagoya.jp/collection/data/data_42/index.html",
+        "https://www.city.nagoya.jp/kankou/rekishi/1004614/1004640/1004656.html"
+      ]
+    },
+    {
+      "id": "MATSUDAIRA",
+      "name": "松平",
+      "head": {
+        "name": "松平清康",
+        "birth_year": 1511,
+        "death_year": 1535,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E6%9D%BE%E5%B9%B3%E6%B8%85%E5%BA%B7-136642"
+        ]
+      },
+      "seat": {
+        "name": "岡崎城",
+        "lon": "137.159",
+        "lat": "34.956",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/23/230000358300.html",
+          "https://kotobank.jp/word/%E5%B2%A1%E5%B4%8E%E5%9F%8E-39709"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Okazaki",
+        "lon": "137.172",
+        "lat": "34.955",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "三河岡崎・安祥・岩津、西三河を核とし東三河へ進出",
+      "contested_or_caveat": "吉良・水野・牧野・戸田・奥平等はそれぞれ在地領主。1535年清康死後の今川進出を遡及しない。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E4%B8%89%E6%B2%B3%E5%9B%BD-138334",
+        "https://adeac.jp/toyohashi-city/texthtml/d100010/mp100010-100010/ht030080"
+      ]
+    },
+    {
+      "id": "ASAKURA",
+      "name": "朝倉",
+      "head": {
+        "name": "朝倉孝景",
+        "birth_year": 1493,
+        "death_year": 1548,
+        "uncertainty": "同名の朝倉孝景（1428–1481）とは別人。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E6%9C%9D%E5%80%89%E5%AD%9D%E6%99%AF-25008"
+        ]
+      },
+      "seat": {
+        "name": "一乗谷朝倉館",
+        "lon": "136.296",
+        "lat": "35.999",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/18/180000130500.html",
+          "https://kotobank.jp/word/%E4%B8%80%E4%B9%97%E8%B0%B7-433423"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Ichijodani",
+        "lon": "136.290",
+        "lat": "35.999",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "越前一乗谷・府中・大野郡を核とする越前の大枠",
+      "contested_or_caveat": "加賀江沼・能美で一揆に介入したが全加賀領有ではない。",
+      "source_urls": [
+        "https://www.library-archives.pref.fukui.lg.jp/fukui/07/kenshi/T2/T2-4-01-05-02-035.htm"
+      ]
+    },
+    {
+      "id": "ASHIKAGA",
+      "name": "足利将軍家",
+      "head": {
+        "name": "足利義晴",
+        "birth_year": 1511,
+        "death_year": 1550,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E8%B6%B3%E5%88%A9%E7%BE%A9%E6%99%B4-25238"
+        ]
+      },
+      "seat": {
+        "name": "桑実寺正覚院（1534年前半の滞在先）",
+        "lon": "136.154",
+        "lat": "35.144",
+        "status": "一時滞在先・開始月で変動",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/25/250000191500.html",
+          "https://kotobank.jp/word/%E6%A1%91%E5%AE%9F%E5%AF%BA-487537"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Muromachi",
+        "lon": "135.760",
+        "lat": "35.029",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "将軍家の京都政庁を象徴する範囲。1534年前半は近江の六角保護下",
+      "contested_or_caveat": "秋に帰京。桑実寺は六角領で足利の領土ではない。現行室町殿跡は1534稼働本拠の証拠なし。",
+      "source_urls": [
+        "https://www.rekihaku.ac.jp/education_research/gallery/webgallery/rakutyuu/theme/house09.html",
+        "https://kotobank.jp/word/%E5%AE%A4%E7%94%BA%E6%99%82%E4%BB%A3-140987"
+      ]
+    },
+    {
+      "id": "MIYOSHI",
+      "name": "三好",
+      "head": {
+        "name": "三好長慶",
+        "birth_year": 1522,
+        "death_year": 1564,
+        "uncertainty": "1534年の本人居所・実名表記は要確認。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E4%B8%89%E5%A5%BD%E9%95%B7%E6%85%B6-16803"
+        ]
+      },
+      "seat": {
+        "name": "芝生城（三好氏本貫）",
+        "lon": "133.970",
+        "lat": "34.045",
+        "status": "家の本貫・本人の常住未証明",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/37/370000071900.html",
+          "https://kotobank.jp/word/%E8%8A%9D%E7%94%9F%E5%9F%8E%E8%B7%A1-3092253"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Shozui",
+        "lon": "134.591",
+        "lat": "34.123",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "阿波三好郡芝生周辺。1534年の長慶は若年で畿内政治に従事",
+      "contested_or_caveat": "勝瑞は阿波細川氏の守護所。1534年8月/10月に細川晴元との関係が変化。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E5%8B%9D%E7%91%9E%E5%9F%8E%E8%B7%A1-3091999",
+        "https://kotobank.jp/word/%E7%B4%B0%E5%B7%9D%E6%99%B4%E5%85%83-133263"
+      ]
+    },
+    {
+      "id": "ROKKAKU",
+      "name": "六角",
+      "head": {
+        "name": "六角定頼",
+        "birth_year": 1495,
+        "death_year": 1552,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%85%AD%E8%A7%92%E5%AE%9A%E9%A0%BC-153000"
+        ]
+      },
+      "seat": {
+        "name": "観音寺城",
+        "lon": "136.158",
+        "lat": "35.146",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/25/250000192100.html",
+          "https://www.pref.shiga.lg.jp/sd00/2592.html"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Kannonji",
+        "lon": "136.168",
+        "lat": "35.133",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "近江蒲生・神崎・野洲を核とする南近江",
+      "contested_or_caveat": "北近江の浅井・京極と争う。近江全域を直轄としない。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E9%8E%8C%E5%88%83%E5%9F%8E-179846"
+      ]
+    },
+    {
+      "id": "HONGANJI",
+      "name": "本願寺",
+      "head": {
+        "name": "証如",
+        "birth_year": 1516,
+        "death_year": 1554,
+        "uncertainty": "本願寺第10世。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E8%A8%BC%E5%A6%82-1082522"
+        ]
+      },
+      "seat": {
+        "name": "石山御坊",
+        "lon": "135.529",
+        "lat": "34.687",
+        "status": "後世大坂城跡の代用点",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/28/280000098900.html",
+          "https://kotobank.jp/word/%E7%9F%B3%E5%B1%B1%E6%9C%AC%E9%A1%98%E5%AF%BA%E8%B7%A1-3075560"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Ishiyama",
+        "lon": "135.526",
+        "lat": "34.689",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "摂津石山御坊と寺内町の初期中核。加賀の本願寺系門徒・寺院との系列関係",
+      "contested_or_caveat": "1534年の石山寺内町の後年並み一円支配、加賀の全村の直轄は未証明。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E5%8A%A0%E8%B3%80%E5%9B%BD-43381",
+        "https://ir.library.osaka-u.ac.jp/repo/ouka/all/47958/mrh_006_001.pdf"
+      ]
+    },
+    {
+      "id": "CHOSOKABE",
+      "name": "長宗我部",
+      "head": {
+        "name": "長宗我部国親",
+        "birth_year": 1504,
+        "death_year": 1560,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E9%95%B7%E5%AE%97%E6%88%91%E9%83%A8%E5%9B%BD%E8%A6%AA-1091612"
+        ]
+      },
+      "seat": {
+        "name": "岡豊城",
+        "lon": "133.623",
+        "lat": "33.595",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/40/400000083700.html",
+          "https://kotobank.jp/word/%E5%B2%A1%E8%B1%8A%E5%9F%8E%E8%B7%A1-1443510"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Oko",
+        "lon": "133.642",
+        "lat": "33.593",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "土佐長岡郡岡豊と江村郷・廿枝郷",
+      "contested_or_caveat": "幡多の一条房家は庇護者で家臣ではない。本山・安芸等の土佐七雄は独立。",
+      "source_urls": [
+        "https://www.pref.kochi.lg.jp/doc/kanko-chosogabe-shichiyu/"
+      ]
+    },
+    {
+      "id": "OUCHI",
+      "name": "大内",
+      "head": {
+        "name": "大内義隆",
+        "birth_year": 1507,
+        "death_year": 1551,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%A4%A7%E5%86%85%E7%BE%A9%E9%9A%86-17848"
+        ]
+      },
+      "seat": {
+        "name": "大内氏館",
+        "lon": "131.480",
+        "lat": "34.185",
+        "status": "史実候補",
+        "source_urls": [
+          "https://www.city.yamaguchi.lg.jp/rs/rekibunshigen/r1062.html",
+          "https://gosenzo.net/yamajiro/2025/06/07/%E3%80%90%E5%B1%B1%E5%8F%A3%E7%9C%8C%E3%80%91%E5%A4%A7%E5%86%85%E6%B0%8F%E9%A4%A8%E8%B7%A1%E3%80%90%E5%B1%B1%E5%8F%A3%E5%B8%82%E5%A4%A7%E6%AE%BF%E5%A4%A7%E8%B7%AF%E3%80%91/"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Yamaguchi",
+        "lon": "131.473",
+        "lat": "34.178",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "周防・長門の政庁と守護領、石見銀山、大内方国衆の領域",
+      "contested_or_caveat": "安芸の毛利は大内方でも別家。備後・筑前・豊前・肥前で尼子/大友/少弐との境が動く。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E5%91%A8%E9%98%B2%E5%9B%BD-83369",
+        "https://ginzan.city.oda.lg.jp/wp-content/uploads/2020/04/b10b1aa9502c20ae6af005a03b414f60.pdf"
+      ]
+    },
+    {
+      "id": "AMAGO",
+      "name": "尼子",
+      "head": {
+        "name": "尼子経久",
+        "birth_year": 1458,
+        "death_year": 1541,
+        "uncertainty": "孫詮久（後の晴久）への家督譲与は1537年。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E7%B5%8C%E4%B9%85-27145",
+          "https://yasugi-kankou.com/amagoitizokuseisuiki/"
+        ]
+      },
+      "seat": {
+        "name": "月山富田城",
+        "lon": "133.185",
+        "lat": "35.361",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/33/330000072400.html",
+          "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E6%B0%8F-27143"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Gassan Toda",
+        "lon": "133.242",
+        "lat": "35.418",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "出雲の富田城圏、隠岐の被官、伯耆方面への勢力",
+      "contested_or_caveat": "塩冶興久の乱が1534年まで続く。石見銀山の取得は1537年。備前・美作等への後年の最大版図を遡及しない。",
+      "source_urls": [
+        "https://www.pref.tottori.lg.jp/87485.htm",
+        "https://ginzan.city.oda.lg.jp/wp-content/uploads/2020/04/b10b1aa9502c20ae6af005a03b414f60.pdf"
+      ]
+    },
+    {
+      "id": "MORI",
+      "name": "毛利",
+      "head": {
+        "name": "毛利元就",
+        "birth_year": 1497,
+        "death_year": 1571,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E6%AF%9B%E5%88%A9%E5%85%83%E5%B0%B1-16902"
+        ]
+      },
+      "seat": {
+        "name": "吉田郡山城",
+        "lon": "132.711",
+        "lat": "34.670",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/35/350000239100.html",
+          "https://kotobank.jp/word/%E6%AF%9B%E5%88%A9%E5%85%83%E5%B0%B1-16902"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Yoshida Koriyama",
+        "lon": "132.708",
+        "lat": "34.687",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "安芸高田郡吉田の毛利本領。大内方の有力国衆",
+      "contested_or_caveat": "安芸の武田・吉川・小早川等は別勢力。中国十国の後年版図を遡及しない。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E5%AE%89%E8%8A%B8%E5%9B%BD-24591",
+        "https://kotobank.jp/word/%E4%BD%90%E6%9D%B1%E9%8A%80%E5%B1%B1%E5%9F%8E-179973"
+      ]
+    },
+    {
+      "id": "OTOMO",
+      "name": "大友",
+      "head": {
+        "name": "大友義鑑",
+        "birth_year": 1502,
+        "death_year": 1550,
+        "uncertainty": "",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%A4%A7%E5%8F%8B%E7%BE%A9%E9%91%91-17574"
+        ]
+      },
+      "seat": {
+        "name": "大友氏館（府内・顕徳町）",
+        "lon": "131.618",
+        "lat": "33.231",
+        "status": "史実候補",
+        "source_urls": [
+          "https://heritagemap.nabunken.go.jp/statistic/59831-%E5%A4%A7%E5%8F%8B%E6%B0%8F%E9%A4%A8%E8%B7%A1_%E7%AC%AC14%E6%AC%A1.html",
+          "https://www.city.oita.oita.jp/o204/documents/dai3syou.pdf"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Funai",
+        "lon": "131.609",
+        "lat": "33.241",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "豊後の府内を核とし筑後の守護権・在地国衆との関係",
+      "contested_or_caveat": "豊前・筑前は大内と争い、肥後菊池義武は1534年に大内と結ぶ。現行府内城は1597年築城。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E7%AD%91%E5%BE%8C%E5%9B%BD-95969",
+        "https://kotobank.jp/word/%E8%8F%8A%E6%B1%A0%E7%BE%A9%E6%AD%A6-1068907",
+        "https://www.city.oita.oita.jp/o204/bunkasports/shitebunkazai/1352943146749.html"
+      ]
+    },
+    {
+      "id": "SHIMAZU",
+      "name": "島津",
+      "head": {
+        "name": "島津勝久",
+        "birth_year": 1503,
+        "death_year": 1573,
+        "uncertainty": "1534年初頭の宗家当主。貴久（1514–1571、伊作/相州家）・実久（薩州家）と並立/抗争。勝久は同年10月に一時出奔。",
+        "source_urls": [
+          "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E5%8B%9D%E4%B9%85-1080888",
+          "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E8%B2%B4%E4%B9%85-75142"
+        ],
+        "alternatives": [
+          {
+            "name": "島津貴久",
+            "birth_year": 1514,
+            "death_year": 1571,
+            "relation": "養子・伊作/相州家の対立当主候補",
+            "source_urls": [
+              "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E8%B2%B4%E4%B9%85-75142"
+            ]
+          },
+          {
+            "name": "島津実久",
+            "birth_year": null,
+            "death_year": null,
+            "relation": "薩州家。1535年の鹿児島入城を1534年へ繰り上げない",
+            "source_urls": [
+              "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E5%AE%9F%E4%B9%85-1080898"
+            ]
+          }
+        ]
+      },
+      "seat": {
+        "name": "清水城",
+        "lon": "130.567",
+        "lat": "31.615",
+        "status": "年初の宗家本拠・年内変動",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/47/470000033500.html",
+          "https://www.city.kagoshima.lg.jp/kikakuzaisei/kikaku/seisaku-s/shise/shokai/shishi/documents/2012510154859.pdf"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Kagoshima",
+        "lon": "130.559",
+        "lat": "31.596",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "薩摩鹿児島の宗家、伊作・薩州家の各所領。日向飫肥の島津一族領",
+      "contested_or_caveat": "薩摩・大隅・日向は統一領国でない。1534年10月後の清水城番は未詳。現行鹿児島城は1601年築。",
+      "source_urls": [
+        "https://kotobank.jp/word/%E8%96%A9%E6%91%A9%E5%9B%BD-69257",
+        "https://kotobank.jp/word/%E6%97%A5%E5%90%91%E5%9B%BD-121039"
+      ]
+    },
+    {
+      "id": "RYUKYU",
+      "name": "琉球王国",
+      "head": {
+        "name": "尚清王",
+        "birth_year": 1497,
+        "death_year": 1555,
+        "uncertainty": "在位1527–1555。1534年に明の冊封。",
+        "source_urls": [
+          "https://oki-park.jp/shurijo/events/detail/10644",
+          "https://www.library.pref.okinawa.jp/archive/contents/chronology.html"
+        ]
+      },
+      "seat": {
+        "name": "首里城",
+        "lon": "127.719",
+        "lat": "26.217",
+        "status": "史実候補",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/48/480000015800.html",
+          "https://www.library.pref.okinawa.jp/archive/contents/cat39/map-knowledge.html"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Shuri",
+        "lon": "127.719",
+        "lat": "26.218",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "沖縄本島の首里王府、宮古・八重山への支配関係、奄美諸島",
+      "contested_or_caveat": "奄美の在地首長をめぐる1537年の軍事行動や1571年の年表記述があり、1534年の島ごとの実効境界は未確定。",
+      "source_urls": [
+        "https://www.city.amami.lg.jp/kikaku/shise/koho/hakko/documents/yoran2023m.pdf",
+        "https://www.pref.kagoshima.jp/aa02/kyoiku/jimusho/oshima/documents/19072_20250611105918-1.pdf"
+      ]
+    },
+    {
+      "id": "AINU",
+      "name": "アイヌ",
+      "head": {
+        "name": "全道共通当主は未確認",
+        "birth_year": null,
+        "death_year": null,
+        "uncertainty": "1534年の単一当主・生没年を史料で確認できない。タナケシは1529年没の伝承、タリコナは1536年の記録のみ。",
+        "source_urls": [
+          "https://hokkaido-digital-museum.jp/hokkaido/kaitaku/k-01/",
+          "https://www.town.kaminokuni.lg.jp/hotnews/detail_sp/00000312.html"
+        ],
+        "alternatives": [
+          {
+            "name": "タリコナ",
+            "birth_year": null,
+            "death_year": null,
+            "relation": "1536年の道南西部アイヌの長。1534年の全道代表とは実証できない",
+            "source_urls": [
+              "https://www.town.kaminokuni.lg.jp/hotnews/detail_sp/00000312.html"
+            ]
+          }
+        ]
+      },
+      "seat": {
+        "name": "二風谷・ポロモイチャシ跡の代表点",
+        "lon": "142.165",
+        "lat": "42.634",
+        "status": "文化的代表点・1534年本拠は未実証",
+        "source_urls": [
+          "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/01/010000287300.html",
+          "https://online.bunka.go.jp/heritages/detail/249303"
+        ]
+      },
+      "current_map_seat": {
+        "label": "Nibutani",
+        "lon": "142.149",
+        "lat": "42.633",
+        "source_path": "tools/japan_map_scale/generate.py:59"
+      },
+      "held_or_dominated_in_1534": "蝦夷島各地のアイヌ地域社会。政治的な単一領域ではない",
+      "contested_or_caveat": "二風谷チャシの1534年使用も未証明。道南には蠣崎氏の和人館・混住域があり、アイヌ直轄とみなせない。",
+      "source_urls": [
+        "https://www.town.matsumae.hokkaido.jp/bunkazai/detail/00001634.html",
+        "https://kotobank.jp/word/%E3%83%81%E3%83%A3%E3%82%B7-3159045"
+      ]
+    }
+  ],
+  "castles": [
+    {
+      "id": "DATE_KOORI",
+      "name": "桑折西山城",
+      "province_or_region": "陸奥",
+      "district_or_area": "伊達郡",
+      "lon": "140.510",
+      "lat": "37.856",
+      "owner_faction_1534_draft": "DATE",
+      "historical_holder": "伊達稙宗",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000236100.html",
+      "history_urls": [
+        "https://www.town.koori.fukushima.jp/site/kanko/1064.html"
+      ],
+      "note": ""
+    },
+    {
+      "id": "DATE_YANAGAWA",
+      "name": "梁川城",
+      "province_or_region": "陸奥",
+      "district_or_area": "伊達郡",
+      "lon": "140.611",
+      "lat": "37.855",
+      "owner_faction_1534_draft": "DATE",
+      "historical_holder": "伊達氏",
+      "status": "支城・旧本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000240400.html",
+      "history_urls": [
+        "https://www.city.fukushima-date.lg.jp/soshiki/87/816.html"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ASHINA_KUROKAWA",
+      "name": "黒川城",
+      "province_or_region": "陸奥",
+      "district_or_area": "会津郡",
+      "lon": "139.930",
+      "lat": "37.488",
+      "owner_faction_1534_draft": "ASHINA",
+      "historical_holder": "蘆名盛舜",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000336500.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E7%9B%9B%E8%88%9C-1049893",
+        "https://kotobank.jp/word/%E8%8B%A5%E6%9D%BE%E5%9F%8E-180408"
+      ],
+      "note": "後の若松城の付近。正確な1534年郭位置は未詳。"
+    },
+    {
+      "id": "ASHINA_INAWASHIRO",
+      "name": "猪苗代城",
+      "province_or_region": "陸奥",
+      "district_or_area": "耶麻郡",
+      "lon": "140.106",
+      "lat": "37.562",
+      "owner_faction_1534_draft": "ASHINA",
+      "historical_holder": "猪苗代氏（蘆名一族）",
+      "status": "同族・従属度未詳",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/07/070000244000.html",
+      "history_urls": [
+        "https://www.town.inawashiro.fukushima.jp/soshiki/8/1523.html",
+        "https://kotobank.jp/word/%E7%8C%AA%E8%8B%97%E4%BB%A3%E5%9F%8E-179706"
+      ],
+      "note": ""
+    },
+    {
+      "id": "DATE_YAMAGATA",
+      "name": "山形城",
+      "province_or_region": "出羽",
+      "district_or_area": "村山地方",
+      "lon": "140.328",
+      "lat": "38.256",
+      "owner_faction_1534_draft": "DATE",
+      "historical_holder": "最上氏",
+      "status": "代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/06/060000085500.html",
+      "history_urls": [
+        "https://www.city.yamagata-yamagata.lg.jp/kakuka/machizukuri/koen/sogo/yamagatajo/history/",
+        "https://kotobank.jp/word/%E6%9C%80%E4%B8%8A%E6%B0%8F-142161"
+      ],
+      "note": "伊達直轄ではない。最上家を22勢力に縮約。"
+    },
+    {
+      "id": "AINU_POROMOI",
+      "name": "ポロモイチャシ跡・二風谷拠点候補",
+      "province_or_region": "蝦夷地",
+      "district_or_area": "沙流川流域",
+      "lon": "142.165",
+      "lat": "42.634",
+      "owner_faction_1534_draft": "AINU",
+      "historical_holder": "地域集団・個人未詳",
+      "status": "1534年の使用未証明",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/01/010000287300.html",
+      "history_urls": [
+        "https://online.bunka.go.jp/heritages/detail/249303",
+        "https://kotobank.jp/word/%E3%83%81%E3%83%A3%E3%82%B7-3159045"
+      ],
+      "note": "二風谷遺跡群は15～17世紀という幅。全道の首都・1534年の城主を示す資料ではない。"
+    },
+    {
+      "id": "HOJO_ODAWARA",
+      "name": "小田原城",
+      "province_or_region": "相模",
+      "district_or_area": "足柄下郡",
+      "lon": "139.154",
+      "lat": "35.251",
+      "owner_faction_1534_draft": "HOJO",
+      "historical_holder": "北条氏綱",
+      "status": "本拠",
+      "location_url": "https://odawara-digital-museum.jp/archive/detail/8_43184/",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%8C%97%E6%9D%A1%E6%B0%8F%E7%B6%B1-132131",
+        "https://www.city.odawara.kanagawa.jp/public/detail/11199/"
+      ],
+      "note": ""
+    },
+    {
+      "id": "UESUGI_HIRAI",
+      "name": "平井城",
+      "province_or_region": "上野",
+      "district_or_area": "緑野郡",
+      "lon": "139.030",
+      "lat": "36.219",
+      "owner_faction_1534_draft": "YAMANOUCHI_UESUGI",
+      "historical_holder": "山内上杉憲政",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/10/100000102700.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E4%B8%8A%E6%9D%89%E6%86%B2%E6%94%BF-33790"
+      ],
+      "note": ""
+    },
+    {
+      "id": "TAKEDA_TSUTSUJI",
+      "name": "躑躅ヶ崎館",
+      "province_or_region": "甲斐",
+      "district_or_area": "山梨郡",
+      "lon": "138.577",
+      "lat": "35.687",
+      "owner_faction_1534_draft": "TAKEDA",
+      "historical_holder": "武田信虎",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/19/190000068600.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%AD%A6%E7%94%B0%E6%B0%8F%E9%A4%A8%E8%B7%A1-1444362"
+      ],
+      "note": ""
+    },
+    {
+      "id": "NAGAO_KASUGAYAMA",
+      "name": "春日山城",
+      "province_or_region": "越後",
+      "district_or_area": "頸城郡",
+      "lon": "138.206",
+      "lat": "37.147",
+      "owner_faction_1534_draft": "NAGAO",
+      "historical_holder": "長尾為景",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/15/150000114000.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E9%95%B7%E5%B0%BE%E7%82%BA%E6%99%AF-17157"
+      ],
+      "note": ""
+    },
+    {
+      "id": "HOJO_EDO",
+      "name": "江戸城",
+      "province_or_region": "武蔵",
+      "district_or_area": "豊島郡",
+      "lon": "139.754",
+      "lat": "35.688",
+      "owner_faction_1534_draft": "HOJO",
+      "historical_holder": "北条氏綱側・城代未詳",
+      "status": "支城",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/13/130000022400.html",
+      "history_urls": [
+        "https://www.city.katsushika.lg.jp/history/history/2-2-3-100.html"
+      ],
+      "note": ""
+    },
+    {
+      "id": "UESUGI_KAWAGOE",
+      "name": "河越城",
+      "province_or_region": "武蔵",
+      "district_or_area": "入間郡",
+      "lon": "139.492",
+      "lat": "35.924",
+      "owner_faction_1534_draft": "YAMANOUCHI_UESUGI",
+      "historical_holder": "扇谷上杉朝興",
+      "status": "別家の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/11/110000103200.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%B7%9D%E8%B6%8A%E5%9F%8E%E8%B7%A1-3037971",
+        "https://kotobank.jp/word/%E4%B8%8A%E6%9D%89%E6%9C%9D%E8%88%88-1057172"
+      ],
+      "note": "扇谷と山内は別家。北条の取得は1537年。"
+    },
+    {
+      "id": "UESUGI_MINOWA",
+      "name": "箕輪城",
+      "province_or_region": "上野",
+      "district_or_area": "群馬郡",
+      "lon": "138.952",
+      "lat": "36.404",
+      "owner_faction_1534_draft": "YAMANOUCHI_UESUGI",
+      "historical_holder": "長野氏・個人未確定",
+      "status": "国衆の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/10/100000109300.html",
+      "history_urls": [
+        "https://www.city.takasaki.gunma.jp/uploaded/attachment/12680.pdf",
+        "https://www.city.takasaki.gunma.jp/uploaded/attachment/5982.pdf"
+      ],
+      "note": ""
+    },
+    {
+      "id": "HOJO_KOGA",
+      "name": "古河城",
+      "province_or_region": "下総",
+      "district_or_area": "葛飾郡",
+      "lon": "139.694",
+      "lat": "36.187",
+      "owner_faction_1534_draft": "HOJO",
+      "historical_holder": "古河公方・高基/晴氏の移行期",
+      "status": "政治的連携の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/08/080000386300.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%8F%A4%E6%B2%B3%E5%85%AC%E6%96%B9-63532",
+        "https://ch.kanagawa-museum.jp/uploads/newsletter_vol22_no1.pdf"
+      ],
+      "note": "北条直轄ではない。"
+    },
+    {
+      "id": "UESUGI_OBOW",
+      "name": "小弓城",
+      "province_or_region": "下総",
+      "district_or_area": "千葉郡",
+      "lon": "140.150",
+      "lat": "35.554",
+      "owner_faction_1534_draft": "YAMANOUCHI_UESUGI",
+      "historical_holder": "小弓公方足利義明",
+      "status": "政治的連携の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/12/120000027000.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E8%B6%B3%E5%88%A9%E7%BE%A9%E6%98%8E-25226",
+        "https://kotobank.jp/word/%E5%B0%8F%E5%BC%93%E5%9F%8E%E8%B7%A1-3039637"
+      ],
+      "note": "北条とは対立する別勢力。"
+    },
+    {
+      "id": "UESUGI_OTA",
+      "name": "太田城",
+      "province_or_region": "常陸",
+      "district_or_area": "久慈郡",
+      "lon": "140.520",
+      "lat": "36.546",
+      "owner_faction_1534_draft": "YAMANOUCHI_UESUGI",
+      "historical_holder": "佐竹氏",
+      "status": "地理的な代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/08/080000068100.html",
+      "history_urls": [
+        "https://www.city.hitachiota.ibaraki.jp/page/page000221.html"
+      ],
+      "note": "1534年の山内上杉家臣という根拠はない。"
+    },
+    {
+      "id": "TAKEDA_UEHARA",
+      "name": "上原城",
+      "province_or_region": "信濃",
+      "district_or_area": "諏訪郡",
+      "lon": "138.149",
+      "lat": "36.009",
+      "owner_faction_1534_draft": "TAKEDA",
+      "historical_holder": "諏訪頼満期の諏訪氏",
+      "status": "地理的な代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/20/200000115700.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E4%B8%8A%E5%8E%9F%E5%9F%8E-179735",
+        "https://kotobank.jp/word/%E8%AB%8F%E8%A8%AA%E9%A0%BC%E9%87%8D-304530"
+      ],
+      "note": "武田が占めたのは1542年。"
+    },
+    {
+      "id": "IMAGAWA_SUNPU",
+      "name": "駿府今川館の推定アンカー",
+      "province_or_region": "駿河",
+      "district_or_area": "安倍郡",
+      "lon": "138.383",
+      "lat": "34.979",
+      "owner_faction_1534_draft": "IMAGAWA",
+      "historical_holder": "今川氏輝",
+      "status": "本拠・位置代用",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/22/220000168700.html",
+      "history_urls": [
+        "https://sitereports.nabunken.go.jp/files/attach/29/29758/21595_1_%E9%A7%BF%E5%BA%9C%E5%9F%8E%E8%B7%A1.pdf",
+        "https://kotobank.jp/word/%E4%BB%8A%E5%B7%9D%E6%B0%8F-32206"
+      ],
+      "note": "後世の駿府城跡点。今川館の厳密な位置は未確定。"
+    },
+    {
+      "id": "IMAGAWA_KAKEGAWA",
+      "name": "掛川城",
+      "province_or_region": "遠江",
+      "district_or_area": "佐野郡",
+      "lon": "138.015",
+      "lat": "34.777",
+      "owner_faction_1534_draft": "IMAGAWA",
+      "historical_holder": "朝比奈泰能",
+      "status": "重臣支城",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/22/220000295200.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%9C%9D%E6%AF%94%E5%A5%88%E6%B3%B0%E8%83%BD-1049379",
+        "https://www.city.kakegawa.shizuoka.jp/fs/3/7/0/1/6/8/_/_________-2022_3_-___HP_-26MB.pdf"
+      ],
+      "note": ""
+    },
+    {
+      "id": "MATSUDAIRA_OKAZAKI",
+      "name": "岡崎城",
+      "province_or_region": "三河",
+      "district_or_area": "額田郡",
+      "lon": "137.159",
+      "lat": "34.956",
+      "owner_faction_1534_draft": "MATSUDAIRA",
+      "historical_holder": "松平清康",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/23/230000358300.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%9D%BE%E5%B9%B3%E6%B8%85%E5%BA%B7-136642",
+        "https://kotobank.jp/word/%E5%B2%A1%E5%B4%8E%E5%9F%8E-39709"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ODA_SHOBATA",
+      "name": "勝幡城",
+      "province_or_region": "尾張",
+      "district_or_area": "海東郡",
+      "lon": "136.729",
+      "lat": "35.202",
+      "owner_faction_1534_draft": "ODA",
+      "historical_holder": "織田信秀",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/23/230000184300.html",
+      "history_urls": [
+        "https://www.city.inazawa.aichi.jp/0000002744.html",
+        "https://kotobank.jp/word/%E7%B9%94%E7%94%B0%E4%BF%A1%E7%A7%80-40523"
+      ],
+      "note": ""
+    },
+    {
+      "id": "IMAGAWA_NAGOYA",
+      "name": "那古野城",
+      "province_or_region": "尾張",
+      "district_or_area": "愛知郡",
+      "lon": "136.902",
+      "lat": "35.184",
+      "owner_faction_1534_draft": "IMAGAWA",
+      "historical_holder": "今川氏豊（1538奪取説）/織田信秀（1532説）",
+      "status": "所有異説",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/23/230000055800.html",
+      "history_urls": [
+        "https://www.museum.city.nagoya.jp/collection/data/data_42/index.html",
+        "https://www.city.nagoya.jp/kankou/rekishi/1004614/1004640/1004656.html"
+      ],
+      "note": "仮案は今川。所有年次の二説を残す。"
+    },
+    {
+      "id": "ASAKURA_ICHIJODANI",
+      "name": "一乗谷朝倉館",
+      "province_or_region": "越前",
+      "district_or_area": "足羽郡",
+      "lon": "136.296",
+      "lat": "35.999",
+      "owner_faction_1534_draft": "ASAKURA",
+      "historical_holder": "朝倉孝景",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/18/180000130500.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%9C%9D%E5%80%89%E5%AD%9D%E6%99%AF-25008",
+        "https://kotobank.jp/word/%E4%B8%80%E4%B9%97%E8%B0%B7-433423"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ASHIKAGA_KIRIYAMA",
+      "name": "霧山城",
+      "province_or_region": "伊勢",
+      "district_or_area": "多気郡",
+      "lon": "136.289",
+      "lat": "34.523",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "北畠晴具",
+      "status": "無所属守護の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/24/240000168200.html",
+      "history_urls": [
+        "https://kunishitei.bunka.go.jp/heritage/detail/401/1514",
+        "https://www.bunka.pref.mie.lg.jp/rekishi/kenshi/asp/Q_A/detail118.html"
+      ],
+      "note": "北畠氏を足利直臣・直領と見なさない。"
+    },
+    {
+      "id": "ASHIKAGA_NANAO",
+      "name": "七尾城",
+      "province_or_region": "能登",
+      "district_or_area": "鹿島郡",
+      "lon": "136.985",
+      "lat": "37.009",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "畠山義総",
+      "status": "守護家の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/17/170000284600.html",
+      "history_urls": [
+        "https://www.city.nanao.lg.jp/syougai/nanaojoushi.html",
+        "https://kotobank.jp/word/%E7%95%A0%E5%B1%B1%E7%BE%A9%E7%B7%8F-1101255"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ASHIKAGA_SAKURABORA",
+      "name": "桜洞城",
+      "province_or_region": "飛騨",
+      "district_or_area": "益田郡",
+      "lon": "137.212",
+      "lat": "35.880",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "三木直頼",
+      "status": "弱い代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/21/210000336100.html",
+      "history_urls": [
+        "https://www.city.gero.lg.jp/uploaded/attachment/6905.pdf",
+        "https://kotobank.jp/word/%E4%B8%89%E6%9C%A8%E6%B0%8F-1209244"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ASHIKAGA_GOSEYAMA",
+      "name": "後瀬山城",
+      "province_or_region": "若狭",
+      "district_or_area": "遠敷郡",
+      "lon": "135.739",
+      "lat": "35.488",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "若狭武田元光",
+      "status": "幕府系守護の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/18/180000281800.html",
+      "history_urls": [
+        "https://www1.city.obama.fukui.jp/japan_heritage/bunkazai/detail.php?id=27",
+        "https://kotobank.jp/word/%E8%8B%A5%E7%8B%AD%E5%9B%BD-153875"
+      ],
+      "note": "甲斐武田とは別系統。"
+    },
+    {
+      "id": "ASHIKAGA_HOJOZU",
+      "name": "放生津城",
+      "province_or_region": "越中",
+      "district_or_area": "射水郡",
+      "lon": "137.090",
+      "lat": "36.777",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "神保氏・城番未詳",
+      "status": "畠山系守護代の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/16/160000257400.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E8%B6%8A%E4%B8%AD%E5%9B%BD-36815",
+        "https://www.city.toyama.toyama.jp/etc/maibun/toyamajyo/history/sengoku2.htm"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ASHIKAGA_KUWANOMI",
+      "name": "桑実寺正覚院（臨時政庁）",
+      "province_or_region": "近江",
+      "district_or_area": "蒲生郡",
+      "lon": "136.154",
+      "lat": "35.144",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "足利義晴（六角保護下）",
+      "status": "一時滞在・城ではない",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/25/250000191500.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%85%AD%E8%A7%92%E5%AE%9A%E9%A0%BC-153000",
+        "https://kotobank.jp/word/%E8%B6%B3%E5%88%A9%E7%BE%A9%E6%99%B4-25238"
+      ],
+      "note": "六角領内の滞在先。足利所有城として数えるかは要判断。"
+    },
+    {
+      "id": "ROKKAKU_KANNONJI",
+      "name": "観音寺城",
+      "province_or_region": "近江",
+      "district_or_area": "蒲生郡",
+      "lon": "136.158",
+      "lat": "35.146",
+      "owner_faction_1534_draft": "ROKKAKU",
+      "historical_holder": "六角定頼",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/25/250000192100.html",
+      "history_urls": [
+        "https://www.pref.shiga.lg.jp/sd00/2592.html",
+        "https://kotobank.jp/word/%E8%A6%B3%E9%9F%B3%E5%AF%BA%E5%9F%8E-179871"
+      ],
+      "note": ""
+    },
+    {
+      "id": "ROKKAKU_KAMAHABA",
+      "name": "鎌刃城",
+      "province_or_region": "近江",
+      "district_or_area": "坂田郡",
+      "lon": "136.315",
+      "lat": "35.297",
+      "owner_faction_1534_draft": "ROKKAKU",
+      "historical_holder": "1533年以降の六角方・城代未確定",
+      "status": "国境支城・所有暫定",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/25/250000302800.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E9%8E%8C%E5%88%83%E5%9F%8E-179846"
+      ],
+      "note": ""
+    },
+    {
+      "id": "HONGANJI_ISHIYAMA",
+      "name": "石山御坊",
+      "province_or_region": "摂津",
+      "district_or_area": "東成郡",
+      "lon": "135.529",
+      "lat": "34.687",
+      "owner_faction_1534_draft": "HONGANJI",
+      "historical_holder": "証如・本願寺",
+      "status": "本拠・位置代用",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/28/280000098900.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%9C%AC%E9%A1%98%E5%AF%BA-134997",
+        "https://kotobank.jp/word/%E7%9F%B3%E5%B1%B1%E6%9C%AC%E9%A1%98%E5%AF%BA%E8%B7%A1-3075560"
+      ],
+      "note": "後世の大坂城跡点で代用。"
+    },
+    {
+      "id": "MIYOSHI_SHIBAO",
+      "name": "芝生城",
+      "province_or_region": "阿波",
+      "district_or_area": "三好郡",
+      "lon": "133.970",
+      "lat": "34.045",
+      "owner_faction_1534_draft": "MIYOSHI",
+      "historical_holder": "三好氏・1534年長慶本人の在城未詳",
+      "status": "家の本貫地",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/37/370000071900.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E8%8A%9D%E7%94%9F%E5%9F%8E%E8%B7%A1-3092253",
+        "https://kotobank.jp/word/%E4%B8%89%E5%A5%BD%E9%95%B7%E6%85%B6-16803"
+      ],
+      "note": ""
+    },
+    {
+      "id": "CHOSOKABE_OKO",
+      "name": "岡豊城",
+      "province_or_region": "土佐",
+      "district_or_area": "長岡郡",
+      "lon": "133.623",
+      "lat": "33.595",
+      "owner_faction_1534_draft": "CHOSOKABE",
+      "historical_holder": "長宗我部国親",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/40/400000083700.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%B2%A1%E8%B1%8A%E5%9F%8E%E8%B7%A1-1443510",
+        "https://kotobank.jp/word/%E9%95%B7%E5%AE%97%E6%88%91%E9%83%A8%E5%9B%BD%E8%A6%AA-1091612"
+      ],
+      "note": ""
+    },
+    {
+      "id": "MIYOSHI_SHOZUI",
+      "name": "勝瑞守護所",
+      "province_or_region": "阿波",
+      "district_or_area": "板野郡",
+      "lon": "134.523",
+      "lat": "34.132",
+      "owner_faction_1534_draft": "MIYOSHI",
+      "historical_holder": "阿波細川持隆",
+      "status": "阿波細川の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/37/370000019300.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%8B%9D%E7%91%9E%E5%9F%8E%E8%B7%A1-3091999",
+        "https://online.bunka.go.jp/db/heritages/detail/140094"
+      ],
+      "note": "現勝瑞城跡は後年の三好存保築城との説明あり。1534年の三好家直城ではない。"
+    },
+    {
+      "id": "MIYOSHI_YAGAMI",
+      "name": "八上城",
+      "province_or_region": "丹波",
+      "district_or_area": "多紀郡",
+      "lon": "135.256",
+      "lat": "35.062",
+      "owner_faction_1534_draft": "MIYOSHI",
+      "historical_holder": "波多野元清/秀忠系",
+      "status": "晴元方の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/29/290000158800.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%85%AB%E4%B8%8A%E5%9F%8E%E8%B7%A1-1445202"
+      ],
+      "note": "1534年の三好直領ではない。"
+    },
+    {
+      "id": "ASHIKAGA_TAKAYA",
+      "name": "高屋城",
+      "province_or_region": "河内",
+      "district_or_area": "古市郡",
+      "lon": "135.610",
+      "lat": "34.549",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "畠山稙長/長経側（年内政変）",
+      "status": "幕府系守護の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/28/280000334800.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E7%95%A0%E5%B1%B1%E7%A8%99%E9%95%B7-1101226",
+        "https://kotobank.jp/word/%E6%B2%B3%E5%86%85%E5%9B%BD-48299"
+      ],
+      "note": "1534年の城主交替時期が開始日次第。"
+    },
+    {
+      "id": "ASHIKAGA_OKISHIO",
+      "name": "置塩城",
+      "province_or_region": "播磨",
+      "district_or_area": "飾東郡",
+      "lon": "134.683",
+      "lat": "34.923",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "赤松政村（後の晴政）",
+      "status": "守護家の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/29/290000556800.html",
+      "history_urls": [
+        "https://rekihaku.pref.hyogo.lg.jp/castle/okishio/",
+        "https://kotobank.jp/word/%E8%B5%A4%E6%9D%BE%E6%99%B4%E6%94%BF-1048967"
+      ],
+      "note": ""
+    },
+    {
+      "id": "MIYOSHI_AMAGIRI",
+      "name": "天霧城",
+      "province_or_region": "讃岐",
+      "district_or_area": "多度郡",
+      "lon": "133.736",
+      "lat": "34.236",
+      "owner_faction_1534_draft": "MIYOSHI",
+      "historical_holder": "香川氏",
+      "status": "細川系守護代の代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/38/380000116900.html",
+      "history_urls": [
+        "https://online.bunka.go.jp/heritages/detail/139617",
+        "https://kotobank.jp/word/%E8%AE%83%E5%B2%90%E5%9B%BD-69432"
+      ],
+      "note": "三好家直領ではない。"
+    },
+    {
+      "id": "ASHIKAGA_YUZUKI",
+      "name": "湯築城",
+      "province_or_region": "伊予",
+      "district_or_area": "温泉郡",
+      "lon": "132.787",
+      "lat": "33.849",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "河野氏",
+      "status": "弱い代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/39/390000137200.html",
+      "history_urls": [
+        "https://www.city.matsuyama.ehime.jp/kanko/kankoguide/rekishibunka/bunkazai/kuni/yudukijou_ato.html",
+        "https://kotobank.jp/word/%E4%BC%8A%E4%BA%88%E5%9B%BD-32344"
+      ],
+      "note": "河野家の将軍家臣従を1534年に証明する資料はない。"
+    },
+    {
+      "id": "OUCHI_YAMAGUCHI",
+      "name": "大内氏館",
+      "province_or_region": "周防",
+      "district_or_area": "吉敷郡",
+      "lon": "131.480",
+      "lat": "34.185",
+      "owner_faction_1534_draft": "OUCHI",
+      "historical_holder": "大内義隆",
+      "status": "本拠・座標推定",
+      "location_url": "https://gosenzo.net/yamajiro/2025/06/07/%E3%80%90%E5%B1%B1%E5%8F%A3%E7%9C%8C%E3%80%91%E5%A4%A7%E5%86%85%E6%B0%8F%E9%A4%A8%E8%B7%A1%E3%80%90%E5%B1%B1%E5%8F%A3%E5%B8%82%E5%A4%A7%E6%AE%BF%E5%A4%A7%E8%B7%AF%E3%80%91/",
+      "history_urls": [
+        "https://www.city.yamaguchi.lg.jp/rs/rekibunshigen/r1062.html",
+        "https://kotobank.jp/word/%E5%A4%A7%E5%86%85%E7%BE%A9%E9%9A%86-17848"
+      ],
+      "note": "現地案内の位置を市史跡所在地で照合。"
+    },
+    {
+      "id": "AMAGO_TODA",
+      "name": "月山富田城",
+      "province_or_region": "出雲",
+      "district_or_area": "能義郡",
+      "lon": "133.185",
+      "lat": "35.361",
+      "owner_faction_1534_draft": "AMAGO",
+      "historical_holder": "尼子経久",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/33/330000072400.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E7%B5%8C%E4%B9%85-27145",
+        "https://yasugi-kankou.com/amagoitizokuseisuiki/"
+      ],
+      "note": ""
+    },
+    {
+      "id": "MORI_KORIYAMA",
+      "name": "吉田郡山城",
+      "province_or_region": "安芸",
+      "district_or_area": "高田郡",
+      "lon": "132.711",
+      "lat": "34.670",
+      "owner_faction_1534_draft": "MORI",
+      "historical_holder": "毛利元就",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/35/350000239100.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%AF%9B%E5%88%A9%E5%85%83%E5%B0%B1-16902"
+      ],
+      "note": ""
+    },
+    {
+      "id": "OTOMO_RESIDENCE",
+      "name": "大友氏館",
+      "province_or_region": "豊後",
+      "district_or_area": "大分郡",
+      "lon": "131.618",
+      "lat": "33.231",
+      "owner_faction_1534_draft": "OTOMO",
+      "historical_holder": "大友義鑑",
+      "status": "本拠・発掘代表点",
+      "location_url": "https://heritagemap.nabunken.go.jp/statistic/59831-%E5%A4%A7%E5%8F%8B%E6%B0%8F%E9%A4%A8%E8%B7%A1_%E7%AC%AC14%E6%AC%A1.html",
+      "history_urls": [
+        "https://www.city.oita.oita.jp/o204/documents/dai3syou.pdf",
+        "https://online.bunka.go.jp/db/heritages/detail/207143"
+      ],
+      "note": ""
+    },
+    {
+      "id": "SHIMAZU_SHIMIZU",
+      "name": "清水城",
+      "province_or_region": "薩摩",
+      "district_or_area": "鹿児島郡",
+      "lon": "130.567",
+      "lat": "31.615",
+      "owner_faction_1534_draft": "SHIMAZU",
+      "historical_holder": "1534年初頭は島津勝久",
+      "status": "本拠・年内変動",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/47/470000033500.html",
+      "history_urls": [
+        "https://www.city.kagoshima.lg.jp/kikakuzaisei/kikaku/seisaku-s/shise/shokai/shishi/documents/2012510154859.pdf",
+        "https://www.city.tarumizu.lg.jp/bunka/kurashi/kosodate/roman/tarumzusimadubosyo.html"
+      ],
+      "note": "勝久は10月に一時逃亡。後の城番は未詳。"
+    },
+    {
+      "id": "RYUKYU_SHURI",
+      "name": "首里城",
+      "province_or_region": "琉球",
+      "district_or_area": "沖縄本島首里",
+      "lon": "127.719",
+      "lat": "26.217",
+      "owner_faction_1534_draft": "RYUKYU",
+      "historical_holder": "尚清王",
+      "status": "本拠",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/48/480000015800.html",
+      "history_urls": [
+        "https://oki-park.jp/shurijo/events/detail/10644"
+      ],
+      "note": ""
+    },
+    {
+      "id": "OUCHI_YAMABUKI",
+      "name": "山吹城・石見銀山",
+      "province_or_region": "石見",
+      "district_or_area": "邇摩郡",
+      "lon": "132.431",
+      "lat": "35.104",
+      "owner_faction_1534_draft": "OUCHI",
+      "historical_holder": "大内方・城主個人未詳",
+      "status": "支城・年次確認",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/33/330000174400.html",
+      "history_urls": [
+        "https://ginzan.city.oda.lg.jp/wp-content/uploads/2020/04/b10b1aa9502c20ae6af005a03b414f60.pdf"
+      ],
+      "note": "大内が1533年に銀山を再掌握、尼子取得は1537年。"
+    },
+    {
+      "id": "OUCHI_TSUWANO",
+      "name": "津和野城（三本松城）",
+      "province_or_region": "石見",
+      "district_or_area": "吉賀郡",
+      "lon": "131.764",
+      "lat": "34.460",
+      "owner_faction_1534_draft": "OUCHI",
+      "historical_holder": "吉見氏（大内方）",
+      "status": "国衆支城",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/33/330000251300.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E5%90%89%E8%A6%8B%E6%B0%8F-146221"
+      ],
+      "note": "1534年の個人城主は未詳。"
+    },
+    {
+      "id": "ASHIKAGA_MITSUISHI",
+      "name": "三石城",
+      "province_or_region": "備前",
+      "district_or_area": "和気郡",
+      "lon": "134.270",
+      "lat": "34.808",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "浦上政宗方",
+      "status": "在地領主の弱い代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/34/340000143000.html",
+      "history_urls": [
+        "https://www.city.bizen.okayama.jp/soshiki/33/558.html"
+      ],
+      "note": "1533年政宗が攻め取る。将軍家直轄ではない。"
+    },
+    {
+      "id": "ASHIKAGA_BITCHU_MATSUYAMA",
+      "name": "備中松山城",
+      "province_or_region": "備中",
+      "district_or_area": "上房郡",
+      "lon": "133.621",
+      "lat": "34.812",
+      "owner_faction_1534_draft": "ASHIKAGA",
+      "historical_holder": "庄為資",
+      "status": "在地領主の弱い代理割当",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/34/340000327400.html",
+      "history_urls": [
+        "https://www.pref.okayama.jp/uploaded/attachment/402813.pdf"
+      ],
+      "note": "庄氏は1533年入城。1534年の個人城主は年次からの推定。"
+    },
+    {
+      "id": "SHIMAZU_IZAKU",
+      "name": "伊作城",
+      "province_or_region": "薩摩",
+      "district_or_area": "阿多郡",
+      "lon": "130.363",
+      "lat": "31.514",
+      "owner_faction_1534_draft": "SHIMAZU",
+      "historical_holder": "島津忠良・貴久系",
+      "status": "別系統の支城",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/47/470000080800.html",
+      "history_urls": [
+        "https://www.city.hioki.kagoshima.jp/bunkazai/kurashi/kosodate-kyoiku/shakaikyoiku/bunkazai/fukiage/izakuzixyou.html",
+        "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E8%B2%B4%E4%B9%85-75142"
+      ],
+      "note": "宗家勝久の直接支城ではない。"
+    },
+    {
+      "id": "SHIMAZU_OBI",
+      "name": "飫肥城",
+      "province_or_region": "日向",
+      "district_or_area": "那珂郡",
+      "lon": "131.350",
+      "lat": "31.629",
+      "owner_faction_1534_draft": "SHIMAZU",
+      "historical_holder": "島津忠朝系",
+      "status": "一族支城・城番未詳",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/46/460000108100.html",
+      "history_urls": [
+        "https://kotobank.jp/word/%E6%97%A5%E5%90%91%E5%9B%BD-121039"
+      ],
+      "note": "1532年の飫肥島津忠朝の記録を根拠とし、1534年連続性は要確認。"
+    },
+    {
+      "id": "RYUKYU_NAKAGUSUKU",
+      "name": "中城グスク",
+      "province_or_region": "琉球",
+      "district_or_area": "沖縄本島中城",
+      "lon": "127.800",
+      "lat": "26.284",
+      "owner_faction_1534_draft": "RYUKYU",
+      "historical_holder": "琉球王府系・個別城主未詳",
+      "status": "王国支城・1534年城番未詳",
+      "location_url": "https://geoshape.ex.nii.ac.jp/nrct-poi/resource/48/480000082200.html",
+      "history_urls": [
+        "https://www.pref.okinawa.jp/kyoiku/kodomo/1002688/1002695/1002699.html",
+        "https://online.bunka.go.jp/heritages/detail/217969"
+      ],
+      "note": "15世紀に王命で築いた城。1534年の常駐城主は未確認。"
+    }
+  ],
+  "province_allocations": [
+    {
+      "province": "山城",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "京都の将軍家を代表させる暫定案。1534年秋の帰京以前は近江滞在で、晴元と法華衆の権益が重なる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%B6%B3%E5%88%A9%E7%BE%A9%E6%99%B4-25238",
+            "https://kotobank.jp/word/%E7%B4%B0%E5%B7%9D%E6%99%B4%E5%85%83-133263"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "大和",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "筒井・古市等と興福寺が並立し、将軍家へ便宜的に束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%AD%92%E4%BA%95%E9%A0%86%E8%88%88-1092356",
+            "https://kotobank.jp/word/%E5%A4%A7%E5%92%8C%E5%9B%BD-144220"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "河内",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "畠山守護家・遊佐・木沢の政変を幕府系勢力として代理表現する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%95%A0%E5%B1%B1%E7%A8%99%E9%95%B7-1101226",
+            "https://kotobank.jp/word/%E6%B2%B3%E5%86%85%E5%9B%BD-48299"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "和泉",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "細川系半国守護と堺自治を将軍家へ仮寄せする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%92%8C%E6%B3%89%E5%9B%BD-30877"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "摂津",
+      "parts": [
+        {
+          "districts": [
+            "東成郡石山御坊・寺内の周辺"
+          ],
+          "owner_faction": "HONGANJI",
+          "reason": "証如の石山本寺を置くが、東成郡全域の一円支配ではない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%9C%AC%E9%A1%98%E5%AF%BA-134997",
+            "https://ir.library.osaka-u.ac.jp/repo/ouka/all/47958/mrh_006_001.pdf"
+          ]
+        },
+        {
+          "districts": [
+            "東成郡の上記以外",
+            "西成",
+            "住吉",
+            "豊島",
+            "能勢",
+            "島上",
+            "島下",
+            "武庫",
+            "兎原",
+            "八部",
+            "川辺",
+            "有馬"
+          ],
+          "owner_faction": "MIYOSHI",
+          "reason": "細川晴元・被官層を1534年秋以後の三好との関係で代理表現する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%B4%B0%E5%B7%9D%E6%99%B4%E5%85%83-133263",
+            "https://kotobank.jp/word/%E6%91%82%E6%B4%A5%E5%9B%BD-87376",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K05.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "伊賀",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "土豪の独立的領域を幕府系の地域として仮寄せする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BC%8A%E8%B3%80%E5%9B%BD-30370"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "伊勢",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "北畠晴具の南五郡と北伊勢国人を、幕府関係の代理として束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.bunka.pref.mie.lg.jp/rekishi/kenshi/asp/Q_A/detail118.html",
+            "https://kotobank.jp/word/%E4%BC%8A%E5%8B%A2%E5%9B%BD-30970"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "志摩",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "九鬼氏・海上の島衆が分立するため、旧守護系列を仮の寄せ先とする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%BF%97%E6%91%A9%E5%9B%BD-75161",
+            "https://kotobank.jp/word/%E4%B9%9D%E9%AC%BC%E6%B0%8F-55026"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "尾張",
+      "parts": [
+        {
+          "districts": [
+            "海東",
+            "海西",
+            "知多",
+            "春日井",
+            "丹羽",
+            "羽栗",
+            "中島",
+            "愛知郡の那古野城周辺以外"
+          ],
+          "owner_faction": "ODA",
+          "reason": "勝幡・津島の信秀と清洲/岩倉織田諸家を同族のゲーム勢力へ統合する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%B9%94%E7%94%B0%E4%BF%A1%E7%A7%80-40523",
+            "https://www.city.inazawa.aichi.jp/0000002744.html",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K09.html"
+          ]
+        },
+        {
+          "districts": [
+            "愛知郡那古野城周辺"
+          ],
+          "owner_faction": "IMAGAWA",
+          "reason": "1538年奪取説では今川氏豊の那古野城。1532年説なら織田へ変更する。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.museum.city.nagoya.jp/collection/data/data_42/index.html",
+            "https://www.city.nagoya.jp/kankou/rekishi/1004614/1004640/1004656.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "三河",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "MATSUDAIRA",
+          "reason": "清康の岡崎・西三河と1529年以後の東三河進出を採用し、未従属国人は判断として含める。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%9D%BE%E5%B9%B3%E6%B8%85%E5%BA%B7-136642",
+            "https://adeac.jp/toyohashi-city/texthtml/d100010/mp100010-100010/ht030080"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "遠江",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "IMAGAWA",
+          "reason": "今川氏親以来の領域と掛川朝比奈ら被官の関係を採る。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BB%8A%E5%B7%9D%E6%B0%8F%E8%A6%AA-32208",
+            "https://kotobank.jp/word/%E6%9C%9D%E6%AF%94%E5%A5%88%E6%B3%B0%E8%83%BD-1049379"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "駿河",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "IMAGAWA",
+          "reason": "駿府の今川氏輝を核とし、河東は1537年の北条との開戦以前の今川側に置く。",
+          "judgement": false,
+          "source_urls": [
+            "https://www.city.shizuoka.lg.jp/s6725/s012154.html",
+            "https://museum.city.fuji.shizuoka.jp/report/rokusyoke9.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "甲斐",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "TAKEDA",
+          "reason": "信虎が1532年頃までに甲斐をほぼ統合。穴山・小山田の独自領は在地主体として残す。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%AD%A6%E7%94%B0%E4%BF%A1%E8%99%8E-93064",
+            "https://kotobank.jp/word/%E7%A9%B4%E5%B1%B1%E6%B0%8F-1143272"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "伊豆",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "HOJO",
+          "reason": "北条早雲以来の伊豆本拠と韮山を氏綱の勢力へ継ぐ。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%8C%97%E6%9D%A1%E6%B0%8F%E7%B6%B1-132131",
+            "https://www.city.odawara.kanagawa.jp/public/detail/11199/"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "相模",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "HOJO",
+          "reason": "小田原本拠の氏綱の勢力中核。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%8C%97%E6%9D%A1%E6%B0%8F%E7%B6%B1-132131",
+            "https://www.city.odawara.kanagawa.jp/public/detail/11199/"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "武蔵",
+      "parts": [
+        {
+          "districts": [
+            "豊島",
+            "荏原",
+            "橘樹",
+            "都筑",
+            "久良岐"
+          ],
+          "owner_faction": "HOJO",
+          "reason": "1524年取得の江戸城周辺と相模に接する南武蔵を郡単位へ拡大した判断。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.katsushika.lg.jp/history/history/2-2-3-100.html",
+            "https://kotobank.jp/word/%E6%AD%A6%E8%94%B5%E5%9B%BD-140407"
+          ]
+        },
+        {
+          "districts": [
+            "足立",
+            "新座",
+            "埼玉",
+            "入間",
+            "高麗",
+            "比企",
+            "横見",
+            "大里",
+            "男衾",
+            "幡羅",
+            "榛沢",
+            "児玉",
+            "賀美",
+            "那珂",
+            "秩父",
+            "多摩"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "河越の扇谷上杉・鉢形の山内方・在地国衆を山内上杉へ縮約する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%B7%9D%E8%B6%8A%E5%9F%8E%E8%B7%A1-3037971",
+            "https://kotobank.jp/word/%E5%B1%B1%E5%86%85%E4%B8%8A%E6%9D%89%E6%B0%8F-3132612",
+            "https://kotobank.jp/word/%E6%AD%A6%E8%94%B5%E5%9B%BD-140407"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "安房",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "HOJO",
+          "reason": "里見義堯の1533–34年内乱を支援した北条との一時的連携で代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.tateyama.chiba.jp/satomi/youyaku/2shou/2shou_4/2shou_4min.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "上総",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "真里谷武田氏・小弓公方系の地域を北条対抗勢力へ仮寄せする。7–11月の内乱で城別所有が変動。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.chiba.jp/kyodo/katsudo/kenkyuin.html",
+            "https://kotobank.jp/word/%E7%9C%9F%E9%87%8C%E8%B0%B7%E5%9F%8E-180333"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "下総",
+      "parts": [
+        {
+          "districts": [
+            "葛飾",
+            "相馬",
+            "猿島",
+            "結城",
+            "豊田",
+            "岡田",
+            "印旛",
+            "香取",
+            "匝瑳",
+            "海上"
+          ],
+          "owner_faction": "HOJO",
+          "reason": "古河公方・千葉宗家との1534年の政治的連携を北条へ代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%8F%A4%E6%B2%B3%E5%85%AC%E6%96%B9-63532",
+            "https://kotobank.jp/word/%E6%9C%AC%E4%BD%90%E5%80%89%E5%9F%8E-180368",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K19.html"
+          ]
+        },
+        {
+          "districts": [
+            "千葉",
+            "埴生"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "小弓公方足利義明の対北条陣営を山内上杉へ仮寄せする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%B6%B3%E5%88%A9%E7%BE%A9%E6%98%8E-25226",
+            "https://kotobank.jp/word/%E5%B0%8F%E5%BC%93%E5%9F%8E-179808",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K19.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "常陸",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "佐竹・江戸・大掾・小田らが分立し、山内上杉への便宜配分にとどまる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BD%90%E7%AB%B9%E6%B0%8F-69088",
+            "https://kotobank.jp/word/%E5%B8%B8%E9%99%B8%E5%9B%BD-120003"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "近江",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ROKKAKU",
+          "reason": "南近江は六角定頼の中核。湖北浅井・京極領までの一括はゲーム上の判断。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%85%AD%E8%A7%92%E5%AE%9A%E9%A0%BC-153000",
+            "https://www.pref.shiga.lg.jp/sd00/2592.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "美濃",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "土岐守護家の内紛期を将軍家へ代理配分する。斎藤道三の後年の一国支配を遡及しない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%BE%8E%E6%BF%83%E5%9B%BD-139340",
+            "https://kotobank.jp/word/%E6%96%8E%E8%97%A4%E9%81%93%E4%B8%89-68115"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "飛騨",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "三木・江馬・姉小路・内ヶ島等が分立し、守護系の便宜配分とする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%89%E6%9C%A8%E6%B0%8F-1209244",
+            "https://kotobank.jp/word/%E5%A7%89%E5%B0%8F%E8%B7%AF%E6%B0%8F-26450"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "信濃",
+      "parts": [
+        {
+          "districts": [
+            "高井"
+          ],
+          "owner_faction": "NAGAO",
+          "reason": "高井郡中野の高梨氏と長尾為景の姻戚・協力関係を郡へ外挿する。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.nagano.nagano.jp/documents/15556/13-02.pdf",
+            "https://kotobank.jp/word/%E4%BF%A1%E6%BF%83%E5%9B%BD-74561"
+          ]
+        },
+        {
+          "districts": [
+            "伊那",
+            "諏訪",
+            "筑摩",
+            "安曇",
+            "更級",
+            "水内",
+            "埴科",
+            "小県",
+            "佐久"
+          ],
+          "owner_faction": "TAKEDA",
+          "reason": "諏訪・小笠原・村上等の独立領を地理的に武田へ仮寄せする。武田の信濃攻略は後年。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BF%A1%E6%BF%83%E5%9B%BD-74561",
+            "https://www.city.matsumoto.nagano.jp/uploaded/attachment/90646.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "上野",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "平井の関東管領上杉と長野・横瀬・成田等の国衆関係を大枠にする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%8A%E6%9D%89%E6%86%B2%E6%94%BF-33790",
+            "https://www.city.takasaki.gunma.jp/site/sightseeing/6449.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "下野",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "YAMANOUCHI_UESUGI",
+          "reason": "宇都宮・那須・小山等は独立的で、足利長尾の山内上杉関係を手掛かりに代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%8B%E9%87%8E%E5%9B%BD-75387",
+            "https://www.pref.tochigi.lg.jp/m01/education/kyouikuzenpan/kyouikuiinkai/documents/2102g12.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "陸奥",
+      "parts": [
+        {
+          "districts": [
+            "伊達",
+            "信夫"
+          ],
+          "owner_faction": "DATE",
+          "reason": "桑折西山・梁川の稙宗本拠と周辺郡。",
+          "judgement": false,
+          "source_urls": [
+            "https://www.city.fukushima-date.lg.jp/soshiki/87/825.html"
+          ]
+        },
+        {
+          "districts": [
+            "会津",
+            "大沼",
+            "河沼",
+            "耶麻"
+          ],
+          "owner_faction": "ASHINA",
+          "reason": "黒川と猪苗代を含む会津の蘆名一族圏。南会津の独立諸家は別記。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E7%9B%9B%E8%88%9C-1049893",
+            "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E6%B0%8F-25298"
+          ]
+        },
+        {
+          "districts": [
+            "白河",
+            "白川",
+            "石川",
+            "田村",
+            "安積",
+            "岩瀬"
+          ],
+          "owner_faction": "ASHINA",
+          "reason": "仙道南部の伊東・二階堂・田村・白河結城等を会津に近い代理として置く。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%98%86%E5%90%8D%E7%9B%9B%E6%B0%8F-25307",
+            "https://kotobank.jp/word/%E7%94%B0%E6%9D%91%E6%B0%8F-94427"
+          ]
+        },
+        {
+          "districts": [
+            "菊多",
+            "磐前",
+            "磐城",
+            "楢葉",
+            "標葉",
+            "行方",
+            "宇多",
+            "亘理",
+            "伊具",
+            "刈田",
+            "安達",
+            "柴田",
+            "名取",
+            "宮城",
+            "黒川",
+            "加美",
+            "玉造",
+            "栗原",
+            "遠田",
+            "志田",
+            "桃生",
+            "牡鹿",
+            "登米",
+            "気仙",
+            "本吉",
+            "磐井",
+            "江刺",
+            "胆沢",
+            "和賀",
+            "稗貫",
+            "紫波",
+            "閉伊",
+            "岩手",
+            "九戸",
+            "鹿角",
+            "北",
+            "三戸",
+            "二戸",
+            "津軽"
+          ],
+          "owner_faction": "DATE",
+          "reason": "南部・大崎・葛西・相馬・岩城などの独立勢力を陸奥の伊達プレイヤーへ強制的に束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E9%99%B8%E5%A5%A5%E5%9B%BD-140636",
+            "https://www.pref.aomori.lg.jp/soshiki/kyoiku/e-bunka/kinen_siseki_14.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "出羽",
+      "parts": [
+        {
+          "districts": [
+            "置賜"
+          ],
+          "owner_faction": "DATE",
+          "reason": "米沢本拠化前から伊達家が置賜へ所領を持つ。",
+          "judgement": false,
+          "source_urls": [
+            "https://sengoku.oki-tama.jp/dte48/",
+            "https://www.city.fukushima-date.lg.jp/soshiki/87/141.html"
+          ]
+        },
+        {
+          "districts": [
+            "村山",
+            "最上"
+          ],
+          "owner_faction": "DATE",
+          "reason": "最上氏の山形周辺を伊達と近い南出羽の代理へ寄せる。臣従は未証明。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%9C%80%E4%B8%8A%E6%B0%8F-142161",
+            "https://kotobank.jp/word/%E5%87%BA%E7%BE%BD%E5%9B%BD-102021"
+          ]
+        },
+        {
+          "districts": [
+            "田川",
+            "飽海",
+            "由利",
+            "雄勝",
+            "平鹿",
+            "仙北",
+            "河辺",
+            "秋田",
+            "山本"
+          ],
+          "owner_faction": "ASHINA",
+          "reason": "武藤・安東・小野寺・戸沢等の独立領をゲーム都合で蘆名へ仮寄せする。史実の蘆名領ではない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%87%BA%E7%BE%BD%E5%9B%BD-102021",
+            "https://www.pref.akita.lg.jp/uploads/public/archive_0000005160_00/H22_kikaku.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "若狭",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "若狭武田元光は甲斐武田とは別系で、将軍側の守護勢力として代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%8B%A5%E7%8B%AD%E5%9B%BD-153875",
+            "https://www1.city.obama.fukui.jp/japan_heritage/bunkazai/detail.php?id=27"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "越前",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASAKURA",
+          "reason": "一乗谷の孝景と府中奉行人・大野郡司の領国運営を大枠とする。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%9C%9D%E5%80%89%E5%AD%9D%E6%99%AF-25008",
+            "https://www.library-archives.pref.fukui.lg.jp/fukui/07/kenshi/T2/T2-4-01-05-02-035.htm"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "加賀",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "HONGANJI",
+          "reason": "1531年の一揆内戦後、本願寺中央支持の超勝寺・本覚寺系が優勢。各郡の一枚岩化は判断。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%8A%A0%E8%B3%80%E5%9B%BD-43381",
+            "https://www.library-archives.pref.fukui.lg.jp/fukui/07/kenshi/T2/T2-4-01-05-02-035.htm"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "能登",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "七尾の畠山義総の守護家を幕府系の代理として扱う。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.nanao.lg.jp/syougai/nanaojoushi.html",
+            "https://kotobank.jp/word/%E7%95%A0%E5%B1%B1%E6%B0%8F-114629"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "越中",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "神保・椎名・遊佐の畠山系守護代が分立し、幕府系へ便宜的に束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%B6%8A%E4%B8%AD%E5%9B%BD-36815",
+            "https://www.pref.toyama.jp/documents/13878/chiken090.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "越後",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "NAGAO",
+          "reason": "春日山の為景を中核とするが、上条定憲・揚北衆の反抗と自立を明記する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E9%95%B7%E5%B0%BE%E7%82%BA%E6%99%AF-17157",
+            "https://kotobank.jp/word/%E4%B8%8A%E6%9D%A1%E5%9F%8E-180034"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "佐渡",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "NAGAO",
+          "reason": "本間氏諸流は独立で、海峡越しの長尾への便宜的仮寄せに過ぎない。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.sado.niigata.jp/uploaded/attachment/15259.pdf",
+            "https://kotobank.jp/word/%E6%9C%AC%E9%96%93%E6%B0%8F-1207075"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "丹波",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "MIYOSHI",
+          "reason": "波多野・内藤等の細川晴元系を、長慶が晴元へ帰属した年末の代理として束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%B9%E6%B3%A2%E5%9B%BD-95427",
+            "https://kotobank.jp/word/%E7%B4%B0%E5%B7%9D%E6%99%B4%E5%85%83-133263"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "丹後",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "一色守護家と稲富等の在地勢力を将軍家へ代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%B9%E5%BE%8C%E5%9B%BD-95018",
+            "https://www.kyoto-be.ne.jp/bunkazai/cms/?p=2099"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "但馬",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "但馬山名氏と垣屋等の国衆を、幕府系守護の代理としてまとめる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BD%86%E9%A6%AC%E5%9B%BD-93259",
+            "https://lib.city.toyooka.lg.jp/kyoudo/komonjo/677d10ffdd746199e73c96e7b416750b1692acb8.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "因幡",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "布施の因幡山名氏を幕府系守護として代理配分する。尼子進出は後年で1534年従属未証明。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%9B%A0%E5%B9%A1%E5%9B%BD-31823",
+            "https://kotobank.jp/word/%E9%B3%A5%E5%8F%96%E5%9F%8E%E8%B7%A1-1444579"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "伯耆",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "AMAGO",
+          "reason": "尼子の進出が及んだ伯耆を代理配分するが、南条・小鴨等の抵抗を消さない。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.pref.tottori.lg.jp/87485.htm",
+            "https://www.pref.tottori.lg.jp/177508.htm"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "出雲",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "AMAGO",
+          "reason": "富田城の経久と出雲国人編成を中核とする。塩冶興久の乱は1534年まで続く。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E6%B0%8F-27143",
+            "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E7%B5%8C%E4%B9%85-27145"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "石見",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "1533年に再掌握した銀山と西部吉見氏の大内方関係を採る。東境の小笠原・尼子との争いは判断。",
+          "judgement": true,
+          "source_urls": [
+            "https://ginzan.city.oda.lg.jp/wp-content/uploads/2020/04/b10b1aa9502c20ae6af005a03b414f60.pdf",
+            "https://kotobank.jp/word/%E5%90%89%E8%A6%8B%E6%B0%8F-146221"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "隠岐",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "AMAGO",
+          "reason": "隠岐氏は尼子被官だが島内の1532–34年の反対勢力を留保する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%B0%BC%E5%AD%90%E6%B0%8F-27143",
+            "https://kotobank.jp/word/%E9%9A%A0%E5%B2%90%E5%9B%BD-39942"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "播磨",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "置塩の赤松政村と浦上・小寺・別所らを幕府系守護の代理へ束ねる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%B5%A4%E6%9D%BE%E6%99%B4%E6%94%BF-1048967",
+            "https://kotobank.jp/word/%E6%92%AD%E7%A3%A8%E5%9B%BD-117030"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "美作",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "AMAGO",
+          "reason": "1532年尼子侵攻を手掛かりに北部を代理表現し、東部浦上・三浦等は独立と記録する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%BE%8E%E4%BD%9C%E5%9B%BD-139433",
+            "https://digioka.libnet.pref.okayama.jp/cont/01/G0000002kyoudo/000/031/000031950.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "備前",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "浦上政宗・宗景の争いと赤松守護系列を将軍家へ便宜的に束ねる。尼子・大内直領ではない。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.bizen.okayama.jp/soshiki/33/558.html",
+            "https://www.pref.okayama.jp/site/kodai/628754.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "備中",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "1533年に備中松山城へ入った庄為資ら在地氏族を、他に同時代の従属先が確定しないため仮置きする。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.pref.okayama.jp/uploaded/attachment/402813.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "備後",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "大内・尼子が争い、1527年大内へ移った和智等を手掛かりに大内へ仮寄せする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%82%99%E5%BE%8C%E5%9B%BD-122076"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "安芸",
+      "parts": [
+        {
+          "districts": [
+            "高田"
+          ],
+          "owner_faction": "MORI",
+          "reason": "吉田郡山城を持つ元就の本領を核とする。郡全域は代理外挿。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%AF%9B%E5%88%A9%E5%85%83%E5%B0%B1-16902",
+            "https://kotobank.jp/word/%E5%AE%89%E8%8A%B8%E5%9B%BD-24591"
+          ]
+        },
+        {
+          "districts": [
+            "安芸"
+          ],
+          "owner_faction": "AMAGO",
+          "reason": "佐東銀山城の武田光和と尼子の結び付きを郡域へ外挿する。大内方地も混在。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BD%90%E6%9D%B1%E9%8A%80%E5%B1%B1%E5%9F%8E-179973",
+            "https://kotobank.jp/word/%E5%AE%89%E8%8A%B8%E5%9B%BD-24591"
+          ]
+        },
+        {
+          "districts": [
+            "豊田",
+            "高宮",
+            "沼田",
+            "佐伯",
+            "賀茂",
+            "山県"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "大内方の毛利・諸国衆を本国周防との政治関係で代理配分する。吉川・小早川等の独立を留保。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%AE%89%E8%8A%B8%E5%9B%BD-24591",
+            "https://kotobank.jp/word/%E6%AF%9B%E5%88%A9%E5%85%83%E5%B0%B1-16902"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "周防",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "山口の大内氏館を置く大内本国で、陶氏等の被官領を含める。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%91%A8%E9%98%B2%E5%9B%BD-83369",
+            "https://www.city.yamaguchi.lg.jp/rs/rekibunshigen/r1062.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "長門",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "義隆の周防・長門守護職と家臣領を大内の中核とする。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%A4%A7%E5%86%85%E7%BE%A9%E9%9A%86-17848"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "紀伊",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "畠山氏の守護権と根来・雑賀・高野山など諸集団の分立を将軍家へ代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%B4%80%E4%BC%8A%E5%9B%BD-49858",
+            "https://adeac.jp/tondabayashi-city/texthtml/d000020/cp000002/ht000110"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "淡路",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "MIYOSHI",
+          "reason": "細川系守護圏と安宅氏の活動を阿波三好側へ仮寄せする。洲本城の1534年築城・城主は異説。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%B4%B2%E6%9C%AC%E5%9F%8E%E8%B7%A1-1444239",
+            "https://kotobank.jp/word/%E7%B4%B0%E5%B7%9D%E6%B0%8F-133254"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "阿波",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "MIYOSHI",
+          "reason": "三好本貫の芝生を核とするが、勝瑞は阿波細川持隆の守護所で代理配分となる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%B8%89%E5%A5%BD%E6%B0%8F-139809",
+            "https://kotobank.jp/word/%E5%8B%9D%E7%91%9E%E5%9F%8E%E8%B7%A1-3091999"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "讃岐",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "MIYOSHI",
+          "reason": "細川被官の安富・香川両守護代を阿波三好へ便宜的にまとめる。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%AE%83%E5%B2%90%E5%9B%BD-69432",
+            "https://kotobank.jp/word/%E5%AE%89%E5%AF%8C%E6%B0%8F-1429333"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "伊予",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "ASHIKAGA",
+          "reason": "河野・宇都宮・西園寺等が分立するため、湯築の河野を幕府関係の代理へ仮寄せする。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E4%BC%8A%E4%BA%88%E5%9B%BD-32344",
+            "https://www.city.matsuyama.ehime.jp/kanko/kankoguide/rekishibunka/bunkazai/kuni/yudukijou_ato.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "土佐",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "CHOSOKABE",
+          "reason": "岡豊と長岡郡の旧領を国親の中核とし、幡多一条・本山・安芸等は独立だが地図上は代理配分する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%B2%A1%E8%B1%8A%E5%9F%8E%E8%B7%A1-1443510",
+            "https://www.pref.kochi.lg.jp/doc/kanko-chosogabe-shichiyu/"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "筑前",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "大内の博多・守護代圏を核とするが、大友の博多湾3拠点と少弐領を一括大内直領とはしない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%AD%91%E5%89%8D%E5%9B%BD-96003",
+            "https://museum.city.fukuoka.jp/sp/exhibition/557/"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "筑後",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OTOMO",
+          "reason": "大友守護と代官の関係を採るが、三池・西牟田ら国人の自律性を保持する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E7%AD%91%E5%BE%8C%E5%9B%BD-95969"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "豊前",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "大内守護代杉氏を核にするが、1534年の宇佐方面は大友との争いが残る。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%B1%8A%E5%89%8D%E5%9B%BD-124848",
+            "https://kotobank.jp/word/%E5%8B%A2%E5%A0%B4%E3%83%B6%E5%8E%9F-3103932"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "豊後",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OTOMO",
+          "reason": "府内の義鑑館を核にする。速見郡は1534年の大内との戦場。",
+          "judgement": false,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%A4%A7%E5%8F%8B%E7%BE%A9%E9%91%91-17574",
+            "https://online.bunka.go.jp/db/heritages/detail/207143"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "肥前",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OTOMO",
+          "reason": "少弐と龍造寺・松浦・有馬等を、大友と少弐の政治関係で仮寄せする。1534年大内和議なら大内案もあり、直領ではない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%82%A5%E5%89%8D%E5%9B%BD-119916",
+            "https://kotobank.jp/word/%E5%B0%91%E5%BC%90%E6%B0%8F-79659"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "肥後",
+      "parts": [
+        {
+          "districts": [
+            "菊池"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "1534年に菊池義武が兄大友義鑑と対立し大内義隆と結んだ関係を優先する。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%8F%8A%E6%B1%A0%E7%BE%A9%E6%AD%A6-1068907",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K68.html"
+          ]
+        },
+        {
+          "districts": [
+            "玉名",
+            "飽田",
+            "託麻",
+            "阿蘇",
+            "合志",
+            "山本",
+            "山鹿",
+            "上益城",
+            "下益城",
+            "宇土",
+            "八代",
+            "葦北",
+            "球磨",
+            "天草"
+          ],
+          "owner_faction": "OTOMO",
+          "reason": "阿蘇・相良など自立領を大友の肥後進出側へ便宜配分する。1534年の一国支配は未証明。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%82%A5%E5%BE%8C%E5%9B%BD-119527",
+            "https://geoshape.ex.nii.ac.jp/kg/resource/K68.html"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "日向",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "SHIMAZU",
+          "reason": "南西の北郷・飫肥島津一族を核にするが、伊東・土持領を同家へ含める部分は強制判断。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E6%97%A5%E5%90%91%E5%9B%BD-121039",
+            "https://www.pref.miyazaki.lg.jp/documents/82466/bunkyo_r040303_01kyoikuiinkai.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "大隅",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "SHIMAZU",
+          "reason": "島津一族領と肝付・禰寝・蒲生等を同一プレイヤーへ便宜配分する。旧多禰の種子島・屋久島も含む。1534年の統一支配ではない。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%A4%A7%E9%9A%85%E5%9B%BD-39305",
+            "https://www.pref.kagoshima.jp/reimeikan/josetsu/theme/genshi/satsuma/index.html",
+            "https://www.city.kagoshima.lg.jp/kikakuzaisei/kikaku/seisaku-s/shise/shokai/shishi/documents/2012510154859.pdf"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "薩摩",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "SHIMAZU",
+          "reason": "勝久宗家・忠良/貴久の相州家・実久の薩州家を同一島津IDへ畳む。家中は抗争中。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E8%96%A9%E6%91%A9%E5%9B%BD-69257",
+            "https://kotobank.jp/word/%E5%B3%B6%E6%B4%A5%E5%AE%9F%E4%B9%85-1080898"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "壱岐",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OTOMO",
+          "reason": "島を掌握した波多氏を肥前・少弐との地域関係経由で大友へ仮寄せする。1534年直接臣従は未確認。",
+          "judgement": true,
+          "source_urls": [
+            "https://www.city.iki.nagasaki.jp/material/files/group/27/kihonkousou02.pdf",
+            "https://kotobank.jp/word/%E5%A3%B1%E5%B2%90%E5%9B%BD-30106"
+          ]
+        }
+      ]
+    },
+    {
+      "province": "対馬",
+      "parts": [
+        {
+          "districts": [
+            "全域"
+          ],
+          "owner_faction": "OUCHI",
+          "reason": "独立性のある宗氏を海峡貿易・大内との西国政治関係へ仮寄せする。宗氏の1534年従属は未証明。",
+          "judgement": true,
+          "source_urls": [
+            "https://kotobank.jp/word/%E5%AF%BE%E9%A6%AC%E5%B3%B6-852838",
+            "https://archives.pref.yamaguchi.lg.jp/user_data/upload/File/doubutsu6.pdf"
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_regions": [
+    {
+      "region": "蝦夷島（北海道本島・周辺島。道南和人館域を含む）",
+      "owner_faction": "AINU",
+      "judgement": true,
+      "reason": "多様なアイヌ地域社会を一勢力として置く。松前大館・勝山館の蠣崎氏和人領域は史実のアイヌ領でなく、この22勢力制約と衝突する。",
+      "source_urls": [
+        "https://hokkaido-digital-museum.jp/hokkaido/kaitaku/k-01/",
+        "https://www.town.matsumae.hokkaido.jp/bunkazai/detail/00001634.html"
+      ]
+    },
+    {
+      "region": "奄美群島",
+      "owner_faction": "RYUKYU",
+      "judgement": true,
+      "reason": "15世紀以降の琉球の関与を採るが、1537年大島への軍事行動があり各島の実効境界は未確定。薩摩の1609年以後の支配は遡及しない。",
+      "source_urls": [
+        "https://www.city.amami.lg.jp/kikaku/shise/koho/hakko/documents/yoran2023m.pdf",
+        "https://www.library.pref.okinawa.jp/archive/contents/chronology.html"
+      ]
+    },
+    {
+      "region": "琉球諸島（沖縄・宮古・八重山）",
+      "owner_faction": "RYUKYU",
+      "judgement": false,
+      "reason": "尚清王の首里王府と尚真期の諸島統合を採る。個別按司の所領境界は未確定。",
+      "source_urls": [
+        "https://oki-park.jp/shurijo/events/detail/10644",
+        "https://www.library.pref.okinawa.jp/archive/contents/cat39/map-knowledge.html"
+      ]
+    },
+    {
+      "region": "トカラ列島",
+      "owner_faction": "SHIMAZU",
+      "judgement": true,
+      "reason": "15～16世紀の薩摩・琉球双方との重層的関係を、単一所有者規則のため島津へ暫定配分。琉球案も残す。1534年の一円支配は未証明。",
+      "source_urls": [
+        "https://rekihaku.repo.nii.ac.jp/record/2722/files/kenkyuhokoku_226_09.pdf",
+        "https://www.jstage.jst.go.jp/article/shigaku/114/11/114_KJ00003985705/_pdf"
+      ]
+    }
+  ]
+}

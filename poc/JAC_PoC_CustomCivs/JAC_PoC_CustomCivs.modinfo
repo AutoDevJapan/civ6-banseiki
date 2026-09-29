@@ -14,14 +14,14 @@
 			<ru_RU>JAC PoC: кланы</ru_RU>
 		</Text>
 		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_TEASER">
-			<en_US>Playable Oda and Takeda clans for Gathering Storm.</en_US>
-			<ja_JP>Gathering Storm 用の織田家・武田家の検証MOD。</ja_JP>
-			<ru_RU>Играбельные кланы Ода и Такэда для Gathering Storm.</ru_RU>
+			<en_US>Twenty-two playable 1534 Japan factions.</en_US>
+			<ja_JP>1534年の日本列島に登場する22勢力。</ja_JP>
+			<ru_RU>Двадцать две фракции Японии 1534 года.</ru_RU>
 		</Text>
 		<Text id="LOC_JAC_POC_CUSTOM_CIVS_MOD_DESCRIPTION">
-			<en_US>Adds two separate civilizations and tests a turn-three clan rename shown through UI overrides.</en_US>
-			<ja_JP>独立した2文明を追加し、3ターン目の家名変更を UI 側の表示上書きで検証する。</ja_JP>
-			<ru_RU>Добавляет две цивилизации и проверяет смену названия клана на третьем ходу через интерфейс.</ru_RU>
+			<en_US>Adds the 22 factions of 1534 Japan; retains the turn-three clan rename PoC.</en_US>
+			<ja_JP>1534年の22勢力を追加し、3ターン目の家名変更PoCも維持する。</ja_JP>
+			<ru_RU>Добавляет 22 державы Японии 1534 года и сохраняет проверку смены названия клана.</ru_RU>
 		</Text>
 	</LocalizedText>
 	<ActionCriteria>
@@ -35,15 +35,19 @@
 		</UpdateArt>
 		<UpdateDatabase id="JAC_CustomCivs_Gameplay" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Gameplay.sql</File>
+			<File>Data/JAC_Japan1534_Gameplay.sql</File>
 		</UpdateDatabase>
 		<UpdateText id="JAC_CustomCivs_Text" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Text/JAC_CustomCivs_Text.xml</File>
+			<File>Text/JAC_Japan1534_Text.xml</File>
 		</UpdateText>
 		<UpdateColors id="JAC_CustomCivs_Colors" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Colors.xml</File>
+			<File>Data/JAC_Japan1534_Colors.xml</File>
 		</UpdateColors>
 		<UpdateIcons id="JAC_CustomCivs_Icons" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Icons.xml</File>
+			<File>Data/JAC_Japan1534_Icons.xml</File>
 		</UpdateIcons>
 		<AddGameplayScripts id="JAC_CustomCivs_Scripts" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Scripts/JAC_CustomCivs.lua</File>
@@ -101,15 +105,19 @@
 		     FrontEnd RuleSetInUse criteria would skip registration when switching from Standard to GS. -->
 		<UpdateDatabase id="JAC_CustomCivs_Settings">
 			<File>Config/JAC_CustomCivs_Players.xml</File>
+			<File>Config/JAC_Japan1534_Players.xml</File>
 		</UpdateDatabase>
 		<UpdateText id="JAC_CustomCivs_SettingsText">
 			<File>Text/JAC_CustomCivs_Text.xml</File>
+			<File>Text/JAC_Japan1534_Text.xml</File>
 		</UpdateText>
 		<UpdateColors id="JAC_CustomCivs_SettingsColors">
 			<File>Data/JAC_CustomCivs_Colors.xml</File>
+			<File>Data/JAC_Japan1534_Colors.xml</File>
 		</UpdateColors>
 		<UpdateIcons id="JAC_CustomCivs_SettingsIcons">
 			<File>Data/JAC_CustomCivs_Icons.xml</File>
+			<File>Data/JAC_Japan1534_Icons.xml</File>
 		</UpdateIcons>
 	</FrontEndActions>
 	<Files>
@@ -119,10 +127,15 @@
 		<File>ArtDefs/Leaders.artdef</File>
 		<File>ArtDefs/FallbackLeaders.artdef</File>
 		<File>Data/JAC_CustomCivs_Gameplay.sql</File>
+		<File>Data/JAC_Japan1534_Gameplay.sql</File>
 		<File>Data/JAC_CustomCivs_Colors.xml</File>
+		<File>Data/JAC_Japan1534_Colors.xml</File>
 		<File>Data/JAC_CustomCivs_Icons.xml</File>
+		<File>Data/JAC_Japan1534_Icons.xml</File>
 		<File>Config/JAC_CustomCivs_Players.xml</File>
+		<File>Config/JAC_Japan1534_Players.xml</File>
 		<File>Text/JAC_CustomCivs_Text.xml</File>
+		<File>Text/JAC_Japan1534_Text.xml</File>
 		<File>Scripts/JAC_CustomCivs.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.xml</File>

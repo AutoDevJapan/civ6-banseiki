@@ -73,7 +73,11 @@ def send_frame(sock: socket.socket, tag: int, payload: str) -> None:
 
 def recv_frame(sock: socket.socket, deadline: float | None = None) -> Frame:
     size, tag = struct.unpack("<Ii", _read_exact(sock, 8, deadline))
-    if size < 1 or size > MAX_FRAME:
+    if size == 0:
+        # The game sometimes sends an empty frame right as autoplay starts (live 2026-09-29);
+        # it carries no reply, so callers keep waiting for the real one.
+        return Frame(tag, "")
+    if size > MAX_FRAME:
         raise TunerError(f"Invalid FireTuner frame size: {size}")
     return Frame(tag, _read_exact(sock, size, deadline).rstrip(b"\x00").decode("utf-8", "replace"))
 
@@ -152,7 +156,7 @@ class TunerClient:
                 raise TunerError(f"No reply to {payload!r} from FireTuner")
             sock.settimeout(remaining)
             frame = recv_frame(sock, deadline)
-            if frame.payload[:2] in ("O ", "O\x00"):
+            if not frame.payload or frame.payload[:2] in ("O ", "O\x00"):
                 continue
             sock.settimeout(self.timeout)
             return frame.payload
