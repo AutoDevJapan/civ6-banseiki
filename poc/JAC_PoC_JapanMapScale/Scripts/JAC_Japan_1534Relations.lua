@@ -36,7 +36,7 @@ local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true, friendshi
 -- 味方の組ごとの Game プロパティ。数値 = 開始時の同盟が続いていて、その値のターンに結んだ（結び直した）、false = イベントなどで終わった。セーブに残る
 local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"
 
--- 期限切れで同盟が途切れ、結び直した回数（Game プロパティ。途切れなければ nil のまま）。実機シナリオが 0 を確かめる
+-- エンジンの期限切れで解けた同盟を、同じターンの初めに結び直した回数（Game プロパティ。一度も切れていなければ nil）
 local LAPSES_KEY = "JAC_1534_ALLIANCE_LAPSES"
 
 -- 調査用シナリオ（tools/civ6-autotest/scenarios/probe-alliance-expiry.json）だけが true にする Game プロパティ。true の間は KeepStartAlliances が何もしない（エンジン本来の期限切れを測るため）。通常のゲームでは誰も書かないので nil のまま
@@ -65,14 +65,9 @@ local function IsStartAllianceActive(factionA, factionB)
 	return type(Game:GetProperty(AllianceKey(factionA, factionB))) == "number"
 end
 
--- 通常の同盟の期限（ターン）。公式の既定は 30（Base/Assets/Gameplay/Data/GlobalParameters.xml:232）
-local function AllianceTimeLimit()
-	local row = GameInfo.GlobalParameters["DIPLOMACY_ALLIANCE_TIME_LIMIT"]
-	return (row and tonumber(row.Value)) or 30
-end
-
 -- 開始時の同盟を終わらせる。将来のイベント（裏切りなど）がゲームプレイのスクリプトから呼ぶ。
--- 以後は結び直さず、同盟を今すぐ解く（視界の共有も終わる）。終わらせたら true、続いていなかったら false
+-- 以後は結び直さない。終わらせたら true、続いていなかったら false。
+-- 同盟中の SetHasAllied(相手, false) はエンジンが受け付けず、同盟のまま残った（実機 diplo-17）。その場合、同盟はエンジンの期限切れ（最長で期限 + 1 ターン）で終わる
 local function EndStartAlliance(factionA, factionB)
 	if not IsStartAllianceActive(factionA, factionB) then return false end
 	Game:SetProperty(AllianceKey(factionA, factionB), false)
@@ -87,25 +82,15 @@ local function EndStartAlliance(factionA, factionB)
 	return true
 end
 
--- 期限の1ターン前になったら、同盟を解いて結び直し、期限を数え直す（"renewed"）。万一切れていたら結び直す（"re-made after lapse"）。
--- 期限の残りを読む GetAllianceTurnsUntilExpiration などはゲームプレイ側では nil（実機 diplo-12）なので、結んだターンから数える。
--- 何かしたらログの語を返す
-local function Renew(diplo, b, madeTurn, turn, limit)
-	if not diplo:HasAllied(b) then
-		diplo:SetHasAllied(b, true)
-		return "re-made after lapse"
-	end
-	if turn - madeTurn < limit - 1 then return nil end
-	diplo:SetHasAllied(b, false)
-	diplo:SetHasAllied(b, true)
-	return "renewed"
-end
-
--- 毎ターンの初めに、続いている開始時の同盟を保つ。RELATIONS の順に処理する（全員で同じ順になる）
+-- 毎ターンの初めに、続いている開始時の同盟を保つ。RELATIONS の順に処理する（全員で同じ順になる）。
+-- エンジンの同盟の期限は延ばせない（実機 diplo-17：同盟中の SetHasAllied(false) は何も起きず、false → true も true の再呼び出しも期限を数え直さない。
+-- 公式の「同盟の更新」DIPLOACTION_RENEW_ALLIANCE は万世紀ルールセットの DB に無い）。
+-- エンジンは結んだターン + 期限 + 1 ターン目（開始ターン1なら32ターン目）へ切り替わるときに、この処理より前に同盟を解く（実機 diplo-16・diplo-17）。
+-- そこでこの処理で結び直す（"re-made after lapse"）。どの家の手番よりも前なので、手番の間に同盟と視界の共有が途切れることは無い
 local function KeepStartAlliances()
 	if Game:GetProperty(KEEP_DISABLED_KEY) == true then return end
 	local players = MajorPlayersByFaction()
-	local turn, limit = Game.GetCurrentGameTurn(), AllianceTimeLimit()
+	local turn = Game.GetCurrentGameTurn()
 	for _, relation in ipairs(RELATIONS) do
 		local factionA, factionB = relation[1], relation[2]
 		local a, b = players[factionA], players[factionB]
@@ -114,19 +99,19 @@ local function KeepStartAlliances()
 			if diplo:IsAtWarWith(b) then
 				-- 同盟国どうしは通常の外交では宣戦できない。スクリプトなどで交戦になったら、同盟も終わりとする
 				EndStartAlliance(factionA, factionB)
-			else
+			elseif not diplo:HasAllied(b) then
 				local key = AllianceKey(factionA, factionB)
 				local madeTurn = Game:GetProperty(key)
-				local ok, result = pcall(Renew, diplo, b, madeTurn, turn, limit)
-				if not ok then
-					Log(string.format("FAILED renew %s %s-%s: %s", relation[4], factionA, factionB, tostring(result)))
-				elseif result then
+				local ok, err = pcall(function() diplo:SetHasAllied(b, true) end)
+				if ok then
 					Game:SetProperty(key, turn)
-					if result ~= "renewed" then Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1) end
+					Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1)
 					diplo:RecheckVisibilityOnAll()
 					Players[b]:GetDiplomacy():RecheckVisibilityOnAll()
-					Log(string.format("%s %s %s-%s on turn %d (made on turn %d, limit %d)",
-						result, relation[4], factionA, factionB, turn, madeTurn, limit))
+					Log(string.format("re-made after lapse %s %s-%s on turn %d (made on turn %d)",
+						relation[4], factionA, factionB, turn, madeTurn))
+				else
+					Log(string.format("FAILED re-make %s %s-%s: %s", relation[4], factionA, factionB, tostring(err)))
 				end
 			end
 		end
@@ -160,7 +145,7 @@ local function Apply()
 				ok = true -- 何もしない。減点は修正値が担う
 			else
 				-- 味方は友好宣言のあと通常の同盟にする。視界の共有は、両家が持つ特性 TRAIT_JAC_1534_ALLY_VISION が同盟に効かせる（オーナー判断G）。
-				-- 永久同盟（SetPermanentAlliance）は解く関数が無いので使わない。期限は KeepStartAlliances が期限の1ターン前に結び直して延ばす。
+				-- 永久同盟（SetPermanentAlliance）は解く関数が無いので使わない。期限で解けたら KeepStartAlliances が同じターンの初めに結び直す。
 				-- 公式：DLC/VikingsScenario/Scripts/VikingScenario.lua:18〜:20
 				ok, err = pcall(function()
 					diploA:SetHasDeclaredFriendship(b, true)

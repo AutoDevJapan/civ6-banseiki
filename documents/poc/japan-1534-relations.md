@@ -21,17 +21,18 @@
 | 敵対・不仲（7組） | Lua では何もしない。好感度の減点は下記の修正値 | 下記 |
 | 全勢力の出会い | 開始時に1回だけ、22家すべてが互いに `SetHasMet`（両方向）。固定キャラだけが出る日本マップなので、全員が互いを知っている（オーナー判断 2026-09-29・Discord G）。ロード時は再適用しない | `Apply` の先頭。下記 |
 
-- 永久同盟 `SetPermanentAlliance` は採らない。解く関数が無く（下記の根拠 5）、イベントで終えられないため。通常の同盟 `SetHasAllied` を使い、期限 `DIPLOMACY_ALLIANCE_TIME_LIMIT` = 30（`Base/Assets/Gameplay/Data/GlobalParameters.xml:232`）を Lua が延ばす。友好宣言の期限も30ターン（同 `:234`）だが、同盟を保つので延ばさない
+- 永久同盟 `SetPermanentAlliance` は採らない。解く関数が無く（下記の根拠 5）、イベントで終えられないため。通常の同盟 `SetHasAllied` を使い、期限 `DIPLOMACY_ALLIANCE_TIME_LIMIT` = 30（`Base/Assets/Gameplay/Data/GlobalParameters.xml:232`）で解けたら Lua が同じターンの初めに結び直す（期限そのものは延ばせない。下記）。友好宣言の期限も30ターン（同 `:234`）だが、同盟を保つので延ばさない
 - 主従は Civ6 に対応する外交状態がない。友好宣言で近似し、主従そのものは SSOT 9 の関係宣言（従属国など）が実装されたときに置き換える（TODO）
 
 ### 開始時の同盟を期限なしで保つ（オーナー判断H）
 
 1. 組のプロパティ `JAC_1534_ALLIANCE_<A>-<B>` には、同盟を結んだ（結び直した）ターンを数値で持つ（続いている印を兼ねる。終わったら `false`）。毎ターンの初め（`GameEvents.OnGameTurnStarted`）に `KeepStartAlliances` が、プロパティが数値の組を `RELATIONS` の順に見る。全員で同じ順・同じ結果になり、マルチプレイでもゲームプレイの状態として同期する
-   - 同盟中で、`現在のターン - 結んだターン` が `期限 - 1`（期限は `GameInfo.GlobalParameters` の `DIPLOMACY_ALLIANCE_TIME_LIMIT`。既定 30 なので29ターン目）以上なら、`SetHasAllied(相手, false)` → `SetHasAllied(相手, true)` と結び直して期限を数え直し、プロパティを今のターンにする。Lua.log に `[JAC_1534_RELATIONS] renewed R02 HOJO-IMAGAWA on turn 30 (made on turn 1, limit 30)` の形で出す。期限の残りを読む `GetAllianceTurnsUntilExpiration` はゲームプレイ側に無い（実機 `diplo-12`）ので、結んだターンから数える
-   - 同盟が切れていたら（万一の期限切れなど）`SetHasAllied(相手, true)` で結び直し、プロパティを今のターンにして、Lua.log に `re-made after lapse` を出す。回数を Game プロパティ `JAC_1534_ALLIANCE_LAPSES` に数える（途切れなければ nil のまま）
-   - 結び直したら両家の `RecheckVisibilityOnAll` を呼ぶ。失敗は `FAILED renew`
-2. 終わらせる入口（将来のイベントの仕組みが呼ぶ。イベントの仕組みは別途設計）：`ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")`。組の順は問わない。組のプロパティを `false` にし、同盟を `SetHasAllied(相手, false)` で今すぐ解く（視界の共有も終わる）。以後は結び直さない。終わらせたら `true`、続いていなかったら `false` を返す。`IsStartAllianceActive(勢力A, 勢力B)` で続いているかを読める。ゲームプレイのスクリプトから呼ぶ（UI から呼ぶとマルチプレイで同期しない）。`ExposedMembers` の公式の使い方は `Base/Assets/UI/MapTacks.lua:8`〜`:9`、同じ MOD の前例は `Scripts/JAC_Resources.lua:172`
-3. 通常の外交での宣戦：同盟中の組は、通常の外交では互いに宣戦できない。`DIPLO_STATE_ALLIED` で選べる外交行動（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:137`〜`:149`）に奇襲戦争も正式な戦争も無い（奇襲戦争は友好的・中立・非友好・非難中の `:168`・`:181`・`:193`・`:206`、正式な戦争は非難中の `:207` だけ）。Civilopedia も「同盟中は互いに正式な戦争を宣言できない」（`Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:675`）。期限で切れないので、味方どうしは（人間が味方の家を担当していても）イベントで同盟が終わるまで戦えない
+   - エンジンの同盟の期限は延ばせない（下記「期限切れの実機調査」）。エンジンは、結んだターン + 期限 + 1 ターン目（開始ターン1・期限30なら32ターン目）へ切り替わるときに同盟を解く。解くのは `OnGameTurnStarted` より前（実機 `diplo-16` では、この処理が32ターン目に8組とも切れているのを見つけた）
+   - 同盟が切れていたら `SetHasAllied(相手, true)` で結び直し、プロパティを今のターンにして、Lua.log に `[JAC_1534_RELATIONS] re-made after lapse R02 HOJO-IMAGAWA on turn 32 (made on turn 1)` の形で出す。回数を Game プロパティ `JAC_1534_ALLIANCE_LAPSES` に数える（一度も切れていなければ nil）。結び直しはどの家の手番よりも前なので、手番の間に同盟と視界の共有が途切れることは無い。結び直した同盟は、また結んだターン + 期限 + 1 ターン目に切れ、同じように結び直す
+   - 結び直したら両家の `RecheckVisibilityOnAll` を呼ぶ。失敗は `FAILED re-make`
+   - 残る影響（ターンの切り替わりの中で起きる）：`AllianceEnded`・`DiplomacyRelationshipChanged` のイベントが出る。人間の家の同盟が切れると、その人間に「同盟の期限切れ」の通知 `NOTIFICATION_DIPLO_ALLIANCE_EXPIRED` が出る（翌ターンの終わりまで残る。`Base/Assets/Gameplay/Data/Notifications.xml:230`）。結び直した組は友好宣言が外れる（同盟中は影響しない）。未測定：同盟ポイント・レベルが0からになるか、切り替わりの間に相手の領土の自軍ユニットが押し出されるか、噂（ゴシップ）が出るか。通知などを出さずに済むのは期限そのものを上げる案だけで、オーナーに確認中（`questions.md` Q48）
+2. 終わらせる入口（将来のイベントの仕組みが呼ぶ。イベントの仕組みは別途設計）：`ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")`。組の順は問わない。組のプロパティを `false` にし、以後は結び直さない。同盟を `SetHasAllied(相手, false)` で解こうとするが、同盟中のこの呼び出しはエンジンが受け付けなかった（実機 `diplo-17`）。そのため同盟と視界の共有は、エンジンの次の期限切れ（最長で期限 + 1 ターン後）まで残る（確認項目）。終わらせたら `true`、続いていなかったら `false` を返す。`IsStartAllianceActive(勢力A, 勢力B)` で続いているかを読める。ゲームプレイのスクリプトから呼ぶ（UI から呼ぶとマルチプレイで同期しない）。`ExposedMembers` の公式の使い方は `Base/Assets/UI/MapTacks.lua:8`〜`:9`、同じ MOD の前例は `Scripts/JAC_Resources.lua:172`
+3. 通常の外交での宣戦：同盟中の組は、通常の外交では互いに宣戦できない。`DIPLO_STATE_ALLIED` で選べる外交行動（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:137`〜`:149`）に奇襲戦争も正式な戦争も無い（奇襲戦争は友好的・中立・非友好・非難中の `:168`・`:181`・`:193`・`:206`、正式な戦争は非難中の `:207` だけ）。Civilopedia も「同盟中は互いに正式な戦争を宣言できない」（`Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:675`）。期限の切れ目はターンの切り替わりの中だけで、手番の前に結び直すので、味方どうしは（人間が味方の家を担当していても）イベントで同盟が終わるまで戦えない
 4. それでも交戦になった場合（別のスクリプトの `DeclareWarOn` など）は、次のターンの初めに `EndStartAlliance` を呼んで終わらせ、結び直さない
 5. 同盟が終わると、Civ6 の `LEAVE_ALLIANCE` で友好的（`DIPLO_STATE_FRIENDLY`）に戻る（`DiplomaticActions.xml:271`・`:284`）。以後は通常の外交
 
@@ -84,11 +85,32 @@
 4. 敵対7組は交戦も友好宣言もせず、両側の `GetDiplomaticModifiers` に -10 の行がある（点数で判定。文言は `japan-1534-feud-ui.json`）。無関係の織田・伊達と島津・琉球には因縁の行がない。実際の外交画面の「関係」欄に「-10 1534年の因縁」が出ることは `japan-1534-feud-ui.json` が読み取る。同じシナリオは、開く前に北条の武田へのアクセスレベルが1以上であること、関係欄に「理由不明（Unknown Reason）」の行が1つも無いことも確かめる（読み取れなかった場合は、スクリーンショットを目で確認する。「理由不明」が出たら、まずアクセスレベルの画面に「諸家のあいだを行き交う噂」があるかを見て、次に `ModifierStrings` の行を見直す）
 5. 1ターン進めても 2〜4 が保たれる
 6. セーブ → メニュー → ロード後、プロパティの `Turn` が開始ターンのまま（再適用されていない）で、2〜4 が保たれる
-7. ロード後にさらに31ターン（計32ターン）進め、同盟の期限 `DIPLOMACY_ALLIANCE_TIME_LIMIT`（30）を越えても、味方の8組が双方向に同盟のまま交戦せず、組のプロパティが数値で、視界を共有している。さらに、どの組も開始ターンより後に結び直されていて（プロパティが開始ターンより大きい）、一度も切れていない（`JAC_1534_ALLIANCE_LAPSES` が nil。Lua.log に `re-made after lapse` が無いのと同じ）。ロード後も毎ターンの処理が動くことも兼ねて確かめる
+7. ロード後にさらに30ターン進め、エンジンが開始時の同盟を解くターン（開始ターン + 期限 `DIPLOMACY_ALLIANCE_TIME_LIMIT`（30） + 1 = 32ターン目）の人間の手番で確かめる。8組とも、組のプロパティがちょうどこのターン（このターンの初めに結び直した）で、`JAC_1534_ALLIANCE_LAPSES` が 8。そのうえで双方向に同盟のまま交戦せず、視界を共有している。結び直しが1ターンでも遅れる、手番の後になる、エンジンの切れるターンがずれる、のどれでも落ちる。ロード後も毎ターンの処理が動くことも兼ねて確かめる
 
-`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。7 が落ちたら、Lua.log の `renewed`・`re-made after lapse`・`FAILED renew` 行で、結び直しが呼ばれたか・どのターンかを見る。`re-made after lapse` が出たら、期限の1ターン前の結び直しでは間に合っていない（エンジンの期限切れの数え方がずれている）。同盟（`SetHasAllied`）は実機で `DIPLO_STATE_ALLIED` になった（2026-09-30）。特性による視界の共有と、期限を越えた維持は未実機確認。
+`Failed` が 0 でなければ、Lua.log の `[JAC_1534_RELATIONS] FAILED` 行に関数名とエラーが出る。7 が落ちたら、Lua.log の `re-made after lapse`・`FAILED re-make` 行で、結び直しがどのターンに呼ばれたかを見る。同盟（`SetHasAllied`）は実機で `DIPLO_STATE_ALLIED` になった（2026-09-30）。32ターン目の人間の手番で同盟と視界の共有が保たれているかは未実機確認（7 で確かめる）。
 
 視界の調査用シナリオ `probe-ally-vision.json`（15 km・史実の領土、開始時と1ターン後）：北条・今川、島津・琉球と、対照の伊達・島津について、外交状態・`HasAllied`・同盟の種類とレベル・期限の残り・相手の本拠の `IsVisible`／`IsRevealed`／`GetVisibilityCount`・自分の本拠の `IsVisible`（対照）・相手に見えているタイルのうち自分にも見えている数と、`GAME_ALLIES_SHARE_VISIBILITY`・`NO_TEAMS`・特性の有無を、ゲームプレイ（`GameCore_Tuner`）と UI（`InGame`）の両方から読む。読み取りはすべて `pcall` で囲み、失敗しても `ERR(...)` を返して最後まで進む。結果は戻り値と Lua.log の `[JAC_ALLY_VISION_PROBE]` 行に出る。特性でも共有されない場合は、各ターンに相手の見えているタイルを `ChangeVisibilityCount` で写す方式（公式の使用例：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:52`〜`:59`）に切り替える。
+
+## 期限切れの実機調査（2026-09-30、`probe-alliance-expiry.json`、`artifacts/diplo-17`）
+
+15 km・史実の領土、大内が人間。Game プロパティ `JAC_1534_KEEP_ALLIANCES_DISABLED`=true で `KeepStartAlliances` を止め、エンジン本来の期限切れを27〜34ターン目に1ターンずつ見た。8組に1つずつ結び直し方を割り当て、操作はゲームプレイ（`GameCore_Tuner`）から行った。結果は Lua.log の `[JAC_ALLIANCE_EXPIRY_PROBE]` 行と steps.jsonl の戻り値。
+
+| 変種 | 組 | 操作 | 操作の直後 | 切れたとき | 期限の数え直し |
+|---|---|---|---|---|---|
+| V1 対照 | R02 北条・今川 | なし | - | 31→32ターン目の切り替わり | - |
+| V2 | R04 伊達・蘆名 | 29ターン目に `SetHasAllied(false)`、別の呼び出しで `(true)` | `false` の後も `HasAllied`=true（何も起きない） | 同上 | されない |
+| V2b | R08 尼子・毛利 | 29ターン目に1回の呼び出しで `false` → `true` | 同上 | 同上 | されない |
+| V3 | R05 足利・六角 | 29ターン目の手番中に `false`、30ターン目の初めに `true` | 同上 | 同上 | されない |
+| V4 | R06 朝倉・六角 | 毎ターン、切れていたら `SetHasAllied(true)` | 32ターン目に切れているのを見て結び直し、33・34ターン目も同盟のまま | 同上 | 結び直しで同盟に戻る |
+| V5a | R07 足利・朝倉 | 29ターン目に足利から `false`、朝倉から `true` | `HasAllied`=true のまま | 同上 | されない |
+| V5b | R03 大内・毛利 | 29ターン目に公式の同盟の更新 `DIPLOACTION_RENEW_ALLIANCE` を申し込む | 外交行動が DB に無い（`CIVIC_CIVIL_SERVICE` を前提に持つので、戦国パックの社会制度の削除で連鎖して消えたと見られる。`DLC/Expansion2/Data/Expansion1_Alliances.xml:37`）。`IsDiplomaticActionValid`=false で申し込めない | 同上。人間の大内に通知 `NOTIFICATION_DIPLO_ALLIANCE_EXPIRED` | できない |
+| V5c | R19 島津・琉球 | 29ターン目に同盟中のまま `SetHasAllied(true)` | `HasAllied`=true | 同上 | されない |
+
+1. 切れるターン：8組とも、開始ターン1に結んだ同盟が31→32ターン目の切り替わりで切れた（ゲームプレイ側では32ターン目、UI 側では31ターン目の番号でイベントが出た）。期限30なので、結んだターン + 期限 + 1 ターン目
+2. 出たイベント：各組で `DiplomacyRelationshipChanged`（両方向）→ `AllianceEnded` → `DiplomacyRelationshipChanged`。ゲームプレイと UI の両方に出た。`DiplomacyDealExpired` は出なかった。人間の大内には同盟の期限切れの通知が出た（翌ターンの終わりまで残る）
+3. 切れた後：どの組も交戦にはならない。北条・今川、伊達・蘆名、島津・琉球は AI が32ターン目に友好宣言をし直した。V4 の朝倉・六角は結び直した後、友好宣言は外れた
+4. 読めなかった値：UI 側の期限の残り（`GetAllianceTurnsUntilExpiration`）と視界（相手の本拠の `IsVisible`）。UI の外交オブジェクトに `HasAllied` が無く、1行の最初の読み取りが `ERR` になった。自動テストの戻り値はエラーの改行で切れるので、その後ろの列が残らなかった。ゲームプレイ側の `GetDeclaredFriendshipTurn` も無い（nil）。期限を延ばす手段が無いことは `HasAllied` と切れたターンだけで判定できるので、読み直しはしない
+5. 結論：同盟中の組の期限を延ばす手段は無い。期限で切れたターンの `OnGameTurnStarted` で結び直す V4 を採った（上記「開始時の同盟を期限なしで保つ」）。`diplo-16` では、当時の実装（期限の1ターン前の `false` → `true`）が何も起こさず、32ターン目の `OnGameTurnStarted` で8組とも `re-made after lapse` になっていた
 
 ## オーナー判断（2026-09-29 Discord・セットA）
 
@@ -118,7 +140,7 @@
 2. 公式の `SetHasAllied` の呼び出しは引数2つだけ（`DLC/VikingsScenario/Scripts/VikingScenario.lua:18`〜`:20`）。種類を渡す使用例は無い。`SetPermanentAlliance` も引数1つ（根拠 5）
 3. 種類つきの同盟を結ぶ公式の経路は、UI の取引だけ：`DealManager.GetWorkingDeal` → `AddItemOfType(DealItemTypes.AGREEMENTS)` → `SetSubType(DealAgreementTypes.ALLIANCE)` → `SetValueType(DB.MakeHash("ALLIANCE_MILITARY"))` → `DiplomacyManager.RequestSession(自分, 相手, "MAKE_DEAL")`（`DLC/Expansion2/UI/Replacements/DiplomacyActionView_Expansion1.lua:208`〜`:223`）。`DealManager`・`DiplomacyManager` は公式では UI のファイルでしか使われず（`Base/Assets/UI/`・`DLC/Expansion*/UI/` だけ）、ローカルの人間プレイヤーが相手に申し込み、AI が受けるかを判断する。AI どうしの組を開始時に決まった形で結ぶ手段にはならない
 4. データだけの経路：同盟ポイントの修正値 `MODIFIER_PLAYER_ADJUST_ALLIANCE_POINTS`（`EFFECT_ADJUST_ALLIANCE_POINTS_FOR_MODIFIER`、`DLC/Expansion2/Data/Expansion1_Modifiers.xml:388`〜`:390`。公式は政策 `ARSENALOFDEMOCRACY_ALLIANCEPOINTS`、`DLC/Expansion2/Data/Expansion1_Policies.xml:110`〜`:111`）は毎ターンのポイントを足すだけで、レベル2（`ALLIANCE_LEVEL_TWO_XP`=320、`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:12`）に開始時から届かない。また同盟の効果は種類ごと（`AllianceEffects` の `AllianceType`）なので、種類が軍事でない限りレベルを上げても視界の共有は付かない。`Alliances` の行の順を入れ替えて軍事を先頭（既定の種類 0）にする案は、全同盟の種類の対応が変わり、`AllianceEffects`・`DiplomaticActions_XP1` の外部キーの連鎖削除も伴うので採らない
-5. 確認項目（静的な推定。`probe-alliance-type.json` で確かめる）：戦国パックは公式の社会制度を全削除する（`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql:148`）。同盟の外交行動（`DIPLOACTION_ALLIANCE`・`DIPLOACTION_ALLIANCE_MILITARY` など）は `InitiatorPrereqCivic="CIVIC_CIVIL_SERVICE"` を持ち（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:69`、`DLC/Expansion2/Data/Expansion1_Alliances.xml:32`〜`:36`）、外部キーは `ON DELETE CASCADE`（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:923`〜`:924`）なので、万世紀ルールセットでは通常の外交で同盟そのものを結べない可能性が高い。そうなら上記の特性の副作用（後で結ぶ同盟の視界共有）も今は起きない。通常の同盟を戦国の制度（例 `CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES`「誓約と同盟」）で解放するかは、戦国パックの制度ツリーの設計で決める
+5. 確認項目（静的な推定。`probe-alliance-type.json` で確かめる）：戦国パックは公式の社会制度を全削除する（`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql:148`）。同盟の外交行動（`DIPLOACTION_ALLIANCE`・`DIPLOACTION_ALLIANCE_MILITARY` など）は `InitiatorPrereqCivic="CIVIC_CIVIL_SERVICE"` を持ち（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:69`、`DLC/Expansion2/Data/Expansion1_Alliances.xml:32`〜`:36`）、外部キーは `ON DELETE CASCADE`（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:923`〜`:924`）なので、万世紀ルールセットでは通常の外交で同盟そのものを結べない可能性が高い（同じ前提の `DIPLOACTION_RENEW_ALLIANCE` が DB に無いことは実機 `diplo-17` で確認）。そうなら上記の特性の副作用（後で結ぶ同盟の視界共有）も今は起きない。通常の同盟を戦国の制度（例 `CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES`「誓約と同盟」）で解放するかは、戦国パックの制度ツリーの設計で決める
 
 種類の設定の調査用シナリオ `probe-alliance-type.json`（15 km・史実の領土、開始時と1ターン後）：ゲームプレイ（`GameCore_Tuner`）から、関係の無い伊達→島津に `SetHasAllied(相手, true, 軍事同盟の Index)`、長尾→毛利に `SetHasAllied(相手, true, DB.MakeHash("ALLIANCE_MILITARY"))` を呼び、UI（`InGame`）で北条→今川（対照）と両組の `GetAllianceType`（種類名）・`GetAllianceLevel`・期限の残り・相手の本拠が見えるかを読む。あわせて、ゲームプレイで `DealManager`・`DiplomacyManager` が使えるか、`GameInfo.Alliances` の先頭行と軍事同盟の Index、`DIPLOACTION_ALLIANCE`・`DIPLOACTION_ALLIANCE_MILITARY` が DB に残っているかを返す。読み取りはすべて `pcall` で囲み、結果は戻り値と Lua.log の `[JAC_ALLIANCE_TYPE_PROBE]` 行に出る。3つ目の引数で種類が軍事になった場合だけ、標準の軍事同盟へ切り替えを検討する（レベル2は別途必要）
 
@@ -133,7 +155,7 @@
    - 同盟にした理由：視界の共有をエンジンに任せられる。ユニットが動いても即時に共有され、セーブにも同盟の状態として残り、マルチプレイでもゲームプレイの状態として同期する。各ターンにタイルの見え方を Lua で写す方式は、ターン中の移動が反映されず、写した分をセーブ・ロードをまたいで正しく取り消す必要がある
    - 副作用：同盟国どうしは外交のアクセスレベルが1段上がる（公式の出所 `Ally`。全員の「限定的」に加えて「開放」になる）、互いに正式な宣戦ができない、同盟ポイントが貯まる
    - 終わり方（オーナー判断H）：期限なしで続け、イベントでだけ終える。上記「開始時の同盟を期限なしで保つ」
-   - 実機（2026-09-30 `probe-ally-vision.json`、`artifacts/diplo-12`）：`SetHasAllied` の同盟は、UI（`InGame`）で `GetAllianceType`=0（`GameInfo.Alliances` の先頭行 `ALLIANCE_RESEARCH`。種類を選んで結んだのではなく既定値と見られる）、`GetAllianceLevel`=1、`GetAllianceTurnsUntilExpiration`=30（1ターン後 29）。特性で相手の本拠が見え、相手に見えているタイル 203/203 が自分にも見えた。ゲームプレイ（`GameCore_Tuner`）の外交オブジェクトには `GetAllianceType`・`GetAllianceLevel`・`GetAllianceTurnsUntilExpiration` が無い（nil）。期限の残りが読めないので、`Renew` は `pcall` で失敗を受けて何もせず、同盟は30ターンで一度切れて次のターンに結び直されていた（`diplo-12`）。今は結んだターンから数えて期限の1ターン前に結び直す（上記）。未実機確認：期限を越えて切れずに保てるか、友好宣言の期限（30ターン）で同盟に影響が出ないか。確認は `japan-1534-relations.json` の 7
+   - 実機（2026-09-30 `probe-ally-vision.json`、`artifacts/diplo-12`）：`SetHasAllied` の同盟は、UI（`InGame`）で `GetAllianceType`=0（`GameInfo.Alliances` の先頭行 `ALLIANCE_RESEARCH`。種類を選んで結んだのではなく既定値と見られる）、`GetAllianceLevel`=1、`GetAllianceTurnsUntilExpiration`=30（1ターン後 29）。特性で相手の本拠が見え、相手に見えているタイル 203/203 が自分にも見えた。ゲームプレイ（`GameCore_Tuner`）の外交オブジェクトには `GetAllianceType`・`GetAllianceLevel`・`GetAllianceTurnsUntilExpiration` が無い（nil）。期限の切れ目で結び直す今の方式は、上記「開始時の同盟を期限なしで保つ」と下記「期限切れの実機調査」。確認は `japan-1534-relations.json` の 7
 4. 戦国パックの技術・制度ツリーは公式の技術をすべて消すので、`TECH_PRINTING` に付いた「アクセスレベル +1」（`TechnologyModifiers` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）と、出所の行 `SOURCE_TECH`（`Base/Assets/Gameplay/Data/Gossip.xml:75`、`PrereqTech=TECH_PRINTING`）が外部キーの連鎖削除で無くなる。`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql` が、削除の前に両方を戦国の技術 T05「街道と荷駄」`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` へ付け替える（全地図で有効）。理由：荷駄・使者が街道を通って諸家の噂を運ぶ、情報に最も近い戦国の技術で、交易商人（`UNIT_TRADER`）も解放する。公式でも交易路は別の出所 `SOURCE_TRADER` としてアクセスレベルを上げる。序盤の第I期（列2）なので、日本マップ以外でも早めに理由が見え始める。テストが付け替えを確かめる
 
 ## 未検証・注意

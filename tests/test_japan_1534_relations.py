@@ -351,39 +351,39 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertLess(end.index("Game:SetProperty(AllianceKey(factionA, factionB), false)"),
                         end.index("SetHasAllied(b, false)"))
         keep = body("local function KeepStartAlliances()")
-        self.assertIn("IsStartAllianceActive(factionA, factionB)", keep)  # ended pairs are never renewed
-        self.assertLess(keep.index("IsAtWarWith(b)"), keep.index("pcall(Renew, diplo, b,"))
-        # GetAllianceTurnsUntilExpiration is nil in the gameplay context (live diplo-12), so count from the stored turn
-        self.assertNotIn("GetAllianceTurnsUntilExpiration(", lua)
+        self.assertIn("IsStartAllianceActive(factionA, factionB)", keep)  # ended pairs are never re-made
+        # live diplo-17: the engine ignores SetHasAllied(false) on an ally and no call restarts the clock, so the only
+        # lever is to re-make the alliance in OnGameTurnStarted of the turn it lapsed (before any player acts)
+        self.assertLess(keep.index("IsAtWarWith(b)"), keep.index("elseif not diplo:HasAllied(b) then"))
+        self.assertIn("pcall(function() diplo:SetHasAllied(b, true) end)", keep)
+        self.assertNotIn("SetHasAllied(b, false)", keep)
+        self.assertNotIn("renewed", lua)
+        self.assertNotIn("DIPLOMACY_ALLIANCE_TIME_LIMIT", lua)
+        self.assertNotIn("GetAllianceTurnsUntilExpiration(", lua)  # nil in the gameplay context (live diplo-12)
         self.assertIn('return type(Game:GetProperty(AllianceKey(factionA, factionB))) == "number"', lua)
-        self.assertIn('GameInfo.GlobalParameters["DIPLOMACY_ALLIANCE_TIME_LIMIT"]', lua)
-        self.assertIn("local turn, limit = Game.GetCurrentGameTurn(), AllianceTimeLimit()", keep)
-        self.assertIn("pcall(Renew, diplo, b, madeTurn, turn, limit)", keep)
         self.assertIn("Game:SetProperty(key, turn)", keep)
-        self.assertIn('if result ~= "renewed" then Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1) end', keep)
-        renew = body("local function Renew(diplo, b, madeTurn, turn, limit)")
-        lapse, early = renew.split("\n\tend\n", 1)
-        self.assertIn("if not diplo:HasAllied(b) then", lapse)
-        self.assertIn('return "re-made after lapse"', lapse)
-        self.assertIn("if turn - madeTurn < limit - 1 then return nil end", early)  # renew one turn before the limit
-        self.assertLess(early.index("SetHasAllied(b, false)"), early.index("SetHasAllied(b, true)"))
-        self.assertIn('return "renewed"', early)
+        self.assertIn("Game:SetProperty(LAPSES_KEY, (Game:GetProperty(LAPSES_KEY) or 0) + 1)", keep)
+        self.assertLess(keep.index("Game:SetProperty(key, turn)"), keep.index("RecheckVisibilityOnAll()"))
         # keys are order-insensitive and match the scenario's 'JAC_1534_ALLIANCE_'..x..'-'..y with x < y
         self.assertIn('local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"', lua)
         key = body("local function AllianceKey(factionA, factionB)")
         self.assertIn("if factionA > factionB then factionA, factionB = factionB, factionA end", key)
         self.assertIn('return ALLIANCE_KEY_PREFIX .. factionA .. "-" .. factionB', key)
-        # the live scenario reloads, then plays past DIPLOMACY_ALLIANCE_TIME_LIMIT (GlobalParameters.xml:232 = 30)
+        # the live scenario reloads, then stops on the lapse turn start + limit + 1 (limit 30, GlobalParameters.xml:232)
         path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-relations.json"
         steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
         actions = [s["action"] for s in steps]
         self.assertEqual(actions[actions.index("load") + 1:], ["ui_lua", "autoplay", "ui_lua"])
-        self.assertGreater(sum(s["turns"] for s in steps if s["action"] == "autoplay"), 30)
-        self.assertIn("GameInfo.GlobalParameters['DIPLOMACY_ALLIANCE_TIME_LIMIT'].Value", steps[-1]["code"])
-        self.assertIn("if elapsed<=limit then error", steps[-1]["code"])
-        # the alliance never lapsed (no "re-made after lapse") and every pair was renewed after the start turn
-        self.assertIn("local lapses=Game:GetProperty('JAC_1534_ALLIANCE_LAPSES'); if lapses~=nil then error", steps[-1]["code"])
-        self.assertIn("made<=GameConfiguration.GetStartTurn() then error", steps[-1]["code"])
+        self.assertEqual([s["turns"] for s in steps if s["action"] == "autoplay"], [1, 30])  # turn 1 -> 2 -> 32
+        check = steps[-1]["code"]
+        self.assertIn("GameInfo.GlobalParameters['DIPLOMACY_ALLIANCE_TIME_LIMIT'].Value", check)
+        self.assertIn("local lapseTurn=start+limit+1; if turn~=lapseTurn then error", check)
+        # a lapse visible to players fails: every pair must be re-made at the start of the lapse turn, and be allied
+        # and share vision in the human turn
+        self.assertIn("if made~=lapseTurn then error", check)
+        self.assertIn("if lapses~=#allies then error", check)
+        self.assertLess(check.index("if made~=lapseTurn then error"), check.index("if s~='DIPLO_STATE_ALLIED' then error"))
+        self.assertIn("does not see ally", check)
         self.assertIn('local LAPSES_KEY = "JAC_1534_ALLIANCE_LAPSES"', lua)
         # live diplo-14: the Oda human seat died at turn 29 of 33; the largest house holds the seat as in japan-prosperous-15km
         seats = next(s["players"] for s in steps if s["action"] == "configure")
