@@ -217,7 +217,8 @@ class Japan1534RelationsTests(unittest.TestCase):
         # everyone meets everyone once at new-game start (not a per-relation side effect)
         self.assertRegex(lua, r"for _, a in pairs\(players\) do\s+for _, b in pairs\(players\) do\s+"
                               r"if a ~= b then Players\[a\]:GetDiplomacy\(\):SetHasMet\(b\) end")
-        self.assertLess(lua.index("SetHasMet(b) end"), lua.index("for _, relation in ipairs(RELATIONS)"))
+        apply = lua.split("local function Apply()", 1)[1]
+        self.assertLess(apply.index("SetHasMet(b) end"), apply.index("for _, relation in ipairs(RELATIONS)"))
 
     def test_ruleset_shares_ally_vision_by_default(self):
         config = (ROOT / "poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml").read_text(encoding="utf-8")
@@ -225,25 +226,64 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertIn('DefaultValue="1"', row)
 
     def test_ally_pairs_start_allied_so_they_share_vision(self):
-        # Owner decision G: allied houses (alliance / marriage / vassal) share vision; friendship alone does not.
+        # Owner decisions G and H (2026-09-30): allied houses (alliance / marriage / vassal) and the Shimazu-Ryukyu
+        # friendship start allied and share vision.
         lua = LUA.read_text(encoding="utf-8")
-        self.assertIn("local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true}", lua)
-        self.assertIn("if ALLIED_KINDS[kind] then diploA:SetHasAllied(b, true) end", lua)
-        self.assertNotIn(":SetPermanentAlliance(", lua)  # permanent alliances cannot be dissolved
-        self.assertLess(lua.index("SetHasAllied(b, true)"), lua.index("RecheckVisibilityOnAll()"))
+        self.assertIn("local ALLIED_KINDS = {alliance = true, marriage = true, vassal = true, friendship = true}", lua)
+        self.assertRegex(lua, r"if ALLIED_KINDS\[kind\] then\s+diploA:SetHasAllied\(b, true\)\s+"
+                              r"Game:SetProperty\(AllianceKey\(relation\[1\], relation\[2\]\), true\)")
+        self.assertNotIn(":SetPermanentAlliance(", lua)  # permanent alliances cannot be dissolved by an event
+        apply = lua.split("local function Apply()", 1)[1]
+        self.assertLess(apply.index("SetHasAllied(b, true)"), apply.index("RecheckVisibilityOnAll()"))
         start = self.data["start_date"]
         allies = {(r["a"], r["b"]) for r in self.relations
-                  if applies(r, start) and r["type"] in ("alliance", "marriage", "vassal")}
+                  if applies(r, start) and r["type"] in ("alliance", "marriage", "vassal", "friendship")}
+        self.assertEqual(len(allies), 8)
+        self.assertIn(("SHIMAZU", "RYUKYU"), allies)
         path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-relations.json"
         codes = [s["code"] for s in json.loads(path.read_text(encoding="utf-8"))["steps"] if "code" in s]
-        self.assertEqual(len(codes), 3)  # start, after 1 turn, after load
+        self.assertEqual(len(codes), 4)  # start, after 1 turn, after load, past the alliance limit
         for code in codes:
             listed = re.search(r"local allies=\{(.*?)\}; ", code).group(1)
             self.assertEqual(set(re.findall(r"\{'([A-Z_]+)','([A-Z_]+)'\}", listed)), allies)
             self.assertIn("'DIPLO_STATE_ALLIED'", code)
-            self.assertIn("PlayersVisibility[id[a]]", code)
-            self.assertIn("{'DATE','SHIMAZU'}", code)  # a far non-allied pair must not see each other
-            self.assertIn("{'SHIMAZU','RYUKYU'},{'RYUKYU','SHIMAZU'}}) do local ok,city=seesNone", code)
+            self.assertIn("PlayersVisibility[id[d[1]]]", code)
+            self.assertIn("Game:GetProperty('JAC_1534_ALLIANCE_'..x..'-'..y)~=true", code)
+            self.assertNotIn("~='DIPLO_STATE_DECLARED_FRIEND'", code)
+        for code in codes[:3]:  # a far non-allied pair must not see each other
+            self.assertIn("for _,d in ipairs({{'DATE','SHIMAZU'},{'SHIMAZU','DATE'}}) do local ok,city=seesNone", code)
+
+    def test_start_alliances_outlast_the_alliance_limit_until_an_event_ends_them(self):
+        # Owner decision H (2026-09-30, "b" + Shimazu-Ryukyu): no time limit; only an event (or a war between the pair) ends a start alliance.
+        lua = LUA.read_text(encoding="utf-8")
+
+        def body(signature):
+            return lua.split(signature, 1)[1].split("\nend\n", 1)[0]
+
+        self.assertIn("GameEvents.OnGameTurnStarted.Add(KeepStartAlliances)", lua)
+        self.assertIn("ExposedMembers.JAC_Japan1534Relations = {\n\tEndStartAlliance = EndStartAlliance,", lua)
+        end = body("local function EndStartAlliance(factionA, factionB)")
+        self.assertLess(end.index("Game:SetProperty(AllianceKey(factionA, factionB), false)"),
+                        end.index("SetHasAllied(b, false)"))
+        keep = body("local function KeepStartAlliances()")
+        self.assertIn("IsStartAllianceActive(factionA, factionB)", keep)  # ended pairs are never renewed
+        self.assertLess(keep.index("IsAtWarWith(b)"), keep.index("pcall(Renew, diplo, b)"))
+        renew = body("local function Renew(diplo, b)")
+        self.assertIn("GetAllianceTurnsUntilExpiration(b)", renew)
+        self.assertLess(renew.index("SetHasAllied(b, false)"), renew.index("SetHasAllied(b, true)"))
+        # keys are order-insensitive and match the scenario's 'JAC_1534_ALLIANCE_'..x..'-'..y with x < y
+        self.assertIn('local ALLIANCE_KEY_PREFIX = "JAC_1534_ALLIANCE_"', lua)
+        key = body("local function AllianceKey(factionA, factionB)")
+        self.assertIn("if factionA > factionB then factionA, factionB = factionB, factionA end", key)
+        self.assertIn('return ALLIANCE_KEY_PREFIX .. factionA .. "-" .. factionB', key)
+        # the live scenario reloads, then plays past DIPLOMACY_ALLIANCE_TIME_LIMIT (GlobalParameters.xml:232 = 30)
+        path = ROOT / "tools/civ6-autotest/scenarios/japan-1534-relations.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        actions = [s["action"] for s in steps]
+        self.assertEqual(actions[actions.index("load") + 1:], ["ui_lua", "autoplay", "ui_lua"])
+        self.assertGreater(sum(s["turns"] for s in steps if s["action"] == "autoplay"), 30)
+        self.assertIn("GameInfo.GlobalParameters['DIPLOMACY_ALLIANCE_TIME_LIMIT'].Value", steps[-1]["code"])
+        self.assertIn("if elapsed<=limit then error", steps[-1]["code"])
 
     def test_sengoku_tree_keeps_the_printing_access_bonus(self):
         sql = (ROOT / "poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql").read_text(encoding="utf-8")
