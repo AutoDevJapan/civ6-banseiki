@@ -265,7 +265,7 @@ local function WriteProperties(l)
 		local city = cities[key]
 		local house = House(l, city.owner)
 		local age = house and house.age or "NONE"
-		local policy = house and house.policy or ""
+		local policy = house and house.policy
 		city.plot:SetProperty(GOLDEN_FLAG, (age == "GOLDEN" or age == "HEROIC") and 1 or 0)
 		for _, row in ipairs(POLICIES) do
 			local on = policy == row.PolicyType
@@ -311,11 +311,13 @@ local function Judge(l, index)
 				house.dark = house.dark + 1
 			end
 			-- The dark-age policy choice screen is a follow-up; every dark house takes the first policy (§6.2).
-			house.policy = age == "DARK" and POLICIES[1].PolicyType or ""
+			-- No policy is nil, not "": live 2026-09-29 (ages-impl-02) a NORMAL house logged policy= here, yet the
+			-- policy read back from the Game property on the next turn was not "" (a "" field does not survive).
+			house.policy = age == "DARK" and POLICIES[1].PolicyType or nil
 			house.age = age
 			results["p" .. tostring(id)] = { age = age, score = house.score, golden = golden, dark = dark }
 			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s",
-				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy))
+				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy or ""))
 			house.score, house.parts = 0, {}
 			Notify(id, reign, age, house.policy)
 		end
@@ -334,7 +336,7 @@ local function Initialize()
 	for _, id in ipairs(AliveMajorIDs()) do
 		local player = Players[id]
 		local house = { civ = PlayerConfigurations[id]:GetCivilizationTypeName(), score = 0, parts = {},
-			golden = 0, dark = 0, age = "NONE", policy = "", research = CountResearch(player) }
+			golden = 0, dark = 0, age = "NONE", research = CountResearch(player) }
 		l.houses["p" .. tostring(id)] = house
 		local capital = player:GetCities():GetCapitalCity()  -- BlackDeathScenario.lua:1103
 		if capital then

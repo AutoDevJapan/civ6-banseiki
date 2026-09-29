@@ -525,7 +525,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_property_writer_is_idempotent_with_one_anchor_per_house(self):
         self.turns(1, 66)  # nobody scored: every house is dark with the first policy
-        self.house(1).age, self.house(1).policy = "GOLDEN", ""  # make Takeda golden
+        self.house(1).age, self.house(1).policy = "GOLDEN", None  # make Takeda golden
         self.turns(67)
         self.assertEqual(self.plot(12, 12).GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 1)
         self.g.FOUND(3, 11, 12, False)  # CityBuilt rewrites; the smaller plot index becomes Imagawa's anchor
@@ -543,6 +543,24 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(self.plot(x, 5).GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 0)
         anchors = [i for i, p in self.g.PLOTS.items() if p.GetProperty(None, "JAC_AGE_ANCHOR_VALOR") == 1]
         self.assertEqual(len(anchors), 3)  # Oda, Hojo, Imagawa are dark; one anchor each
+
+    def test_normal_house_has_no_policy_and_dark_house_flags_every_city(self):
+        # Live ages-impl-02: a NORMAL house logged policy= but its ledger policy was not "" on the next turn, so
+        # "no policy" is nil, not a "" sentinel. §7.1: the policy flag on every city centre, the anchor on one.
+        self.turns(1, 30)
+        for i in range(1, 6):
+            self.g.Players[0].research.techs[i] = True  # Oda: 5 points, 2 cities -> dark 4, golden 7: normal
+        self.turns(31, 67)
+        r1 = self.g.LEDGER().history["r1"]
+        self.assertEqual((r1.p0.age, r1.p3.age), ("NORMAL", "DARK"))
+        self.assertIsNone(self.house(0).policy)
+        self.assertEqual(self.house(3).policy, "JAC_AGE_POLICY_VALOR")
+        for x in (1, 2):
+            self.assertEqual(self.plot_properties()[100 + x], (0,) * 9)
+        for x in (12, 13, 14):
+            plot = self.plot(x, 12)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_POLICY_VALOR"), 1)
+            self.assertEqual(plot.GetProperty(None, "JAC_AGE_ANCHOR_VALOR"), 1 if x == 12 else 0)
 
     def test_load_does_not_count_again(self):
         self.turns(1, 5)
