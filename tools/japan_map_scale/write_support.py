@@ -374,9 +374,8 @@ def resource_scenario() -> None:
          "map_file": "{" + MOD_ID + "}Maps/" + item["file"], "map_size": "MAPSIZE_HUGE",
          "speed": "GAMESPEED_STANDARD", "seed": 620960, "city_states": 0, "players": players},
         {"action": "start_game", "timeout": 600},
-        {"action": "wait_for", "condition": {"type": "log_line", "log": "Modding.log",
-                                              "contains": "Applying Component - JAC_Japan_Resources (UpdateDatabase)"},
-         "timeout": 60},
+        # The per-map component is applied while the game loads, before this step's log baseline
+        # (live 2026-09-29), so only the later Lua line is awaited; the judge checks the mod loaded.
         {"action": "wait_for", "condition": {"type": "log_line", "log": "Lua.log",
                                               "contains": "[JAC_RESOURCES] loaded"}, "timeout": 60},
         {"action": "ui_lua", "state_name": "InGame", "code": static},

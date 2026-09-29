@@ -145,15 +145,6 @@
       "action": "wait_for",
       "condition": {
         "type": "log_line",
-        "log": "Modding.log",
-        "contains": "Applying Component - JAC_Japan_Resources (UpdateDatabase)"
-      },
-      "timeout": 60
-    },
-    {
-      "action": "wait_for",
-      "condition": {
-        "type": "log_line",
         "log": "Lua.log",
         "contains": "[JAC_RESOURCES] loaded"
       },
