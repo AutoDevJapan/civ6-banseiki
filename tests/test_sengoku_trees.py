@@ -85,6 +85,7 @@ class SengokuTreeTests(unittest.TestCase):
         required |= {f"LOC_JAC_SENGOKU_ERA_{i}_{suffix}" for i in range(1, 5)
                      for suffix in ("NAME", "DESCRIPTION")}
         required |= {f"LOC_JAC_SENGOKU_BOOST_{short}" for short in MODULE.BOOSTS}
+        required |= {house for _, house, _, _ in MODULE.HOUSE_NAMES}
         self.assertEqual(set(translations), required)
         for key, text in translations.items():
             self.assertEqual(set(text), {"ja_JP", "en_US", "ru_RU"}, key)
@@ -103,6 +104,7 @@ class SengokuTreeTests(unittest.TestCase):
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
             "Text/JAC_Sengoku_Text.xml",
+            "UI/JAC_HouseNamesData_Sengoku.lua",
         ])
         self.assertTrue(all((MOD / file).is_file() for file in files))
         self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],

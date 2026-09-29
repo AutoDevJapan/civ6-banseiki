@@ -22,6 +22,7 @@
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
+| [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
 | [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
