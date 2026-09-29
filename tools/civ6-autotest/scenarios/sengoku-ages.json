@@ -1,0 +1,238 @@
+{
+  "name": "Sengoku ages on the 15 km Japan map: the ledger (武功の台帳) keeps 22 houses, scores no start alliance (turns 31-34), survives save/load and judges the Koji 改元 on turn 66; official era score and ages stay off",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local g = GameInfo.GlobalParameters; local function v(n) return g[n] and g[n].Value end; if v('DARK_AGE_SCORE_BASE_THRESHOLD') ~= '-9999' or v('GOLDEN_AGE_SCORE_BASE_THRESHOLD') ~= '9999' or v('THRESHOLD_SHIFT_PER_CITY') ~= '0' or v('COMMEMORATE_BASE_CHOICES_ALLOWED') ~= '0' then error('official age parameters not overwritten') end; local n = 0; for _ in GameInfo.JAC_SengokuReigns() do n = n + 1 end; if n ~= 8 then error('reigns ' .. n) end; return 'ages data loaded: 8 reigns, official thresholds -9999/9999'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; if elapsed ~= 2 then error('not turn 2: ' .. elapsed) end; if l.reign ~= 0 then error('reign ' .. l.reign) end; local homes = 0; for _, h in pairs(l.houses) do if h.home then homes = homes + 1 end end; if homes ~= 22 then error('homes registered: ' .. homes) end; local cities = 0; for _ in pairs(l.cities) do cities = cities + 1 end; return 'turn 2: ledger with 22 houses, 22 homes, ' .. cities .. ' castles'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local eras = Game.GetEras(); local out = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local sum = 0; for _, src in ipairs(eras:GetPlayerCurrentEraScoreBreakdown(id)) do for _, v in pairs(src) do sum = sum + v end end; local score = eras:GetPlayerCurrentScore(id); if sum ~= 0 or score ~= 0 then error('official era score for ' .. id .. ': breakdown ' .. sum .. ' score ' .. score) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end; local dark, golden = eras:GetPlayerDarkAgeThreshold(id), eras:GetPlayerGoldenAgeThreshold(id); if not (dark <= score and score < golden) then error('thresholds for ' .. id .. ': ' .. dark .. ' <= ' .. score .. ' < ' .. golden) end end; return 'turn ' .. (Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1) .. ': official era score 0, no official age, era ' .. tostring(eras:GetCurrentEra())"
+    },
+    {
+      "action": "autoplay",
+      "turns": 29,
+      "allow_human_elimination": true,
+      "timeout": 5400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; local ids = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local f = string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(), '^CIVILIZATION_JAC_(.+)$'); if f then ids[f] = p:GetID() end end; local pairsChecked = 0; for fa, a in pairs(ids) do for fb, b in pairs(ids) do if fa < fb then local v = Game:GetProperty('JAC_1534_ALLIANCE_' .. fa .. '-' .. fb); if type(v) == 'number' then pairsChecked = pairsChecked + 1; local lo, hi = math.min(a, b), math.max(a, b); if l.allies[lo .. '-' .. hi] ~= 'start' then error('start pair ' .. fa .. '-' .. fb .. ' state ' .. tostring(l.allies[lo .. '-' .. hi])) end; for r = 0, 8 do if l.keys['ally:' .. lo .. ':' .. hi .. ':' .. r] then error('start pair ' .. fa .. '-' .. fb .. ' scored') end end end end end end; if pairsChecked ~= 8 then error('start pairs with a number property: ' .. pairsChecked .. ' ~= 8') end; if elapsed ~= 31 then error('not turn 31: ' .. elapsed) end; return 'turn 31: 8 start pairs are start alliances, 0 points'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 3,
+      "allow_human_elimination": true,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; local ids = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local f = string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(), '^CIVILIZATION_JAC_(.+)$'); if f then ids[f] = p:GetID() end end; local pairsChecked = 0; for fa, a in pairs(ids) do for fb, b in pairs(ids) do if fa < fb then local v = Game:GetProperty('JAC_1534_ALLIANCE_' .. fa .. '-' .. fb); if type(v) == 'number' then pairsChecked = pairsChecked + 1; local lo, hi = math.min(a, b), math.max(a, b); if l.allies[lo .. '-' .. hi] ~= 'start' then error('start pair ' .. fa .. '-' .. fb .. ' state ' .. tostring(l.allies[lo .. '-' .. hi])) end; for r = 0, 8 do if l.keys['ally:' .. lo .. ':' .. hi .. ':' .. r] then error('start pair ' .. fa .. '-' .. fb .. ' scored') end end end end end end; if pairsChecked ~= 8 then error('start pairs with a number property: ' .. pairsChecked .. ' ~= 8') end; if elapsed ~= 34 then error('not turn 34: ' .. elapsed) end; local lapses = Game:GetProperty('JAC_1534_ALLIANCE_LAPSES'); if type(lapses) ~= 'number' or lapses < 1 then error('start alliances were not re-made after the turn-32 lapse: ' .. tostring(lapses)) end; Game:SetProperty('JAC_AGES_TEST_SNAPSHOT', ser(l)); return 'turn 34: start pairs still 0 points after ' .. lapses .. ' re-makes; snapshot ' .. #ser(l) .. ' chars'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local eras = Game.GetEras(); local out = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local sum = 0; for _, src in ipairs(eras:GetPlayerCurrentEraScoreBreakdown(id)) do for _, v in pairs(src) do sum = sum + v end end; local score = eras:GetPlayerCurrentScore(id); if sum ~= 0 or score ~= 0 then error('official era score for ' .. id .. ': breakdown ' .. sum .. ' score ' .. score) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end; local dark, golden = eras:GetPlayerDarkAgeThreshold(id), eras:GetPlayerGoldenAgeThreshold(id); if not (dark <= score and score < golden) then error('thresholds for ' .. id .. ': ' .. dark .. ' <= ' .. score .. ' < ' .. golden) end end; return 'turn ' .. (Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1) .. ': official era score 0, no official age, era ' .. tostring(eras:GetCurrentEra())"
+    },
+    {
+      "action": "save",
+      "name": "JAC-SengokuAges-01",
+      "timeout": 180
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 180
+    },
+    {
+      "action": "load",
+      "name": "JAC-SengokuAges-01",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; if elapsed ~= 34 then error('loaded turn ' .. elapsed) end; local before = Game:GetProperty('JAC_AGES_TEST_SNAPSHOT'); if type(before) ~= 'string' then error('snapshot missing after load') end; if ser(l) ~= before then error('ledger changed across save/load') end; return 'ledger equal after load (' .. #before .. ' chars)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local n = 0; for row in GameInfo.Technologies() do if p:GetTechs():HasTech(row.Index) then n = n + 1 end end; for row in GameInfo.Civics() do if p:GetCulture():HasCivic(row.Index) then n = n + 1 end end; local h = l.houses['p' .. p:GetID()]; if h.research ~= n then error('research count of ' .. p:GetID() .. ' is ' .. h.research .. ', engine ' .. n) end; if (h.parts.research or 0) > h.score then error('score below research points for ' .. p:GetID()) end end; return 'turn 35: research counts continue from the saved record'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 32,
+      "allow_human_elimination": true,
+      "timeout": 7200
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local function ser(v) if type(v) ~= 'table' then return tostring(v) end; local ks = {}; for k in pairs(v) do ks[#ks + 1] = tostring(k) end; table.sort(ks); local o = {}; for _, k in ipairs(ks) do o[#o + 1] = k .. '=' .. ser(v[k]) end; return '{' .. table.concat(o, ',') .. '}' end; local n = 0; for k, h in pairs(l.houses) do n = n + 1; if type(h.score) ~= 'number' or type(h.research) ~= 'number' then error('house ' .. k .. ' malformed') end end; if n ~= 22 then error('ledger has ' .. n .. ' houses, expected 22') end; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if l.houses['p' .. p:GetID()] == nil then error('alive major ' .. p:GetID() .. ' missing from the ledger') end end; if elapsed ~= 67 then error('not turn 67: ' .. elapsed) end; if l.reign ~= 1 then error('reign ' .. l.reign) end; local r = l.history.r1; if type(r) ~= 'table' or r.turn ~= 66 or r.length ~= 65 then error('Koji judgement not on turn 66: ' .. ser(r)) end; local ages = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local res = r['p' .. id]; if res == nil then error('no result for ' .. id) end; if res.age ~= 'GOLDEN' and res.age ~= 'NORMAL' and res.age ~= 'DARK' then error('first judgement gave ' .. tostring(res.age)) end; ages[res.age] = (ages[res.age] or 0) + 1; local h = l.houses['p' .. id]; local anchors = 0; for _, c in p:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); local golden = (h.age == 'GOLDEN' or h.age == 'HEROIC') and 1 or 0; if plot:GetProperty('JAC_AGE_GOLDEN') ~= golden then error('golden flag of ' .. id) end; if h.policy ~= '' then if plot:GetProperty(h.policy) ~= 1 then error('policy flag of ' .. id) end; anchors = anchors + (plot:GetProperty((string.gsub(h.policy, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0) end end; if h.policy ~= '' and p:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; return 'Koji (turn 66): golden ' .. (ages.GOLDEN or 0) .. ', normal ' .. (ages.NORMAL or 0) .. ', dark ' .. (ages.DARK or 0)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local eras = Game.GetEras(); local out = {}; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local sum = 0; for _, src in ipairs(eras:GetPlayerCurrentEraScoreBreakdown(id)) do for _, v in pairs(src) do sum = sum + v end end; local score = eras:GetPlayerCurrentScore(id); if sum ~= 0 or score ~= 0 then error('official era score for ' .. id .. ': breakdown ' .. sum .. ' score ' .. score) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end; local dark, golden = eras:GetPlayerDarkAgeThreshold(id), eras:GetPlayerGoldenAgeThreshold(id); if not (dark <= score and score < golden) then error('thresholds for ' .. id .. ': ' .. dark .. ' <= ' .. score .. ' < ' .. golden) end end; return 'turn ' .. (Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1) .. ': official era score 0, no official age, era ' .. tostring(eras:GetCurrentEra())"
+    }
+  ]
+}

@@ -102,6 +102,8 @@ class SengokuTreeTests(unittest.TestCase):
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
             "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
+            "Data/JAC_Sengoku_Ages.sql", "Data/JAC_Sengoku_Ages_Icons.xml", "Scripts/JAC_Sengoku_Ages.lua",
+            "Text/JAC_Sengoku_Ages_Text.xml",
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
             "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
@@ -111,8 +113,8 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertTrue(all((MOD / file).is_file() for file in files))
         self.assertEqual([row.text for row in meta.findall("./FrontEndActions/UpdateDatabase/File")],
                          ["Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml"])
-        self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-1],
-                         "Data/JAC_Sengoku_Unification.sql")
+        self.assertEqual([row.text for row in meta.findall("./InGameActions/UpdateDatabase/File")][-2:],
+                         ["Data/JAC_Sengoku_Unification.sql", "Data/JAC_Sengoku_Ages.sql"])
         icons = ET.parse(MOD / "Data/JAC_Sengoku_Icons.xml").getroot()
         icon_names = [row.get("Name") for row in icons.findall("./IconDefinitions/Row")]
         self.assertEqual(len(icon_names), 124)

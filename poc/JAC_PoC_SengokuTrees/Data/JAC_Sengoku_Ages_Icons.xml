@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<IconDefinitions>
+		<!-- The 改元 notification (Scripts/JAC_Sengoku_Ages.lua) uses NOTIFICATION_USER_DEFINED_2, which has no base icon.
+		     USER_DEFINED_1 belongs to JAC_PoC_HistoricalEvents. Picture: the official dedication icon
+		     (DLC/Expansion2/Data/Expansion1_Icons_Notifications.xml:36). -->
+		<Row Name="ICON_NOTIFICATION_USER_DEFINED_2" Atlas="ICON_ATLAS_EXPANSION1_NOTIFICATIONS" Index="7"/>
+	</IconDefinitions>
+</GameInfo>

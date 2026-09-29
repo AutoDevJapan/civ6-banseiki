@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sengoku ages (documents/research/sengoku-ages.md). Draft wording; en/ru are provisional translations. -->
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_REIGN_KOJI_NAME" Language="ja_JP"><Text>弘治</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_NAME" Language="en_US"><Text>Kōji</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_NAME" Language="ru_RU"><Text>Кодзи</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_NAME" Language="ja_JP"><Text>永禄</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_NAME" Language="en_US"><Text>Eiroku</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_NAME" Language="ru_RU"><Text>Эйроку</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_NAME" Language="ja_JP"><Text>元亀</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_NAME" Language="en_US"><Text>Genki</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_NAME" Language="ru_RU"><Text>Гэнки</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_NAME" Language="ja_JP"><Text>天正</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_NAME" Language="en_US"><Text>Tenshō</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_NAME" Language="ru_RU"><Text>Тэнсё</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_NAME" Language="ja_JP"><Text>文禄</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_NAME" Language="en_US"><Text>Bunroku</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_NAME" Language="ru_RU"><Text>Бунроку</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_NAME" Language="ja_JP"><Text>慶長</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_NAME" Language="en_US"><Text>Keichō</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_NAME" Language="ru_RU"><Text>Кэйтё</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_NAME" Language="ja_JP"><Text>元和</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_NAME" Language="en_US"><Text>Genna</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_NAME" Language="ru_RU"><Text>Гэнна</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="ja_JP"><Text>寛永</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="en_US"><Text>Kan'ei</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="ru_RU"><Text>Канъэй</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：天文から弘治へ（1555年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Tenbun to Kōji (1555)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Тэмбун на Кодзи (1555)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元：弘治から永禄へ（1558年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Kōji to Eiroku (1558)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Кодзи на Эйроку (1558)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：永禄から元亀へ（1570年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Eiroku to Genki (1570)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Эйроку на Гэнки (1570)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元：元亀から天正へ（1573年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Genki to Tenshō (1573)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Гэнки на Тэнсё (1573)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元：天正から文禄へ（1593年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Tenshō to Bunroku (1593)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Тэнсё на Бунроку (1593)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元：文禄から慶長へ（1596年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Bunroku to Keichō (1596)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Бунроку на Кэйтё (1596)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ja_JP"><Text>改元：慶長から元和へ（1615年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Keichō to Genna (1615)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Кэйтё на Гэнна (1615)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：元和から寛永へ（1624年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Genna to Kan'ei (1624)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Гэнна на Канъэй (1624)</Text></Row>
+    <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="ja_JP"><Text>当家は黄金期に入った。全都市の生産力と金 +10%。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Golden Age: +10% Production and Gold in all cities.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в золотой век: +10% производства и золота во всех городах.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_HEROIC_ANNOUNCEMENT" Language="ja_JP"><Text>暗黒期から立ち直り、当家は英雄期に入った。全都市の生産力と金 +10%。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_HEROIC_ANNOUNCEMENT" Language="en_US"><Text>Rising from a Dark Age, your house enters a Heroic Age: +10% Production and Gold in all cities.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_HEROIC_ANNOUNCEMENT" Language="ru_RU"><Text>Поднявшись из тёмного века, ваш дом вступает в героический век: +10% производства и золота во всех городах.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NORMAL_ANNOUNCEMENT" Language="ja_JP"><Text>当家は通常期となった。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NORMAL_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Normal Age.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NORMAL_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в обычный век.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_VALOR_NAME" Language="ja_JP"><Text>背水の陣</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_VALOR_NAME" Language="en_US"><Text>Backs to the River</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_VALOR_NAME" Language="ru_RU"><Text>Спиной к реке</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_ELITE_NAME" Language="ja_JP"><Text>精鋭主義</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_ELITE_NAME" Language="en_US"><Text>Elite Troops</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_ELITE_NAME" Language="ru_RU"><Text>Отборные войска</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_PIRATE_NAME" Language="ja_JP"><Text>海賊衆の免許</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_PIRATE_NAME" Language="en_US"><Text>Sea Captains' Licence</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_PIRATE_NAME" Language="ru_RU"><Text>Грамота морским дружинам</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_TEMPLE_NAME" Language="ja_JP"><Text>寺院学問</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_TEMPLE_NAME" Language="en_US"><Text>Temple Learning</Text></Row>
+    <Row Tag="LOC_JAC_AGE_POLICY_TEMPLE_NAME" Language="ru_RU"><Text>Храмовая учёность</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT" Language="ja_JP"><Text>当家は暗黒期に入った。暗黒期の政策「背水の陣」：近接・騎兵などの攻撃時の戦闘力 +5。自領の外では回復しない。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Dark Age. Dark Age policy "Backs to the River": +5 Combat Strength when melee, cavalry and similar units attack; no healing outside your territory.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_VALOR_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в тёмный век. Политика тёмного века «Спиной к реке»: +5 к боевой силе ближнего боя, кавалерии и схожих отрядов при атаке; вне своих земель отряды не лечатся.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT" Language="ja_JP"><Text>当家は暗黒期に入った。暗黒期の政策「精鋭主義」：全ユニットの戦闘経験 +100%。軍事ユニット1体ごとに維持費 +2 金。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Dark Age. Dark Age policy "Elite Troops": +100% combat experience for all units; +2 Gold maintenance per military unit.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в тёмный век. Политика тёмного века «Отборные войска»: +100% боевого опыта всем отрядам; +2 золота содержания за каждый военный отряд.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_PIRATE_ANNOUNCEMENT" Language="ja_JP"><Text>当家は暗黒期に入った。暗黒期の政策「海賊衆の免許」：水軍の生産 +100%、水軍の移動力 +2。交易路の金 −50%。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_PIRATE_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Dark Age. Dark Age policy "Sea Captains' Licence": +100% Production toward naval units, +2 Movement for naval units; −50% Gold from trade routes.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_PIRATE_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в тёмный век. Политика тёмного века «Грамота морским дружинам»: +100% производства морских отрядов, +2 к передвижению морских отрядов; −50% золота от торговых путей.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_TEMPLE_ANNOUNCEMENT" Language="ja_JP"><Text>当家は暗黒期に入った。暗黒期の政策「寺院学問」：全都市の科学 +25%。全都市の文化 −25%。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_TEMPLE_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Dark Age. Dark Age policy "Temple Learning": +25% Science in all cities; −25% Culture in all cities.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_TEMPLE_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в тёмный век. Политика тёмного века «Храмовая учёность»: +25% науки во всех городах; −25% культуры во всех городах.</Text></Row>
+  </LocalizedText>
+</GameData>
