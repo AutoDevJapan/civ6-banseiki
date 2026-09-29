@@ -521,11 +521,9 @@ def insert_historical_state(db: sqlite3.Connection, cities: list[dict],
     # capital without it; official DLC/VikingsScenario/Maps/Viking.Civ6Map does the same).
     db.executemany("INSERT INTO Buildings VALUES ('BUILDING_PALACE', ?)",
                    ((city["plot"],) for city in ordered if city["capital"]))
-    # No settler on the historical start, so each capital gets one garrison;
-    # without any unit a faction cannot act on turn 1 (live 2026-09-29).
-    capitals = [city for city in ordered if city["capital"]]
-    db.executemany("INSERT INTO Units VALUES (?, 'UNIT_WARRIOR', ?, ?, NULL)",
-                   ((index, SEAT_INDEX[city["owner"]], city["plot"]) for index, city in enumerate(capitals)))
+    # Units, population, districts, improvements and gold come from
+    # prosper_start.apply() (SSOT 3.1). Without any unit a faction cannot act on
+    # turn 1 (live 2026-09-29), so every city gets a garrison there.
     city_order = {city["plot"]: index for index, city in enumerate(ordered)}
     db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
                    sorted(allocations, key=lambda row: (0, city_order[row[0]])
@@ -1185,6 +1183,8 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
                              "Human", "DIFFICULTY_PRINCE", "INVALID",
                              "RANDOM", 1) for i, seat in enumerate(SEATS)))
             insert_historical_state(db, cities, assign_land(grid, land_tiles, cities))
+            import prosper_start  # imports this module; kept local to avoid a cycle at import time
+            prosper_start.apply(db, grid.width, grid.height, km, cities)
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"Invalid SQLite map: {destination}")
         db.commit()

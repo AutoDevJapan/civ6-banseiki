@@ -1,6 +1,7 @@
 # 1534年開始時の「ある程度栄えた状態」調査（Q28）
 
-> **位置づけ：調査・提案。** SSOT の改定ではない。確定済みの範囲は [SSOT 3.1](../spec/ssot/03-map-and-scale.md)（ある程度栄えた状態で始める。中身は [Q28](../questions.md)）。実装はしていない。機械可読データは [japan-1534-prosperity.json](../spec/data/japan-1534-prosperity.json)、その生成は `tools/japan_map_scale/prosperity.py`。
+> **位置づけ：調査・提案。** SSOT の改定ではない。確定済みの範囲は [SSOT 3.1](../spec/ssot/03-map-and-scale.md)。
+> **実装済み（2026-09-29）：** オプション①で地図に反映した。記録は [japan-prosperous-start.md](../poc/japan-prosperous-start.md)。その際、長宗我部・島津・琉球王国・アイヌの規模を史料で見直した（島津は階層 C→D）。本書 §3・§5.5 の表は見直し前の値で、現在の値は JSON と実装記録を正とする。機械可読データは [japan-1534-prosperity.json](../spec/data/japan-1534-prosperity.json)、その生成は `tools/japan_map_scale/prosperity.py`。
 > 各勢力の石高は史料の直接の数字ではなく、**1598年の国別石高を土台にした推定**。信頼度を勢力ごとに付け、根拠を §3 に書いた。オーナーが見るべき判断は §9。
 
 ## 0. 要約

@@ -56,6 +56,13 @@ class ProsperityPlanTests(unittest.TestCase):
         self.assertEqual(tiers["ODA"], "D")
         # bigger houses never get fewer field units than smaller ones
         self.assertGreater(p.field_units("OUCHI"), p.field_units("ODA"))
+        # Ryukyu and the Ainu are sized from sources too (owner decision 8b)
+        self.assertEqual((tiers["RYUKYU"], tiers["AINU"]), ("C", "D"))
+        shares = {f["id"]: f["direct_koku_share_pct"] for f in self.plan["factions"]}
+        self.assertIsNone(shares["AINU"])  # population-derived, not koku
+        self.assertAlmostEqual(sum(v for v in shares.values() if v is not None), 100, delta=0.5)
+        self.assertTrue(all(len(spec["k"]) == 3 and spec["k"][0] <= spec["k"][1] <= spec["k"][2]
+                            for spec in p.FACTIONS.values()))
 
 
 if __name__ == "__main__":

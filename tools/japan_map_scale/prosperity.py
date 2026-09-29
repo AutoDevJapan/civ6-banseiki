@@ -65,16 +65,21 @@ SPLIT_SHARES = {
 # scale, in 10,000 koku (None = not koku based). Traits 0-3.
 # martial, trade, port, faith, mine, learn.
 FACTIONS = {
-    "ODA": dict(k=(4, 8, 12), conf="低", cap_bonus=0, traits=(1, 3, 2, 1, 0, 0),
-                basis="尾張の海東・海西郡の弾正忠家。勝幡城と津島・熱田の湊町の矢銭で伸びる途中。石高は小さいが商業は大きい"),
-    "DATE": dict(k=(15, 27, 35), conf="低", cap_bonus=0, traits=(2, 1, 0, 1, 1, 0),
-                 basis="伊達・信夫・置賜の直轄と近隣の従属国衆。陸奥北部と出羽の大半は独立性が強く数えない"),
+    "ODA": dict(k=(4, 8, 12), conf="中低", cap_bonus=0, traits=(1, 3, 2, 1, 0, 0),
+                basis="尾張の海東・海西郡の弾正忠家。勝幡城と津島・熱田の湊町の矢銭で伸びる途中。石高は小さいが商業は大きい"
+                      "(1540年に伊勢遷宮へ銭700貫文、1543年に内裏修理料4000貫文を献上。Wikipedia「織田信秀」)"),
+    "DATE": dict(k=(15, 27, 35), conf="中低", cap_bonus=0, traits=(2, 1, 0, 1, 1, 0),
+                 basis="伊達・信夫・置賜の直轄と近隣の従属国衆。陸奥北部と出羽の大半は独立性が強く数えない"
+                       "(1532年に桑折西山城へ移り、1533年『蔵方之掟』、1535年『棟役日記』、1538年『御段銭帳』の徴税台帳を作る。"
+                       "Wikipedia「伊達稙宗」。台帳の数値は未確認)"),
     "ASHINA": dict(k=(15, 25, 32), conf="低", cap_bonus=0, traits=(1, 1, 0, 2, 0, 0),
-                   basis="会津4郡と仙道南部の一族・従属国衆。出羽の仮割当は数えない"),
+                   basis="会津4郡と仙道南部の一族・従属国衆。出羽の仮割当は数えない"
+                         "(当主は盛舜。「会津守護」を自称。Wikipedia「蘆名氏」。数値の史料は見つからず推定のまま)"),
     "HOJO": dict(k=(35, 43, 52), conf="中", cap_bonus=0, traits=(3, 2, 1, 0, 0, 0),
                  basis="相模+伊豆(26.4万)と武蔵南部の江戸周辺(約25%=16.7万)。下総は政治的連携で数えない"),
     "YAMANOUCHI_UESUGI": dict(k=(40, 50, 60), conf="低", cap_bonus=0, traits=(2, 1, 0, 1, 0, 0),
-                              basis="上野(49.6万)と武蔵北部(50万)の名目領のうち約半分が実効。1530年代は内紛と衰退の途中"),
+                              basis="上野(49.6万)と武蔵北部(50万)の名目領のうち約半分が実効。1530年代は内紛と衰退の途中"
+                                    "(1531年の関東享禄の内乱で憲政が家督。1546年河越で3,000人余を失う。Wikipedia「上杉憲政」)"),
     "TAKEDA": dict(k=(20, 23, 30), conf="中", cap_bonus=0, traits=(3, 0, 0, 1, 2, 0),
                    basis="甲斐一国(22.8万)。信虎が1519-31年に統一済み。信濃はまだ制圧前"),
     "NAGAO": dict(k=(25, 30, 36), conf="中低", cap_bonus=0, traits=(2, 2, 2, 0, 0, 0),
@@ -85,30 +90,42 @@ FACTIONS = {
                        basis="三河(29.1万)の約60%。清康が西三河を固め東三河へ進出中(1535年没)"),
     "ASAKURA": dict(k=(38, 42, 50), conf="中高", cap_bonus=0, traits=(1, 2, 2, 2, 0, 3),
                     basis="越前(49.9万)の約85%。一乗谷は「北陸の小京都」と呼ばれた計画城下町"),
-    "ASHIKAGA": dict(k=(8, 15, 25), conf="低", cap_bonus=2, traits=(0, 3, 0, 3, 0, 3),
-                     basis="将軍家の直轄は山城の御料所程度。石高は小さいが京都の人口・寺社・商業と威信が最大"),
+    "ASHIKAGA": dict(k=(8, 15, 25), conf="中低", cap_bonus=2, traits=(0, 3, 0, 3, 0, 3),
+                     basis="将軍家の直轄は山城の御料所程度。石高は小さいが京都の人口・寺社・商業と威信が最大"
+                           "(幕府財政は御料所が主で小規模。Wikipedia「室町幕府」。義晴は1534年6月まで桑実寺、のち坂本。"
+                           "Wikipedia「足利義晴」)"),
     "MIYOSHI": dict(k=(4, 8, 15), conf="低", cap_bonus=0, traits=(2, 2, 3, 0, 0, 0),
-                    basis="阿波三好郡の三好家(元長は1532年没、長慶は12歳)。守護細川氏の阿波・讃岐・淡路は数えない"),
+                    basis="阿波三好郡の三好家(元長は1532年没、長慶は12歳)。守護細川氏の阿波・讃岐・淡路は数えない"
+                          "(元長の死は Wikipedia「三好元長」。所領の数値の史料は見つからず推定のまま)"),
     "ROKKAKU": dict(k=(30, 40, 45), conf="中", cap_bonus=0, traits=(2, 2, 1, 1, 0, 0),
                     basis="近江(77.5万)のうち南近江の約50%。北近江は浅井氏が半独立"),
     "HONGANJI": dict(k=(10, 18, 30), conf="低", cap_bonus=1, traits=(0, 3, 2, 3, 0, 0),
-                     basis="石山御坊・寺内町と加賀の一向一揆領(35.6万の約50%)。石高より門徒・寺内町・資金が力"),
+                     basis="石山御坊・寺内町と加賀の一向一揆領(35.6万の約50%)。石高より門徒・寺内町・資金が力"
+                           "(1532年に山科本願寺を焼かれ、石山は濠・土居で囲んだ寺内町。細川晴元との戦いは1535年11月まで。"
+                           "Wikipedia「石山本願寺」「証如」)"),
     "OUCHI": dict(k=(55, 70, 85), conf="中", cap_bonus=0, traits=(1, 3, 3, 2, 3, 3),
                   basis="周防+長門(29.9万)、石見の約70%、筑前の約70%、豊前の約80%。山口と博多、石見銀山(1533年に灰吹法)"),
     "AMAGO": dict(k=(30, 40, 50), conf="中低", cap_bonus=0, traits=(3, 0, 1, 0, 3, 0),
                   basis="出雲+隠岐+伯耆(29.9万)と美作・石見・備後・安芸の一部。たたら製鉄の産地。影響は中国11か国に及ぶと伝わる"),
-    "MORI": dict(k=(2, 3, 5), conf="低", cap_bonus=0, traits=(2, 0, 0, 0, 0, 0),
-                 basis="吉田郡山周辺の一国衆(家督継承時に約3,000貫と伝わる。要確認)。大内方の従属国衆"),
-    "CHOSOKABE": dict(k=(2, 3, 5), conf="低", cap_bonus=0, traits=(2, 0, 1, 0, 0, 0),
-                      basis="土佐長岡郡岡豊と周辺。土佐(9.8万)の1/3未満。一条氏など土佐七雄の一つ"),
+    "MORI": dict(k=(2, 3, 5), conf="中低", cap_bonus=0, traits=(2, 0, 0, 0, 0, 0),
+                 basis="吉田郡山周辺の一国衆。大内方の従属国衆。元就の元の所領は多治比300貫、大内義興から可部700貫・温科300貫・"
+                       "深川300貫・久村70貫の恩賞(Wikipedia「毛利元就」)。1540年の郡山籠城は徴集兵込み3,000。"
+                       "本家の貫高は見つからず、国衆連合を含めて推定"),
+    "CHOSOKABE": dict(k=(0.3, 0.45, 0.6), conf="中低", cap_bonus=0, traits=(2, 0, 1, 0, 0, 0),
+                      basis="土佐長岡郡岡豊と周辺。土佐七雄で最小の長岡郡3000貫(1貫=1〜2石で0.3〜0.6万石)。"
+                            "本山・吉良・安芸・津野は各5000貫、一条氏は幡多郡16000貫(Wikipedia「土佐七雄」)"),
     "OTOMO": dict(k=(40, 48, 60), conf="中低", cap_bonus=0, traits=(1, 3, 3, 2, 0, 0),
                   basis="豊後(41.8万)の約85%、筑後の約40%、肥後の一部。府内は明との貿易港を持つ"),
-    "SHIMAZU": dict(k=(6, 12, 20), conf="低", cap_bonus=0, traits=(3, 1, 2, 0, 0, 0),
-                    basis="薩摩・大隅・日向南部の名目領(57.6万)のうち貴久(伊作家)が固めた範囲。宗家と分家が分裂中"),
-    "RYUKYU": dict(k=None, conf="低", cap_bonus=0, traits=(0, 3, 3, 0, 0, 0), tier="C",
-                   basis="石高なし。那覇の中継貿易(明・東南アジア・日本)で成り立つ。兵は少なく港・商業が主"),
-    "AINU": dict(k=None, conf="低", cap_bonus=0, traits=(1, 1, 1, 0, 0, 0), tier="D",
-                 basis="石高なし。各コタン・チャシの連合で単一の領域ではない(ゲーム上の扱い)"),
+    "SHIMAZU": dict(k=(4, 8, 15), conf="中低", cap_bonus=0, traits=(3, 1, 2, 0, 0, 0),
+                    basis="薩摩・大隅・日向南部の名目領(57.6万)のうち貴久(伊作家・相州家)が固めた範囲。1533年に南郷城で初陣、"
+                          "1535年に実久が宗家を奪い勝久を追放(Wikipedia「島津貴久」)。宗家と分家が分裂中のため旧案(中12万)から下げた"),
+    "RYUKYU": dict(k=(8, 10, 11), conf="中", cap_bonus=0, traits=(0, 3, 3, 0, 0, 0),
+                   basis="1609年以後の「琉球国高究帳」で11万石余・沖縄本島8万石(Wikipedia「薩摩藩」、典拠『沖縄県史料 前近代1』)。"
+                         "奄美は1571年まで全域支配でないため中10万。那覇の中継貿易で商業・港が主。兵力は数千人規模(Wikipedia「琉球王国」)"),
+    "AINU": dict(k=(2, 3, 7), conf="低", cap_bonus=0, traits=(1, 1, 1, 0, 0, 0), koku_equivalent=True,
+                 basis="石高なし。人口からの石高相当。江戸時代の記録上の最大は26,800人、1804年以降の調査で約2万人"
+                       "(Wikipedia「アイヌ」「江戸時代の日本の人口統計」)。1人1石(吉田東伍)〜1石0.28〜0.44人(速水融)で2.7〜9.6万石だが、"
+                       "狩猟・交易社会で徴税・動員の仕組みがないため下限側の3万石相当とした(推定)。各コタン・チャシの連合で単一の領域ではない"),
 }
 TRAIT_NAMES = ("martial", "trade", "port", "faith", "mine", "learn")
 TRAIT_DISTRICT = {"trade": "DISTRICT_COMMERCIAL_HUB", "port": "DISTRICT_HARBOR",
@@ -148,22 +165,83 @@ IMPORTANCE = {
     "SHIMAZU_OBI": 1, "RYUKYU_NAKAGUSUKU": 2,
 }
 NO_WALLS = {"ASHIKAGA_KUWANOMI"}
+KYOTO = "ASHIKAGA_SEAT"  # Muromachi palace, the Ashikaga capital
 
 
 def tier_of(slug: str) -> str:
-    spec = FACTIONS[slug]
-    if "tier" in spec:
-        return spec["tier"]
-    k = spec["k"][1]
+    k = FACTIONS[slug]["k"][1]
     return "A" if k >= 40 else "B" if k >= 20 else "C" if k >= 10 else "D"
 
 
 def field_units(slug: str) -> int:
     """Units beyond the per-city garrison; sqrt compression of the koku scale."""
-    k = FACTIONS[slug]["k"]
-    if k is None:
-        return 2 if slug == "RYUKYU" else 1
-    return max(1, round(math.sqrt(k[1]) / 1.5))
+    return max(1, round(math.sqrt(FACTIONS[slug]["k"][1]) / 1.5))
+
+
+# Starting treasury (owner decision 5b: koku differences go into assets, not land).
+# Official maps set it with PlayerAttributes(ID, 'Treasury', 'Balance', ...):
+# DLC/NubiaScenario/Maps/NubiaScenario.Civ6Map (100/50) and
+# DLC/WarMachineScenario/Maps/WarMachineMap.Civ6Map (900).
+GOLD_PER_MAN_KOKU = 10
+GOLD_PER_TRADE = 40
+GOLD_FLOOR = 100
+KYOTO_GOLD = 100  # owner decision 9a: Kyoto's commerce
+
+
+def starting_gold(slug: str) -> int:
+    spec = FACTIONS[slug]
+    gold = GOLD_PER_MAN_KOKU * spec["k"][1] + GOLD_PER_TRADE * spec["traits"][TRAIT_NAMES.index("trade")]
+    gold = max(GOLD_FLOOR, int(round(gold / 10)) * 10)
+    return gold + (KYOTO_GOLD if slug == "ASHIKAGA" else 0)
+
+
+def city_plan(slug: str, city: dict, rec: Counter, coastal: bool) -> dict:
+    """Population, districts, centre buildings and garrison of one city on one map scale."""
+    spec, tier, capital = FACTIONS[slug], tier_of(slug), city["capital"]
+    importance = 3 if capital else IMPORTANCE[city["id"]]
+    target = max(2, CAPITAL_POP[tier] + (spec["cap_bonus"] if capital else 0)
+                 + IMPORTANCE_POP_DELTA[importance])
+    land = rec["tiles"] - 1 - rec["mountain"]
+    pop = max(2, min(target, land))
+    # districts: one per 3 citizens above 2, limited by free tiles
+    n_districts = 0 if pop < 3 else 1 if pop < 6 else 2 if pop < 9 else 3
+    n_districts = max(0, min(n_districts, land - pop))
+    if not capital:
+        n_districts = min(n_districts, 1 if importance >= 2 else 0)
+    if city["id"] == KYOTO:
+        n_districts = 2  # owner decision 9a: temples and commerce regardless of tile count
+    scores = sorted(TRAIT_NAMES, key=lambda t: (-spec["traits"][TRAIT_NAMES.index(t)], TRAIT_ORDER.index(t)))
+    # Every district the house's traits allow, best first; a map places the first
+    # n_districts that fit and falls back to the next ones.
+    options = []
+    for trait in scores:
+        dtype = TRAIT_DISTRICT[trait]
+        if spec["traits"][TRAIT_NAMES.index(trait)] == 0 or (dtype == "DISTRICT_HARBOR" and not coastal):
+            continue
+        buildings = [DISTRICT_BUILDING[dtype]]
+        if capital and dtype == "DISTRICT_HOLY_SITE" and spec["traits"][TRAIT_NAMES.index("faith")] == 3:
+            buildings.append("BUILDING_TEMPLE")
+        options.append({"district": dtype, "buildings": buildings})
+    buildings = ["BUILDING_PALACE"] if capital else []
+    if (capital or importance >= 2) and city["id"] not in NO_WALLS:
+        buildings.append("BUILDING_WALLS")
+    if pop >= 4:
+        buildings.append("BUILDING_GRANARY")
+    if capital:
+        garrison = ["UNIT_SPEARMAN"] + (["UNIT_ARCHER"] if tier in "AB" else [])
+    else:
+        garrison = ["UNIT_SPEARMAN"] if importance >= 2 else ["UNIT_WARRIOR"]
+    return {"importance": importance, "target_pop": target, "pop": pop, "land": land,
+            "districts": options[:n_districts], "district_options": options, "n_districts": n_districts,
+            "city_buildings": buildings, "garrison": garrison}
+
+
+def faction_reserves(slug: str, plans: list[dict]) -> list[str]:
+    """Units placed near the cities: the capitals' second garrison unit, then field units."""
+    order = ["UNIT_SPEARMAN", "UNIT_ARCHER", "UNIT_WARRIOR", "UNIT_SPEARMAN", "UNIT_ARCHER",
+             "UNIT_SPEARMAN", "UNIT_WARRIOR", "UNIT_SPEARMAN"]
+    return ([u for p in plans for u in p["garrison"][1:]]
+            + [order[i % len(order)] for i in range(field_units(slug))])
 
 
 def territory_koku() -> dict[str, float]:
@@ -181,24 +259,21 @@ def territory_koku() -> dict[str, float]:
     return dict(total)
 
 
-def read_map(km: int) -> dict:
-    """Per-city land statistics from the generated Civ6Map file."""
-    manifest = next(m for m in json.loads((MAPS / "manifest.json").read_text(encoding="utf-8"))
-                    if m["km_per_tile"] == km)
-    width, height = manifest["width"], manifest["height"]
+WATER = {"TERRAIN_COAST", "TERRAIN_OCEAN"}
+
+
+def read_db(db: sqlite3.Connection, width: int, height: int, km: int) -> dict[int, dict]:
+    """Per-city land statistics of a historical Civ6Map, keyed by city-centre plot.
+
+    Only land plots count: a harbour district adds an owned water plot.
+    """
     grid = g.HexGrid(km, width, height, 0.0, 0.0)  # only neighbours()/index() are used
-    with tempfile.TemporaryDirectory() as tmp:
-        copy = Path(tmp) / "map.db"
-        shutil.copy(MAPS / f"JAC_Japan_{km}km.Civ6Map", copy)
-        db = sqlite3.connect(copy)
-        terrain = dict(db.execute("SELECT ID, TerrainType FROM Plots"))
-        feature = dict(db.execute("SELECT ID, FeatureType FROM PlotFeatures"))
-        resource = dict(db.execute("SELECT ID, ResourceType FROM PlotResources"))
-        owners = db.execute("SELECT ID, Owner, CityOwner FROM PlotOwners").fetchall()
-        city_rows = db.execute("SELECT Plot, Owner FROM Cities").fetchall()
-        db.close()
-    water = {"TERRAIN_COAST", "TERRAIN_OCEAN"}
-    by_city: dict[int, dict] = {}
+    terrain = dict(db.execute("SELECT ID, TerrainType FROM Plots"))
+    feature = dict(db.execute("SELECT ID, FeatureType FROM PlotFeatures"))
+    resource = dict(db.execute("SELECT ID, ResourceType FROM PlotResources"))
+    owners = [row for row in db.execute("SELECT ID, Owner, CityOwner FROM PlotOwners ORDER BY ID")
+              if terrain[row[0]] not in WATER]
+    by_city: dict[int, Counter] = {}
     for plot, _owner, city in owners:
         rec = by_city.setdefault(city, Counter())
         rec["tiles"] += 1
@@ -212,12 +287,11 @@ def read_map(km: int) -> dict:
         if plot in resource:
             rec["res:" + resource[plot]] += 1
     out = {}
-    for plot, owner in city_rows:
+    for plot, owner in db.execute("SELECT Plot, Owner FROM Cities ORDER BY Plot"):
         col, row = plot % width, plot // width
         neighbours = [grid.index(c, r) for c, r in grid.neighbours(col, row)]
         out[plot] = dict(rec=by_city.get(plot, Counter()), owner=owner,
-                         coastal=any(terrain[n] in water for n in neighbours),
-                         neighbours=neighbours, terrain=terrain, city=plot)
+                         coastal=any(terrain[n] in WATER for n in neighbours))
     # Free tiles for extra units: owned, not mountain, within 2 tiles of the centre.
     # Civ6 allows one military unit per tile (see the research doc), so units
     # beyond the garrison need their own tiles.
@@ -225,19 +299,29 @@ def read_map(km: int) -> dict:
         centre = (plot % width, plot // width)
         info["near_slots"] = sum(
             1 for p, _o, city in owners
-            if city == plot and p != plot and not info["terrain"][p].endswith("MOUNTAIN")
+            if city == plot and p != plot and not terrain[p].endswith("MOUNTAIN")
             and g.hex_distance(centre, (p % width, p // width)) <= 2)
-        del info["neighbours"], info["terrain"]
-    return {"manifest": manifest, "cities": out}
+    return out
 
 
-def city_records() -> list[dict]:
-    manifest = next(m for m in json.loads((MAPS / "manifest.json").read_text(encoding="utf-8"))
-                    if m["km_per_tile"] == 15)
-    return manifest["cities"]
+def manifest_item(km: int) -> dict:
+    return next(m for m in json.loads((MAPS / "manifest.json").read_text(encoding="utf-8"))
+                if m["km_per_tile"] == km)
 
 
-def distribute_units(slug: str, plans: list[dict], extra: list[str]) -> list[str]:
+def read_map(km: int) -> dict[int, dict]:
+    manifest = manifest_item(km)
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "map.db"
+        shutil.copy(MAPS / f"JAC_Japan_{km}km.Civ6Map", copy)
+        db = sqlite3.connect(copy)
+        try:
+            return read_db(db, manifest["width"], manifest["height"], km)
+        finally:
+            db.close()
+
+
+def distribute_units(plans: list[dict], extra: list[str]) -> list[str]:
     """Place extra units on free tiles within 2 of a city, capital first. Returns unplaced units."""
     for plan in sorted(plans, key=lambda p: (not p["capital"], -p["near_slots_15km"])):
         room = plan["near_slots_15km"] - sum(1 for u in plan["units"] if u["where"] == "near")
@@ -247,119 +331,71 @@ def distribute_units(slug: str, plans: list[dict], extra: list[str]) -> list[str
     return extra
 
 
+def upkeep_of(units: list[str], districts: list[dict]) -> int:
+    return (sum(UNIT_UPKEEP[u] for u in units)
+            + sum(BUILDING_UPKEEP.get(b, 0) for d in districts for b in d["buildings"])
+            + sum(DISTRICT_UPKEEP.get(d["district"], 0) for d in districts))
+
+
 def build() -> dict:
-    cities15 = read_map(15)["cities"]
-    cities20 = read_map(20)["cities"]
+    cities15 = read_map(15)
+    cities20 = read_map(20)
     k_terr = territory_koku()
     tiles_by_owner = Counter()
     for info in cities15.values():
         tiles_by_owner[g.SEATS[info["owner"]].slug] += info["rec"]["tiles"]
-    k_sum = sum(f["k"][1] for f in FACTIONS.values() if f["k"])
+    k_sum = sum(f["k"][1] for f in FACTIONS.values() if not f.get("koku_equivalent"))
     tile_total = sum(tiles_by_owner.values())
+    records15 = manifest_item(15)["cities"]
+    plot20 = {c["id"]: c["plot"] for c in manifest_item(20)["cities"]}
 
-    # 20 km plots differ; match cities by id through the 20 km manifest
-    manifest20 = next(m for m in json.loads((MAPS / "manifest.json").read_text(encoding="utf-8"))
-                      if m["km_per_tile"] == 20)
-    plot20 = {c["id"]: c["plot"] for c in manifest20["cities"]}
-
-    factions_out, city_plans = [], []
+    factions_out = []
     for seat in g.SEATS:
         slug, spec = seat.slug, FACTIONS[seat.slug]
-        tier = tier_of(slug)
-        own = [c for c in city_records() if c["owner"] == slug]
+        own = [c for c in records15 if c["owner"] == slug]
         plans = []
         for city in sorted(own, key=lambda c: (not c["capital"], c["research_priority"])):
             info15, info20 = cities15[city["plot"]], cities20[plot20[city["id"]]]
-            importance = 3 if city["capital"] else IMPORTANCE[city["id"]]
-            target = CAPITAL_POP[tier] + (spec["cap_bonus"] if city["capital"] else 0) \
-                + IMPORTANCE_POP_DELTA[importance]
-            target = max(2, target)
-            pops = {}
-            for label, info in (("15km", info15), ("20km", info20)):
-                rec = info["rec"]
-                land = rec["tiles"] - 1 - rec["mountain"]
-                pops[label] = max(2, min(target, land))
-            pop = pops["15km"]
-            # districts: one per 3 citizens above 2, limited by free tiles
+            plan = city_plan(slug, city, info15["rec"], info15["coastal"])
             rec = info15["rec"]
-            land = rec["tiles"] - 1 - rec["mountain"]
-            n_districts = 0 if pop < 3 else 1 if pop < 6 else 2 if pop < 9 else 3
-            n_districts = max(0, min(n_districts, land - pop))
-            if not city["capital"]:
-                n_districts = min(n_districts, 1 if importance >= 2 else 0)
-            scores = sorted(TRAIT_NAMES, key=lambda t: (-spec["traits"][TRAIT_NAMES.index(t)],
-                                                        TRAIT_ORDER.index(t)))
-            districts = []
-            for trait in scores:
-                if len(districts) >= n_districts or spec["traits"][TRAIT_NAMES.index(trait)] == 0:
-                    break
-                dtype = TRAIT_DISTRICT[trait]
-                if dtype == "DISTRICT_HARBOR" and not info15["coastal"]:
-                    continue
-                districts.append({"district": dtype, "buildings": [DISTRICT_BUILDING[dtype]]})
-            if city["capital"] and spec["traits"][TRAIT_NAMES.index("faith")] == 3:
-                for d in districts:
-                    if d["district"] == "DISTRICT_HOLY_SITE":
-                        d["buildings"].append("BUILDING_TEMPLE")
-            buildings = []
-            if city["capital"]:
-                buildings.append("BUILDING_PALACE")
-            if (city["capital"] or importance >= 2) and city["id"] not in NO_WALLS:
-                buildings.append("BUILDING_WALLS")
-            if pop >= 4:
-                buildings.append("BUILDING_GRANARY")
-            # units: garrison in the city centre, extras placed later
-            if city["capital"]:
-                garrison = ["UNIT_SPEARMAN"] + (["UNIT_ARCHER"] if tier in "AB" else [])
-            else:
-                garrison = ["UNIT_SPEARMAN"] if importance >= 2 else ["UNIT_WARRIOR"]
-            units = [{"type": garrison[0], "where": "center"}]
-            extra_local = garrison[1:]
-            # improvements
             flat = max(0, rec["tiles"] - 1 - rec["mountain"] - rec["hills"] - rec["forest"])
-            worked = max(0, pop - len(districts))
+            worked = max(0, plan["pop"] - len(plan["districts"]))
             farms = min(flat, worked)
             mines = min(rec["hills"], rec.get("res:RESOURCE_IRON", 0) + worked - farms)
             plans.append({
                 "id": city["id"], "name": city["name"], "capital": city["capital"],
-                "importance": importance, "target_pop": target,
+                "importance": plan["importance"], "target_pop": plan["target_pop"],
                 "tiles_15km": rec["tiles"], "tiles_20km": info20["rec"]["tiles"],
-                "pop_15km": pops["15km"], "pop_20km": pops["20km"],
-                "option2_pop_15km": max(2, min(4, land)),
+                "pop_15km": plan["pop"],
+                "pop_20km": city_plan(slug, city, info20["rec"], info20["coastal"])["pop"],
+                "option2_pop_15km": max(2, min(4, plan["land"])),
                 "coastal_centre": info15["coastal"],
                 "near_slots_15km": info15["near_slots"],
-                "city_buildings": buildings, "districts": districts,
-                "units": units, "_extra": extra_local,
+                "city_buildings": plan["city_buildings"], "districts": plan["districts"],
+                "units": [{"type": plan["garrison"][0], "where": "center"}], "_garrison": plan["garrison"],
                 "improvements": {"IMPROVEMENT_FARM": farms, "IMPROVEMENT_MINE": mines},
                 "unverified_improvements": {
                     "IMPROVEMENT_PASTURE": rec.get("res:RESOURCE_HORSES", 0),
                     "IMPROVEMENT_PLANTATION": rec.get("res:RESOURCE_SILK", 0) + rec.get("res:RESOURCE_TEA", 0)},
             })
-        # field units: 50% spearman, 30% archer, rest warrior; placed on free tiles near a city
-        n_field = field_units(slug)
-        order = ["UNIT_SPEARMAN", "UNIT_ARCHER", "UNIT_WARRIOR", "UNIT_SPEARMAN", "UNIT_ARCHER",
-                 "UNIT_SPEARMAN", "UNIT_WARRIOR", "UNIT_SPEARMAN"]
-        extra = [u for p in plans for u in p.pop("_extra")] + [order[i % len(order)] for i in range(n_field)]
-        for p in plans:
-            p.pop("_extra", None)
-        unplaced = distribute_units(slug, plans, extra)
-        upkeep = sum(UNIT_UPKEEP[u["type"]] for p in plans for u in p["units"])
-        upkeep += sum(BUILDING_UPKEEP.get(b, 0) for p in plans for d in p["districts"] for b in d["buildings"])
-        upkeep += sum(DISTRICT_UPKEEP.get(d["district"], 0) for p in plans for d in p["districts"])
+        extra = faction_reserves(slug, [{"garrison": p.pop("_garrison")} for p in plans])
+        unplaced = distribute_units(plans, extra)
+        upkeep = sum(upkeep_of([u["type"] for u in p["units"]], p["districts"]) for p in plans)
         for p in plans:
             p.pop("near_slots_15km")
         k = spec["k"]
         factions_out.append({
-            "id": slug, "name": seat.ja, "tier": tier, "confidence": spec["conf"],
-            "direct_koku_man": None if k is None else {"low": k[0], "mid": k[1], "high": k[2]},
+            "id": slug, "name": seat.ja, "tier": tier_of(slug), "confidence": spec["conf"],
+            "direct_koku_man": {"low": k[0], "mid": k[1], "high": k[2]},
+            "koku_equivalent": bool(spec.get("koku_equivalent")),
             "direct_koku_basis": spec["basis"],
-            "mobilization_troops": None if k is None else {
-                "low": k[0] * TROOPS_PER_MAN_KOKU, "mid": k[1] * TROOPS_PER_MAN_KOKU,
-                "high": k[2] * TROOPS_PER_MAN_KOKU},
+            "mobilization_troops": {"low": round(k[0] * TROOPS_PER_MAN_KOKU),
+                                    "mid": round(k[1] * TROOPS_PER_MAN_KOKU),
+                                    "high": round(k[2] * TROOPS_PER_MAN_KOKU)},
             "territory_koku_1598_man": round(k_terr.get(slug, 0) / 10000, 1),
             "tiles_15km": tiles_by_owner[slug],
             "tile_share_pct": round(100 * tiles_by_owner[slug] / tile_total, 1),
-            "direct_koku_share_pct": None if k is None else round(100 * k[1] / k_sum, 1),
+            "direct_koku_share_pct": None if spec.get("koku_equivalent") else round(100 * k[1] / k_sum, 1),
             "traits": dict(zip(TRAIT_NAMES, spec["traits"])),
             "cities": len(plans), "pop_total_15km": sum(p["pop_15km"] for p in plans),
             "units_total": sum(len(p["units"]) for p in plans),
@@ -367,16 +403,16 @@ def build() -> dict:
             "option2_units_total": len(plans) + 3,
             "units_unplaced": unplaced,
             "gold_upkeep_per_turn": upkeep,
+            "starting_gold": starting_gold(slug),
             "plan": plans,
         })
-        city_plans.extend(plans)
     return {
         "_schema": {
-            "status": "調査案。オーナー確認前(Q28)。SSOT ではない",
+            "status": "Q28 はオプション①に決定(SSOT 3.1)。地図への反映は prosper_start.py(documents/poc/japan-prosperous-start.md)",
             "generated_by": "tools/japan_map_scale/prosperity.py",
-            "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale",
-            "option1": "各家の1534年規模に合わせる案。plan[] が都市ごとの開始状態",
-            "option2": "全勢力に同じ量を置く案。option2_rule を参照",
+            "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale; koku_equivalent=true is derived from population",
+            "option1": "各家の1534年規模に合わせる案(採用)。plan[] は15km 地図の目安。実際の配置は地図ごとに prosper_start.py が決める",
+            "option2": "全勢力に同じ量を置く案(不採用)。option2_rule を参照",
         },
         "option2_rule": {
             "per_city": {"pop": 4, "city_buildings": ["BUILDING_WALLS", "BUILDING_GRANARY"],
