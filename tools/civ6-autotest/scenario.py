@@ -592,13 +592,17 @@ class Runner:
     # An AI leader's statement or deal proposal to the human opens these contexts and holds the
     # AI's turn until the human answers, so autoplay stalls (live 2026-09-29, turn 31 on the 15 km map).
     # The deal view goes first: while it is up the action view is in DEAL_MODE and ignores OnClose.
-    DIPLOMACY_CLOSERS = (
+    # The pack's own popups that wait for the human are closed the same way (each guarded by ContextPtr:IsHidden()).
+    POPUP_CLOSERS = (
         # Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129 OnLocalPlayerTurnEnd, the game's own
         # turn-end path: OnRefuseDeal(true) rejects the AI proposal and closes the session
         # (:589-613), then OnContinue hides the view (:2868-2870). Base: Base/Assets/UI/DiplomacyDealView.lua:3075-3085.
         ("DiplomacyDealView", "OnLocalPlayerTurnEnd()", "AI deal proposal"),
         # Base/Assets/UI/DiplomacyActionView.lua:2883-2886 OnClose, "Act like they pressed ESC".
         ("DiplomacyActionView", "OnClose()", "AI diplomacy statement"),
+        # The pack's dark-age policy choice (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuDarkPolicy.lua): closing keeps
+        # the house's default policy, as a human who never answers (documents/poc/sengoku-ages.md).
+        ("JAC_SengokuDarkPolicy", "OnClose()", "dark-age policy choice"),
     )
 
     def _close_diplomacy(self, deadline: float) -> list[str]:
@@ -609,7 +613,7 @@ class Runner:
     def _close_diplomacy_once(self, deadline: float) -> list[str]:
         states = {state.casefold() for state in self._states(min(5, _remaining(deadline)))}
         closed = []
-        for state, call, label in self.DIPLOMACY_CLOSERS:
+        for state, call, label in self.POPUP_CLOSERS:
             if state.casefold() not in states:
                 continue
             if self._lua(state, f"if ContextPtr:IsHidden() then return false end\n{call}\nreturn true",

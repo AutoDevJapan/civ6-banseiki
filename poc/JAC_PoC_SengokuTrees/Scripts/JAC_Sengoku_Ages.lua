@@ -7,8 +7,17 @@
 -- continues from the saved record and never re-initializes. Writes happen only in gameplay script from
 -- GameEvents.OnGameTurnStarted (DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246), GameEvents.CityConquered
 -- (DLC/NubiaScenario/Scripts/NubiaScenario.lua:937,969; the city already belongs to the capturer there) and
--- GameEvents.CityBuilt (DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:56,255), in a fixed order (players
--- by ID, cities by plot key), without randomness or local-player checks. Table keys are strings (§6.1).
+-- GameEvents.CityBuilt (DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:56,255) and the dark-age policy
+-- choice (below), in a fixed order (players by ID, cities by plot key), without randomness or local-player checks.
+-- Table keys are strings (§6.1).
+--
+-- Dark-age policy choice (§6.2, §7.2): a dark house gets its default policy at the 改元 (its row of
+-- JAC_SengokuDarkAgePolicyDefaults, else the lowest Priority), so AI houses and humans who never answer keep it.
+-- A human chooses on UI/JAC_SengokuDarkPolicy.lua, which sends UI.RequestPlayerOperation(local,
+-- PlayerOperations.EXECUTE_SCRIPT, {OnStart = "JAC_SengokuDarkPolicyChoose", PolicyType, Reign}); the engine raises
+-- that GameEvent on every machine with the requesting player first (DLC/BlackDeathScenario/UI/
+-- BlackDeathScenario_PopupHandler.lua:21-28, Scripts/BlackDeathScenario_StateUtils.lua:64-74; live in this repo for
+-- the court arbitration, documents/poc/court-arbitration.md). The requester is that engine-supplied player, never a parameter.
 --
 -- Turns are game-relative: current - GameConfiguration.GetStartTurn() + 1 (the 1534 calendar starts the engine
 -- turn near 16603; same as poc/JAC_PoC_JapanMapScale/Scripts/JAC_Resources.lua:149).
@@ -68,6 +77,10 @@ end)
 local POLICIES = {}
 for row in GameInfo.JAC_SengokuDarkAgePolicies() do table.insert(POLICIES, row) end
 table.sort(POLICIES, function(a, b) return a.Priority < b.Priority end)
+local POLICY_BY_TYPE = {}
+for _, row in ipairs(POLICIES) do POLICY_BY_TYPE[row.PolicyType] = row end
+local DEFAULT_POLICY = {}  -- CivilizationType -> PolicyType
+for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do DEFAULT_POLICY[row.CivilizationType] = row.PolicyType end
 local function AnchorFlag(policyType) return (string.gsub(policyType, "^JAC_AGE_POLICY_", "JAC_AGE_ANCHOR_")) end
 
 local EVENT_SCORES = {}
@@ -320,10 +333,10 @@ local function Judge(l, index)
 			else
 				house.dark = house.dark + 1
 			end
-			-- The dark-age policy choice screen is a follow-up; every dark house takes the first policy (§6.2).
-			-- No policy is nil, not "": live 2026-09-29 (ages-impl-02) a NORMAL house logged policy= here, yet the
-			-- policy read back from the Game property on the next turn was not "" (a "" field does not survive).
-			house.policy = age == "DARK" and POLICIES[1].PolicyType or nil
+			-- The house's default until it chooses (§6.2). No policy is nil, not "": live 2026-09-29 (ages-impl-02)
+			-- a NORMAL house logged policy= here, yet the policy read back from the Game property on the next turn
+			-- was not "" (a "" field does not survive).
+			house.policy = age == "DARK" and (DEFAULT_POLICY[house.civ] or POLICIES[1].PolicyType) or nil
 			house.age = age
 			results["p" .. tostring(id)] = { age = age, score = house.score, golden = golden, dark = dark }
 			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s",
@@ -408,8 +421,39 @@ local function OnCityBuilt(playerID, cityID, x, y)
 	Game:SetProperty(LEDGER_KEY, l)
 end
 
+-- A human's choice (header). Taken only from a house judged dark in the current period, once per 改元
+-- (<chosen> holds the period's number), for the period the screen showed, and for a policy of the table;
+-- anything else is dropped and logged.
+local function OnChoosePolicy(playerID, params)
+	local l = Game:GetProperty(LEDGER_KEY)
+	local house = l and House(l, playerID)
+	params = params or {}
+	local policy = params.PolicyType
+	local reason = nil
+	if house == nil then
+		reason = "no house"
+	elseif house.age ~= "DARK" then
+		reason = "not dark"
+	elseif params.Reign ~= l.reign then
+		reason = "stale period " .. tostring(params.Reign)
+	elseif house.chosen == l.reign then
+		reason = "already chosen"
+	elseif POLICY_BY_TYPE[policy] == nil then
+		reason = "unknown policy"
+	end
+	if reason then
+		Log(string.format("choice dropped player=%d policy=%s: %s", playerID, tostring(policy), reason))
+		return
+	end
+	house.policy, house.chosen = policy, l.reign
+	Log(string.format("chosen player=%d reign=%d policy=%s turn=%d", playerID, l.reign, policy, ElapsedTurn()))
+	WriteProperties(l)
+	Game:SetProperty(LEDGER_KEY, l)
+end
+
 Log(string.format("loaded reigns=%d first=%s@%d speed=%s", #REIGNS, REIGNS[1] and REIGNS[1].type or "none",
 	REIGNS[1] and REIGNS[1].due or -1, SPEED))
 GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)
 GameEvents.CityConquered.Add(OnCityConquered)
 GameEvents.CityBuilt.Add(OnCityBuilt)
+GameEvents.JAC_SengokuDarkPolicyChoose.Add(OnChoosePolicy)

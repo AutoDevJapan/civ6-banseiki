@@ -27,7 +27,7 @@
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
-| [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、Q36〜Q39 の暫定の既定、実機確認項目 |
+| [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、Q36〜Q39 の暫定の既定、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72） |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組み・データ形式・暦との関係・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
 | [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チームと天下統一同盟）：同盟の申し込み画面、主体だけが勝つ仕組み、公式根拠、実機確認項目 |
