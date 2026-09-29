@@ -42,10 +42,15 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 
 - 暦は main にマージ済みの戦国パックの暦（[sengoku-calendar.md](sengoku-calendar.md)、PR #34）。`ERA_ANCIENT` の開始年が1534、ゲーム速度ごとに `GameSpeed_Turns`（`MonthIncrement` か月/ターンを `TurnsPerIncrement` ターン）が順に並ぶ
 - 換算（`Scripts/JAC_HistoricalEvents.lua` の `TurnForYear`）：ターン1を開始年の始まりとし、ターン `t` の手前までに経過した月数が `(年 - 開始年) × 12` に達する最初のターン。開始年は `GameInfo.StartEras['ERA_ANCIENT'].Year`、速度は `GameConfiguration.GetGameSpeedType()`、区間は `GameInfo.GameSpeed_Turns()` を速度で絞って行順に読む（行順は `GameSpeed_Turns` の `ORDER BY rowid`、`01_GameplaySchema.sql:3337`。速度は `InGameTopOptionsMenu.lua:442` と同じ取り方）
+- エンジンの現在ターンは1から始まらない。1534年開始の暦では `Game.GetCurrentGameTurn()` と `GameConfiguration.GetStartTurn()` がともに 16603 から始まる（実機、2026-09-29。暦の文字列は「1534 AD」）。そこでスクリプトは、公式の上部パネルが「ターンを1から数える」ために行う `現在 - GetStartTurn() + 1`（`Base/Assets/UI/TopPanel.lua:390`）を `GameTurn()` に取り、上の換算・発生ターンのプロパティ・ログはすべてこの経過ターンで扱う。開始ターンはセーブに含まれる設定なので、セーブ・ロードでも速度が違っても変わらない。暦の年を数値で得る公式 API は無い（`Calendar` は文字列のみ）ので、年からの直接算出は採らない
 - 標準速度（4か月/ターン＝1年3ターン）では `ターン = (年 - 1534) × 3 + 1`。鉄砲伝来1543年はターン28、足尾銅山1550年はターン49、長尾家の上杉家継承1561年はターン82、1600年はターン199
 - ほかの速度も同じ表で自動的に換算する。1年あたりのターン数は Online 1.5、Quick 2、Epic 4（200ターンまで。以後6）、Marathon 6（200ターンまで。以後12）。例：鉄砲伝来1543年は Quick でターン19、Online でターン15
 - 暦の月は1月始まりとみなす（暦の起点計算はエンジン内部。sengoku-calendar.md の未検証事項と同じ）。年の途中の出来事（月日単位）は扱わない
 - 以前の暫定値（`JAC_EVENTS_START_YEAR`／`JAC_EVENTS_TURNS_PER_YEAR` の `GlobalParameters`）は廃止した。静的テスト（`tests/test_historical_events.py`）は、暦の XML から同じ換算を Python で再計算し、全速度で「換算したターンの暦上の年が出来事の年で、その前のターンは前の年」を確かめる
+
+## 資源を置く出来事
+
+資源を置く行（`JAC_HistoricalEventResources`）には `SiteId`（資源候補 JSON の地点 ID）がある。発生時に `ExposedMembers.JAC_Resources`（資源 MOD `Scripts/JAC_Resources.lua` が公開。`feat/resources`）があれば、まず `RevealSite(SiteId)`（既に開示済みなら `IsRevealed`）でその予約地点に置き、地点のタイルに目的の資源があることを確かめる。MOD が無い、地点が使えない場合は、これまでの「目標タイル周辺の置ける空きタイルを探す」に戻り、`Lua.log` に `resources mod not loaded` か `not usable` を出す。置いたログは `via=site`（予約地点）か `via=search`（探索）。前回の実機で目標タイル4416そのものは銅を置けず `result=no_legal_plot` だったため、この優先順にした。この MOD には依存しない（読み込み順に関係なく発生時に探す）。
 
 ## サンプルの3件（すべて暫定）
 
@@ -116,8 +121,8 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/historical-
 | 手順 | 確かめること |
 |---|---|
 | 開始直後 | `Lua.log` に `[JAC_EVENTS] loaded events=3 startYear=1534 speed=GAMESPEED_STANDARD`。ターン1で出来事は1件も起きていない |
-| ターン1に強制 | 織田に技術「鉄砲伝来」「金銀山経営」、長尾家に社会制度「朝廷・将軍への取次」を与える（GameCore_Tuner） |
-| 1ターン進めた後 | `fired event=JAC_EVENT_TEPPO_DENRAI player=0 civ=CIVILIZATION_JAC_ODA reason=prereq turn=2 due=28` のログ。織田の鉄砲伝来・足尾銅山と長尾家の上杉継承がターン2で起き、他の勢力の鉄砲伝来は起きていない。発生回数の合計が3。足尾の目標タイル（4416）から2タイル以内に銅が1つ置かれた。`WorldRankings` の画面で長尾家の文明名が `LOC_JAC_EVENT_UESUGI_CIV_NAME` に切り替わっている |
+| ターン1に強制 | 経過ターンは `Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1`（生のターンは 16603 などで、シナリオは経過ターンで比べる）。 織田に技術「鉄砲伝来」「金銀山経営」、長尾家に社会制度「朝廷・将軍への取次」を与える（GameCore_Tuner） |
+| 1ターン進めた後 | `fired event=JAC_EVENT_TEPPO_DENRAI player=0 civ=CIVILIZATION_JAC_ODA reason=prereq turn=2 due=28` のログ。織田の鉄砲伝来・足尾銅山と長尾家の上杉継承がターン2で起き、他の勢力の鉄砲伝来は起きていない。発生回数の合計が3。足尾の銅が資源 MOD の予約地点（4416付近）か、その2タイル以内に1つ置かれた。`WorldRankings` の画面で長尾家の文明名が `LOC_JAC_EVENT_UESUGI_CIV_NAME` に切り替わっている |
 | セーブ→メニュー→ロード | 同じ確認がロード直後にも通る（プロパティ・銅・家名が保存されている） |
 | ロード後に1ターン | 発生回数が3のままで、各勢力の発生ターンが2のまま（2度起きていない）。家名の切替も残る |
 | ターン28まで進める | 長尾家（鉄砲伝来を未研究）に `fired event=JAC_EVENT_TEPPO_DENRAI … reason=year turn=28 due=28 boost=tech=boosted`。長尾家は技術を持たずひらめきだけが発動している。織田は技術を持ったまま。AI が先に研究していると失敗するので、その場合はログの `reason=prereq` を確かめる |

@@ -25,6 +25,10 @@ end
 -- order (MonthIncrement months per turn for TurnsPerIncrement turns), rewritten for 1534 by
 -- SengokuTrees Data/JAC_Sengoku_Calendar.xml. Turn 1 is the start year; a turn's year is the start year
 -- plus the elapsed months / 12. Same method as GameSpeed_Turns in GameSpeeds.xml:64-103.
+-- The engine's turn counter does not start at 1 (the 1534 calendar starts it at GameConfiguration.GetStartTurn(),
+-- 16603 live), so every turn here is the game-relative one: current - start + 1, the same "keep turns
+-- starting at 1" the official top panel shows (Base/Assets/UI/TopPanel.lua:390). The start turn is part of
+-- the saved game configuration, so this is stable across save/load and game speeds.
 local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
 local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
 
@@ -40,6 +44,10 @@ local function TurnForYear(year)
 		end
 	end
 	return turn
+end
+
+local function GameTurn()
+	return Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1
 end
 
 local function DueTurn(row)
@@ -149,6 +157,28 @@ local function FindResourcePlot(target, resourceIndex, range)
 	return best
 end
 
+-- Prefer the site the resources mod reserved for this resource (ExposedMembers.JAC_Resources, published by
+-- JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua). Looked up at fire time, so it may be absent: returns the
+-- plot index when the reserved site holds the resource now, nil to fall back to the legal-plot search.
+local function RevealReservedSite(row)
+	local api = ExposedMembers and ExposedMembers.JAC_Resources
+	if not (api and row.SiteId) then
+		Log("resource site=" .. tostring(row.SiteId) .. " resources mod not loaded, searching legal plots")
+		return nil
+	end
+	local revealed = api.RevealSite(row.SiteId) or api.IsRevealed(row.SiteId)
+	for _, site in ipairs(api.GetSites()) do
+		if site.id == row.SiteId then
+			local plot = Map.GetPlotByIndex(site.plot)
+			if revealed and plot and plot:GetResourceType() == GameInfo.Resources[row.ResourceType].Index then
+				return site.plot
+			end
+		end
+	end
+	Log("resource site=" .. row.SiteId .. " not usable, searching legal plots")
+	return nil
+end
+
 local function PlaceResources(event)
 	local key = RESOURCES_PREFIX .. event.row.EventType
 	if #event.resources == 0 or Game:GetProperty(key) ~= nil then return end
@@ -156,12 +186,14 @@ local function PlaceResources(event)
 	for _, row in ipairs(event.resources) do
 		local target = Map.GetPlotByIndex(row.PlotIndex)
 		local resource = GameInfo.Resources[row.ResourceType].Index
-		local plot = target and FindResourcePlot(target, resource, row.SearchRange)
+		local reserved = RevealReservedSite(row)
+		local plot = reserved and Map.GetPlotByIndex(reserved)
+			or (target and FindResourcePlot(target, resource, row.SearchRange))
 		if plot then
-			ResourceBuilder.SetResourceType(plot, resource, row.Amount)
+			if not reserved then ResourceBuilder.SetResourceType(plot, resource, row.Amount) end
 			table.insert(placed, plot:GetIndex())
-			Log(string.format("resource event=%s type=%s plot=%d target=%d", event.row.EventType,
-				row.ResourceType, plot:GetIndex(), row.PlotIndex))
+			Log(string.format("resource event=%s type=%s plot=%d target=%d via=%s", event.row.EventType,
+				row.ResourceType, plot:GetIndex(), row.PlotIndex, reserved and "site" or "search"))
 		else
 			Log(string.format("resource event=%s type=%s target=%d result=no_legal_plot", event.row.EventType,
 				row.ResourceType, row.PlotIndex))
@@ -186,7 +218,7 @@ end
 
 -- Same hook and turn source as the official scenarios (AustraliaScenario.lua:1440-1455).
 local function OnGameTurnStarted()
-	local turn = Game.GetCurrentGameTurn()
+	local turn = GameTurn()
 	local ids = SortedMajorIDs()
 	for _, event in ipairs(EVENTS) do
 		for _, playerID in ipairs(ids) do

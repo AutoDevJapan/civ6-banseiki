@@ -103,6 +103,21 @@ class HistoricalEventTests(unittest.TestCase):
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
         self.assertIn("GameInfo.GameSpeed_Turns()", lua)
         self.assertNotIn("TURNS_PER_YEAR", lua)
+        # Live: the 1534 calendar starts the engine turn counter at GetStartTurn() (16603), not 1.
+        self.assertIn("Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1", lua)
+        self.assertEqual(len(re.findall(r"Game\.GetCurrentGameTurn\(\)", lua)), 1)  # only inside GameTurn()
+        scenario = (ROOT / "tools/civ6-autotest/scenarios/historical-events-20km.json").read_text(encoding="utf-8")
+        self.assertNotIn("Game.GetCurrentGameTurn()~=", scenario)  # raw turn compares break at start turn 16603
+
+    def test_resource_events_prefer_the_reserved_site_and_fall_back(self):
+        lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
+        self.assertIn("ExposedMembers.JAC_Resources", lua)
+        self.assertIn("api.RevealSite(row.SiteId)", lua)
+        self.assertIn("FindResourcePlot(target, resource, row.SearchRange)", lua)  # fallback when the mod is absent
+        self.assertIn("resources mod not loaded", lua)
+        resources = ROOT / "poc/JAC_PoC_HistoricalEvents/Data"
+        for name in PLOT_FILES.values():
+            self.assertIn("'copper-ashio'", (resources / name).read_text(encoding="utf-8"))
 
     def test_missing_prereq_gets_a_boost_not_the_tech(self):
         db = load_db()
