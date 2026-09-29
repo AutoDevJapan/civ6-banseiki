@@ -8,8 +8,14 @@ import mmap
 import os
 from pathlib import Path
 import re
+import sys
 import unittest
 import xml.etree.ElementTree as ET
+
+from PIL import Image, ImageChops
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from draw_crests import NAMES as CREST_NAMES, MOTIFS as CREST_MOTIFS
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -33,6 +39,13 @@ def icon_records(files, allow_duplicates=False):
     atlases = {}
     for path in files:
         xml = ET.parse(path)
+        # IconDefinitions' primary key is (Name, Atlas) (Base/Assets/Database/IconManager.sql),
+        # so Replace/Update on another atlas adds a second row and the older row keeps winning.
+        # Each mod icon must therefore be defined exactly once, as a plain Row.
+        if not allow_duplicates:
+            edits = [node.tag for node in xml.findall("./IconDefinitions/*") if node.tag != "Row"]
+            if edits:
+                raise AssertionError(f"{path}: IconDefinitions uses {edits}; define icons once with Row")
         for row in xml.findall("./IconDefinitions/Row"):
             name = row.attrib["Name"]
             if name in definitions and not allow_duplicates:
@@ -50,6 +63,88 @@ def package_textures(path, names):
 
 
 class FrontEndArtTests(unittest.TestCase):
+    def test_house_crests_fill_all_xp2_sizes_with_distinct_white_masks(self):
+        self.assertEqual(len(CREST_NAMES), 22)
+        self.assertEqual(len(set(CREST_NAMES)), 22)
+        self.assertEqual(len(CREST_MOTIFS), 22)
+        official = GAME / "DLC" / "Expansion2" / "Data" / "Expansion2_Icons_Civilizations.xml"
+        self.assertTrue(official.is_file())
+        official_sizes = {
+            int(row.attrib["IconSize"]) for row in
+            ET.parse(official).findall("./IconTextureAtlases/Row")
+            if row.attrib["Name"] == "ICON_ATLAS_EXPANSION_2_CIVILIZATIONS"
+        }
+        self.assertEqual(official_sizes,
+                         {22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256})
+        modinfo = ET.parse(MOD / "JAC_PoC_CustomCivs.modinfo")
+        for context in ("FrontEndActions", "InGameActions"):
+            icon_files = [node.text for node in modinfo.findall(f"./{context}/UpdateIcons/File")]
+            self.assertIn("Data/JAC_Crests_Icons.xml", icon_files, context)
+            # Crest rows must be the only civilization icons, whatever the load order.
+            civ_icons = {row.attrib["Name"]: file for file in icon_files
+                         for row in ET.parse(MOD / file).findall("./IconDefinitions/Row")
+                         if row.attrib["Name"].startswith("ICON_CIVILIZATION_")}
+            self.assertEqual(civ_icons, {f"ICON_CIVILIZATION_JAC_{name}": "Data/JAC_Crests_Icons.xml"
+                                         for name in CREST_NAMES}, context)
+        definitions, atlases = icon_records(MOD / file for file in icon_files)
+        self.assertNotIn("ICON_ATLAS_JAC_CIVILIZATIONS", atlases)
+        rows = atlases["ICON_ATLAS_JAC_CRESTS"]
+        self.assertEqual({int(row["IconSize"]) for row in rows}, official_sizes)
+        self.assertTrue(all(int(row["IconsPerRow"]) == 8 and
+                            int(row["IconsPerColumn"]) == 3 for row in rows))
+        players = [dict(row.attrib) for file in ("Config/JAC_CustomCivs_Players.xml",
+                                                 "Config/JAC_Japan1534_Players.xml")
+                   for row in ET.parse(MOD / file).findall("./Players/Row")]
+        config_files = [node.text for node in modinfo.findall("./FrontEndActions/UpdateDatabase/File")]
+        self.assertEqual(config_files[-1], "Config/JAC_Crests_Players.xml")
+        for update in ET.parse(MOD / config_files[-1]).findall("./Players/Update"):
+            where, values = update.find("Where").attrib, update.find("Set").attrib
+            matched = [p for p in players if all(p[k] == v for k, v in where.items())]
+            self.assertEqual(len(matched), 1, where)
+            matched[0].update(values)
+        self.assertEqual({row["CivilizationType"] for row in players},
+                         {f"CIVILIZATION_JAC_{name}" for name in CREST_NAMES})
+        for player in players:
+            icon = player["CivilizationIcon"]
+            self.assertEqual(icon, "ICON_" + player["CivilizationType"])
+            self.assertEqual(int(definitions[icon]["Index"]),
+                             CREST_NAMES.index(player["CivilizationType"].removeprefix(
+                                 "CIVILIZATION_JAC_")))
+            self.assertEqual(definitions[icon]["Atlas"], "ICON_ATLAS_JAC_CRESTS")
+            self.assertNotIn("ICON_CIVILIZATION_JAPAN", player.values())
+
+        originals = ROOT.parent.parent / "civ6-art-local" / "JAC_PoC_CustomCivs" / "Originals" / "crests"
+        override = os.environ.get("JAC_ART_LOCAL")
+        if override:
+            originals = Path(override).expanduser().resolve() / "JAC_PoC_CustomCivs" / "Originals" / "crests"
+        masters = []
+        alpha_fingerprints = set()
+        for name in CREST_NAMES:
+            self.assertTrue((originals / f"{name.lower()}.svg").is_file())
+            with Image.open(originals / f"{name.lower()}.png") as file:
+                master = file.convert("RGBA")
+            self.assertEqual(master.size, (512, 512))
+            self.assertEqual(master.getpixel((0, 0))[3], 0)
+            alpha = master.getchannel("A")
+            self.assertIsNotNone(alpha.getbbox())
+            self.assertEqual(set(master.getdata(0)) | set(master.getdata(1)) |
+                             set(master.getdata(2)), {255})
+            alpha_fingerprints.add(alpha.tobytes())
+            masters.append(master)
+        self.assertEqual(len(alpha_fingerprints), 22)
+
+        for size in official_sizes:
+            with Image.open(ROOT / "tools" / "jac_art" / "build" / "previews" /
+                            f"JAC_Crests{size}.png") as file:
+                atlas = file.convert("RGBA")
+            self.assertEqual(atlas.size, (8*size, 3*size))
+            for index, master in enumerate(masters):
+                tile = atlas.crop(((index%8)*size, (index//8)*size,
+                                   (index%8+1)*size, (index//8+1)*size))
+                expected = master.resize((size, size), Image.Resampling.LANCZOS)
+                self.assertIsNone(ImageChops.difference(tile, expected).getbbox(),
+                                  f"{CREST_NAMES[index]} at {size}")
+
     def test_every_player_icon_and_portrait_has_a_cooked_texture(self):
         modinfo = ET.parse(MOD / "JAC_PoC_CustomCivs.modinfo")
         frontend_icons = action_files(modinfo, "FrontEndActions", "UpdateIcons")

@@ -48,6 +48,7 @@
 		<UpdateIcons id="JAC_CustomCivs_Icons" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Icons.xml</File>
 			<File>Data/JAC_Japan1534_Icons.xml</File>
+			<File>Data/JAC_Crests_Icons.xml</File>
 		</UpdateIcons>
 		<AddGameplayScripts id="JAC_CustomCivs_Scripts" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Scripts/JAC_CustomCivs.lua</File>
@@ -106,6 +107,7 @@
 		<UpdateDatabase id="JAC_CustomCivs_Settings">
 			<File>Config/JAC_CustomCivs_Players.xml</File>
 			<File>Config/JAC_Japan1534_Players.xml</File>
+			<File>Config/JAC_Crests_Players.xml</File>
 		</UpdateDatabase>
 		<UpdateText id="JAC_CustomCivs_SettingsText">
 			<File>Text/JAC_CustomCivs_Text.xml</File>
@@ -118,6 +120,7 @@
 		<UpdateIcons id="JAC_CustomCivs_SettingsIcons">
 			<File>Data/JAC_CustomCivs_Icons.xml</File>
 			<File>Data/JAC_Japan1534_Icons.xml</File>
+			<File>Data/JAC_Crests_Icons.xml</File>
 		</UpdateIcons>
 	</FrontEndActions>
 	<Files>
@@ -134,6 +137,8 @@
 		<File>Data/JAC_Japan1534_Icons.xml</File>
 		<File>Config/JAC_CustomCivs_Players.xml</File>
 		<File>Config/JAC_Japan1534_Players.xml</File>
+		<File>Config/JAC_Crests_Players.xml</File>
+		<File>Data/JAC_Crests_Icons.xml</File>
 		<File>Text/JAC_CustomCivs_Text.xml</File>
 		<File>Text/JAC_Japan1534_Text.xml</File>
 		<File>Scripts/JAC_CustomCivs.lua</File>

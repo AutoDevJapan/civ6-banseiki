@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<!-- 1534年日本の20家は能力アイコン欄も家紋を暫定で使う。織田・武田は専用の能力アイコンを持つので対象外。 -->
+	<Players>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_DATE"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_DATE" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_DATE"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_ASHINA"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_ASHINA" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_ASHINA"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_HOJO"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_HOJO" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_HOJO"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_YAMANOUCHI_UESUGI"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_YAMANOUCHI_UESUGI" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_YAMANOUCHI_UESUGI"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_NAGAO"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_NAGAO" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_NAGAO"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_IMAGAWA"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_IMAGAWA" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_IMAGAWA"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_MATSUDAIRA"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_MATSUDAIRA" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_MATSUDAIRA"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_ASAKURA"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_ASAKURA" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_ASAKURA"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_ASHIKAGA"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_ASHIKAGA" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_ASHIKAGA"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_MIYOSHI"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_MIYOSHI" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_MIYOSHI"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_ROKKAKU"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_ROKKAKU" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_ROKKAKU"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_HONGANJI"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_HONGANJI" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_HONGANJI"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_OUCHI"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_OUCHI" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_OUCHI"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_AMAGO"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_AMAGO" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_AMAGO"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_MORI"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_MORI" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_MORI"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_CHOSOKABE"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_CHOSOKABE" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_CHOSOKABE"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_OTOMO"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_OTOMO" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_OTOMO"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_SHIMAZU"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_SHIMAZU" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_SHIMAZU"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_RYUKYU"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_RYUKYU" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_RYUKYU"/>
+		</Update>
+		<Update>
+			<Where Domain="Players:Expansion2_Players" CivilizationType="CIVILIZATION_JAC_AINU"/>
+			<Set CivilizationAbilityIcon="ICON_CIVILIZATION_JAC_AINU" LeaderAbilityIcon="ICON_CIVILIZATION_JAC_AINU"/>
+		</Update>
+	</Players>
+</GameInfo>
