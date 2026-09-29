@@ -1,6 +1,7 @@
 -- 日本マップ：1534年の同盟・婚姻・主従と交戦を、新規ゲームの開始時に1回だけ外交状態へ反映する。
 -- 元データ：documents/spec/data/japan-1534-relations.json（適用分だけをここに写す。テストで一致を確かめる）
--- 敵対・不仲（hostility）は開始時に設定できる API がないため、ここでは扱わない（documents/poc/japan-1534-relations.md）。
+-- 敵対・不仲（hostility）は、ここでは出会い済みにするだけ。「1534年の因縁」の好感度減点は Data/JAC_Japan_Feuds.xml（勢力別の特性の修正値）が担う。
+-- 史実の領土の日本マップだけで読み込まれる（modinfo）。開拓者からの2種では何も適用しない。
 
 local PROPERTY_KEY = "JAC_JAPAN_1534_RELATIONS"
 
@@ -14,6 +15,14 @@ local RELATIONS = {
 	{"ASAKURA", "ROKKAKU", "alliance", "R06"},
 	{"ASHIKAGA", "ASAKURA", "vassal", "R07"},
 	{"AMAGO", "MORI", "alliance", "R08"},
+	{"HOJO", "TAKEDA", "hostility", "R09"},
+	{"IMAGAWA", "TAKEDA", "hostility", "R10"},
+	{"HOJO", "YAMANOUCHI_UESUGI", "hostility", "R11"},
+	{"NAGAO", "YAMANOUCHI_UESUGI", "hostility", "R12"},
+	{"NAGAO", "HONGANJI", "hostility", "R13"},
+	{"HONGANJI", "ROKKAKU", "hostility", "R14"},
+	{"ODA", "MATSUDAIRA", "hostility", "R15"},
+	{"SHIMAZU", "RYUKYU", "friendship", "R19"},
 }
 
 local function Log(message)
@@ -49,8 +58,10 @@ local function Apply()
 			local ok, err
 			if kind == "war" then
 				ok, err = pcall(function() diploA:DeclareWarOn(b, WarTypes.FORMAL_WAR, true) end)
+			elseif kind == "hostility" then
+				ok = true -- 出会い済みにするのみ。減点は修正値が担う
 			else
-				-- ponytail: 同盟・婚姻・主従はすべて友好宣言で近似する。期限（30ターン）で切れる
+				-- ponytail: 同盟・婚姻・主従・友好はすべて友好宣言で近似する。期限（30ターン）で切れる
 				ok, err = pcall(function()
 					diploA:SetHasDeclaredFriendship(b, true)
 					diploB:SetHasDeclaredFriendship(a, true)

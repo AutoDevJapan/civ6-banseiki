@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -14,6 +15,10 @@ DATA = ROOT / "documents/spec/data/japan-1534-relations.json"
 MOD = ROOT / "poc/JAC_PoC_JapanMapScale"
 LUA = MOD / "Scripts/JAC_Japan_1534Relations.lua"
 SCRIPT = "Scripts/JAC_Japan_1534Relations.lua"
+sys.path.insert(0, str(ROOT / "tools/japan_map_scale"))
+import write_feuds  # noqa: E402
+
+FEUDS = MOD / "Data/JAC_Japan_Feuds.xml"
 DATE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
@@ -94,34 +99,69 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertFalse(applies({"confidence": "high", "from": "1534-05-12", "to": "1534-05-12"}, start))
         self.assertTrue(applies({"confidence": "medium", "from": "1534", "to": "1534-05"}, start))
 
-    def test_lua_copies_exactly_the_applicable_war_and_friendship_rows(self):
+    def test_lua_copies_exactly_the_applicable_rows(self):
         start = self.data["start_date"]
         expected = [(r["a"], r["b"], r["type"], r["id"]) for r in self.relations
-                    if applies(r, start) and r["type"] != "hostility"]
+                    if applies(r, start)]
         body = LUA.read_text(encoding="utf-8").split("local RELATIONS = {", 1)[1].split("\n}", 1)[0]
         actual = re.findall(r'\{"([A-Z_]+)", "([A-Z_]+)", "([a-z]+)", "(R\d+)"\}', body)
         self.assertEqual(actual, expected)
         self.assertEqual(len(actual), body.count("{"))  # no row escaped the pattern
-        self.assertIn("war", {row[2] for row in actual})
+        self.assertEqual({row[2] for row in actual}, {"war", "alliance", "marriage", "vassal", "hostility", "friendship"})
+        self.assertIn(("SHIMAZU", "RYUKYU", "friendship", "R19"), actual)
         self.assertIn("LuaEvents.NewGameInitialized.Add(Apply)", LUA.read_text(encoding="utf-8"))
 
-    def test_script_runs_on_all_four_japan_maps_only(self):
+    def test_script_and_feuds_run_on_the_two_historical_maps_only(self):
         mod = ET.parse(MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
         criteria = {row.attrib["id"]: row for row in mod.findall("./ActionCriteria/Criteria")}
         config = ET.parse(MOD / "Config/JAC_JapanMapScale_Config.xml").getroot()
         map_files = {row.attrib["File"] for row in config.findall("./Maps/Row")}
-        scripts = [row for row in mod.findall("./InGameActions/AddGameplayScripts")
-                   if row.findtext("File") == SCRIPT]
-        self.assertEqual(len(scripts), 4)
-        selected = set()
-        for row in scripts:
-            criterion = criteria[row.attrib["criteria"]]
-            self.assertEqual(criterion.findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
-            self.assertEqual(criterion.findtext("./ConfigurationValueMatches/ConfigurationId"), "MAP_SCRIPT")
-            selected.add(criterion.findtext("./ConfigurationValueMatches/Value"))
-        self.assertEqual(selected, map_files)
+        historical = {f for f in map_files if "Settlers" not in f}
         self.assertEqual(len(map_files), 4)
-        self.assertIn(SCRIPT, {row.text for row in mod.findall("./Files/File")})
+        self.assertEqual(len(historical), 2)
+        for tag, path in (("AddGameplayScripts", SCRIPT), ("UpdateDatabase", "Data/JAC_Japan_Feuds.xml")):
+            rows = [row for row in mod.findall(f"./InGameActions/{tag}") if row.findtext("File") == path]
+            self.assertEqual(len(rows), 2, path)
+            selected = set()
+            for row in rows:
+                criterion = criteria[row.attrib["criteria"]]
+                self.assertEqual(criterion.findtext("RuleSetInUse"), "RULESET_JAC_BANSEIKI")
+                self.assertEqual(criterion.findtext("./ConfigurationValueMatches/ConfigurationId"), "MAP_SCRIPT")
+                selected.add(criterion.findtext("./ConfigurationValueMatches/Value"))
+            self.assertEqual(selected, historical, path)
+        files = {row.text for row in mod.findall("./Files/File")}
+        self.assertLessEqual({SCRIPT, "Data/JAC_Japan_Feuds.xml"}, files)
+
+    def test_feud_xml_is_generated_from_the_hostility_rows(self):
+        expected = {frozenset((r["a"], r["b"])) for r in self.relations
+                    if r["type"] == "hostility" and applies(r, self.data["start_date"])}
+        self.assertEqual(len(expected), 7)
+        self.assertEqual({frozenset(p) for p in write_feuds.feud_pairs()}, expected)
+        root = ET.parse(FEUDS).getroot()
+        mods = {row.attrib["ModifierId"]: row.attrib for row in root.findall("./Modifiers/Row")}
+        owners = {(row.attrib["TraitType"], row.attrib["ModifierId"]) for row in root.findall("./TraitModifiers/Row")}
+        for pair in expected:
+            for a, b in (tuple(pair), tuple(pair)[::-1]):  # both sides dislike each other
+                with self.subTest(a=a, b=b):
+                    mod = mods[f"JAC_1534_FEUD_{a}_{b}"]
+                    self.assertEqual(mod["ModifierType"], "MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER")
+                    self.assertEqual(mod["SubjectRequirementSetId"], f"JAC_1534_PLAYER_IS_{b}")
+                    self.assertIn((f"TRAIT_JAC_1534_FEUD_{a}", mod["ModifierId"]), owners)
+        args = {(row.attrib["ModifierId"], row.attrib["Name"]): row.attrib["Value"]
+                for row in root.findall("./ModifierArguments/Row")}
+        self.assertEqual(len(mods), 14)
+        for mod_id in mods:
+            self.assertLess(int(args[(mod_id, "InitialValue")]), 0)
+            self.assertNotIn((mod_id, "ReductionTurns"), args)  # never decays while the pair stands
+            self.assertEqual(args[(mod_id, "SimpleModifierDescription")], write_feuds.TEXT_TAG)
+        self.assertNotIn("SHIMAZU", FEUDS.read_text(encoding="utf-8"))  # friendship is not a feud
+        # the checked-in file is what the generator writes
+        fresh = write_feuds.build()
+        ET.indent(fresh, space="  ")
+        self.assertEqual(ET.tostring(root, encoding="unicode"), ET.tostring(fresh, encoding="unicode"))
+        text = (MOD / "Text/JAC_JapanMapScale_Text.xml").read_text(encoding="utf-8")
+        self.assertIn(write_feuds.TEXT_TAG, text)
+        self.assertIn("1534年の因縁", text)
 
 
 if __name__ == "__main__":

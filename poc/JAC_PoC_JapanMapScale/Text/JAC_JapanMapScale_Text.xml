@@ -91,5 +91,14 @@
     <Row Tag="LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION" Language="ru_RU">
       <Text>Может входить во владения других держав без договора об открытых границах.</Text>
     </Row>
+    <Row Tag="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" Language="en_US">
+      <Text>Old feud from 1534</Text>
+    </Row>
+    <Row Tag="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" Language="ja_JP">
+      <Text>1534年の因縁</Text>
+    </Row>
+    <Row Tag="LOC_JAC_DIPLO_MODIFIER_1534_FEUD" Language="ru_RU">
+      <Text>Давняя вражда 1534 года</Text>
+    </Row>
   </LocalizedText>
 </GameData>

@@ -1,0 +1,159 @@
+{
+  "name": "JAC Japan map 15 km (settlers): historical relations and feud penalties are NOT applied",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(),'^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; for _,f in ipairs({'OUCHI','OTOMO','HOJO','IMAGAWA','MORI','SHIMAZU','RYUKYU','TAKEDA','ODA'}) do if id[f]==nil then error('missing faction '..f) end end; local function st(a,b) return GameInfo.DiplomaticStates[Players[id[a]]:GetDiplomaticAI():GetDiplomaticStateIndex(id[b])].StateType end; local function war(a,b) return Players[id[a]]:GetDiplomacy():IsAtWarWith(id[b]) end; local function feud(a,b) local n=0; local mods=Players[id[a]]:GetDiplomaticAI():GetDiplomaticModifiers(id[b]); if mods then for _,t in ipairs(mods) do if t.Text=='LOC_JAC_DIPLO_MODIFIER_1534_FEUD' or Locale.Lookup(t.Text)==Locale.Lookup('LOC_JAC_DIPLO_MODIFIER_1534_FEUD') then n=n+t.Score end end end return n end; if Game:GetProperty('JAC_JAPAN_1534_RELATIONS')~=nil then error('relations were applied on the settler map') end; if war('OUCHI','OTOMO') or war('OTOMO','OUCHI') then error('Ouchi-Otomo at war on the settler map') end; for _,pr in ipairs({{'HOJO','IMAGAWA'},{'SHIMAZU','RYUKYU'}}) do if st(pr[1],pr[2])=='DIPLO_STATE_DECLARED_FRIEND' then error(pr[1]..'-'..pr[2]..' friends on the settler map') end end; if feud('HOJO','TAKEDA')~=0 or feud('TAKEDA','HOJO')~=0 then error('feud penalty on the settler map') end; return 'start: settler map applies no relation and no feud penalty'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(),'^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; for _,f in ipairs({'OUCHI','OTOMO','HOJO','IMAGAWA','MORI','SHIMAZU','RYUKYU','TAKEDA','ODA'}) do if id[f]==nil then error('missing faction '..f) end end; local function st(a,b) return GameInfo.DiplomaticStates[Players[id[a]]:GetDiplomaticAI():GetDiplomaticStateIndex(id[b])].StateType end; local function war(a,b) return Players[id[a]]:GetDiplomacy():IsAtWarWith(id[b]) end; local function feud(a,b) local n=0; local mods=Players[id[a]]:GetDiplomaticAI():GetDiplomaticModifiers(id[b]); if mods then for _,t in ipairs(mods) do if t.Text=='LOC_JAC_DIPLO_MODIFIER_1534_FEUD' or Locale.Lookup(t.Text)==Locale.Lookup('LOC_JAC_DIPLO_MODIFIER_1534_FEUD') then n=n+t.Score end end end return n end; if Game:GetProperty('JAC_JAPAN_1534_RELATIONS')~=nil then error('relations were applied on the settler map') end; if war('OUCHI','OTOMO') or war('OTOMO','OUCHI') then error('Ouchi-Otomo at war on the settler map') end; for _,pr in ipairs({{'HOJO','IMAGAWA'},{'SHIMAZU','RYUKYU'}}) do if st(pr[1],pr[2])=='DIPLO_STATE_DECLARED_FRIEND' then error(pr[1]..'-'..pr[2]..' friends on the settler map') end end; if feud('HOJO','TAKEDA')~=0 or feud('TAKEDA','HOJO')~=0 then error('feud penalty on the settler map') end; return 'after 1 turn: still nothing applied'"
+    }
+  ]
+}

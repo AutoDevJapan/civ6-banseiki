@@ -76,6 +76,8 @@ def text() -> None:
         "May enter another faction's territory without an Open Borders agreement.",
         "開放国境の協定なしに他勢力の領土へ進入できる。",
         "Может входить во владения других держав без договора об открытых границах.")
+    add("LOC_JAC_DIPLO_MODIFIER_1534_FEUD",
+        "Old feud from 1534", "1534年の因縁", "Давняя вражда 1534 года")
     write_xml(MOD / "Text" / "JAC_JapanMapScale_Text.xml", root)
 
 

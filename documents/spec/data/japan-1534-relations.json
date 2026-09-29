@@ -9,9 +9,10 @@
     "alliance": {"ja": "同盟・盟約", "civ6": "友好宣言（暫定）"},
     "marriage": {"ja": "婚姻", "civ6": "友好宣言（暫定）"},
     "vassal": {"ja": "主従", "civ6": "友好宣言（暫定）。主従そのものは表せない"},
-    "hostility": {"ja": "敵対・不仲（開戦していない）", "civ6": "未適用（TODO）。開始時に設定できる API がない"}
+    "friendship": {"ja": "友好（同盟ほどではない通交・友好関係）", "civ6": "友好宣言（SetHasDeclaredFriendship）"},
+    "hostility": {"ja": "敵対・不仲（開戦していない）", "civ6": "AI の好感度に固定の減点「1534年の因縁」（勢力別の特性 + MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER）。開始時に出会い済みにする。史実の領土の日本マップだけ"}
   },
-  "apply_rule": "confidence が high か medium で、from ≤ start_date < to のものを開始時に適用する。low は記録だけ",
+  "apply_rule": "confidence が high か medium で、from ≤ start_date < to のものを開始時に適用する。low は記録だけ。適用先は史実の領土の日本マップ（15 km・20 km）だけで、開拓者からの2種には適用しない（オーナー判断 2026-09-29）",
   "relations": [
     {"id": "R01", "a": "OUCHI", "b": "OTOMO", "type": "war", "from": "1534-04-06", "to": "1538", "confidence": "high",
      "summary": "北九州の覇権を争い交戦中。天文3年4月6日に勢場ヶ原で衝突し、その後も交戦が続いた。天文7年に将軍義晴の仲介で和睦",
@@ -66,6 +67,9 @@
      "sources": [{"title": "尼子経久（Wikipedia）", "url": "https://ja.wikipedia.org/wiki/尼子経久"}]},
     {"id": "R18", "a": "MIYOSHI", "b": "HONGANJI", "type": "alliance", "from": "1534-08", "to": "1534-10", "confidence": "high",
      "summary": "三好長慶（千熊丸）は天文3年に本願寺に味方して8月11日に細川晴元軍と戦い、10月に晴元へ帰参した。開始日より後なので適用しない",
-     "sources": [{"title": "三好長慶（Wikipedia）", "url": "https://ja.wikipedia.org/wiki/三好長慶"}]}
+     "sources": [{"title": "三好長慶（Wikipedia）", "url": "https://ja.wikipedia.org/wiki/三好長慶"}]},
+    {"id": "R19", "a": "SHIMAZU", "b": "RYUKYU", "type": "friendship", "from": null, "to": null, "confidence": "medium",
+     "summary": "オーナー判断（2026-09-29）で友好宣言として始める。1609年の薩摩の琉球侵攻より前は、通交・貿易の友好関係にあった前提。Wikipedia の島津氏・琉球王国の記事には1534年時点の直接の記述がなく、確度は medium（要文献確認）",
+     "sources": [{"title": "琉球王国（Wikipedia。1609年の侵攻以降の記述が中心で、以前の関係の記述は乏しい）", "url": "https://ja.wikipedia.org/wiki/琉球王国"}, {"title": "島津氏（Wikipedia。同上）", "url": "https://ja.wikipedia.org/wiki/島津氏"}]}
   ]
 }
