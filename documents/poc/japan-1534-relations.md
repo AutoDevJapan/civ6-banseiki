@@ -104,6 +104,24 @@
 1. 開始時の同盟（史実の同盟・婚姻・主従）には期限を設けず、裏切りなどのイベントでだけ終える（選択肢②）。実装は上記「開始時の同盟を期限なしで保つ」
 2. 友好の島津と琉球王国も同じく同盟にし、視界を共有する（選択肢③）。味方は8組になる
 
+## オーナー判断（2026-09-30 Discord・確認事項I-1）
+
+「基本的に全都市が軍事同盟を持っている状態から始めればいいんじゃない？そしたら、わざわざ新規実装する必要ないでしょ。」
+
+1. 意図：味方の8組は、Civ6 の標準の軍事同盟（視界の共有はレベル2の効果、`DLC/Expansion2/Data/Expansion1_Alliances.xml:158`・`:173`〜`:176`）を結んだ状態から始める
+2. 調べた結果、ゲームプレイのスクリプトから同盟の種類とレベルは設定できない（下記の根拠）。そこで標準の軍事同盟の代わりに、これまでの「通常の同盟 + 特性 `TRAIT_JAC_1534_ALLY_VISION`（全同盟で視界を共有）」で同じ効果（開始時からの視界の共有）を出す。特性がすでに実機で視界を共有できている（上記の実機）ので、新規の実装はしない
+3. 特性の副作用（12家が後で結ぶ同盟も視界を共有する）は、この近似の一部として受け入れる（旧 `questions.md` Q30 は削除）
+
+根拠（2026-09-30 調査。公式フォルダ内）
+
+1. DLL の Lua バインディング名（`DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll`・`DLC/Expansion1/Binaries/Win64/GameCore_XP1_FinalRelease.dll`・`Base/Binaries/Win64Steam/GameCore_Base_FinalRelease.dll` の文字列）：同盟の設定は `lSetHasAllied`・`lSetPermanentAlliance` だけ。種類とレベルは取得用の `lGetAllianceType`・`lGetAllianceLevel`・`lGetAlliancePointsPerTurn`・`lGetAllianceTurnsThisLevel`・`lGetAllianceTurnsToNextLevel`・`lGetAllianceTurnsUntilExpiration`・`lGetAllianceBenefitsString`・`lGetAlliancePointsTooltip` しかなく、`SetAllianceType`・`SetAllianceLevel`・`ChangeAlliancePoints`・`AddAlliancePoints` などの設定関数は無い。`l(Set|Change|Add|Grant|Make|Declare|Force|Propose|Do)*` の全バインディングを見ても、同盟の種類・レベル・ポイントを変えるものは無い
+2. 公式の `SetHasAllied` の呼び出しは引数2つだけ（`DLC/VikingsScenario/Scripts/VikingScenario.lua:18`〜`:20`）。種類を渡す使用例は無い。`SetPermanentAlliance` も引数1つ（根拠 5）
+3. 種類つきの同盟を結ぶ公式の経路は、UI の取引だけ：`DealManager.GetWorkingDeal` → `AddItemOfType(DealItemTypes.AGREEMENTS)` → `SetSubType(DealAgreementTypes.ALLIANCE)` → `SetValueType(DB.MakeHash("ALLIANCE_MILITARY"))` → `DiplomacyManager.RequestSession(自分, 相手, "MAKE_DEAL")`（`DLC/Expansion2/UI/Replacements/DiplomacyActionView_Expansion1.lua:208`〜`:223`）。`DealManager`・`DiplomacyManager` は公式では UI のファイルでしか使われず（`Base/Assets/UI/`・`DLC/Expansion*/UI/` だけ）、ローカルの人間プレイヤーが相手に申し込み、AI が受けるかを判断する。AI どうしの組を開始時に決まった形で結ぶ手段にはならない
+4. データだけの経路：同盟ポイントの修正値 `MODIFIER_PLAYER_ADJUST_ALLIANCE_POINTS`（`EFFECT_ADJUST_ALLIANCE_POINTS_FOR_MODIFIER`、`DLC/Expansion2/Data/Expansion1_Modifiers.xml:388`〜`:390`。公式は政策 `ARSENALOFDEMOCRACY_ALLIANCEPOINTS`、`DLC/Expansion2/Data/Expansion1_Policies.xml:110`〜`:111`）は毎ターンのポイントを足すだけで、レベル2（`ALLIANCE_LEVEL_TWO_XP`=320、`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:12`）に開始時から届かない。また同盟の効果は種類ごと（`AllianceEffects` の `AllianceType`）なので、種類が軍事でない限りレベルを上げても視界の共有は付かない。`Alliances` の行の順を入れ替えて軍事を先頭（既定の種類 0）にする案は、全同盟の種類の対応が変わり、`AllianceEffects`・`DiplomaticActions_XP1` の外部キーの連鎖削除も伴うので採らない
+5. 確認項目（静的な推定。`probe-alliance-type.json` で確かめる）：戦国パックは公式の社会制度を全削除する（`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql:148`）。同盟の外交行動（`DIPLOACTION_ALLIANCE`・`DIPLOACTION_ALLIANCE_MILITARY` など）は `InitiatorPrereqCivic="CIVIC_CIVIL_SERVICE"` を持ち（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:69`、`DLC/Expansion2/Data/Expansion1_Alliances.xml:32`〜`:36`）、外部キーは `ON DELETE CASCADE`（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:923`〜`:924`）なので、万世紀ルールセットでは通常の外交で同盟そのものを結べない可能性が高い。そうなら上記の特性の副作用（後で結ぶ同盟の視界共有）も今は起きない。通常の同盟を戦国の制度（例 `CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES`「誓約と同盟」）で解放するかは、戦国パックの制度ツリーの設計で決める
+
+種類の設定の調査用シナリオ `probe-alliance-type.json`（15 km・史実の領土、開始時と1ターン後）：ゲームプレイ（`GameCore_Tuner`）から、関係の無い伊達→島津に `SetHasAllied(相手, true, 軍事同盟の Index)`、長尾→毛利に `SetHasAllied(相手, true, DB.MakeHash("ALLIANCE_MILITARY"))` を呼び、UI（`InGame`）で北条→今川（対照）と両組の `GetAllianceType`（種類名）・`GetAllianceLevel`・期限の残り・相手の本拠が見えるかを読む。あわせて、ゲームプレイで `DealManager`・`DiplomacyManager` が使えるか、`GameInfo.Alliances` の先頭行と軍事同盟の Index、`DIPLOACTION_ALLIANCE`・`DIPLOACTION_ALLIANCE_MILITARY` が DB に残っているかを返す。読み取りはすべて `pcall` で囲み、結果は戻り値と Lua.log の `[JAC_ALLIANCE_TYPE_PROBE]` 行に出る。3つ目の引数で種類が軍事になった場合だけ、標準の軍事同盟へ切り替えを検討する（レベル2は別途必要）
+
 ## 全勢力の出会いと外交の見え方（オーナー判断 2026-09-29・Discord G）
 
 「日本マップには固定キャラだけが出るので、全員が互いを知っている。最終的に同盟国は視界を共有する」。
@@ -111,11 +129,11 @@
 1. 出会い：上記のとおり、開始時に22家が互いに出会い済み
 2. アクセスレベル：上記の `TRAIT_JAC_1534_ACCESS`（全22家に「限定的」）。関係の理由（「1534年の因縁」を含む）が最初から見える。出所の行は `TraitType` でこの特性に結ぶ（結ばない行では実機でアクセスレベルが 0 のままだった）。実機で「限定的」になり、外交画面の関係欄に「-10 1534年の因縁」が出ることを確認済み
 3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組と島津・琉球（オーナー判断H）を開始時に通常の同盟（`SetHasAllied`）にする。Rise and Fall 以降、種類の無い同盟だけでは視界を共有しない（上記の根拠 10）。そこで味方の組の12家（北条・今川・大内・毛利・伊達・蘆名・足利・六角・朝倉・尼子・島津・琉球）に、プンドメーカーと同じ「全同盟で視界を共有する」修正値 `JAC_1534_ALLY_SHARED_VIS`（`MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS`、`ShareVis`=`true`、根拠 13）を特性 `TRAIT_JAC_1534_ALLY_VISION` で付ける（`Data/JAC_Japan_Feuds.xml`、`write_feuds.py` が JSON の味方の組から生成）。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値も 1 のまま（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`）。テストが既定値 1、特性を持つ12家、Lua が味方の組だけを同盟にすることを確かめる
-   - 副作用（確認項目、`questions.md` Q30）：修正値は「その家の全同盟」に効くので、12家が後で結ぶ通常の同盟も、レベルに関係なく視界を共有する。修正値は外せないので、開始時の同盟が終わった後も残る
+   - 副作用：修正値は「その家の全同盟」に効くので、12家が後で結ぶ通常の同盟も、レベルに関係なく視界を共有する。修正値は外せないので、開始時の同盟が終わった後も残る。オーナー判断I（下記）で、軍事同盟から始める扱いの近似として受け入れた
    - 同盟にした理由：視界の共有をエンジンに任せられる。ユニットが動いても即時に共有され、セーブにも同盟の状態として残り、マルチプレイでもゲームプレイの状態として同期する。各ターンにタイルの見え方を Lua で写す方式は、ターン中の移動が反映されず、写した分をセーブ・ロードをまたいで正しく取り消す必要がある
    - 副作用：同盟国どうしは外交のアクセスレベルが1段上がる（公式の出所 `Ally`。全員の「限定的」に加えて「開放」になる）、互いに正式な宣戦ができない、同盟ポイントが貯まる
    - 終わり方（オーナー判断H）：期限なしで続け、イベントでだけ終える。上記「開始時の同盟を期限なしで保つ」
-   - 未実機確認：Gathering Storm で種類の無い同盟になるか（外交画面は種類 -1 を扱える。`DLC/Expansion2/UI/Additions/DiplomacyActionView_AllianceTab.lua:38`〜`:39`）、期限を越えて保てるか、友好宣言の期限（30ターン）で同盟に影響が出ないか。確認は `japan-1534-relations.json` の 7
+   - 実機（2026-09-30 `probe-ally-vision.json`、`artifacts/diplo-12`）：`SetHasAllied` の同盟は、UI（`InGame`）で `GetAllianceType`=0（`GameInfo.Alliances` の先頭行 `ALLIANCE_RESEARCH`。種類を選んで結んだのではなく既定値と見られる）、`GetAllianceLevel`=1、`GetAllianceTurnsUntilExpiration`=30（1ターン後 29）。特性で相手の本拠が見え、相手に見えているタイル 203/203 が自分にも見えた。ゲームプレイ（`GameCore_Tuner`）の外交オブジェクトには `GetAllianceType`・`GetAllianceLevel`・`GetAllianceTurnsUntilExpiration` が無い（nil）。未実機確認：期限を越えて保てるか、友好宣言の期限（30ターン）で同盟に影響が出ないか。確認は `japan-1534-relations.json` の 7
 4. 戦国パックの技術・制度ツリーは公式の技術をすべて消すので、`TECH_PRINTING` に付いた「アクセスレベル +1」（`TechnologyModifiers` の `PRINTING_ADD_DIPLO_VISIBILITY`、`Base/Assets/Gameplay/Data/Technologies.xml:546`〜`:616`・`:670`〜`:672`）と、出所の行 `SOURCE_TECH`（`Base/Assets/Gameplay/Data/Gossip.xml:75`、`PrereqTech=TECH_PRINTING`）が外部キーの連鎖削除で無くなる。`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Unlocks.sql` が、削除の前に両方を戦国の技術 T05「街道と荷駄」`TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS` へ付け替える（全地図で有効）。理由：荷駄・使者が街道を通って諸家の噂を運ぶ、情報に最も近い戦国の技術で、交易商人（`UNIT_TRADER`）も解放する。公式でも交易路は別の出所 `SOURCE_TRADER` としてアクセスレベルを上げる。序盤の第I期（列2）なので、日本マップ以外でも早めに理由が見え始める。テストが付け替えを確かめる
 
 ## 未検証・注意
@@ -124,7 +142,7 @@
 - AI が開始直後に友好宣言を破棄したり和睦したりする頻度は未確認
 - 確認項目：マルチプレイでの同期（全員の出会い・友好宣言・同盟と視界の共有・同盟の結び直し・交戦・因縁・アクセスレベルが全員で一致するか）は未検証
 - 確認項目：ゲーム設定で「チームなし」を選ぶと同盟国の視界共有が切れる（`SetupParameters.xml:199`〜`:200`）
-- 要実機確認：期限の延ばし方。`GetAllianceTurnsUntilExpiration` がゲームプレイのスクリプトで読めるか、`SetHasAllied(相手, false)` → `true` で期限が数え直されるか。読めない・数え直されない場合も、切れた次のターンの初めに結び直すが、そのあいだ（ターン処理の途中）は同盟と視界の共有が一時的に切れ、期限切れの通知が出うる
+- 期限の延ばし方：`GetAllianceTurnsUntilExpiration` はゲームプレイのスクリプトには無い（上記の実機）。`Renew` は `pcall` で失敗を受けて何もしないので、同盟は30ターンで一度切れ、切れた次のターンの初めに結び直す。そのあいだ（ターン処理の途中）は同盟と視界の共有が一時的に切れ、期限切れの通知が出うる。要実機確認：結び直した同盟で期限が数え直されるか（`japan-1534-relations.json` の 7）
 - 確認項目：結び直すたび（30ターンに1回）に、同盟の噂（`LOC_GOSSIP_ALLIED`）や通知が出るかもしれない。多すぎる場合は、結び直しを期限切れのときだけにするかを検討する
 - 確認項目：人間が味方の家（北条など）を担当すると、イベントで同盟が終わるまで味方の家に宣戦できない。オーナー判断Hどおりだが、イベントの仕組みができるまでは終える手段がない
 - 確認項目：組のプロパティを書かない古いビルドのセーブでは、開始時の同盟を保たない（通常の同盟として30ターンで切れる）。影響はリリース前のセーブだけなので対応しない

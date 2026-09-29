@@ -294,6 +294,20 @@ class Japan1534RelationsTests(unittest.TestCase):
                             "GetAllianceLevel(", "GAME_ALLIES_SHARE_VISIBILITY"):
                     self.assertIn(api, step["code"])
 
+    def test_alliance_type_probe_sets_in_gameplay_and_reads_in_ui(self):
+        # Owner decision I-1: can a script start a typed Military alliance? Only SetHasAllied with an extra arg is untested.
+        path = ROOT / "tools/civ6-autotest/scenarios/probe-alliance-type.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        probes = [s for s in steps if s["action"] == "ui_lua"]
+        self.assertEqual([s["state_name"] for s in probes], ["GameCore_Tuner", "InGame", "InGame"])
+        self.assertIn("SetHasAllied(id.SHIMAZU, true, mil.Index)", probes[0]["code"])
+        self.assertIn("SetHasAllied(id.MORI, true, DB.MakeHash('ALLIANCE_MILITARY'))", probes[0]["code"])
+        for step in probes:
+            self.assertIn("pcall(f)", step["code"])  # every read returns a value instead of stopping the probe
+            self.assertNotIn("error(", step["code"])
+        for api in ("GetAllianceType(", "GetAllianceLevel(", "GetAllianceTurnsUntilExpiration("):
+            self.assertIn(api, probes[1]["code"])
+
     def test_start_alliances_outlast_the_alliance_limit_until_an_event_ends_them(self):
         # Owner decision H (2026-09-30, "b" + Shimazu-Ryukyu): no time limit; only an event (or a war between the pair) ends a start alliance.
         lua = LUA.read_text(encoding="utf-8")
