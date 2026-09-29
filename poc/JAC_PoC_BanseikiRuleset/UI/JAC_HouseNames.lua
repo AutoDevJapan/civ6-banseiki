@@ -26,6 +26,8 @@ include("JAC_HouseNamesData_", true)
 
 -- 操作中プレイヤーの文明。観戦・ロード画面など操作中のプレイヤーがいないときは nil（一般名を出す）。
 local function GetLocalCivilization()
+	-- LoadScreen の OnLoadGameViewStateDone では Game がまだ無く、ここで止まるとロードが進まない（実機 2026-09-30）。
+	if Game == nil or PlayerConfigurations == nil then return nil end
 	local playerID = Game.GetLocalPlayer()
 	if playerID == nil or playerID < 0 then return nil end
 	local config = PlayerConfigurations[playerID]

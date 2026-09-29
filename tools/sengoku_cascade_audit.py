@@ -113,7 +113,9 @@ def _run_sengoku(source: sqlite3.Connection, with_deletes: bool) -> sqlite3.Conn
             for statement in TREE_DELETES:
                 assert statement in script or not file.text.endswith("Unlocks.sql"), statement
                 script = script.replace(statement, "")
-        db.executescript(script)
+        # Cascades fire per statement, but the violation check waits for COMMIT: the game reports
+        # dangling keys only after a file loads, so rows may reference ones inserted later in the file.
+        db.executescript(f"BEGIN; PRAGMA defer_foreign_keys=ON;\n{script}\nCOMMIT;")
     return db
 
 

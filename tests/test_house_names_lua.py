@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "poc/JAC_PoC_BanseikiRuleset/UI"
 DATA = ROOT / "poc/JAC_PoC_SengokuTrees/UI/JAC_HouseNamesData_Sengoku.lua"
 TEXT = ROOT / "poc/JAC_PoC_SengokuTrees/Text/JAC_Sengoku_Text.xml"
-CIVIC = "LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME"
+# A second registered key; C25 (太閤検地) is no longer a house name (SSOT 3.2).
+DESC = "LOC_JAC_SENGOKU_ERA_3_DESCRIPTION"
 ERA = "LOC_JAC_SENGOKU_ERA_3_NAME"
 
 # Engine-side text as it would be built in C++ (notification bodies, moments).
@@ -122,29 +123,29 @@ class HouseNamesLuaTests(unittest.TestCase):
         g = lua.globals()
         self.assertEqual(list(g.LOG.values()), ["[JAC_POC] houseNames context=Test result=installed"])
         self.assertTrue(lua.eval("Locale ~= ENGINE_LOCALE and JAC_HouseNamesBaseLocale == ENGINE_LOCALE"))
-        self.assertEqual(self.lookup(lua, CIVIC), self.texts[CIVIC + "_HOUSE"])
-        self.assertEqual(g.ENGINE_LOCALE.Lookup(CIVIC), self.texts[CIVIC])  # the engine table is untouched
+        self.assertEqual(self.lookup(lua, DESC), self.texts[DESC + "_HOUSE"])
+        self.assertEqual(g.ENGINE_LOCALE.Lookup(DESC), self.texts[DESC])  # the engine table is untouched
         self.assertTrue(lua.eval("Locale.Compare == ENGINE_LOCALE.Compare"))  # unwrapped members still reach the engine table
         # A second include in the same context (ToolTipHelper is read several times) does not wrap twice,
         # and a file loaded after the install sees the shadowed Locale.
         lua.execute('include("JAC_HouseNames"); JAC_InstallHouseNames("Test")')
         self.assertEqual(list(g.LOG.values())[-1], "[JAC_POC] houseNames context=Test result=already_installed")
         self.assertTrue(lua.eval("JAC_HouseNamesBaseLocale == ENGINE_LOCALE"))
-        self.assertEqual(lua.execute("return Locale.Lookup(...)", CIVIC), self.texts[CIVIC + "_HOUSE"])
+        self.assertEqual(lua.execute("return Locale.Lookup(...)", DESC), self.texts[DESC + "_HOUSE"])
 
     def test_owner_sees_house_names_for_keys_arguments_and_upper_case(self):
         lua = self.runtime("CIVILIZATION_JAC_ODA")
-        house = self.texts[CIVIC + "_HOUSE"]
-        self.assertEqual(self.lookup(lua, CIVIC), house)
-        self.assertEqual(self.lookup(lua, "LOC_NOTIFICATION_CIVIC_DISCOVERED_SUMMARY", CIVIC), f"You have discovered {house}!")
+        house = self.texts[DESC + "_HOUSE"]
+        self.assertEqual(self.lookup(lua, DESC), house)
+        self.assertEqual(self.lookup(lua, "LOC_NOTIFICATION_CIVIC_DISCOVERED_SUMMARY", DESC), f"You have discovered {house}!")
         upper = lua.globals().JAC_HouseNamesBaseLocale.ToUpper
-        self.assertEqual(lua.globals().Locale.ToUpper(CIVIC), upper(house))
+        self.assertEqual(lua.globals().Locale.ToUpper(DESC), upper(house))
 
     def test_engine_built_text_is_switched_for_the_owner(self):
         for language in ("en_US", "ja_JP"):
             with self.subTest(language=language):
                 lua = self.runtime("CIVILIZATION_JAC_ODA", language)
-                generic, house = self.texts[CIVIC], self.texts[CIVIC + "_HOUSE"]
+                generic, house = self.texts[DESC], self.texts[DESC + "_HOUSE"]
                 era, era_house = self.texts[ERA], self.texts[ERA + "_HOUSE"]
                 # What pNotification:GetSummary() returns: already formatted by the engine with the generic name.
                 engine = self.texts["LOC_NOTIFICATION_CIVIC_DISCOVERED_SUMMARY"].replace("{1_Name}", generic)
@@ -163,11 +164,19 @@ class HouseNamesLuaTests(unittest.TestCase):
         for civilization in ("CIVILIZATION_JAC_TAKEDA", None):
             with self.subTest(civilization=civilization):
                 lua = self.runtime(civilization)
-                generic = self.texts[CIVIC]
+                generic = self.texts[DESC]
                 engine = f"You have discovered {generic}!"
-                self.assertEqual(self.lookup(lua, CIVIC), generic)
+                self.assertEqual(self.lookup(lua, DESC), generic)
                 self.assertEqual(self.lookup(lua, engine), engine)
                 self.assertFalse(lua.globals().JAC_LocalHouseHasNames())
+
+    def test_load_screen_without_game_keeps_generic_names(self):
+        # LoadScreen.lua:473 (OnLoadGameViewStateDone) runs before Game exists; an error there hangs the load.
+        lua = self.runtime("CIVILIZATION_JAC_ODA", extra="Game = nil; PlayerConfigurations = nil")
+        generic = self.texts[CIVIC]
+        self.assertEqual(self.lookup(lua, CIVIC), generic)
+        self.assertEqual(lua.globals().JAC_ApplyHouseNames(generic), generic)
+        self.assertFalse(lua.globals().JAC_LocalHouseHasNames())
 
     def test_civilopedia_parts_receive_house_text_only_for_the_owner(self):
         pedia = (UI / "CivilopediaPage_JAC_HouseNames.lua").read_text(encoding="utf-8")
@@ -180,7 +189,7 @@ class HouseNamesLuaTests(unittest.TestCase):
           s:AddLabel("%s")
           s:AddIconLabel({ "ICON_X", "%s" }, "%s")
         end)
-        """ % (ERA, CIVIC, CIVIC, ERA, ERA, CIVIC, CIVIC)
+        """ % (ERA, DESC, DESC, ERA, ERA, DESC, DESC)
         for civilization, expect_house in (("CIVILIZATION_JAC_ODA", True), ("CIVILIZATION_JAC_TAKEDA", False)):
             with self.subTest(civilization=civilization):
                 lua = self.runtime(civilization, extra=PEDIA_STUBS)
@@ -189,16 +198,16 @@ class HouseNamesLuaTests(unittest.TestCase):
                 captions = list(lua.globals().CAPTIONS.values())
                 if expect_house:
                     self.assertIn(self.texts[ERA + "_HOUSE"], captions)
-                    self.assertIn(self.texts[CIVIC + "_HOUSE"], captions)
+                    self.assertIn(self.texts[DESC + "_HOUSE"], captions)
                     self.assertNotIn(ERA, captions)
-                    self.assertNotIn(CIVIC, captions)
+                    self.assertNotIn(DESC, captions)
                     self.assertIn("ICON_X", captions)  # icon names are left alone
                     self.assertIn("same", captions)  # official tooltip de-duplication still works
                 else:
                     # Unchanged: keys go to the engine exactly as the official page passes them.
                     self.assertIn(ERA, captions)
-                    self.assertIn(CIVIC, captions)
-                    self.assertNotIn(self.texts[CIVIC + "_HOUSE"], captions)
+                    self.assertIn(DESC, captions)
+                    self.assertNotIn(self.texts[DESC + "_HOUSE"], captions)
 
     def test_historic_moment_descriptions_are_switched(self):
         extra = r"""

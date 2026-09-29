@@ -75,6 +75,15 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
+    <!-- Registered castles by plot; after the victory SQL (JAC_PoC_SengokuTrees, LoadOrder 200). -->
+    <UpdateDatabase id="JAC_Japan_20km_Castles" criteria="JAC_Japan_20km_Historical">
+      <Properties><LoadOrder>300</LoadOrder></Properties>
+      <File>Data/JAC_Japan_20km_Castles.sql</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_15km_Castles" criteria="JAC_Japan_15km_Historical">
+      <Properties><LoadOrder>300</LoadOrder></Properties>
+      <File>Data/JAC_Japan_15km_Castles.sql</File>
+    </UpdateDatabase>
     <UpdateDatabase id="JAC_Japan_20km_NoSettlers" criteria="JAC_Japan_20km_Historical">
       <File>Data/JAC_Japan_NoSettlers.xml</File>
     </UpdateDatabase>
@@ -129,6 +138,8 @@
     </AddGameplayScripts>
   </InGameActions>
   <Files>
+    <File>Data/JAC_Japan_20km_Castles.sql</File>
+    <File>Data/JAC_Japan_15km_Castles.sql</File>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Data/JAC_Japan_NoSettlers.xml</File>

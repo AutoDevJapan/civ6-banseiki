@@ -50,37 +50,61 @@
       "code": "if Game.GetCurrentGameTurn()~=1 then error('not turn 1') end; if not Players[0]:IsHuman() then error('player 0 is not the human') end; Players[0]:GetDiplomacy():SetHasMet(1); Players[1]:GetDiplomacy():SetHasMet(0); return tostring(Players[0]:GetDiplomacy():HasMet(1))"
     },
     {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if Game.GetCurrentGameTurn()~=1 then error('not turn 1') end; if not Players[0]:IsHuman() then error('player 0 is not the human') end; local a,b=Players[0]:GetDiplomacy(),Players[1]:GetDiplomacy(); a:SetHasMet(1); b:SetHasMet(0); a:SetHasDeclaredFriendship(1,true); b:SetHasDeclaredFriendship(0,true); return tostring(a:HasMet(1))"
+    },
+    {
       "action": "wait_for",
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "return Players[0]:GetDiplomacy():HasMet(1)"
+        "code": "return Players[0]:GetDiplomacy():HasMet(1) and GameInfo.DiplomaticStates[Players[1]:GetDiplomaticAI():GetDiplomaticStateIndex(0)].StateType=='DIPLO_STATE_DECLARED_FRIEND'"
       },
       "timeout": 30
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local function reasons() local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid('DIPLOACTION_ALLIANCE',1,true); local name=Locale.Lookup(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Name); local list,hit={},false; for _,s in ipairs((res and res.FailureReasons) or {}) do local text=Locale.Lookup(s); table.insert(list,text); if string.find(text,name,1,true) then hit=true end end; return ok,hit,table.concat(list,' / ') end; local ok,hit,text=reasons(); print('[JAC_ALLIANCE] before C11 valid='..tostring(ok)..' reasons='..text); if ok then error('alliance valid before C11') end; if not hit then error('C11 not named in failure reasons: '..text) end; return 'blocked by C11: '..text"
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local acts={'DIPLOACTION_ALLIANCE','DIPLOACTION_ALLIANCE_MILITARY','DIPLOACTION_ALLIANCE_RESEARCH','DIPLOACTION_ALLIANCE_CULTURAL','DIPLOACTION_ALLIANCE_ECONOMIC','DIPLOACTION_ALLIANCE_RELIGIOUS'}; local valid,out=0,{}; for _,a in ipairs(acts) do local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid(a,1,true); local rs={}; for _,s in ipairs((res and res.FailureReasons) or {}) do table.insert(rs,Locale.Lookup(s)) end; if ok then valid=valid+1 end; table.insert(out,a..'='..tostring(ok)..'['..table.concat(rs,'; ')..']') end; local diag='phase=neither c11='..q(function() return Players[0]:GetCulture():HasCivic(i) end)..'/'..q(function() return Players[1]:GetCulture():HasCivic(i) end)..' met='..q(function() return Players[0]:GetDiplomacy():HasMet(1) end)..' state='..q(function() return GameInfo.DiplomaticStates[Players[1]:GetDiplomaticAI():GetDiplomaticStateIndex(0)].StateType end)..' valid='..valid..' '..table.concat(out,' '); print('[JAC_ALLIANCE] '..diag); if not (valid==0) then error('alliance valid in phase neither: '..diag) end; return diag"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({0,1}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i) and Players[1]:GetCulture():HasCivic(i))"
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({0}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i))..'/'..tostring(Players[1]:GetCulture():HasCivic(i))"
     },
     {
       "action": "wait_for",
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "return Players[0]:GetCulture():HasCivic(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index)"
+        "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; local ok,v=pcall(function() return Players[0]:GetCulture():HasCivic(i) end); return (not ok) or v"
       },
       "timeout": 30
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local function reasons() local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid('DIPLOACTION_ALLIANCE',1,true); local name=Locale.Lookup(GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Name); local list,hit={},false; for _,s in ipairs((res and res.FailureReasons) or {}) do local text=Locale.Lookup(s); table.insert(list,text); if string.find(text,name,1,true) then hit=true end end; return ok,hit,table.concat(list,' / ') end; local ok,hit,text=reasons(); print('[JAC_ALLIANCE] after C11 valid='..tostring(ok)..' reasons='..text); if hit then error('C11 still blocks the alliance: '..text) end; return 'C11 no longer blocks; valid='..tostring(ok)..' remaining='..text"
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local acts={'DIPLOACTION_ALLIANCE','DIPLOACTION_ALLIANCE_MILITARY','DIPLOACTION_ALLIANCE_RESEARCH','DIPLOACTION_ALLIANCE_CULTURAL','DIPLOACTION_ALLIANCE_ECONOMIC','DIPLOACTION_ALLIANCE_RELIGIOUS'}; local valid,out=0,{}; for _,a in ipairs(acts) do local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid(a,1,true); local rs={}; for _,s in ipairs((res and res.FailureReasons) or {}) do table.insert(rs,Locale.Lookup(s)) end; if ok then valid=valid+1 end; table.insert(out,a..'='..tostring(ok)..'['..table.concat(rs,'; ')..']') end; local diag='phase=initiator-only c11='..q(function() return Players[0]:GetCulture():HasCivic(i) end)..'/'..q(function() return Players[1]:GetCulture():HasCivic(i) end)..' met='..q(function() return Players[0]:GetDiplomacy():HasMet(1) end)..' state='..q(function() return GameInfo.DiplomaticStates[Players[1]:GetDiplomaticAI():GetDiplomaticStateIndex(0)].StateType end)..' valid='..valid..' '..table.concat(out,' '); print('[JAC_ALLIANCE] '..diag); if not (valid==0) then error('alliance valid in phase initiator-only: '..diag) end; return diag"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({1}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i))..'/'..tostring(Players[1]:GetCulture():HasCivic(i))"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; local ok,v=pcall(function() return Players[1]:GetCulture():HasCivic(i) end); return (not ok) or v"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; local function q(f) local ok,v=pcall(f); if ok then return tostring(v) end return 'ERR('..tostring(v)..')' end; local acts={'DIPLOACTION_ALLIANCE','DIPLOACTION_ALLIANCE_MILITARY','DIPLOACTION_ALLIANCE_RESEARCH','DIPLOACTION_ALLIANCE_CULTURAL','DIPLOACTION_ALLIANCE_ECONOMIC','DIPLOACTION_ALLIANCE_RELIGIOUS'}; local valid,out=0,{}; for _,a in ipairs(acts) do local ok,res=Players[0]:GetDiplomacy():IsDiplomaticActionValid(a,1,true); local rs={}; for _,s in ipairs((res and res.FailureReasons) or {}) do table.insert(rs,Locale.Lookup(s)) end; if ok then valid=valid+1 end; table.insert(out,a..'='..tostring(ok)..'['..table.concat(rs,'; ')..']') end; local diag='phase=both c11='..q(function() return Players[0]:GetCulture():HasCivic(i) end)..'/'..q(function() return Players[1]:GetCulture():HasCivic(i) end)..' met='..q(function() return Players[0]:GetDiplomacy():HasMet(1) end)..' state='..q(function() return GameInfo.DiplomaticStates[Players[1]:GetDiplomaticAI():GetDiplomaticStateIndex(0)].StateType end)..' valid='..valid..' '..table.concat(out,' '); print('[JAC_ALLIANCE] '..diag); if not (valid>0) then error('no alliance valid with C11 on both sides: '..diag) end; return diag"
     }
   ]
 }

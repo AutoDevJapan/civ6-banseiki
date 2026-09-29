@@ -127,14 +127,24 @@ class AllianceScenarioTests(unittest.TestCase):
         self.assertIn(len(configure["players"]), (2, 3))
         codes = [step.get("code", "") for step in steps]
         self.assertTrue(all(any(a in code for code in codes) for a in ALLIANCES))
+        # C11 の有無だけを変えて比べる：友好宣言済みで、両者なし→開始側だけ→両者あり の順に有効性を確かめる
+        friend = [i for i, s in enumerate(steps) if "SetHasDeclaredFriendship" in s.get("code", "")]
         grant = [i for i, s in enumerate(steps) if "SetCivic" in s.get("code", "")]
         checks = [i for i, s in enumerate(steps) if "IsDiplomaticActionValid" in s.get("code", "")]
-        self.assertEqual(len(grant), 1)
-        self.assertEqual(len(checks), 2)
-        self.assertLess(checks[0], grant[0])
-        self.assertLess(grant[0], checks[1])
-        self.assertEqual(steps[grant[0]]["state_name"], "GameCore_Tuner")
-        self.assertIn(C11, steps[grant[0]]["code"])
+        self.assertEqual(len(friend), 1)
+        self.assertEqual(len(grant), 2)
+        self.assertEqual(len(checks), 3)
+        self.assertEqual(sorted(friend + grant + checks),
+                         [friend[0], checks[0], grant[0], checks[1], grant[1], checks[2]])
+        for i in friend + grant:
+            self.assertEqual(steps[i]["state_name"], "GameCore_Tuner")
+        for i in grant:
+            self.assertIn(C11, steps[i]["code"])
+        self.assertIn("ipairs({0})", steps[grant[0]]["code"])
+        self.assertIn("ipairs({1})", steps[grant[1]]["code"])
+        self.assertIn("valid==0", steps[checks[0]]["code"])
+        self.assertIn("valid==0", steps[checks[1]]["code"])
+        self.assertIn("valid>0", steps[checks[2]]["code"])
         decided = [s["code"] for s in steps if "EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS" in s.get("code", "")]
         self.assertEqual(len(decided), 1)
         self.assertLess(codes.index(decided[0]), grant[0])
