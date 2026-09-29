@@ -1,21 +1,33 @@
 # Civ6 PoC 検証ドライバ
 
-`tools/civ6-autotest/` は、起動済みの Steam 版 Civ6 1.0.12.68（Gathering Storm、シングルプレイ）に FireTuner で接続し、JSON の手順を順に実行する。ゲームの起動は行わない。各ステップの成否と出力、画面 PNG、ログ判定用の開始位置を新しい成果物ディレクトリへ保存する。
+`tools/civ6-autotest/` は Steam 版 Civ6 1.0.12.68（Gathering Storm、シングルプレイ）に FireTuner で接続し、JSON の手順を順に実行する。シナリオで有効化する MOD の更新が起動中のゲームより新しい場合や、ゲームが停止している場合は、手順の開始前に Civ6 を再起動する。各ステップの成否と出力、画面 PNG、ログ判定用の開始位置を新しい成果物ディレクトリへ保存する。
 
 ## 準備と実行
 
-1. 対象 MOD を Civ6 の MOD フォルダから参照できる状態にする。`bundle0-load-save.json` はこのリポジトリの `poc/JAC_PoC_Bundle0` を使う。`custom-clans.json` と `growth-notebooks.json` の ID と Lua イベント名は、この PC の別 PoC ワークツリーにある `JAC_PoC_CustomCivs`、`JAC_PoC_GrowthUI` から読み取り確認した。これらは現時点でこのワークツリーの `poc/` にはないため、実行前に配置とバージョンを確認する。
-2. オーナーまたは Computer Use で Civ6 を**ウィンドウ表示**で起動し、メインメニューまで進める。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
+1. 対象 MOD を Civ6 の `Mods` フォルダから参照できる状態にする。ドライバは `.modinfo` の UUID で対象を探し、ジャンクションの参照先を走査する。`bundle0-load-save.json` は `JAC_PoC_Bundle0`、クランと手帳のシナリオは `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を使う。実際に Civ6 が参照する `Mods` の配置先を確認する。
+2. Civ6 は**ウィンドウ表示**で起動できる設定にする。停止中ならドライバが Steam 経由で起動する。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
 3. PowerShell でリポジトリのルートから実行する。Python 3.12 で確認済み。追加パッケージは不要。
 
 ```powershell
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-load-save.json --check
+# 既にゲームが起動している場合の診断
 python tools/civ6-autotest/tuner.py states
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-load-save.json --output tools/civ6-autotest/artifacts/bundle0-run-01
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/clans-notebooks.json --no-auto-restart --output tools/civ6-autotest/artifacts/debug-01
 python -m unittest discover -s tools/civ6-autotest/tests -v
 ```
 
-`states` で `FrontEnd` と `InGame` が現れるか先に確認する。異なる名前が出た場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>` を指定する。
+`states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
+
+### 自動鮮度確認と再起動
+
+実行開始時、全 `enable_mods.ids` に対応する `.modinfo` を `Mods` 直下の各 MOD フォルダで探し、ジャンクションを解決した参照先の全ファイルから最も新しい更新時刻を取得する。起動中の `CivilizationVI.exe` または `CivilizationVI_DX12.exe` の開始時刻よりその時刻が**新しい**場合、またはゲームが起動していない場合は、`steps.jsonl` の `auto_restart` に理由を記録して再起動する。MOD が見つからない、同じ UUID が複数ある、Civ6 プロセスが複数ある場合は失敗として止める。更新時刻が等しい場合は再起動しない。`--no-auto-restart` はデバッグ時のみ鮮度確認を省略する。
+
+再起動はまず FireTuner の `FrontEnd` / `InGame` UI 状態から `Events.UserConfirmedClose()` を呼ぶ。接続できなければ、実行ファイル名とタイトルを照合した Civ6 ウィンドウに閉じる要求を送る。15 秒待っても元のプロセスが残る場合は PID と開始時刻を再確認してから終了させる。旧 EXE の終了後も Steam が旧セッションを解放するまで 8 秒待ち、`steam://rungameid/289070` で再起動する。新しいゲームが現れなければ 45 秒間隔で最大 4 回起動を試す。確認済みの Civ6 ウィンドウを左クリックしてオープニングを飛ばす。動画が続いて `FrontEnd` が応答しなければ、安全な位置を 12 秒間隔で再度左クリックし、`UI.IsInFrontEnd()` が `true` を返すまで待つ（the opening can be skipped with a left click）。起動直後にこの読み取り専用照会の応答が欠けた場合だけ再接続して再試行する。再起動後に MOD の更新時刻を再確認し、まだ新しければ手順を始めず失敗する。ログの開始位置も取り直すため、古いゲームのログを判定に混ぜない。
+
+ゲームプレイ Lua・SQL・テキストは新しいゲームの開始またはセーブの読込で再読込される。フロントエンド設定（ルールセット、プレイヤー、パラメータ）は MOD の再適用または再起動が必要。アート（BLP、DDS、ArtDefs、テクスチャ）は完全な再起動が必要。自動判定はファイル種別を問わず新しい更新時刻で再起動するため、これらを共通に扱う。
+
+`tests/test_restart.py` は、模擬ファイル更新時刻と模擬プロセス開始時刻による鮮度判定、再起動が最初の手順より前に行われること、`restart_game` の JSON 入力検証、Steam 起動・左クリック・`FrontEnd` 待機を単体テストする。
 
 実行先ディレクトリは**新規**にする。`baseline.json`、`steps.jsonl`、PNG が入る。既存名のセーブは上書きせず停止するため、再実行時は JSON の `save` と `load` の名前を両方変える。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
 
@@ -33,6 +45,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 | action | 必要な値 | 動作 |
 |---|---|---|
+| `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
 | `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
 | `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players` | 既定のゲーム設定に戻し、ルールセット、マップ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する |
 | `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ |
@@ -65,6 +78,8 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 既存の実機記録では、`clans-notebooks-run-18` は 17/17 ステップ・判定 2/2、`clans-both-ai-run-02` は 41/41 ステップ・判定 2/2、`growth-run-19` は 41/41 ステップ・判定 13/13、`clans-house-names-run-20` は 102/102 ステップ・判定 2/2 を通過した。2026-09-29 の先行修正では、オフライン単体テスト 53 件と実機 `clans-notebooks-run-21` の 17/17 ステップ・判定 2/2 が成功した。今回の修正後は単体テスト 68 件、実機 `clans-notebooks-run-23` の 17/17 ステップ・判定 2/2、`growth-run-24` の 41/41 ステップ・判定 13/13 が成功した。`AutoPlayEnd` がターン表示より先に届くことがあるため、自動進行の完了はイベント、実ターン数、停止、人間プレイヤーへの復帰を組み合わせて判定している。
 
+2026-09-29 の自動再起動確認では、`JAC_PoC_CustomCivs.modinfo` の更新時刻を起動中の Civ6 より新しくしてから `scenarios/clans-notebooks.json` を実行した。`artifacts/auto-restart-live-20260929-091628/steps.jsonl` は MOD 更新時刻 `1790640988.192` と旧プロセス開始時刻 `1790640934.839` を理由に `auto_restart` の `START`・`OK` を**ステップ 1 より前**に記録した。その後 17/17 ステップとログ判定 2/2 件が成功した。4 枚の PNG、判定ログ、生成セーブを同じ成果物ディレクトリに保存し、実行前の同名セーブは元の場所へ復元した。オフライン単体テストは 84 件成功した。
+
 ## 根拠と注意
 
 FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ、4バイト tag、NUL 終端 payload、`APP:`・`LSQ:`・`CMD:<stateIndex>:<lua>` の方式は [公開クライアントの実装](https://github.com/lmwilki/civ6-mcp/blob/main/src/civ_mcp/tuner_client.py)を参考に独立して実装した。Tuner は任意の Lua を実行できるため、信頼できるローカル JSON だけを使う。Gameplay Lua と UI Lua は別の状態なので、`ui_lua` には対象 UI 状態を明示する。
@@ -84,5 +99,6 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 既知の制約:
 
 - 複数の Civ6 プロセスの同時起動は未対応。ドライバはローカルのゲームが1つであることを前提とし、非表示プロセスを含めて2つ以上見つけたら停止する。FireTuner の接続先 PID とウィンドウ PID の直接照合はしていない。
+- 起動直後だけは Steam のランチャーとの一時的なプロセス重複を入力せず待つ。重複が解消せず、単一の Civ6 ウィンドウを確認できなければ期限で失敗する。実機試行中に DX12 実行ファイルが AMD の `amdxc64.dll` で一度クラッシュした（Windows Application Error 1000）。このクラッシュはドライバから防げず、その実行は手順開始前に停止した。次の実行で上記の成功結果を得た。
 - `PrintWindow` と `BitBlt` は同期呼び出し。撮影期限は呼び出しから戻った後に確認するため、ゲームウィンドウが応答しない場合は期限を超えてもドライバが戻らない可能性がある。
-- Civ6 のオープニング動画は左クリックで飛ばせる（オーナー確認済み、2026-09-29）。起動直後の自動操作では左クリックでスキップする
+- 再起動アクションをシナリオの途中に置くと、ログ判定の対象はその再起動後に発生したログだけになる。再起動前の確認は `steps.jsonl` に残る。
