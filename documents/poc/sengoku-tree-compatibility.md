@@ -13,7 +13,7 @@
 | `DLC/Expansion2/Scripts/WorldCongress.lua:254-281`、`DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:290-300` | 世界会議は区域の `PrereqCivic/PrereqTech` から研究とEraを直接引き、会議開始時代は数値2 | 残す区域の研究ゲートを戦国IDに付け替え、`GameInfo.Civics/Technologies[prereq]` が欠落しないようにする。世界会議自体は残す。世界法律、会議の戦国向け開始時期・議題はTODO。外交勝利は下記のとおり無効化する。 |
 | `DLC/Expansion2/Data/Expansion2_Ai.xml:123-143`、`Base/Assets/UI/Screens/TechTree.lua:1387` | GS AIの時代戦略は残り、UIの技術候補はゲームコアの利用可能ノードから取る | AI戦略テーブルは保持。公式研究を削除し、戦国ノードに前提なしの初期候補を技術4・制度3用意する。AIが研究を継続するかはゲーム内シナリオで要確認。 |
 | `Base/Assets/Configuration/Data/Schema/AdditionalTables.sql:182-204,289-298,332-337`、`Base/Assets/Configuration/Data/SetupParameters.xml:208,255,268`、`DLC/Expansion2/Config/Expansion2_Config.xml:8,50-57` | ルールセットの `VictoryDomain` に属する `Victories` から勝利設定が生成され、GSドメインには制覇・文化・宗教・スコア・科学・外交がある | FrontEnd設定でBanseikiだけを専用の空ドメインに切り替え、公式勝利の設定値を0にする。通常のGSルールセットは変更しない。 |
-| `DLC/BlackDeathScenario/Data/BlackDeathScenario_Config.xml:5-9,26-33`、`Base/Assets/Configuration/Data/SetupParameters.xml:39-40,73-74,172,195-197,262-268`、`Base/Assets/UI/FrontEnd/GameSetupLogic.lua:588-608` | 公式シナリオは専用ドメインと `RulesetSupportedValues` で選択肢を絞る。`MaxTurns=0` はターン上限なしの設定更新を生み、勝利項目が空なら設定画面はその欄を隠す | `TURNLIMIT_NONE` のみを選択可能にし、`GAME_MAX_TURNS=0`、スコア勝利=0、時間敗北=0を設定する。空の勝利ドメインでも設定画面の他の項目を残す構成。画面そのものは修正後に要実機確認。 |
+| `DLC/BlackDeathScenario/Data/BlackDeathScenario_Config.xml:5-9,26-33`、`Base/Assets/Configuration/Data/SetupParameters.xml:39-40,73-74,172,195-197,262-268`、`Base/Assets/UI/FrontEnd/GameSetupLogic.lua:588-608` | 公式シナリオは専用ドメインと `RulesetSupportedValues` で選択肢を絞る。`MaxTurns=0` はターン上限なしの設定更新を生み、勝利項目が空なら設定画面はその欄を隠す | `TURNLIMIT_NONE` のみを選択可能にし、Banseiki本体の `GAME_TURN_LIMIT` の設定更新を `TURNLIMIT_NONE` に上書きする（表に一意キーがなく、行を足すと既存の `TURNLIMIT_GAMESPEED` と競合する）。`GAME_MAX_TURNS=0`、スコア勝利=0、時間敗北=0も設定する。空の勝利ドメインでも設定画面の他の項目を残す構成。画面そのものは要実機確認。 |
 | `DLC/AlexanderScenario/Data/AlexanderScenario_Victories.xml:14-18`、`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:3083-3095` | 公式シナリオはゲームプレイ側の `Victories.EnabledByDefault` も無効化する | 戦国ツリーのゲーム内アクションで公式7種（既定・制覇・科学・文化・宗教・外交・スコア）の既定有効化を外し、`DEFEAT_TIME` も無効化する。全城支配による統一勝利は次段階で実装する。 |
 
 ## 現行PoCでの残る制約
@@ -23,4 +23,5 @@
 - 非戦国の公式 `Types` IDは、GS側のメタデータやアイコンが参照できるように残す。研究UIと研究候補を決める `Technologies`・`Civics` 行には残さない。削除に伴う関連行の連鎖削除はローカルスキーマに従う。50ターンの進行は確認済みだが、GS全機能の長期動作は未確認。
 - 1534年固定マップ・22勢力・既設城、資源の年別出現、史実イベント、家別の初期技術と「太閤検地」の表示分岐は今後のシナリオ側実装。汎用マップで始める自動テストのため、開拓者はこのPoC中は残す。
 - 2026-09-29 の提示された実機結果：`RULESET_JAC_BANSEIKI` と日本マップでロード成功。戦国技術32件・社会制度30件のみで、公式技術・制度行は0件。Gathering Stormの仕組みが存在し、50ターンの自動進行とセーブ／ロードが成功した。この結果は今回の公式勝利無効化を加える前のもの。
-- **要実機確認**：今回の勝利無効化後の設定画面、ゲーム内で公式勝利7種と時間制限が無効であること。ツリー画面の見た目・前提線・研究選択・Boostの操作も人が確認する。50ターン進行とセーブ／ロードの成功は、これらの画面・操作と勝利無効化後の長期挙動を証明しない。
+- 2026-09-29 の自動実機結果（勝利無効化後）：設定を作成画面と同じく組み立てて開始すると、公式勝利7種が無効で、終了ターン（`Game.GetGameEndTurn()`）が0になり、画面上部のターン表示から上限が消えた。戦国ツリーPoCを外した対照では公式勝利が有効で、終了ターンは501。
+- **要実機確認**：人が作成画面から始めたときのターン制限欄の表示、500ターンを超える長期進行。ツリー画面の前提線・研究選択・Boostの操作も人が確認する。

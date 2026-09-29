@@ -11,7 +11,12 @@
 		<Row Ruleset="RULESET_JAC_BANSEIKI" Domain="StandardTurnLimits" Value="TURNLIMIT_NONE"/>
 	</RulesetSupportedValues>
 	<ConfigurationUpdates>
-		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_TURN_LIMIT" TargetValue="TURNLIMIT_NONE" Hash="1"/>
+		<!-- The ruleset already maps GAME_TURN_LIMIT to TURNLIMIT_GAMESPEED and the table has no key,
+		     so a second row would leave two competing targets; overwrite the existing one instead. -->
+		<Update>
+			<Where SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_TURN_LIMIT"/>
+			<Set TargetValue="TURNLIMIT_NONE"/>
+		</Update>
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="GAME_MAX_TURNS" TargetValue="0" Hash="0"/>
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_DEFAULT" TargetValue="0" Hash="0"/>
 		<Row SourceGroup="Game" SourceId="RULESET" SourceValue="RULESET_JAC_BANSEIKI" TargetGroup="Game" TargetId="VICTORY_CONQUEST" TargetValue="0" Hash="0"/>

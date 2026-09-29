@@ -201,8 +201,16 @@ class SengokuTreeTests(unittest.TestCase):
                             and row.get("TargetGroup") == "Game" for row in updates))
         values = {row.get("TargetId"): row.get("TargetValue") for row in updates}
         self.assertEqual(len(values), len(updates))
-        self.assertEqual(values, {**dict.fromkeys(official | {"DEFEAT_TIME"}, "0"),
-                                  "GAME_TURN_LIMIT": "TURNLIMIT_NONE", "GAME_MAX_TURNS": "0"})
+        self.assertEqual(values, {**dict.fromkeys(official | {"DEFEAT_TIME"}, "0"), "GAME_MAX_TURNS": "0"})
+
+        # The base ruleset's GAME_TURN_LIMIT row is overwritten, not duplicated (the table has no key).
+        base_limit = [row.attrib for row in base.findall("./ConfigurationUpdates/Row")
+                      if row.get("SourceValue") == "RULESET_JAC_BANSEIKI" and row.get("TargetId") == "GAME_TURN_LIMIT"]
+        self.assertEqual(len(base_limit), 1)
+        limit = config.find("./ConfigurationUpdates/Update")
+        self.assertEqual(limit.find("Where").attrib, {k: base_limit[0][k] for k in
+                         ("SourceGroup", "SourceId", "SourceValue", "TargetGroup", "TargetId")})
+        self.assertEqual(limit.find("Set").attrib, {"TargetValue": "TURNLIMIT_NONE"})
 
         db = sqlite3.connect(":memory:")
         db.executescript("""
