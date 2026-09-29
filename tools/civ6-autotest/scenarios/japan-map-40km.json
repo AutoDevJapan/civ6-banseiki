@@ -5,130 +5,132 @@
     {
       "action": "enable_mods",
       "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
         "403be889-1455-4de7-967b-ad54c0ff3431"
       ],
       "disable_ids": [
-        "dfa0717e-4d0b-4370-b693-27fc6758571b",
-        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
-        "7696e937-2044-4f3c-8e13-4e27632e2710"
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
       ]
     },
     {
       "action": "configure",
-      "ruleset": "RULESET_EXPANSION_2",
+      "ruleset": "RULESET_JAC_BANSEIKI",
       "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_40km.Civ6Map",
       "map_size": "MAPSIZE_HUGE",
       "speed": "GAMESPEED_STANDARD",
       "seed": 620969,
+      "city_states": 0,
       "players": [
         {
-          "leader": "LEADER_CLEOPATRA",
-          "civ": "CIVILIZATION_JAC_JAPAN_DATE",
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
           "human": true
         },
         {
+          "leader": "LEADER_CLEOPATRA",
+          "civ": "CIVILIZATION_EGYPT",
+          "human": false
+        },
+        {
           "leader": "LEADER_GILGAMESH",
-          "civ": "CIVILIZATION_JAC_JAPAN_ASHINA",
+          "civ": "CIVILIZATION_SUMERIA",
           "human": false
         },
         {
           "leader": "LEADER_TRAJAN",
-          "civ": "CIVILIZATION_JAC_JAPAN_HOJO",
+          "civ": "CIVILIZATION_ROME",
           "human": false
         },
         {
           "leader": "LEADER_GORGO",
-          "civ": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
+          "civ": "CIVILIZATION_GREECE",
           "human": false
         },
         {
-          "leader": "LEADER_PERICLES",
-          "civ": "CIVILIZATION_JAC_JAPAN_TAKEDA",
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
           "human": false
         },
         {
           "leader": "LEADER_PHILIP_II",
-          "civ": "CIVILIZATION_JAC_JAPAN_NAGAO",
+          "civ": "CIVILIZATION_SPAIN",
           "human": false
         },
         {
           "leader": "LEADER_SALADIN",
-          "civ": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_VICTORIA",
-          "civ": "CIVILIZATION_JAC_JAPAN_ODA",
+          "civ": "CIVILIZATION_ARABIA",
           "human": false
         },
         {
           "leader": "LEADER_PETER_GREAT",
-          "civ": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
+          "civ": "CIVILIZATION_RUSSIA",
           "human": false
         },
         {
           "leader": "LEADER_GANDHI",
-          "civ": "CIVILIZATION_JAC_JAPAN_ASAKURA",
+          "civ": "CIVILIZATION_INDIA",
           "human": false
         },
         {
           "leader": "LEADER_QIN",
-          "civ": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
+          "civ": "CIVILIZATION_CHINA",
           "human": false
         },
         {
           "leader": "LEADER_CHANDRAGUPTA",
-          "civ": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
+          "civ": "CIVILIZATION_INDIA",
           "human": false
         },
         {
           "leader": "LEADER_MVEMBA",
-          "civ": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
+          "civ": "CIVILIZATION_KONGO",
           "human": false
         },
         {
           "leader": "LEADER_PEDRO",
-          "civ": "CIVILIZATION_JAC_JAPAN_HONGANJI",
+          "civ": "CIVILIZATION_BRAZIL",
           "human": false
         },
         {
           "leader": "LEADER_TOMYRIS",
-          "civ": "CIVILIZATION_JAC_JAPAN_OUCHI",
+          "civ": "CIVILIZATION_SCYTHIA",
           "human": false
         },
         {
           "leader": "LEADER_BARBAROSSA",
-          "civ": "CIVILIZATION_JAC_JAPAN_AMAGO",
+          "civ": "CIVILIZATION_GERMANY",
           "human": false
         },
         {
           "leader": "LEADER_HARDRADA",
-          "civ": "CIVILIZATION_JAC_JAPAN_MORI",
+          "civ": "CIVILIZATION_NORWAY",
           "human": false
         },
         {
           "leader": "LEADER_CATHERINE_DE_MEDICI",
-          "civ": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
+          "civ": "CIVILIZATION_FRANCE",
           "human": false
         },
         {
           "leader": "LEADER_T_ROOSEVELT",
-          "civ": "CIVILIZATION_JAC_JAPAN_OTOMO",
+          "civ": "CIVILIZATION_AMERICA",
           "human": false
         },
         {
           "leader": "LEADER_SEONDEOK",
-          "civ": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
+          "civ": "CIVILIZATION_KOREA",
           "human": false
         },
         {
           "leader": "LEADER_SHAKA",
-          "civ": "CIVILIZATION_JAC_JAPAN_RYUKYU",
+          "civ": "CIVILIZATION_ZULU",
           "human": false
         },
         {
           "leader": "LEADER_WILHELMINA",
-          "civ": "CIVILIZATION_JAC_JAPAN_AINU",
+          "civ": "CIVILIZATION_NETHERLANDS",
           "human": false
         }
       ]
@@ -140,7 +142,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local w,h=Map.GetGridSize(); if w~=79 or h~=36 then error('map grid mismatch '..w..'x'..h) end; local expected={{56,17},{55,16},{50,12},{51,15},{49,14},{52,18},{47,13},{46,16},{45,15},{46,19},{44,18},{40,18},{44,17},{43,18},{35,25},{41,24},{38,23},{37,19},{34,22},{28,21},{13,16},{68,24}}; for i=0,21 do local p=Players[i]; if not p or not p:IsAlive() then error('missing player '..i) end; local e=expected[i+1]; local found=false; for _,unit in p:GetUnits():Members() do if Map.GetPlotDistance(unit:GetX(),unit:GetY(),e[1],e[2])<=2 then found=true end end; if not found then error('start moved from seat '..i) end end; return '22 player starts on 40km map'"
+      "code": "local w,h=Map.GetGridSize(); if w~=79 or h~=36 then error('map grid mismatch '..w..'x'..h) end; local majors=#PlayerManager.GetAliveMajors(); local minors=#PlayerManager.GetAliveMinors(); if minors~=0 then error('city-states present: '..minors) end; if majors~=22 then error('majors '..majors) end; local expected={{46,16},{56,17},{55,16},{50,12},{51,15},{49,14},{52,18},{47,13},{45,15},{46,19},{44,18},{40,18},{44,17},{43,18},{35,25},{41,24},{38,23},{37,19},{34,22},{28,21},{13,16},{68,24}}; local leaders={'LEADER_JAC_ODA_NOBUHIDE','LEADER_CLEOPATRA','LEADER_GILGAMESH','LEADER_TRAJAN','LEADER_GORGO','LEADER_JAC_TAKEDA_NOBUTORA','LEADER_PHILIP_II','LEADER_SALADIN','LEADER_PETER_GREAT','LEADER_GANDHI','LEADER_QIN','LEADER_CHANDRAGUPTA','LEADER_MVEMBA','LEADER_PEDRO','LEADER_TOMYRIS','LEADER_BARBAROSSA','LEADER_HARDRADA','LEADER_CATHERINE_DE_MEDICI','LEADER_T_ROOSEVELT','LEADER_SEONDEOK','LEADER_SHAKA','LEADER_WILHELMINA'}; for i=0,21 do local p=Players[i]; if not p or not p:IsAlive() then error('missing player '..i) end; if PlayerConfigurations[i]:GetLeaderTypeName()~=leaders[i+1] then error('leader mismatch in slot '..i) end; local e=expected[i+1]; local best=99; for _,unit in p:GetUnits():Members() do best=math.min(best,Map.GetPlotDistance(unit:GetX(),unit:GetY(),e[1],e[2])) end; if best>1 then error('start moved from seat '..i..' by '..best) end end; return '22 leaders on their seats, no city-states, 40km map'"
     },
     {
       "action": "autoplay",
@@ -165,7 +167,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local w,h=Map.GetGridSize(); if w~=79 or h~=36 then error('map grid mismatch '..w..'x'..h) end; if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then error('loaded game state lost') end; return 'loaded 22-slot map at turn '..Game.GetCurrentGameTurn()"
+      "code": "local w,h=Map.GetGridSize(); if w~=79 or h~=36 then error('map grid mismatch '..w..'x'..h) end; local majors=#PlayerManager.GetAliveMajors(); local minors=#PlayerManager.GetAliveMinors(); if minors~=0 then error('city-states present: '..minors) end; if Game.GetCurrentGameTurn()<51 or not Players[0]:IsAlive() then error('loaded game state lost') end; return 'loaded at turn '..Game.GetCurrentGameTurn()..' with '..majors..' of 22 majors alive'"
     },
     {
       "action": "autoplay",

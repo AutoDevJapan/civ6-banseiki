@@ -161,8 +161,8 @@ def _japan_map_checks(logs: dict[str, str]) -> list[Check]:
     return [
         Check("Japan map: mod registered", JAPAN_MAP_ID.lower() in modding.lower(),
               "Modding.log contains mod ID"),
-        Check("Japan map: gameplay applied", "Applying Component - JAC_JapanMapScale_Gameplay (UpdateDatabase)" in modding,
-              "22 civilization identities registered"),
+        Check("Japan map: in-game text applied", "Applying Component - JAC_JapanMapScale_InGameText (UpdateText)" in modding,
+              "map names loaded under the running ruleset"),
         Check("Japan map: Database.log", not database_errors,
               f"{len(database_errors)} JAC-related database errors"),
         Check("Japan map: Modding.log", not errors, f"{len(errors)} JAC-related modding errors"),

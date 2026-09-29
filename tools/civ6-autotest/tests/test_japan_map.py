@@ -25,6 +25,7 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertIn("MapConfiguration.SetValue('MAP_SCRIPT',", code)
                 self.assertLess(code.index("MAP_SCRIPT"), code.index("SetMapSize"))
                 self.assertIn("SetMaxMajorPlayers(22)", code)
+                self.assertIn("SetValue('CITY_STATE_COUNT', 0)", code)
 
     def test_rejects_bad_map_file_and_metrics_flag(self):
         data = json.loads((SCENARIOS / "japan-map-40km.json").read_text(encoding="utf-8"))
@@ -81,9 +82,9 @@ class JapanMapScenarioTests(unittest.TestCase):
         base = {"Lua.log": "", "Database.log": "",
                 "Modding.log": ("403be889-1455-4de7-967b-ad54c0ff3431\n"
                                 "Applying Component - JAC_JapanMapScale_Config (UpdateDatabase)\n"
-                                "Applying Component - JAC_JapanMapScale_Gameplay (UpdateDatabase)\n")}
+                                "Applying Component - JAC_JapanMapScale_InGameText (UpdateText)\n")}
         self.assertTrue(all(check.passed for check in judge(base, "japan_map")))
-        broken = dict(base, **{"Database.log": "ERROR JAC_JapanMapScale_Gameplay invalid terrain\n"})
+        broken = dict(base, **{"Database.log": "ERROR JAC_JapanMapScale_InGameText invalid tag\n"})
         self.assertFalse(next(check.passed for check in judge(broken, "japan_map")
                               if check.name == "Japan map: Database.log"))
         broken = dict(base, **{"Modding.log": base["Modding.log"] + "ERROR JAC_JapanMapScale_Config failed\n"})

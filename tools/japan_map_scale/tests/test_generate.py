@@ -110,24 +110,30 @@ class GeneratedMapTests(unittest.TestCase):
                     self.assertEqual(impassable, 0)
                     self.assertEqual(db.execute("SELECT Type,Value FROM StartPositions WHERE Plot=?",
                                                 (start["plot"],)).fetchone(),
-                                     ("LEADER", start["proxy_leader"]))
+                                     ("LEADER", start["leader"]))
                     self.assertLessEqual(start["displacement_km"], 30)
+            self.assertEqual(item["close_start_pairs"], g.close_start_pairs(starts))
+
+    def test_hex_distance_matches_neighbours(self):
+        grid = g.HexGrid(40, 20, 20, 0.0, 0.0)
+        for col, row in ((5, 4), (5, 5)):
+            for other in grid.neighbours(col, row):
+                self.assertEqual(g.hex_distance((col, row), other), 1)
+        self.assertEqual(g.hex_distance((0, 0), (3, 0)), 3)
+        self.assertEqual(g.hex_distance((0, 0), (0, 2)), 2)
 
     def test_config_and_scenarios_cover_all_scales(self):
         config = ET.parse(g.MOD / "Config" / "JAC_JapanMapScale_Config.xml").getroot()
         self.assertEqual(len(config.findall("./Maps/Row")), 4)
         self.assertEqual(len(config.findall("./MapSizes/Row")), 4)
-        self.assertEqual(len(config.findall("./Players/Row")), 22)
+        self.assertEqual(config.findall("./Players/Row"), [])
         self.assertEqual(len(config.findall("./MapLeaders/Row")), 88)
         text = ET.parse(g.MOD / "Text" / "JAC_JapanMapScale_Text.xml").getroot()
         by_tag = {}
         for row in text.findall("./LocalizedText/Row"):
             by_tag.setdefault(row.attrib["Tag"], set()).add(row.attrib["Language"])
-        for seat in g.SEATS:
-            self.assertEqual(by_tag[f"LOC_JAC_JAPAN_{seat.slug}_NAME"],
-                             {"ja_JP", "en_US", "ru_RU"})
-            self.assertEqual(by_tag[f"LOC_JAC_JAPAN_{seat.slug}_CAPITAL"],
-                             {"ja_JP", "en_US", "ru_RU"})
+        for km in g.SCALES:
+            self.assertEqual(by_tag[f"LOC_JAC_JAPAN_{km}_NAME"], {"ja_JP", "en_US", "ru_RU"})
         mod = ET.parse(g.MOD / "JAC_PoC_JapanMapScale.modinfo").getroot()
         packaged = {element.text for element in mod.findall("./Files/File")}
         for item in self.manifest:
@@ -138,10 +144,16 @@ class GeneratedMapTests(unittest.TestCase):
             scenario = json.loads((g.ROOT / "tools" / "civ6-autotest" / "scenarios" /
                                    f"japan-map-{item['km_per_tile']}km.json").read_text(encoding="utf-8"))
             self.assertEqual(scenario["steps"][1]["map_file"], file)
+            self.assertEqual(scenario["steps"][1]["ruleset"], "RULESET_JAC_BANSEIKI")
             self.assertEqual(len(scenario["steps"][1]["players"]), 22)
             self.assertEqual(scenario["steps"][4]["turns"], 50)
 
-    def test_official_proxy_leaders_are_installed(self):
+    def test_leaders_unique_and_human_from_banseiki_pool(self):
+        leaders = [seat.leader for seat in g.SEATS]
+        self.assertEqual(len(set(leaders)), 22)  # SSOT 2.2: leaders never repeat; civilizations may
+        self.assertEqual(g.SEATS[0].leader, "LEADER_JAC_ODA_NOBUHIDE")
+
+    def test_official_leaders_are_installed(self):
         base = g.OFFICIAL.parents[4]
         files = (base / "Base/Assets/Configuration/Data/Players.xml",
                  base / "DLC/Expansion1/Config/Expansion1_Players.xml",
@@ -150,10 +162,11 @@ class GeneratedMapTests(unittest.TestCase):
             self.skipTest("Civ6 and both expansions not installed at default path")
         rows = [row.attrib for file in files for row in ET.parse(file).getroot().findall("./Players/Row")]
         for seat in g.SEATS:
-            self.assertTrue(any(row.get("LeaderType") == seat.proxy and
-                                row.get("LeaderName") == "LOC_" + seat.proxy + "_NAME" and
-                                row.get("LeaderIcon") == "ICON_" + seat.proxy
-                                for row in rows), seat.proxy)
+            if seat.leader.startswith("LEADER_JAC_"):
+                continue  # defined by JAC_PoC_CustomCivs
+            self.assertTrue(any(row.get("LeaderType") == seat.leader and
+                                row.get("CivilizationType") == seat.civ
+                                for row in rows), seat.leader)
 
 
 if __name__ == "__main__":

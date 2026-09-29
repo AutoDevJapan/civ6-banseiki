@@ -39,9 +39,10 @@ SOURCE = {
         "1c04df76876d71b5424961f90771922641f8e85bc7fec5de70f688d59b60082d"),
 }
 
-# Approximate 1534 seats, WGS84 longitude/latitude.  The existing custom-civ
-# PoC provides only two leaders, so this map PoC uses 22 different official
-# leaders as art/AI proxies for 22 JAC civilization identities.
+# Approximate 1534 seats, WGS84 longitude/latitude.  Played with the Banseiki
+# ruleset: the human is Oda Nobuhide from the Banseiki pool (JAC_PoC_CustomCivs),
+# Takeda uses the other Banseiki leader, and the rest are official leaders with
+# their official civilizations.  Leaders never repeat; civilizations may (SSOT 2.2).
 @dataclass(frozen=True)
 class Seat:
     slug: str
@@ -51,36 +52,33 @@ class Seat:
     castle: str
     lon: float
     lat: float
-    proxy: str
-
-    @property
-    def civ(self) -> str:
-        return "CIVILIZATION_JAC_JAPAN_" + self.slug
+    leader: str
+    civ: str
 
 
 SEATS = (
-    Seat("DATE", "伊達", "Date", "Датэ", "Yonezawa", 140.106, 37.914, "LEADER_CLEOPATRA"),
-    Seat("ASHINA", "蘆名", "Ashina", "Асина", "Kurokawa", 139.930, 37.494, "LEADER_GILGAMESH"),
-    Seat("HOJO", "北条", "Hojo", "Ходзё", "Odawara", 139.157, 35.252, "LEADER_TRAJAN"),
-    Seat("YAMANOUCHI_UESUGI", "山内上杉", "Yamanouchi Uesugi", "Яманоути Уэсуги", "Hirai", 139.063, 36.202, "LEADER_GORGO"),
-    Seat("TAKEDA", "武田", "Takeda", "Такэда", "Tsutsujigasaki", 138.568, 35.677, "LEADER_PERICLES"),
-    Seat("NAGAO", "長尾", "Nagao", "Нагао", "Kasugayama", 138.206, 37.148, "LEADER_PHILIP_II"),
-    Seat("IMAGAWA", "今川", "Imagawa", "Имагава", "Sunpu", 138.383, 34.979, "LEADER_SALADIN"),
-    Seat("ODA", "織田", "Oda", "Ода", "Nagoya", 136.900, 35.184, "LEADER_VICTORIA"),
-    Seat("MATSUDAIRA", "松平", "Matsudaira", "Мацудайра", "Okazaki", 137.172, 34.955, "LEADER_PETER_GREAT"),
-    Seat("ASAKURA", "朝倉", "Asakura", "Асакура", "Ichijodani", 136.290, 35.999, "LEADER_GANDHI"),
-    Seat("ASHIKAGA", "足利将軍家", "Ashikaga Shogunate", "Сёгунат Асикага", "Muromachi", 135.760, 35.029, "LEADER_QIN"),
-    Seat("MIYOSHI", "三好", "Miyoshi", "Миёси", "Shozui", 134.591, 34.123, "LEADER_CHANDRAGUPTA"),
-    Seat("ROKKAKU", "六角", "Rokkaku", "Роккаку", "Kannonji", 136.168, 35.133, "LEADER_MVEMBA"),
-    Seat("HONGANJI", "本願寺", "Honganji", "Хонгандзи", "Ishiyama", 135.526, 34.689, "LEADER_PEDRO"),
-    Seat("OUCHI", "大内", "Ouchi", "Оути", "Yamaguchi", 131.473, 34.178, "LEADER_TOMYRIS"),
-    Seat("AMAGO", "尼子", "Amago", "Амаго", "Gassan Toda", 133.242, 35.418, "LEADER_BARBAROSSA"),
-    Seat("MORI", "毛利", "Mori", "Мори", "Yoshida Koriyama", 132.708, 34.687, "LEADER_HARDRADA"),
-    Seat("CHOSOKABE", "長宗我部", "Chosokabe", "Тёсокабэ", "Oko", 133.642, 33.593, "LEADER_CATHERINE_DE_MEDICI"),
-    Seat("OTOMO", "大友", "Otomo", "Отомо", "Funai", 131.609, 33.241, "LEADER_T_ROOSEVELT"),
-    Seat("SHIMAZU", "島津", "Shimazu", "Симадзу", "Kagoshima", 130.559, 31.596, "LEADER_SEONDEOK"),
-    Seat("RYUKYU", "琉球王国", "Ryukyu Kingdom", "Королевство Рюкю", "Shuri", 127.719, 26.218, "LEADER_SHAKA"),
-    Seat("AINU", "アイヌ", "Ainu", "Айны", "Nibutani", 142.149, 42.633, "LEADER_WILHELMINA"),
+    Seat("ODA", "織田", "Oda", "Ода", "Nagoya", 136.900, 35.184, "LEADER_JAC_ODA_NOBUHIDE", "CIVILIZATION_JAC_ODA"),
+    Seat("DATE", "伊達", "Date", "Датэ", "Yonezawa", 140.106, 37.914, "LEADER_CLEOPATRA", "CIVILIZATION_EGYPT"),
+    Seat("ASHINA", "蘆名", "Ashina", "Асина", "Kurokawa", 139.930, 37.494, "LEADER_GILGAMESH", "CIVILIZATION_SUMERIA"),
+    Seat("HOJO", "北条", "Hojo", "Ходзё", "Odawara", 139.157, 35.252, "LEADER_TRAJAN", "CIVILIZATION_ROME"),
+    Seat("YAMANOUCHI_UESUGI", "山内上杉", "Yamanouchi Uesugi", "Яманоути Уэсуги", "Hirai", 139.063, 36.202, "LEADER_GORGO", "CIVILIZATION_GREECE"),
+    Seat("TAKEDA", "武田", "Takeda", "Такэда", "Tsutsujigasaki", 138.568, 35.677, "LEADER_JAC_TAKEDA_NOBUTORA", "CIVILIZATION_JAC_TAKEDA"),
+    Seat("NAGAO", "長尾", "Nagao", "Нагао", "Kasugayama", 138.206, 37.148, "LEADER_PHILIP_II", "CIVILIZATION_SPAIN"),
+    Seat("IMAGAWA", "今川", "Imagawa", "Имагава", "Sunpu", 138.383, 34.979, "LEADER_SALADIN", "CIVILIZATION_ARABIA"),
+    Seat("MATSUDAIRA", "松平", "Matsudaira", "Мацудайра", "Okazaki", 137.172, 34.955, "LEADER_PETER_GREAT", "CIVILIZATION_RUSSIA"),
+    Seat("ASAKURA", "朝倉", "Asakura", "Асакура", "Ichijodani", 136.290, 35.999, "LEADER_GANDHI", "CIVILIZATION_INDIA"),
+    Seat("ASHIKAGA", "足利将軍家", "Ashikaga Shogunate", "Сёгунат Асикага", "Muromachi", 135.760, 35.029, "LEADER_QIN", "CIVILIZATION_CHINA"),
+    Seat("MIYOSHI", "三好", "Miyoshi", "Миёси", "Shozui", 134.591, 34.123, "LEADER_CHANDRAGUPTA", "CIVILIZATION_INDIA"),
+    Seat("ROKKAKU", "六角", "Rokkaku", "Роккаку", "Kannonji", 136.168, 35.133, "LEADER_MVEMBA", "CIVILIZATION_KONGO"),
+    Seat("HONGANJI", "本願寺", "Honganji", "Хонгандзи", "Ishiyama", 135.526, 34.689, "LEADER_PEDRO", "CIVILIZATION_BRAZIL"),
+    Seat("OUCHI", "大内", "Ouchi", "Оути", "Yamaguchi", 131.473, 34.178, "LEADER_TOMYRIS", "CIVILIZATION_SCYTHIA"),
+    Seat("AMAGO", "尼子", "Amago", "Амаго", "Gassan Toda", 133.242, 35.418, "LEADER_BARBAROSSA", "CIVILIZATION_GERMANY"),
+    Seat("MORI", "毛利", "Mori", "Мори", "Yoshida Koriyama", 132.708, 34.687, "LEADER_HARDRADA", "CIVILIZATION_NORWAY"),
+    Seat("CHOSOKABE", "長宗我部", "Chosokabe", "Тёсокабэ", "Oko", 133.642, 33.593, "LEADER_CATHERINE_DE_MEDICI", "CIVILIZATION_FRANCE"),
+    Seat("OTOMO", "大友", "Otomo", "Отомо", "Funai", 131.609, 33.241, "LEADER_T_ROOSEVELT", "CIVILIZATION_AMERICA"),
+    Seat("SHIMAZU", "島津", "Shimazu", "Симадзу", "Kagoshima", 130.559, 31.596, "LEADER_SEONDEOK", "CIVILIZATION_KOREA"),
+    Seat("RYUKYU", "琉球王国", "Ryukyu Kingdom", "Королевство Рюкю", "Shuri", 127.719, 26.218, "LEADER_SHAKA", "CIVILIZATION_ZULU"),
+    Seat("AINU", "アイヌ", "Ainu", "Айны", "Nibutani", 142.149, 42.633, "LEADER_WILHELMINA", "CIVILIZATION_NETHERLANDS"),
 )
 ISLAND_ANCHORS = (
     ("Yonaguni", 123.000, 24.460),
@@ -299,6 +297,23 @@ def create_schema(source: Path, target: Path) -> sqlite3.Connection:
     return db
 
 
+CITY_MIN_RANGE = 3  # GlobalParameters: no city within 3 hexes of another
+
+
+def hex_distance(a: tuple[int, int], b: tuple[int, int]) -> int:
+    """Distance on Civ6's odd-row-shifted grid (no wrap on these maps)."""
+    def cube(col: int, row: int) -> tuple[int, int]:
+        return col - (row - (row & 1)) // 2, row
+    (ax, az), (bx, bz) = cube(*a), cube(*b)
+    return max(abs(ax - bx), abs(az - bz), abs((ax + az) - (bx + bz)))
+
+
+def close_start_pairs(starts: list[dict]) -> list[list]:
+    """Seat pairs too close for both capitals to be founded where they start."""
+    return [[a["seat"], b["seat"], d] for i, a in enumerate(starts) for b in starts[i + 1:]
+            if (d := hex_distance((a["col"], a["row"]), (b["col"], b["row"]))) <= CITY_MIN_RANGE]
+
+
 def choose_starts(grid: HexGrid, passable: set[int]) -> list[dict]:
     available = [(col, row, *grid.centre(col, row)) for row in range(grid.height)
                  for col in range(grid.width) if grid.index(col, row) in passable]
@@ -314,7 +329,7 @@ def choose_starts(grid: HexGrid, passable: set[int]) -> list[dict]:
         index = grid.index(col, row)
         used.add(index)
         result.append({"seat": seat.slug, "castle": seat.castle, "civilization": seat.civ,
-                       "proxy_leader": seat.proxy, "lon": seat.lon, "lat": seat.lat,
+                       "leader": seat.leader, "lon": seat.lon, "lat": seat.lat,
                        "col": col, "row": row, "plot": index, "displacement_km": round(distance, 1)})
     return result
 
@@ -377,7 +392,7 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
             plots.append((index, terrain, continent, impassable))
         db.executemany("INSERT INTO Plots VALUES (?, ?, ?, ?)", plots)
         db.executemany("INSERT INTO StartPositions VALUES (?, 'LEADER', ?)",
-                       ((start["plot"], start["proxy_leader"]) for start in starts))
+                       ((start["plot"], start["leader"]) for start in starts))
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"Invalid SQLite map: {destination}")
         db.commit()
@@ -386,7 +401,8 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
         db.close()
     return {"km_per_tile": km, "width": grid.width, "height": grid.height,
             "land_tiles": len(land_tiles), "sea_tiles": grid.width * grid.height - len(land_tiles),
-            "starts": starts, "file": destination.name, "bytes": destination.stat().st_size}
+            "starts": starts, "close_start_pairs": close_start_pairs(starts),
+            "file": destination.name, "bytes": destination.stat().st_size}
 
 
 def main() -> None:

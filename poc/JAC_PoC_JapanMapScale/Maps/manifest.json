@@ -7,10 +7,22 @@
     "sea_tiles": 2566,
     "starts": [
       {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 46,
+        "row": 16,
+        "plot": 1310,
+        "displacement_km": 11.9
+      },
+      {
         "seat": "DATE",
         "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_DATE",
-        "proxy_leader": "LEADER_CLEOPATRA",
+        "civilization": "CIVILIZATION_EGYPT",
+        "leader": "LEADER_CLEOPATRA",
         "lon": 140.106,
         "lat": 37.914,
         "col": 56,
@@ -21,8 +33,8 @@
       {
         "seat": "ASHINA",
         "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHINA",
-        "proxy_leader": "LEADER_GILGAMESH",
+        "civilization": "CIVILIZATION_SUMERIA",
+        "leader": "LEADER_GILGAMESH",
         "lon": 139.93,
         "lat": 37.494,
         "col": 55,
@@ -33,8 +45,8 @@
       {
         "seat": "HOJO",
         "castle": "Odawara",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HOJO",
-        "proxy_leader": "LEADER_TRAJAN",
+        "civilization": "CIVILIZATION_ROME",
+        "leader": "LEADER_TRAJAN",
         "lon": 139.157,
         "lat": 35.252,
         "col": 50,
@@ -45,8 +57,8 @@
       {
         "seat": "YAMANOUCHI_UESUGI",
         "castle": "Hirai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
-        "proxy_leader": "LEADER_GORGO",
+        "civilization": "CIVILIZATION_GREECE",
+        "leader": "LEADER_GORGO",
         "lon": 139.063,
         "lat": 36.202,
         "col": 51,
@@ -57,8 +69,8 @@
       {
         "seat": "TAKEDA",
         "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_TAKEDA",
-        "proxy_leader": "LEADER_PERICLES",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
         "lon": 138.568,
         "lat": 35.677,
         "col": 49,
@@ -69,8 +81,8 @@
       {
         "seat": "NAGAO",
         "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_NAGAO",
-        "proxy_leader": "LEADER_PHILIP_II",
+        "civilization": "CIVILIZATION_SPAIN",
+        "leader": "LEADER_PHILIP_II",
         "lon": 138.206,
         "lat": 37.148,
         "col": 52,
@@ -81,8 +93,8 @@
       {
         "seat": "IMAGAWA",
         "castle": "Sunpu",
-        "civilization": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
-        "proxy_leader": "LEADER_SALADIN",
+        "civilization": "CIVILIZATION_ARABIA",
+        "leader": "LEADER_SALADIN",
         "lon": 138.383,
         "lat": 34.979,
         "col": 47,
@@ -91,22 +103,10 @@
         "displacement_km": 11.7
       },
       {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ODA",
-        "proxy_leader": "LEADER_VICTORIA",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 46,
-        "row": 16,
-        "plot": 1310,
-        "displacement_km": 11.9
-      },
-      {
         "seat": "MATSUDAIRA",
         "castle": "Okazaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
-        "proxy_leader": "LEADER_PETER_GREAT",
+        "civilization": "CIVILIZATION_RUSSIA",
+        "leader": "LEADER_PETER_GREAT",
         "lon": 137.172,
         "lat": 34.955,
         "col": 45,
@@ -117,8 +117,8 @@
       {
         "seat": "ASAKURA",
         "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASAKURA",
-        "proxy_leader": "LEADER_GANDHI",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_GANDHI",
         "lon": 136.29,
         "lat": 35.999,
         "col": 46,
@@ -129,8 +129,8 @@
       {
         "seat": "ASHIKAGA",
         "castle": "Muromachi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
-        "proxy_leader": "LEADER_QIN",
+        "civilization": "CIVILIZATION_CHINA",
+        "leader": "LEADER_QIN",
         "lon": 135.76,
         "lat": 35.029,
         "col": 44,
@@ -141,8 +141,8 @@
       {
         "seat": "MIYOSHI",
         "castle": "Shozui",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
-        "proxy_leader": "LEADER_CHANDRAGUPTA",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_CHANDRAGUPTA",
         "lon": 134.591,
         "lat": 34.123,
         "col": 40,
@@ -153,8 +153,8 @@
       {
         "seat": "ROKKAKU",
         "castle": "Kannonji",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
-        "proxy_leader": "LEADER_MVEMBA",
+        "civilization": "CIVILIZATION_KONGO",
+        "leader": "LEADER_MVEMBA",
         "lon": 136.168,
         "lat": 35.133,
         "col": 44,
@@ -165,8 +165,8 @@
       {
         "seat": "HONGANJI",
         "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HONGANJI",
-        "proxy_leader": "LEADER_PEDRO",
+        "civilization": "CIVILIZATION_BRAZIL",
+        "leader": "LEADER_PEDRO",
         "lon": 135.526,
         "lat": 34.689,
         "col": 43,
@@ -177,8 +177,8 @@
       {
         "seat": "OUCHI",
         "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OUCHI",
-        "proxy_leader": "LEADER_TOMYRIS",
+        "civilization": "CIVILIZATION_SCYTHIA",
+        "leader": "LEADER_TOMYRIS",
         "lon": 131.473,
         "lat": 34.178,
         "col": 35,
@@ -189,8 +189,8 @@
       {
         "seat": "AMAGO",
         "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AMAGO",
-        "proxy_leader": "LEADER_BARBAROSSA",
+        "civilization": "CIVILIZATION_GERMANY",
+        "leader": "LEADER_BARBAROSSA",
         "lon": 133.242,
         "lat": 35.418,
         "col": 41,
@@ -201,8 +201,8 @@
       {
         "seat": "MORI",
         "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MORI",
-        "proxy_leader": "LEADER_HARDRADA",
+        "civilization": "CIVILIZATION_NORWAY",
+        "leader": "LEADER_HARDRADA",
         "lon": 132.708,
         "lat": 34.687,
         "col": 38,
@@ -213,8 +213,8 @@
       {
         "seat": "CHOSOKABE",
         "castle": "Oko",
-        "civilization": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
-        "proxy_leader": "LEADER_CATHERINE_DE_MEDICI",
+        "civilization": "CIVILIZATION_FRANCE",
+        "leader": "LEADER_CATHERINE_DE_MEDICI",
         "lon": 133.642,
         "lat": 33.593,
         "col": 37,
@@ -225,8 +225,8 @@
       {
         "seat": "OTOMO",
         "castle": "Funai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OTOMO",
-        "proxy_leader": "LEADER_T_ROOSEVELT",
+        "civilization": "CIVILIZATION_AMERICA",
+        "leader": "LEADER_T_ROOSEVELT",
         "lon": 131.609,
         "lat": 33.241,
         "col": 34,
@@ -237,8 +237,8 @@
       {
         "seat": "SHIMAZU",
         "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
-        "proxy_leader": "LEADER_SEONDEOK",
+        "civilization": "CIVILIZATION_KOREA",
+        "leader": "LEADER_SEONDEOK",
         "lon": 130.559,
         "lat": 31.596,
         "col": 28,
@@ -249,8 +249,8 @@
       {
         "seat": "RYUKYU",
         "castle": "Shuri",
-        "civilization": "CIVILIZATION_JAC_JAPAN_RYUKYU",
-        "proxy_leader": "LEADER_SHAKA",
+        "civilization": "CIVILIZATION_ZULU",
+        "leader": "LEADER_SHAKA",
         "lon": 127.719,
         "lat": 26.218,
         "col": 13,
@@ -261,8 +261,8 @@
       {
         "seat": "AINU",
         "castle": "Nibutani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AINU",
-        "proxy_leader": "LEADER_WILHELMINA",
+        "civilization": "CIVILIZATION_NETHERLANDS",
+        "leader": "LEADER_WILHELMINA",
         "lon": 142.149,
         "lat": 42.633,
         "col": 68,
@@ -270,6 +270,128 @@
         "plot": 1964,
         "displacement_km": 18.3
       }
+    ],
+    "close_start_pairs": [
+      [
+        "ODA",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "ODA",
+        "MATSUDAIRA",
+        1
+      ],
+      [
+        "ODA",
+        "ASAKURA",
+        3
+      ],
+      [
+        "ODA",
+        "ASHIKAGA",
+        3
+      ],
+      [
+        "ODA",
+        "ROKKAKU",
+        2
+      ],
+      [
+        "DATE",
+        "ASHINA",
+        2
+      ],
+      [
+        "HOJO",
+        "YAMANOUCHI_UESUGI",
+        3
+      ],
+      [
+        "HOJO",
+        "TAKEDA",
+        2
+      ],
+      [
+        "HOJO",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "YAMANOUCHI_UESUGI",
+        "TAKEDA",
+        3
+      ],
+      [
+        "YAMANOUCHI_UESUGI",
+        "NAGAO",
+        3
+      ],
+      [
+        "TAKEDA",
+        "IMAGAWA",
+        2
+      ],
+      [
+        "IMAGAWA",
+        "MATSUDAIRA",
+        3
+      ],
+      [
+        "MATSUDAIRA",
+        "ASHIKAGA",
+        3
+      ],
+      [
+        "MATSUDAIRA",
+        "ROKKAKU",
+        2
+      ],
+      [
+        "ASAKURA",
+        "ASHIKAGA",
+        3
+      ],
+      [
+        "ASAKURA",
+        "ROKKAKU",
+        3
+      ],
+      [
+        "ASHIKAGA",
+        "ROKKAKU",
+        1
+      ],
+      [
+        "ASHIKAGA",
+        "HONGANJI",
+        1
+      ],
+      [
+        "MIYOSHI",
+        "HONGANJI",
+        3
+      ],
+      [
+        "MIYOSHI",
+        "CHOSOKABE",
+        3
+      ],
+      [
+        "ROKKAKU",
+        "HONGANJI",
+        2
+      ],
+      [
+        "OUCHI",
+        "OTOMO",
+        3
+      ],
+      [
+        "AMAGO",
+        "MORI",
+        3
+      ]
     ],
     "file": "JAC_Japan_40km.Civ6Map",
     "bytes": 319488
@@ -282,10 +404,22 @@
     "sea_tiles": 4405,
     "starts": [
       {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 60,
+        "row": 21,
+        "plot": 2244,
+        "displacement_km": 3.7
+      },
+      {
         "seat": "DATE",
         "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_DATE",
-        "proxy_leader": "LEADER_CLEOPATRA",
+        "civilization": "CIVILIZATION_EGYPT",
+        "leader": "LEADER_CLEOPATRA",
         "lon": 140.106,
         "lat": 37.914,
         "col": 74,
@@ -296,8 +430,8 @@
       {
         "seat": "ASHINA",
         "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHINA",
-        "proxy_leader": "LEADER_GILGAMESH",
+        "civilization": "CIVILIZATION_SUMERIA",
+        "leader": "LEADER_GILGAMESH",
         "lon": 139.93,
         "lat": 37.494,
         "col": 73,
@@ -308,8 +442,8 @@
       {
         "seat": "HOJO",
         "castle": "Odawara",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HOJO",
-        "proxy_leader": "LEADER_TRAJAN",
+        "civilization": "CIVILIZATION_ROME",
+        "leader": "LEADER_TRAJAN",
         "lon": 139.157,
         "lat": 35.252,
         "col": 66,
@@ -320,8 +454,8 @@
       {
         "seat": "YAMANOUCHI_UESUGI",
         "castle": "Hirai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
-        "proxy_leader": "LEADER_GORGO",
+        "civilization": "CIVILIZATION_GREECE",
+        "leader": "LEADER_GORGO",
         "lon": 139.063,
         "lat": 36.202,
         "col": 67,
@@ -332,8 +466,8 @@
       {
         "seat": "TAKEDA",
         "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_TAKEDA",
-        "proxy_leader": "LEADER_PERICLES",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
         "lon": 138.568,
         "lat": 35.677,
         "col": 65,
@@ -344,8 +478,8 @@
       {
         "seat": "NAGAO",
         "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_NAGAO",
-        "proxy_leader": "LEADER_PHILIP_II",
+        "civilization": "CIVILIZATION_SPAIN",
+        "leader": "LEADER_PHILIP_II",
         "lon": 138.206,
         "lat": 37.148,
         "col": 69,
@@ -356,8 +490,8 @@
       {
         "seat": "IMAGAWA",
         "castle": "Sunpu",
-        "civilization": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
-        "proxy_leader": "LEADER_SALADIN",
+        "civilization": "CIVILIZATION_ARABIA",
+        "leader": "LEADER_SALADIN",
         "lon": 138.383,
         "lat": 34.979,
         "col": 63,
@@ -366,22 +500,10 @@
         "displacement_km": 10.0
       },
       {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ODA",
-        "proxy_leader": "LEADER_VICTORIA",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 60,
-        "row": 21,
-        "plot": 2244,
-        "displacement_km": 3.7
-      },
-      {
         "seat": "MATSUDAIRA",
         "castle": "Okazaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
-        "proxy_leader": "LEADER_PETER_GREAT",
+        "civilization": "CIVILIZATION_RUSSIA",
+        "leader": "LEADER_PETER_GREAT",
         "lon": 137.172,
         "lat": 34.955,
         "col": 61,
@@ -392,8 +514,8 @@
       {
         "seat": "ASAKURA",
         "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASAKURA",
-        "proxy_leader": "LEADER_GANDHI",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_GANDHI",
         "lon": 136.29,
         "lat": 35.999,
         "col": 61,
@@ -404,8 +526,8 @@
       {
         "seat": "ASHIKAGA",
         "castle": "Muromachi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
-        "proxy_leader": "LEADER_QIN",
+        "civilization": "CIVILIZATION_CHINA",
+        "leader": "LEADER_QIN",
         "lon": 135.76,
         "lat": 35.029,
         "col": 58,
@@ -416,8 +538,8 @@
       {
         "seat": "MIYOSHI",
         "castle": "Shozui",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
-        "proxy_leader": "LEADER_CHANDRAGUPTA",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_CHANDRAGUPTA",
         "lon": 134.591,
         "lat": 34.123,
         "col": 53,
@@ -428,8 +550,8 @@
       {
         "seat": "ROKKAKU",
         "castle": "Kannonji",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
-        "proxy_leader": "LEADER_MVEMBA",
+        "civilization": "CIVILIZATION_KONGO",
+        "leader": "LEADER_MVEMBA",
         "lon": 136.168,
         "lat": 35.133,
         "col": 58,
@@ -440,8 +562,8 @@
       {
         "seat": "HONGANJI",
         "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HONGANJI",
-        "proxy_leader": "LEADER_PEDRO",
+        "civilization": "CIVILIZATION_BRAZIL",
+        "leader": "LEADER_PEDRO",
         "lon": 135.526,
         "lat": 34.689,
         "col": 56,
@@ -452,8 +574,8 @@
       {
         "seat": "OUCHI",
         "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OUCHI",
-        "proxy_leader": "LEADER_TOMYRIS",
+        "civilization": "CIVILIZATION_SCYTHIA",
+        "leader": "LEADER_TOMYRIS",
         "lon": 131.473,
         "lat": 34.178,
         "col": 47,
@@ -464,8 +586,8 @@
       {
         "seat": "AMAGO",
         "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AMAGO",
-        "proxy_leader": "LEADER_BARBAROSSA",
+        "civilization": "CIVILIZATION_GERMANY",
+        "leader": "LEADER_BARBAROSSA",
         "lon": 133.242,
         "lat": 35.418,
         "col": 53,
@@ -476,8 +598,8 @@
       {
         "seat": "MORI",
         "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MORI",
-        "proxy_leader": "LEADER_HARDRADA",
+        "civilization": "CIVILIZATION_NORWAY",
+        "leader": "LEADER_HARDRADA",
         "lon": 132.708,
         "lat": 34.687,
         "col": 50,
@@ -488,8 +610,8 @@
       {
         "seat": "CHOSOKABE",
         "castle": "Oko",
-        "civilization": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
-        "proxy_leader": "LEADER_CATHERINE_DE_MEDICI",
+        "civilization": "CIVILIZATION_FRANCE",
+        "leader": "LEADER_CATHERINE_DE_MEDICI",
         "lon": 133.642,
         "lat": 33.593,
         "col": 49,
@@ -500,8 +622,8 @@
       {
         "seat": "OTOMO",
         "castle": "Funai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OTOMO",
-        "proxy_leader": "LEADER_T_ROOSEVELT",
+        "civilization": "CIVILIZATION_AMERICA",
+        "leader": "LEADER_T_ROOSEVELT",
         "lon": 131.609,
         "lat": 33.241,
         "col": 44,
@@ -512,8 +634,8 @@
       {
         "seat": "SHIMAZU",
         "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
-        "proxy_leader": "LEADER_SEONDEOK",
+        "civilization": "CIVILIZATION_KOREA",
+        "leader": "LEADER_SEONDEOK",
         "lon": 130.559,
         "lat": 31.596,
         "col": 37,
@@ -524,8 +646,8 @@
       {
         "seat": "RYUKYU",
         "castle": "Shuri",
-        "civilization": "CIVILIZATION_JAC_JAPAN_RYUKYU",
-        "proxy_leader": "LEADER_SHAKA",
+        "civilization": "CIVILIZATION_ZULU",
+        "leader": "LEADER_SHAKA",
         "lon": 127.719,
         "lat": 26.218,
         "col": 16,
@@ -536,8 +658,8 @@
       {
         "seat": "AINU",
         "castle": "Nibutani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AINU",
-        "proxy_leader": "LEADER_WILHELMINA",
+        "civilization": "CIVILIZATION_NETHERLANDS",
+        "leader": "LEADER_WILHELMINA",
         "lon": 142.149,
         "lat": 42.633,
         "col": 91,
@@ -545,6 +667,68 @@
         "plot": 3419,
         "displacement_km": 11.7
       }
+    ],
+    "close_start_pairs": [
+      [
+        "ODA",
+        "MATSUDAIRA",
+        1
+      ],
+      [
+        "ODA",
+        "ROKKAKU",
+        3
+      ],
+      [
+        "DATE",
+        "ASHINA",
+        1
+      ],
+      [
+        "HOJO",
+        "YAMANOUCHI_UESUGI",
+        3
+      ],
+      [
+        "HOJO",
+        "TAKEDA",
+        3
+      ],
+      [
+        "HOJO",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "YAMANOUCHI_UESUGI",
+        "TAKEDA",
+        2
+      ],
+      [
+        "TAKEDA",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "ASHIKAGA",
+        "ROKKAKU",
+        1
+      ],
+      [
+        "ASHIKAGA",
+        "HONGANJI",
+        2
+      ],
+      [
+        "ROKKAKU",
+        "HONGANJI",
+        2
+      ],
+      [
+        "AMAGO",
+        "MORI",
+        3
+      ]
     ],
     "file": "JAC_Japan_30km.Civ6Map",
     "bytes": 368640
@@ -557,10 +741,22 @@
     "sea_tiles": 6122,
     "starts": [
       {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 72,
+        "row": 25,
+        "plot": 3172,
+        "displacement_km": 2.5
+      },
+      {
         "seat": "DATE",
         "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_DATE",
-        "proxy_leader": "LEADER_CLEOPATRA",
+        "civilization": "CIVILIZATION_EGYPT",
+        "leader": "LEADER_CLEOPATRA",
         "lon": 140.106,
         "lat": 37.914,
         "col": 89,
@@ -571,8 +767,8 @@
       {
         "seat": "ASHINA",
         "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHINA",
-        "proxy_leader": "LEADER_GILGAMESH",
+        "civilization": "CIVILIZATION_SUMERIA",
+        "leader": "LEADER_GILGAMESH",
         "lon": 139.93,
         "lat": 37.494,
         "col": 87,
@@ -583,8 +779,8 @@
       {
         "seat": "HOJO",
         "castle": "Odawara",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HOJO",
-        "proxy_leader": "LEADER_TRAJAN",
+        "civilization": "CIVILIZATION_ROME",
+        "leader": "LEADER_TRAJAN",
         "lon": 139.157,
         "lat": 35.252,
         "col": 78,
@@ -595,8 +791,8 @@
       {
         "seat": "YAMANOUCHI_UESUGI",
         "castle": "Hirai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
-        "proxy_leader": "LEADER_GORGO",
+        "civilization": "CIVILIZATION_GREECE",
+        "leader": "LEADER_GORGO",
         "lon": 139.063,
         "lat": 36.202,
         "col": 81,
@@ -607,8 +803,8 @@
       {
         "seat": "TAKEDA",
         "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_TAKEDA",
-        "proxy_leader": "LEADER_PERICLES",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
         "lon": 138.568,
         "lat": 35.677,
         "col": 78,
@@ -619,8 +815,8 @@
       {
         "seat": "NAGAO",
         "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_NAGAO",
-        "proxy_leader": "LEADER_PHILIP_II",
+        "civilization": "CIVILIZATION_SPAIN",
+        "leader": "LEADER_PHILIP_II",
         "lon": 138.206,
         "lat": 37.148,
         "col": 82,
@@ -631,8 +827,8 @@
       {
         "seat": "IMAGAWA",
         "castle": "Sunpu",
-        "civilization": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
-        "proxy_leader": "LEADER_SALADIN",
+        "civilization": "CIVILIZATION_ARABIA",
+        "leader": "LEADER_SALADIN",
         "lon": 138.383,
         "lat": 34.979,
         "col": 76,
@@ -641,22 +837,10 @@
         "displacement_km": 11.8
       },
       {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ODA",
-        "proxy_leader": "LEADER_VICTORIA",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 72,
-        "row": 25,
-        "plot": 3172,
-        "displacement_km": 2.5
-      },
-      {
         "seat": "MATSUDAIRA",
         "castle": "Okazaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
-        "proxy_leader": "LEADER_PETER_GREAT",
+        "civilization": "CIVILIZATION_RUSSIA",
+        "leader": "LEADER_PETER_GREAT",
         "lon": 137.172,
         "lat": 34.955,
         "col": 72,
@@ -667,8 +851,8 @@
       {
         "seat": "ASAKURA",
         "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASAKURA",
-        "proxy_leader": "LEADER_GANDHI",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_GANDHI",
         "lon": 136.29,
         "lat": 35.999,
         "col": 73,
@@ -679,8 +863,8 @@
       {
         "seat": "ASHIKAGA",
         "castle": "Muromachi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
-        "proxy_leader": "LEADER_QIN",
+        "civilization": "CIVILIZATION_CHINA",
+        "leader": "LEADER_QIN",
         "lon": 135.76,
         "lat": 35.029,
         "col": 69,
@@ -691,8 +875,8 @@
       {
         "seat": "MIYOSHI",
         "castle": "Shozui",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
-        "proxy_leader": "LEADER_CHANDRAGUPTA",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_CHANDRAGUPTA",
         "lon": 134.591,
         "lat": 34.123,
         "col": 63,
@@ -703,8 +887,8 @@
       {
         "seat": "ROKKAKU",
         "castle": "Kannonji",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
-        "proxy_leader": "LEADER_MVEMBA",
+        "civilization": "CIVILIZATION_KONGO",
+        "leader": "LEADER_MVEMBA",
         "lon": 136.168,
         "lat": 35.133,
         "col": 70,
@@ -715,8 +899,8 @@
       {
         "seat": "HONGANJI",
         "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HONGANJI",
-        "proxy_leader": "LEADER_PEDRO",
+        "civilization": "CIVILIZATION_BRAZIL",
+        "leader": "LEADER_PEDRO",
         "lon": 135.526,
         "lat": 34.689,
         "col": 67,
@@ -727,8 +911,8 @@
       {
         "seat": "OUCHI",
         "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OUCHI",
-        "proxy_leader": "LEADER_TOMYRIS",
+        "civilization": "CIVILIZATION_SCYTHIA",
+        "leader": "LEADER_TOMYRIS",
         "lon": 131.473,
         "lat": 34.178,
         "col": 56,
@@ -739,8 +923,8 @@
       {
         "seat": "AMAGO",
         "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AMAGO",
-        "proxy_leader": "LEADER_BARBAROSSA",
+        "civilization": "CIVILIZATION_GERMANY",
+        "leader": "LEADER_BARBAROSSA",
         "lon": 133.242,
         "lat": 35.418,
         "col": 64,
@@ -751,8 +935,8 @@
       {
         "seat": "MORI",
         "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MORI",
-        "proxy_leader": "LEADER_HARDRADA",
+        "civilization": "CIVILIZATION_NORWAY",
+        "leader": "LEADER_HARDRADA",
         "lon": 132.708,
         "lat": 34.687,
         "col": 60,
@@ -763,8 +947,8 @@
       {
         "seat": "CHOSOKABE",
         "castle": "Oko",
-        "civilization": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
-        "proxy_leader": "LEADER_CATHERINE_DE_MEDICI",
+        "civilization": "CIVILIZATION_FRANCE",
+        "leader": "LEADER_CATHERINE_DE_MEDICI",
         "lon": 133.642,
         "lat": 33.593,
         "col": 59,
@@ -775,8 +959,8 @@
       {
         "seat": "OTOMO",
         "castle": "Funai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OTOMO",
-        "proxy_leader": "LEADER_T_ROOSEVELT",
+        "civilization": "CIVILIZATION_AMERICA",
+        "leader": "LEADER_T_ROOSEVELT",
         "lon": 131.609,
         "lat": 33.241,
         "col": 52,
@@ -787,8 +971,8 @@
       {
         "seat": "SHIMAZU",
         "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
-        "proxy_leader": "LEADER_SEONDEOK",
+        "civilization": "CIVILIZATION_KOREA",
+        "leader": "LEADER_SEONDEOK",
         "lon": 130.559,
         "lat": 31.596,
         "col": 45,
@@ -799,8 +983,8 @@
       {
         "seat": "RYUKYU",
         "castle": "Shuri",
-        "civilization": "CIVILIZATION_JAC_JAPAN_RYUKYU",
-        "proxy_leader": "LEADER_SHAKA",
+        "civilization": "CIVILIZATION_ZULU",
+        "leader": "LEADER_SHAKA",
         "lon": 127.719,
         "lat": 26.218,
         "col": 19,
@@ -811,8 +995,8 @@
       {
         "seat": "AINU",
         "castle": "Nibutani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AINU",
-        "proxy_leader": "LEADER_WILHELMINA",
+        "civilization": "CIVILIZATION_NETHERLANDS",
+        "leader": "LEADER_WILHELMINA",
         "lon": 142.149,
         "lat": 42.633,
         "col": 108,
@@ -820,6 +1004,58 @@
         "plot": 4820,
         "displacement_km": 12.0
       }
+    ],
+    "close_start_pairs": [
+      [
+        "ODA",
+        "MATSUDAIRA",
+        2
+      ],
+      [
+        "ODA",
+        "ROKKAKU",
+        3
+      ],
+      [
+        "DATE",
+        "ASHINA",
+        2
+      ],
+      [
+        "HOJO",
+        "TAKEDA",
+        3
+      ],
+      [
+        "HOJO",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "YAMANOUCHI_UESUGI",
+        "TAKEDA",
+        3
+      ],
+      [
+        "TAKEDA",
+        "IMAGAWA",
+        3
+      ],
+      [
+        "ASHIKAGA",
+        "ROKKAKU",
+        2
+      ],
+      [
+        "ASHIKAGA",
+        "HONGANJI",
+        2
+      ],
+      [
+        "ROKKAKU",
+        "HONGANJI",
+        3
+      ]
     ],
     "file": "JAC_Japan_25km.Civ6Map",
     "bytes": 417792
@@ -832,10 +1068,22 @@
     "sea_tiles": 9229,
     "starts": [
       {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 90,
+        "row": 31,
+        "plot": 4864,
+        "displacement_km": 8.6
+      },
+      {
         "seat": "DATE",
         "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_DATE",
-        "proxy_leader": "LEADER_CLEOPATRA",
+        "civilization": "CIVILIZATION_EGYPT",
+        "leader": "LEADER_CLEOPATRA",
         "lon": 140.106,
         "lat": 37.914,
         "col": 111,
@@ -846,8 +1094,8 @@
       {
         "seat": "ASHINA",
         "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHINA",
-        "proxy_leader": "LEADER_GILGAMESH",
+        "civilization": "CIVILIZATION_SUMERIA",
+        "leader": "LEADER_GILGAMESH",
         "lon": 139.93,
         "lat": 37.494,
         "col": 109,
@@ -858,8 +1106,8 @@
       {
         "seat": "HOJO",
         "castle": "Odawara",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HOJO",
-        "proxy_leader": "LEADER_TRAJAN",
+        "civilization": "CIVILIZATION_ROME",
+        "leader": "LEADER_TRAJAN",
         "lon": 139.157,
         "lat": 35.252,
         "col": 97,
@@ -870,8 +1118,8 @@
       {
         "seat": "YAMANOUCHI_UESUGI",
         "castle": "Hirai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_YAMANOUCHI_UESUGI",
-        "proxy_leader": "LEADER_GORGO",
+        "civilization": "CIVILIZATION_GREECE",
+        "leader": "LEADER_GORGO",
         "lon": 139.063,
         "lat": 36.202,
         "col": 101,
@@ -882,8 +1130,8 @@
       {
         "seat": "TAKEDA",
         "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_TAKEDA",
-        "proxy_leader": "LEADER_PERICLES",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
         "lon": 138.568,
         "lat": 35.677,
         "col": 97,
@@ -894,8 +1142,8 @@
       {
         "seat": "NAGAO",
         "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_NAGAO",
-        "proxy_leader": "LEADER_PHILIP_II",
+        "civilization": "CIVILIZATION_SPAIN",
+        "leader": "LEADER_PHILIP_II",
         "lon": 138.206,
         "lat": 37.148,
         "col": 102,
@@ -906,8 +1154,8 @@
       {
         "seat": "IMAGAWA",
         "castle": "Sunpu",
-        "civilization": "CIVILIZATION_JAC_JAPAN_IMAGAWA",
-        "proxy_leader": "LEADER_SALADIN",
+        "civilization": "CIVILIZATION_ARABIA",
+        "leader": "LEADER_SALADIN",
         "lon": 138.383,
         "lat": 34.979,
         "col": 94,
@@ -916,22 +1164,10 @@
         "displacement_km": 5.1
       },
       {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ODA",
-        "proxy_leader": "LEADER_VICTORIA",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 90,
-        "row": 31,
-        "plot": 4864,
-        "displacement_km": 8.6
-      },
-      {
         "seat": "MATSUDAIRA",
         "castle": "Okazaki",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MATSUDAIRA",
-        "proxy_leader": "LEADER_PETER_GREAT",
+        "civilization": "CIVILIZATION_RUSSIA",
+        "leader": "LEADER_PETER_GREAT",
         "lon": 137.172,
         "lat": 34.955,
         "col": 90,
@@ -942,8 +1178,8 @@
       {
         "seat": "ASAKURA",
         "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASAKURA",
-        "proxy_leader": "LEADER_GANDHI",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_GANDHI",
         "lon": 136.29,
         "lat": 35.999,
         "col": 91,
@@ -954,8 +1190,8 @@
       {
         "seat": "ASHIKAGA",
         "castle": "Muromachi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ASHIKAGA",
-        "proxy_leader": "LEADER_QIN",
+        "civilization": "CIVILIZATION_CHINA",
+        "leader": "LEADER_QIN",
         "lon": 135.76,
         "lat": 35.029,
         "col": 86,
@@ -966,8 +1202,8 @@
       {
         "seat": "MIYOSHI",
         "castle": "Shozui",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MIYOSHI",
-        "proxy_leader": "LEADER_CHANDRAGUPTA",
+        "civilization": "CIVILIZATION_INDIA",
+        "leader": "LEADER_CHANDRAGUPTA",
         "lon": 134.591,
         "lat": 34.123,
         "col": 78,
@@ -978,8 +1214,8 @@
       {
         "seat": "ROKKAKU",
         "castle": "Kannonji",
-        "civilization": "CIVILIZATION_JAC_JAPAN_ROKKAKU",
-        "proxy_leader": "LEADER_MVEMBA",
+        "civilization": "CIVILIZATION_KONGO",
+        "leader": "LEADER_MVEMBA",
         "lon": 136.168,
         "lat": 35.133,
         "col": 87,
@@ -990,8 +1226,8 @@
       {
         "seat": "HONGANJI",
         "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_HONGANJI",
-        "proxy_leader": "LEADER_PEDRO",
+        "civilization": "CIVILIZATION_BRAZIL",
+        "leader": "LEADER_PEDRO",
         "lon": 135.526,
         "lat": 34.689,
         "col": 84,
@@ -1002,8 +1238,8 @@
       {
         "seat": "OUCHI",
         "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OUCHI",
-        "proxy_leader": "LEADER_TOMYRIS",
+        "civilization": "CIVILIZATION_SCYTHIA",
+        "leader": "LEADER_TOMYRIS",
         "lon": 131.473,
         "lat": 34.178,
         "col": 69,
@@ -1014,8 +1250,8 @@
       {
         "seat": "AMAGO",
         "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AMAGO",
-        "proxy_leader": "LEADER_BARBAROSSA",
+        "civilization": "CIVILIZATION_GERMANY",
+        "leader": "LEADER_BARBAROSSA",
         "lon": 133.242,
         "lat": 35.418,
         "col": 80,
@@ -1026,8 +1262,8 @@
       {
         "seat": "MORI",
         "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_JAC_JAPAN_MORI",
-        "proxy_leader": "LEADER_HARDRADA",
+        "civilization": "CIVILIZATION_NORWAY",
+        "leader": "LEADER_HARDRADA",
         "lon": 132.708,
         "lat": 34.687,
         "col": 75,
@@ -1038,8 +1274,8 @@
       {
         "seat": "CHOSOKABE",
         "castle": "Oko",
-        "civilization": "CIVILIZATION_JAC_JAPAN_CHOSOKABE",
-        "proxy_leader": "LEADER_CATHERINE_DE_MEDICI",
+        "civilization": "CIVILIZATION_FRANCE",
+        "leader": "LEADER_CATHERINE_DE_MEDICI",
         "lon": 133.642,
         "lat": 33.593,
         "col": 73,
@@ -1050,8 +1286,8 @@
       {
         "seat": "OTOMO",
         "castle": "Funai",
-        "civilization": "CIVILIZATION_JAC_JAPAN_OTOMO",
-        "proxy_leader": "LEADER_T_ROOSEVELT",
+        "civilization": "CIVILIZATION_AMERICA",
+        "leader": "LEADER_T_ROOSEVELT",
         "lon": 131.609,
         "lat": 33.241,
         "col": 65,
@@ -1062,8 +1298,8 @@
       {
         "seat": "SHIMAZU",
         "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_JAC_JAPAN_SHIMAZU",
-        "proxy_leader": "LEADER_SEONDEOK",
+        "civilization": "CIVILIZATION_KOREA",
+        "leader": "LEADER_SEONDEOK",
         "lon": 130.559,
         "lat": 31.596,
         "col": 56,
@@ -1074,8 +1310,8 @@
       {
         "seat": "RYUKYU",
         "castle": "Shuri",
-        "civilization": "CIVILIZATION_JAC_JAPAN_RYUKYU",
-        "proxy_leader": "LEADER_SHAKA",
+        "civilization": "CIVILIZATION_ZULU",
+        "leader": "LEADER_SHAKA",
         "lon": 127.719,
         "lat": 26.218,
         "col": 24,
@@ -1086,8 +1322,8 @@
       {
         "seat": "AINU",
         "castle": "Nibutani",
-        "civilization": "CIVILIZATION_JAC_JAPAN_AINU",
-        "proxy_leader": "LEADER_WILHELMINA",
+        "civilization": "CIVILIZATION_NETHERLANDS",
+        "leader": "LEADER_WILHELMINA",
         "lon": 142.149,
         "lat": 42.633,
         "col": 135,
@@ -1095,6 +1331,28 @@
         "plot": 7373,
         "displacement_km": 6.4
       }
+    ],
+    "close_start_pairs": [
+      [
+        "ODA",
+        "MATSUDAIRA",
+        2
+      ],
+      [
+        "DATE",
+        "ASHINA",
+        3
+      ],
+      [
+        "ASHIKAGA",
+        "ROKKAKU",
+        2
+      ],
+      [
+        "ASHIKAGA",
+        "HONGANJI",
+        2
+      ]
     ],
     "file": "JAC_Japan_20km.Civ6Map",
     "bytes": 503808

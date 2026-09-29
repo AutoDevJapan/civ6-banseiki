@@ -19,14 +19,14 @@
       <ru_RU>Четыре карты Японии для проверки игры с 22 фракциями.</ru_RU>
     </Text>
     <Text id="LOC_JAC_JAPAN_SCALE_MOD_DESCRIPTION">
-      <en_US>40, 30, 25 and 20 km per hex; provisional faction identities and official leader proxies.</en_US>
-      <ja_JP>1タイル約40・30・25・20 km。勢力は仮登録し、指導者のAIと画像を公式の人物で代用。</ja_JP>
-      <ru_RU>40, 30, 25 и 20 км на гекс. Временные фракции используют официальных лидеров.</ru_RU>
+      <en_US>40, 30, 25 and 20 km per hex; Banseiki ruleset with Oda Nobuhide as the human and official leaders for the other seats.</en_US>
+      <ja_JP>1タイル約40・30・25・20 km。万世紀ルールセットで、人間は織田信秀、他の本拠は公式の指導者で試す。</ja_JP>
+      <ru_RU>40, 30, 25 и 20 км на гекс. Правила «Бансэйки»: игрок — Ода Нобухидэ, остальные — официальные лидеры.</ru_RU>
     </Text>
   </LocalizedText>
   <ActionCriteria>
     <Criteria id="JAC_JapanMapScale_GatheringStorm">
-      <RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+      <RuleSetInUse>RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI</RuleSetInUse>
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
@@ -38,16 +38,12 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
-    <UpdateDatabase id="JAC_JapanMapScale_Gameplay" criteria="JAC_JapanMapScale_GatheringStorm">
-      <File>Data/JAC_JapanMapScale_Gameplay.sql</File>
-    </UpdateDatabase>
     <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_GatheringStorm">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
     </UpdateText>
   </InGameActions>
   <Files>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
-    <File>Data/JAC_JapanMapScale_Gameplay.sql</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
     <File>Maps/JAC_Japan_40km.Civ6Map</File>
     <File>Maps/JAC_Japan_40km.lua</File>

@@ -114,6 +114,8 @@ def validate_scenario(data: dict) -> None:
             if "map_file" in step and (not isinstance(step["map_file"], str)
                                        or not MAP_FILE.fullmatch(step["map_file"])):
                 raise ScenarioError(f"Step {number}: invalid map_file")
+            if "city_states" in step and (type(step["city_states"]) is not int or not 0 <= step["city_states"] <= 24):
+                raise ScenarioError(f"Step {number}: city_states must be an integer from 0 to 24")
             players = step.get("players")
             if not isinstance(players, list) or len(players) < 2 or sum(p.get("human") is True for p in players if isinstance(p, dict)) != 1:
                 raise ScenarioError(f"Step {number}: specify at least two players and exactly one human")
@@ -226,6 +228,10 @@ def _configure_code(step: dict) -> str:
         f"MapConfiguration.SetMaxMajorPlayers({len(players)})",
         f"GameConfiguration.SetParticipatingPlayerCount({len(players)} + GameConfiguration.GetHiddenPlayerCount())",
     ]
+    if "city_states" in step:  # otherwise the map size default (18 on Huge) survives a FireTuner setup
+        count = step["city_states"]
+        lines += [f"GameConfiguration.SetValue('CITY_STATE_COUNT', {count})",
+                  f"if GameConfiguration.GetValue('CITY_STATE_COUNT') ~= {count} then error('city-state count not applied') end"]
     for index, player in enumerate(players):
         leader, civ = _lua_string(player["leader"]), _lua_string(player["civ"])
         slot = "SS_TAKEN" if player["human"] else "SS_COMPUTER"
