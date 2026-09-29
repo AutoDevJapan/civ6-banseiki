@@ -1208,27 +1208,28 @@
     "close_city_pairs": [],
     "close_start_pairs": [],
     "resource_placement": {
-      "candidate_count": 67,
-      "placed_count": 50,
-      "land_candidate_count": 39,
+      "candidate_count": 68,
+      "placed_count": 53,
+      "land_candidate_count": 42,
       "marine_candidate_count": 17,
+      "reserved_count": 8,
       "count_by_type": {
         "RESOURCE_FISH": 16,
-        "RESOURCE_HORSES": 6,
+        "RESOURCE_HORSES": 5,
         "RESOURCE_IRON": 5,
+        "RESOURCE_JAC_GOLD": 2,
+        "RESOURCE_JAC_LACQUER": 1,
         "RESOURCE_RICE": 12,
         "RESOURCE_SALT": 6,
         "RESOURCE_SILK": 3,
+        "RESOURCE_SILVER": 1,
         "RESOURCE_TEA": 1,
         "RESOURCE_WHALES": 1
       },
       "candidate_status_counts": {
-        "custom_type_and_later_release": 4,
-        "custom_type_required": 3,
-        "deferred": 4,
-        "no_historically_sensible_terrain": 1,
-        "placed": 50,
-        "same_tile_conflict": 5
+        "deferred": 9,
+        "placed": 53,
+        "same_tile_conflict": 6
       },
       "custom_resource_ids": [
         "RESOURCE_JAC_GOLD",
@@ -1254,12 +1255,14 @@
           "17世紀"
         ],
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "kai_mines"
-        ]
+        ],
+        "plot": 4257,
+        "displacement_km": 16.9
       },
       {
         "id": "gold-kai-nakayama",
@@ -1279,12 +1282,14 @@
           "17世紀末"
         ],
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "nakayama_mine"
-        ]
+        ],
+        "plot": 4100,
+        "displacement_km": 4.1
       },
       {
         "id": "gold-izu-toi",
@@ -1301,12 +1306,16 @@
         "start_year": 1577,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "toi_mine"
-        ]
+        ],
+        "plot": 3483,
+        "displacement_km": 8.3,
+        "reveal_year": 1577,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-noto-hodatsu",
@@ -1323,12 +1332,16 @@
         "start_year": 1586,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "hodatsu_study"
-        ]
+        ],
+        "plot": 5948,
+        "displacement_km": 6.2,
+        "reveal_year": 1586,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-sado-nishimikawa",
@@ -1345,12 +1358,40 @@
         "start_year": 1593,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "no_valid_official_plot",
         "confidence": "high",
         "source_ids": [
           "sado_placer"
-        ]
+        ],
+        "placement_reason": "No nearby free plot satisfies the resource rules (the tile budget of this scale is used up)."
+      },
+      {
+        "id": "gold-sado-aikawa",
+        "site": "相川金銀山",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.235,
+          38.032
+        ],
+        "start_year": 1596,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer",
+          "sado_silver"
+        ],
+        "plot": 5958,
+        "displacement_km": 15.1,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "silver-iwami",
@@ -1368,13 +1409,14 @@
         "start_year_range": null,
         "available_at_start": true,
         "start_status": "start_candidate",
-        "placement_status": "no_historically_sensible_terrain",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "iwami_unesco",
           "iwami_discovery"
         ],
-        "placement_reason": "The official silver terrains are desert or tundra; Iwami's temperate mine cannot be represented by those climates."
+        "plot": 7314,
+        "displacement_km": 13.8
       },
       {
         "id": "silver-ikuno",
@@ -1392,11 +1434,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "ikuno_mine"
-        ]
+        ],
+        "plot": 6089,
+        "displacement_km": 6.0,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-sado-tsurushi",
@@ -1414,11 +1460,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_silver"
-        ]
+        ],
+        "plot": 6112,
+        "displacement_km": 28.1,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-nobesawa",
@@ -1439,11 +1489,15 @@
         ],
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "nobesawa_mine"
-        ]
+        ],
+        "plot": 5196,
+        "displacement_km": 7.0,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "copper-ashio",
@@ -1461,11 +1515,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "ashio_mine"
-        ]
+        ],
+        "plot": 4416,
+        "displacement_km": 0.6,
+        "reveal_year": 1550,
+        "reveal_tech": "TECH_JAC_SENGOKU_ORE_PROSPECTING"
       },
       {
         "id": "iron-izumo-yokota",
@@ -1725,13 +1783,14 @@
         "start_year_range": null,
         "available_at_start": null,
         "start_status": "start_candidate",
-        "placement_status": "placed",
+        "placement_status": "same_tile_conflict",
         "confidence": "medium",
         "source_ids": [
           "horse_kai"
         ],
         "plot": 4100,
-        "displacement_km": 37.6
+        "displacement_km": 37.6,
+        "conflict_with": "gold-kai-nakayama"
       },
       {
         "id": "horse-kiso",
@@ -2411,12 +2470,14 @@
         "start_year": null,
         "start_year_range": null,
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "medium",
         "source_ids": [
           "lacquer_wajima"
-        ]
+        ],
+        "plot": 6259,
+        "displacement_km": 11.2
       },
       {
         "id": "lacquer-aizu",
@@ -2433,12 +2494,15 @@
         "start_year": 1590,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "lacquer_aizu"
-        ]
+        ],
+        "plot": 4882,
+        "displacement_km": 14.8,
+        "reveal_year": 1590
       },
       {
         "id": "fish-ishikari",
@@ -2868,12 +2932,16 @@
         "start_year": 1577,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "toi_mine"
-        ]
+        ],
+        "plot": 3483,
+        "displacement_km": 8.3,
+        "reveal_year": 1577,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-noto-hodatsu",
@@ -2890,12 +2958,16 @@
         "start_year": 1586,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "hodatsu_study"
-        ]
+        ],
+        "plot": 5948,
+        "displacement_km": 6.2,
+        "reveal_year": 1586,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-sado-nishimikawa",
@@ -2912,36 +2984,40 @@
         "start_year": 1593,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "no_valid_official_plot",
         "confidence": "high",
         "source_ids": [
           "sado_placer"
-        ]
+        ],
+        "placement_reason": "No nearby free plot satisfies the resource rules (the tile budget of this scale is used up)."
       },
       {
-        "id": "silver-iwami",
-        "site": "石見銀山・大森",
-        "province": "石見",
-        "resource_ja": "銀",
-        "resource_id": "RESOURCE_SILVER",
-        "official_resource_id": "RESOURCE_SILVER",
-        "availability": "official",
+        "id": "gold-sado-aikawa",
+        "site": "相川金銀山",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
         "coordinates": [
-          132.437,
-          35.103
+          138.235,
+          38.032
         ],
-        "start_year": 1526,
+        "start_year": 1596,
         "start_year_range": null,
-        "available_at_start": true,
-        "start_status": "start_candidate",
-        "placement_status": "no_historically_sensible_terrain",
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
-          "iwami_unesco",
-          "iwami_discovery"
+          "sado_placer",
+          "sado_silver"
         ],
-        "placement_reason": "The official silver terrains are desert or tundra; Iwami's temperate mine cannot be represented by those climates."
+        "plot": 5958,
+        "displacement_km": 15.1,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "silver-ikuno",
@@ -2959,11 +3035,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "ikuno_mine"
-        ]
+        ],
+        "plot": 6089,
+        "displacement_km": 6.0,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-sado-tsurushi",
@@ -2981,11 +3061,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_silver"
-        ]
+        ],
+        "plot": 6112,
+        "displacement_km": 28.1,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-nobesawa",
@@ -3006,11 +3090,15 @@
         ],
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "nobesawa_mine"
-        ]
+        ],
+        "plot": 5196,
+        "displacement_km": 7.0,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "copper-ashio",
@@ -3028,11 +3116,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "ashio_mine"
-        ]
+        ],
+        "plot": 4416,
+        "displacement_km": 0.6,
+        "reveal_year": 1550,
+        "reveal_tech": "TECH_JAC_SENGOKU_ORE_PROSPECTING"
       },
       {
         "id": "lacquer-aizu",
@@ -3049,12 +3141,15 @@
         "start_year": 1590,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "lacquer_aizu"
-        ]
+        ],
+        "plot": 4882,
+        "displacement_km": 14.8,
+        "reveal_year": 1590
       }
     ],
     "trade_access": [
@@ -3107,9 +3202,10 @@
           "gold-kai-nakayama",
           "gold-izu-toi",
           "gold-noto-hodatsu",
-          "gold-sado-nishimikawa"
+          "gold-sado-nishimikawa",
+          "gold-sado-aikawa"
         ],
-        "status": "requires_custom_resource_definition"
+        "status": "defined_in_Data/JAC_Japan_Resources.xml"
       },
       {
         "type": "RESOURCE_JAC_LACQUER",
@@ -3119,7 +3215,7 @@
           "lacquer-wajima",
           "lacquer-aizu"
         ],
-        "status": "requires_custom_resource_definition"
+        "status": "defined_in_Data/JAC_Japan_Resources.xml"
       },
       {
         "type": "FEATURE_JAC_FUJI",
@@ -4247,16 +4343,16 @@
     ],
     "terrain_features": {
       "feature_counts": {
-        "FEATURE_FOREST": 404,
+        "FEATURE_FOREST": 399,
         "FEATURE_MARSH": 27,
         "FEATURE_VOLCANO": 5
       },
       "forest": {
         "feature_id": "FEATURE_FOREST",
         "target_percent": 45,
-        "eligible_tiles": 892,
-        "placed_count": 401,
-        "placed_percent": 44.96,
+        "eligible_tiles": 881,
+        "placed_count": 396,
+        "placed_percent": 44.95,
         "rice_basin_exclusion_radius_km": 23.0,
         "source_ids": [
           "forest_history",
@@ -4267,7 +4363,7 @@
         "feature_id": "FEATURE_MARSH",
         "target_count": 27,
         "placed_count": 27,
-        "eligible_flat_land_tiles": 603,
+        "eligible_flat_land_tiles": 598,
         "cluster_ids": [
           "marsh-kushiro",
           "marsh-sarobetsu",
@@ -5780,26 +5876,27 @@
     "close_city_pairs": [],
     "close_start_pairs": [],
     "resource_placement": {
-      "candidate_count": 67,
-      "placed_count": 53,
-      "land_candidate_count": 39,
+      "candidate_count": 68,
+      "placed_count": 57,
+      "land_candidate_count": 42,
       "marine_candidate_count": 17,
+      "reserved_count": 9,
       "count_by_type": {
         "RESOURCE_FISH": 16,
         "RESOURCE_HORSES": 6,
         "RESOURCE_IRON": 6,
+        "RESOURCE_JAC_GOLD": 2,
+        "RESOURCE_JAC_LACQUER": 1,
         "RESOURCE_RICE": 13,
         "RESOURCE_SALT": 6,
         "RESOURCE_SILK": 3,
+        "RESOURCE_SILVER": 1,
         "RESOURCE_TEA": 2,
         "RESOURCE_WHALES": 1
       },
       "candidate_status_counts": {
-        "custom_type_and_later_release": 4,
-        "custom_type_required": 3,
-        "deferred": 4,
-        "no_historically_sensible_terrain": 1,
-        "placed": 53,
+        "deferred": 9,
+        "placed": 57,
         "same_tile_conflict": 2
       },
       "custom_resource_ids": [
@@ -5826,12 +5923,14 @@
           "17世紀"
         ],
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "kai_mines"
-        ]
+        ],
+        "plot": 7270,
+        "displacement_km": 11.3
       },
       {
         "id": "gold-kai-nakayama",
@@ -5851,12 +5950,14 @@
           "17世紀末"
         ],
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "nakayama_mine"
-        ]
+        ],
+        "plot": 7063,
+        "displacement_km": 6.2
       },
       {
         "id": "gold-izu-toi",
@@ -5873,12 +5974,16 @@
         "start_year": 1577,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "toi_mine"
-        ]
+        ],
+        "plot": 6042,
+        "displacement_km": 5.0,
+        "reveal_year": 1577,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-noto-hodatsu",
@@ -5895,12 +6000,16 @@
         "start_year": 1586,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "hodatsu_study"
-        ]
+        ],
+        "plot": 10328,
+        "displacement_km": 6.6,
+        "reveal_year": 1586,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-sado-nishimikawa",
@@ -5917,12 +6026,43 @@
         "start_year": 1593,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_placer"
-        ]
+        ],
+        "plot": 10340,
+        "displacement_km": 11.8,
+        "reveal_year": 1593,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
+      },
+      {
+        "id": "gold-sado-aikawa",
+        "site": "相川金銀山",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
+        "coordinates": [
+          138.235,
+          38.032
+        ],
+        "start_year": 1596,
+        "start_year_range": null,
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
+        "confidence": "high",
+        "source_ids": [
+          "sado_placer",
+          "sado_silver"
+        ],
+        "plot": 10544,
+        "displacement_km": 3.5,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "silver-iwami",
@@ -5940,13 +6080,14 @@
         "start_year_range": null,
         "available_at_start": true,
         "start_status": "start_candidate",
-        "placement_status": "no_historically_sensible_terrain",
+        "placement_status": "placed",
         "confidence": "high",
         "source_ids": [
           "iwami_unesco",
           "iwami_discovery"
         ],
-        "placement_reason": "The official silver terrains are desert or tundra; Iwami's temperate mine cannot be represented by those climates."
+        "plot": 12750,
+        "displacement_km": 20.5
       },
       {
         "id": "silver-ikuno",
@@ -5964,11 +6105,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "ikuno_mine"
-        ]
+        ],
+        "plot": 10719,
+        "displacement_km": 14.2,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-sado-tsurushi",
@@ -5986,11 +6131,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_silver"
-        ]
+        ],
+        "plot": 10545,
+        "displacement_km": 24.7,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-nobesawa",
@@ -6011,11 +6160,15 @@
         ],
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "nobesawa_mine"
-        ]
+        ],
+        "plot": 8924,
+        "displacement_km": 7.7,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "copper-ashio",
@@ -6033,11 +6186,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "ashio_mine"
-        ]
+        ],
+        "plot": 7482,
+        "displacement_km": 10.1,
+        "reveal_year": 1550,
+        "reveal_tech": "TECH_JAC_SENGOKU_ORE_PROSPECTING"
       },
       {
         "id": "iron-izumo-yokota",
@@ -6980,12 +7137,14 @@
         "start_year": null,
         "start_year_range": null,
         "available_at_start": null,
-        "start_status": "custom_type_required",
-        "placement_status": "not_placed",
+        "start_status": "start_candidate",
+        "placement_status": "placed",
         "confidence": "medium",
         "source_ids": [
           "lacquer_wajima"
-        ]
+        ],
+        "plot": 10943,
+        "displacement_km": 7.7
       },
       {
         "id": "lacquer-aizu",
@@ -7002,12 +7161,15 @@
         "start_year": 1590,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "lacquer_aizu"
-        ]
+        ],
+        "plot": 8304,
+        "displacement_km": 9.4,
+        "reveal_year": 1590
       },
       {
         "id": "fish-ishikari",
@@ -7437,12 +7599,16 @@
         "start_year": 1577,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "toi_mine"
-        ]
+        ],
+        "plot": 6042,
+        "displacement_km": 5.0,
+        "reveal_year": 1577,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-noto-hodatsu",
@@ -7459,12 +7625,16 @@
         "start_year": 1586,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "hodatsu_study"
-        ]
+        ],
+        "plot": 10328,
+        "displacement_km": 6.6,
+        "reveal_year": 1586,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "gold-sado-nishimikawa",
@@ -7481,36 +7651,43 @@
         "start_year": 1593,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_placer"
-        ]
+        ],
+        "plot": 10340,
+        "displacement_km": 11.8,
+        "reveal_year": 1593,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
-        "id": "silver-iwami",
-        "site": "石見銀山・大森",
-        "province": "石見",
-        "resource_ja": "銀",
-        "resource_id": "RESOURCE_SILVER",
-        "official_resource_id": "RESOURCE_SILVER",
-        "availability": "official",
+        "id": "gold-sado-aikawa",
+        "site": "相川金銀山",
+        "province": "佐渡",
+        "resource_ja": "金",
+        "resource_id": "RESOURCE_JAC_GOLD",
+        "official_resource_id": "RESOURCE_GOLD",
+        "availability": "official_scenario_only",
         "coordinates": [
-          132.437,
-          35.103
+          138.235,
+          38.032
         ],
-        "start_year": 1526,
+        "start_year": 1596,
         "start_year_range": null,
-        "available_at_start": true,
-        "start_status": "start_candidate",
-        "placement_status": "no_historically_sensible_terrain",
+        "available_at_start": false,
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
-          "iwami_unesco",
-          "iwami_discovery"
+          "sado_placer",
+          "sado_silver"
         ],
-        "placement_reason": "The official silver terrains are desert or tundra; Iwami's temperate mine cannot be represented by those climates."
+        "plot": 10544,
+        "displacement_km": 3.5,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "silver-ikuno",
@@ -7528,11 +7705,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "ikuno_mine"
-        ]
+        ],
+        "plot": 10719,
+        "displacement_km": 14.2,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-sado-tsurushi",
@@ -7550,11 +7731,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "high",
         "source_ids": [
           "sado_silver"
-        ]
+        ],
+        "plot": 10545,
+        "displacement_km": 24.7,
+        "reveal_year": 1542,
+        "reveal_tech": "TECH_JAC_SENGOKU_CUPELLATION"
       },
       {
         "id": "silver-nobesawa",
@@ -7575,11 +7760,15 @@
         ],
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "nobesawa_mine"
-        ]
+        ],
+        "plot": 8924,
+        "displacement_km": 7.7,
+        "reveal_year": 1596,
+        "reveal_tech": "TECH_JAC_SENGOKU_MINE_MANAGEMENT"
       },
       {
         "id": "copper-ashio",
@@ -7597,11 +7786,15 @@
         "start_year_range": null,
         "available_at_start": false,
         "start_status": "deferred",
-        "placement_status": "not_placed",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "ashio_mine"
-        ]
+        ],
+        "plot": 7482,
+        "displacement_km": 10.1,
+        "reveal_year": 1550,
+        "reveal_tech": "TECH_JAC_SENGOKU_ORE_PROSPECTING"
       },
       {
         "id": "lacquer-aizu",
@@ -7618,12 +7811,15 @@
         "start_year": 1590,
         "start_year_range": null,
         "available_at_start": false,
-        "start_status": "custom_type_and_later_release",
-        "placement_status": "not_placed",
+        "start_status": "deferred",
+        "placement_status": "reserved_for_later_release",
         "confidence": "medium",
         "source_ids": [
           "lacquer_aizu"
-        ]
+        ],
+        "plot": 8304,
+        "displacement_km": 9.4,
+        "reveal_year": 1590
       }
     ],
     "trade_access": [
@@ -7676,9 +7872,10 @@
           "gold-kai-nakayama",
           "gold-izu-toi",
           "gold-noto-hodatsu",
-          "gold-sado-nishimikawa"
+          "gold-sado-nishimikawa",
+          "gold-sado-aikawa"
         ],
-        "status": "requires_custom_resource_definition"
+        "status": "defined_in_Data/JAC_Japan_Resources.xml"
       },
       {
         "type": "RESOURCE_JAC_LACQUER",
@@ -7688,7 +7885,7 @@
           "lacquer-wajima",
           "lacquer-aizu"
         ],
-        "status": "requires_custom_resource_definition"
+        "status": "defined_in_Data/JAC_Japan_Resources.xml"
       },
       {
         "type": "FEATURE_JAC_FUJI",
@@ -9092,16 +9289,16 @@
     ],
     "terrain_features": {
       "feature_counts": {
-        "FEATURE_FOREST": 750,
+        "FEATURE_FOREST": 744,
         "FEATURE_MARSH": 33,
         "FEATURE_VOLCANO": 5
       },
       "forest": {
         "feature_id": "FEATURE_FOREST",
         "target_percent": 45,
-        "eligible_tiles": 1659,
-        "placed_count": 747,
-        "placed_percent": 45.03,
+        "eligible_tiles": 1646,
+        "placed_count": 741,
+        "placed_percent": 45.02,
         "rice_basin_exclusion_radius_km": 17.2,
         "source_ids": [
           "forest_history",
@@ -9112,7 +9309,7 @@
         "feature_id": "FEATURE_MARSH",
         "target_count": 33,
         "placed_count": 33,
-        "eligible_flat_land_tiles": 1136,
+        "eligible_flat_land_tiles": 1131,
         "cluster_ids": [
           "marsh-kushiro",
           "marsh-sarobetsu",

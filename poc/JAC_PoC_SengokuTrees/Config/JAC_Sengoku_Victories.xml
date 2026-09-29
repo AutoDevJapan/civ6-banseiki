@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <GameInfo>
-	<!-- The VictoryDomain has no rows in Victories until the castle-unification victory exists. -->
 	<Rulesets>
 		<Update>
 			<Where RulesetType="RULESET_JAC_BANSEIKI"/>
 			<Set VictoryDomain="JAC_Sengoku_Victories" MaxTurns="0"/>
 		</Update>
 	</Rulesets>
+	<Victories>
+		<Row Domain="JAC_Sengoku_Victories" VictoryType="VICTORY_JAC_SENGOKU_UNIFICATION" Name="LOC_VICTORY_JAC_UNIFICATION_NAME" Description="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" ReadOnly="true" EnabledByDefault="true"/>
+	</Victories>
 	<RulesetSupportedValues>
 		<Row Ruleset="RULESET_JAC_BANSEIKI" Domain="StandardTurnLimits" Value="TURNLIMIT_NONE"/>
 	</RulesetSupportedValues>
