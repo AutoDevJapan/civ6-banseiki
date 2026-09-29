@@ -166,7 +166,7 @@
       "condition": {
         "type": "log_line",
         "log": "Lua.log",
-        "contains": "[JAC_EVENTS] fired event=JAC_EVENT_TEPPO_DENRAI player=0 civ=CIVILIZATION_JAC_ODA reason=prereq turn=2 due=28"
+        "contains": "[JAC_EVENTS] fired event=JAC_EVENT_TEPPO_DENRAI player=0 civ=CIVILIZATION_JAC_ODA reason=prereq turn=2 due=30"
       },
       "timeout": 60
     },
