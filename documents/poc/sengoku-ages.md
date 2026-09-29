@@ -1,12 +1,12 @@
 # 戦国パックの時代（黄金期・暗黒期）第1段階（JAC_PoC_SengokuTrees）
 
-[時代の設計](../research/sengoku-ages.md) §10 の 1（データ）・2（ゲームプレイ Lua の「武功の台帳」）・4（自動テスト）と、3（UI）のうち結果を見せる最小限（改元の通知）を実装した PoC。置き場は設計どおり `poc/JAC_PoC_SengokuTrees` で、条件は既存と同じ `RULESET_JAC_BANSEIKI`（地図では絞らない）。点・閾値・効果の数値はすべて**暫定**。
+[時代の設計](../research/sengoku-ages.md) §10 の 1（データ）・2（ゲームプレイ Lua の「武功の台帳」）・4（自動テスト）と、3（UI）のうち結果を見せる最小限（改元の通知）を実装した PoC。置き場は設計どおり `poc/JAC_PoC_SengokuTrees` で、条件は既存と同じ `RULESET_JAC_BANSEIKI`（地図では絞らない。戦国パックの他の仕組みと同じくルールセット全体に効く。SSOT 3.2 は時代を戦国パックの仕組みとして書いており、地図の条件は無い）。点・閾値・効果の数値はすべて**暫定**。
 
 - データ：`Data/JAC_Sengoku_Ages.sql`（手書き。既存の `JAC_Sengoku_Unlocks.sql` などと同じく生成スクリプトは使わない。設計の表から作る生成物ではないため）、`Data/JAC_Sengoku_Ages_Icons.xml`、`Text/JAC_Sengoku_Ages_Text.xml`（ja・en・ru）
 - ゲームプレイ Lua：`Scripts/JAC_Sengoku_Ages.lua`
 - UI Lua：`UI/JAC_SengokuDarkPolicy.lua`・`.xml`（暗黒期の政策の選択画面。下の「暗黒期の政策の選択」）
 - テスト：`tests/test_sengoku_ages.py`（公式データを読むデータの断面と、lupa で台帳と選択画面を動かす単体テスト）
-- 実機シナリオ：`tools/civ6-autotest/scenarios/sengoku-ages.json`（2026-09-30 に PASS。後から足した確認は未実行。下の「実機確認」）、`sengoku-dark-policy.json`（暗黒期の政策の選択。未実行）
+- 実機シナリオ：`tools/civ6-autotest/scenarios/sengoku-ages.json`（2026-09-30 に PASS。後から足した確認は未実行。下の「実機確認」）、`sengoku-dark-policy.json`（暗黒期の政策の選択。2026-09-30 に ages-dark-choice-01 で PASS）
 
 ## 暫定の既定（オーナー確認事項 Q36〜Q39）
 
@@ -45,13 +45,13 @@
 オーナー確認事項 Q70〜Q72（[`questions.md`](../questions.md)）の推奨案を暫定の既定にした。
 
 1. **既定の政策**：改元で暗黒期になった家は、すぐに既定の政策を持つ。既定は `JAC_SengokuDarkAgePolicyDefaults`（家ごとに1行、22家。設計の「家ごとの順位表」の1位）で、表に無い文明（Gathering Storm の地図の文明）は `Priority` が最小の政策（背水の陣）。AI の家と、答えない人間の家はこのまま。割り当ては家の史実の性格による暫定（Q70）
-2. **選択の画面**：人間の家が暗黒期で、今の期にまだ選んでいなければ、自分の手番の始まり（`Events.LocalPlayerTurnBegin`）と読み込み（`Events.LoadScreenClose`）のたびに画面を出す。4つの政策の名前・効果（`Description`）と「選ぶ」、今の政策の名前、「あとで」（次の手番まで閉じる。Q72）。入力は奪わない（公式の `DisloyalCityChooser.lua` と同じ `ContextPtr:SetHide` の出し入れで、入力ハンドラは置かない）
+2. **選択の画面**：人間の家が暗黒期で、今の期にまだ選んでいなければ、自分の手番の始まり（`Events.LocalPlayerTurnBegin`）と読み込み（`Events.LoadScreenClose`）のたびに画面を出す。4つの政策の名前・効果（`Description`）と「選ぶ」、今の政策の名前、「あとで」（次の手番まで閉じる。Q72）。選ばずに手番を終えたとき（`Events.LocalPlayerTurnEnd`。公式 `Base/Assets/UI/ActionPanel.lua:1335`）も閉じる。手番の外では送れないためで、選べる間は次の手番の始まりにまた出る。入力は奪わない（公式の `DisloyalCityChooser.lua` と同じ `ContextPtr:SetHide` の出し入れで、入力ハンドラは置かない）
 3. **送信**：「選ぶ」で `UI.RequestPlayerOperation(自分, PlayerOperations.EXECUTE_SCRIPT, {OnStart = "JAC_SengokuDarkPolicyChoose", PolicyType, Reign})`。自分の手番が始まる前（読み込み直後など）は送らず、画面を開いたままにする（手番の前に送った要求は届かない。実機 court-arbitration-03）
 4. **受け付け**（ゲームプレイ側 `GameEvents.JAC_SengokuDarkPolicyChoose`）：送った家（エンジンが渡すプレイヤー。引数は使わない）が台帳にあり、`age` が `DARK`、`Reign` が今の期、今の期にまだ選んでいない（`chosen` が今の期でない）、表にある政策、のすべてを満たすときだけ、`policy` と `chosen` を書き、タイルのプロパティを書き直す（§7.1 の関数。冪等）。合わないものは捨てて Lua.log に `[JAC_AGES] choice dropped player=… : <理由>` を出す。選べるのは期の間に1回（Q71）
 5. 次の改元で暗黒期が続けば、また既定の政策になり、新しい期の選択を受け付ける。選んだ政策は台帳に入るので、セーブ→ロードでもそのまま
 6. **自動テストの driver**：`scenario.py` の `POPUP_CLOSERS`（旧 `DIPLOMACY_CLOSERS`）に `JAC_SengokuDarkPolicy` の `OnClose()` を足した。autoplay の途中で画面が出ても閉じて続ける（閉じると既定の政策のまま）。画面は入力を奪わないので、閉じなくても autoplay は止まらない
 
-実機シナリオ `sengoku-dark-policy.json`（未実行。設定は `sengoku-ages.json` と同じ）：
+実機シナリオ `sengoku-dark-policy.json`（設定は `sengoku-ages.json` と同じ）。2026-09-30 に ages-dark-choice-01 で PASS：弘治で武田を暗黒期にし、既定は精鋭主義、選択の画面が出た。寺院学問を選ぶと全都市に旗が付き要の都市は1つ、2回目の選択は捨てられ、セーブ→ロード後も選択が残り画面は閉じたまま。手番終了で閉じる処理はこの後に足したもので、実機では未確認（単体テストで確認）：
 
 | 時点 | 確かめること |
 |---|---|
@@ -128,7 +128,7 @@ MOD と設定は `ages-probe.json` と同じ（15 km 史実領土版、22勢力�
 
 ## 後続
 
-1. ~~暗黒期の専用政策を選ぶ画面と受け付け、AI の家ごとの順位表~~ → 上の「暗黒期の政策の選択」（実機は未実行）
+1. ~~暗黒期の専用政策を選ぶ画面と受け付け、AI の家ごとの順位表~~ → 上の「暗黒期の政策の選択」（実機 PASS：ages-dark-choice-01、2026-09-30）
 2. 誓約（Q39 ①の暫定。家に固有1つ＋共通から2つ）と、誓約の達成の点
 3. 改元の画面・時代スコアの画面（§8）。家固有名の差し替え（`poc/JAC_PoC_BanseikiRuleset/UI/JAC_Era*.lua`）に足す。公式の時代の画面から年齢の部分を外す
 4. 数値の調整（設計 §5.3、§10 の 5）

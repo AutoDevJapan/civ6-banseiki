@@ -53,7 +53,7 @@ function JAC_ChooseDarkPolicy(policyType)
 	return true
 end
 
--- 選択待ちの間、自分の手番の始まり（と読み込み）ごとに出す。「あとで」は次の手番まで閉じるだけ（Q72）
+-- 選択待ちの間、自分の手番の始まり（と読み込み）ごとに出す。「あとで」と手番の終わりは次の手番まで閉じるだけ（Q72）
 local function Refresh()
 	local house = PendingHouse()
 	if house == nil then
@@ -77,4 +77,5 @@ end
 ContextPtr:SetHide(true)
 Controls.LaterButton:RegisterCallback(Mouse.eLClick, OnClose)
 Events.LocalPlayerTurnBegin.Add(Refresh) -- Base/Assets/UI/ActionPanel.lua:1334
+Events.LocalPlayerTurnEnd.Add(OnClose)  -- Base/Assets/UI/ActionPanel.lua:1335。手番外では送れないので閉じる
 Events.LoadScreenClose.Add(Refresh)      -- Base/Assets/UI/Popups/PlayerChange.lua:298

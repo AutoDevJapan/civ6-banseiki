@@ -747,12 +747,14 @@ Mouse = { eLClick = 1 }
 PlayerOperations = { EXECUTE_SCRIPT = "EXECUTE_SCRIPT" }
 Game.GetLocalPlayer = function() return LOCAL_PLAYER end
 for _, p in pairs(Players) do p.IsTurnActive = function() return TURN_ACTIVE end end
-local uiEvents = { turn = {}, load = {} }
+local uiEvents = { turn = {}, turnEnd = {}, load = {} }
 Events = {
   LocalPlayerTurnBegin = { Add = function(f) table.insert(uiEvents.turn, f) end },
+  LocalPlayerTurnEnd = { Add = function(f) table.insert(uiEvents.turnEnd, f) end },
   LoadScreenClose = { Add = function(f) table.insert(uiEvents.load, f) end },
 }
 function LOCAL_TURN_BEGIN() for _, f in ipairs(uiEvents.turn) do f() end end
+function LOCAL_TURN_END() for _, f in ipairs(uiEvents.turnEnd) do f() end end
 UI = { RequestPlayerOperation = function(id, op, params)
   table.insert(REQUESTS, { id = id, op = op, OnStart = params.OnStart })
   if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params) end
@@ -810,6 +812,19 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.g.LOCAL_TURN_BEGIN()
         self.assertTrue(self.shown())  # still unchosen: asked again, the default stays meanwhile
         self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_ELITE", None))
+
+    def test_turn_end_closes_and_the_next_turn_asks_again(self):
+        self.turns(1, 66)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())
+        self.g.LOCAL_TURN_END()  # ended without choosing: nothing can be sent until the next turn
+        self.assertFalse(self.shown())
+        self.assertEqual(len(self.g.REQUESTS), 0)
+        self.turns(67)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())
+        list(self.g.ROWS.values())[3].Choose.click()
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 1))
 
     def test_not_shown_for_a_house_that_is_not_dark(self):
         self.turns(1, 30)
