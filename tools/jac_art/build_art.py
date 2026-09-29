@@ -15,6 +15,8 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
+from draw_crests import NAMES as CREST_NAMES
+
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "poc" / "JAC_PoC_CustomCivs"
 BUILD = Path(__file__).resolve().parent / "build"
@@ -234,6 +236,32 @@ def atlas(masters, size):
     return out
 
 
+def grid_atlas(masters, size, columns=8):
+    """Rows follow icon index order, as in XP2 civilization atlases."""
+    rows = (len(masters) + columns - 1) // columns
+    out = Image.new("RGBA", (columns * size, rows * size), (0, 0, 0, 0))
+    for i, master in enumerate(masters):
+        out.alpha_composite(master.resize((size, size), Image.Resampling.LANCZOS),
+                            ((i % columns) * size, (i // columns) * size))
+    return out
+
+
+def crest_contact_sheet(masters):
+    """Readable local proof with full-size and 22px samples for each house."""
+    cell_w, cell_h, columns = 180, 195, 6
+    rows = (len(masters) + columns - 1) // columns
+    sheet = Image.new("RGBA", (columns * cell_w, rows * cell_h), "#45484d")
+    draw = ImageDraw.Draw(sheet)
+    for i, (name, master) in enumerate(zip(CREST_NAMES, masters, strict=True)):
+        x, y = (i % columns) * cell_w, (i // columns) * cell_h
+        sheet.alpha_composite(master.resize((104, 104), Image.Resampling.LANCZOS),
+                              (x + 22, y + 12))
+        sheet.alpha_composite(master.resize((22, 22), Image.Resampling.LANCZOS),
+                              (x + 135, y + 60))
+        draw.text((x + 8, y + 143), name, fill="white")
+    sheet.convert("RGB").save(PREVIEWS / "house-crests.png")
+
+
 def growth_icon():
     keyed = key_magenta(GROWTH_ORIGINALS / "notebooks_generated.png")
     bounds = keyed.getchannel("A").getbbox()
@@ -308,7 +336,7 @@ def main():
     growth_available = (GROWTH_MOD / "JAC_PoC_GrowthUI.modinfo").is_file()
     required = [ORIGINALS / value for leader in LEADERS.values()
                 for value in (leader["portrait"], leader["figure"], leader["background"])]
-    required += [ORIGINALS / "oda_mokko_generated.png", ORIGINALS / "takeda_bishi_generated.png"]
+    required += [ORIGINALS / "crests" / f"{name.lower()}.png" for name in CREST_NAMES]
     if growth_available:
         required.append(GROWTH_ORIGINALS / "notebooks_generated.png")
     required += [ORIGINALS / name for name in ABILITY_SOURCES]
@@ -327,11 +355,17 @@ def main():
 
     order = ("ODA_NOBUHIDE", "TAKEDA_NOBUTORA")
     leader_masters = [leader_icon_master(k) for k in order]
-    civ_masters = [symbol_icon_master(name) for name in ("oda_mokko_generated.png", "takeda_bishi_generated.png")]
+    civ_masters = []
+    for name in CREST_NAMES:
+        master = Image.open(ORIGINALS / "crests" / f"{name.lower()}.png").convert("RGBA")
+        if master.size != (512, 512) or master.getchannel("A").getbbox() is None:
+            raise ValueError(f"Invalid crest image: {name}")
+        civ_masters.append(master)
+    crest_contact_sheet(civ_masters)
     ability_masters = [symbol_icon_master(name) for name in ABILITY_SOURCES]
     icons = [texture(f"JAC_Leaders{s}", atlas(leader_masters, s)) for s in LEADER_ICON_SIZES]
     for s in CIV_ICON_SIZES:
-        icons.append(texture(f"JAC_Civs{s}", atlas(civ_masters, s)))
+        icons.append(texture(f"JAC_Civs{s}", grid_atlas(civ_masters, s)))
     for s in ABILITY_ICON_SIZES:
         icons.append(texture(f"JAC_Abilities{s}", atlas(ability_masters, s)))
 

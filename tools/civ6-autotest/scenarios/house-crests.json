@@ -1,0 +1,26 @@
+{
+  "name": "Twenty-two house crests resolve in every civilization icon size",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b"
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "local names={'ODA','TAKEDA','DATE','ASHINA','HOJO','YAMANOUCHI_UESUGI','NAGAO','IMAGAWA','MATSUDAIRA','ASAKURA','ASHIKAGA','MIYOSHI','ROKKAKU','HONGANJI','OUCHI','AMAGO','MORI','CHOSOKABE','OTOMO','SHIMAZU','RYUKYU','AINU'}; local sizes={22,30,32,36,44,45,48,50,64,80,128,200,256}; for _,size in ipairs(sizes) do local seen={}; for _,name in ipairs(names) do local icon='ICON_CIVILIZATION_JAC_'..name; local x,y,sheet=IconManager:FindIconAtlas(icon,size); if x==nil or y==nil or not sheet or not string.find(sheet,'JAC_Civs'..size,1,true) then error('unresolved house crest '..icon..' size '..size..' sheet='..tostring(sheet)) end; local key=tostring(x)..':'..tostring(y); if seen[key] then error('duplicate atlas position '..icon..' and '..seen[key]..' size '..size) end; seen[key]=icon end end; return '22 unique crests resolve at all 13 sizes'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "MainMenu",
+      "code": "OnAdvancedSetup(); return 'advanced setup opened for crest inspection'"
+    },
+    {
+      "action": "screenshot",
+      "path": "house-crests-advanced-setup.png"
+    }
+  ]
+}
