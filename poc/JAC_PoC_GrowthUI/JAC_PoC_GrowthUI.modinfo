@@ -30,7 +30,7 @@
 	</LocalizedText>
 	<ActionCriteria>
 		<Criteria id="JAC_GrowthUI_GatheringStorm">
-			<RuleSetInUse>RULESET_EXPANSION_2</RuleSetInUse>
+			<RuleSetInUse>RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI</RuleSetInUse>
 		</Criteria>
 	</ActionCriteria>
 	<InGameActions>

@@ -4,7 +4,7 @@
 
 ## 準備と実行
 
-1. 対象 MOD を Civ6 の `Mods` フォルダから参照できる状態にする。ドライバは `.modinfo` の UUID で対象を探し、ジャンクションの参照先を走査する。`bundle0-load-save.json` は `JAC_PoC_Bundle0`、クランと手帳のシナリオは `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を使う。実際に Civ6 が参照する `Mods` の配置先を確認する。
+1. 対象 MOD を Civ6 の `Mods` フォルダから参照できる状態にする。ドライバは `.modinfo` の UUID で対象を探し、ジャンクションの参照先を走査する。`bundle0-load-save.json` は `JAC_PoC_Bundle0`、クランと手帳のシナリオは `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を使う。`banseiki-ruleset.json` はこの3 MOD と `JAC_PoC_BanseikiRuleset` を使う。実際に Civ6 が参照する `Mods` の配置先を確認する。
 2. Civ6 は**ウィンドウ表示**で起動できる設定にする。停止中ならドライバが Steam 経由で起動する。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
 3. PowerShell でリポジトリのルートから実行する。Python 3.12 で確認済み。追加パッケージは不要。
 
@@ -13,6 +13,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-loa
 # 既にゲームが起動している場合の診断
 python tools/civ6-autotest/tuner.py states
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-load-save.json --output tools/civ6-autotest/artifacts/bundle0-run-01
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/banseiki-ruleset.json --output tools/civ6-autotest/artifacts/banseiki-run-01
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/clans-notebooks.json --no-auto-restart --output tools/civ6-autotest/artifacts/debug-01
 python -m unittest discover -s tools/civ6-autotest/tests -v
 ```

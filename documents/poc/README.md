@@ -150,7 +150,7 @@ python tools/jac_art/build_art.py
 MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
-- `Players:Expansion2_Players` に両組だけを登録する。公式 GS の `RulesetDomainOverrides` が `RULESET_EXPANSION_2` の `PlayerLeader` をこのドメインに切り替えるため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
+- `Players:Expansion2_Players` に両組だけを登録する。公式 GS と独自ルールセット「万世紀」が `RulesetDomainOverrides` でこのドメインを選ぶため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
 - 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
 - ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 - 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
@@ -318,3 +318,19 @@ Antigravity 追加利用規約の第6項は第三者ソフトウェア経由の�
 修正前後の実機結果は上記「新しい画像の実機表示」を参照。修正後の新 BLP と `LeaderScene` 差し替えは実機で確認した。都市の旗と1080pでの端の表示は未確認。能力専用アイコン4点は登録・参照を確認済みで、標準 UI が文明／指導者アイコンを再利用するため画面表示は PoC の対象外。製品版で専用絵柄を出すには能力用のカスタム UI が必要。
 
 BLP の容量：非圧縮 RGBA（`PF_R8G8B8A8_UNORM`）で、2026-09-29 の修正後ビルドの 3 個は合計 37,824,512 バイト（`_Leaders` 31,619,072、`_Fallback` 4,705,792、`_Icons` 1,499,648）。人物は `_Leaders` と `_Fallback` の両方に入る。長期保管方式は [質問 D10](../questions.md) の議論待ちで決める。
+
+## JAC_PoC_BanseikiRuleset：独立ルールセットと指導者プール
+
+SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検証。`poc/JAC_PoC_BanseikiRuleset` を独立した PoC MOD にした。ルールセットとステージング設定を既存のゲームプレイ PoC から分けることで、FrontEnd の設定登録を常時適用し、各 PoC のゲーム内アクションをルールセット条件で評価できる。3つの既存 MOD は `RULESET_JAC_BANSEIKI` と比較用の `RULESET_EXPANSION_2` の両方で読み込む。GS を残す理由は、既存シナリオの回帰確認と両ルールセットの差分調査である。
+
+新ルールセットの `Rulesets` 行は `RULESET_JAC_BANSEIKI`、`GameCore=Expansion2`、`IsScenario=0`、`SupportsSinglePlayer=1`、`SupportsMultiPlayer=1`。マルチプレイの実動作は未検証。勝利条件のドメインとマップ候補は GS を使う。GS が `RULESET_EXPANSION_2` 専用に宣言する通常オプション、災害の強度（`Realism`）、自然遺産・都市国家除外、公式の指導者プール1・2、および開始時代・ターン制限の設定更新を、このルールセットにも宣言する。
+
+指導者候補には `Players:Expansion2_Players` を共用する。これは公式と JAC の全候補を持つドメインで、`RULESET_JAC_BANSEIKI` の `PlayerLeader` に `RulesetDomainOverrides` で指定する。織田・武田の行は `JAC_PoC_CustomCivs/Config/JAC_CustomCivs_Players.xml` に一度だけ登録し、新 MOD は CustomCivs を依存 MOD とする。`JAC_BanseikiHumanPool` 設定の既定は `JAC_BANSEIKI_ONLY`、もう一方は `JAC_ALL_POOLS`。`DomainValueFilterQueries` と `QueryParameters` がルールセット・プレイヤー ID・設定値を読み、シングルプレイの人間枠 0 かつ既定値のときだけ候補を織田信秀・武田信虎との積集合にする。AI 枠にはフィルターを返さず、公式と JAC の全候補を残す。この仕組みは FrontEnd の設定 DB だけで動き、ゲームプレイ Lua や UI 差し替えは不要。
+
+2026-09-29 の設定画面と FrontEnd Lua の結果：**設定部分は成功**。英語 UI の「Create Game」ルールセット欄に `Banseiki` が現れ、選択すると `Human Leader Choices` の既定 `Use Banseiki pool only` が表示された。`Use all leader pools` への切替も画面で確認した。`HostGame` の `CreatePlayerParameters(id, true)` と `Refresh()` で、既定時は人間枠 2 候補（両 JAC）、AI 枠 1・2 は各 82 候補（公式クレオパトラと両 JAC を含む）。全プールを選ぶと人間枠も 82 候補となった。スクリーンショットは Git 管理外の `tools/civ6-autotest/artifacts/banseiki-ui-01/ruleset-selected.png` と `pool-all.png`。3言語のタグは登録したが、ゲーム画面での表示確認は英語のみ。
+
+ゲーム開始の初回実行 `tools/civ6-autotest/artifacts/banseiki-full-01/` は、ロード画面後にメニューへ戻り、開始ステップで失敗した。`Modding.log` と `Database.log` では公式 GS の `Expansion2Core` と `Expansion2CoreContent` が適用されず、XP1/XP2 の参照整合性エラーでゲームプレイ DB がロールバックされた。この時点の `Target Mods` にルールセット MOD 自体が入っていなかった。診断用に一時的に `IsScenario=1` として起動した `banseiki-flag1-01/` はゲーム内まで進み、3 MOD の `[JAC_POC]` ログも出たが、`GameClimate` と `Game.GetWorldCongress` は存在せず、Base コアの動作だった。対照の公式「黒死病」`blackdeath-core-control-01/` は同じドライバで `GameClimate=true`、`Game.GetWorldCongress=function`、`Expansion2Core` の適用を確認した。現在の MOD は `IsScenario=0` に戻し、公式シナリオと同様にゲーム内アクションおよび既定有効化を追加した。ゲーム内アクション追加後の再検証は Steam のサインイン画面で起動できず、まだ行えていない。
+
+静的検証は XML 6ファイルの解析、`banseiki-ruleset.json --check`（27ステップ）、自動テスト84件、`git diff --check` がすべて成功。これはゲーム内アクション追加後のGS中核読み込みを証明しない。
+
+最終の自動シナリオは `tools/civ6-autotest/scenarios/banseiki-ruleset.json`。ルールセットとプールの画面記録、設定値と候補リストの Lua 照会、織田（人間）・クレオパトラ（AI）・武田（AI）の開始、3 MOD のログ、気候画面と世界会議 API、数ターンの自動進行、保存・メニューへ戻る・ロードを検査する。未検証はこの最終シナリオのゲーム内部分、マルチプレイ、長期プレイでの海面上昇。
