@@ -61,6 +61,12 @@ class TransientTimeoutTests(unittest.TestCase):
         self.assertTrue(self.runner._dismiss_advisor(time.monotonic() + 60))
         self.assertEqual(FakeTuner.calls, ["AdvisorPopup", "AdvisorPopup"])
 
+    def test_research_query_retries_after_timeout(self):
+        FakeTuner.replies = {**FakeTuner.replies, "InGame": "3|0~A~true~0~0~~~~"}
+        self.addCleanup(FakeTuner.replies.update, {"InGame": "42|true|false|10|0"})
+        self.assertEqual(self.runner._research_query("return 1", time.monotonic() + 60), "3|0~A~true~0~0~~~~")
+        self.assertEqual(FakeTuner.calls, ["InGame", "InGame"])
+
     def test_gives_up_only_after_deadline(self):
         FakeTuner.failures = 10 ** 6
         with self.assertRaises(LuaResponseUnknown):

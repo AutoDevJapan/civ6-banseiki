@@ -154,9 +154,45 @@ class DriverFeatureTests(unittest.TestCase):
         self.assertIn("p:GetCities():GetCount()~=0", settler["steps"][3]["code"])
         self.assertIn("count~=1", settler["steps"][3]["code"])
         long = json.loads((SCENARIOS / "japan-map-15km-200turn.json").read_text(encoding="utf-8"))
-        self.assertEqual(long["steps"][4]["turns"], 200)
-        self.assertTrue(long["steps"][4]["allow_human_elimination"])
-        self.assertTrue(long["steps"][4]["research_metrics"])
+        steps = long["steps"]
+        auto = next(i for i, step in enumerate(steps) if step["action"] == "autoplay")
+        self.assertEqual(steps[auto]["turns"], 200)
+        self.assertTrue(steps[auto]["allow_human_elimination"])
+        self.assertTrue(steps[auto]["research_metrics"])
+        # Research metrics must never be recorded on the official trees.
+        self.assertIn("26c967d0-c10d-4eeb-8aaf-c83dc7e621e7", steps[0]["ids"])
+        self.assertTrue(steps[1]["build_setup"])
+        self.assertEqual(steps[1]["ruleset"], "RULESET_JAC_BANSEIKI")
+        start = next(i for i, step in enumerate(steps) if step["action"] == "start_game")
+        check = next(step["code"] for step in steps[start + 1:auto] if "RULESET_JAC_BANSEIKI" in step.get("code", ""))
+        for text in ("GetRuleSet()~='RULESET_JAC_BANSEIKI'", "TECH_JAC_SENGOKU_", "CIVIC_JAC_SENGOKU_", "t~=32 or c~=30"):
+            self.assertIn(text, check)
+
+    def test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            # Early stop at turn 2 with a stale end event, then the real end at turn 4.
+            statuses = iter((AutoplayStatus(2, False, True, 0, 0), AutoplayStatus(2, False, True, 0, 0),
+                             AutoplayStatus(3, True, False, 1, 0), AutoplayStatus(4, False, True, 0, 0)))
+            calls = []
+
+            def lua(_state, code, _timeout=5.0):
+                calls.append(code)
+                return "1|0" if "return tostring(startTurn)" in code else "true"
+
+            clock = iter(range(0, 1000, 2))
+            with patch.object(runner, "_lua", side_effect=lua), patch.object(
+                runner, "_autoplay_status", side_effect=lambda _deadline: next(statuses)
+            ), patch.object(runner, "_close_options_menu"), patch.object(
+                runner, "_dismiss_advisor"
+            ), patch.object(runner, "_choose_dedication", return_value=None), patch(
+                "scenario.time.sleep"
+            ), patch("scenario.time.monotonic", side_effect=lambda: next(clock)):
+                detail = runner._autoplay(3, 1000)
+            resumes = [c for c in calls if "SetTurns(2)" in c]
+            self.assertEqual(len(resumes), 1)
+            self.assertLess(resumes[0].index("JAC_AUTOTEST_AUTO_DONE = false"), resumes[0].index("SetActive(true)"))
+            self.assertIn("1->4", detail)
 
 
 if __name__ == "__main__":

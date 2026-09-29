@@ -78,9 +78,9 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 
 - `japan-map-setup-screen.json`: 「ゲームの作成」で通常マップの人間候補が織田・武田の2人、日本15 kmマップを選んだ後の候補が所定の22人と完全一致することを検査し、それぞれ画面を保存する。
 - `japan-map-15km-settlers.json`: 開拓者版の開始時に22メジャー勢力、各勢力ちょうど1人の開拓者、都市0、地図204×88を検査する。
-- `japan-map-15km-200turn.json`: 史実領土版の初期22勢力・56都市を検査し、200ターンを進め、滅亡を許容しつつターン時間・メモリと全メジャーの研究状況を記録する。最後に目標ターン到達と生存勢力数を確認する。
+- `japan-map-15km-200turn.json`: 史実領土版の初期22勢力・56都市を検査し、開始後に ruleset が `RULESET_JAC_BANSEIKI` で戦国ツリー（技術32・社会制度30、公式の行なし）が有効なことを検査してから、200ターンを進め、滅亡を許容しつつターン時間・メモリと全メジャーの研究状況を記録する。最後に目標ターン到達と生存勢力数を確認する。
 
-研究ログは成果物の `autoplay-research-1.jsonl` に、**観測できた**各ターンの各メジャーについて、生死、研究済み技術・社会制度の件数とID、現在の研究IDを記録する。観測できなかったターンを補間しない。到達ターンの中央値と勢力間の最小・最大・幅は次のコマンドで出す。`--kind civic` で社会制度を集計する。最初の観測時点で既に完了した項目は `baseline_factions` に数え、その正確な研究完了ターンは不明である。
+研究ログは成果物の `autoplay-research-1.jsonl` に、**観測できた**各ターンの各メジャーについて、生死、研究済み技術・社会制度の件数とID、現在の研究IDを記録する。観測できなかったターンを補間しない。ターンごとの研究状況の問い合わせは読み取りだけなので、FireTuner の一時的なタイムアウトでは再試行する。途中で止まった自動進行を再開するときは、終了フラグ `JAC_AUTOTEST_AUTO_DONE` を消してから再開し、新しい終了イベントを待つ。到達ターンの中央値と勢力間の最小・最大・幅は次のコマンドで出す。`--kind civic` で社会制度を集計する。最初の観測時点で既に完了した項目は `baseline_factions` に数え、その正確な研究完了ターンは不明である。
 
 ```powershell
 python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl

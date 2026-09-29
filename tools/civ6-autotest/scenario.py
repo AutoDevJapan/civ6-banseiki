@@ -591,6 +591,10 @@ class Runner:
                           min(5, _remaining(deadline)))
         return _parse_autoplay_status(value)
 
+    def _research_query(self, code: str, deadline: float) -> str:
+        # Read-only Lua, so a FireTuner timeout may be retried safely.
+        return self._retry_idempotent(lambda: self._lua("InGame", code, min(10, _remaining(deadline))), deadline)
+
     def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
                   record_metrics: bool = False, research_metrics: bool = False,
                   allow_human_elimination: bool = False) -> str:
@@ -637,7 +641,7 @@ class Runner:
                 recorder.start(process_memory(metrics_pid))
             if research_metrics:
                 research_recorder = ResearchMetrics(self.output / f"autoplay-research-{self.metrics_runs}.jsonl")
-                research_recorder.sample(self._lua("InGame", RESEARCH_SAMPLE_CODE, min(10, _remaining(deadline))))
+                research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline))
             restarts = 0
             dedications = 0
             inactive_since = None
@@ -653,8 +657,7 @@ class Runner:
                         raise ScenarioError("Civ VI process changed during metrics sampling")
                     recorder.sample(status.turn, process_memory(metrics_pid))
                 if research_recorder and status.turn != research_recorder.last_turn:
-                    research_recorder.sample(self._lua("InGame", research_sample_code(research_recorder.slots),
-                                                      min(10, _remaining(deadline))))
+                    research_recorder.sample(self._research_query(research_sample_code(research_recorder.slots), deadline))
                 _remaining(deadline)
                 if (elimination_turn is None and
                         (status.turn != last_alive_check_turn or status.local_player < 0)):
