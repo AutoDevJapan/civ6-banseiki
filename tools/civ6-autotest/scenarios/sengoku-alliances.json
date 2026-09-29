@@ -74,6 +74,11 @@
       "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({0}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i))..'/'..tostring(Players[1]:GetCulture():HasCivic(i))"
     },
     {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
+    },
+    {
       "action": "wait_for",
       "condition": {
         "type": "lua",
@@ -91,6 +96,11 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local i=GameInfo.Civics['CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES'].Index; for _,id in ipairs({1}) do Players[id]:GetCulture():SetCivic(i,true) end; return tostring(Players[0]:GetCulture():HasCivic(i))..'/'..tostring(Players[1]:GetCulture():HasCivic(i))"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
     },
     {
       "action": "wait_for",
