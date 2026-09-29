@@ -1,4 +1,4 @@
-"""Build the four static Japan scale maps from pinned public-domain source data.
+"""Build the 1534 Japan maps from pinned public-domain source data.
 
 Only the Python standard library is needed.  The official Civ6Map supplies the
 SQLite schema; its map content is never copied into the generated files.
@@ -19,13 +19,15 @@ import urllib.request
 import uuid
 import zipfile
 
+from start_1534 import civ_id, data, leader_id
+
 
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "poc" / "JAC_PoC_JapanMapScale"
 CACHE = Path(__file__).resolve().parent / "cache"
 OFFICIAL = (Path("C:/Program Files (x86)/Steam/steamapps/common/")
             / "Sid Meier's Civilization VI/Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map")
-SCALES = (40, 30, 25, 20)
+SCALES = (20, 15)
 SOURCE = {
     "ne_10m_land.zip": (
         "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip",
@@ -39,10 +41,8 @@ SOURCE = {
         "1c04df76876d71b5424961f90771922641f8e85bc7fec5de70f688d59b60082d"),
 }
 
-# Approximate 1534 seats, WGS84 longitude/latitude.  Played with the Banseiki
-# ruleset: the human is Oda Nobuhide from the Banseiki pool (JAC_PoC_CustomCivs),
-# Takeda uses the other Banseiki leader, and the rest are official leaders with
-# their official civilizations.  Leaders never repeat; civilizations may (SSOT 2.2).
+# Representative seats (SSOT 3.1), WGS84. The draft's historical castle owner
+# can differ from the seat owner (notably Imagawa's Nagoya and Oda's seat).
 @dataclass(frozen=True)
 class Seat:
     slug: str
@@ -58,27 +58,27 @@ class Seat:
 
 SEATS = (
     Seat("ODA", "織田", "Oda", "Ода", "Nagoya", 136.900, 35.184, "LEADER_JAC_ODA_NOBUHIDE", "CIVILIZATION_JAC_ODA"),
-    Seat("DATE", "伊達", "Date", "Датэ", "Yonezawa", 140.106, 37.914, "LEADER_CLEOPATRA", "CIVILIZATION_EGYPT"),
-    Seat("ASHINA", "蘆名", "Ashina", "Асина", "Kurokawa", 139.930, 37.494, "LEADER_GILGAMESH", "CIVILIZATION_SUMERIA"),
-    Seat("HOJO", "北条", "Hojo", "Ходзё", "Odawara", 139.157, 35.252, "LEADER_TRAJAN", "CIVILIZATION_ROME"),
-    Seat("YAMANOUCHI_UESUGI", "山内上杉", "Yamanouchi Uesugi", "Яманоути Уэсуги", "Hirai", 139.063, 36.202, "LEADER_GORGO", "CIVILIZATION_GREECE"),
+    Seat("DATE", "伊達", "Date", "Датэ", "Yonezawa", 140.106, 37.914, leader_id("DATE"), civ_id("DATE")),
+    Seat("ASHINA", "蘆名", "Ashina", "Асина", "Kurokawa", 139.930, 37.494, leader_id("ASHINA"), civ_id("ASHINA")),
+    Seat("HOJO", "北条", "Hojo", "Ходзё", "Odawara", 139.157, 35.252, leader_id("HOJO"), civ_id("HOJO")),
+    Seat("YAMANOUCHI_UESUGI", "山内上杉", "Yamanouchi Uesugi", "Яманоути Уэсуги", "Hirai", 139.063, 36.202, leader_id("YAMANOUCHI_UESUGI"), civ_id("YAMANOUCHI_UESUGI")),
     Seat("TAKEDA", "武田", "Takeda", "Такэда", "Tsutsujigasaki", 138.568, 35.677, "LEADER_JAC_TAKEDA_NOBUTORA", "CIVILIZATION_JAC_TAKEDA"),
-    Seat("NAGAO", "長尾", "Nagao", "Нагао", "Kasugayama", 138.206, 37.148, "LEADER_PHILIP_II", "CIVILIZATION_SPAIN"),
-    Seat("IMAGAWA", "今川", "Imagawa", "Имагава", "Sunpu", 138.383, 34.979, "LEADER_SALADIN", "CIVILIZATION_ARABIA"),
-    Seat("MATSUDAIRA", "松平", "Matsudaira", "Мацудайра", "Okazaki", 137.172, 34.955, "LEADER_PETER_GREAT", "CIVILIZATION_RUSSIA"),
-    Seat("ASAKURA", "朝倉", "Asakura", "Асакура", "Ichijodani", 136.290, 35.999, "LEADER_GANDHI", "CIVILIZATION_INDIA"),
-    Seat("ASHIKAGA", "足利将軍家", "Ashikaga Shogunate", "Сёгунат Асикага", "Muromachi", 135.760, 35.029, "LEADER_QIN", "CIVILIZATION_CHINA"),
-    Seat("MIYOSHI", "三好", "Miyoshi", "Миёси", "Shozui", 134.591, 34.123, "LEADER_CHANDRAGUPTA", "CIVILIZATION_INDIA"),
-    Seat("ROKKAKU", "六角", "Rokkaku", "Роккаку", "Kannonji", 136.168, 35.133, "LEADER_MVEMBA", "CIVILIZATION_KONGO"),
-    Seat("HONGANJI", "本願寺", "Honganji", "Хонгандзи", "Ishiyama", 135.526, 34.689, "LEADER_PEDRO", "CIVILIZATION_BRAZIL"),
-    Seat("OUCHI", "大内", "Ouchi", "Оути", "Yamaguchi", 131.473, 34.178, "LEADER_TOMYRIS", "CIVILIZATION_SCYTHIA"),
-    Seat("AMAGO", "尼子", "Amago", "Амаго", "Gassan Toda", 133.242, 35.418, "LEADER_BARBAROSSA", "CIVILIZATION_GERMANY"),
-    Seat("MORI", "毛利", "Mori", "Мори", "Yoshida Koriyama", 132.708, 34.687, "LEADER_HARDRADA", "CIVILIZATION_NORWAY"),
-    Seat("CHOSOKABE", "長宗我部", "Chosokabe", "Тёсокабэ", "Oko", 133.642, 33.593, "LEADER_CATHERINE_DE_MEDICI", "CIVILIZATION_FRANCE"),
-    Seat("OTOMO", "大友", "Otomo", "Отомо", "Funai", 131.609, 33.241, "LEADER_T_ROOSEVELT", "CIVILIZATION_AMERICA"),
-    Seat("SHIMAZU", "島津", "Shimazu", "Симадзу", "Kagoshima", 130.559, 31.596, "LEADER_SEONDEOK", "CIVILIZATION_KOREA"),
-    Seat("RYUKYU", "琉球王国", "Ryukyu Kingdom", "Королевство Рюкю", "Shuri", 127.719, 26.218, "LEADER_SHAKA", "CIVILIZATION_ZULU"),
-    Seat("AINU", "アイヌ", "Ainu", "Айны", "Nibutani", 142.149, 42.633, "LEADER_WILHELMINA", "CIVILIZATION_NETHERLANDS"),
+    Seat("NAGAO", "長尾", "Nagao", "Нагао", "Kasugayama", 138.206, 37.148, leader_id("NAGAO"), civ_id("NAGAO")),
+    Seat("IMAGAWA", "今川", "Imagawa", "Имагава", "Sunpu", 138.383, 34.979, leader_id("IMAGAWA"), civ_id("IMAGAWA")),
+    Seat("MATSUDAIRA", "松平", "Matsudaira", "Мацудайра", "Okazaki", 137.172, 34.955, leader_id("MATSUDAIRA"), civ_id("MATSUDAIRA")),
+    Seat("ASAKURA", "朝倉", "Asakura", "Асакура", "Ichijodani", 136.290, 35.999, leader_id("ASAKURA"), civ_id("ASAKURA")),
+    Seat("ASHIKAGA", "足利将軍家", "Ashikaga Shogunate", "Сёгунат Асикага", "Muromachi", 135.760, 35.029, leader_id("ASHIKAGA"), civ_id("ASHIKAGA")),
+    Seat("MIYOSHI", "三好", "Miyoshi", "Миёси", "Shozui", 134.591, 34.123, leader_id("MIYOSHI"), civ_id("MIYOSHI")),
+    Seat("ROKKAKU", "六角", "Rokkaku", "Роккаку", "Kannonji", 136.168, 35.133, leader_id("ROKKAKU"), civ_id("ROKKAKU")),
+    Seat("HONGANJI", "本願寺", "Honganji", "Хонгандзи", "Ishiyama", 135.526, 34.689, leader_id("HONGANJI"), civ_id("HONGANJI")),
+    Seat("OUCHI", "大内", "Ouchi", "Оути", "Yamaguchi", 131.473, 34.178, leader_id("OUCHI"), civ_id("OUCHI")),
+    Seat("AMAGO", "尼子", "Amago", "Амаго", "Gassan Toda", 133.242, 35.418, leader_id("AMAGO"), civ_id("AMAGO")),
+    Seat("MORI", "毛利", "Mori", "Мори", "Yoshida Koriyama", 132.708, 34.687, leader_id("MORI"), civ_id("MORI")),
+    Seat("CHOSOKABE", "長宗我部", "Chosokabe", "Тёсокабэ", "Oko", 133.642, 33.593, leader_id("CHOSOKABE"), civ_id("CHOSOKABE")),
+    Seat("OTOMO", "大友", "Otomo", "Отомо", "Funai", 131.609, 33.241, leader_id("OTOMO"), civ_id("OTOMO")),
+    Seat("SHIMAZU", "島津", "Shimazu", "Симадзу", "Kagoshima", 130.559, 31.596, leader_id("SHIMAZU"), civ_id("SHIMAZU")),
+    Seat("RYUKYU", "琉球王国", "Ryukyu Kingdom", "Королевство Рюкю", "Shuri", 127.719, 26.218, leader_id("RYUKYU"), civ_id("RYUKYU")),
+    Seat("AINU", "アイヌ", "Ainu", "Айны", "Nibutani", 142.149, 42.633, leader_id("AINU"), civ_id("AINU")),
 )
 ISLAND_ANCHORS = (
     ("Yonaguni", 123.000, 24.460),
@@ -314,6 +314,141 @@ def close_start_pairs(starts: list[dict]) -> list[list]:
             if (d := hex_distance((a["col"], a["row"]), (b["col"], b["row"]))) <= CITY_MIN_RANGE]
 
 
+# A seat may stand for the same physical site as a draft castle even when the
+# labels/coordinates differ. The remaining three seats are additional cities:
+# Oda's Nagoya (draft owner: Imagawa), Date's Yonezawa, Ashikaga's Muromachi.
+SEAT_CASTLES = {
+    "ASHINA": "ASHINA_KUROKAWA", "HOJO": "HOJO_ODAWARA",
+    "YAMANOUCHI_UESUGI": "UESUGI_HIRAI", "TAKEDA": "TAKEDA_TSUTSUJI",
+    "NAGAO": "NAGAO_KASUGAYAMA", "IMAGAWA": "IMAGAWA_SUNPU",
+    "MATSUDAIRA": "MATSUDAIRA_OKAZAKI", "ASAKURA": "ASAKURA_ICHIJODANI",
+    "MIYOSHI": "MIYOSHI_SHOZUI", "ROKKAKU": "ROKKAKU_KANNONJI",
+    "HONGANJI": "HONGANJI_ISHIYAMA", "OUCHI": "OUCHI_YAMAGUCHI",
+    "AMAGO": "AMAGO_TODA", "MORI": "MORI_KORIYAMA",
+    "CHOSOKABE": "CHOSOKABE_OKO", "OTOMO": "OTOMO_RESIDENCE",
+    "SHIMAZU": "SHIMAZU_SHIMIZU", "RYUKYU": "RYUKYU_SHURI",
+    "AINU": "AINU_POROMOI",
+}
+EXTRA_CAPITAL_NAMES = {"ODA": "那古野城", "DATE": "米沢城", "ASHIKAGA": "室町殿"}
+
+# Province centres used only where the 53-castle draft has no site. These are
+# hand-placed geographic proxies, NOT historical boundaries. Their owners are
+# checked against the province allocation table on every generation.
+TERRITORY_ANCHORS = (
+    ("山城", "ASHIKAGA", 135.76, 35.01), ("大和", "ASHIKAGA", 135.83, 34.68),
+    ("和泉", "ASHIKAGA", 135.46, 34.58), ("伊賀", "ASHIKAGA", 136.13, 34.77),
+    ("志摩", "ASHIKAGA", 136.85, 34.36), ("伊豆", "HOJO", 138.94, 35.12),
+    ("安房", "HOJO", 139.87, 34.99), ("上総", "YAMANOUCHI_UESUGI", 140.10, 35.48),
+    ("美濃", "ASHIKAGA", 136.76, 35.42), ("下野", "YAMANOUCHI_UESUGI", 139.88, 36.56),
+    ("加賀", "HONGANJI", 136.66, 36.56), ("佐渡", "NAGAO", 138.40, 38.00),
+    ("丹後", "ASHIKAGA", 135.20, 35.54), ("但馬", "ASHIKAGA", 134.82, 35.54),
+    ("因幡", "ASHIKAGA", 134.24, 35.50), ("伯耆", "AMAGO", 133.33, 35.43),
+    ("隠岐", "AMAGO", 133.30, 36.20), ("美作", "AMAGO", 134.00, 35.07),
+    ("備後", "OUCHI", 133.36, 34.50), ("長門", "OUCHI", 130.94, 34.00),
+    ("紀伊", "ASHIKAGA", 135.17, 34.22), ("紀伊", "ASHIKAGA", 135.75, 33.75),
+    ("淡路", "MIYOSHI", 134.90, 34.34), ("筑前", "OUCHI", 130.40, 33.60),
+    ("筑後", "OTOMO", 130.50, 33.30), ("豊前", "OUCHI", 131.14, 33.60),
+    ("肥前", "OTOMO", 130.30, 33.20), ("肥前", "OTOMO", 129.90, 32.80),
+    ("肥後", "OTOMO", 130.70, 32.80), ("肥後", "OUCHI", 130.82, 33.00),
+    ("大隅", "SHIMAZU", 130.85, 31.40), ("壱岐", "OTOMO", 129.70, 33.75),
+    ("対馬", "OUCHI", 129.30, 34.30),
+)
+
+
+def choose_cities(grid: HexGrid, passable: set[int], starts: list[dict],
+                  castles: list[dict]) -> list[dict]:
+    """Reserve representative capitals first; place every draft castle next."""
+    sites = {castle["id"]: castle for castle in castles}
+    expected = {seat.slug for seat in SEATS} - set(SEAT_CASTLES)
+    if expected != set(EXTRA_CAPITAL_NAMES) or len(sites) != 53:
+        raise ValueError("1534 castle/seat inventory changed; review capital aliases")
+    used = {start["plot"] for start in starts}
+    cities = []
+    for start in starts:
+        slug = start["seat"]
+        alias = SEAT_CASTLES.get(slug)
+        name = sites[alias]["name"] if alias else EXTRA_CAPITAL_NAMES[slug]
+        cities.append({**start, "id": alias or f"{slug}_SEAT", "name": name,
+                       "owner": slug, "capital": True, "province":
+                       sites[alias]["province_or_region"] if alias else "代表本拠"})
+    available = [(grid.index(col, row), *grid.centre(col, row))
+                 for row in range(grid.height) for col in range(grid.width)
+                 if grid.index(col, row) in passable and grid.index(col, row) not in used]
+    for castle in castles:
+        if castle["id"] in SEAT_CASTLES.values():
+            continue
+        target = project(float(castle["lon"]), float(castle["lat"]))
+        distance, plot = min((math.hypot(x - target[0], y - target[1]), plot)
+                             for plot, x, y in available if plot not in used)
+        if distance > 50:
+            raise ValueError(f"Castle too far from land: {castle['id']} {distance:.1f} km")
+        used.add(plot)
+        cities.append({"id": castle["id"], "name": castle["name"],
+                       "owner": castle["owner_faction_1534_draft"], "capital": False,
+                       "province": castle["province_or_region"],
+                       "lon": float(castle["lon"]), "lat": float(castle["lat"]),
+                       "col": plot % grid.width, "row": plot // grid.width,
+                       "plot": plot, "displacement_km": round(distance, 1)})
+    return cities
+
+
+def close_city_pairs(cities: list[dict]) -> list[list]:
+    return [[a["id"], b["id"], distance]
+            for i, a in enumerate(cities) for b in cities[i + 1:]
+            if (distance := hex_distance((a["col"], a["row"]),
+                                         (b["col"], b["row"]))) <= CITY_MIN_RANGE]
+
+
+def assign_land(grid: HexGrid, land_tiles: set[int], cities: list[dict]) -> list[tuple]:
+    """Approximate allocation by the nearest castle/seat in projected space.
+
+    Remote islands are explicitly assigned to the SSOT's island factions. The
+    finer old-province/district boundaries in the draft are not polygon data.
+    """
+    centres = [(city, grid.centre(city["col"], city["row"])) for city in cities]
+    allocations = {entry["province"]: {part["owner_faction"] for part in entry["parts"]}
+                   for entry in data()["province_allocations"]}
+    if any(owner not in allocations[province] for province, owner, _, _ in TERRITORY_ANCHORS):
+        raise ValueError("Territory anchor disagrees with the 1534 province allocation")
+    influence = centres + [({"owner": owner, "plot": -1}, project(lon, lat))
+                           for _, owner, lon, lat in TERRITORY_ANCHORS]
+    by_faction = {slug: [(city, xy) for city, xy in centres if city["owner"] == slug]
+                  for slug in {city["owner"] for city in cities}}
+    centre_by_plot = {city["plot"]: city for city in cities}
+    ainu_seed = next(city["plot"] for city in cities if city["owner"] == "AINU")
+    ainu_island = {ainu_seed}
+    frontier = [ainu_seed]
+    while frontier:
+        plot = frontier.pop()
+        for col, row in grid.neighbours(plot % grid.width, plot // grid.width):
+            neighbour = grid.index(col, row)
+            if neighbour in land_tiles and neighbour not in ainu_island:
+                ainu_island.add(neighbour)
+                frontier.append(neighbour)
+    results = []
+    for plot in sorted(land_tiles):
+        col, row = plot % grid.width, plot // grid.width
+        xy = grid.centre(col, row)
+        lon, lat = unproject(*xy)
+        # The 22-faction constraint assigns all of Hokkaido to Ainu, and the
+        # southern island chain to Ryukyu/one of the Kyushu factions.
+        forced = "AINU" if plot in ainu_island or lat >= 41.8 else "RYUKYU" if lat < 29.2 else None
+        candidates = by_faction[forced] if forced else [item for item in influence if item[0]["owner"] != "AINU"]
+        owner = (centre_by_plot[plot]["owner"] if plot in centre_by_plot else
+                 min(candidates, key=lambda item: ((item[1][0] - xy[0]) ** 2 +
+                                                   (item[1][1] - xy[1]) ** 2,
+                                                   item[0]["plot"]))[0]["owner"])
+        closest = min(by_faction[owner], key=lambda item: ((item[1][0] - xy[0]) ** 2 +
+                                                         (item[1][1] - xy[1]) ** 2,
+                                                         item[0]["plot"]))[0]
+        # CityOwner/CityWorking are city-centre plot IDs in Civ6Map's schema.
+        results.append((plot, SEAT_INDEX[closest["owner"]], closest["plot"], closest["plot"]))
+    return results
+
+
+SEAT_INDEX = {seat.slug: index for index, seat in enumerate(SEATS)}
+
+
 def choose_starts(grid: HexGrid, passable: set[int]) -> list[dict]:
     available = [(col, row, *grid.centre(col, row)) for row in range(grid.height)
                  for col in range(grid.width) if grid.index(col, row) in passable]
@@ -335,7 +470,7 @@ def choose_starts(grid: HexGrid, passable: set[int]) -> list[dict]:
 
 
 def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Path,
-                 destination: Path) -> dict:
+                 destination: Path, *, settlers: bool = False) -> dict:
     grid = HexGrid.for_scale(km, japan)
     land_tiles: set[int] = set()
     heights: dict[int, float] = {}
@@ -361,6 +496,8 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
     # Starting sites must be traversable.  Mountains still count as land.
     passable = {index for index in land_tiles if heights[index] < 1200}
     starts = choose_starts(grid, passable)
+    castles = data()["castles"]
+    cities = choose_cities(grid, passable, starts, castles)
     coast = set()
     for index in land_tiles:
         col, row = index % grid.width, index // grid.width
@@ -393,6 +530,21 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
         db.executemany("INSERT INTO Plots VALUES (?, ?, ?, ?)", plots)
         db.executemany("INSERT INTO StartPositions VALUES (?, 'LEADER', ?)",
                        ((start["plot"], start["leader"]) for start in starts))
+        if not settlers:
+            db.executemany("INSERT INTO Players VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           ((i, seat.civ, seat.leader, "CIVILIZATION_LEVEL_FULL_CIV", "",
+                             "Human" if i == 0 else "AI", "DIFFICULTY_PRINCE", "INVALID",
+                             "RANDOM", 1) for i, seat in enumerate(SEATS)))
+            db.executemany("INSERT INTO Cities VALUES (?, ?, ?)",
+                           ((SEAT_INDEX[city["owner"]], city["plot"],
+                             f"LOC_JAC_1534_CAPITAL_{city['owner']}" if city["capital"] else city["name"])
+                            for city in cities))
+            db.executemany("INSERT INTO Districts VALUES ('DISTRICT_CITY_CENTER', ?, ?)",
+                           ((city["plot"], city["plot"]) for city in cities))
+            db.executemany("INSERT INTO CityAttributes VALUES (?, 'Population', 'Initial', '2')",
+                           ((city["plot"],) for city in cities))
+            db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)",
+                           assign_land(grid, land_tiles, cities))
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"Invalid SQLite map: {destination}")
         db.commit()
@@ -401,7 +553,9 @@ def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Pa
         db.close()
     return {"km_per_tile": km, "width": grid.width, "height": grid.height,
             "land_tiles": len(land_tiles), "sea_tiles": grid.width * grid.height - len(land_tiles),
-            "starts": starts, "close_start_pairs": close_start_pairs(starts),
+            "starts": starts, "cities": cities, "close_city_pairs": close_city_pairs(cities),
+            "close_start_pairs": close_start_pairs(starts),
+            "start_mode": "settlers" if settlers else "historical",
             "file": destination.name, "bytes": destination.stat().st_size}
 
 
@@ -422,10 +576,15 @@ def main() -> None:
     for km in SCALES:
         item = generate_map(km, land, japan, dem, args.official,
                             args.output / f"JAC_Japan_{km}km.Civ6Map")
-        (args.output / f"JAC_Japan_{km}km.lua").write_text(
-            "-- Static map: terrain and starts are stored in the Civ6Map file.\n"
-            "function InitializeNewGame() end\n"
-            "LuaEvents.NewGameInitialized.Add(InitializeNewGame);\n", encoding="utf-8")
+        settler_file = f"JAC_Japan_{km}km_Settlers.Civ6Map"
+        generate_map(km, land, japan, dem, args.official,
+                     args.output / settler_file, settlers=True)
+        item["settler_file"] = settler_file
+        for basename in (f"JAC_Japan_{km}km", f"JAC_Japan_{km}km_Settlers"):
+            (args.output / f"{basename}.lua").write_text(
+                "-- Static map: starting state is stored in the Civ6Map file.\n"
+                "function InitializeNewGame() end\n"
+                "LuaEvents.NewGameInitialized.Add(InitializeNewGame);\n", encoding="utf-8")
         manifests.append(item)
         print(f"{km} km: {item['width']}x{item['height']}, "
               f"{item['land_tiles']} land, {item['bytes']} bytes", flush=True)

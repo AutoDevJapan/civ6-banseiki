@@ -132,6 +132,9 @@ def validate_scenario(data: dict) -> None:
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
+            for key in ("capture_as", "equals_capture"):
+                if key in step and (not isinstance(step[key], str) or not TYPE_ID.fullmatch(step[key])):
+                    raise ScenarioError(f"Step {number}: invalid {key}")
             try:
                 validate_lua_code(step["code"])
             except ValueError as exc:
@@ -264,6 +267,7 @@ class Runner:
         self.log_step_baseline: dict | None = None
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
         self.metrics_runs = 0
+        self.lua_captures: dict[str, str] = {}
 
     def _log(self, action: str, status: str, detail: str) -> None:
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
@@ -721,6 +725,12 @@ class Runner:
             return self._end_turn(timeout, deadline=deadline)
         if action == "ui_lua":
             value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
+            if "equals_capture" in step:
+                key = step["equals_capture"]
+                if key not in self.lua_captures or value != self.lua_captures[key]:
+                    raise ScenarioError(f"ui_lua snapshot mismatch for {key}: {value!r} != {self.lua_captures.get(key)!r}")
+            if "capture_as" in step:
+                self.lua_captures[step["capture_as"]] = value
             return f"ran Lua in {step['state_name']}; return={value}"
         if action == "screenshot":
             require_single_civ_process()

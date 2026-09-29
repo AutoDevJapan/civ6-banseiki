@@ -1,1066 +1,5 @@
 [
   {
-    "km_per_tile": 40,
-    "width": 79,
-    "height": 36,
-    "land_tiles": 278,
-    "sea_tiles": 2566,
-    "starts": [
-      {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_ODA",
-        "leader": "LEADER_JAC_ODA_NOBUHIDE",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 46,
-        "row": 16,
-        "plot": 1310,
-        "displacement_km": 11.9
-      },
-      {
-        "seat": "DATE",
-        "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_EGYPT",
-        "leader": "LEADER_CLEOPATRA",
-        "lon": 140.106,
-        "lat": 37.914,
-        "col": 56,
-        "row": 17,
-        "plot": 1399,
-        "displacement_km": 14.9
-      },
-      {
-        "seat": "ASHINA",
-        "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_SUMERIA",
-        "leader": "LEADER_GILGAMESH",
-        "lon": 139.93,
-        "lat": 37.494,
-        "col": 55,
-        "row": 16,
-        "plot": 1319,
-        "displacement_km": 6.3
-      },
-      {
-        "seat": "HOJO",
-        "castle": "Odawara",
-        "civilization": "CIVILIZATION_ROME",
-        "leader": "LEADER_TRAJAN",
-        "lon": 139.157,
-        "lat": 35.252,
-        "col": 50,
-        "row": 12,
-        "plot": 998,
-        "displacement_km": 18.9
-      },
-      {
-        "seat": "YAMANOUCHI_UESUGI",
-        "castle": "Hirai",
-        "civilization": "CIVILIZATION_GREECE",
-        "leader": "LEADER_GORGO",
-        "lon": 139.063,
-        "lat": 36.202,
-        "col": 51,
-        "row": 15,
-        "plot": 1236,
-        "displacement_km": 16.7
-      },
-      {
-        "seat": "TAKEDA",
-        "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_TAKEDA",
-        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
-        "lon": 138.568,
-        "lat": 35.677,
-        "col": 49,
-        "row": 14,
-        "plot": 1155,
-        "displacement_km": 20.9
-      },
-      {
-        "seat": "NAGAO",
-        "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_SPAIN",
-        "leader": "LEADER_PHILIP_II",
-        "lon": 138.206,
-        "lat": 37.148,
-        "col": 52,
-        "row": 18,
-        "plot": 1474,
-        "displacement_km": 14.3
-      },
-      {
-        "seat": "IMAGAWA",
-        "castle": "Sunpu",
-        "civilization": "CIVILIZATION_ARABIA",
-        "leader": "LEADER_SALADIN",
-        "lon": 138.383,
-        "lat": 34.979,
-        "col": 47,
-        "row": 13,
-        "plot": 1074,
-        "displacement_km": 11.7
-      },
-      {
-        "seat": "MATSUDAIRA",
-        "castle": "Okazaki",
-        "civilization": "CIVILIZATION_RUSSIA",
-        "leader": "LEADER_PETER_GREAT",
-        "lon": 137.172,
-        "lat": 34.955,
-        "col": 45,
-        "row": 15,
-        "plot": 1230,
-        "displacement_km": 14.7
-      },
-      {
-        "seat": "ASAKURA",
-        "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_GANDHI",
-        "lon": 136.29,
-        "lat": 35.999,
-        "col": 46,
-        "row": 19,
-        "plot": 1547,
-        "displacement_km": 8.3
-      },
-      {
-        "seat": "ASHIKAGA",
-        "castle": "Muromachi",
-        "civilization": "CIVILIZATION_CHINA",
-        "leader": "LEADER_QIN",
-        "lon": 135.76,
-        "lat": 35.029,
-        "col": 44,
-        "row": 18,
-        "plot": 1466,
-        "displacement_km": 12.0
-      },
-      {
-        "seat": "MIYOSHI",
-        "castle": "Shozui",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_CHANDRAGUPTA",
-        "lon": 134.591,
-        "lat": 34.123,
-        "col": 40,
-        "row": 18,
-        "plot": 1462,
-        "displacement_km": 11.5
-      },
-      {
-        "seat": "ROKKAKU",
-        "castle": "Kannonji",
-        "civilization": "CIVILIZATION_KONGO",
-        "leader": "LEADER_MVEMBA",
-        "lon": 136.168,
-        "lat": 35.133,
-        "col": 44,
-        "row": 17,
-        "plot": 1387,
-        "displacement_km": 18.8
-      },
-      {
-        "seat": "HONGANJI",
-        "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_BRAZIL",
-        "leader": "LEADER_PEDRO",
-        "lon": 135.526,
-        "lat": 34.689,
-        "col": 43,
-        "row": 18,
-        "plot": 1465,
-        "displacement_km": 15.9
-      },
-      {
-        "seat": "OUCHI",
-        "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_SCYTHIA",
-        "leader": "LEADER_TOMYRIS",
-        "lon": 131.473,
-        "lat": 34.178,
-        "col": 35,
-        "row": 25,
-        "plot": 2010,
-        "displacement_km": 15.5
-      },
-      {
-        "seat": "AMAGO",
-        "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_GERMANY",
-        "leader": "LEADER_BARBAROSSA",
-        "lon": 133.242,
-        "lat": 35.418,
-        "col": 41,
-        "row": 24,
-        "plot": 1937,
-        "displacement_km": 17.9
-      },
-      {
-        "seat": "MORI",
-        "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_NORWAY",
-        "leader": "LEADER_HARDRADA",
-        "lon": 132.708,
-        "lat": 34.687,
-        "col": 38,
-        "row": 23,
-        "plot": 1855,
-        "displacement_km": 11.8
-      },
-      {
-        "seat": "CHOSOKABE",
-        "castle": "Oko",
-        "civilization": "CIVILIZATION_FRANCE",
-        "leader": "LEADER_CATHERINE_DE_MEDICI",
-        "lon": 133.642,
-        "lat": 33.593,
-        "col": 37,
-        "row": 19,
-        "plot": 1538,
-        "displacement_km": 1.5
-      },
-      {
-        "seat": "OTOMO",
-        "castle": "Funai",
-        "civilization": "CIVILIZATION_AMERICA",
-        "leader": "LEADER_T_ROOSEVELT",
-        "lon": 131.609,
-        "lat": 33.241,
-        "col": 34,
-        "row": 22,
-        "plot": 1772,
-        "displacement_km": 19.7
-      },
-      {
-        "seat": "SHIMAZU",
-        "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_KOREA",
-        "leader": "LEADER_SEONDEOK",
-        "lon": 130.559,
-        "lat": 31.596,
-        "col": 28,
-        "row": 21,
-        "plot": 1687,
-        "displacement_km": 1.5
-      },
-      {
-        "seat": "RYUKYU",
-        "castle": "Shuri",
-        "civilization": "CIVILIZATION_ZULU",
-        "leader": "LEADER_SHAKA",
-        "lon": 127.719,
-        "lat": 26.218,
-        "col": 13,
-        "row": 16,
-        "plot": 1277,
-        "displacement_km": 11.5
-      },
-      {
-        "seat": "AINU",
-        "castle": "Nibutani",
-        "civilization": "CIVILIZATION_NETHERLANDS",
-        "leader": "LEADER_WILHELMINA",
-        "lon": 142.149,
-        "lat": 42.633,
-        "col": 68,
-        "row": 24,
-        "plot": 1964,
-        "displacement_km": 18.3
-      }
-    ],
-    "close_start_pairs": [
-      [
-        "ODA",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "ODA",
-        "MATSUDAIRA",
-        1
-      ],
-      [
-        "ODA",
-        "ASAKURA",
-        3
-      ],
-      [
-        "ODA",
-        "ASHIKAGA",
-        3
-      ],
-      [
-        "ODA",
-        "ROKKAKU",
-        2
-      ],
-      [
-        "DATE",
-        "ASHINA",
-        2
-      ],
-      [
-        "HOJO",
-        "YAMANOUCHI_UESUGI",
-        3
-      ],
-      [
-        "HOJO",
-        "TAKEDA",
-        2
-      ],
-      [
-        "HOJO",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "YAMANOUCHI_UESUGI",
-        "TAKEDA",
-        3
-      ],
-      [
-        "YAMANOUCHI_UESUGI",
-        "NAGAO",
-        3
-      ],
-      [
-        "TAKEDA",
-        "IMAGAWA",
-        2
-      ],
-      [
-        "IMAGAWA",
-        "MATSUDAIRA",
-        3
-      ],
-      [
-        "MATSUDAIRA",
-        "ASHIKAGA",
-        3
-      ],
-      [
-        "MATSUDAIRA",
-        "ROKKAKU",
-        2
-      ],
-      [
-        "ASAKURA",
-        "ASHIKAGA",
-        3
-      ],
-      [
-        "ASAKURA",
-        "ROKKAKU",
-        3
-      ],
-      [
-        "ASHIKAGA",
-        "ROKKAKU",
-        1
-      ],
-      [
-        "ASHIKAGA",
-        "HONGANJI",
-        1
-      ],
-      [
-        "MIYOSHI",
-        "HONGANJI",
-        3
-      ],
-      [
-        "MIYOSHI",
-        "CHOSOKABE",
-        3
-      ],
-      [
-        "ROKKAKU",
-        "HONGANJI",
-        2
-      ],
-      [
-        "OUCHI",
-        "OTOMO",
-        3
-      ],
-      [
-        "AMAGO",
-        "MORI",
-        3
-      ]
-    ],
-    "file": "JAC_Japan_40km.Civ6Map",
-    "bytes": 319488
-  },
-  {
-    "km_per_tile": 30,
-    "width": 104,
-    "height": 47,
-    "land_tiles": 483,
-    "sea_tiles": 4405,
-    "starts": [
-      {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_ODA",
-        "leader": "LEADER_JAC_ODA_NOBUHIDE",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 60,
-        "row": 21,
-        "plot": 2244,
-        "displacement_km": 3.7
-      },
-      {
-        "seat": "DATE",
-        "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_EGYPT",
-        "leader": "LEADER_CLEOPATRA",
-        "lon": 140.106,
-        "lat": 37.914,
-        "col": 74,
-        "row": 21,
-        "plot": 2258,
-        "displacement_km": 16.8
-      },
-      {
-        "seat": "ASHINA",
-        "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_SUMERIA",
-        "leader": "LEADER_GILGAMESH",
-        "lon": 139.93,
-        "lat": 37.494,
-        "col": 73,
-        "row": 21,
-        "plot": 2257,
-        "displacement_km": 15.1
-      },
-      {
-        "seat": "HOJO",
-        "castle": "Odawara",
-        "civilization": "CIVILIZATION_ROME",
-        "leader": "LEADER_TRAJAN",
-        "lon": 139.157,
-        "lat": 35.252,
-        "col": 66,
-        "row": 16,
-        "plot": 1730,
-        "displacement_km": 13.9
-      },
-      {
-        "seat": "YAMANOUCHI_UESUGI",
-        "castle": "Hirai",
-        "civilization": "CIVILIZATION_GREECE",
-        "leader": "LEADER_GORGO",
-        "lon": 139.063,
-        "lat": 36.202,
-        "col": 67,
-        "row": 19,
-        "plot": 2043,
-        "displacement_km": 11.5
-      },
-      {
-        "seat": "TAKEDA",
-        "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_TAKEDA",
-        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
-        "lon": 138.568,
-        "lat": 35.677,
-        "col": 65,
-        "row": 19,
-        "plot": 2041,
-        "displacement_km": 14.2
-      },
-      {
-        "seat": "NAGAO",
-        "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_SPAIN",
-        "leader": "LEADER_PHILIP_II",
-        "lon": 138.206,
-        "lat": 37.148,
-        "col": 69,
-        "row": 24,
-        "plot": 2565,
-        "displacement_km": 15.5
-      },
-      {
-        "seat": "IMAGAWA",
-        "castle": "Sunpu",
-        "civilization": "CIVILIZATION_ARABIA",
-        "leader": "LEADER_SALADIN",
-        "lon": 138.383,
-        "lat": 34.979,
-        "col": 63,
-        "row": 17,
-        "plot": 1831,
-        "displacement_km": 10.0
-      },
-      {
-        "seat": "MATSUDAIRA",
-        "castle": "Okazaki",
-        "civilization": "CIVILIZATION_RUSSIA",
-        "leader": "LEADER_PETER_GREAT",
-        "lon": 137.172,
-        "lat": 34.955,
-        "col": 61,
-        "row": 20,
-        "plot": 2141,
-        "displacement_km": 14.9
-      },
-      {
-        "seat": "ASAKURA",
-        "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_GANDHI",
-        "lon": 136.29,
-        "lat": 35.999,
-        "col": 61,
-        "row": 25,
-        "plot": 2661,
-        "displacement_km": 1.4
-      },
-      {
-        "seat": "ASHIKAGA",
-        "castle": "Muromachi",
-        "civilization": "CIVILIZATION_CHINA",
-        "leader": "LEADER_QIN",
-        "lon": 135.76,
-        "lat": 35.029,
-        "col": 58,
-        "row": 24,
-        "plot": 2554,
-        "displacement_km": 14.6
-      },
-      {
-        "seat": "MIYOSHI",
-        "castle": "Shozui",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_CHANDRAGUPTA",
-        "lon": 134.591,
-        "lat": 34.123,
-        "col": 53,
-        "row": 24,
-        "plot": 2549,
-        "displacement_km": 5.5
-      },
-      {
-        "seat": "ROKKAKU",
-        "castle": "Kannonji",
-        "civilization": "CIVILIZATION_KONGO",
-        "leader": "LEADER_MVEMBA",
-        "lon": 136.168,
-        "lat": 35.133,
-        "col": 58,
-        "row": 23,
-        "plot": 2450,
-        "displacement_km": 13.6
-      },
-      {
-        "seat": "HONGANJI",
-        "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_BRAZIL",
-        "leader": "LEADER_PEDRO",
-        "lon": 135.526,
-        "lat": 34.689,
-        "col": 56,
-        "row": 23,
-        "plot": 2448,
-        "displacement_km": 4.5
-      },
-      {
-        "seat": "OUCHI",
-        "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_SCYTHIA",
-        "leader": "LEADER_TOMYRIS",
-        "lon": 131.473,
-        "lat": 34.178,
-        "col": 47,
-        "row": 32,
-        "plot": 3375,
-        "displacement_km": 12.1
-      },
-      {
-        "seat": "AMAGO",
-        "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_GERMANY",
-        "leader": "LEADER_BARBAROSSA",
-        "lon": 133.242,
-        "lat": 35.418,
-        "col": 53,
-        "row": 31,
-        "plot": 3277,
-        "displacement_km": 4.6
-      },
-      {
-        "seat": "MORI",
-        "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_NORWAY",
-        "leader": "LEADER_HARDRADA",
-        "lon": 132.708,
-        "lat": 34.687,
-        "col": 50,
-        "row": 31,
-        "plot": 3274,
-        "displacement_km": 16.4
-      },
-      {
-        "seat": "CHOSOKABE",
-        "castle": "Oko",
-        "civilization": "CIVILIZATION_FRANCE",
-        "leader": "LEADER_CATHERINE_DE_MEDICI",
-        "lon": 133.642,
-        "lat": 33.593,
-        "col": 49,
-        "row": 25,
-        "plot": 2649,
-        "displacement_km": 6.1
-      },
-      {
-        "seat": "OTOMO",
-        "castle": "Funai",
-        "civilization": "CIVILIZATION_AMERICA",
-        "leader": "LEADER_T_ROOSEVELT",
-        "lon": 131.609,
-        "lat": 33.241,
-        "col": 44,
-        "row": 29,
-        "plot": 3060,
-        "displacement_km": 7.5
-      },
-      {
-        "seat": "SHIMAZU",
-        "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_KOREA",
-        "leader": "LEADER_SEONDEOK",
-        "lon": 130.559,
-        "lat": 31.596,
-        "col": 37,
-        "row": 27,
-        "plot": 2845,
-        "displacement_km": 10.1
-      },
-      {
-        "seat": "RYUKYU",
-        "castle": "Shuri",
-        "civilization": "CIVILIZATION_ZULU",
-        "leader": "LEADER_SHAKA",
-        "lon": 127.719,
-        "lat": 26.218,
-        "col": 16,
-        "row": 21,
-        "plot": 2200,
-        "displacement_km": 10.5
-      },
-      {
-        "seat": "AINU",
-        "castle": "Nibutani",
-        "civilization": "CIVILIZATION_NETHERLANDS",
-        "leader": "LEADER_WILHELMINA",
-        "lon": 142.149,
-        "lat": 42.633,
-        "col": 91,
-        "row": 32,
-        "plot": 3419,
-        "displacement_km": 11.7
-      }
-    ],
-    "close_start_pairs": [
-      [
-        "ODA",
-        "MATSUDAIRA",
-        1
-      ],
-      [
-        "ODA",
-        "ROKKAKU",
-        3
-      ],
-      [
-        "DATE",
-        "ASHINA",
-        1
-      ],
-      [
-        "HOJO",
-        "YAMANOUCHI_UESUGI",
-        3
-      ],
-      [
-        "HOJO",
-        "TAKEDA",
-        3
-      ],
-      [
-        "HOJO",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "YAMANOUCHI_UESUGI",
-        "TAKEDA",
-        2
-      ],
-      [
-        "TAKEDA",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "ASHIKAGA",
-        "ROKKAKU",
-        1
-      ],
-      [
-        "ASHIKAGA",
-        "HONGANJI",
-        2
-      ],
-      [
-        "ROKKAKU",
-        "HONGANJI",
-        2
-      ],
-      [
-        "AMAGO",
-        "MORI",
-        3
-      ]
-    ],
-    "file": "JAC_Japan_30km.Civ6Map",
-    "bytes": 368640
-  },
-  {
-    "km_per_tile": 25,
-    "width": 124,
-    "height": 55,
-    "land_tiles": 698,
-    "sea_tiles": 6122,
-    "starts": [
-      {
-        "seat": "ODA",
-        "castle": "Nagoya",
-        "civilization": "CIVILIZATION_JAC_ODA",
-        "leader": "LEADER_JAC_ODA_NOBUHIDE",
-        "lon": 136.9,
-        "lat": 35.184,
-        "col": 72,
-        "row": 25,
-        "plot": 3172,
-        "displacement_km": 2.5
-      },
-      {
-        "seat": "DATE",
-        "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_EGYPT",
-        "leader": "LEADER_CLEOPATRA",
-        "lon": 140.106,
-        "lat": 37.914,
-        "col": 89,
-        "row": 26,
-        "plot": 3313,
-        "displacement_km": 8.7
-      },
-      {
-        "seat": "ASHINA",
-        "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_SUMERIA",
-        "leader": "LEADER_GILGAMESH",
-        "lon": 139.93,
-        "lat": 37.494,
-        "col": 87,
-        "row": 25,
-        "plot": 3187,
-        "displacement_km": 10.4
-      },
-      {
-        "seat": "HOJO",
-        "castle": "Odawara",
-        "civilization": "CIVILIZATION_ROME",
-        "leader": "LEADER_TRAJAN",
-        "lon": 139.157,
-        "lat": 35.252,
-        "col": 78,
-        "row": 19,
-        "plot": 2434,
-        "displacement_km": 10.9
-      },
-      {
-        "seat": "YAMANOUCHI_UESUGI",
-        "castle": "Hirai",
-        "civilization": "CIVILIZATION_GREECE",
-        "leader": "LEADER_GORGO",
-        "lon": 139.063,
-        "lat": 36.202,
-        "col": 81,
-        "row": 22,
-        "plot": 2809,
-        "displacement_km": 6.7
-      },
-      {
-        "seat": "TAKEDA",
-        "castle": "Tsutsujigasaki",
-        "civilization": "CIVILIZATION_JAC_TAKEDA",
-        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
-        "lon": 138.568,
-        "lat": 35.677,
-        "col": 78,
-        "row": 22,
-        "plot": 2806,
-        "displacement_km": 7.3
-      },
-      {
-        "seat": "NAGAO",
-        "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_SPAIN",
-        "leader": "LEADER_PHILIP_II",
-        "lon": 138.206,
-        "lat": 37.148,
-        "col": 82,
-        "row": 28,
-        "plot": 3554,
-        "displacement_km": 4.9
-      },
-      {
-        "seat": "IMAGAWA",
-        "castle": "Sunpu",
-        "civilization": "CIVILIZATION_ARABIA",
-        "leader": "LEADER_SALADIN",
-        "lon": 138.383,
-        "lat": 34.979,
-        "col": 76,
-        "row": 20,
-        "plot": 2556,
-        "displacement_km": 11.8
-      },
-      {
-        "seat": "MATSUDAIRA",
-        "castle": "Okazaki",
-        "civilization": "CIVILIZATION_RUSSIA",
-        "leader": "LEADER_PETER_GREAT",
-        "lon": 137.172,
-        "lat": 34.955,
-        "col": 72,
-        "row": 23,
-        "plot": 2924,
-        "displacement_km": 7.4
-      },
-      {
-        "seat": "ASAKURA",
-        "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_GANDHI",
-        "lon": 136.29,
-        "lat": 35.999,
-        "col": 73,
-        "row": 30,
-        "plot": 3793,
-        "displacement_km": 13.5
-      },
-      {
-        "seat": "ASHIKAGA",
-        "castle": "Muromachi",
-        "civilization": "CIVILIZATION_CHINA",
-        "leader": "LEADER_QIN",
-        "lon": 135.76,
-        "lat": 35.029,
-        "col": 69,
-        "row": 28,
-        "plot": 3541,
-        "displacement_km": 3.5
-      },
-      {
-        "seat": "MIYOSHI",
-        "castle": "Shozui",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_CHANDRAGUPTA",
-        "lon": 134.591,
-        "lat": 34.123,
-        "col": 63,
-        "row": 28,
-        "plot": 3535,
-        "displacement_km": 6.6
-      },
-      {
-        "seat": "ROKKAKU",
-        "castle": "Kannonji",
-        "civilization": "CIVILIZATION_KONGO",
-        "leader": "LEADER_MVEMBA",
-        "lon": 136.168,
-        "lat": 35.133,
-        "col": 70,
-        "row": 27,
-        "plot": 3418,
-        "displacement_km": 2.7
-      },
-      {
-        "seat": "HONGANJI",
-        "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_BRAZIL",
-        "leader": "LEADER_PEDRO",
-        "lon": 135.526,
-        "lat": 34.689,
-        "col": 67,
-        "row": 27,
-        "plot": 3415,
-        "displacement_km": 8.5
-      },
-      {
-        "seat": "OUCHI",
-        "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_SCYTHIA",
-        "leader": "LEADER_TOMYRIS",
-        "lon": 131.473,
-        "lat": 34.178,
-        "col": 56,
-        "row": 38,
-        "plot": 4768,
-        "displacement_km": 10.3
-      },
-      {
-        "seat": "AMAGO",
-        "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_GERMANY",
-        "leader": "LEADER_BARBAROSSA",
-        "lon": 133.242,
-        "lat": 35.418,
-        "col": 64,
-        "row": 37,
-        "plot": 4652,
-        "displacement_km": 11.0
-      },
-      {
-        "seat": "MORI",
-        "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_NORWAY",
-        "leader": "LEADER_HARDRADA",
-        "lon": 132.708,
-        "lat": 34.687,
-        "col": 60,
-        "row": 36,
-        "plot": 4524,
-        "displacement_km": 8.9
-      },
-      {
-        "seat": "CHOSOKABE",
-        "castle": "Oko",
-        "civilization": "CIVILIZATION_FRANCE",
-        "leader": "LEADER_CATHERINE_DE_MEDICI",
-        "lon": 133.642,
-        "lat": 33.593,
-        "col": 59,
-        "row": 29,
-        "plot": 3655,
-        "displacement_km": 13.6
-      },
-      {
-        "seat": "OTOMO",
-        "castle": "Funai",
-        "civilization": "CIVILIZATION_AMERICA",
-        "leader": "LEADER_T_ROOSEVELT",
-        "lon": 131.609,
-        "lat": 33.241,
-        "col": 52,
-        "row": 35,
-        "plot": 4392,
-        "displacement_km": 11.9
-      },
-      {
-        "seat": "SHIMAZU",
-        "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_KOREA",
-        "leader": "LEADER_SEONDEOK",
-        "lon": 130.559,
-        "lat": 31.596,
-        "col": 45,
-        "row": 32,
-        "plot": 4013,
-        "displacement_km": 12.4
-      },
-      {
-        "seat": "RYUKYU",
-        "castle": "Shuri",
-        "civilization": "CIVILIZATION_ZULU",
-        "leader": "LEADER_SHAKA",
-        "lon": 127.719,
-        "lat": 26.218,
-        "col": 19,
-        "row": 24,
-        "plot": 2995,
-        "displacement_km": 13.9
-      },
-      {
-        "seat": "AINU",
-        "castle": "Nibutani",
-        "civilization": "CIVILIZATION_NETHERLANDS",
-        "leader": "LEADER_WILHELMINA",
-        "lon": 142.149,
-        "lat": 42.633,
-        "col": 108,
-        "row": 38,
-        "plot": 4820,
-        "displacement_km": 12.0
-      }
-    ],
-    "close_start_pairs": [
-      [
-        "ODA",
-        "MATSUDAIRA",
-        2
-      ],
-      [
-        "ODA",
-        "ROKKAKU",
-        3
-      ],
-      [
-        "DATE",
-        "ASHINA",
-        2
-      ],
-      [
-        "HOJO",
-        "TAKEDA",
-        3
-      ],
-      [
-        "HOJO",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "YAMANOUCHI_UESUGI",
-        "TAKEDA",
-        3
-      ],
-      [
-        "TAKEDA",
-        "IMAGAWA",
-        3
-      ],
-      [
-        "ASHIKAGA",
-        "ROKKAKU",
-        2
-      ],
-      [
-        "ASHIKAGA",
-        "HONGANJI",
-        2
-      ],
-      [
-        "ROKKAKU",
-        "HONGANJI",
-        3
-      ]
-    ],
-    "file": "JAC_Japan_25km.Civ6Map",
-    "bytes": 417792
-  },
-  {
     "km_per_tile": 20,
     "width": 154,
     "height": 67,
@@ -1082,8 +21,8 @@
       {
         "seat": "DATE",
         "castle": "Yonezawa",
-        "civilization": "CIVILIZATION_EGYPT",
-        "leader": "LEADER_CLEOPATRA",
+        "civilization": "CIVILIZATION_JAC_DATE",
+        "leader": "LEADER_JAC_DATE_TANEMUNE",
         "lon": 140.106,
         "lat": 37.914,
         "col": 111,
@@ -1094,8 +33,8 @@
       {
         "seat": "ASHINA",
         "castle": "Kurokawa",
-        "civilization": "CIVILIZATION_SUMERIA",
-        "leader": "LEADER_GILGAMESH",
+        "civilization": "CIVILIZATION_JAC_ASHINA",
+        "leader": "LEADER_JAC_ASHINA_MORIKIYO",
         "lon": 139.93,
         "lat": 37.494,
         "col": 109,
@@ -1106,8 +45,8 @@
       {
         "seat": "HOJO",
         "castle": "Odawara",
-        "civilization": "CIVILIZATION_ROME",
-        "leader": "LEADER_TRAJAN",
+        "civilization": "CIVILIZATION_JAC_HOJO",
+        "leader": "LEADER_JAC_HOJO_UJITSUNA",
         "lon": 139.157,
         "lat": 35.252,
         "col": 97,
@@ -1118,8 +57,8 @@
       {
         "seat": "YAMANOUCHI_UESUGI",
         "castle": "Hirai",
-        "civilization": "CIVILIZATION_GREECE",
-        "leader": "LEADER_GORGO",
+        "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+        "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
         "lon": 139.063,
         "lat": 36.202,
         "col": 101,
@@ -1142,8 +81,8 @@
       {
         "seat": "NAGAO",
         "castle": "Kasugayama",
-        "civilization": "CIVILIZATION_SPAIN",
-        "leader": "LEADER_PHILIP_II",
+        "civilization": "CIVILIZATION_JAC_NAGAO",
+        "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
         "lon": 138.206,
         "lat": 37.148,
         "col": 102,
@@ -1154,8 +93,8 @@
       {
         "seat": "IMAGAWA",
         "castle": "Sunpu",
-        "civilization": "CIVILIZATION_ARABIA",
-        "leader": "LEADER_SALADIN",
+        "civilization": "CIVILIZATION_JAC_IMAGAWA",
+        "leader": "LEADER_JAC_IMAGAWA_UJITERU",
         "lon": 138.383,
         "lat": 34.979,
         "col": 94,
@@ -1166,8 +105,8 @@
       {
         "seat": "MATSUDAIRA",
         "castle": "Okazaki",
-        "civilization": "CIVILIZATION_RUSSIA",
-        "leader": "LEADER_PETER_GREAT",
+        "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+        "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
         "lon": 137.172,
         "lat": 34.955,
         "col": 90,
@@ -1178,8 +117,8 @@
       {
         "seat": "ASAKURA",
         "castle": "Ichijodani",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_GANDHI",
+        "civilization": "CIVILIZATION_JAC_ASAKURA",
+        "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
         "lon": 136.29,
         "lat": 35.999,
         "col": 91,
@@ -1190,8 +129,8 @@
       {
         "seat": "ASHIKAGA",
         "castle": "Muromachi",
-        "civilization": "CIVILIZATION_CHINA",
-        "leader": "LEADER_QIN",
+        "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+        "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
         "lon": 135.76,
         "lat": 35.029,
         "col": 86,
@@ -1202,8 +141,8 @@
       {
         "seat": "MIYOSHI",
         "castle": "Shozui",
-        "civilization": "CIVILIZATION_INDIA",
-        "leader": "LEADER_CHANDRAGUPTA",
+        "civilization": "CIVILIZATION_JAC_MIYOSHI",
+        "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
         "lon": 134.591,
         "lat": 34.123,
         "col": 78,
@@ -1214,8 +153,8 @@
       {
         "seat": "ROKKAKU",
         "castle": "Kannonji",
-        "civilization": "CIVILIZATION_KONGO",
-        "leader": "LEADER_MVEMBA",
+        "civilization": "CIVILIZATION_JAC_ROKKAKU",
+        "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
         "lon": 136.168,
         "lat": 35.133,
         "col": 87,
@@ -1226,8 +165,8 @@
       {
         "seat": "HONGANJI",
         "castle": "Ishiyama",
-        "civilization": "CIVILIZATION_BRAZIL",
-        "leader": "LEADER_PEDRO",
+        "civilization": "CIVILIZATION_JAC_HONGANJI",
+        "leader": "LEADER_JAC_HONGANJI_SHONYO",
         "lon": 135.526,
         "lat": 34.689,
         "col": 84,
@@ -1238,8 +177,8 @@
       {
         "seat": "OUCHI",
         "castle": "Yamaguchi",
-        "civilization": "CIVILIZATION_SCYTHIA",
-        "leader": "LEADER_TOMYRIS",
+        "civilization": "CIVILIZATION_JAC_OUCHI",
+        "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
         "lon": 131.473,
         "lat": 34.178,
         "col": 69,
@@ -1250,8 +189,8 @@
       {
         "seat": "AMAGO",
         "castle": "Gassan Toda",
-        "civilization": "CIVILIZATION_GERMANY",
-        "leader": "LEADER_BARBAROSSA",
+        "civilization": "CIVILIZATION_JAC_AMAGO",
+        "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
         "lon": 133.242,
         "lat": 35.418,
         "col": 80,
@@ -1262,8 +201,8 @@
       {
         "seat": "MORI",
         "castle": "Yoshida Koriyama",
-        "civilization": "CIVILIZATION_NORWAY",
-        "leader": "LEADER_HARDRADA",
+        "civilization": "CIVILIZATION_JAC_MORI",
+        "leader": "LEADER_JAC_MORI_MOTONARI",
         "lon": 132.708,
         "lat": 34.687,
         "col": 75,
@@ -1274,8 +213,8 @@
       {
         "seat": "CHOSOKABE",
         "castle": "Oko",
-        "civilization": "CIVILIZATION_FRANCE",
-        "leader": "LEADER_CATHERINE_DE_MEDICI",
+        "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+        "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
         "lon": 133.642,
         "lat": 33.593,
         "col": 73,
@@ -1286,8 +225,8 @@
       {
         "seat": "OTOMO",
         "castle": "Funai",
-        "civilization": "CIVILIZATION_AMERICA",
-        "leader": "LEADER_T_ROOSEVELT",
+        "civilization": "CIVILIZATION_JAC_OTOMO",
+        "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
         "lon": 131.609,
         "lat": 33.241,
         "col": 65,
@@ -1298,8 +237,8 @@
       {
         "seat": "SHIMAZU",
         "castle": "Kagoshima",
-        "civilization": "CIVILIZATION_KOREA",
-        "leader": "LEADER_SEONDEOK",
+        "civilization": "CIVILIZATION_JAC_SHIMAZU",
+        "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
         "lon": 130.559,
         "lat": 31.596,
         "col": 56,
@@ -1310,8 +249,8 @@
       {
         "seat": "RYUKYU",
         "castle": "Shuri",
-        "civilization": "CIVILIZATION_ZULU",
-        "leader": "LEADER_SHAKA",
+        "civilization": "CIVILIZATION_JAC_RYUKYU",
+        "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
         "lon": 127.719,
         "lat": 26.218,
         "col": 24,
@@ -1322,8 +261,8 @@
       {
         "seat": "AINU",
         "castle": "Nibutani",
-        "civilization": "CIVILIZATION_NETHERLANDS",
-        "leader": "LEADER_WILHELMINA",
+        "civilization": "CIVILIZATION_JAC_AINU",
+        "leader": "LEADER_JAC_AINU_TARIKONA",
         "lon": 142.149,
         "lat": 42.633,
         "col": 135,
@@ -1331,6 +270,1101 @@
         "plot": 7373,
         "displacement_km": 6.4
       }
+    ],
+    "cities": [
+      {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 90,
+        "row": 31,
+        "plot": 4864,
+        "displacement_km": 8.6,
+        "id": "ODA_SEAT",
+        "name": "那古野城",
+        "owner": "ODA",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "DATE",
+        "castle": "Yonezawa",
+        "civilization": "CIVILIZATION_JAC_DATE",
+        "leader": "LEADER_JAC_DATE_TANEMUNE",
+        "lon": 140.106,
+        "lat": 37.914,
+        "col": 111,
+        "row": 32,
+        "plot": 5039,
+        "displacement_km": 7.5,
+        "id": "DATE_SEAT",
+        "name": "米沢城",
+        "owner": "DATE",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "ASHINA",
+        "castle": "Kurokawa",
+        "civilization": "CIVILIZATION_JAC_ASHINA",
+        "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+        "lon": 139.93,
+        "lat": 37.494,
+        "col": 109,
+        "row": 30,
+        "plot": 4729,
+        "displacement_km": 5.5,
+        "id": "ASHINA_KUROKAWA",
+        "name": "黒川城",
+        "owner": "ASHINA",
+        "capital": true,
+        "province": "陸奥"
+      },
+      {
+        "seat": "HOJO",
+        "castle": "Odawara",
+        "civilization": "CIVILIZATION_JAC_HOJO",
+        "leader": "LEADER_JAC_HOJO_UJITSUNA",
+        "lon": 139.157,
+        "lat": 35.252,
+        "col": 97,
+        "row": 23,
+        "plot": 3639,
+        "displacement_km": 6.4,
+        "id": "HOJO_ODAWARA",
+        "name": "小田原城",
+        "owner": "HOJO",
+        "capital": true,
+        "province": "相模"
+      },
+      {
+        "seat": "YAMANOUCHI_UESUGI",
+        "castle": "Hirai",
+        "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+        "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+        "lon": 139.063,
+        "lat": 36.202,
+        "col": 101,
+        "row": 28,
+        "plot": 4413,
+        "displacement_km": 10.8,
+        "id": "UESUGI_HIRAI",
+        "name": "平井城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": true,
+        "province": "上野"
+      },
+      {
+        "seat": "TAKEDA",
+        "castle": "Tsutsujigasaki",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+        "lon": 138.568,
+        "lat": 35.677,
+        "col": 97,
+        "row": 27,
+        "plot": 4255,
+        "displacement_km": 4.2,
+        "id": "TAKEDA_TSUTSUJI",
+        "name": "躑躅ヶ崎館",
+        "owner": "TAKEDA",
+        "capital": true,
+        "province": "甲斐"
+      },
+      {
+        "seat": "NAGAO",
+        "castle": "Kasugayama",
+        "civilization": "CIVILIZATION_JAC_NAGAO",
+        "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+        "lon": 138.206,
+        "lat": 37.148,
+        "col": 102,
+        "row": 35,
+        "plot": 5492,
+        "displacement_km": 10.2,
+        "id": "NAGAO_KASUGAYAMA",
+        "name": "春日山城",
+        "owner": "NAGAO",
+        "capital": true,
+        "province": "越後"
+      },
+      {
+        "seat": "IMAGAWA",
+        "castle": "Sunpu",
+        "civilization": "CIVILIZATION_JAC_IMAGAWA",
+        "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+        "lon": 138.383,
+        "lat": 34.979,
+        "col": 94,
+        "row": 24,
+        "plot": 3790,
+        "displacement_km": 5.1,
+        "id": "IMAGAWA_SUNPU",
+        "name": "駿府今川館の推定アンカー",
+        "owner": "IMAGAWA",
+        "capital": true,
+        "province": "駿河"
+      },
+      {
+        "seat": "MATSUDAIRA",
+        "castle": "Okazaki",
+        "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+        "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+        "lon": 137.172,
+        "lat": 34.955,
+        "col": 90,
+        "row": 29,
+        "plot": 4556,
+        "displacement_km": 9.8,
+        "id": "MATSUDAIRA_OKAZAKI",
+        "name": "岡崎城",
+        "owner": "MATSUDAIRA",
+        "capital": true,
+        "province": "三河"
+      },
+      {
+        "seat": "ASAKURA",
+        "castle": "Ichijodani",
+        "civilization": "CIVILIZATION_JAC_ASAKURA",
+        "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+        "lon": 136.29,
+        "lat": 35.999,
+        "col": 91,
+        "row": 37,
+        "plot": 5789,
+        "displacement_km": 5.8,
+        "id": "ASAKURA_ICHIJODANI",
+        "name": "一乗谷朝倉館",
+        "owner": "ASAKURA",
+        "capital": true,
+        "province": "越前"
+      },
+      {
+        "seat": "ASHIKAGA",
+        "castle": "Muromachi",
+        "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+        "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+        "lon": 135.76,
+        "lat": 35.029,
+        "col": 86,
+        "row": 34,
+        "plot": 5322,
+        "displacement_km": 6.3,
+        "id": "ASHIKAGA_SEAT",
+        "name": "室町殿",
+        "owner": "ASHIKAGA",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "MIYOSHI",
+        "castle": "Shozui",
+        "civilization": "CIVILIZATION_JAC_MIYOSHI",
+        "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+        "lon": 134.591,
+        "lat": 34.123,
+        "col": 78,
+        "row": 35,
+        "plot": 5468,
+        "displacement_km": 3.1,
+        "id": "MIYOSHI_SHOZUI",
+        "name": "勝瑞守護所",
+        "owner": "MIYOSHI",
+        "capital": true,
+        "province": "阿波"
+      },
+      {
+        "seat": "ROKKAKU",
+        "castle": "Kannonji",
+        "civilization": "CIVILIZATION_JAC_ROKKAKU",
+        "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+        "lon": 136.168,
+        "lat": 35.133,
+        "col": 87,
+        "row": 33,
+        "plot": 5169,
+        "displacement_km": 5.1,
+        "id": "ROKKAKU_KANNONJI",
+        "name": "観音寺城",
+        "owner": "ROKKAKU",
+        "capital": true,
+        "province": "近江"
+      },
+      {
+        "seat": "HONGANJI",
+        "castle": "Ishiyama",
+        "civilization": "CIVILIZATION_JAC_HONGANJI",
+        "leader": "LEADER_JAC_HONGANJI_SHONYO",
+        "lon": 135.526,
+        "lat": 34.689,
+        "col": 84,
+        "row": 34,
+        "plot": 5320,
+        "displacement_km": 6.0,
+        "id": "HONGANJI_ISHIYAMA",
+        "name": "石山御坊",
+        "owner": "HONGANJI",
+        "capital": true,
+        "province": "摂津"
+      },
+      {
+        "seat": "OUCHI",
+        "castle": "Yamaguchi",
+        "civilization": "CIVILIZATION_JAC_OUCHI",
+        "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+        "lon": 131.473,
+        "lat": 34.178,
+        "col": 69,
+        "row": 47,
+        "plot": 7307,
+        "displacement_km": 8.8,
+        "id": "OUCHI_YAMAGUCHI",
+        "name": "大内氏館",
+        "owner": "OUCHI",
+        "capital": true,
+        "province": "周防"
+      },
+      {
+        "seat": "AMAGO",
+        "castle": "Gassan Toda",
+        "civilization": "CIVILIZATION_JAC_AMAGO",
+        "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+        "lon": 133.242,
+        "lat": 35.418,
+        "col": 80,
+        "row": 46,
+        "plot": 7164,
+        "displacement_km": 7.7,
+        "id": "AMAGO_TODA",
+        "name": "月山富田城",
+        "owner": "AMAGO",
+        "capital": true,
+        "province": "出雲"
+      },
+      {
+        "seat": "MORI",
+        "castle": "Yoshida Koriyama",
+        "civilization": "CIVILIZATION_JAC_MORI",
+        "leader": "LEADER_JAC_MORI_MOTONARI",
+        "lon": 132.708,
+        "lat": 34.687,
+        "col": 75,
+        "row": 45,
+        "plot": 7005,
+        "displacement_km": 10.7,
+        "id": "MORI_KORIYAMA",
+        "name": "吉田郡山城",
+        "owner": "MORI",
+        "capital": true,
+        "province": "安芸"
+      },
+      {
+        "seat": "CHOSOKABE",
+        "castle": "Oko",
+        "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+        "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+        "lon": 133.642,
+        "lat": 33.593,
+        "col": 73,
+        "row": 36,
+        "plot": 5617,
+        "displacement_km": 9.9,
+        "id": "CHOSOKABE_OKO",
+        "name": "岡豊城",
+        "owner": "CHOSOKABE",
+        "capital": true,
+        "province": "土佐"
+      },
+      {
+        "seat": "OTOMO",
+        "castle": "Funai",
+        "civilization": "CIVILIZATION_JAC_OTOMO",
+        "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+        "lon": 131.609,
+        "lat": 33.241,
+        "col": 65,
+        "row": 43,
+        "plot": 6687,
+        "displacement_km": 4.7,
+        "id": "OTOMO_RESIDENCE",
+        "name": "大友氏館",
+        "owner": "OTOMO",
+        "capital": true,
+        "province": "豊後"
+      },
+      {
+        "seat": "SHIMAZU",
+        "castle": "Kagoshima",
+        "civilization": "CIVILIZATION_JAC_SHIMAZU",
+        "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+        "lon": 130.559,
+        "lat": 31.596,
+        "col": 56,
+        "row": 40,
+        "plot": 6216,
+        "displacement_km": 9.0,
+        "id": "SHIMAZU_SHIMIZU",
+        "name": "清水城",
+        "owner": "SHIMAZU",
+        "capital": true,
+        "province": "薩摩"
+      },
+      {
+        "seat": "RYUKYU",
+        "castle": "Shuri",
+        "civilization": "CIVILIZATION_JAC_RYUKYU",
+        "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+        "lon": 127.719,
+        "lat": 26.218,
+        "col": 24,
+        "row": 30,
+        "plot": 4644,
+        "displacement_km": 1.0,
+        "id": "RYUKYU_SHURI",
+        "name": "首里城",
+        "owner": "RYUKYU",
+        "capital": true,
+        "province": "琉球"
+      },
+      {
+        "seat": "AINU",
+        "castle": "Nibutani",
+        "civilization": "CIVILIZATION_JAC_AINU",
+        "leader": "LEADER_JAC_AINU_TARIKONA",
+        "lon": 142.149,
+        "lat": 42.633,
+        "col": 135,
+        "row": 47,
+        "plot": 7373,
+        "displacement_km": 6.4,
+        "id": "AINU_POROMOI",
+        "name": "ポロモイチャシ跡・二風谷拠点候補",
+        "owner": "AINU",
+        "capital": true,
+        "province": "蝦夷地"
+      },
+      {
+        "id": "DATE_KOORI",
+        "name": "桑折西山城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.51,
+        "lat": 37.856,
+        "col": 112,
+        "row": 30,
+        "plot": 4732,
+        "displacement_km": 2.3
+      },
+      {
+        "id": "DATE_YANAGAWA",
+        "name": "梁川城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.611,
+        "lat": 37.855,
+        "col": 112,
+        "row": 29,
+        "plot": 4578,
+        "displacement_km": 9.5
+      },
+      {
+        "id": "ASHINA_INAWASHIRO",
+        "name": "猪苗代城",
+        "owner": "ASHINA",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.106,
+        "lat": 37.562,
+        "col": 110,
+        "row": 30,
+        "plot": 4730,
+        "displacement_km": 7.4
+      },
+      {
+        "id": "DATE_YAMAGATA",
+        "name": "山形城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "出羽",
+        "lon": 140.328,
+        "lat": 38.256,
+        "col": 113,
+        "row": 32,
+        "plot": 5041,
+        "displacement_km": 6.6
+      },
+      {
+        "id": "HOJO_EDO",
+        "name": "江戸城",
+        "owner": "HOJO",
+        "capital": false,
+        "province": "武蔵",
+        "lon": 139.754,
+        "lat": 35.688,
+        "col": 101,
+        "row": 23,
+        "plot": 3643,
+        "displacement_km": 9.5
+      },
+      {
+        "id": "UESUGI_KAWAGOE",
+        "name": "河越城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "武蔵",
+        "lon": 139.492,
+        "lat": 35.924,
+        "col": 101,
+        "row": 25,
+        "plot": 3951,
+        "displacement_km": 8.4
+      },
+      {
+        "id": "UESUGI_MINOWA",
+        "name": "箕輪城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "上野",
+        "lon": 138.952,
+        "lat": 36.404,
+        "col": 101,
+        "row": 29,
+        "plot": 4567,
+        "displacement_km": 5.1
+      },
+      {
+        "id": "HOJO_KOGA",
+        "name": "古河城",
+        "owner": "HOJO",
+        "capital": false,
+        "province": "下総",
+        "lon": 139.694,
+        "lat": 36.187,
+        "col": 103,
+        "row": 25,
+        "plot": 3953,
+        "displacement_km": 9.7
+      },
+      {
+        "id": "UESUGI_OBOW",
+        "name": "小弓城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "下総",
+        "lon": 140.15,
+        "lat": 35.554,
+        "col": 102,
+        "row": 20,
+        "plot": 3182,
+        "displacement_km": 8.0
+      },
+      {
+        "id": "UESUGI_OTA",
+        "name": "太田城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "常陸",
+        "lon": 140.52,
+        "lat": 36.546,
+        "col": 107,
+        "row": 24,
+        "plot": 3803,
+        "displacement_km": 4.6
+      },
+      {
+        "id": "TAKEDA_UEHARA",
+        "name": "上原城",
+        "owner": "TAKEDA",
+        "capital": false,
+        "province": "信濃",
+        "lon": 138.149,
+        "lat": 36.009,
+        "col": 97,
+        "row": 30,
+        "plot": 4717,
+        "displacement_km": 7.9
+      },
+      {
+        "id": "IMAGAWA_KAKEGAWA",
+        "name": "掛川城",
+        "owner": "IMAGAWA",
+        "capital": false,
+        "province": "遠江",
+        "lon": 138.015,
+        "lat": 34.777,
+        "col": 92,
+        "row": 25,
+        "plot": 3942,
+        "displacement_km": 9.3
+      },
+      {
+        "id": "ODA_SHOBATA",
+        "name": "勝幡城",
+        "owner": "ODA",
+        "capital": false,
+        "province": "尾張",
+        "lon": 136.729,
+        "lat": 35.202,
+        "col": 89,
+        "row": 31,
+        "plot": 4863,
+        "displacement_km": 8.6
+      },
+      {
+        "id": "IMAGAWA_NAGOYA",
+        "name": "那古野城",
+        "owner": "IMAGAWA",
+        "capital": false,
+        "province": "尾張",
+        "lon": 136.902,
+        "lat": 35.184,
+        "col": 90,
+        "row": 30,
+        "plot": 4710,
+        "displacement_km": 12.9
+      },
+      {
+        "id": "ASHIKAGA_KIRIYAMA",
+        "name": "霧山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "伊勢",
+        "lon": 136.289,
+        "lat": 34.523,
+        "col": 86,
+        "row": 30,
+        "plot": 4706,
+        "displacement_km": 8.9
+      },
+      {
+        "id": "ASHIKAGA_NANAO",
+        "name": "七尾城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "能登",
+        "lon": 136.985,
+        "lat": 37.009,
+        "col": 97,
+        "row": 39,
+        "plot": 6103,
+        "displacement_km": 7.4
+      },
+      {
+        "id": "ASHIKAGA_SAKURABORA",
+        "name": "桜洞城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "飛騨",
+        "lon": 137.212,
+        "lat": 35.88,
+        "col": 93,
+        "row": 33,
+        "plot": 5175,
+        "displacement_km": 9.3
+      },
+      {
+        "id": "ASHIKAGA_GOSEYAMA",
+        "name": "後瀬山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "若狭",
+        "lon": 135.739,
+        "lat": 35.488,
+        "col": 87,
+        "row": 37,
+        "plot": 5785,
+        "displacement_km": 10.0
+      },
+      {
+        "id": "ASHIKAGA_HOJOZU",
+        "name": "放生津城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "越中",
+        "lon": 137.09,
+        "lat": 36.777,
+        "col": 96,
+        "row": 37,
+        "plot": 5794,
+        "displacement_km": 11.7
+      },
+      {
+        "id": "ASHIKAGA_KUWANOMI",
+        "name": "桑実寺正覚院（臨時政庁）",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "近江",
+        "lon": 136.154,
+        "lat": 35.144,
+        "col": 88,
+        "row": 34,
+        "plot": 5324,
+        "displacement_km": 13.4
+      },
+      {
+        "id": "ROKKAKU_KAMAHABA",
+        "name": "鎌刃城",
+        "owner": "ROKKAKU",
+        "capital": false,
+        "province": "近江",
+        "lon": 136.315,
+        "lat": 35.297,
+        "col": 88,
+        "row": 33,
+        "plot": 5170,
+        "displacement_km": 9.0
+      },
+      {
+        "id": "MIYOSHI_SHIBAO",
+        "name": "芝生城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "阿波",
+        "lon": 133.97,
+        "lat": 34.045,
+        "col": 76,
+        "row": 37,
+        "plot": 5774,
+        "displacement_km": 3.9
+      },
+      {
+        "id": "MIYOSHI_YAGAMI",
+        "name": "八上城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "丹波",
+        "lon": 135.256,
+        "lat": 35.062,
+        "col": 84,
+        "row": 37,
+        "plot": 5782,
+        "displacement_km": 10.1
+      },
+      {
+        "id": "ASHIKAGA_TAKAYA",
+        "name": "高屋城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "河内",
+        "lon": 135.61,
+        "lat": 34.549,
+        "col": 83,
+        "row": 33,
+        "plot": 5165,
+        "displacement_km": 3.6
+      },
+      {
+        "id": "ASHIKAGA_OKISHIO",
+        "name": "置塩城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "播磨",
+        "lon": 134.683,
+        "lat": 34.923,
+        "col": 82,
+        "row": 38,
+        "plot": 5934,
+        "displacement_km": 2.3
+      },
+      {
+        "id": "MIYOSHI_AMAGIRI",
+        "name": "天霧城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "讃岐",
+        "lon": 133.736,
+        "lat": 34.236,
+        "col": 76,
+        "row": 38,
+        "plot": 5928,
+        "displacement_km": 13.8
+      },
+      {
+        "id": "ASHIKAGA_YUZUKI",
+        "name": "湯築城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "伊予",
+        "lon": 132.787,
+        "lat": 33.849,
+        "col": 71,
+        "row": 41,
+        "plot": 6385,
+        "displacement_km": 8.2
+      },
+      {
+        "id": "OUCHI_YAMABUKI",
+        "name": "山吹城・石見銀山",
+        "owner": "OUCHI",
+        "capital": false,
+        "province": "石見",
+        "lon": 132.431,
+        "lat": 35.104,
+        "col": 75,
+        "row": 47,
+        "plot": 7313,
+        "displacement_km": 12.7
+      },
+      {
+        "id": "OUCHI_TSUWANO",
+        "name": "津和野城（三本松城）",
+        "owner": "OUCHI",
+        "capital": false,
+        "province": "石見",
+        "lon": 131.764,
+        "lat": 34.46,
+        "col": 71,
+        "row": 47,
+        "plot": 7309,
+        "displacement_km": 8.6
+      },
+      {
+        "id": "ASHIKAGA_MITSUISHI",
+        "name": "三石城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "備前",
+        "lon": 134.27,
+        "lat": 34.808,
+        "col": 80,
+        "row": 39,
+        "plot": 6086,
+        "displacement_km": 3.1
+      },
+      {
+        "id": "ASHIKAGA_BITCHU_MATSUYAMA",
+        "name": "備中松山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "備中",
+        "lon": 133.621,
+        "lat": 34.812,
+        "col": 78,
+        "row": 42,
+        "plot": 6546,
+        "displacement_km": 10.0
+      },
+      {
+        "id": "SHIMAZU_IZAKU",
+        "name": "伊作城",
+        "owner": "SHIMAZU",
+        "capital": false,
+        "province": "薩摩",
+        "lon": 130.363,
+        "lat": 31.514,
+        "col": 55,
+        "row": 40,
+        "plot": 6215,
+        "displacement_km": 13.4
+      },
+      {
+        "id": "SHIMAZU_OBI",
+        "name": "飫肥城",
+        "owner": "SHIMAZU",
+        "capital": false,
+        "province": "日向",
+        "lon": 131.35,
+        "lat": 31.629,
+        "col": 58,
+        "row": 37,
+        "plot": 5756,
+        "displacement_km": 6.7
+      },
+      {
+        "id": "RYUKYU_NAKAGUSUKU",
+        "name": "中城グスク",
+        "owner": "RYUKYU",
+        "capital": false,
+        "province": "琉球",
+        "lon": 127.8,
+        "lat": 26.284,
+        "col": 25,
+        "row": 30,
+        "plot": 4645,
+        "displacement_km": 10.4
+      }
+    ],
+    "close_city_pairs": [
+      [
+        "ODA_SEAT",
+        "MATSUDAIRA_OKAZAKI",
+        2
+      ],
+      [
+        "ODA_SEAT",
+        "ODA_SHOBATA",
+        1
+      ],
+      [
+        "ODA_SEAT",
+        "IMAGAWA_NAGOYA",
+        1
+      ],
+      [
+        "ODA_SEAT",
+        "ROKKAKU_KAMAHABA",
+        3
+      ],
+      [
+        "DATE_SEAT",
+        "ASHINA_KUROKAWA",
+        3
+      ],
+      [
+        "DATE_SEAT",
+        "DATE_KOORI",
+        2
+      ],
+      [
+        "DATE_SEAT",
+        "DATE_YANAGAWA",
+        3
+      ],
+      [
+        "DATE_SEAT",
+        "ASHINA_INAWASHIRO",
+        2
+      ],
+      [
+        "DATE_SEAT",
+        "DATE_YAMAGATA",
+        2
+      ],
+      [
+        "ASHINA_KUROKAWA",
+        "DATE_KOORI",
+        3
+      ],
+      [
+        "ASHINA_KUROKAWA",
+        "ASHINA_INAWASHIRO",
+        1
+      ],
+      [
+        "UESUGI_HIRAI",
+        "UESUGI_KAWAGOE",
+        3
+      ],
+      [
+        "UESUGI_HIRAI",
+        "UESUGI_MINOWA",
+        1
+      ],
+      [
+        "TAKEDA_TSUTSUJI",
+        "TAKEDA_UEHARA",
+        3
+      ],
+      [
+        "IMAGAWA_SUNPU",
+        "IMAGAWA_KAKEGAWA",
+        2
+      ],
+      [
+        "MATSUDAIRA_OKAZAKI",
+        "ODA_SHOBATA",
+        2
+      ],
+      [
+        "MATSUDAIRA_OKAZAKI",
+        "IMAGAWA_NAGOYA",
+        1
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ROKKAKU_KANNONJI",
+        2
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "HONGANJI_ISHIYAMA",
+        2
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ASHIKAGA_GOSEYAMA",
+        3
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ASHIKAGA_KUWANOMI",
+        2
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ROKKAKU_KAMAHABA",
+        3
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "MIYOSHI_YAGAMI",
+        3
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ASHIKAGA_TAKAYA",
+        3
+      ],
+      [
+        "MIYOSHI_SHOZUI",
+        "MIYOSHI_SHIBAO",
+        3
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ODA_SHOBATA",
+        3
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ASHIKAGA_KIRIYAMA",
+        3
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ASHIKAGA_KUWANOMI",
+        1
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ROKKAKU_KAMAHABA",
+        1
+      ],
+      [
+        "HONGANJI_ISHIYAMA",
+        "MIYOSHI_YAGAMI",
+        3
+      ],
+      [
+        "HONGANJI_ISHIYAMA",
+        "ASHIKAGA_TAKAYA",
+        1
+      ],
+      [
+        "OUCHI_YAMAGUCHI",
+        "OUCHI_TSUWANO",
+        2
+      ],
+      [
+        "MORI_KORIYAMA",
+        "OUCHI_YAMABUKI",
+        2
+      ],
+      [
+        "SHIMAZU_SHIMIZU",
+        "SHIMAZU_IZAKU",
+        1
+      ],
+      [
+        "RYUKYU_SHURI",
+        "RYUKYU_NAKAGUSUKU",
+        1
+      ],
+      [
+        "DATE_KOORI",
+        "DATE_YANAGAWA",
+        1
+      ],
+      [
+        "DATE_KOORI",
+        "ASHINA_INAWASHIRO",
+        2
+      ],
+      [
+        "DATE_KOORI",
+        "DATE_YAMAGATA",
+        2
+      ],
+      [
+        "DATE_YANAGAWA",
+        "ASHINA_INAWASHIRO",
+        3
+      ],
+      [
+        "DATE_YANAGAWA",
+        "DATE_YAMAGATA",
+        3
+      ],
+      [
+        "HOJO_EDO",
+        "UESUGI_KAWAGOE",
+        2
+      ],
+      [
+        "HOJO_EDO",
+        "HOJO_KOGA",
+        3
+      ],
+      [
+        "HOJO_EDO",
+        "UESUGI_OBOW",
+        3
+      ],
+      [
+        "UESUGI_KAWAGOE",
+        "HOJO_KOGA",
+        2
+      ],
+      [
+        "ODA_SHOBATA",
+        "IMAGAWA_NAGOYA",
+        1
+      ],
+      [
+        "ODA_SHOBATA",
+        "ASHIKAGA_KUWANOMI",
+        3
+      ],
+      [
+        "ODA_SHOBATA",
+        "ROKKAKU_KAMAHABA",
+        2
+      ],
+      [
+        "IMAGAWA_NAGOYA",
+        "ROKKAKU_KAMAHABA",
+        3
+      ],
+      [
+        "ASHIKAGA_NANAO",
+        "ASHIKAGA_HOJOZU",
+        2
+      ],
+      [
+        "ASHIKAGA_GOSEYAMA",
+        "ASHIKAGA_KUWANOMI",
+        3
+      ],
+      [
+        "ASHIKAGA_GOSEYAMA",
+        "MIYOSHI_YAGAMI",
+        3
+      ],
+      [
+        "ASHIKAGA_KUWANOMI",
+        "ROKKAKU_KAMAHABA",
+        1
+      ],
+      [
+        "MIYOSHI_SHIBAO",
+        "MIYOSHI_AMAGIRI",
+        1
+      ],
+      [
+        "MIYOSHI_YAGAMI",
+        "ASHIKAGA_OKISHIO",
+        3
+      ],
+      [
+        "ASHIKAGA_OKISHIO",
+        "ASHIKAGA_MITSUISHI",
+        2
+      ]
     ],
     "close_start_pairs": [
       [
@@ -1354,7 +1388,1283 @@
         2
       ]
     ],
+    "start_mode": "historical",
     "file": "JAC_Japan_20km.Civ6Map",
-    "bytes": 503808
+    "bytes": 520192,
+    "settler_file": "JAC_Japan_20km_Settlers.Civ6Map"
+  },
+  {
+    "km_per_tile": 15,
+    "width": 204,
+    "height": 88,
+    "land_tiles": 1914,
+    "sea_tiles": 16038,
+    "starts": [
+      {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 120,
+        "row": 40,
+        "plot": 8280,
+        "displacement_km": 6.8
+      },
+      {
+        "seat": "DATE",
+        "castle": "Yonezawa",
+        "civilization": "CIVILIZATION_JAC_DATE",
+        "leader": "LEADER_JAC_DATE_TANEMUNE",
+        "lon": 140.106,
+        "lat": 37.914,
+        "col": 147,
+        "row": 41,
+        "plot": 8511,
+        "displacement_km": 6.3
+      },
+      {
+        "seat": "ASHINA",
+        "castle": "Kurokawa",
+        "civilization": "CIVILIZATION_JAC_ASHINA",
+        "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+        "lon": 139.93,
+        "lat": 37.494,
+        "col": 145,
+        "row": 40,
+        "plot": 8305,
+        "displacement_km": 7.3
+      },
+      {
+        "seat": "HOJO",
+        "castle": "Odawara",
+        "civilization": "CIVILIZATION_JAC_HOJO",
+        "leader": "LEADER_JAC_HOJO_UJITSUNA",
+        "lon": 139.157,
+        "lat": 35.252,
+        "col": 130,
+        "row": 30,
+        "plot": 6250,
+        "displacement_km": 6.5
+      },
+      {
+        "seat": "YAMANOUCHI_UESUGI",
+        "castle": "Hirai",
+        "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+        "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+        "lon": 139.063,
+        "lat": 36.202,
+        "col": 134,
+        "row": 36,
+        "plot": 7478,
+        "displacement_km": 3.6
+      },
+      {
+        "seat": "TAKEDA",
+        "castle": "Tsutsujigasaki",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+        "lon": 138.568,
+        "lat": 35.677,
+        "col": 129,
+        "row": 35,
+        "plot": 7269,
+        "displacement_km": 2.3
+      },
+      {
+        "seat": "NAGAO",
+        "castle": "Kasugayama",
+        "civilization": "CIVILIZATION_JAC_NAGAO",
+        "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+        "lon": 138.206,
+        "lat": 37.148,
+        "col": 136,
+        "row": 46,
+        "plot": 9520,
+        "displacement_km": 7.6
+      },
+      {
+        "seat": "IMAGAWA",
+        "castle": "Sunpu",
+        "civilization": "CIVILIZATION_JAC_IMAGAWA",
+        "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+        "lon": 138.383,
+        "lat": 34.979,
+        "col": 125,
+        "row": 32,
+        "plot": 6653,
+        "displacement_km": 3.1
+      },
+      {
+        "seat": "MATSUDAIRA",
+        "castle": "Okazaki",
+        "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+        "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+        "lon": 137.172,
+        "lat": 34.955,
+        "col": 120,
+        "row": 38,
+        "plot": 7872,
+        "displacement_km": 7.3
+      },
+      {
+        "seat": "ASAKURA",
+        "castle": "Ichijodani",
+        "civilization": "CIVILIZATION_JAC_ASAKURA",
+        "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+        "lon": 136.29,
+        "lat": 35.999,
+        "col": 121,
+        "row": 48,
+        "plot": 9913,
+        "displacement_km": 7.7
+      },
+      {
+        "seat": "ASHIKAGA",
+        "castle": "Muromachi",
+        "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+        "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+        "lon": 135.76,
+        "lat": 35.029,
+        "col": 114,
+        "row": 45,
+        "plot": 9294,
+        "displacement_km": 7.2
+      },
+      {
+        "seat": "MIYOSHI",
+        "castle": "Shozui",
+        "civilization": "CIVILIZATION_JAC_MIYOSHI",
+        "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+        "lon": 134.591,
+        "lat": 34.123,
+        "col": 104,
+        "row": 46,
+        "plot": 9488,
+        "displacement_km": 4.5
+      },
+      {
+        "seat": "ROKKAKU",
+        "castle": "Kannonji",
+        "civilization": "CIVILIZATION_JAC_ROKKAKU",
+        "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+        "lon": 136.168,
+        "lat": 35.133,
+        "col": 116,
+        "row": 44,
+        "plot": 9092,
+        "displacement_km": 5.8
+      },
+      {
+        "seat": "HONGANJI",
+        "castle": "Ishiyama",
+        "civilization": "CIVILIZATION_JAC_HONGANJI",
+        "leader": "LEADER_JAC_HONGANJI_SHONYO",
+        "lon": 135.526,
+        "lat": 34.689,
+        "col": 111,
+        "row": 44,
+        "plot": 9087,
+        "displacement_km": 6.1
+      },
+      {
+        "seat": "OUCHI",
+        "castle": "Yamaguchi",
+        "civilization": "CIVILIZATION_JAC_OUCHI",
+        "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+        "lon": 131.473,
+        "lat": 34.178,
+        "col": 91,
+        "row": 63,
+        "plot": 12943,
+        "displacement_km": 7.0
+      },
+      {
+        "seat": "AMAGO",
+        "castle": "Gassan Toda",
+        "civilization": "CIVILIZATION_JAC_AMAGO",
+        "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+        "lon": 133.242,
+        "lat": 35.418,
+        "col": 106,
+        "row": 60,
+        "plot": 12346,
+        "displacement_km": 5.6
+      },
+      {
+        "seat": "MORI",
+        "castle": "Yoshida Koriyama",
+        "civilization": "CIVILIZATION_JAC_MORI",
+        "leader": "LEADER_JAC_MORI_MOTONARI",
+        "lon": 132.708,
+        "lat": 34.687,
+        "col": 99,
+        "row": 59,
+        "plot": 12135,
+        "displacement_km": 1.6
+      },
+      {
+        "seat": "CHOSOKABE",
+        "castle": "Oko",
+        "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+        "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+        "lon": 133.642,
+        "lat": 33.593,
+        "col": 97,
+        "row": 48,
+        "plot": 9889,
+        "displacement_km": 7.3
+      },
+      {
+        "seat": "OTOMO",
+        "castle": "Funai",
+        "civilization": "CIVILIZATION_JAC_OTOMO",
+        "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+        "lon": 131.609,
+        "lat": 33.241,
+        "col": 87,
+        "row": 56,
+        "plot": 11511,
+        "displacement_km": 6.9
+      },
+      {
+        "seat": "SHIMAZU",
+        "castle": "Kagoshima",
+        "civilization": "CIVILIZATION_JAC_SHIMAZU",
+        "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+        "lon": 130.559,
+        "lat": 31.596,
+        "col": 73,
+        "row": 53,
+        "plot": 10885,
+        "displacement_km": 1.6
+      },
+      {
+        "seat": "RYUKYU",
+        "castle": "Shuri",
+        "civilization": "CIVILIZATION_JAC_RYUKYU",
+        "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+        "lon": 127.719,
+        "lat": 26.218,
+        "col": 31,
+        "row": 39,
+        "plot": 7987,
+        "displacement_km": 5.1
+      },
+      {
+        "seat": "AINU",
+        "castle": "Nibutani",
+        "civilization": "CIVILIZATION_JAC_AINU",
+        "leader": "LEADER_JAC_AINU_TARIKONA",
+        "lon": 142.149,
+        "lat": 42.633,
+        "col": 180,
+        "row": 62,
+        "plot": 12828,
+        "displacement_km": 3.8
+      }
+    ],
+    "cities": [
+      {
+        "seat": "ODA",
+        "castle": "Nagoya",
+        "civilization": "CIVILIZATION_JAC_ODA",
+        "leader": "LEADER_JAC_ODA_NOBUHIDE",
+        "lon": 136.9,
+        "lat": 35.184,
+        "col": 120,
+        "row": 40,
+        "plot": 8280,
+        "displacement_km": 6.8,
+        "id": "ODA_SEAT",
+        "name": "那古野城",
+        "owner": "ODA",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "DATE",
+        "castle": "Yonezawa",
+        "civilization": "CIVILIZATION_JAC_DATE",
+        "leader": "LEADER_JAC_DATE_TANEMUNE",
+        "lon": 140.106,
+        "lat": 37.914,
+        "col": 147,
+        "row": 41,
+        "plot": 8511,
+        "displacement_km": 6.3,
+        "id": "DATE_SEAT",
+        "name": "米沢城",
+        "owner": "DATE",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "ASHINA",
+        "castle": "Kurokawa",
+        "civilization": "CIVILIZATION_JAC_ASHINA",
+        "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+        "lon": 139.93,
+        "lat": 37.494,
+        "col": 145,
+        "row": 40,
+        "plot": 8305,
+        "displacement_km": 7.3,
+        "id": "ASHINA_KUROKAWA",
+        "name": "黒川城",
+        "owner": "ASHINA",
+        "capital": true,
+        "province": "陸奥"
+      },
+      {
+        "seat": "HOJO",
+        "castle": "Odawara",
+        "civilization": "CIVILIZATION_JAC_HOJO",
+        "leader": "LEADER_JAC_HOJO_UJITSUNA",
+        "lon": 139.157,
+        "lat": 35.252,
+        "col": 130,
+        "row": 30,
+        "plot": 6250,
+        "displacement_km": 6.5,
+        "id": "HOJO_ODAWARA",
+        "name": "小田原城",
+        "owner": "HOJO",
+        "capital": true,
+        "province": "相模"
+      },
+      {
+        "seat": "YAMANOUCHI_UESUGI",
+        "castle": "Hirai",
+        "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+        "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+        "lon": 139.063,
+        "lat": 36.202,
+        "col": 134,
+        "row": 36,
+        "plot": 7478,
+        "displacement_km": 3.6,
+        "id": "UESUGI_HIRAI",
+        "name": "平井城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": true,
+        "province": "上野"
+      },
+      {
+        "seat": "TAKEDA",
+        "castle": "Tsutsujigasaki",
+        "civilization": "CIVILIZATION_JAC_TAKEDA",
+        "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+        "lon": 138.568,
+        "lat": 35.677,
+        "col": 129,
+        "row": 35,
+        "plot": 7269,
+        "displacement_km": 2.3,
+        "id": "TAKEDA_TSUTSUJI",
+        "name": "躑躅ヶ崎館",
+        "owner": "TAKEDA",
+        "capital": true,
+        "province": "甲斐"
+      },
+      {
+        "seat": "NAGAO",
+        "castle": "Kasugayama",
+        "civilization": "CIVILIZATION_JAC_NAGAO",
+        "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+        "lon": 138.206,
+        "lat": 37.148,
+        "col": 136,
+        "row": 46,
+        "plot": 9520,
+        "displacement_km": 7.6,
+        "id": "NAGAO_KASUGAYAMA",
+        "name": "春日山城",
+        "owner": "NAGAO",
+        "capital": true,
+        "province": "越後"
+      },
+      {
+        "seat": "IMAGAWA",
+        "castle": "Sunpu",
+        "civilization": "CIVILIZATION_JAC_IMAGAWA",
+        "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+        "lon": 138.383,
+        "lat": 34.979,
+        "col": 125,
+        "row": 32,
+        "plot": 6653,
+        "displacement_km": 3.1,
+        "id": "IMAGAWA_SUNPU",
+        "name": "駿府今川館の推定アンカー",
+        "owner": "IMAGAWA",
+        "capital": true,
+        "province": "駿河"
+      },
+      {
+        "seat": "MATSUDAIRA",
+        "castle": "Okazaki",
+        "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+        "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+        "lon": 137.172,
+        "lat": 34.955,
+        "col": 120,
+        "row": 38,
+        "plot": 7872,
+        "displacement_km": 7.3,
+        "id": "MATSUDAIRA_OKAZAKI",
+        "name": "岡崎城",
+        "owner": "MATSUDAIRA",
+        "capital": true,
+        "province": "三河"
+      },
+      {
+        "seat": "ASAKURA",
+        "castle": "Ichijodani",
+        "civilization": "CIVILIZATION_JAC_ASAKURA",
+        "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+        "lon": 136.29,
+        "lat": 35.999,
+        "col": 121,
+        "row": 48,
+        "plot": 9913,
+        "displacement_km": 7.7,
+        "id": "ASAKURA_ICHIJODANI",
+        "name": "一乗谷朝倉館",
+        "owner": "ASAKURA",
+        "capital": true,
+        "province": "越前"
+      },
+      {
+        "seat": "ASHIKAGA",
+        "castle": "Muromachi",
+        "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+        "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+        "lon": 135.76,
+        "lat": 35.029,
+        "col": 114,
+        "row": 45,
+        "plot": 9294,
+        "displacement_km": 7.2,
+        "id": "ASHIKAGA_SEAT",
+        "name": "室町殿",
+        "owner": "ASHIKAGA",
+        "capital": true,
+        "province": "代表本拠"
+      },
+      {
+        "seat": "MIYOSHI",
+        "castle": "Shozui",
+        "civilization": "CIVILIZATION_JAC_MIYOSHI",
+        "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+        "lon": 134.591,
+        "lat": 34.123,
+        "col": 104,
+        "row": 46,
+        "plot": 9488,
+        "displacement_km": 4.5,
+        "id": "MIYOSHI_SHOZUI",
+        "name": "勝瑞守護所",
+        "owner": "MIYOSHI",
+        "capital": true,
+        "province": "阿波"
+      },
+      {
+        "seat": "ROKKAKU",
+        "castle": "Kannonji",
+        "civilization": "CIVILIZATION_JAC_ROKKAKU",
+        "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+        "lon": 136.168,
+        "lat": 35.133,
+        "col": 116,
+        "row": 44,
+        "plot": 9092,
+        "displacement_km": 5.8,
+        "id": "ROKKAKU_KANNONJI",
+        "name": "観音寺城",
+        "owner": "ROKKAKU",
+        "capital": true,
+        "province": "近江"
+      },
+      {
+        "seat": "HONGANJI",
+        "castle": "Ishiyama",
+        "civilization": "CIVILIZATION_JAC_HONGANJI",
+        "leader": "LEADER_JAC_HONGANJI_SHONYO",
+        "lon": 135.526,
+        "lat": 34.689,
+        "col": 111,
+        "row": 44,
+        "plot": 9087,
+        "displacement_km": 6.1,
+        "id": "HONGANJI_ISHIYAMA",
+        "name": "石山御坊",
+        "owner": "HONGANJI",
+        "capital": true,
+        "province": "摂津"
+      },
+      {
+        "seat": "OUCHI",
+        "castle": "Yamaguchi",
+        "civilization": "CIVILIZATION_JAC_OUCHI",
+        "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+        "lon": 131.473,
+        "lat": 34.178,
+        "col": 91,
+        "row": 63,
+        "plot": 12943,
+        "displacement_km": 7.0,
+        "id": "OUCHI_YAMAGUCHI",
+        "name": "大内氏館",
+        "owner": "OUCHI",
+        "capital": true,
+        "province": "周防"
+      },
+      {
+        "seat": "AMAGO",
+        "castle": "Gassan Toda",
+        "civilization": "CIVILIZATION_JAC_AMAGO",
+        "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+        "lon": 133.242,
+        "lat": 35.418,
+        "col": 106,
+        "row": 60,
+        "plot": 12346,
+        "displacement_km": 5.6,
+        "id": "AMAGO_TODA",
+        "name": "月山富田城",
+        "owner": "AMAGO",
+        "capital": true,
+        "province": "出雲"
+      },
+      {
+        "seat": "MORI",
+        "castle": "Yoshida Koriyama",
+        "civilization": "CIVILIZATION_JAC_MORI",
+        "leader": "LEADER_JAC_MORI_MOTONARI",
+        "lon": 132.708,
+        "lat": 34.687,
+        "col": 99,
+        "row": 59,
+        "plot": 12135,
+        "displacement_km": 1.6,
+        "id": "MORI_KORIYAMA",
+        "name": "吉田郡山城",
+        "owner": "MORI",
+        "capital": true,
+        "province": "安芸"
+      },
+      {
+        "seat": "CHOSOKABE",
+        "castle": "Oko",
+        "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+        "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+        "lon": 133.642,
+        "lat": 33.593,
+        "col": 97,
+        "row": 48,
+        "plot": 9889,
+        "displacement_km": 7.3,
+        "id": "CHOSOKABE_OKO",
+        "name": "岡豊城",
+        "owner": "CHOSOKABE",
+        "capital": true,
+        "province": "土佐"
+      },
+      {
+        "seat": "OTOMO",
+        "castle": "Funai",
+        "civilization": "CIVILIZATION_JAC_OTOMO",
+        "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+        "lon": 131.609,
+        "lat": 33.241,
+        "col": 87,
+        "row": 56,
+        "plot": 11511,
+        "displacement_km": 6.9,
+        "id": "OTOMO_RESIDENCE",
+        "name": "大友氏館",
+        "owner": "OTOMO",
+        "capital": true,
+        "province": "豊後"
+      },
+      {
+        "seat": "SHIMAZU",
+        "castle": "Kagoshima",
+        "civilization": "CIVILIZATION_JAC_SHIMAZU",
+        "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+        "lon": 130.559,
+        "lat": 31.596,
+        "col": 73,
+        "row": 53,
+        "plot": 10885,
+        "displacement_km": 1.6,
+        "id": "SHIMAZU_SHIMIZU",
+        "name": "清水城",
+        "owner": "SHIMAZU",
+        "capital": true,
+        "province": "薩摩"
+      },
+      {
+        "seat": "RYUKYU",
+        "castle": "Shuri",
+        "civilization": "CIVILIZATION_JAC_RYUKYU",
+        "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+        "lon": 127.719,
+        "lat": 26.218,
+        "col": 31,
+        "row": 39,
+        "plot": 7987,
+        "displacement_km": 5.1,
+        "id": "RYUKYU_SHURI",
+        "name": "首里城",
+        "owner": "RYUKYU",
+        "capital": true,
+        "province": "琉球"
+      },
+      {
+        "seat": "AINU",
+        "castle": "Nibutani",
+        "civilization": "CIVILIZATION_JAC_AINU",
+        "leader": "LEADER_JAC_AINU_TARIKONA",
+        "lon": 142.149,
+        "lat": 42.633,
+        "col": 180,
+        "row": 62,
+        "plot": 12828,
+        "displacement_km": 3.8,
+        "id": "AINU_POROMOI",
+        "name": "ポロモイチャシ跡・二風谷拠点候補",
+        "owner": "AINU",
+        "capital": true,
+        "province": "蝦夷地"
+      },
+      {
+        "id": "DATE_KOORI",
+        "name": "桑折西山城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.51,
+        "lat": 37.856,
+        "col": 148,
+        "row": 39,
+        "plot": 8104,
+        "displacement_km": 6.7
+      },
+      {
+        "id": "DATE_YANAGAWA",
+        "name": "梁川城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.611,
+        "lat": 37.855,
+        "col": 149,
+        "row": 39,
+        "plot": 8105,
+        "displacement_km": 4.1
+      },
+      {
+        "id": "ASHINA_INAWASHIRO",
+        "name": "猪苗代城",
+        "owner": "ASHINA",
+        "capital": false,
+        "province": "陸奥",
+        "lon": 140.106,
+        "lat": 37.562,
+        "col": 145,
+        "row": 39,
+        "plot": 8101,
+        "displacement_km": 4.8
+      },
+      {
+        "id": "DATE_YAMAGATA",
+        "name": "山形城",
+        "owner": "DATE",
+        "capital": false,
+        "province": "出羽",
+        "lon": 140.328,
+        "lat": 38.256,
+        "col": 150,
+        "row": 43,
+        "plot": 8922,
+        "displacement_km": 7.5
+      },
+      {
+        "id": "HOJO_EDO",
+        "name": "江戸城",
+        "owner": "HOJO",
+        "capital": false,
+        "province": "武蔵",
+        "lon": 139.754,
+        "lat": 35.688,
+        "col": 134,
+        "row": 29,
+        "plot": 6050,
+        "displacement_km": 5.4
+      },
+      {
+        "id": "UESUGI_KAWAGOE",
+        "name": "河越城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "武蔵",
+        "lon": 139.492,
+        "lat": 35.924,
+        "col": 135,
+        "row": 32,
+        "plot": 6663,
+        "displacement_km": 5.8
+      },
+      {
+        "id": "UESUGI_MINOWA",
+        "name": "箕輪城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "上野",
+        "lon": 138.952,
+        "lat": 36.404,
+        "col": 135,
+        "row": 38,
+        "plot": 7887,
+        "displacement_km": 5.2
+      },
+      {
+        "id": "HOJO_KOGA",
+        "name": "古河城",
+        "owner": "HOJO",
+        "capital": false,
+        "province": "下総",
+        "lon": 139.694,
+        "lat": 36.187,
+        "col": 136,
+        "row": 33,
+        "plot": 6868,
+        "displacement_km": 6.1
+      },
+      {
+        "id": "UESUGI_OBOW",
+        "name": "小弓城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "下総",
+        "lon": 140.15,
+        "lat": 35.554,
+        "col": 135,
+        "row": 27,
+        "plot": 5643,
+        "displacement_km": 4.4
+      },
+      {
+        "id": "UESUGI_OTA",
+        "name": "太田城",
+        "owner": "YAMANOUCHI_UESUGI",
+        "capital": false,
+        "province": "常陸",
+        "lon": 140.52,
+        "lat": 36.546,
+        "col": 142,
+        "row": 31,
+        "plot": 6466,
+        "displacement_km": 3.7
+      },
+      {
+        "id": "TAKEDA_UEHARA",
+        "name": "上原城",
+        "owner": "TAKEDA",
+        "capital": false,
+        "province": "信濃",
+        "lon": 138.149,
+        "lat": 36.009,
+        "col": 129,
+        "row": 39,
+        "plot": 8085,
+        "displacement_km": 3.4
+      },
+      {
+        "id": "IMAGAWA_KAKEGAWA",
+        "name": "掛川城",
+        "owner": "IMAGAWA",
+        "capital": false,
+        "province": "遠江",
+        "lon": 138.015,
+        "lat": 34.777,
+        "col": 122,
+        "row": 32,
+        "plot": 6650,
+        "displacement_km": 6.6
+      },
+      {
+        "id": "ODA_SHOBATA",
+        "name": "勝幡城",
+        "owner": "ODA",
+        "capital": false,
+        "province": "尾張",
+        "lon": 136.729,
+        "lat": 35.202,
+        "col": 119,
+        "row": 41,
+        "plot": 8483,
+        "displacement_km": 8.0
+      },
+      {
+        "id": "IMAGAWA_NAGOYA",
+        "name": "那古野城",
+        "owner": "IMAGAWA",
+        "capital": false,
+        "province": "尾張",
+        "lon": 136.902,
+        "lat": 35.184,
+        "col": 119,
+        "row": 40,
+        "plot": 8279,
+        "displacement_km": 11.4
+      },
+      {
+        "id": "ASHIKAGA_KIRIYAMA",
+        "name": "霧山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "伊勢",
+        "lon": 136.289,
+        "lat": 34.523,
+        "col": 113,
+        "row": 39,
+        "plot": 8069,
+        "displacement_km": 6.8
+      },
+      {
+        "id": "ASHIKAGA_NANAO",
+        "name": "七尾城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "能登",
+        "lon": 136.985,
+        "lat": 37.009,
+        "col": 129,
+        "row": 51,
+        "plot": 10533,
+        "displacement_km": 3.5
+      },
+      {
+        "id": "ASHIKAGA_SAKURABORA",
+        "name": "桜洞城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "飛騨",
+        "lon": 137.212,
+        "lat": 35.88,
+        "col": 124,
+        "row": 43,
+        "plot": 8896,
+        "displacement_km": 2.8
+      },
+      {
+        "id": "ASHIKAGA_GOSEYAMA",
+        "name": "後瀬山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "若狭",
+        "lon": 135.739,
+        "lat": 35.488,
+        "col": 116,
+        "row": 48,
+        "plot": 9908,
+        "displacement_km": 6.4
+      },
+      {
+        "id": "ASHIKAGA_HOJOZU",
+        "name": "放生津城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "越中",
+        "lon": 137.09,
+        "lat": 36.777,
+        "col": 128,
+        "row": 49,
+        "plot": 10124,
+        "displacement_km": 6.2
+      },
+      {
+        "id": "ASHIKAGA_KUWANOMI",
+        "name": "桑実寺正覚院（臨時政庁）",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "近江",
+        "lon": 136.154,
+        "lat": 35.144,
+        "col": 117,
+        "row": 44,
+        "plot": 9093,
+        "displacement_km": 10.3
+      },
+      {
+        "id": "ROKKAKU_KAMAHABA",
+        "name": "鎌刃城",
+        "owner": "ROKKAKU",
+        "capital": false,
+        "province": "近江",
+        "lon": 136.315,
+        "lat": 35.297,
+        "col": 118,
+        "row": 44,
+        "plot": 9094,
+        "displacement_km": 2.8
+      },
+      {
+        "id": "MIYOSHI_SHIBAO",
+        "name": "芝生城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "阿波",
+        "lon": 133.97,
+        "lat": 34.045,
+        "col": 101,
+        "row": 49,
+        "plot": 10097,
+        "displacement_km": 6.0
+      },
+      {
+        "id": "MIYOSHI_YAGAMI",
+        "name": "八上城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "丹波",
+        "lon": 135.256,
+        "lat": 35.062,
+        "col": 112,
+        "row": 48,
+        "plot": 9904,
+        "displacement_km": 1.9
+      },
+      {
+        "id": "ASHIKAGA_TAKAYA",
+        "name": "高屋城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "河内",
+        "lon": 135.61,
+        "lat": 34.549,
+        "col": 110,
+        "row": 43,
+        "plot": 8882,
+        "displacement_km": 5.5
+      },
+      {
+        "id": "ASHIKAGA_OKISHIO",
+        "name": "置塩城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "播磨",
+        "lon": 134.683,
+        "lat": 34.923,
+        "col": 109,
+        "row": 50,
+        "plot": 10309,
+        "displacement_km": 0.8
+      },
+      {
+        "id": "MIYOSHI_AMAGIRI",
+        "name": "天霧城",
+        "owner": "MIYOSHI",
+        "capital": false,
+        "province": "讃岐",
+        "lon": 133.736,
+        "lat": 34.236,
+        "col": 101,
+        "row": 51,
+        "plot": 10505,
+        "displacement_km": 2.6
+      },
+      {
+        "id": "ASHIKAGA_YUZUKI",
+        "name": "湯築城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "伊予",
+        "lon": 132.787,
+        "lat": 33.849,
+        "col": 95,
+        "row": 54,
+        "plot": 11111,
+        "displacement_km": 5.7
+      },
+      {
+        "id": "OUCHI_YAMABUKI",
+        "name": "山吹城・石見銀山",
+        "owner": "OUCHI",
+        "capital": false,
+        "province": "石見",
+        "lon": 132.431,
+        "lat": 35.104,
+        "col": 100,
+        "row": 63,
+        "plot": 12952,
+        "displacement_km": 5.0
+      },
+      {
+        "id": "OUCHI_TSUWANO",
+        "name": "津和野城（三本松城）",
+        "owner": "OUCHI",
+        "capital": false,
+        "province": "石見",
+        "lon": 131.764,
+        "lat": 34.46,
+        "col": 94,
+        "row": 63,
+        "plot": 12946,
+        "displacement_km": 5.1
+      },
+      {
+        "id": "ASHIKAGA_MITSUISHI",
+        "name": "三石城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "備前",
+        "lon": 134.27,
+        "lat": 34.808,
+        "col": 106,
+        "row": 51,
+        "plot": 10510,
+        "displacement_km": 7.1
+      },
+      {
+        "id": "ASHIKAGA_BITCHU_MATSUYAMA",
+        "name": "備中松山城",
+        "owner": "ASHIKAGA",
+        "capital": false,
+        "province": "備中",
+        "lon": 133.621,
+        "lat": 34.812,
+        "col": 104,
+        "row": 55,
+        "plot": 11324,
+        "displacement_km": 7.6
+      },
+      {
+        "id": "SHIMAZU_IZAKU",
+        "name": "伊作城",
+        "owner": "SHIMAZU",
+        "capital": false,
+        "province": "薩摩",
+        "lon": 130.363,
+        "lat": 31.514,
+        "col": 72,
+        "row": 53,
+        "plot": 10884,
+        "displacement_km": 8.0
+      },
+      {
+        "id": "SHIMAZU_OBI",
+        "name": "飫肥城",
+        "owner": "SHIMAZU",
+        "capital": false,
+        "province": "日向",
+        "lon": 131.35,
+        "lat": 31.629,
+        "col": 77,
+        "row": 49,
+        "plot": 10073,
+        "displacement_km": 7.2
+      },
+      {
+        "id": "RYUKYU_NAKAGUSUKU",
+        "name": "中城グスク",
+        "owner": "RYUKYU",
+        "capital": false,
+        "province": "琉球",
+        "lon": 127.8,
+        "lat": 26.284,
+        "col": 33,
+        "row": 40,
+        "plot": 8193,
+        "displacement_km": 15.9
+      }
+    ],
+    "close_city_pairs": [
+      [
+        "ODA_SEAT",
+        "MATSUDAIRA_OKAZAKI",
+        2
+      ],
+      [
+        "ODA_SEAT",
+        "ODA_SHOBATA",
+        1
+      ],
+      [
+        "ODA_SEAT",
+        "IMAGAWA_NAGOYA",
+        1
+      ],
+      [
+        "DATE_SEAT",
+        "ASHINA_KUROKAWA",
+        3
+      ],
+      [
+        "DATE_SEAT",
+        "DATE_KOORI",
+        2
+      ],
+      [
+        "DATE_SEAT",
+        "DATE_YANAGAWA",
+        3
+      ],
+      [
+        "DATE_SEAT",
+        "ASHINA_INAWASHIRO",
+        3
+      ],
+      [
+        "ASHINA_KUROKAWA",
+        "ASHINA_INAWASHIRO",
+        1
+      ],
+      [
+        "UESUGI_HIRAI",
+        "UESUGI_MINOWA",
+        2
+      ],
+      [
+        "IMAGAWA_SUNPU",
+        "IMAGAWA_KAKEGAWA",
+        3
+      ],
+      [
+        "MATSUDAIRA_OKAZAKI",
+        "ODA_SHOBATA",
+        3
+      ],
+      [
+        "MATSUDAIRA_OKAZAKI",
+        "IMAGAWA_NAGOYA",
+        2
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ROKKAKU_KANNONJI",
+        2
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ASHIKAGA_GOSEYAMA",
+        3
+      ],
+      [
+        "ASHIKAGA_SEAT",
+        "ASHIKAGA_KUWANOMI",
+        3
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ASHIKAGA_KUWANOMI",
+        1
+      ],
+      [
+        "ROKKAKU_KANNONJI",
+        "ROKKAKU_KAMAHABA",
+        2
+      ],
+      [
+        "HONGANJI_ISHIYAMA",
+        "ASHIKAGA_TAKAYA",
+        1
+      ],
+      [
+        "OUCHI_YAMAGUCHI",
+        "OUCHI_TSUWANO",
+        3
+      ],
+      [
+        "SHIMAZU_SHIMIZU",
+        "SHIMAZU_IZAKU",
+        1
+      ],
+      [
+        "RYUKYU_SHURI",
+        "RYUKYU_NAKAGUSUKU",
+        2
+      ],
+      [
+        "DATE_KOORI",
+        "DATE_YANAGAWA",
+        1
+      ],
+      [
+        "DATE_KOORI",
+        "ASHINA_INAWASHIRO",
+        3
+      ],
+      [
+        "HOJO_EDO",
+        "UESUGI_KAWAGOE",
+        3
+      ],
+      [
+        "HOJO_EDO",
+        "UESUGI_OBOW",
+        2
+      ],
+      [
+        "UESUGI_KAWAGOE",
+        "HOJO_KOGA",
+        2
+      ],
+      [
+        "ODA_SHOBATA",
+        "IMAGAWA_NAGOYA",
+        1
+      ],
+      [
+        "ODA_SHOBATA",
+        "ROKKAKU_KAMAHABA",
+        3
+      ],
+      [
+        "ASHIKAGA_NANAO",
+        "ASHIKAGA_HOJOZU",
+        2
+      ],
+      [
+        "ASHIKAGA_KUWANOMI",
+        "ROKKAKU_KAMAHABA",
+        1
+      ],
+      [
+        "MIYOSHI_SHIBAO",
+        "MIYOSHI_AMAGIRI",
+        2
+      ],
+      [
+        "ASHIKAGA_OKISHIO",
+        "ASHIKAGA_MITSUISHI",
+        3
+      ]
+    ],
+    "close_start_pairs": [
+      [
+        "ODA",
+        "MATSUDAIRA",
+        2
+      ],
+      [
+        "DATE",
+        "ASHINA",
+        3
+      ],
+      [
+        "ASHIKAGA",
+        "ROKKAKU",
+        2
+      ]
+    ],
+    "start_mode": "historical",
+    "file": "JAC_Japan_15km.Civ6Map",
+    "bytes": 724992,
+    "settler_file": "JAC_Japan_15km_Settlers.Civ6Map"
   }
 ]

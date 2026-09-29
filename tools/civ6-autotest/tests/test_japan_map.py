@@ -17,7 +17,7 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 class JapanMapScenarioTests(unittest.TestCase):
     def test_every_scale_scenario_is_valid(self):
-        for km in (40, 30, 25, 20):
+        for km in (20, 15):
             with self.subTest(km=km):
                 data = json.loads((SCENARIOS / f"japan-map-{km}km.json").read_text(encoding="utf-8"))
                 validate_scenario(data)
@@ -26,16 +26,33 @@ class JapanMapScenarioTests(unittest.TestCase):
                 self.assertLess(code.index("MAP_SCRIPT"), code.index("SetMapSize"))
                 self.assertIn("SetMaxMajorPlayers(22)", code)
                 self.assertIn("SetValue('CITY_STATE_COUNT', 0)", code)
+                self.assertEqual(data["steps"][5]["capture_as"], "JAPAN_STATE")
+                self.assertEqual(data["steps"][9]["equals_capture"], "JAPAN_STATE")
+                self.assertIn("city count", data["steps"][3]["code"])
+                self.assertIn("unowned land plot", data["steps"][3]["code"])
+                self.assertIn("settler in slot", data["steps"][3]["code"])
 
     def test_rejects_bad_map_file_and_metrics_flag(self):
-        data = json.loads((SCENARIOS / "japan-map-40km.json").read_text(encoding="utf-8"))
+        data = json.loads((SCENARIOS / "japan-map-20km.json").read_text(encoding="utf-8"))
         data["steps"][1]["map_file"] = "../outside.Civ6Map"
         with self.assertRaisesRegex(ScenarioError, "map_file"):
             validate_scenario(data)
-        data["steps"][1]["map_file"] = "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_40km.Civ6Map"
+        data["steps"][1]["map_file"] = "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map"
         data["steps"][4]["metrics"] = "yes"
         with self.assertRaisesRegex(ScenarioError, "metrics"):
             validate_scenario(data)
+
+    def test_capture_and_compare_lua_results(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_lua", side_effect=["22,56,7", "22,56,7", "21,55,8"]):
+                runner._run_step({"action": "ui_lua", "state_name": "InGame", "code": "return 'state'",
+                                  "capture_as": "JAPAN_STATE"})
+                runner._run_step({"action": "ui_lua", "state_name": "InGame", "code": "return 'state'",
+                                  "equals_capture": "JAPAN_STATE"})
+                with self.assertRaisesRegex(ScenarioError, "snapshot mismatch"):
+                    runner._run_step({"action": "ui_lua", "state_name": "InGame", "code": "return 'state'",
+                                      "equals_capture": "JAPAN_STATE"})
 
     def test_turn_metrics_preserve_missing_samples(self):
         current = [10.0]

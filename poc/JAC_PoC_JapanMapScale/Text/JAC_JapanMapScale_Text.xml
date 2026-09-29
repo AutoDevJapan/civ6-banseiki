@@ -1,77 +1,77 @@
 <?xml version='1.0' encoding='utf-8'?>
 <GameData>
   <LocalizedText>
-    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="en_US">
-      <Text>Japan archipelago 40 km/hex</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Language="en_US">
+      <Text>Japan 20 km — start: historical territory</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="ja_JP">
-      <Text>日本列島 40 km/タイル</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Language="ja_JP">
+      <Text>日本列島 20 km — 開始方法: 史実の領土</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_40_NAME" Language="ru_RU">
-      <Text>Японский архипелаг 40 км/гекс</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_NAME" Language="ru_RU">
+      <Text>Япония 20 км — начало: исторические владения</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="en_US">
-      <Text>Fixed 22-faction Japan scale trial, 40 km between opposite hex sides.</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Language="en_US">
+      <Text>22 fixed 1534 factions; start with historical territory.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="ja_JP">
-      <Text>22勢力の固定日本列島地図。六角形の対辺間が約40 km。</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Language="ja_JP">
+      <Text>1534年の22勢力。開始方法は史実の領土。</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_40_DESCRIPTION" Language="ru_RU">
-      <Text>Фиксированная карта Японии для 22 фракций; около 40 км между сторонами гекса.</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_HISTORICAL_DESCRIPTION" Language="ru_RU">
+      <Text>22 державы 1534 года; начало: исторические владения.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="en_US">
-      <Text>Japan archipelago 30 km/hex</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_NAME" Language="en_US">
+      <Text>Japan 20 km — start: from settlers</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="ja_JP">
-      <Text>日本列島 30 km/タイル</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_NAME" Language="ja_JP">
+      <Text>日本列島 20 km — 開始方法: 開拓者から</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_NAME" Language="ru_RU">
-      <Text>Японский архипелаг 30 км/гекс</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_NAME" Language="ru_RU">
+      <Text>Япония 20 км — начало: с поселенцев</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="en_US">
-      <Text>Fixed 22-faction Japan scale trial, 30 km between opposite hex sides.</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Language="en_US">
+      <Text>22 fixed 1534 factions; start with from settlers.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="ja_JP">
-      <Text>22勢力の固定日本列島地図。六角形の対辺間が約30 km。</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Language="ja_JP">
+      <Text>1534年の22勢力。開始方法は開拓者から。</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_30_DESCRIPTION" Language="ru_RU">
-      <Text>Фиксированная карта Японии для 22 фракций; около 30 км между сторонами гекса.</Text>
+    <Row Tag="LOC_JAC_JAPAN_20_SETTLERS_DESCRIPTION" Language="ru_RU">
+      <Text>22 державы 1534 года; начало: с поселенцев.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="en_US">
-      <Text>Japan archipelago 25 km/hex</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Language="en_US">
+      <Text>Japan 15 km — start: historical territory</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="ja_JP">
-      <Text>日本列島 25 km/タイル</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Language="ja_JP">
+      <Text>日本列島 15 km — 開始方法: 史実の領土</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_NAME" Language="ru_RU">
-      <Text>Японский архипелаг 25 км/гекс</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_NAME" Language="ru_RU">
+      <Text>Япония 15 км — начало: исторические владения</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="en_US">
-      <Text>Fixed 22-faction Japan scale trial, 25 km between opposite hex sides.</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Language="en_US">
+      <Text>22 fixed 1534 factions; start with historical territory.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="ja_JP">
-      <Text>22勢力の固定日本列島地図。六角形の対辺間が約25 km。</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Language="ja_JP">
+      <Text>1534年の22勢力。開始方法は史実の領土。</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_25_DESCRIPTION" Language="ru_RU">
-      <Text>Фиксированная карта Японии для 22 фракций; около 25 км между сторонами гекса.</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_HISTORICAL_DESCRIPTION" Language="ru_RU">
+      <Text>22 державы 1534 года; начало: исторические владения.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="en_US">
-      <Text>Japan archipelago 20 km/hex</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_NAME" Language="en_US">
+      <Text>Japan 15 km — start: from settlers</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="ja_JP">
-      <Text>日本列島 20 km/タイル</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_NAME" Language="ja_JP">
+      <Text>日本列島 15 km — 開始方法: 開拓者から</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_NAME" Language="ru_RU">
-      <Text>Японский архипелаг 20 км/гекс</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_NAME" Language="ru_RU">
+      <Text>Япония 15 км — начало: с поселенцев</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="en_US">
-      <Text>Fixed 22-faction Japan scale trial, 20 km between opposite hex sides.</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Language="en_US">
+      <Text>22 fixed 1534 factions; start with from settlers.</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="ja_JP">
-      <Text>22勢力の固定日本列島地図。六角形の対辺間が約20 km。</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Language="ja_JP">
+      <Text>1534年の22勢力。開始方法は開拓者から。</Text>
     </Row>
-    <Row Tag="LOC_JAC_JAPAN_20_DESCRIPTION" Language="ru_RU">
-      <Text>Фиксированная карта Японии для 22 фракций; около 20 км между сторонами гекса.</Text>
+    <Row Tag="LOC_JAC_JAPAN_15_SETTLERS_DESCRIPTION" Language="ru_RU">
+      <Text>22 державы 1534 года; начало: с поселенцев.</Text>
     </Row>
   </LocalizedText>
 </GameData>

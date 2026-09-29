@@ -14,19 +14,35 @@
       <ru_RU>JAC PoC: масштаб карты Японии</ru_RU>
     </Text>
     <Text id="LOC_JAC_JAPAN_SCALE_MOD_TEASER">
-      <en_US>Four fixed Japan maps for 22-player stability trials.</en_US>
-      <ja_JP>22勢力で安定性を測る4段階の固定日本地図。</ja_JP>
-      <ru_RU>Четыре карты Японии для проверки игры с 22 фракциями.</ru_RU>
+      <en_US>1534 Japan at 20 or 15 km with two start methods.</en_US>
+      <ja_JP>1534年の日本列島。20・15 kmと2つの開始方法。</ja_JP>
+      <ru_RU>Япония 1534 года: 20 или 15 км, два способа начала.</ru_RU>
     </Text>
     <Text id="LOC_JAC_JAPAN_SCALE_MOD_DESCRIPTION">
-      <en_US>40, 30, 25 and 20 km per hex; Banseiki ruleset with Oda Nobuhide as the human and official leaders for the other seats.</en_US>
-      <ja_JP>1タイル約40・30・25・20 km。万世紀ルールセットで、人間は織田信秀、他の本拠は公式の指導者で試す。</ja_JP>
-      <ru_RU>40, 30, 25 и 20 км на гекс. Правила «Бансэйки»: игрок — Ода Нобухидэ, остальные — официальные лидеры.</ru_RU>
+      <en_US>Choose historical territory or settlers in the map list; 22 Japan factions.</en_US>
+      <ja_JP>地図一覧で「史実の領土」か「開拓者から」を選択。日本の22勢力。</ja_JP>
+      <ru_RU>Выберите исторические владения или поселенцев в списке карт; 22 державы.</ru_RU>
     </Text>
   </LocalizedText>
   <ActionCriteria>
     <Criteria id="JAC_JapanMapScale_GatheringStorm">
       <RuleSetInUse>RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI</RuleSetInUse>
+    </Criteria>
+    <Criteria id="JAC_Japan_20km_Historical">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Japan_15km_Historical">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
@@ -38,6 +54,12 @@
     </UpdateText>
   </FrontEndActions>
   <InGameActions>
+    <UpdateDatabase id="JAC_Japan_20km_NoSettlers" criteria="JAC_Japan_20km_Historical">
+      <File>Data/JAC_Japan_NoSettlers.xml</File>
+    </UpdateDatabase>
+    <UpdateDatabase id="JAC_Japan_15km_NoSettlers" criteria="JAC_Japan_15km_Historical">
+      <File>Data/JAC_Japan_NoSettlers.xml</File>
+    </UpdateDatabase>
     <UpdateText id="JAC_JapanMapScale_InGameText" criteria="JAC_JapanMapScale_GatheringStorm">
       <File>Text/JAC_JapanMapScale_Text.xml</File>
     </UpdateText>
@@ -45,13 +67,14 @@
   <Files>
     <File>Config/JAC_JapanMapScale_Config.xml</File>
     <File>Text/JAC_JapanMapScale_Text.xml</File>
-    <File>Maps/JAC_Japan_40km.Civ6Map</File>
-    <File>Maps/JAC_Japan_40km.lua</File>
-    <File>Maps/JAC_Japan_30km.Civ6Map</File>
-    <File>Maps/JAC_Japan_30km.lua</File>
-    <File>Maps/JAC_Japan_25km.Civ6Map</File>
-    <File>Maps/JAC_Japan_25km.lua</File>
+    <File>Data/JAC_Japan_NoSettlers.xml</File>
     <File>Maps/JAC_Japan_20km.Civ6Map</File>
     <File>Maps/JAC_Japan_20km.lua</File>
+    <File>Maps/JAC_Japan_20km_Settlers.Civ6Map</File>
+    <File>Maps/JAC_Japan_20km_Settlers.lua</File>
+    <File>Maps/JAC_Japan_15km.Civ6Map</File>
+    <File>Maps/JAC_Japan_15km.lua</File>
+    <File>Maps/JAC_Japan_15km_Settlers.Civ6Map</File>
+    <File>Maps/JAC_Japan_15km_Settlers.lua</File>
   </Files>
 </Mod>
