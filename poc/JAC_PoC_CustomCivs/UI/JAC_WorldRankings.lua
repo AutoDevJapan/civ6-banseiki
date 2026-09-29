@@ -9,16 +9,19 @@ local BasePopulateOverallInstance = PopulateOverallInstance;
 local loggedOverviewRename = false;
 function PopulateOverallInstance(instance, victoryType, typeText)
 	BasePopulateOverallInstance(instance, victoryType, typeText);
-	local target = Game:GetProperty("JAC_POC_CUSTOM_CIVS_RENAMED_NAME");
-	if not target then return; end
-	local oldLabel = Locale.Lookup("LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE",
-		Locale.Lookup("LOC_CIVILIZATION_JAC_TAKEDA_NAME"));
-	if instance.VictoryLeading:GetText() == oldLabel then
-		local newLabel = Locale.Lookup("LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE", Locale.Lookup(target));
-		instance.VictoryLeading:SetText(newLabel);
-		if not loggedOverviewRename then
-			loggedOverviewRename = true;
-			print("[JAC_POC] worldRankingLabel result=applied displayed=" .. newLabel);
+	local shown = instance.VictoryLeading:GetText();
+	for _, player in ipairs(PlayerManager.GetAliveMajors()) do
+		local civType = PlayerConfigurations[player:GetID()]:GetCivilizationTypeName();
+		local target = JAC_GetCivNameTarget(civType);
+		local civ = target and GameInfo.Civilizations[civType];
+		if civ and shown == Locale.Lookup("LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE", Locale.Lookup(civ.Name)) then
+			local newLabel = Locale.Lookup("LOC_WORLD_RANKINGS_FIRST_PLACE_OTHER_SIMPLE", Locale.Lookup(target));
+			instance.VictoryLeading:SetText(newLabel);
+			if not loggedOverviewRename then
+				loggedOverviewRename = true;
+				print("[JAC_POC] worldRankingLabel result=applied displayed=" .. newLabel);
+			end
+			return;
 		end
 	end
 end

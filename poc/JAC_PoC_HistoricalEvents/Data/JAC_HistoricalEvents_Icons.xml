@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+	<IconDefinitions>
+		<!-- Event notifications use NOTIFICATION_USER_DEFINED_1; the base game has no icon for it
+		     (official scenarios add one, e.g. BlackDeathScenario_Icons_Notifications.xml:6). -->
+		<Row Name="ICON_NOTIFICATION_USER_DEFINED_1" Atlas="ICON_ATLAS_NOTIFICATIONS" Index="15"/>
+	</IconDefinitions>
+</GameInfo>
