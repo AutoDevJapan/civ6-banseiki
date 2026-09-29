@@ -249,8 +249,9 @@
       "code": "LuaEvents.PartialScreenHooks_CloseAllExcept('_AllTheThings'); return true"
     },
     {
-      "action": "end_turn",
-      "timeout": 180
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
     },
     {
       "action": "ui_lua",
@@ -275,6 +276,11 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local human=Game.GetLocalPlayer(); local ainu=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_AINU' then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if ainu then error('multiple held out Ainu castles') end; ainu=city end end end end; if not ainu then error('Ainu held out castle missing') end; CityManager.TransferCity(ainu,human); local owned=0; for _,city in Players[human]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then owned=owned+1 end end; if owned~=56 then error('positive count '..owned) end; return 'positive: all registered castles transferred'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 300
     },
     {
       "action": "wait_for",
