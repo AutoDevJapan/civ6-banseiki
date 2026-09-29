@@ -596,7 +596,24 @@ class GeneratedMapTests(unittest.TestCase):
         self.assertEqual({(row.tag, row.attrib["ModifierId"])
                           for row in rules.findall("./TraitModifiers/*")},
                          {("Row", "JAC_DOMAIN_CROSSING_ALL_UNITS"),
+                          ("Row", "JAC_JAPAN_CITY_LOYALTY_STABILITY"),
                           ("Delete", "STANDARD_DIPLOMATIC_INCURSION")})
+        stability = rules.find("./Modifiers/Row[@ModifierId='JAC_JAPAN_CITY_LOYALTY_STABILITY']")
+        self.assertIsNotNone(stability)
+        self.assertEqual(stability.attrib,
+                         {"ModifierId": "JAC_JAPAN_CITY_LOYALTY_STABILITY",
+                          "ModifierType": "MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN"})
+        self.assertEqual(
+            rules.find("./ModifierArguments/Row[@ModifierId='JAC_JAPAN_CITY_LOYALTY_STABILITY']").attrib,
+            {"ModifierId": "JAC_JAPAN_CITY_LOYALTY_STABILITY", "Name": "Amount", "Value": "100"})
+        modifier_source = g.OFFICIAL.parents[4] / "DLC/Expansion2/Data/Expansion1_Modifiers.xml"
+        if modifier_source.is_file():
+            official_modifiers = ET.parse(modifier_source).getroot()
+            modifier_types = [row for row in official_modifiers.findall("./DynamicModifiers/Row")
+                              if row.findtext("ModifierType") == stability.attrib["ModifierType"]]
+            self.assertEqual(len(modifier_types), 1)
+            self.assertEqual(modifier_types[0].findtext("CollectionType"), "COLLECTION_PLAYER_CITIES")
+            self.assertEqual(modifier_types[0].findtext("EffectType"), "EFFECT_ADJUST_CITY_IDENTITY_PER_TURN")
         loyalty = rules.find("./GlobalParameters/Update")
         self.assertEqual(loyalty.find("Where").attrib["Name"],
                          "LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_LOYALTY")
