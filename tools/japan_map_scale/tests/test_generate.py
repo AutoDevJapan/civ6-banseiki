@@ -198,14 +198,9 @@ class GeneratedMapTests(unittest.TestCase):
                     for table in ("PlotResources", "PlotRivers"):
                         self.assertEqual(db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
                                          historical.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
-                    # The historical map only lacks woods cleared under a district or improvement.
-                    settler = set(db.execute("SELECT ID,FeatureType FROM PlotFeatures"))
-                    kept = set(historical.execute("SELECT ID,FeatureType FROM PlotFeatures"))
-                    built = {row[0] for row in historical.execute(
-                        "SELECT Plot FROM Districts UNION SELECT ID FROM PlotImprovements")}
-                    self.assertLessEqual(kept, settler)
-                    self.assertTrue(all(kind == "FEATURE_FOREST" and plot in built
-                                        for plot, kind in settler - kept))
+                    # No feature is cleared for districts/improvements (owner decision E1=b).
+                    self.assertEqual(set(db.execute("SELECT ID,FeatureType FROM PlotFeatures")),
+                                     set(historical.execute("SELECT ID,FeatureType FROM PlotFeatures")))
 
     def test_takeda_setup_slot_maps_to_static_city_and_territory_owners(self):
         for item in self.manifest:
@@ -358,8 +353,6 @@ class GeneratedMapTests(unittest.TestCase):
         for item in self.manifest:
             km = item["km_per_tile"]
             features = item["terrain_features"]
-            # Generated terrain is checked on the settler variant: the historical map
-            # clears some woods under districts/improvements (test_settler_variant_...).
             with self.subTest(km=km), sqlite3.connect(g.MOD / "Maps" / item["settler_file"]) as db,                     sqlite3.connect(g.MOD / "Maps" / item["file"]) as historical:
                 self.assertEqual(item["land_tiles"], expected[km]["land"])
                 self.assertEqual(len(features["lakes"]), 6)

@@ -35,9 +35,8 @@ SCENARIO = SCENARIO_DIR / "japan-prosperous-15km.json"
 DISTRICT_RANGE = 3          # a city places districts within 3 tiles
 RESERVE_RANGE = 2           # reserves stand within 2 tiles of a city (research doc 5.2)
 NO_ADJACENT_CITY = {"DISTRICT_ENCAMPMENT"}  # Districts.xml:46 NoAdjacentCity="true"
-# Woods are Removable="true" (Features.xml:32). Marsh is too (:34) but the draft places only
-# ~30 marshes on purpose (japan-map-resources.json), so they are kept.
-REMOVABLE = ("FEATURE_FOREST",)
+# Owner decision E1=b: no feature (woods, marsh) is ever cleared. When the plots run out,
+# fewer districts/improvements are placed instead.
 # Harbor: Coast="true" AdjacentToLand="true" (Districts.xml:47).
 FARM_TERRAINS = {"TERRAIN_GRASS", "TERRAIN_PLAINS"}  # Improvements.xml:101-102; hill farms need
 #                                                    # CIVIC_CIVIL_ENGINEERING (:103-104), so none
@@ -68,7 +67,7 @@ def reset(db: sqlite3.Connection, features: list[tuple] | None) -> None:
     """Remove every row apply() writes, back to the bare historical state.
 
     features: the generator's PlotFeatures rows (the settler map keeps them), to put
-    back woods cleared by an earlier apply(); None when the map is fresh.
+    back features cleared by an older apply(); None when the map is fresh.
     """
     if features is not None:
         db.execute("DELETE FROM PlotFeatures")
@@ -91,7 +90,6 @@ def apply(db: sqlite3.Connection, width: int, height: int, km: int, cities: list
     terrain = dict(db.execute("SELECT ID, TerrainType FROM Plots"))
     impassable = {pid for (pid,) in db.execute("SELECT ID FROM Plots WHERE IsImpassable<>0")}
     feature = dict(db.execute("SELECT ID, FeatureType FROM PlotFeatures"))
-    hard_feature = {pid: kind for pid, kind in feature.items() if kind not in REMOVABLE}
     resource = dict(db.execute("SELECT ID, ResourceType FROM PlotResources"))
     owner_rows = db.execute("SELECT ID, Owner, CityOwner FROM PlotOwners ORDER BY ID").fetchall()
     plot_owner = {pid: owner for pid, owner, _ in owner_rows}
@@ -140,12 +138,11 @@ def apply(db: sqlite3.Connection, width: int, height: int, km: int, cities: list
                                   and 1 <= dist(pid, centre) <= DISTRICT_RANGE]
                 else:
                     candidates = [pid for pid in land if pid not in used and pid not in resource
-                                  and pid not in hard_feature and dist(pid, centre) <= DISTRICT_RANGE
+                                  and pid not in feature and dist(pid, centre) <= DISTRICT_RANGE
                                   and not (dtype in NO_ADJACENT_CITY and dist(pid, centre) < 2)]
                 if not candidates:
                     continue  # try the next district the house's traits allow
-                # Clear plots first; otherwise clear woods as placing a district does.
-                pid = min(set(candidates), key=lambda c: (c in feature, dist(c, centre), c))
+                pid = min(set(candidates), key=lambda c: (dist(c, centre), c))
                 used.add(pid)
                 if dtype == "DISTRICT_HARBOR":
                     plot_owner[pid] = index
@@ -158,10 +155,10 @@ def apply(db: sqlite3.Connection, width: int, height: int, km: int, cities: list
                        (str(plan["pop"]), centre))
             # Improve as many tiles as there are working citizens, resources first.
             worked = max(0, plan["pop"] - len(placed))
-            options = sorted(((pid in feature, pid not in resource, imp != "IMPROVEMENT_FARM",
+            options = sorted(((pid not in resource, imp != "IMPROVEMENT_FARM",
                                dist(pid, centre), pid, imp)
                               for pid in land if pid not in used and dist(pid, centre) <= DISTRICT_RANGE
-                              and (imp := improvement_for(terrain[pid], hard_feature.get(pid), resource.get(pid)))))
+                              and (imp := improvement_for(terrain[pid], feature.get(pid), resource.get(pid)))))
             improvements = Counter()
             for *_key, pid, imp in options[:worked]:
                 used.add(pid)
@@ -204,10 +201,6 @@ def apply(db: sqlite3.Connection, width: int, height: int, km: int, cities: list
             "unplaced": unplaced,
             "missing_districts": sum(x["plan"]["n_districts"] - len(x["districts"]) for x in plans),
         }
-    # A district or improvement placed on woods (only when no clear plot is left)
-    # removes the feature, as building it does in the game.
-    db.executemany("DELETE FROM PlotFeatures WHERE ID=?",
-                   ((pid,) for pid in sorted(used - centres) if feature.get(pid) in REMOVABLE))
     db.executemany("INSERT INTO PlotOwners VALUES (?, ?, ?, ?)", owner_adds)
     db.executemany("INSERT INTO Districts VALUES (?, ?, ?)", districts_rows)
     db.executemany("INSERT INTO Buildings VALUES (?, ?)", building_rows)

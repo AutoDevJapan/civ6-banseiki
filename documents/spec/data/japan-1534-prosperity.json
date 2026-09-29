@@ -2198,7 +2198,7 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 2,
+      "IMPROVEMENT_FARM": 1,
       "IMPROVEMENT_MINE": 0
      },
      "unverified_improvements": {
@@ -2287,7 +2287,7 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 4,
+      "IMPROVEMENT_FARM": 2,
       "IMPROVEMENT_MINE": 0
      },
      "unverified_improvements": {
@@ -2414,8 +2414,8 @@
       }
      ],
      "improvements": {
-      "IMPROVEMENT_FARM": 4,
-      "IMPROVEMENT_MINE": 0
+      "IMPROVEMENT_FARM": 3,
+      "IMPROVEMENT_MINE": 1
      },
      "unverified_improvements": {
       "IMPROVEMENT_PASTURE": 0,

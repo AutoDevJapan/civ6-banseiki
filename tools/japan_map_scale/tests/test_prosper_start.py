@@ -28,11 +28,13 @@ ALLOWED_IMPROVEMENTS = {"IMPROVEMENT_FARM", "IMPROVEMENT_MINE", "IMPROVEMENT_QUA
 
 # Snapshot of the per-tier totals: (factions, pop, units, districts, walls, improvements, gold).
 TIER_TOTALS = {
-    15: {"A": (7, 80, 55, 16, 11, 64, 3850), "B": (5, 47, 34, 7, 7, 38, 1620),
-         "C": (4, 47, 27, 9, 8, 31, 1070), "D": (6, 30, 21, 6, 9, 22, 780)},
-    20: {"A": (7, 77, 55, 16, 11, 60, 3850), "B": (5, 46, 34, 5, 7, 40, 1620),
-         "C": (4, 47, 27, 8, 8, 31, 1070), "D": (6, 29, 21, 5, 9, 24, 780)},
+    15: {"A": (7, 80, 55, 16, 11, 60, 3850), "B": (5, 47, 34, 7, 7, 31, 1620),
+         "C": (4, 47, 27, 9, 8, 29, 1070), "D": (6, 30, 21, 6, 9, 21, 780)},
+    20: {"A": (7, 77, 55, 16, 11, 43, 3850), "B": (5, 46, 34, 5, 7, 35, 1620),
+         "C": (4, 47, 27, 6, 8, 28, 1070), "D": (6, 29, 21, 5, 9, 24, 780)},
 }
+# Districts that do not fit without clearing woods are left out (owner decision E1=b).
+MISSING_DISTRICTS = {15: {}, 20: {"MATSUDAIRA": 1, "ASHIKAGA": 1}}
 
 
 def rows(db: sqlite3.Connection, sql: str, *args) -> list[tuple]:
@@ -123,7 +125,7 @@ class ProsperousMapTests(unittest.TestCase):
                     self.assertEqual(owner[plot][1], city)
                     self.assertTrue(1 <= d <= ps.DISTRICT_RANGE)
                     self.assertNotIn(plot, resource)
-                    self.assertIn(features.get(plot), (None, *ps.REMOVABLE))
+                    self.assertNotIn(plot, features)
                     if dtype == "DISTRICT_ENCAMPMENT":
                         self.assertGreaterEqual(d, 2)
                     if dtype == "DISTRICT_HARBOR":
@@ -146,9 +148,16 @@ class ProsperousMapTests(unittest.TestCase):
                     self.assertEqual(owner[plot][0], imp_owner)
                     self.assertNotIn(plot, district_at)
                     self.assertNotIn(plot, cities)
-                    kind = features.get(plot)
-                    self.assertEqual(ps.improvement_for(terrain[plot], None if kind in ps.REMOVABLE else kind,
-                                                        resource.get(plot)), imp)
+                    self.assertNotIn(plot, features)
+                    self.assertEqual(ps.improvement_for(terrain[plot], None, resource.get(plot)), imp)
+
+    def test_no_forest_or_marsh_is_removed(self):
+        for km, (_item, db) in self.maps.items():
+            with self.subTest(km=km):
+                base = set(ps.settler_features(km))
+                self.assertGreater(len(base), 0)
+                self.assertEqual(set(rows(db, "SELECT ID, FeatureType FROM PlotFeatures")), base)
+                self.assertTrue({"FEATURE_FOREST", "FEATURE_MARSH"} <= {k for _, k in base})
 
     def test_kyoto_and_treasury(self):
         for km, (item, db) in self.maps.items():
@@ -157,9 +166,11 @@ class ProsperousMapTests(unittest.TestCase):
                 self.assertEqual(rows(db, "SELECT Value FROM CityAttributes WHERE ID=?", kyoto), [("6",)])
                 built = {(d, b) for d, b in rows(db, "SELECT d.DistrictType, b.BuildingType FROM Districts d "
                                                      "JOIN Buildings b ON b.Plot=d.Plot WHERE d.CityID=?", kyoto)}
-                self.assertLessEqual({("DISTRICT_COMMERCIAL_HUB", "BUILDING_MARKET"),
-                                      ("DISTRICT_HOLY_SITE", "BUILDING_SHRINE"),
-                                      ("DISTRICT_HOLY_SITE", "BUILDING_TEMPLE")}, built)
+                # 20 km has no woodless plot left for Kyoto's holy site (E1=b), so only 15 km has it.
+                want = {("DISTRICT_COMMERCIAL_HUB", "BUILDING_MARKET")}
+                if km == 15:
+                    want |= {("DISTRICT_HOLY_SITE", "BUILDING_SHRINE"), ("DISTRICT_HOLY_SITE", "BUILDING_TEMPLE")}
+                self.assertLessEqual(want, built)
                 gold = rows(db, "SELECT ID, Value FROM PlayerAttributes WHERE Type='Treasury' ORDER BY ID")
                 self.assertEqual(gold, [(i, f"{p.starting_gold(s.slug)}.000000") for i, s in enumerate(g.SEATS)])
         self.assertEqual(p.starting_gold("ODA"), 200)       # 8 man koku, trade 3
@@ -185,7 +196,9 @@ class ProsperousMapTests(unittest.TestCase):
                 self.assertEqual(dump(copy), dump(ps.map_path(km)))
                 self.assertEqual(ps.apply_file(copy, km), first)
                 self.assertEqual(dump(copy), dump(ps.map_path(km)))
-                self.assertTrue(all(not r["unplaced"] and r["missing_districts"] == 0 for r in first.values()))
+                self.assertTrue(all(not r["unplaced"] for r in first.values()))
+                self.assertEqual({s: r["missing_districts"] for s, r in first.items() if r["missing_districts"]},
+                                 MISSING_DISTRICTS[km])
 
     def test_improvement_rules(self):
         self.assertEqual(ps.improvement_for("TERRAIN_GRASS", None, None), "IMPROVEMENT_FARM")
