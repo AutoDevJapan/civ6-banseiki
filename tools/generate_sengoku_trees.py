@@ -31,11 +31,9 @@ ERA_NAMES = (
 # the generic text; UI/JAC_HouseNamesData_Sengoku.lua swaps in the house text
 # (see documents/poc/house-names.md).  Each entry is
 # (generic tag, house tag, owner civilization, (ja, en, ru) house text).
-# The Toyotomi are not a faction, so the owner of the Taiko survey is a
-# provisional choice (Oda, the house Hideyoshi served); see the owner question.
+# C25 太閤検地 is not here: the owner decided every house that researches it
+# sees 太閤検地 (SSOT 3.2), so it is the civic's plain name.
 HOUSE_NAMES = (
-    ("LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME", "LOC_CIVIC_JAC_SENGOKU_TAIKO_LAND_SURVEY_NAME_HOUSE",
-     "CIVILIZATION_JAC_ODA", ("太閤検地", "Taikō Land Survey", "Тайко-кэнти (межевание земель)")),
     ("LOC_JAC_SENGOKU_ERA_3_NAME", "LOC_JAC_SENGOKU_ERA_3_NAME_HOUSE",
      "CIVILIZATION_JAC_ODA", ("天下布武と広域戦", "Tenka Fubu and Wide-Area Campaigns", "«Тэнка фубу» и походы широкого масштаба")),
     ("LOC_JAC_SENGOKU_ERA_3_DESCRIPTION", "LOC_JAC_SENGOKU_ERA_3_DESCRIPTION_HOUSE",
@@ -58,7 +56,7 @@ RU_NAMES = (
     "Советы портовых купцов", "Чайные встречи и ценности", "Указы для призамковых городов", "Посланники ко двору и сёгуну",
     "Свободные рынки", "Гарантии храмовых земель", "Посланники к южным варварам", "Межевание владений",
     "Организация стрелков", "Чайная дипломатия", "Союзные походы", "Посредничество в перемириях",
-    "Общее межевание земель", "Грамоты с красной печатью", "Изъятие мечей", "Разделение воинов и земледельцев",
+    "Тайко-кэнти (межевание земель)", "Грамоты с красной печатью", "Изъятие мечей", "Разделение воинов и земледельцев",
     "Управление портами", "Подтверждение земельных прав",
 )
 
@@ -102,10 +100,7 @@ def read_design() -> list[Node]:
         column = int(m["column"])
         cost = (TECH_COSTS if short.startswith("T") else CIVIC_COSTS)[column - 1]
         prerequisites = () if m["prereqs"] == "—" else tuple(names[p.strip()] for p in m["prereqs"].split(","))
-        ja, en = m["ja"], m["en"]
-        if short == "C25":  # SSOT 3.2: non-Toyotomi houses must see a generic term.
-            ja, en = "広域検地", "Regional Land Survey"
-        nodes.append(Node(short, m["id"], ja, en, ru, prerequisites, column,
+        nodes.append(Node(short, m["id"], m["ja"], m["en"], ru, prerequisites, column,
                           int(m["row"]), cost, ERAS[(column - 1) // 3],
                           m["unlock"], m["boost"]))
     return nodes
@@ -261,7 +256,7 @@ def make_unlock_matrix(nodes: list[Node]) -> str:
         "",
         "設計案の各行を、現行の公式アイテムへ接続した範囲。公式アイテムの能力値・名称・時代感は暫定の代理表現であり、"
         "設計案固有の建物・Unit・政策・操作・効果はすべて TODO。未接続ノードも研究自体は可能。",
-        "特にC25はSSOT 3.2に従い、既定の名前は「広域検地」とし、織田家（暫定）を操作するときだけ「太閤検地」と表示する。仕組みは[家固有名の表示切替](house-names.md)。",
+        "C25「太閤検地」は、研究したすべての家に同じ名前で表示する（SSOT 3.2）。",
         "",
         "| ノード | 設計案の解放 | 現行PoCの公式代理 | 残課題 |",
         "|---|---|---|---|",
