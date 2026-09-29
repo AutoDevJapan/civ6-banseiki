@@ -1,5 +1,5 @@
 {
-  "name": "Sengoku unification victory: one castle missing, save/load, then all castles",
+  "name": "Sengoku unification victory on the test map: raze, one castle missing, save/load, then all",
   "judge_profile": "generic",
   "steps": [
     {
@@ -9,7 +9,8 @@
         "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
         "7696e937-2044-4f3c-8e13-4e27632e2710",
         "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
-        "403be889-1455-4de7-967b-ad54c0ff3431"
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85"
       ],
       "disable_ids": [
         "dfa0717e-4d0b-4370-b693-27fc6758571b"
@@ -18,10 +19,10 @@
     {
       "action": "configure",
       "ruleset": "RULESET_JAC_BANSEIKI",
-      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
-      "map_size": "MAPSIZE_HUGE",
+      "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
+      "map_size": "MAPSIZE_DUEL",
       "speed": "GAMESPEED_STANDARD",
-      "seed": 620944,
+      "seed": 620951,
       "city_states": 0,
       "players": [
         {
@@ -38,101 +39,6 @@
           "leader": "LEADER_JAC_ASHINA_MORIKIYO",
           "civ": "CIVILIZATION_JAC_ASHINA",
           "human": false
-        },
-        {
-          "leader": "LEADER_JAC_HOJO_UJITSUNA",
-          "civ": "CIVILIZATION_JAC_HOJO",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
-          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
-          "civ": "CIVILIZATION_JAC_TAKEDA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
-          "civ": "CIVILIZATION_JAC_NAGAO",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
-          "civ": "CIVILIZATION_JAC_IMAGAWA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
-          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
-          "civ": "CIVILIZATION_JAC_ASAKURA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
-          "civ": "CIVILIZATION_JAC_ASHIKAGA",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
-          "civ": "CIVILIZATION_JAC_MIYOSHI",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
-          "civ": "CIVILIZATION_JAC_ROKKAKU",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_HONGANJI_SHONYO",
-          "civ": "CIVILIZATION_JAC_HONGANJI",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
-          "civ": "CIVILIZATION_JAC_OUCHI",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
-          "civ": "CIVILIZATION_JAC_AMAGO",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_MORI_MOTONARI",
-          "civ": "CIVILIZATION_JAC_MORI",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
-          "civ": "CIVILIZATION_JAC_CHOSOKABE",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
-          "civ": "CIVILIZATION_JAC_OTOMO",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
-          "civ": "CIVILIZATION_JAC_SHIMAZU",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
-          "civ": "CIVILIZATION_JAC_RYUKYU",
-          "human": false
-        },
-        {
-          "leader": "LEADER_JAC_AINU_TARIKONA",
-          "civ": "CIVILIZATION_JAC_AINU",
-          "human": false
         }
       ]
     },
@@ -143,82 +49,22 @@
     },
     {
       "action": "start_game",
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; if not Game.IsVictoryEnabled('VICTORY_JAC_SENGOKU_UNIFICATION') then error('unification victory disabled') end; if PlayerConfigurations[0]:GetLeaderTypeName()~='LEADER_JAC_ODA_NOBUHIDE' then error('slot 0 is not Oda') end; if Game.GetWinningTeam()~=nil then error('winner at start') end; local human=0; local total=0; JAC_UNIFY_QUEUE={}; JAC_UNIFY_HELDOUT=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do local player=Players[owner]; if player and player:IsMajor() then for _,city in player:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner~=human then local row={owner=owner,id=city:GetID()}; if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_AINU' and not JAC_UNIFY_HELDOUT then JAC_UNIFY_HELDOUT=row else table.insert(JAC_UNIFY_QUEUE,row) end end end end end end; if total~=56 or not JAC_UNIFY_HELDOUT or #JAC_UNIFY_QUEUE<1 then error('registry/heldout mismatch '..total) end; if not CityManager.TransferCity then error('GameCore TransferCity unavailable') end; return 'registered='..total..' queued='..#JAC_UNIFY_QUEUE..' Ainu held out'"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "for i=1,5 do if #JAC_UNIFY_QUEUE==0 then break end; local row=table.remove(JAC_UNIFY_QUEUE); local city=CityManager.GetCity(row.owner,row.id); if not city then error('castle missing '..row.owner..':'..row.id) end; CityManager.TransferCity(city,0) end; return #JAC_UNIFY_QUEUE"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "if #JAC_UNIFY_QUEUE~=0 then error('transfer queue not empty '..#JAC_UNIFY_QUEUE) end; return true"
+      "timeout": 240
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local human=0; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do local player=Players[owner]; if player and player:IsMajor() then for _,city in player:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then total=total+1; if owner==human then owned=owned+1 end end end end end; if total~=56 or owned~=55 then error('negative count '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one Ainu castle missing; no winner'"
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total~=4 or total-owned~=2 then error('initial castles '..owned..'/'..total) end; if not Game.IsVictoryEnabled('VICTORY_JAC_SENGOKU_UNIFICATION') then error('unification victory disabled') end; if Game.GetWinningTeam()~=nil then error('winner at start') end; return 'registered=4, two held by Date'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local target=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then local capital=Players[owner]:GetCities():GetCapitalCity(); for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) and (not capital or city:GetID()~=capital:GetID()) then target=city end end end end; if not target then error('Date castle to raze missing') end; local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; if CityManager.GetCity(owner,id) then how='fallback transfer (DestroyCity did not raze)'; CityManager.TransferCity(CityManager.GetCity(owner,id),0) end; return 'raze: '..how"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "ui_lua",
@@ -237,7 +83,7 @@
     {
       "action": "ui_lua",
       "state_name": "WorldRankings",
-      "code": "if not GameInfo.Victories['VICTORY_JAC_SENGOKU_UNIFICATION'] then error('victory absent from rankings') end; ViewGeneric('VICTORY_JAC_SENGOKU_UNIFICATION'); if Controls.GenericView:IsHidden() then error('custom victory tab hidden') end; return 'World Rankings shows 天下統一 condition'"
+      "code": "ViewGeneric('VICTORY_JAC_SENGOKU_UNIFICATION'); if Controls.GenericView:IsHidden() then error('custom victory tab hidden') end; return 'World Rankings shows 天下統一 condition'"
     },
     {
       "action": "screenshot",
@@ -256,7 +102,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local human=0; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do local player=Players[owner]; if player and player:IsMajor() then for _,city in player:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then total=total+1; if owner==human then owned=owned+1 end end end end end; if total~=56 or owned~=55 then error('negative count '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one Ainu castle missing; no winner'"
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "save",
@@ -265,17 +111,17 @@
     {
       "action": "load",
       "name": "jac-unification-negative",
-      "timeout": 600
+      "timeout": 300
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local human=0; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do local player=Players[owner]; if player and player:IsMajor() then for _,city in player:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then total=total+1; if owner==human then owned=owned+1 end end end end end; if total~=56 or owned~=55 then error('negative count '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one Ainu castle missing; no winner'"
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=1 then error('negative castles '..owned..'/'..total) end; if Game.GetWinningTeam()~=nil then error('victory with one castle missing') end; return 'negative: one castle missing ('..owned..'/'..total..'); no winner'"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local human=Game.GetLocalPlayer(); local ainu=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if PlayerConfigurations[owner]:GetCivilizationTypeName()=='CIVILIZATION_JAC_AINU' then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if ainu then error('multiple held out Ainu castles') end; ainu=city end end end end; if not ainu then error('Ainu held out castle missing') end; CityManager.TransferCity(ainu,human); local owned=0; for _,city in Players[human]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then owned=owned+1 end end; if owned~=56 then error('positive count '..owned) end; return 'positive: all registered castles transferred'"
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE'].Index; local last=nil; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if owner~=0 then for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker) then if last then error('more than one castle held out') end; last=city end end end end; if not last then error('held out castle missing') end; CityManager.TransferCity(last,0); return 'transferred the last castle'"
     },
     {
       "action": "autoplay",
@@ -287,14 +133,18 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local winner,v=Game.GetWinningTeam(); if winner==nil and not JAC_UNIFY_END_REQUESTED then JAC_UNIFY_END_REQUESTED=true; UI.RequestAction(ActionTypes.ACTION_ENDTURN) end; return winner==Players[Game.GetLocalPlayer()]:GetTeam() and v~=nil and GameInfo.Victories[v] and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
+        "code": "local winner,v=Game.GetWinningTeam(); return winner==Players[0]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
       },
       "timeout": 60
     },
     {
+      "action": "screenshot",
+      "path": "unification-victory.png"
+    },
+    {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local winner,v=Game.GetWinningTeam(); if winner~=Players[Game.GetLocalPlayer()]:GetTeam() or not GameInfo.Victories[v] or GameInfo.Victories[v].VictoryType~='VICTORY_JAC_SENGOKU_UNIFICATION' then error('wrong winner '..tostring(winner)..'/'..tostring(v)) end; return '天下統一 fired for human'"
+      "code": "local marker=GameInfo.Buildings['BUILDING_JAC_REGISTERED_CASTLE']; if not marker then error('castle marker missing') end; local total=0; local owned=0; for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do if city:GetBuildings():HasBuilding(marker.Index) then total=total+1; if owner==0 then owned=owned+1 end end end end; if total-owned~=0 then error('positive castles '..owned..'/'..total) end; if total~=3 then error('raze not verified: '..total..' castles remain') end; return '天下統一 with 3 of 4 castles after the raze'"
     }
   ]
 }

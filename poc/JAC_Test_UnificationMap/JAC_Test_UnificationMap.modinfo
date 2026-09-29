@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85" version="1">
+  <Properties>
+    <Name>LOC_JAC_TEST_UNIFICATION_MOD_NAME</Name>
+    <Teaser>LOC_JAC_TEST_UNIFICATION_MOD_TEASER</Teaser>
+    <Description>LOC_JAC_TEST_UNIFICATION_MOD_TEASER</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="403be889-1455-4de7-967b-ad54c0ff3431" title="LOC_JAC_JAPAN_SCALE_MOD_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_TEST_UNIFICATION_MOD_NAME">
+      <en_US>JAC TEST ONLY: unification test map</en_US>
+      <ja_JP>JAC テスト専用：天下統一の検証地図</ja_JP>
+      <ru_RU>JAC ТОЛЬКО ДЛЯ ТЕСТОВ: карта проверки объединения</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_TEST_UNIFICATION_MOD_TEASER">
+      <en_US>Automated test map. Do not enable for play.</en_US>
+      <ja_JP>自動テスト用の地図。プレイでは有効にしない。</ja_JP>
+      <ru_RU>Карта для автотестов. Не включайте для игры.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <FrontEndActions>
+    <UpdateDatabase id="JAC_Test_UnificationMap_Config">
+      <File>Config/JAC_Test_UnificationMap_Config.xml</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Test_UnificationMap_Text">
+      <File>Text/JAC_Test_UnificationMap_Text.xml</File>
+    </UpdateText>
+  </FrontEndActions>
+  <Files>
+    <File>Config/JAC_Test_UnificationMap_Config.xml</File>
+    <File>Text/JAC_Test_UnificationMap_Text.xml</File>
+    <File>Maps/JAC_Unification_Test.Civ6Map</File>
+    <File>Maps/JAC_Unification_Test.lua</File>
+  </Files>
+</Mod>

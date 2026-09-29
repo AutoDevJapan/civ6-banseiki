@@ -4,14 +4,17 @@
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_NAME" Language="ja_JP"><Text>天下統一</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_NAME" Language="en_US"><Text>Unification of Japan</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_NAME" Language="ru_RU"><Text>Объединение Японии</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="ja_JP"><Text>日本マップに登録されたすべての城を、1人のプレイヤーが支配する。</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="en_US"><Text>One player controls every castle registered on the Japan map.</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="ru_RU"><Text>Один игрок контролирует все замки, зарегистрированные на карте Японии.</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="ja_JP"><Text>日本マップに登録された城のうち、残っているすべてを支配する。登録城のない地図（開拓者から始める版など）では、全勢力の本拠（最初の首都）を支配する。</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="en_US"><Text>Control every remaining castle registered on the Japan map. On maps without registered castles (such as settler starts), control every faction's original capital.</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_DESCRIPTION" Language="ru_RU"><Text>Контролировать все оставшиеся замки, зарегистрированные на карте Японии. На картах без зарегистрированных замков (например, при старте с поселенцами) контролировать исходные столицы всех держав.</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_BLURB" Language="ja_JP"><Text>すべての登録城を支配し、天下を統一した。</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_BLURB" Language="en_US"><Text>Every registered castle is yours. Japan is unified.</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_BLURB" Language="ru_RU"><Text>Все зарегистрированные замки под вашим контролем. Япония объединена.</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PROGRESS" Language="ja_JP"><Text>登録城をすべて支配する</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PROGRESS" Language="en_US"><Text>Control every registered castle</Text></Row>
     <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PROGRESS" Language="ru_RU"><Text>Контролировать все зарегистрированные замки</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="ja_JP"><Text>登録城のない地図では、全勢力の本拠を支配する</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="en_US"><Text>On maps without registered castles, control every original capital</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_CAPITALS_PROGRESS" Language="ru_RU"><Text>На картах без зарегистрированных замков контролировать все исходные столицы</Text></Row>
   </LocalizedText>
 </GameData>
