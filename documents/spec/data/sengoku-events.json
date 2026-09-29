@@ -5,6 +5,7 @@
   "factions": "documents/spec/data/japan-1534-start.json の22勢力ID (ALL=全勢力)",
   "earlier_by": "その研究を先に終えた勢力は、史実年より前にイベントの効果を使える (SSOT 3.2)",
   "month_note": "月は date_text の日付を西暦に換算した月（1582年10月4日まではユリウス暦、10月15日以降はグレゴリオ暦）。旧暦の月だけ分かるものはその月の15日、幅があるものは開始日で換算。date_text に旧暦表記・幅を残す",
+  "year_end": "史実の期間の終わりの年（表示用）。イベントは year／month に対応するターンで一度だけ発火し、year_end まで再発火したり効果を延ばしたりしない。続く効果は gameplay_effect に書く。year_end の無いイベントは一時点",
   "confidence": "high/medium/low",
   "boost": "史実の年に、関係する研究を終えていない影響勢力へ与えるひらめき／着想（SSOT 3.2）。earlier_by のうち1つ。null は与えない",
   "advisor_popup": "助言役のポップアップで薦める行動（和睦など）。null は通常の通知と Boost の表示だけ",
@@ -17,7 +18,8 @@
    ],
    "note": "発火するのは万世紀ルールセットの戦国パックで、採用の15 km日本マップ（SSOT 3.4。20 kmは比較用）を使うゲームだけ。実装ではこの3つをガードする"
   },
-  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない"
+  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない。action が ownership のときは owner_to（移転先の勢力ID）を必ず持つ",
+  "rename": "家名の表示切替（SSOT 3.2）。faction の表示名を from から to へ、このイベントの year／month で切り替える。同じ勢力の段階は年月順に from→to がつながる（織田→羽柴→豊臣）"
  },
  "events": [
   {
@@ -1215,7 +1217,12 @@
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
     "short": "C16"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "rename": {
+    "faction": "NAGAO",
+    "from": "長尾",
+    "to": "上杉"
+   }
   },
   {
    "id": "EV_MORI_IWAMI",
@@ -1262,7 +1269,8 @@
     "resource_id": "RESOURCE_SILVER",
     "location": "石見銀山・石見 (35.103, 132.437)",
     "action": "ownership",
-    "start_year": 1526
+    "start_year": 1526,
+    "owner_to": "MORI"
    },
    "sources": [
     {
@@ -1388,7 +1396,8 @@
     "resource_id": "RESOURCE_IRON",
     "location": "奥出雲・出雲 (35.199, 133.092)",
     "action": "ownership",
-    "start_year": 1534
+    "start_year": 1534,
+    "owner_to": "MORI"
    },
    "sources": [
     {
@@ -1451,7 +1460,12 @@
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
     "short": "C16"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "rename": {
+    "faction": "MATSUDAIRA",
+    "from": "松平",
+    "to": "徳川"
+   }
   },
   {
    "id": "EV_RAKUICHI",
@@ -2116,7 +2130,7 @@
    ],
    "house_specific": false,
    "effect_category": "succession",
-   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の当主が替わり、表示名を織田→羽柴→豊臣へ切り替える（長尾→上杉と同じ仕組み。SSOT 3.2）。",
+   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の当主が替わり、表示名を織田→羽柴へ切り替える（長尾→上杉と同じ仕組み。SSOT 3.2）。羽柴→豊臣は EV_TOYOTOMI_SURNAME（1586年）で切り替える。",
    "sources": [
     {
      "title": "コトバンク『本能寺の変』"
@@ -2126,7 +2140,7 @@
     }
    ],
    "confidence": "high",
-   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれず、織田家の表示名の切り替えで表す（SSOT 3.2）。",
+   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれず、織田家の表示名の切り替えで表す（SSOT 3.2）。 切替の段階と時期は Q56。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
@@ -2136,6 +2150,11 @@
     "ja": "朝廷・将軍への取次で、後継の正統性を固めましょう。",
     "en": "Use envoys to the court to secure the successor's legitimacy.",
     "ru": "Через послов ко двору укрепите законность наследника."
+   },
+   "rename": {
+    "faction": "ODA",
+    "from": "織田",
+    "to": "羽柴"
    }
   },
   {
@@ -2249,7 +2268,7 @@
     "ru": "Строительство великого замка"
    },
    "effect_category": "construction",
-   "gameplay_effect": "石山本願寺の跡地に巨大な城郭が築かれる。石垣・本丸・惣構（T21／T29／T32）を持つ勢力は、大都市防衛を強化する。豊臣の拠点化。",
+   "gameplay_effect": "石山本願寺の跡地に巨大な城郭が築かれる。石垣・本丸・惣構（T21／T29／T32）を持つ勢力は、大都市防衛を強化する。羽柴（1586年から豊臣）の拠点化。",
    "sources": [
     {
      "title": "コトバンク『大坂城』"
@@ -2389,6 +2408,57 @@
     "ja": "被災した城を修理し、湯屋と兵糧蔵で民を救いましょう。",
     "en": "Repair damaged castles and relieve the people with baths and granaries.",
     "ru": "Восстановите замки и помогите народу банями и амбарами."
+   }
+  },
+  {
+   "id": "EV_TOYOTOMI_SURNAME",
+   "name": {
+    "ja": "豊臣姓の下賜",
+    "en": "Grant of the Toyotomi Surname",
+    "ru": "Пожалование фамилии Тоётоми"
+   },
+   "year": 1586,
+   "month": 10,
+   "date_text": "天正14年9月9日（豊臣姓の下賜。天正13年とする説もある）",
+   "regions": [
+    "山城"
+   ],
+   "affected_factions": [
+    "ODA"
+   ],
+   "primary_factions": [
+    "ODA"
+   ],
+   "earlier_by": [
+    {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+     "short": "C16"
+    }
+   ],
+   "house_specific": false,
+   "effect_category": "rename",
+   "gameplay_effect": "羽柴秀吉が朝廷から豊臣の姓を賜る。長尾→上杉と同じ仕組みで、家名を『羽柴』から『豊臣』へ表示切替（Civilization IDは維持。SSOT 3.2）。条件案：EV_HONNOJI で羽柴に切り替えた後、C16を研究。",
+   "sources": [
+    {
+     "title": "コトバンク『豊臣秀吉』"
+    },
+    {
+     "title": "Wikipedia日本語版『豊臣秀吉』"
+    }
+   ],
+   "confidence": "medium",
+   "note": "SSOT 3.2 は本能寺の変の後の織田→羽柴→豊臣を決めているが、各段階の時期は決めていない。羽柴は本能寺の変、豊臣は姓の下賜の年月とする案で、Q56 でオーナーに確認する。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+    "short": "C16"
+   },
+   "advisor_popup": null,
+   "rename": {
+    "faction": "ODA",
+    "from": "羽柴",
+    "to": "豊臣"
    }
   },
   {

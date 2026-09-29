@@ -41,7 +41,10 @@ class SengokuEventTests(unittest.TestCase):
             self.assertTrue(1533 <= e["year"] <= 1600, e["id"])
             self.assertTrue(e["month"] is None or 1 <= e["month"] <= 12, e["id"])
             if e.get("year_end"):
-                self.assertGreaterEqual(e["year_end"], e["year"], e["id"])
+                # year_end is the historical span for display; the event still fires once at year/month.
+                self.assertGreater(e["year_end"], e["year"], e["id"])
+                ye = str(e["year_end"])
+                self.assertTrue(ye in e["date_text"] or f"〜{ye[2:]}" in e["date_text"], e["id"])
             self.assertTrue(all(e["name"][k] for k in ("ja", "en", "ru")), e["id"])
             self.assertTrue(e["sources"] and e["confidence"] in ("high", "medium", "low"), e["id"])
 
@@ -72,6 +75,22 @@ class SengokuEventTests(unittest.TestCase):
         for e in EVENTS:
             self.assertTrue(e.get("house") is None or e["house"] in FACTIONS, e["id"])
         self.assertFalse(next(e for e in EVENTS if e["id"] == "EV_YAMAZAKI_KENCHI")["house_specific"])
+
+    def test_renames_chain_in_date_order(self):
+        # SSOT 3.2: Nagao->Uesugi, Matsudaira->Tokugawa, Oda->Hashiba->Toyotomi, each stage at its own event date.
+        stages = {}
+        for e in EVENTS:
+            if r := e.get("rename"):
+                self.assertIn(r["faction"], e["primary_factions"], e["id"])
+                stages.setdefault(r["faction"], []).append(((e["year"], e["month"]), r["from"], r["to"], e["id"]))
+        chains = {}
+        for f, s in stages.items():
+            s.sort()
+            for a, b in zip(s, s[1:]):
+                self.assertLess(a[0], b[0], (a[3], b[3]))
+                self.assertEqual(a[2], b[1], (a[3], b[3]))
+            chains[f] = [s[0][1]] + [x[2] for x in s]
+        self.assertEqual(chains, {"NAGAO": ["長尾", "上杉"], "MATSUDAIRA": ["松平", "徳川"], "ODA": ["織田", "羽柴", "豊臣"]})
 
     def test_house_specific_has_generic_name(self):
         for e in EVENTS:
@@ -104,12 +123,28 @@ class SengokuEventTests(unittest.TestCase):
             for p in g["points"]:
                 points[(g["civ6_id"], tuple(p["coordinates"]))] = p
         trades = {(t["civ6_id"], tuple(t["coordinates"])): t for t in RESOURCES["trade_access"]}
-        seen = 0
+        expected = {
+            "EV_IKUNO_SILVER": ("RESOURCE_SILVER", "生野・但馬 (35.167, 134.790)", "reveal", 1542, None),
+            "EV_HIRADO_PORTUGUESE": ("RESOURCE_NITER", "平戸・肥前 (33.368, 129.553)", "trade_access", 1586, None),
+            "EV_MORI_IWAMI": ("RESOURCE_SILVER", "石見銀山・石見 (35.103, 132.437)", "ownership", 1526, "MORI"),
+            "EV_AMAGO_FALL": ("RESOURCE_IRON", "奥出雲・出雲 (35.199, 133.092)", "ownership", 1534, "MORI"),
+            "EV_SADO_SUBJUGATION": ("RESOURCE_JAC_GOLD", "西三川・佐渡 (37.819, 138.273)", "reveal", 1593, None),
+            "EV_AIZU_LACQUER": ("RESOURCE_JAC_LACQUER", "会津 (37.490, 139.930)", "reveal", 1590, None),
+            "EV_AIKAWA": ("RESOURCE_JAC_GOLD", "相川・佐渡 (38.032, 138.235)", "reveal", 1596, None),
+        }
+        actual = {
+            e["id"]: (r["resource_id"], r["location"], r["action"], r["start_year"], r.get("owner_to"))
+            for e in EVENTS
+            if (r := e.get("resource"))
+        }
+        self.assertEqual(actual, expected)
         for e in EVENTS:
             r = e.get("resource")
             if not r:
                 continue
-            seen += 1
+            if r["action"] == "ownership":
+                # The transfer target must be machine-readable, one of the event's primary factions.
+                self.assertIn(r["owner_to"], FACTIONS & set(e["primary_factions"]), e["id"])
             m = re.search(r"\((-?[\d.]+), (-?[\d.]+)\)$", r["location"])
             self.assertIsNotNone(m, e["id"])
             key = (r["resource_id"], (float(m[2]), float(m[1])))  # location is (lat, lon); data is [lon, lat]
@@ -131,7 +166,6 @@ class SengokuEventTests(unittest.TestCase):
                 self.assertFalse(deferred, e["id"])  # ownership means the resource is on the map from 1534
                 if p.get("start_year") is not None:
                     self.assertEqual(r["start_year"], p["start_year"], e["id"])
-        self.assertGreaterEqual(seen, 6)
 
 
 if __name__ == "__main__":
