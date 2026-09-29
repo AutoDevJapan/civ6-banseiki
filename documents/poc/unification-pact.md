@@ -6,7 +6,7 @@ SSOT 3.1 の表「勝利」の「天下統一は1つの勢力で判定するが�
 
 1. 「最初から組んでいる同盟」はゲーム設定のチーム。勝利の要件はチーム単位で評価されるので、同じチームの城は追加の実装なしで合算される（下の「チームの合算」）。1534年の開始時の同盟（味方8組）は含めない（Q61）
 2. チームでは、Civ6 の勝者がチーム単位のため、チーム全員が勝つ。主体だけを勝たせる仕組みはエンジンにない（Q62）
-3. 天下統一同盟は、ゲーム中に申し込んで組む。申し込んだ家が主体。人間の家には相手の受諾が要る。AI の家は、申し込んだ家と同盟（Civ6 の同盟）を結んでいれば、その場で加わる（公式の同盟が AI の同意の代わり）。AI からは申し込まない。1つの同盟に主体は1人で、加わる家の数に上限はない。1つの家が入れる同盟は1つ。同じチームどうしでは組めない（チームで合算済み）。同盟は勝利まで続き、抜けられない（Q63）
+3. 天下統一同盟は、ゲーム中に申し込んで組む。申し込んだ家が主体。人間の家には相手の受諾が要る。AI の家は、申し込んだ家と同盟（Civ6 の同盟）を結んでいれば、その場で加わる（公式の同盟が AI の同意の代わり）。AI からは申し込まない。1つの同盟に主体は1人で、加わる家の数に上限はない。1つの家が入れる同盟は1つ。同じチームどうしでは組めない（チームで合算済み）。同盟は勝利まで続き、抜けられない（Q63）。滅亡した家は同盟から外れる（都市を持たないので、その家が失った城は取った家の城として数える）。残りの家で数える登録城をすべて持てば主体が勝つ
 4. 同盟の合算は登録城のある地図だけ。開拓者から始める版（登録城なし）は、今までどおりチームごとの本拠の条件（Q64）
 
 ## 仕組み
@@ -36,6 +36,7 @@ SSOT 3.1 の表「勝利」の「天下統一は1つの勢力で判定するが�
 | 件数の下限 `REQUIREMENT_COLLECTION_COUNT_ATLEAST` と `Count` | `Base/Assets/Gameplay/Data/Leaders.xml:6532-6533,6748-6756` |
 | 都市が建物を持つかの要件 `REQUIREMENT_CITY_HAS_BUILDING` | `Base/Assets/Gameplay/Data/Buildings.xml:1800-1801,1894-1896` |
 | 同盟の確認 `GetDiplomacy():HasAllied`（ゲーム側） | `DLC/VikingsScenario/Scripts/VikingScenario.lua:77` |
+| 滅亡した家も含めた全プレイヤー `PlayerManager.GetWasEverAliveCount`（実機シナリオの家の探索） | `Base/Assets/UI/ARXManager.lua:32`、`Base/Assets/Maps/Utility/MapUtilities.lua:705` |
 | 生存する主要勢力 `PlayerManager.GetAliveMajors`、`IsHuman` | `DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:47,49` |
 | `IsMajor`（ゲーム側） | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:122` |
 | `GetTeam`（ゲーム側） | `DLC/CivRoyaleScenario/Scripts/CivRoyaleScenario_UnitCommands.lua:157` |
@@ -49,16 +50,18 @@ SSOT 3.1 の表「勝利」の「天下統一は1つの勢力で判定するが�
 ## 検証
 
 - 静的検査（`python -m unittest discover -s tests -t .`）：`tests/test_unification_victory.py` が要件の行を模擬評価し、印のある都市を持つチームだけが勝つ（相手のチームと部外者は勝たない）、印がなければ同じ城の分け方でも誰も勝たない、を確かめる。modinfo の登録、画面が状態を変えないこと、文言の3言語もここで見る
-- Lua（lupa）：`tests/test_unification_pact_lua.py` が `JAC_Sengoku_RebuiltCastles.lua` と一緒にゲーム側 Lua を動かし、同盟していない AI は加わらない、同盟中の AI は加わる、部外者が城を1つ持つ間は印を付けない、相手に城が移ると主体の首都にだけ印を付ける、人間は受諾が要る（申し込んでいない家や別の家の受諾は無効）、1つの家は1つの同盟だけ、同じチームは組めない、破却後の再建都市は妨げない、登録城のない地図では印を付けない、を確かめる
+- Lua（lupa）：`tests/test_unification_pact_lua.py` が `JAC_Sengoku_RebuiltCastles.lua` と一緒にゲーム側 Lua を動かし、同盟していない AI は加わらない、同盟中の AI は加わる、部外者が城を1つ持つ間は印を付けない、相手に城が移ると主体の首都にだけ印を付ける、人間は受諾が要る（申し込んでいない家や別の家の受諾は無効）、1つの家は1つの同盟だけ、同じチームは組めない、破却後の再建都市は妨げない、登録城のない地図では印を付けない、同盟の相手が滅亡しても残りの家で全城を持てば主体の首都に印を付ける、滅亡した相手の城を部外者が取れば印を付けない（滅亡した家には申し込めない）、を確かめる
 - 実機シナリオ `tools/civ6-autotest/scenarios/unification-pact.json`（`python tools/generate_unification_victory.py` で生成）。検証地図（[天下統一 PoC](unification-victory.md) と同じ `JAC_Test_UnificationMap`）で織田（人間）・伊達・蘆名：
   1. 登録城4、織田2・伊達2で勝者なし
   2. 同盟の画面から伊達へ申し込む → 結果が「AI と同盟していない」、同盟は成立しない
   3. 伊達の本拠でない城を蘆名へ移し、織田と伊達を同盟にする（1534年の関係と同じく友好宣言のあと `SetHasAllied`）
   4. もう一度申し込む → 成立（伊達の主体が織田）。同盟は4城のうち3城なので、印も勝者もない
   5. 画面を開いて `unification-pact-panel.png` を撮る
-  6. 蘆名の城を伊達（同盟の相手）へ移す → 織田の首都に印が付く → 勝者が織田のチーム（伊達のチームではない）、勝利タイプが天下統一 → `unification-pact-victory.png`
+  6. 蘆名の城を伊達（同盟の相手）へ移す（蘆名は唯一の都市を失って滅亡する。以降の家の探索は滅亡した家も含める）→ 織田の首都に印が付く → 勝者が織田のチーム（伊達のチームではない）、勝利タイプが天下統一 → `unification-pact-victory.png`
 
-## 実機確認（未実施）
+## 実機確認（途中まで）
+
+2026-09-29 の unification-alliance-01 で、上の手順1〜6の印まで通った（申し込み・「AI と同盟していない」・同盟後の成立・3城で印なし・移管で印、`Lua.log` に終了画面の表示）。最後の勝者の確認だけが、滅亡した蘆名を生存中の家から探して「Date or Ashina missing」で止まった。家の探索を `GetWasEverAliveCount` に直したので、再実行で勝者の確認まで見る。
 
 ```
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/unification-pact.json

@@ -75,7 +75,7 @@ for id, spec in ipairs({ { human = true }, {}, {}, { human = true } }) do
   local p = { team = pid }
   p.GetID = function() return pid end
   p.IsMajor = function() return true end
-  p.IsAlive = function() return true end
+  p.IsAlive = function() return not p.dead end
   p.IsHuman = function() return spec.human == true end
   p.GetTeam = function() return p.team end
   p.GetDiplomacy = function() return { HasAllied = function(_, other) return ALLIED[pid .. "-" .. other] == true end } end
@@ -86,7 +86,11 @@ for id, spec in ipairs({ { human = true }, {}, {}, { human = true } }) do
   Players[pid] = p
   MAJORS[#MAJORS + 1] = p
 end
-PlayerManager = { GetAliveMajors = function() return MAJORS end }
+PlayerManager = { GetAliveMajors = function()
+  local alive = {}
+  for _, p in ipairs(MAJORS) do if not p.dead then alive[#alive + 1] = p end end
+  return alive
+end }
 ExposedMembers = {}
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
@@ -190,6 +194,32 @@ class UnificationPactTests(unittest.TestCase):
         self.g.FIRE("CityBuilt", ASHINA, 0, 25, 14)  # marked as rebuilt
         self.request("Propose", ODA, DATE)
         self.assertEqual(self.marked()[-1], (self.unified(), 5 * 32 + 6))
+
+    def test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win(self):
+        self.g.ALLIED[f"{ODA}-{DATE}"] = True
+        self.date_castle.owner = ASHINA
+        self.request("Propose", ODA, DATE)
+        self.assertEqual(self.lead(DATE), ODA)
+        taken = self.g.CITIES[5 * 32 + 25]  # Oda takes Date's capital, Date's last city
+        taken.owner, taken.capital = ODA, False
+        self.g.Players[DATE].dead = True
+        self.g.FIRE("CityConquered", ODA, DATE, 0, 25, 5)
+        self.assertEqual(self.marked(), [], "Ashina still holds a castle")
+        self.date_castle.owner = ODA
+        self.g.FIRE("CityConquered", ODA, ASHINA, 0, 25, 14)
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 6)], "the lead's capital")
+
+    def test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact(self):
+        self.g.ALLIED[f"{ODA}-{DATE}"] = True
+        self.date_castle.owner = ASHINA
+        self.request("Propose", ODA, DATE)
+        self.g.CITIES[5 * 32 + 25].owner = ASHINA  # Ashina eliminates Date
+        self.g.Players[DATE].dead = True
+        self.g.FIRE("CityConquered", ASHINA, DATE, 0, 25, 5)
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual(self.marked(), [])
+        self.request("Propose", ODA, DATE)  # an eliminated player cannot be invited again
+        self.assertEqual(self.result(ODA), "INVALID")
 
     def test_no_marker_without_registered_castles(self):
         self.setUp(no_castles=True)

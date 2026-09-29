@@ -69,33 +69,33 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_UnificationPact",
-      "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
+      "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
     },
     {
       "action": "wait_for",
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; return Players[0]:GetProperty('JAC_UNIFICATION_PACT_RESULT')=='NOT_ALLIED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)==nil"
+        "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; return Players[0]:GetProperty('JAC_UNIFICATION_PACT_RESULT')=='NOT_ALLIED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)==nil"
       },
       "timeout": 30
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local capital=Players[date]:GetCities():GetCapitalCity(); local moved=nil; for _,city in Players[date]:GetCities():Members() do if castle(city) and city:GetID()~=capital:GetID() then moved=city end end; if not moved then error('Date castle to move missing') end; CityManager.TransferCity(moved,ashina); local a,b=Players[0]:GetDiplomacy(),Players[date]:GetDiplomacy(); a:SetHasMet(date); b:SetHasMet(0); a:SetHasDeclaredFriendship(date,true); b:SetHasDeclaredFriendship(0,true); a:SetHasAllied(date,true); if not a:HasAllied(date) then error('Oda and Date not allied') end; return 'Ashina holds one castle; Oda and Date allied'"
+      "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local capital=Players[date]:GetCities():GetCapitalCity(); local moved=nil; for _,city in Players[date]:GetCities():Members() do if castle(city) and city:GetID()~=capital:GetID() then moved=city end end; if not moved then error('Date castle to move missing') end; CityManager.TransferCity(moved,ashina); local a,b=Players[0]:GetDiplomacy(),Players[date]:GetDiplomacy(); a:SetHasMet(date); b:SetHasMet(0); a:SetHasDeclaredFriendship(date,true); b:SetHasDeclaredFriendship(0,true); a:SetHasAllied(date,true); if not a:HasAllied(date) then error('Oda and Date not allied') end; return 'Ashina holds one castle; Oda and Date allied'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_UnificationPact",
-      "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
+      "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
     },
     {
       "action": "wait_for",
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; return Players[0]:GetProperty('JAC_UNIFICATION_PACT_RESULT')=='JOINED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)==0 and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_0')==0"
+        "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; return Players[0]:GetProperty('JAC_UNIFICATION_PACT_RESULT')=='JOINED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)==0 and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_0')==0"
       },
       "timeout": 30
     },
@@ -121,7 +121,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local last=nil; for _,city in Players[ashina]:GetCities():Members() do if castle(city) then last=city end end; if not last then error('Ashina castle missing') end; CityManager.TransferCity(last,date); return 'Ashina castle handed to Date (pact partner)'"
+      "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; local plots={['6,5']=true,['25,5']=true,['6,14']=true,['25,14']=true}; local function castle(city) return plots[city:GetX()..','..city:GetY()]==true end; local last=nil; for _,city in Players[ashina]:GetCities():Members() do if castle(city) then last=city end end; if not last then error('Ashina castle missing') end; CityManager.TransferCity(last,date); return 'Ashina castle handed to Date (pact partner)'"
     },
     {
       "action": "wait_for",
@@ -142,7 +142,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); if civ=='CIVILIZATION_JAC_DATE' then date=id elseif civ=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not date or not ashina then error('Date or Ashina missing') end; local winner,v=Game.GetWinningTeam(); return winner==Players[0]:GetTeam() and winner~=Players[date]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
+        "code": "local date=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then date=id end end; if not date then error('Date missing') end; local ashina=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do if PlayerConfigurations[id]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ASHINA' then ashina=id end end; if not ashina then error('Ashina missing') end; local winner,v=Game.GetWinningTeam(); return winner==Players[0]:GetTeam() and winner~=Players[date]:GetTeam() and v~=nil and GameInfo.Victories[v]~=nil and GameInfo.Victories[v].VictoryType=='VICTORY_JAC_SENGOKU_UNIFICATION'"
       },
       "timeout": 300
     },

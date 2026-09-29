@@ -12,6 +12,8 @@
 --   with the proposer (the official alliance is the AI's consent); a pact has one lead and any number of
 --   members, a player is in at most one pact, and a pact lasts until the game ends (no dissolving).
 --   Players on the same Civ6 team already pool through the team-evaluated victory, so a pact joins teams.
+--   An eliminated member drops out (Members() lists alive majors; it owns no cities), so its lost castles
+--   count for whoever took them and the rest of the pact still wins by holding every counted castle.
 -- Victory: when the pact's teams together hold every counted castle
 -- (ExposedMembers.JAC_UnificationCastles from JAC_Sengoku_RebuiltCastles.lua), the hidden
 -- BUILDING_JAC_PACT_UNIFIED goes into the lead's capital; the victory's pact branch

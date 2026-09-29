@@ -473,6 +473,17 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertIn("winner~=Players[date]:GetTeam()", codes[-2])
         self.assertEqual(steps[-1]["action"], "screenshot")
 
+    def test_live_scenarios_find_players_dead_or_alive(self):
+        # The handover eliminates Ashina, and the winner check then failed with "Date or Ashina missing"
+        # because the lookup scanned only alive players (unification-alliance-01, live 2026-09-29).
+        for built in (scenario(), pact_scenario()):
+            for step in built["steps"]:
+                code = step.get("code") or step.get("condition", {}).get("code", "")
+                if "GetCivilizationTypeName" in code:
+                    self.assertIn("PlayerManager.GetWasEverAliveCount()", code)
+                    self.assertNotIn("GetAliveIDs()) do if PlayerConfigurations", code)
+                    self.assertNotIn("local civ=PlayerConfigurations", code)
+
 
 if __name__ == "__main__":
     unittest.main()

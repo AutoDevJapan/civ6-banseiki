@@ -216,6 +216,15 @@ def _razed_lua(rows: list[tuple[int, int, int]]) -> str:
             f"local function razed(x,y) return Game:GetProperty('{RAZED_PREFIX}'..Map.GetPlot(x,y):GetIndex())==true end; ")
 
 
+def _player_lua(var: str, civ: str, label: str) -> str:
+    """Lua prelude: `var` is the slot of `civ`, dead or alive (a player losing its last city leaves
+    GetAliveIDs; unification-alliance-01 2026-09-29). Every slot that ever lived, as the official
+    Base/Assets/UI/ARXManager.lua:32 and Base/Assets/Maps/Utility/MapUtilities.lua:705 loop."""
+    return (f"local {var}=nil; for id=0,PlayerManager.GetWasEverAliveCount()-1 do "
+            f"if PlayerConfigurations[id]:GetCivilizationTypeName()=='{civ}' then {var}=id end end; "
+            f"if not {var} then error('{label} missing') end; ")
+
+
 def _tally() -> str:
     return ("local total=0; local owned=0; "
             "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
@@ -253,13 +262,11 @@ def scenario() -> dict:
     # DestroyCity is only a GameCore export string (worked live 2026-09-29); if it does not
     # remove the city, hand the city to Oda instead and let the rebuild step fail (no razed plot).
     raze = (
-        _castle_lua(rows) + "local target=nil; "
-        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[owner]:GetCivilizationTypeName()=='{players[1]['civ']}' then "
-        "local capital=Players[owner]:GetCities():GetCapitalCity(); "
-        "for _,city in Players[owner]:GetCities():Members() do "
+        _castle_lua(rows) + _player_lua("date", players[1]["civ"], "Date") + "local target=nil; "
+        "local capital=Players[date]:GetCities():GetCapitalCity(); "
+        "for _,city in Players[date]:GetCities():Members() do "
         "if castle(city) and (not capital or city:GetID()~=capital:GetID()) "
-        "then target=city end end end end; "
+        "then target=city end end; "
         "if not target then error('Date castle to raze missing') end; "
         "local owner,id=target:GetOwner(),target:GetID(); local how='DestroyCity'; "
         "if CityManager.DestroyCity then pcall(CityManager.DestroyCity,target) end; "
@@ -282,9 +289,7 @@ def scenario() -> dict:
         "if target then error('more than one razed plot') end; target=xy "
         "elseif not city then error('empty plot not recorded as razed: '..xy[1]..','..xy[2]) end end; "
         "if not target then error('no razed plot recorded (raze or turn-start scan failed)') end; "
-        "local builder=nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[id]:GetCivilizationTypeName()=='{players[2]['civ']}' then builder=id end end; "
-        "if not builder then error('Ashina missing') end; "
+        + _player_lua("builder", players[2]["civ"], "Ashina") +
         "Players[builder]:GetCities():Create(target[1],target[2]); "
         "if not CityManager.GetCityAt(target[1],target[2]) then error('rebuild failed') end; "
         "return 'rebuilt '..target[1]..','..target[2]..' for Ashina'"
@@ -301,12 +306,10 @@ def scenario() -> dict:
         "return 'rebuilt city marked; no winner'"
     )
     final = (
-        _castle_lua(rows) + "local last=nil; "
-        "for _,owner in ipairs(PlayerManager.GetAliveIDs()) do "
-        f"if PlayerConfigurations[owner]:GetCivilizationTypeName()=='{players[1]['civ']}' then "
-        "for _,city in Players[owner]:GetCities():Members() do "
+        _castle_lua(rows) + _player_lua("date", players[1]["civ"], "Date") + "local last=nil; "
+        "for _,city in Players[date]:GetCities():Members() do "
         "if castle(city) then "
-        "if last then error('more than one castle held out') end; last=city end end end end; "
+        "if last then error('more than one castle held out') end; last=city end end; "
         "if not last then error('held out castle missing') end; "
         f"CityManager.TransferCity(last,{HUMAN}); return 'transferred the last castle'"
     )
@@ -401,10 +404,7 @@ def pact_scenario() -> dict:
     start = scenario()["steps"][:5]  # enable, configure, setup, start_game, 4 castles with 2 held by Date
     rows = castles(TEST_MAP)
     date_civ, ashina_civ = start[1]["players"][1]["civ"], start[1]["players"][2]["civ"]
-    ids = ("local date,ashina=nil,nil; for _,id in ipairs(PlayerManager.GetAliveIDs()) do "
-           "local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); "
-           f"if civ=='{date_civ}' then date=id elseif civ=='{ashina_civ}' then ashina=id end end; "
-           "if not date or not ashina then error('Date or Ashina missing') end; ")
+    ids = _player_lua("date", date_civ, "Date") + _player_lua("ashina", ashina_civ, "Ashina")
     propose = ids + "JAC_RequestPact('Propose',date); return 'Oda proposes to Date'"
     result = ("return Players[{h}]:GetProperty('{r}')=='{{0}}'".format(h=HUMAN, r=PACT_RESULT))
     not_allied = ids + result.format("NOT_ALLIED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..date)==nil"
@@ -436,7 +436,7 @@ def pact_scenario() -> dict:
         "for _,city in Players[ashina]:GetCities():Members() do if castle(city) then last=city end end; "
         "if not last then error('Ashina castle missing') end; "
         "CityManager.TransferCity(last,date); return 'Ashina castle handed to Date (pact partner)'"
-    )
+    )  # Ashina's only city: the outsider is eliminated on purpose, so later lookups include the dead
     marked = f"return Players[{HUMAN}]:GetCities():GetCapitalCity():GetBuildings():HasBuilding({unified})"
     won = (
         ids + "local winner,v=Game.GetWinningTeam(); "
