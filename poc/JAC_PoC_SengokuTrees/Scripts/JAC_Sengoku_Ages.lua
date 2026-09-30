@@ -12,7 +12,7 @@
 -- Table keys are strings (§6.1).
 --
 -- Dark-age policy choice (§6.2, §7.2): a dark house gets its default policy at the 改元 (its row of
--- JAC_SengokuDarkAgePolicyDefaults, else the lowest Priority), so AI houses and humans who never answer keep it.
+-- JAC_SengokuDarkAgePolicyDefaults, else the lowest Priority). AI keeps it; humans choose once on that turn.
 -- A human chooses on UI/JAC_SengokuDarkPolicy.lua, which sends UI.RequestPlayerOperation(local,
 -- PlayerOperations.EXECUTE_SCRIPT, {OnStart = "JAC_SengokuDarkPolicyChoose", PolicyType, Reign}); the engine raises
 -- that GameEvent on every machine with the requesting player first (DLC/BlackDeathScenario/UI/
@@ -352,10 +352,23 @@ end
 -- LOC keys, not looked-up text: each machine shows its own language (JAC_HistoricalEvents.lua:158-167).
 -- USER_DEFINED_2 has its own icon (Data/JAC_Sengoku_Ages_Icons.xml).
 -- The heading names the new era ("改元：弘治の世"; owner decision L-1: the 元号 is the era wherever one is named).
-local function Notify(id, reign, age, policy)
+local function Notify(id, reign, index, age, policy)
 	local summary = AGE_ANNOUNCEMENTS[age == "DARK" and policy or age]
-	NotificationManager.SendNotification(id, NotificationTypes.USER_DEFINED_2,
-		{ [ParameterTypes.MESSAGE] = reign.notification, [ParameterTypes.SUMMARY] = summary })
+	local data = { [ParameterTypes.MESSAGE] = reign.notification, [ParameterTypes.SUMMARY] = summary }
+	local kind = NotificationTypes.USER_DEFINED_2
+	-- Use the engine's dedication notification type. Whether a scripted notification has the native blocker
+	-- is checked by the live scenarios (the Lua stubs alone cannot prove it). Official:
+	-- DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:29 and Base/Assets/UI/ActionPanel.lua:553-602.
+	-- IsHuman in gameplay: DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:49.
+	-- Custom properties and non-dismissable notifications: DLC/PiratesScenario/Scripts/
+	-- PiratesScenario_PropKeys.lua:85-89, PiratesScenario_StartScript.lua:340-343; UI reads them at
+	-- UI/Replacements/NotificationPanel_PiratesScenario.lua:81,145.
+	if age == "DARK" and Players[id]:IsHuman() then
+		kind = NotificationTypes.COMMEMORATION_AVAILABLE
+		data.JAC_DARK_POLICY_REIGN = index
+		data[NotificationParameterTypes.CanUserDismiss] = false
+	end
+	NotificationManager.SendNotification(id, kind, data)
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.
@@ -373,6 +386,7 @@ local function Thresholds(house, cities, length)
 end
 
 local function Judge(l, index, engineEra)
+	local notices = {}
 	local reign = REIGNS[index]
 	local endTurn = EndTurn(reign, ElapsedTurn())
 	local length = endTurn - l.reignStart
@@ -405,11 +419,12 @@ local function Judge(l, index, engineEra)
 				reign.type, results.turn, length, reign.era, tostring(engineEra), id, age, house.score, golden, dark,
 				house.policy or "", reign.forced and " forced" or ""))
 			house.score, house.parts = 0, {}
-			Notify(id, reign, age, house.policy)
+			table.insert(notices, { id = id, reign = reign, index = index, age = age, policy = house.policy })
 		end
 	end
 	l.history["r" .. tostring(index)] = results
 	l.reign, l.reignStart = index, endTurn
+	return notices
 end
 
 -- For the era score screen (UI only reads the ledger): the next 改元's turn and each house's thresholds for the
@@ -465,6 +480,7 @@ end
 -- Initialized at the first turn start, after LuaEvents.NewGameInitialized has granted the starting knowledge
 -- (JAC_Sengoku_StartingKnowledge.lua) and made the start alliances, so neither scores.
 local function OnGameTurnStarted()
+	local notices = {}
 	local l = Game:GetProperty(LEDGER_KEY)
 	if l == nil then
 		l = Initialize()
@@ -477,7 +493,7 @@ local function OnGameTurnStarted()
 		local index = NextJudged(l.reign)
 		while index and IsDue(REIGNS[index], turn, engineEra) do
 			IntakeEvents(l, EndTurn(REIGNS[index], turn))
-			Judge(l, index, engineEra)
+			for _, notice in ipairs(Judge(l, index, engineEra)) do table.insert(notices, notice) end
 			index = NextJudged(l.reign)
 		end
 		IntakeEvents(l, nil)
@@ -485,6 +501,8 @@ local function OnGameTurnStarted()
 	Project(l)
 	WriteProperties(l)
 	Game:SetProperty(LEDGER_KEY, l)
+	-- Publish the ledger first, as PiratesScenario_StartScript.lua:165 does before sending its notifications.
+	for _, notice in ipairs(notices) do Notify(notice.id, notice.reign, notice.index, notice.age, notice.policy) end
 end
 
 local function OnCityConquered(capturerID, ownerID, cityID, x, y)
@@ -510,7 +528,7 @@ local function OnCityBuilt(playerID, cityID, x, y)
 	Game:SetProperty(LEDGER_KEY, l)
 end
 
--- A human's choice (header). Taken only from a house judged dark in the current period, once per 改元
+-- A human's choice (header). Taken only on the saved judgement turn, once per 改元
 -- (<chosen> holds the period's number), for the period the screen showed, and for a policy of the table;
 -- anything else is dropped and logged.
 local function OnChoosePolicy(playerID, params)
@@ -523,8 +541,12 @@ local function OnChoosePolicy(playerID, params)
 		reason = "no house"
 	elseif house.age ~= "DARK" then
 		reason = "not dark"
+	elseif not Players[playerID]:IsHuman() then
+		reason = "not human"
 	elseif params.Reign ~= l.reign then
 		reason = "stale period " .. tostring(params.Reign)
+	elseif not l.history["r" .. tostring(l.reign)] or l.history["r" .. tostring(l.reign)].turn ~= ElapsedTurn() then
+		reason = "not judgement turn"
 	elseif house.chosen == l.reign then
 		reason = "already chosen"
 	elseif POLICY_BY_TYPE[policy] == nil then

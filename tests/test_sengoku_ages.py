@@ -350,6 +350,7 @@ Map = { GetPlot = function(x, y)
 end }
 CITIES = {}          -- list of {owner, x, y, capital}
 ALLIED, FRIENDS, TEAM, ALIVE = {}, {}, {}, {}
+HUMAN = { [1] = true, [3] = true }
 NO_FRIENDSHIP_API = false  -- true: the gameplay diplomacy object has no HasDeclaredFriendship
 Players, PlayerConfigurations = {}, {}
 local function citiesOf(id)
@@ -364,6 +365,7 @@ local function makePlayer(id, civ)
   local p = { research = { techs = {}, civics = {} } }
   p.GetID = function() return id end
   p.GetTeam = function() return TEAM[id] end
+  p.IsHuman = function() return HUMAN[id] == true end
   p.GetCities = function() return {
     Members = function()
       local list, n = citiesOf(id), 0
@@ -405,11 +407,42 @@ PlayerManager = {
   end,
 }
 ParameterTypes = { MESSAGE = "MESSAGE", SUMMARY = "SUMMARY" }
-NotificationTypes = { USER_DEFINED_2 = 2 }
-NOTES = {}
+NotificationParameterTypes = { CanUserDismiss = "CanUserDismiss" }
+NotificationTypes = { USER_DEFINED_2 = 2, COMMEMORATION_AVAILABLE = 71 }
+EndTurnBlockingTypes = { NO_ENDTURN_BLOCKING = -1, ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE = 71 }
+NOTES, NOTIFICATIONS = {}, {}
 NotificationManager = { SendNotification = function(id, kind, data)
   table.insert(NOTES, { id, kind, data.MESSAGE, data.SUMMARY, CURRENT_TURN - startTurn + 1 })
+  local n = { player = id, kind = kind, data = data, id = #NOTIFICATIONS + 1, dismissed = false }
+  function n:GetPlayerID() return self.player end
+  function n:GetID() return self.id end
+  function n:GetType() return self.kind end
+  function n:GetValue(key) return self.data[key] end
+  function n:IsDismissed() return self.dismissed end
+  -- This models the proposed native notification. It does NOT prove DLL behavior; the live scenario checks it.
+  function n:GetEndTurnBlocking() return self.kind == 71 and 71 or -1 end
+  function n:CanUserDismiss() return self.data.CanUserDismiss ~= false end
+  table.insert(NOTIFICATIONS, n)
 end }
+NotificationManager.FindType = function(kind, id)
+  for _, n in ipairs(NOTIFICATIONS) do if n.kind == kind and n.player == id and not n.dismissed then return n end end
+end
+NotificationManager.Find = function(id, index)
+  local n = NOTIFICATIONS[index]; if n and n.player == id then return n end
+end
+NotificationManager.GetList = function(id)
+  local ids = {}
+  for _, n in ipairs(NOTIFICATIONS) do if n.player == id then table.insert(ids, n.id) end end
+  return ids
+end
+NotificationManager.Dismiss = function(id, index) NotificationManager.Find(id, index).dismissed = true end
+NotificationManager.GetAllEndTurnBlocking = function(id)
+  local kinds = {}
+  for _, n in ipairs(NOTIFICATIONS) do
+    if n.player == id and not n.dismissed and n:GetEndTurnBlocking() ~= -1 then table.insert(kinds, n:GetEndTurnBlocking()) end
+  end
+  return kinds
+end
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
 local handlers = { turn = {}, conquered = {}, built = {}, choose = {} }
@@ -961,7 +994,7 @@ class LedgerTests(unittest.TestCase):
         self.assertIsNone(self.house(0).chosen)
 
     def test_dark_house_choice_applies_its_flags_once_per_reign(self):
-        self.turns(1, 67)  # every house dark; Takeda's default is Elite Troops
+        self.turns(1, 66)  # 改元のターンだけ選べる。Takeda's default is Elite Troops
         self.assertEqual(self.policy_flags(5, 5)["ELITE"], (1, 1))
         self.choose(1, "JAC_AGE_POLICY_PIRATE")
         self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_PIRATE", 1))
@@ -970,7 +1003,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.policy_flags(6, 5),
                          {"VALOR": (0, 0), "ELITE": (0, 0), "PIRATE": (1, 0), "TEMPLE": (0, 0)})
         self.choose(1, "JAC_AGE_POLICY_TEMPLE")  # a second choice in the same period is dropped
-        self.turns(68, 72)  # turn starts keep the choice
+        self.turns(67, 72)  # turn starts keep the choice
         self.assertEqual(self.house(1).policy, "JAC_AGE_POLICY_PIRATE")
         self.assertEqual(self.policy_flags(5, 5)["PIRATE"], (1, 1))
         self.assertTrue(any("already chosen" in line for line in self.g.LOG.values()))
@@ -1014,6 +1047,34 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.policy_flags(12, 12)["VALOR"], (1, 1))
         self.assertEqual(self.policy_flags(12, 12)["TEMPLE"], (0, 0))
 
+    def test_unselected_policy_cannot_be_changed_after_the_judgement_turn_even_after_load(self):
+        self.turns(1, 66)
+        self.g.RESET_HANDLERS()
+        self.load_script()
+        self.turns(67)
+        before = self.snapshot()
+        self.choose(1, "JAC_AGE_POLICY_TEMPLE")
+        self.assertEqual(self.snapshot(), before)
+        self.assertTrue(any("not judgement turn" in line for line in self.g.LOG.values()))
+        self.assertIsNone(self.house(1).chosen)
+
+    def test_unselected_policy_can_be_chosen_after_load_on_the_judgement_turn(self):
+        self.turns(1, 66)
+        self.g.RESET_HANDLERS()
+        self.load_script()
+        self.choose(1, "JAC_AGE_POLICY_TEMPLE")
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 1))
+
+    def test_ai_keeps_its_default_and_only_dark_humans_get_the_native_blocker(self):
+        self.turns(1, 66)
+        before = self.snapshot()
+        self.choose(0, "JAC_AGE_POLICY_TEMPLE")
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual([n.kind for n in self.g.NOTIFICATIONS.values()], [2, 71, 2, 71])
+        self.assertEqual([n.data.JAC_DARK_POLICY_REIGN for n in self.g.NOTIFICATIONS.values() if n.kind == 71], [1, 1])
+        notification = self.g.NotificationManager.FindType(71, 1)
+        self.assertFalse(notification.CanUserDismiss(notification))
+
     def test_load_does_not_count_again(self):
         self.turns(1, 5)
         self.g.CAPTURE(1, 2, 1)
@@ -1029,6 +1090,7 @@ class LedgerTests(unittest.TestCase):
 
 
 UI_STUBS = r"""
+local viewSource = ...
 -- UI side of the choice screen: controls record their state; UI.RequestPlayerOperation hands the operation to the
 -- gameplay handler as the engine does for EXECUTE_SCRIPT (requesting player, parameter table).
 LOCAL_PLAYER, TURN_ACTIVE, REQUESTS = 1, true, {}
@@ -1057,7 +1119,10 @@ end })
 Controls = setmetatable({}, { __index = function(t, k) local c = control(); rawset(t, k, c); return c end })
 ContextPtr = control()
 ROWS = {}
-function include(name) assert(name == "InstanceManager") end
+function include(name)
+  if name == "JAC_SengokuAgesView" then assert(load(viewSource, name))()
+  else assert(name == "InstanceManager") end
+end
 InstanceManager = { new = function() return {
   ResetInstances = function() ROWS = {} end,
   GetInstance = function()
@@ -1071,17 +1136,20 @@ Mouse = { eLClick = 1 }
 PlayerOperations = { EXECUTE_SCRIPT = "EXECUTE_SCRIPT" }
 Game.GetLocalPlayer = function() return LOCAL_PLAYER end
 for _, p in pairs(Players) do p.IsTurnActive = function() return TURN_ACTIVE end end
-local uiEvents = { turn = {}, turnEnd = {}, load = {} }
+local uiEvents = { turn = {}, turnEnd = {}, load = {}, publish = {} }
 Events = {
   LocalPlayerTurnBegin = { Add = function(f) table.insert(uiEvents.turn, f) end },
   LocalPlayerTurnEnd = { Add = function(f) table.insert(uiEvents.turnEnd, f) end },
   LoadScreenClose = { Add = function(f) table.insert(uiEvents.load, f) end },
+  GameCoreEventPublishComplete = { Add = function(f) table.insert(uiEvents.publish, f) end },
 }
 function LOCAL_TURN_BEGIN() for _, f in ipairs(uiEvents.turn) do f() end end
 function LOCAL_TURN_END() for _, f in ipairs(uiEvents.turnEnd) do f() end end
+function LOAD_SCREEN_CLOSE() for _, f in ipairs(uiEvents.load) do f() end end
+function PUBLISH() for _, f in ipairs(uiEvents.publish) do f() end end
 UI = { RequestPlayerOperation = function(id, op, params)
   table.insert(REQUESTS, { id = id, op = op, OnStart = params.OnStart })
-  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params) end
+  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params); PUBLISH() end
 end }
 """
 
@@ -1095,7 +1163,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
 
     def setUp(self):
         LedgerTests.setUp(self)
-        self.lua.execute(UI_STUBS)
+        self.lua.execute(UI_STUBS, (MOD / "UI/JAC_SengokuAgesView.lua").read_text(encoding="utf-8"))
         self.lua.execute((MOD / "UI/JAC_SengokuDarkPolicy.lua").read_text(encoding="utf-8"))
 
     def shown(self) -> bool:
@@ -1107,6 +1175,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.assertFalse(self.shown())  # no judgement yet
         self.turns(66)
         self.g.LOCAL_TURN_BEGIN()
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
         self.assertTrue(self.shown())
         rows = list(self.g.ROWS.values())
         self.assertEqual([r.Name.text for r in rows], ["LOC_JAC_AGE_POLICY_VALOR_NAME", "LOC_JAC_AGE_POLICY_ELITE_NAME",
@@ -1121,10 +1190,11 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.g.LOCAL_TURN_BEGIN()
         self.assertFalse(self.shown())  # chosen: not shown again in this period
 
-    def test_later_closes_until_the_next_turn_and_nothing_is_sent_before_the_turn_is_active(self):
+    def test_later_closes_until_the_notification_and_nothing_is_sent_before_the_turn_is_active(self):
         self.turns(1, 66)
         self.g.TURN_ACTIVE = False
         self.g.LOCAL_TURN_BEGIN()
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
         self.assertTrue(self.shown())
         list(self.g.ROWS.values())[2].Choose.click()  # before the turn is active: not sent, the screen stays
         self.assertEqual(len(self.g.REQUESTS), 0)
@@ -1132,23 +1202,77 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.g.Controls.LaterButton.click()
         self.assertFalse(self.shown())
         self.g.TURN_ACTIVE = True
-        self.turns(67)
         self.g.LOCAL_TURN_BEGIN()
-        self.assertTrue(self.shown())  # still unchosen: asked again, the default stays meanwhile
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
+        self.assertFalse(self.shown())  # no repeated automatic display on the same turn
+        self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
+        self.assertTrue(self.shown())
+        self.assertEqual(self.g.JAC_DARK_POLICY_SHOW_COUNT, 2)
         self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_ELITE", None))
 
-    def test_turn_end_closes_and_the_next_turn_asks_again(self):
+    def test_turn_end_closes_and_the_next_turn_cannot_choose_even_if_unchosen(self):
         self.turns(1, 66)
         self.g.LOCAL_TURN_BEGIN()
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
         self.assertTrue(self.shown())
         self.g.LOCAL_TURN_END()  # ended without choosing: nothing can be sent until the next turn
         self.assertFalse(self.shown())
         self.assertEqual(len(self.g.REQUESTS), 0)
         self.turns(67)
         self.g.LOCAL_TURN_BEGIN()
-        self.assertTrue(self.shown())
-        list(self.g.ROWS.values())[3].Choose.click()
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
+        self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
+        self.assertFalse(self.shown())
+        self.assertFalse(self.g.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_TEMPLE"))
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_ELITE", None))
+
+    def test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice(self):
+        self.turns(1, 66)
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
+        notification = self.g.NotificationManager.FindType(71, 1)
+        self.g.OnClose()
+        self.g.PUBLISH()
+        self.assertFalse(notification.dismissed)
+        self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
+        self.assertTrue(self.g.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_TEMPLE"))
+        self.assertTrue(notification.dismissed)
         self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 1))
+
+    def test_rejected_request_does_not_clear_the_blocker(self):
+        self.turns(1, 66)
+        notification = self.g.NotificationManager.FindType(71, 1)
+        self.g.CHOOSE(1, self.lua.table_from({"PolicyType": "JAC_AGE_POLICY_TEMPLE", "Reign": 0}))
+        self.g.PUBLISH()
+        self.assertFalse(notification.dismissed)
+        self.assertIsNone(self.house(1).chosen)
+
+    def test_cleanup_scans_past_official_notifications_and_keeps_other_houses(self):
+        self.g.NotificationManager.SendNotification(1, 71, self.lua.table_from({"MESSAGE": "official"}))
+        official = self.g.NotificationManager.FindType(71, 1)
+        self.turns(1, 66)
+        current = next(n for n in self.g.NOTIFICATIONS.values() if n.player == 1 and n.data.JAC_DARK_POLICY_REIGN == 1)
+        other = self.g.NotificationManager.FindType(71, 3)
+        self.g.NotificationManager.SendNotification(1, 71, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
+        stale = self.g.NOTIFICATIONS[len(self.g.NOTIFICATIONS)]
+        self.g.PUBLISH()
+        self.assertTrue(stale.dismissed)
+        self.assertFalse(official.dismissed)
+        self.assertFalse(current.dismissed)
+        self.assertTrue(self.g.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_TEMPLE"))
+        self.assertTrue(current.dismissed)
+        self.assertFalse(official.dismissed)
+        self.assertFalse(other.dismissed)
+
+    def test_load_keeps_pending_notification_and_does_not_show_the_screen_automatically(self):
+        self.turns(1, 66)
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
+        self.g.OnClose()
+        self.g.LOAD_SCREEN_CLOSE()
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertFalse(self.shown())
+        self.assertFalse(self.g.NotificationManager.FindType(71, 1).dismissed)
+        self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
+        self.assertTrue(self.shown())
 
     def test_not_shown_for_a_house_that_is_not_dark(self):
         self.turns(1, 30)
@@ -1156,6 +1280,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
             self.g.Players[1].research.techs[i] = True  # Takeda normal at 弘治
         self.turns(31, 66)
         self.g.LOCAL_TURN_BEGIN()
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
         self.assertEqual(self.house(1).age, "NORMAL")
         self.assertFalse(self.shown())
 

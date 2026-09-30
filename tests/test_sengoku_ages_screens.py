@@ -91,6 +91,40 @@ function RealizeEraIndicator()
 end
 """
 
+# Official NotificationPanel activation paths (:1637-1646,1691-1703) and ActionPanel DoEndTurn (:553-602).
+# Native notification blocking is simulated here; only the live scenarios can validate the engine.
+NOTIFICATION_PANEL_STUBS = r"""
+OFFICIAL_ACTIVATIONS = 0
+g_notificationHandlers = {}
+function GetActiveNotificationFromEntry(entry, notificationID)
+  return NotificationManager.Find(entry.m_PlayerID, notificationID or entry.id)
+end
+function RegisterHandlers()
+  g_notificationHandlers[NotificationTypes.COMMEMORATION_AVAILABLE] = {
+    Activate = function() OFFICIAL_ACTIVATIONS = OFFICIAL_ACTIVATIONS + 1 end,
+    TryDismiss = function(entry) NotificationManager.Dismiss(entry.m_PlayerID, entry.id) end,
+  }
+end
+function Entry(n) return { m_PlayerID = n:GetPlayerID(), id = n:GetID() } end
+function OnNotificationActivated(playerID, notificationID, activatedByUser)
+  local n = NotificationManager.Find(playerID, notificationID)
+  g_notificationHandlers[n:GetType()].Activate(Entry(n), notificationID, activatedByUser)
+end
+LuaEvents.ActionPanel_ActivateNotification.Add(function(n)
+  OnNotificationActivated(n:GetPlayerID(), n:GetID(), true)
+end)
+"""
+
+END_TURN_STUBS = r"""
+END_TURN_REQUESTS = 0
+function DoEndTurn()
+  local n = NotificationManager.FindType(NotificationTypes.COMMEMORATION_AVAILABLE, Game.GetLocalPlayer())
+  if n and n:GetEndTurnBlocking() ~= EndTurnBlockingTypes.NO_ENDTURN_BLOCKING then
+    LuaEvents.ActionPanel_ActivateNotification(n)
+  else END_TURN_REQUESTS = END_TURN_REQUESTS + 1 end
+end
+"""
+
 
 def _files():
     names = {"JAC_HouseNames": RULESET_UI / "JAC_HouseNames.lua",
@@ -107,7 +141,7 @@ class ScreenTestBase(unittest.TestCase):
 
     def setUp(self):
         LedgerTests.setUp(self)
-        self.lua.execute(UI_STUBS)
+        self.lua.execute(UI_STUBS, (MOD / "UI/JAC_SengokuAgesView.lua").read_text(encoding="utf-8"))
         self.lua.execute(SCREEN_STUBS, self.lua.table_from(_files()))
 
     def make_dark(self, pid: int) -> None:
@@ -238,6 +272,97 @@ class ReignPopupTests(ScreenTestBase):
         self.controls.Continue.click()
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(len(self.g.REQUESTS), 0)
+
+
+class DarkPolicyNotificationTests(ScreenTestBase):
+    shown, dark_shown = ReignPopupTests.shown, ReignPopupTests.dark_shown
+
+    def setUp(self):
+        super().setUp()
+        read = lambda name: (MOD / f"UI/{name}.lua").read_text(encoding="utf-8")
+        self.dark = self.g.NEW_CONTEXT("JAC_SengokuDarkPolicy", read("JAC_SengokuDarkPolicy"))
+        self.popup = self.g.NEW_CONTEXT("JAC_SengokuReignPopup", read("JAC_SengokuReignPopup"))
+        files = dict(_files(), NotificationPanel=NOTIFICATION_PANEL_STUBS)
+        self.lua.execute(SCREEN_STUBS, self.lua.table_from(files))
+        self.panel = self.g.NEW_CONTEXT("NotificationPanel", (MOD / "UI/JAC_NotificationPanel_Sengoku.lua").read_text(encoding="utf-8"))
+        self.panel.RegisterHandlers()
+        self.action = self.g.NEW_CONTEXT("ActionPanel", END_TURN_STUBS)
+
+    def test_screen_once_then_notification_and_end_turn_button_reopen_until_chosen(self):
+        self.make_dark(1)
+        self.turns(66)
+        self.g.LOCAL_TURN_BEGIN()
+        self.popup.OnClose()
+        self.assertTrue(self.dark_shown())
+        self.assertEqual(self.dark.JAC_DARK_POLICY_SHOW_COUNT, 1)
+        self.dark.OnClose()
+        self.g.LOCAL_TURN_BEGIN()
+        self.g.AUTOPLAY_END()
+        self.assertFalse(self.dark_shown())
+        notification = self.g.NotificationManager.FindType(71, 1)
+        self.panel.OnNotificationActivated(1, notification.id, True)
+        self.assertTrue(self.dark_shown())
+        self.assertEqual(self.dark.JAC_DARK_POLICY_SHOW_COUNT, 2)
+        self.dark.OnClose()
+        self.action.DoEndTurn()
+        self.assertEqual(self.action.END_TURN_REQUESTS, 0)
+        self.assertTrue(self.dark_shown())
+        self.panel.g_notificationHandlers[71].TryDismiss(self.panel.Entry(notification))
+        self.assertFalse(notification.dismissed)
+        self.assertTrue(self.dark.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_TEMPLE"))
+        self.assertTrue(notification.dismissed)
+        self.action.DoEndTurn()
+        self.assertEqual(self.action.END_TURN_REQUESTS, 1)
+        self.turns(67)
+        self.panel.OnNotificationActivated(1, notification.id, True)
+        self.assertFalse(self.dark_shown())
+        self.assertFalse(self.dark.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_PIRATE"))
+
+    def test_notification_can_replace_an_open_reign_popup(self):
+        self.make_dark(1)
+        self.turns(66)
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertTrue(self.shown())
+        notification = self.g.NotificationManager.FindType(71, 1)
+        self.panel.OnNotificationActivated(1, notification.id, True)
+        self.assertFalse(self.shown())
+        self.assertTrue(self.dark_shown())
+
+    def test_official_notifications_keep_their_own_handler(self):
+        self.g.NotificationManager.SendNotification(1, 71, self.lua.table_from({"MESSAGE": "official"}))
+        n = self.g.NotificationManager.FindType(71, 1)
+        self.panel.OnNotificationActivated(1, n.id, True)
+        self.assertEqual(self.panel.OFFICIAL_ACTIVATIONS, 1)
+        self.assertFalse(self.dark_shown())
+
+    def test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen(self):
+        self.make_dark(1)
+        self.turns(66)
+        self.g.NotificationManager.SendNotification(1, 71, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
+        self.panel.OnNotificationActivated(1, len(self.g.NOTIFICATIONS), True)
+        other = self.g.NotificationManager.FindType(71, 3)
+        self.panel.OnNotificationActivated(3, other.id, True)
+        self.assertFalse(self.dark_shown())
+
+    def test_ui_recreated_from_save_does_not_repeat_automatic_choice_but_notification_works(self):
+        self.make_dark(1)
+        self.turns(66)
+        # New UI globals after load; Game and native notifications are saved, UI event handlers are not.
+        self.lua.execute("LuaEvents = setmetatable({}, { __index = function(t, k) local hs = {}; local e = setmetatable({Add=function(f) hs[#hs+1]=f end}, {__call=function(_, ...) for _,f in ipairs(hs) do f(...) end end}); rawset(t,k,e); return e end })")
+        read = lambda name: (MOD / f"UI/{name}.lua").read_text(encoding="utf-8")
+        self.dark = self.g.NEW_CONTEXT("JAC_SengokuDarkPolicy", read("JAC_SengokuDarkPolicy"))
+        self.popup = self.g.NEW_CONTEXT("JAC_SengokuReignPopup", read("JAC_SengokuReignPopup"))
+        self.panel = self.g.NEW_CONTEXT("NotificationPanel", read("JAC_NotificationPanel_Sengoku"))
+        self.panel.RegisterHandlers()
+        self.g.LOAD_SCREEN_CLOSE()
+        self.assertFalse(self.popup.JAC_ShowReignPopup(False))
+        self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
+        self.assertFalse(self.dark_shown())
+        self.assertEqual(self.dark.JAC_DARK_POLICY_SHOW_COUNT, 0)
+        n = self.g.NotificationManager.FindType(71, 1)
+        self.panel.OnNotificationActivated(1, n.id, True)
+        self.assertTrue(self.dark_shown())
+        self.assertFalse(n.dismissed)
 
 
 class EraPanelTests(ScreenTestBase):
@@ -415,6 +540,14 @@ class EraCompletePopupTests(ScreenTestBase):
 
 
 class WiringTests(unittest.TestCase):
+    def test_notification_override_is_loaded_after_the_official_panel(self):
+        meta = ET.parse(MOD / "JAC_PoC_SengokuTrees.modinfo").getroot()
+        override = meta.find("./InGameActions/ReplaceUIScript[@id='JAC_Sengoku_NotificationPanel']")
+        self.assertEqual(override.get("criteria"), "JAC_Sengoku_BanseikiOnly")
+        self.assertEqual(override.findtext("Properties/LuaContext"), "NotificationPanel")
+        self.assertEqual(override.findtext("Properties/LoadOrder"), "100")
+        self.assertEqual(override.findtext("Properties/LuaReplace"), "UI/JAC_NotificationPanel_Sengoku.lua")
+
     def test_ruleset_panel_loads_the_extension_after_the_official_script(self):
         source = (RULESET_UI / "JAC_EraProgressPanel.lua").read_text(encoding="utf-8").rstrip().splitlines()
         self.assertEqual(source[-2:], ['include("EraProgressPanel")', 'include("JAC_EraProgressPanel_", true)'])

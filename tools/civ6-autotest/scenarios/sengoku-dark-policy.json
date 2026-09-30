@@ -1,5 +1,5 @@
 {
-  "name": "Sengoku dark-age policy choice on the 15 km Japan map: the human house (Takeda), forced dark at the Koji 改元 (turn 66), gets its default, sees the choice screen, chooses Temple Learning via EXECUTE_SCRIPT (flags applied, a second choice dropped) and keeps it across a turn and save/load; dark AI houses take their own defaults",
+  "name": "Sengoku dark policy: a human chooses only on the 改元 turn; exactly one automatic screen, native notification and end-turn blocking, reopen by notification/button, pending and chosen save/load, AI defaults, and rejected late or duplicate requests",
   "judge_profile": "generic",
   "steps": [
     {
@@ -151,14 +151,66 @@
       "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 65 or l.reign ~= 0 then error('not turn 65 before Koji: ' .. elapsed .. ' reign ' .. l.reign) end; if defaults.CIVILIZATION_JAC_TAKEDA == 'JAC_AGE_POLICY_TEMPLE' then error('the test chooses Temple Learning, which must not be the default') end; h.score = -1000; Game:SetProperty('JAC_AGES_LEDGER', l); return 'turn 65: forced Takeda (player ' .. takeda .. ') to score -1000 before the Koji judgement'"
     },
     {
-      "action": "autoplay",
-      "turns": 1,
-      "timeout": 1800
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "end_turn",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+      }
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 66 then error('not turn 66: ' .. elapsed) end; if l.reign ~= 1 or type(l.history.r1) ~= 'table' or l.history.r1.turn ~= 66 then error('Koji not judged on turn 66') end; if h.age ~= 'DARK' then error('forced Takeda not dark: ' .. tostring(h.age)) end; if h.policy ~= defaults.CIVILIZATION_JAC_TAKEDA or h.chosen ~= nil then error('Takeda before choosing: ' .. tostring(h.policy) .. ' chosen ' .. tostring(h.chosen)) end; flags(takeda, h.policy); local dark = 0; for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); local x = l.houses['p' .. id]; local civ = PlayerConfigurations[id]:GetCivilizationTypeName(); if x.age == 'DARK' then dark = dark + 1; if x.policy ~= defaults[civ] then error('default of ' .. civ .. ': ' .. tostring(x.policy)) end; flags(id, x.policy) elseif x.policy ~= nil then error('policy of non-dark ' .. civ) end end; return 'Koji (turn 66): Takeda dark on its default ' .. h.policy .. '; ' .. dark .. ' dark houses, each on its own default'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local last = JAC_REIGN_POPUP_LAST; if last == nil or last.reign ~= 1 or last.turn ~= 66 or last.age ~= 'DARK' then error('no automatic dark Koji popup on turn 66') end; if ContextPtr:IsHidden() then error('reign popup not automatically shown') end; OnClose(); if JAC_ShowReignPopup(false) then error('same reign shown automatically twice') end; return 'automatic reign screen shown once, closed for the policy choice'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 1 then error('policy choice not automatically shown exactly once') end; OnClose(); LuaEvents.JAC_SengokuReignPopup_Closed(true); if not ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 1 then error('automatic policy choice repeated') end; return 'policy choice shown once; closing keeps it closed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved native policy notification') end; if n:CanUserDismiss() then error('policy blocker can be dismissed without choosing') end; if n:GetEndTurnBlocking() ~= EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then error('sent notification has no native commemoration blocker: ' .. tostring(n:GetEndTurnBlocking())) end; local found = false; for _, kind in pairs(NotificationManager.GetAllEndTurnBlocking(me) or {}) do if kind == EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then found = true end end; if not found then error('engine does not list the policy end-turn blocker') end; if UI.CanEndTurn() then error('engine allows end-turn before a policy is chosen') end; if elapsed ~= 66 or h.chosen == 1 then error('wrong pending turn') end; n:Activate(true); return 'native blocker prevents end-turn; notification activated through the official event'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 2 then error('notification did not reopen the policy choice') end; OnClose(); return 'notification reopened the choice; closed again'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved native policy notification') end; if n:CanUserDismiss() then error('policy blocker can be dismissed without choosing') end; if n:GetEndTurnBlocking() ~= EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then error('sent notification has no native commemoration blocker: ' .. tostring(n:GetEndTurnBlocking())) end; local found = false; for _, kind in pairs(NotificationManager.GetAllEndTurnBlocking(me) or {}) do if kind == EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then found = true end end; if not found then error('engine does not list the policy end-turn blocker') end; if UI.CanEndTurn() then error('engine allows end-turn before a policy is chosen') end; DoEndTurn(); return 'normal end-turn button activates the policy blocker'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 3 then error('end-turn button did not reopen the choice') end; return 'end-turn opened the choice and did not advance the turn'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved native policy notification') end; if n:CanUserDismiss() then error('policy blocker can be dismissed without choosing') end; if n:GetEndTurnBlocking() ~= EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then error('sent notification has no native commemoration blocker: ' .. tostring(n:GetEndTurnBlocking())) end; local found = false; for _, kind in pairs(NotificationManager.GetAllEndTurnBlocking(me) or {}) do if kind == EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then found = true end end; if not found then error('engine does not list the policy end-turn blocker') end; if UI.CanEndTurn() then error('engine allows end-turn before a policy is chosen') end; if elapsed ~= 66 then error('end-turn advanced without a choice') end; return 'still on turn 66 with engine block'"
     },
     {
       "action": "save",
@@ -186,7 +238,17 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_SengokuDarkPolicy",
-      "code": "if ContextPtr:IsHidden() then error('choice screen hidden after load for the dark human house') end; return 'choice screen shown: ' .. tostring(Controls.Body:GetText())"
+      "code": "if not ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 0 then error('load automatically repeated the choice screen') end; return 'pending save loaded without automatic popup'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved native policy notification') end; if n:CanUserDismiss() then error('policy blocker can be dismissed without choosing') end; if n:GetEndTurnBlocking() ~= EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then error('sent notification has no native commemoration blocker: ' .. tostring(n:GetEndTurnBlocking())) end; local found = false; for _, kind in pairs(NotificationManager.GetAllEndTurnBlocking(me) or {}) do if kind == EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then found = true end end; if not found then error('engine does not list the policy end-turn blocker') end; if UI.CanEndTurn() then error('engine allows end-turn before a policy is chosen') end; if elapsed ~= 66 or h.chosen == 1 then error('pending selection not preserved') end; n:Activate(true); return 'pending save kept the native blocker; reopening from the saved notification'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 1 then error('saved notification did not reopen choice') end; return 'saved notification reopened the choice once'"
     },
     {
       "action": "screenshot",
@@ -202,8 +264,8 @@
       "timeout": 60,
       "condition": {
         "type": "lua",
-        "state_name": "GameCore_Tuner",
-        "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; local h = l.houses['p' .. takeda]; if h.policy == 'JAC_AGE_POLICY_TEMPLE' and h.chosen == 1 then return true end; return 'policy=' .. tostring(h.policy) .. ' chosen=' .. tostring(h.chosen)"
+        "state_name": "InGame",
+        "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then return false end; if findNote() ~= nil then return false end; for _, kind in pairs(NotificationManager.GetAllEndTurnBlocking(me) or {}) do if kind == EndTurnBlockingTypes.ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE then return false end end; return true"
       }
     },
     {
@@ -214,17 +276,54 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_SengokuDarkPolicy",
-      "code": "if not JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('not sent: local turn not active') end; return 'second choice (Sea Captains) sent'"
+      "code": "if not ContextPtr:IsHidden() then error('choice screen stayed open after acceptance') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('second UI choice accepted') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_SengokuDarkPolicyChoose', PolicyType='JAC_AGE_POLICY_PIRATE', Reign=l.reign}); return 'UI rejects a second choice; forged duplicate sent to test the gameplay receiver'"
     },
     {
-      "action": "autoplay",
-      "turns": 1,
-      "timeout": 1800
+      "action": "end_turn",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); local h = l.houses['p' .. Game.GetLocalPlayer()]; local turn = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if turn ~= 67 or h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then error('next turn changed the saved choice') end; LuaEvents.JAC_SengokuDarkPolicy_Open(1); if not ContextPtr:IsHidden() then error('choice reopened after the judgement turn') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('next-turn policy choice sent') end; return 'turn 67: no popup, no UI change, Temple Learning remains'"
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local takeda; for _, p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() == 'CIVILIZATION_JAC_TAKEDA' then takeda = p:GetID() end end; if takeda == nil then error('Takeda (the human) not alive') end; local h = l.houses['p' .. takeda]; local defaults = {}; for row in GameInfo.JAC_SengokuDarkAgePolicyDefaults() do defaults[row.CivilizationType] = row.PolicyType end; local function flags(id, policy) local anchors = 0; for _, c in Players[id]:GetCities():Members() do local plot = Map.GetPlot(c:GetX(), c:GetY()); for row in GameInfo.JAC_SengokuDarkAgePolicies() do local on = row.PolicyType == policy; if (plot:GetProperty(row.PolicyType) or 0) ~= (on and 1 or 0) then error(row.PolicyType .. ' flag of ' .. id .. ' (policy ' .. tostring(policy) .. ')') end; local a = plot:GetProperty((string.gsub(row.PolicyType, '^JAC_AGE_POLICY_', 'JAC_AGE_ANCHOR_'))) or 0; if a ~= 0 and not on then error('stray anchor of ' .. id) end; anchors = anchors + a end end; if Players[id]:GetCities():GetCount() > 0 and anchors ~= 1 then error('anchors of ' .. id .. ': ' .. anchors) end end; if elapsed ~= 67 then error('not turn 67: ' .. elapsed) end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then error('after the second choice and a turn start: ' .. tostring(h.policy) .. ' chosen ' .. tostring(h.chosen)) end; flags(takeda, h.policy); return 'turn 67: the second choice was dropped and the turn start kept Temple Learning'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); local me = Game.GetLocalPlayer(); l.houses['p' .. me].chosen = nil; Game:SetProperty('JAC_AGES_LEDGER', l); return 'test-only: emulate an older unselected save on turn 67'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('late unselected UI choice sent') end; UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_SengokuDarkPolicyChoose', PolicyType='JAC_AGE_POLICY_PIRATE', Reign=l.reign}); return 'forged late unselected choice sent to test gameplay deadline'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "not judgement turn"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); local h = l.houses['p' .. Game.GetLocalPlayer()]; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= nil then error('late unselected gameplay choice accepted') end; h.chosen = 1; Game:SetProperty('JAC_AGES_LEDGER', l); return 'late unselected request rejected; test-only marker restored'"
     },
     {
       "action": "save",
@@ -249,6 +348,11 @@
       "action": "ui_lua",
       "state_name": "JAC_SengokuDarkPolicy",
       "code": "if not ContextPtr:IsHidden() then error('choice screen shown again after the house chose') end; return 'choice screen stays closed after load (already chosen)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate dark-policy blocker') end; found = n end end; return found end; if elapsed ~= 67 or h.chosen ~= 1 or h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or findNote() ~= nil then error('chosen save did not preserve choice/unblock') end; return 'chosen save retains policy without a native policy blocker'"
     }
   ]
 }
