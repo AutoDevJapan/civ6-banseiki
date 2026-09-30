@@ -144,7 +144,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。再実行の `era-equals-reign-07`（2026-09-30）で全手順が通り、弘治・永禄の改元の画面の元号・年齢・点が台帳と一致した。同じ日に `sengoku-house-names-oda`・`-takeda`・`sengoku-ages`（読み込み直後の黄金の生産効果を含む）・`sengoku-ages-screens`・`historical-events-15km`・`court-arbitration`・`sengoku-trees` も通った（`era-equals-reign-10`〜`-16`）。
 
-**要実機確認**：48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。
+叙事詩・マラソンの倍率は最初の3時代で確認済み。10番目・11番目の時代は短縮データで切り替わりと改元画面、公式ポップアップの抑止を確認済み。**要実機確認**：48時代全体の読み込み・保存・AIの動きと、追加時代の他の公式UI。時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写している。
 
 ## PR #79 の追加確認シナリオ
 
@@ -181,4 +181,4 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 | 暦の行の順と月増分 | `Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1403-1408,3337`。1534開始・99行と上記の年は本MODの暦データから求めた値 |
 | エンジンの暦の表示 | `Base/Assets/UI/TopPanel.lua:387-399` |
 
-実行方法は [autotest.md](autotest.md#今回追加した実機シナリオ)。まだ未確認なのは、追加7本の実機実行、48時代全体のAI・保存・長時間の挙動、追加時代での他の公式画面である。300ターンの計測も別シナリオで行う。
+実行方法は [autotest.md](autotest.md#今回追加した実機シナリオ)。追加7本の実機実行は、長い待ちに早送りを使って成功した。未確認なのは48時代全体のAI・保存・長時間の挙動、追加時代の他の公式画面、通常進行300ターンの性能・長期安定性である。300ターン版の早送りは保存・復元を検証したもので、通常進行300ターンの性能評価には使わない。
