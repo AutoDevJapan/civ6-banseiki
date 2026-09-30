@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
-from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids,
+from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids, _process_ids,
                    find_civ_window, kernel32)
 
 
@@ -174,7 +174,33 @@ def terminate_civ_process(pid: int, expected_start: float) -> None:
         kernel32.CloseHandle(process)
 
 
+def close_orphan_civ_reporters() -> None:
+    """Steam counts a leftover Civ6 crash reporter as a running game."""
+    if _civ_process_ids():
+        return
+    for pid in sorted(_process_ids({"firaxisbugreporter.exe"})):
+        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not process:
+            continue  # It may have exited between the snapshot and OpenProcess.
+        try:
+            executable = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(executable))
+            if not kernel32.QueryFullProcessImageNameW(process, 0, executable, ctypes.byref(length)):
+                raise InputError(f"Cannot inspect crash reporter {pid}")
+            suffix = "\\sid meier's civilization vi\\base\\binaries\\win64steam\\firaxisbugreporter.exe"
+            if not executable.value.casefold().endswith(suffix):
+                continue  # A reporter belonging to another Firaxis game.
+            if _civ_process_ids():
+                return  # The game appeared while enumerating; keep its reporter.
+            if not kernel32.TerminateProcess(process, 1):
+                raise InputError(f"Could not close orphan Civ VI crash reporter {pid}")
+            print(f"Closed orphan Civ VI crash reporter {pid}", flush=True)
+        finally:
+            kernel32.CloseHandle(process)
+
+
 def launch_via_steam() -> None:
+    close_orphan_civ_reporters()
     os.startfile(STEAM_URI)
 
 

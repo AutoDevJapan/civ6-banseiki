@@ -533,7 +533,7 @@
     {
       "action": "ui_lua",
       "state_name": "FrontEnd",
-      "code": "GameConfiguration.SetValue('JAC_AUTOTEST',1); GameConfiguration.SetToDefaults(); if tonumber(GameConfiguration.GetValue('JAC_AUTOTEST'))==1 then error('test deadlines leaked into new game defaults') end; return 'manual new-game setup clears test deadlines'"
+      "code": "GameConfiguration.SetValue('JAC_AUTOTEST',1); if tonumber(GameConfiguration.GetValue('JAC_AUTOTEST'))~=1 then error('test flag setup failed') end; GameConfiguration.SetToDefaults(); if tonumber(GameConfiguration.GetValue('JAC_AUTOTEST'))==1 then error('test deadlines leaked into new game defaults') end; return 'manual new-game setup clears test deadlines'"
     }
   ]
 }
