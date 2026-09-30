@@ -42,7 +42,7 @@ AIは人間と同じ前提・費用・上限を検査する。職業の第一候
 
 通常の入力は検査後に1回保存する。費用・効果は予約を`PENDING`で保存し、エンジンに適用してから`APPLIED`を保存する。最初の保存失敗なら作用しない。効果・最後の保存が失敗すれば`PENDING`のまま再実行を拒む。残高・Eureka・市民・英雄とGameプロパティは一括で戻せないため、実際の状態を照合して復旧する。ロードやターン開始時に効果を再適用しない。ターン開始処理は宗教同盟の終了だけを更新する。
 
-Gameplay APIは`ExposedMembers.JAC_ReligionPersistence`。`ResolveDiscovery(id, discovery, outcome, options)`と`Revive(id, revival, source, community, player, city)`を使う。`Rules/Inspect/Export`はコピー、`Snapshot`はキー順を固定した台帳文字列。UIからは同期されたGameplay要求を使い、手番開始前に送らない。
+Gameplay APIは`ExposedMembers.JAC_ReligionPersistence`。`ResolveDiscovery(id, discovery, outcome, options)`と`Revive(id, revival, source, community, player, city)`を使う。`Rules/Inspect/Export`はコピー、`Snapshot`はキー順を固定した台帳文字列。通常のUIからの操作は、後続の同期されたGameplay要求を使い、手番開始前に送らない。今回の単独プレイ用の英雄確認橋はExposedMembersからGameplayの完了処理を呼ぶ。報酬は受取先の手番だけで払い、マルチプレイの同期要求には未接続。
 
 再興は空いているコミュニティIDを選ぶ。信仰支払い中のGameplay呼び出しで予定のIDが埋まった場合も選び直し、実際のIDを再興履歴に記録する。既存の信徒・施設・保有者と別宗教の同名IDを上書きせず、生成したIDも128文字以内に収める。
 
@@ -134,7 +134,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 
 ## 結果と未検証
 
-2026-10-01、依頼されたコマンドをそのまま実行し、main取り込み後の404件と自動検証ツール161件が成功。Luaのスキップなし。前の作業で必要だった権限の実行補助は使用していない。残っていた空の一時フォルダー3件は確認して削除した。
+2026-10-01、依頼されたコマンドをそのまま実行し、main取り込み後の408件と自動検証ツール161件が成功。Luaのスキップなし。前の作業で必要だった権限の実行補助は使用していない。残っていた空の一時フォルダー3件は確認して削除した。
 
 確定回答を反映した実機結果と現在の変更の別モデルレビューは実施中。吸収の圧力減算・人数の丸め、GameplayのEureka・英雄API、公式Modifierによる加入、金の端数、同盟の期限切れは実機結果で確認する。弾圧の接続口、自然な探索・布教の入力連携と未対応宗教の自動の対応付け、マルチプレイはPoCの範囲外として残る。
 
@@ -147,3 +147,5 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 実機のreligion-04でも一覧取得が停止した。実行中のGameplayオブジェクトを調べ、`GetNumFollowers`・`RemovePressureOneReligion`・`AddReligiousPressure`があり、`GetReligionsInCity`がないことを確認した。信徒数を各実宗教IDについて直接読み、無宗教の人数は人口との差から求める実装へ変更。圧力の調整は正の宗教IDだけを消去し、正の圧力を再配分する。市民数が完全一致してから費用を払う。新しいAPIの引数と変換は4回目の実機で確認する。
 
 英雄の管理オブジェクトにもGameplayには所有者と拠点建物の取得APIがないため、表示しないUI用の読取橋を追加した。公式の都市用加入ModifierはGameplayで適用し、UIの次のフレームで英雄・クラス・寿命・加入先を確認してから信仰報酬を払う。予約中の保存を再開でき、報酬の途中で停止した場合は再実行しない。検証は30秒で止め、確認できない場合は処理中の記録を残す。
+
+3回目のレビューで、吸収先の自国信徒の検査が手入力を使う点と、再興の宗教IDが文字列順になる点を指摘された。吸収先の実宗教について自分の各都市の実信徒数を読み、手入力値を検査の根拠から取り除いた。再興の選択だけは数値順でIDを並べる。手入力と実人数が逆転した2ケースとID2・10の比較を追加した。英雄の報酬も受取先の手番まで待ち、他人の手番の待機時間は検証期限に数えない。

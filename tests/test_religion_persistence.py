@@ -175,6 +175,7 @@ for id = 0, 1 do
     ChangeFaithBalance = function(_, amount) if FAIL_EFFECT then error('effect refused') end; e.faith = e.faith + amount end }
   Players[pid] = {
     GetID = function() return pid end, IsAlive = function() return e.alive end,
+    IsTurnActive = function() return e.active ~= false end,
     IsMajor = function() return e.major end, IsHuman = function() return pid == 0 end,
     GetCities = function() return { GetCapitalCity = function() return e.city and capital or nil end,
       FindID = function(_, city) return e.city and cityObjects[tostring(city)] or nil end,
@@ -234,7 +235,8 @@ Game.GetHeroesManager = function() return {
   GetHeroClaimPlayer = function(_, index) return ENGINE['0'].heroClaims[tostring(index)] or -1 end,
 } end
 GameInfo.Religions = info({ { Index = 42, ReligionType = 'RELIGION_CUSTOM_1' },
-  { Index = 43, ReligionType = 'RELIGION_CUSTOM_2' }, { Index = 44, ReligionType = 'RELIGION_CUSTOM_3' } }, 'ReligionType')
+  { Index = 43, ReligionType = 'RELIGION_CUSTOM_2' }, { Index = 44, ReligionType = 'RELIGION_CUSTOM_3' },
+  { Index = 2, ReligionType = 'RELIGION_ORDER_2' }, { Index = 10, ReligionType = 'RELIGION_ORDER_10' } }, 'ReligionType')
 GameInfo.Beliefs = { BELIEF_CATHEDRAL = { Index = 9 } }
 local native = {
   FoundReligion = function(_, player, religion)
@@ -735,8 +737,8 @@ class ReligionPersistenceTests(unittest.TestCase):
         # ceil(5/3)=2, whereas rounding separately per city would convert 3.
         self.lua.execute("""
           local a,b=ENGINE['0'].cities['0'],ENGINE['1'].cities['0']
-          a.population=3; a.pressure={['42']=1024,['43']=1024,['44']=1024}
-          b.population=4; b.pressure={['42']=4096}
+          a.population=2; a.pressure={['42']=1024,['44']=1024}
+          b.population=5; b.pressure={['42']=4096,['43']=1024}
         """)
         self.g.ENGINE["1"].faith = 499
         before = plain(self.g.ENGINE)
@@ -749,7 +751,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual([(c["player"], c["city"], c["moved"]) for c in effect["conversions"]], [(0, 0, 1), (1, 0, 1)])
         self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (3, 3))
         rows = plain(self.g.NativeRows(self.g.ENGINE["0"].cities["0"]))
-        self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1})
+        self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 1, 44: 1})
         self.assertEqual(self.g.ENGINE["1"].faith, 0)
         self.reload()
 
@@ -778,8 +780,8 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.g.OMIT_UNAFFILIATED_ROWS = omitted
                 self.lua.execute("""
                   local a,b=ENGINE['0'].cities['0'],ENGINE['1'].cities['0']
-                  a.population=4; a.pressure={['42']=256,['43']=256,['44']=256,['-1']=256}
-                  b.population=4; b.pressure={['42']=4096}
+                  a.population=3; a.pressure={['42']=256,['44']=256,['-1']=256}
+                  b.population=5; b.pressure={['42']=4096,['43']=1024}
                 """)
                 if sentinel == 0:
                     self.lua.execute("local c=ENGINE['0'].cities['0']; c.pressure['0']=c.pressure['-1']; c.pressure['-1']=nil")
@@ -789,7 +791,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.assertEqual(self.g.ENGINE["0"].cities["0"].pressure[str(sentinel)], 256)
                 self.g.OMIT_UNAFFILIATED_ROWS = False
                 rows = plain(self.g.NativeRows(self.g.ENGINE["0"].cities["0"]))
-                self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1, sentinel: 1})
+                self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 1, 44: 1, sentinel: 1})
                 self.assertEqual(self.g.ENGINE["1"].faith, 0)
 
     def test_bound_native_counts_prevent_false_loss_and_revival(self):
@@ -816,6 +818,38 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.g.ENGINE["1"].faith = 500
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
         self.assertEqual(self.g.ENGINE["1"].faith, 500)
+
+    def test_stale_owned_community_cannot_authorize_absorption(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.found(R2)
+        self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+        self.lua.execute("ENGINE['0'].cities['0'].pressure={['42']=4096,['43']=3072}; "
+                         "ENGINE['1'].cities['0'].pressure={['42']=4096}")
+        self.bind_absorption()
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
+
+    def test_actual_owned_followers_authorize_absorption_with_zero_manual_count(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.found(R2)
+        self.rp.SetCommunity(R2, "origin", 0, 0, "PLAYER_0")
+        self.bind_absorption()
+        self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+        self.assertEqual(self.rp.NativeFollowers(R1), 4)
+
+    def test_native_revival_uses_numeric_religion_order(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.lua.execute("ENGINE['0'].cities['0'].pressure={['43']=7168}; "
+                         "ENGINE['1'].cities['0'].pressure={['2']=2048,['10']=2048}")
+        self.rp.BindEngineReligion(R1, 42)
+        self.rp.ResolveDiscovery(R1, "d", "REVIVE", self.options())
+        e = self.state()["discoveries"]["d"]["effect"]["conversions"][0]
+        self.assertEqual((e["after"]["2"], e["after"]["10"], e["after"]["42"]), (1, 2, 1))
 
     def test_bound_revival_creates_one_native_citizen_and_survives_load(self):
         self.found()
@@ -936,6 +970,19 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(self.g.ENGINE["1"].faith, before)
         self.assertEqual(self.state()["discoveries"]["d"]["effects"], "PENDING")
         self.g.ENGINE["0"].heroClaims["10"] = 1
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+
+    def test_hero_reward_waits_until_recipients_turn(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        before = self.g.ENGINE["1"].faith
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.g.ENGINE["1"].active = False
+        self.g.HERO_UI_TICK(60)
+        self.assertEqual(self.g.ENGINE["1"].faith, before)
+        self.g.ENGINE["1"].active = True
         self.g.HERO_UI_TICK()
         self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
 

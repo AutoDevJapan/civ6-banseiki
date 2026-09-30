@@ -310,6 +310,11 @@ local function absorptionPlan(source, target, p)
   check(source.engineReligion ~= nil and target.engineReligion == own and own >= 0,
     "absorption needs bound source and the player's own founded religion")
   check(source.engineReligion ~= own, "native source and target must differ")
+  local owned = false
+  for _, city in p:GetCities():Members() do
+    owned = owned or city:GetReligion():GetNumFollowers(own) > 0
+  end
+  check(owned, "target religion needs own native followers")
   local entries, total = {}, 0
   for _, entry in ipairs(nativeCities()) do
     local followers = cityFollowers(entry.object)
@@ -519,7 +524,9 @@ local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID
     local before = cityFollowers(city)
     local donor = before["-1"] > 0 and "-1" or nil
     if donor == nil then
-      for _, key in ipairs(keys(before)) do if before[key] > 0 then donor = key; break end end
+      local ordered = keys(before)
+      table.sort(ordered, function(a, b) return tonumber(a) < tonumber(b) end)
+      for _, key in ipairs(ordered) do if before[key] > 0 then donor = key; break end end
     end
     check(donor ~= nil, "revival needs a citizen in the owned city")
     local after = copy(before)
@@ -587,11 +594,6 @@ local function discoveryPlan(id, discoveryID, outcome, options)
     check(options.targetReligion ~= id, "absorption requires another religion")
     local target = get(state, options.targetReligion)
     check(not target.lost, "absorption target must have followers")
-    local owned = false
-    for _, c in pairs(target.communities) do
-      owned = owned or c.holder == "PLAYER_" .. discovery.player and c.followers > 0
-    end
-    check(owned, "target religion needs own followers")
     check(target.assets[discovery.asset] == nil and target.materialUses[discovery.asset] == nil
       and not target.retiredAssets[discovery.asset], "target material ID occupied")
     plan.targetReligion, plan.faithCost = options.targetReligion, RULES.ABSORB_FAITH_COST
@@ -754,6 +756,7 @@ function RP.CompleteHero(playerID)
   check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
   local info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
   if info == nil then return false end -- UI has not received the new unit yet.
+  if not info.active then return false end -- pay only during the recipient's turn.
   if not (info.hero and info.class == h.heroClass and info.lifespan > 0 and info.claim == playerID) then
     return false -- independently replicated UI fields may arrive in different frames.
   end
