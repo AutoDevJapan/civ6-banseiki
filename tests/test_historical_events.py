@@ -167,12 +167,11 @@ class HistoricalEventTests(unittest.TestCase):
             return start + months_of_turn(speed, turn) // 12
 
         self.assertEqual(start, 1534)
-        # The Lua sorts a speed's stages by MonthIncrement descending; that equals the engine's rowid order
-        # only while every calendar lists stages from the longest turn to the shortest.
+        # The Lua walks the speed's rows in row order (GameSpeedTurnCollection) like the engine; the rows need not
+        # be sorted, but GameSpeed_Turns' key (speed, MonthIncrement, TurnsPerIncrement) must not repeat.
         for speed, rows in stages.items():
             with self.subTest(speed=speed):
-                increments = [increment for _, increment in rows]
-                self.assertEqual(increments, sorted(set(increments), reverse=True))
+                self.assertEqual(len(set(rows)), len(rows))
         standard = [turn_for_year(year) for year in (1534, 1535, 1543, 1550, 1561, 1600)]
         self.assertEqual(standard, [1, 4, 28, 49, 82, 199])  # 3 turns per year, turn 1 = 1534
         for speed in stages:
@@ -197,8 +196,9 @@ class HistoricalEventTests(unittest.TestCase):
         self.assertTrue(all(1 < turn <= 200 for turn in due.values()), due)
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
         self.assertIn("(month or 1) - 1", lua)
-        self.assertIn("GameInfo.GameSpeed_Turns()", lua)
-        self.assertIn("return a.MonthIncrement > b.MonthIncrement", lua)
+        self.assertIn(".GameSpeedTurnCollection", lua)
+        self.assertNotIn("GameInfo.GameSpeed_Turns()", lua)
+        self.assertNotIn("table.sort(STAGES", lua)
         self.assertNotIn("TURNS_PER_YEAR", lua)
         # Live: the 1534 calendar starts the engine turn counter at GetStartTurn() (16603), not 1.
         self.assertIn("Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1", lua)

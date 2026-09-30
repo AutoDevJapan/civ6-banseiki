@@ -85,15 +85,21 @@ class SengokuCalendarTests(unittest.TestCase):
             self.assertEqual(remaining, 0, speed)
             return 1534 + months // 12
 
-        for speed, target_turn in (
-            ("GAMESPEED_ONLINE", 100), ("GAMESPEED_QUICK", 134),
-            ("GAMESPEED_STANDARD", 200), ("GAMESPEED_EPIC", 300),
-            ("GAMESPEED_MARATHON", 600),
+        # The first turn of 1600. Standard: about 200 turns (SSOT 3.2). The other speeds follow the engine eras,
+        # which the engine scales by CostMultiplier (rounding each era down), so they come a little earlier than
+        # 200 x 0.5 / 0.67 / 1.5 / 3 (owner decision U-2b, tools/generate_sengoku_reigns.py).
+        for speed, first_turn in (
+            ("GAMESPEED_ONLINE", 97), ("GAMESPEED_QUICK", 131),
+            ("GAMESPEED_STANDARD", 199), ("GAMESPEED_EPIC", 293),
+            ("GAMESPEED_MARATHON", 584),
         ):
             with self.subTest(speed=speed):
                 self.assertEqual(sum(turns for turns, _ in curves[speed]), 10000)
                 self.assertEqual(year_after(speed, 0), 1534)
-                self.assertIn(year_after(speed, target_turn), (1600, 1601))
+                self.assertEqual(year_after(speed, first_turn - 1), 1600)
+                self.assertEqual(year_after(speed, first_turn - 2), 1599)
+                # A turn lasts 1 to 12 months, so no year is skipped.
+                self.assertLessEqual(max(increment for _, increment in curves[speed]), 12)
         self.assertEqual(year_after("GAMESPEED_STANDARD", 3), 1535)
         self.assertEqual(year_after("GAMESPEED_STANDARD", 198), 1600)
 

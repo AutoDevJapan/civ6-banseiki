@@ -233,7 +233,7 @@ class DeferredSiteDataTests(unittest.TestCase):
         # The real calendar drives the release; no test-only year override is left in the normal path.
         self.assertNotIn("TEST_YEAR", lua)
         self.assertNotIn("TEST_YEAR", scenario)
-        for fragment in ("GameConfiguration.GetStartTurn()", "GameInfo.StartEras()", "GameInfo.GameSpeed_Turns()",
+        for fragment in ("GameConfiguration.GetStartTurn()", "GameInfo.StartEras()", "ipairs(speed.GameSpeedTurnCollection)",
                          "CurrentYear = CurrentYear,"):
             self.assertIn(fragment, lua)
         # The scenario waits for these Lua.log lines: "[JAC_RESOURCES] loaded" and "[JAC_RESOURCES] revealed <id>".

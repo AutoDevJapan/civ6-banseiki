@@ -90,16 +90,13 @@ class ScopeAndTextTests(unittest.TestCase):
 
 STUBS = r"""
 local tables, civs, startTurn, rulesPath = ...
-local function rowsTable(rows)
-  return setmetatable({}, { __call = function()
-    local i = 0
-    return function() i = i + 1; return rows[i] end
-  end })
+local speedTurns = {}  -- the navigation property: the speed's GameSpeed_Turns rows in row order
+for _, row in ipairs(tables.GameSpeed_Turns) do
+  if row.GameSpeedType == "GAMESPEED_STANDARD" then table.insert(speedTurns, row) end
 end
 GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
-  GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD" } },
-  GameSpeed_Turns = rowsTable(tables.GameSpeed_Turns),
+  GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD", GameSpeedTurnCollection = speedTurns } },
   Yields = { YIELD_GOLD = { Index = 2 }, YIELD_CULTURE = { Index = 4 } },
 }
 CURRENT_TURN = startTurn

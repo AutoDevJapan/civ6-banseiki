@@ -149,18 +149,38 @@ class AgesDataTests(unittest.TestCase):
         # Each 改元 names the next era in order.
         rows = self.q("SELECT e.ChronologyIndex FROM JAC_SengokuReigns r JOIN Eras e USING (EraType) ORDER BY r.Year, r.Month")
         self.assertEqual([r[0] for r in rows], list(range(2, 49)))
-        # The trees' eras are reigns in column order; the official late great people moved to their own reigns.
+        # The trees' eras are reigns in column order.
         for table, key in (("Technologies", "TechnologyType"), ("Civics", "CivicType")):
             order = [r[0] for r in self.q(f"SELECT e.ChronologyIndex FROM {table} t JOIN Eras e USING (EraType) "
                                           f"ORDER BY t.Cost, t.{key}")]
             self.assertEqual(len(order), 32 if table == "Technologies" else 30)
             self.assertEqual(order, sorted(order))
+        # Owner decision U-3b: no official great person of the Industrial to Future eras (the official database has
+        # 103 of 178: GreatPeople_*.xml), nor their great works; the 75 of the Classical to Renaissance eras stay.
+        # Every official musician is from the Industrial era on, so the class has none (as in an official game
+        # before the Industrial era). The GP-less industrial artifacts moved to 享保.
         late = tuple(era for era, _ in REIGNS_GEN.LATE_OFFICIAL_ERA_YEARS)
         marks = ",".join("?" * len(late))
         self.assertEqual(self.q(f"SELECT COUNT(*) FROM GreatPersonIndividuals WHERE EraType IN ({marks})", *late), [(0,)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM GreatPersonIndividuals"), [(75,)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM Types WHERE Kind = 'KIND_GREAT_PERSON_INDIVIDUAL'"), [(75,)])
+        self.assertEqual(self.q("SELECT GreatPersonClassType FROM GreatPersonClasses c WHERE NOT EXISTS (SELECT 1 "
+                                "FROM GreatPersonIndividuals i WHERE i.GreatPersonClassType = c.GreatPersonClassType)"),
+                         [("GREAT_PERSON_CLASS_MUSICIAN",)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM GreatWorks WHERE GreatPersonIndividualType IS NOT NULL AND "
+                                "GreatPersonIndividualType NOT IN (SELECT GreatPersonIndividualType FROM "
+                                "GreatPersonIndividuals)"), [(0,)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM GreatPersonIndividualActionModifiers WHERE "
+                                "GreatPersonIndividualType NOT IN (SELECT GreatPersonIndividualType FROM "
+                                "GreatPersonIndividuals)"), [(0,)])
+        self.assertEqual(self.q("SELECT VisibilitySourceType FROM DiplomaticVisibilitySources WHERE "
+                                "GreatPersonIndividualType IS NOT NULL"), [])  # Mary Katherine Goddard's (modern)
         self.assertEqual(self.q(f"SELECT COUNT(*) FROM GreatWorks WHERE EraType IN ({marks})", *late), [(0,)])
-        self.assertGreater(self.q("SELECT COUNT(*) FROM GreatPersonIndividuals WHERE EraType = 'ERA_JAC_MEIJI'")[0][0], 0)
-        for table in ("Eras", "Eras_XP1", "Technologies", "Civics", "GreatPersonIndividuals", "GreatWorks", "JAC_SengokuReigns"):
+        self.assertEqual(self.q("SELECT GreatWorkType FROM GreatWorks WHERE EraType = 'ERA_JAC_KYOHO' ORDER BY 1"),
+                         [(f"GREATWORK_ARTIFACT_{n}",) for n in range(21, 26)])
+        for table in ("Eras", "Eras_XP1", "Technologies", "Civics", "GreatPersonIndividuals", "GreatWorks",
+                      "GreatPersonIndividualActionModifiers", "GreatPersonIndividualBirthModifiers",
+                      "DiplomaticVisibilitySources", "JAC_SengokuReigns"):
             self.assertEqual(self.q(f"PRAGMA foreign_key_check({table})"), [], table)
 
     def test_reigns_policies_and_effect_modifiers(self):
@@ -255,6 +275,29 @@ class ReignFilesTests(unittest.TestCase):
         for speed in REIGNS_GEN.SPEEDS:
             turns = REIGNS_GEN.engine_turns(speed)
             self.assertTrue(all(b - a >= REIGNS_GEN.MIN_ERA_TURNS for a, b in zip([1] + turns, turns)), speed)
+
+    def test_the_calendar_dates_each_engine_era_with_its_reign_at_every_speed(self):
+        # Owner decision U-2b: at every speed the engine era starts on the calendar turn containing its 改元's month
+        # (drift 0 turns), and that turn begins at most 2 months before it (3 at standard, 4 months a turn).
+        start, stages = REIGNS_GEN.calendar()
+        months = REIGNS_GEN.reign_months()
+        by_speed = REIGNS_GEN.turns_by_speed()
+        for speed in REIGNS_GEN.SPEEDS:
+            with self.subTest(speed=speed):
+                rows = stages[speed]
+                self.assertEqual(len(set(rows)), len(rows))  # GameSpeed_Turns' primary key
+                self.assertEqual(sum(turns for _, turns in rows), REIGNS_GEN.CALENDAR_TURNS)
+                engine = REIGNS_GEN.engine_turns(speed)
+                self.assertEqual(engine, by_speed[speed])
+                begins = [0]
+                for increment, turns in rows:
+                    begins += [begins[-1] + increment * (i + 1) for i in range(turns)]
+                early = [month - begins[turn - 1] for month, turn in zip(months, engine)]
+                self.assertTrue(all(0 <= e <= (3 if speed == "GAMESPEED_STANDARD" else 2) for e in early), early)
+                if speed != "GAMESPEED_STANDARD":
+                    self.assertEqual(early[-1], 0)  # 遅代 begins on its month
+        self.assertEqual(start, 1534)
+        self.assertEqual(stages["GAMESPEED_STANDARD"], [(4, 10000)])
 
 
 START_TURN = 16603  # live 1534 calendar

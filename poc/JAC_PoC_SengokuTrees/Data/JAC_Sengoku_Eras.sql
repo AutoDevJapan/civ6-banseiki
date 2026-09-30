@@ -233,15 +233,16 @@ UPDATE Eras_XP1 SET GameEraMinimumTurns=91, GameEraMaximumTurns=91 WHERE EraType
 UPDATE Eras_XP1 SET GameEraMinimumTurns=300, GameEraMaximumTurns=300 WHERE EraType='ERA_JAC_REIWA'; -- REIWA
 UPDATE Eras_XP1 SET GameEraMinimumTurns=NULL, GameEraMaximumTurns=NULL WHERE EraType='ERA_JAC_CHIDAI'; -- CHIDAI
 
--- Great people and great works of the official eras after the Sengoku tree go to the reign of the official
--- era's start year (LATE_OFFICIAL_ERA_YEARS in the generator) instead of arriving with 天正 to 寛永.
-UPDATE GreatPersonIndividuals SET EraType='ERA_JAC_KYOHO' WHERE EraType='ERA_INDUSTRIAL'; -- 1725
+-- Owner decision U-3b: the official great people of the Industrial to Future eras do not appear in the
+-- Sengoku pack (they would arrive with 天正 to 寛永). Deleting their Types rows cascades to
+-- GreatPersonIndividuals (01_GameplaySchema.sql:1519,1566) and on to their great works, action and birth
+-- modifiers and the journalism visibility source (ON DELETE CASCADE, :1012,1573,1579,1598).
+DELETE FROM Types WHERE Type IN (SELECT GreatPersonIndividualType FROM GreatPersonIndividuals WHERE EraType IN ('ERA_INDUSTRIAL', 'ERA_MODERN', 'ERA_ATOMIC', 'ERA_INFORMATION', 'ERA_FUTURE'));
+-- The great works of those eras with no great person (the industrial artifacts GREATWORK_ARTIFACT_21-25,
+-- Base/Assets/Gameplay/Data/GreatWorks.xml) go to the reign of the official era's start year
+-- (LATE_OFFICIAL_ERA_YEARS in the generator).
 UPDATE GreatWorks SET EraType='ERA_JAC_KYOHO' WHERE EraType='ERA_INDUSTRIAL'; -- 1725
-UPDATE GreatPersonIndividuals SET EraType='ERA_JAC_MEIJI' WHERE EraType='ERA_MODERN'; -- 1890
 UPDATE GreatWorks SET EraType='ERA_JAC_MEIJI' WHERE EraType='ERA_MODERN'; -- 1890
-UPDATE GreatPersonIndividuals SET EraType='ERA_JAC_SHOWA' WHERE EraType='ERA_ATOMIC'; -- 1945
 UPDATE GreatWorks SET EraType='ERA_JAC_SHOWA' WHERE EraType='ERA_ATOMIC'; -- 1945
-UPDATE GreatPersonIndividuals SET EraType='ERA_JAC_HEISEI' WHERE EraType='ERA_INFORMATION'; -- 1995
 UPDATE GreatWorks SET EraType='ERA_JAC_HEISEI' WHERE EraType='ERA_INFORMATION'; -- 1995
-UPDATE GreatPersonIndividuals SET EraType='ERA_JAC_REIWA' WHERE EraType='ERA_FUTURE'; -- 2020
 UPDATE GreatWorks SET EraType='ERA_JAC_REIWA' WHERE EraType='ERA_FUTURE'; -- 2020

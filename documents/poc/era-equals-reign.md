@@ -85,34 +85,48 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 |---|---|
 | `Eras_XP1`・`Eras_XP2` | 全 48 時代に行がある（上の 3・5） |
 | `Technologies`・`Civics`（`EraType`） | 下の「ツリーの時代」 |
-| `GreatPersonIndividuals`・`GreatWorks`（`EraType`） | 公式の産業〜未来の時代の偉人と作品は、そのままでは天正〜寛永（1573〜1644年）に出てくる。公式の時代の開始年（`StartEras.Year`：産業 1725・近代 1890・原子力 1945・情報 1995、未来は行が無いので令和）の元号へ移した（享保・明治・昭和・平成・令和）。古代〜ルネサンスの偉人は天文〜元亀のまま |
+| `GreatPersonIndividuals`・`GreatWorks`（`EraType`） | 公式の産業〜未来の時代の偉人は、そのままでは天正〜寛永（1573〜1644年）に出てくる。オーナー判断 U-3b（2026-09-30）で戦国パックには出さない：`Types` の行を消し、`GreatPersonIndividuals`（`01_GameplaySchema.sql:1519,1566`）からその偉人の作品（`GreatWorks`）・効果（`GreatPersonIndividualActionModifiers`・`BirthModifiers`）・近代の偉人メアリー・キャサリン・ゴダードの情報源（`DiplomaticVisibilitySources`）まで外部キーで連鎖して消える（`:1012,1573,1579,1598`、いずれも `ON DELETE CASCADE`）。公式の 178 人（`Base/Assets/Gameplay/Data/GreatPeople_*.xml`）のうち 103 人が消え、古典〜ルネサンスの 75 人が残る。公式の大音楽家は全員が産業以降なので、音楽家の偉人はいなくなる（公式のゲームで産業時代より前に候補がいないのと同じ状態）。偉人を持たない産業の遺物 5 つ（`GREATWORK_ARTIFACT_21`〜`25`、`GreatWorks.xml`）だけは、公式の時代の開始年（産業 1725）の元号＝享保へ移す。シナリオ・テストに消えた偉人を前提にするものは無い（`GREAT_PERSON_INDIVIDUAL` を参照するのは公式の偉人の時代スコアの効果を消す行だけ） |
 | `RandomAgendasInEra`・`RandomAgendaEraTags` | 公式は `ERA_ANCIENT` の行だけ（`Expansion2_Leaders.xml`）。開始時に 1 回使うだけなので足さない |
 | `StartEras`・`StartEras_XP2`・`MajorStartingUnits`・`BonusMinorStartingUnits`・`StartingBuildings`・`StartingCivics`・`StartingBoostedTechnologies`・`StartingBoostedCivics`・`StartingGovernments` | 開始の時代の行。戦国パックは `ERA_ANCIENT`（天文）開始だけなので足さない |
 | `HeroClassProgressions`・`HeroClasses.DiscoveryMinEraType` | 英雄モード（Babylon）だけ。日本マップでは使わない。10番目以降の時代の行が無いときのエンジンの扱いは未確認（英雄モードを使うなら要実機確認） |
 | `Moments`・`CommemorationTypes`・`Policies_XP1`・`GovernorPromotionConditions`・`Resolutions` | 公式の ID を指すので残る。瞬間は 0 点、誓約・公式の暗黒期の政策・総督は止めてある。世界会議の決議の時代の範囲は元号の順で早まる（日本マップは世界会議なし） |
 | `Routes.PrereqEra`・`Buildings.ObsoleteEra`・`Resources.PeakEra`（外部キー無し） | 公式の ID のまま。道の格上げ（中世＝永禄、産業＝天正、近代＝文禄）は元号の順で早まる。公式の不思議は戦国パックでは作れない（`InternalOnly`）ので廃れの時代は効かない |
 | `Gossips.ErasUntilObsolete`・`DiplomaticActions.RequiresLeadXEras`（数） | 時代の数で数えるので、元号が短いと早く古くなる・早く条件を満たす（要観察） |
-| `Eras_XP2` の不満の減り方・交易路の最短ターン | 公式の時代の値のまま進むので、公式より早い手番で値が変わる（永禄 73 ターンで交易路 +10、天正 119 ターンで +20）。バランスは約200ターンの自動進行で見る |
+| `Eras_XP2` の不満の減り方・交易路の最短ターン | 公式の時代の値のまま進むので、公式より早い手番で値が変わる（永禄 73 ターンで交易路 +10、天正 119 ターンで +20）。オーナー判断 U-4a（2026-09-30）：道の格上げを含め、時代で変わる公式の値はこのままにし、約200ターンの自動進行で見て判断する |
 
-### 速度とのずれ
+### 速度と暦（オーナー判断 U-2b、2026-09-30）
 
-エンジンは `Eras_XP1` のターンを速度の `CostMultiplier` で縮め伸ばしする（切り捨て、最短 2）。戦国の暦は標準 4・迅速 6・オンライン 8 か月／ターンで、迅速とオンラインはほぼ同じ比率になる。叙事詩・マラソンは暦が2段階（`Data/JAC_Sengoku_Calendar.xml`）なので合わない。改元の月を含む暦のターンとエンジンの時代の始まりの差（エンジン − 暦。`tools/generate_sengoku_reigns.py` の `engine_turns` と `turns_by_speed`）：
+エンジンは `Eras_XP1` のターンを速度の `CostMultiplier`（`Base/Assets/Gameplay/Data/GameSpeeds.xml`：オンライン 50・迅速 67・標準 100・叙事詩 150・マラソン 300）で縮め伸ばしする（切り捨て、最短 2）。以前の暦（迅速 6・オンライン 8 か月／ターン、叙事詩・マラソンは 2 段階）では、改元の月を含む暦のターンとエンジンの時代の始まりが、迅速・オンラインで最大 −13・−14 ターン、叙事詩で −793、マラソンで −1556 ターンずれていた。
 
-| 速度 | 弘治〜慶長（1600年まで） | 最大 | 明治 | 遅代 |
-|---|---|---|---|---|
-| オンライン | 0, −1, −1, −2, −2, −3 | −14（令和） | −12 | −14 |
-| 迅速 | 0, −1, −1, −2, −2, −2 | −13（大正） | −12 | −12 |
-| 標準 | すべて 0 | 0 | 0 | 0 |
-| 叙事詩 | +10, +11, +17, +17, +9, +2 | −793（遅代） | −415 | −793 |
-| マラソン | +64, +71, +91, +79, +23, +9 | −1556（遅代） | −805 | −1556 |
+標準以外の暦は、`tools/generate_sengoku_reigns.py` が改元の表とエンジンの時代の長さから作る（`Data/JAC_Sengoku_Calendar.xml` も生成物になった）。
 
-改元はエンジンの時代の始まりで判定するので、迅速・オンラインでは改元の画面が暦の年月より数ターン早く出る。叙事詩・マラソンは序盤は遅く、明治以降は大きく早い。叙事詩・マラソンの倍率（150・300）で縮め伸ばしすることは実機で確かめていない（要実機確認）。
+1. 各時代の最初のターンの日付は、その改元の月か、その 2 か月前まで（そのターンが改元の月を含む）。遅代は改元の月ちょうど
+2. 時代の間のターンは、その元号の月数をなるべく均等に分ける（1 ターンの月数は隣どうしで 1 か月違いの 2 種類を交互に。長い元号は約 8 ターン以上の区切りごとに交互）
+3. `GameSpeed_Turns` の主キーは（速度、`MonthIncrement`、`TurnsPerIncrement`）（`01_GameplaySchema.sql:1403-1408`）なので、同じ組を 2 行にできない。生成器は同じ組になる行を 2 つに割り、それでも無理なら元号の分け方を変える（乱数の種を固定した貪欲法で、出力は毎回同じ）。1 ターンは 12 か月以下（年が飛ばない）
+4. 遅代の後（10000 ターンまで）は、標準の 4 か月を倍率で割った月数（オンライン 8・迅速 6・叙事詩 3・マラソン 1）
+5. 標準速度は 4 か月／ターンのまま（SSOT 3.2 の「約200ターンで1600年ごろ」。時代の長さはこの暦から決まる）
+
+改元の月を含む暦のターンとエンジンの時代の始まりの差（エンジン − 暦）：
+
+| 速度 | 行数 | 1600年まで | 全体 | 最初のターンが改元の月より前（最大、時代の数） | 1600年の最初のターン | 元号の途中の日付の偏り（1600年まで／全体、月） | 1 ターンの月数 |
+|---|---:|---:|---:|---|---:|---|---|
+| オンライン | 62 | 0 | 0 | 2 か月、24 | 97 | 5.4／31.3 | 3〜12 |
+| 迅速 | 66 | 0 | 0 | 2 か月、17 | 131 | 3.8／29.9 | 2〜10 |
+| 標準 | 1 | 0 | 0 | 3 か月、33 | 199 | 3.0／3.0 | 4 |
+| 叙事詩 | 99 | 0 | 0 | 2 か月、10 | 293 | 10.2／28.5 | 1〜5 |
+| マラソン | 126 | 0 | 0 | 1 か月、9 | 584 | 14.8／33.3 | 1〜4 |
+
+「偏り」は、元号の中のターンの日付が均等に分けた場合から最大何か月ずれるか（改元の日付そのものは上の表のとおり合う）。長い元号（昭和・令和など）では行数の制約で 2〜3 年ずれる。1600年の最初のターンは以前の目安（100・134・300・600）より少し早い（エンジンが各時代の長さを切り捨てるため）。
+
+台帳・史実イベント・資源の年（`JAC_HistoricalEvents.lua`・`JAC_CourtArbitration_Rules.lua`・`JAC_Resources.lua`）は、速度の行をエンジンと同じ行の順に読む。以前は `MonthIncrement` の大きい順に並べ替えていたが、新しい暦では増減が交互になり並べ替えで順を戻せないため、ナビゲーションプロパティ `GameInfo.GameSpeeds[速度].GameSpeedTurnCollection`（`ORDER BY rowid`、`01_GameplaySchema.sql:3337`。公式の Lua も `leader.TraitCollection` の形で使う：`Base/Assets/UI/MapTacks.lua:172`）を読む。
+
+**要実機確認**：叙事詩・マラソンの倍率（150・300）での時代の長さ、`GameSpeedTurnCollection` がゲームプレイの Lua から読めること、叙事詩・マラソン・迅速・オンラインで改元の画面とトップパネルの年が合うこと。
 
 ### ツリーの時代
 
 各列を、設計の 4 期（1534〜1542・1543〜1567・1568〜1581・1582〜1600 年、[ツリー設計](../research/sengoku-tech-civic-tree.md) §1・§4）の年を列で3等分した中央の年月の元号に入れる（`tools/generate_sengoku_trees.py` の `column_era`）。列 1〜5 は天文（列5 は 1555年7月）、6 は永禄（1563年11月）、7 は元亀（1570年5月）、8〜11 は天正、12 は慶長（1597年11月）。ツリーの画面は技術・社会制度のある時代だけを並べる（`Base/Assets/UI/Screens/TechTree.lua:1452-1476`）ので、見出しは天文・永禄・元亀・天正・慶長の5つ。公式の研究費の補正（今の時代より後の時代の項目 +20%、前の時代の項目 −20%。`Expansion2_GlobalParameters.xml:48-50,244-246`）は元号で効く。各家の時代（`Player:GetEra()`）も研究した項目の元号で進む。
 
-4 期の名前（領国の基盤・技術交流と領国競争・統一への広域戦・統一事業）と、織田の家固有名「天下布武と広域戦」は無くなった（[家固有名](house-names.md)）。
+4 期の名前（領国の基盤・技術交流と領国競争・統一への広域戦・統一事業）と、織田の家固有名「天下布武と広域戦」は無くなった（[家固有名](house-names.md)）。「天下布武」は、誓約を実装するときに織田家の固有の誓約3つのうち1つの名前にする（オーナー判断 U-1「a」、2026-09-30。SSOT 3.2、[時代の設計](../research/sengoku-ages.md) §7.2）。それまではどこにも表示しない。今、戦国パックに登録した家固有名は無い。
 
 ### 武功の台帳と画面
 
@@ -123,9 +137,11 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 ### 検査
 
-- `python tools/generate_sengoku_reigns.py --check`、`python tools/generate_sengoku_trees.py --check`
-- `tests/test_sengoku_ages.py`：公式のデータに重ねた時代の表（48、年代順、各 2 ターン以上、標準速度で改元の手番 = 時代の始まり、遅代は終わらない、`NEXT_ERA_TURN_COUNTDOWN` = 1、ツリーの時代が列の順、後の時代の偉人を移した、外部キー）、台帳（エンジンの時代が変わった手番の判定、全速度の判定の手番が生成器と同じ）
+- `python tools/generate_sengoku_reigns.py --check`（暦 `Data/JAC_Sengoku_Calendar.xml` も含む）、`python tools/generate_sengoku_trees.py --check`
+- `tests/test_sengoku_ages.py`：公式のデータに重ねた時代の表（48、年代順、各 2 ターン以上、標準速度で改元の手番 = 時代の始まり、遅代は終わらない、`NEXT_ERA_TURN_COUNTDOWN` = 1、ツリーの時代が列の順、産業〜未来の偉人が無く連鎖先も残らない、遺物は享保、外部キー）、全速度で改元の手番＝時代の始まり（差 0、最初のターンは改元の月の 2 か月前まで、暦の行の主キーが重ならない）、台帳（エンジンの時代が変わった手番の判定、全速度の判定の手番が生成器と同じ）
 - `tests/test_sengoku_trees.py`：列の元号、`tests/test_sengoku_ages_screens.py`：公式の新しい時代の画面を出さない
-- 実機シナリオ `tools/civ6-autotest/scenarios/sengoku-era-reigns.json`（15 km 日本地図、標準速度、75 ターン）：時代の表、ツリーの見出し、エンジンの時代が弘治（66）・永禄（73）ちょうどで変わること（GameCore と InGame）、台帳の判定、改元の画面が1回ずつ出て公式の画面は出ないこと、公式の時代スコアと年齢が止まったままのこと
+- 実機シナリオ `tools/civ6-autotest/scenarios/sengoku-era-reigns.json`（15 km 日本地図、標準速度、75 ターン）：時代の表、ツリーの見出し、エンジンの時代が弘治（66）・永禄（73）ちょうどで変わること（GameCore と InGame）、台帳の判定、改元の画面が1回ずつ出て公式の画面は出ないこと、公式の時代スコアと年齢が止まったままのこと。改元の画面は、`JAC_REIGN_POPUP_LAST` で出た改元（元号・ターン・年齢・点が台帳どおり）を確かめ、自動進行の間にドライバが閉じていれば（`scenario.py` の `POPUP_CLOSERS`）`JAC_ShowReignPopup(true)` で出し直してから、見出し・年齢・点の文を確かめて閉じる
 
-**要実機確認**：`sengoku-era-reigns.json` の実行（未実行）。48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。
+実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。
+
+**要実機確認**：`sengoku-era-reigns.json` の再実行（改元の画面の確認以降）。48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。

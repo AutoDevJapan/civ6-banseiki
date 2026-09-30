@@ -5,6 +5,7 @@ SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では
 ## オーナー判断
 
 - B-5（2026-09-29）：エンジンが組み立てる文（通知の本文、シヴィロペディアの一部など）で一般名しか出ないのは**不可**。持ち主の家には、そこでも家固有名を出す
+- U-1（2026-09-30）：「天下布武」は、誓約を実装するときに織田家の固有の誓約3つのうち1つの名前にする（SSOT 3.2、[時代の設計](../research/sengoku-ages.md) §7.2）。それまではどこにも表示しない。家固有名としては登録しない
 - Q31（2026-09-30）：社会制度 C25「太閤検地」は、研究したすべての家に「太閤検地」と表示する。家固有名にせず、DB が指す名前そのものを「太閤検地」にした（一般名「広域検地」は廃止）
 
 ## 名前の棚卸し
@@ -13,7 +14,7 @@ SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では
 
 | 対象 | 一般名（既定・DB が指す） | 家固有名 | 表示する家 | 理由 |
 |---|---|---|---|---|
-| （削除）時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 | 天下布武と広域戦 | 織田 | オーナー判断 T（元号＝時代）でツリーの4期が元号に置き換わり、期の名前ごと無くなった（[元号＝時代](era-equals-reign.md)）。今、戦国パックに登録した家固有名は無い。仕組みの検査は `tests/test_house_names_lua.py` の検査用の登録で行う |
+| （削除）時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 | 天下布武と広域戦 | 織田 | オーナー判断 T（元号＝時代）でツリーの4期が元号に置き換わり、期の名前ごと無くなった（[元号＝時代](era-equals-reign.md)）。「天下布武」はオーナー判断 U-1 で織田家の誓約の名前になる。今、戦国パックに登録した家固有名は無い。仕組みの検査は `tests/test_house_names_lua.py` の検査用の登録で行う |
 
 対象外にしたもの：C25 太閤検地（オーナー判断 Q31。研究したすべての家に同じ名前で出す）。一般的な制度名・史実の出来事で、特定の人物・家の名ではないもの：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
 
@@ -91,7 +92,7 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 | 各 UI コンテキスト（TechTree・CivicsTree・CivicsChooser・ResearchChooser・WorldTracker・TechCivicCompletedPopup・BoostUnlockedPopup・NotificationPanel）で C25 の名前 | 織田・武田とも太閤検地（`_HOUSE` のテキストが無いことも確かめる）。`ui_lua` が書式文の引数（`LOC_UI_CIVIC_PROGRESS_COMPLETE_BLURB`）にも名前が入ることを確かめる |
 | 上のコンテキストと EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments の `ERA_MEDIEVAL` の名前 | 織田・武田とも永禄の世（元号＝時代。時代3の家固有名は削除）。HistoricMoments では記録済みの瞬間の説明に LOC キーが残らないことも確かめる |
 | 社会制度ツリーのツールチップ（TechTree・CivicsTree の `ToolTipHelper.GetToolTip`） | 織田・武田とも C25 の名前（太閤検地）を含む |
-| シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田・武田とも太閤検地 |
+| シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田・武田とも太閤検地。`JAC_LocalHouseHasNames()` は織田・武田とも偽で、`JAC_HOUSE_NAMES` は空（戦国パックに家固有名の登録が無い。実機 `era-equals-reign-05` は織田を真と見ていたため失敗し、期待を直した） |
 | **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文と、表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田・武田とも太閤検地を含む。家固有名の通知での切り替えは、実機のシナリオでは確かめていない（`tests/test_house_names_lua.py` の模擬実行で時代3の名前を使って確かめる）。`house-names-*-notification.png` に記録 |
 | `house-names-*-civics-tree.png`・`-tech-tree.png` | ツリーの見た目の記録。C25 が未公開だと「???」で、名前はスクリーンショットでは見えない（名前の判定は `ui_lua`） |
 
@@ -105,5 +106,4 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 ## オーナーへの質問
 
-1. 「天下布武」の持ち主を織田家（暫定）にしてよいか
-2. 上記の棚卸しで対象外にした名前（刀狩・楽市楽座・軍役帳・朱印状）のうち、家固有にしたいものはあるか
+1. 上記の棚卸しで対象外にした名前（刀狩・楽市楽座・軍役帳・朱印状）のうち、家固有にしたいものはあるか
