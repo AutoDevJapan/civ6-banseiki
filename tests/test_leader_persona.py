@@ -177,8 +177,10 @@ class LeaderPersonaStaticTests(unittest.TestCase):
                                  "JAC-Persona-Reassigned", "JAC-Persona-Promoted", "JAC-Persona-Two-Skilled-Governors",
                                  "JAC-Persona-Three-Title-Cost"])
         self.assertEqual([s["name"] for s in steps if s["action"] == "load"], saves)
-        self.assertEqual(sum(s.get("turns", 0) for s in steps if s["action"] == "end_turn"), 16)
-        self.assertEqual(len(steps), 134)
+        end_turns = [s for s in steps if s["action"] == "end_turn"]
+        self.assertEqual(len(end_turns), 16)
+        self.assertTrue(all("turns" not in s for s in end_turns), "driver executes one turn per step")
+        self.assertEqual(len(steps), 141)
         human = [p for p in steps[1]["players"] if p["human"]]
         self.assertEqual([p["leader"] for p in human], ["LEADER_JAC_HOJO_UJITSUNA"])
         lua = LuaRuntime(unpack_returned_tuples=True)
