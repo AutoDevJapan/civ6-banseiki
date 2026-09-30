@@ -105,7 +105,8 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: ids must be mod UUIDs")
             disabled = step.get("disable_ids", [])
             if (not isinstance(disabled, list) or any(not isinstance(item, str) or not MOD_ID.fullmatch(item)
-                                                    for item in disabled) or set(disabled) & set(step["ids"])):
+                                                    for item in disabled)
+                    or {item.lower() for item in disabled} & {item.lower() for item in step["ids"]}):
                 raise ScenarioError(f"Step {number}: invalid disable_ids")
         elif action == "configure":
             if "build_setup" in step and type(step["build_setup"]) is not bool:
@@ -202,29 +203,71 @@ def validate_scenario(data: dict) -> None:
 
 
 def _enable_mods_code(ids: list[str], disable_ids: list[str] | None = None) -> str:
-    lines = ["if not UI.IsInFrontEnd() then error('main menu required') end"]
-    for mod_id in disable_ids or []:
-        literal = _lua_string(mod_id)
-        lines += [
-            f"local disabledHandle = Modding.GetModHandle({literal})",
-            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then Modding.DisableMod(disabledHandle) end",
-            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then error('mod stayed enabled') end",
-        ]
-    for mod_id in ids:
-        literal = _lua_string(mod_id)
-        lines += [
-            f"local handle = Modding.GetModHandle({literal})",
-            f"if not handle then error('mod is not installed: ' .. {literal}) end",
-            "local info = Modding.GetModInfo(handle)",
-            "if not info.Enabled then",
-            "  local reason = Modding.CanEnableMod(handle, true)",
-            "  if reason ~= 'OK' then error('cannot enable mod: ' .. tostring(reason)) end",
-            "  Modding.EnableMod(handle, true)",
-            "end",
-            "if not Modding.GetModInfo(handle).Enabled then error('mod did not become enabled') end",
-        ]
-    lines += ["GameConfiguration.UpdateEnabledMods()", "return true"]
-    return "\n".join(lines)
+    # Official FrontEnd APIs: Base/Assets/UI/FrontEnd/Mods.lua:67,255,
+    # 296-327,545-550. Only associations' dependencies (not references) block disabling.
+    return "\n".join([
+        "if not UI.IsInFrontEnd() then error('main menu required') end",
+        "local enableIDs = {" + ", ".join(_lua_string(i) for i in ids) + "}",
+        "local disableIDs = {" + ", ".join(_lua_string(i) for i in disable_ids or []) + "}",
+        """local keep, disabled = {}, {}
+for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
+if #disableIDs > 0 then
+  local handles, dependents = {}, {}
+  for _, installed in ipairs(Modding.GetInstalledMods()) do
+    local info = Modding.GetModInfo(installed.Handle)
+    local id = string.lower(info.Id)
+    handles[id] = installed.Handle
+    local dependencies = Modding.GetModAssociations(installed.Handle)
+    for _, dependency in ipairs(dependencies or {}) do
+      local target = string.lower(dependency.Id)
+      dependents[target] = dependents[target] or {}
+      table.insert(dependents[target], id)
+    end
+  end
+  local visiting, visited, order = {}, {}, {}
+  local function visit(id)
+    if visiting[id] then error('mod dependency cycle: ' .. id) end
+    if visited[id] then return end
+    if keep[id] then error('scenario enables a dependent mod of a disable target: ' .. id) end
+    visiting[id] = true
+    local children = dependents[id] or {}
+    table.sort(children)
+    for _, child in ipairs(children) do visit(child) end
+    local handle = handles[id]
+    if handle and Modding.GetModInfo(handle).Enabled then table.insert(order, id) end
+    visiting[id], visited[id] = nil, true
+  end
+  -- Build the complete order before changing anything, including paths through
+  -- disabled intermediates. An enable-list conflict must not disable other mods.
+  for _, id in ipairs(disableIDs) do visit(string.lower(id)) end
+  for _, id in ipairs(order) do
+    local handle = handles[id]
+    local reason = Modding.CanDisableMod(handle)
+    if reason ~= 'OK' then error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
+    Modding.DisableMod(handle)
+    if Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+    table.insert(disabled, id)
+  end
+end
+for _, id in ipairs(enableIDs) do
+  local handle = Modding.GetModHandle(id)
+  if not handle then error('mod is not installed: ' .. id) end
+  if not Modding.GetModInfo(handle).Enabled then
+    local reason = Modding.CanEnableMod(handle, true)
+    if reason ~= 'OK' then error('cannot enable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
+    Modding.EnableMod(handle, true)
+  end
+end
+for _, id in ipairs(enableIDs) do
+  if not Modding.GetModInfo(Modding.GetModHandle(id)).Enabled then error('mod did not become enabled: ' .. id) end
+end
+for _, id in ipairs(disableIDs) do
+  local handle = Modding.GetModHandle(id)
+  if handle and Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+end
+GameConfiguration.UpdateEnabledMods()
+return table.concat(disabled, ', ')""",
+    ])
 
 
 def _configure_code(step: dict) -> str:
@@ -971,9 +1014,9 @@ class Runner:
         if action == "restart_game":
             return self._restart_game(_remaining(deadline))
         if action == "enable_mods":
-            self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")),
-                      min(5, _remaining(deadline)))
-            return "enabled/verified " + ", ".join(step["ids"])
+            disabled = self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")),
+                                 min(5, _remaining(deadline)))
+            return "enabled/verified " + ", ".join(step["ids"]) + "; disabled " + (disabled or "none")
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
             self.ruleset = step["ruleset"]

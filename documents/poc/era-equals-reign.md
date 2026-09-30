@@ -25,7 +25,7 @@
 
 getter は1つずつ `pcall` で呼び、無いものは `absent`、失敗は `ERR(...)` と書いて先へ進む（GameCore にどの getter があるかも結果の一部）。例外として、`InGame` の最初の手順は前提が崩れていれば止める：ルールセット、テスト MOD の `Eras_XP1` と `NEXT_ERA_TURN_COUNTDOWN` が効いていること、指定の速度、開始日が1534年（戦国の暦）。前提が崩れた記録は読み違いのもとになるため。
 
-このテスト MOD は、`enable_mods` がほかの MOD を無効にしないため、一度有効にすると残る。影響を検証地図に限り、同じ地図を使う `unification-victory.json`・`unification-pact.json` は `disable_ids` でこの MOD を切る（`tests/test_era_timing_probe.py` が検査する）。
+このテスト MOD は、`disable_ids` の指定がない手順では、一度有効にすると残る。影響を検証地図に限り、同じ地図を使う `unification-victory.json`・`unification-pact.json` は `disable_ids` でこの MOD を切る（`tests/test_era_timing_probe.py` が検査する）。依存する基礎 MOD を無効化する手順でも、先にこのテスト MOD を無効化する。
 
 ## 準備（オーナー）
 

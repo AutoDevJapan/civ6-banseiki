@@ -14,7 +14,7 @@
 
 数値は**PoCで試す推奨案**としてSSOT 9.3に記載した。本番の数値へのオーナー承認とは区別する。比較案は未実装。D8は議論待ちのまま、宗教・教義・人物の内容は定義しない。
 
-独立MODは `poc/JAC_PoC_ReligionPersistence/`、IDは `9b0b9a39-bd72-4ff1-9062-05eeac09b693`。Gathering Stormと万世紀で読み込み、番号付き仮宗教20枠を使う。判定はカタログIDを使い、具体的な宗教名や20という個数に依存しない。
+独立MODは `poc/JAC_PoC_ReligionPersistence/`、IDは `9b0b9a39-bd72-4ff1-9062-05eeac09b693`。Gathering Stormと万世紀MODを前提に、`RULESET_JAC_BANSEIKI`でのみ読み込む。標準のGathering Stormルールセットには適用しない。番号付き仮宗教20枠を使い、判定はカタログIDを使う。具体的な宗教名や20という個数には依存しない。
 
 ## 再興の提案（Q80）
 
@@ -96,6 +96,8 @@ return R.Snapshot()
 
 `SetCommunity`は差分ではなく現在値。`PreserveAsset`・`MoveAsset`の最後の任意引数は保管先とは別の所有プレイヤーID。`Discover`の最後のプレイヤーIDは必須。`Revive(id, revivalID, sourceID, communityID, playerID, cityID)`は記録・人物・秘匿資料にも使う。`Rules()`はSQLの名前付き定数のコピー。科学・文化の60件のModifierも同じ定数から生成する。`Inspect`・`Export`はコピー、`Snapshot`はキー順を固定した全台帳文字列。`ChooseOutcome`は候補を返すだけ、`ResolveForAI`はAIの発見に限って実際に解決する。
 
+再興では、希望するコミュニティIDが使用済みなら末尾に番号を付け、同じ宗教内の空いているIDを選ぶ。費用支払い中のGameplay呼び出しで予定のIDが埋まった場合も、保存直前に空きを選び直す。実際に使ったIDは再興履歴の`community`に保存する。既存の信徒・施設・保有者と、同じIDを持つ別宗教の記録を上書きしない。生成したIDも128文字以内に収める。
+
 ## 公式ファイルの根拠
 
 基準フォルダは `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI`。今回、本体ファイルは変更していない。
@@ -107,6 +109,7 @@ return R.Snapshot()
 | Gameplayの現在ターン | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:413,675` |
 | コンテキスト間の共有名 | `Base/Assets/UI/MapTacks.lua:5-11` の `ExposedMembers` による共有の説明 |
 | 実機の開拓者による都市建設要求 | `Base/Assets/UI/Panels/UnitPanel.lua:2636,2641` の `UnitManager.RequestOperation(..., UnitOperationTypes.FOUND_CITY)` |
+| メニューでのMOD列挙・有効状態・依存関係・切り替え | `Base/Assets/UI/FrontEnd/Mods.lua:67,255,296-327,391,545-569,904`。無効化可否と依存元ID、依存・参照・競合の別配列、設定への反映。IDからのハンドル取得は `Base/Assets/UI/FrontEnd/MainMenu.lua:486-488` |
 | 人間のターンが有効になるまで待つ | `Base/Assets/UI/LocalPlayerActionSupport.lua:6-14` の `IsTurnActive()` 判定 |
 | 首都取得と聖都指定・宗教創始・信仰追加 | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1103,137,143-144` |
 | 標準の番号付きカスタム宗教枠 | `Base/Assets/Gameplay/Data/Religions.xml:20,127-131` |
@@ -161,11 +164,14 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 | 再興 | 信仰60減、信徒2・施設0、資料の利用権を消費し現物と履歴を保持 |
 | 公開へ復帰 | 施設1で公開、再興履歴を保持 |
 | 全8分岐 | 秘匿・解釈・吸収・収蔵・返還・仮英雄。人間のゴールド+40、信仰−40（吸収+20・英雄−60）、支持+10、斥候+1。AIの売却+40。UIで科学+20・文化+50を外部比較 |
+| 再興先のID衝突 | 直接の再興と発見からの再興で空いているIDを選ぶ。使用済みの2枠の施設・保有者と別宗教を保持し、合計信仰120の支払いと保存後の完全一致を検査 |
 
-64ステップ、7回のsave→メニュー→load。台帳・手番・残高・研究進捗を外部の`capture_as`と`equals_capture`で完全比較する。ゲーム内の期待値と台帳が同時に消えても成功にならない。各分岐の再実行はエラーと台帳不変を検査。最後のロードでは残高・Unit・研究進捗も比較し、ロード時の二重付与を検出する。不一致は`ui_lua`の`error()`か比較エラーで失敗する。ドライバーは`end_turn`の回数を尊重し、複数ターンで共通の期限を使う。
+69ステップ、8回のsave→メニュー→load。台帳・手番・残高・研究進捗を外部の`capture_as`と`equals_capture`で完全比較する。ゲーム内の期待値と台帳が同時に消えても成功にならない。各分岐の再実行はエラーと台帳不変を検査。全8分岐のロードでは残高・Unit・研究進捗も比較し、ロード時の二重付与を検出する。最後にID衝突を伴う再興を保存・読込して台帳と信仰を比較する。不一致は`ui_lua`の`error()`か比較エラーで失敗する。ドライバーは`end_turn`の回数を尊重し、複数ターンで共通の期限を使う。
+
+開始時のMOD切り替えでは、無効化するMODに依存するものを、間接的な依存も含めて先に無効化する。シナリオで有効化を指定したMODは対象から外す。その指定と無効化が矛盾する場合は、変更前にエラーにする。実際に無効化したMODのIDは、そのステップの結果に記録する。これにより、以前のシナリオが残した依存MODによる無効化拒否を検出・解消する。依存関係を模したLuaテスト7件で、順序・共有依存・無効化済みのMOD・循環・指定の衝突・エンジンの拒否・結果への記録を検査する。
 
 ## 結果と未検証
 
-2026-10-01：宗教PoCのlupaテスト36件を含む全362件、自動検証ツール152件が成功。64ステップの形式チェックとLua39片の構文検査も成功。実機はこの作業では実行しない。独自表のGameInfo参照、入れ子・空テーブル・false値・使用履歴の保存、GameCore_Tunerの参照、科学／文化Modifier・外交支持・隣接Unit生成、日英露表示は要実機確認。マルチプレイ、自然な探索・布教・迫害、建物／人口／人物／本体Vaultの同期は未検証・未接続。
+2026-10-01：宗教PoCのlupaテスト40件を含む全366件、自動検証ツール159件が成功。スキップなし。69ステップの形式チェックとLua41片の構文検査も成功。実機はこの作業では実行しない。独自表のGameInfo参照、入れ子・空テーブル・false値・使用履歴の保存、GameCore_Tunerの参照、科学／文化Modifier・外交支持・隣接Unit生成、依存MODの切り替え、日英露表示は要実機確認。マルチプレイ、自然な探索・布教・迫害、建物／人口／人物／本体Vaultの同期は未検証・未接続。
 
-指定のテスト検出では、制限付きWindowsトークンによる0700一時フォルダーの再アクセス不可と、自動検証ツールの名前空間パッケージをunittestが検出できない問題があった。一時領域だけの実行補助で、新規一時フォルダーに親の権限を継承させ、既存の名前空間パッケージを検出して全件実行した。既存ACL・リポジトリのテスト・__init__.pyは変更していない。別モデルのレビューはCodexの起動時にAccess deniedで停止し、未実施。
+指定のテスト検出では、制限付きWindowsトークンによる0700一時フォルダーの再アクセス不可と、自動検証ツールの名前空間パッケージをunittestが検出できない問題があった。一時領域だけの実行補助で、新規一時フォルダーに親の権限を継承させ、既存の名前空間パッケージを検出して全件実行した。既存フォルダーのACLは変更せず、リポジトリには実行補助や__init__.pyを追加していない。別モデルのレビューはCodexの起動時にAccess deniedで停止し、未実施。

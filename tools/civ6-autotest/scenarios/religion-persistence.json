@@ -375,6 +375,32 @@
       "state_name": "GameCore_Tuner",
       "code": "local p=Players[0]; local n=0; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units.UNIT_SCOUT.Index then n=n+1 end end; return tostring(p:GetTreasury():GetGoldBalance())..'|'..tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(p:GetDiplomacy():GetFavor())..'|'..tostring(n)",
       "equals_capture": "RP_BALANCE_AFTER"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); p:GetReligion():ChangeFaithBalance(200-p:GetReligion():GetFaithBalance()); local direct='JAC_RP_PLACEHOLDER_05'; local discovered='JAC_RP_PLACEHOLDER_06'; R.Found('JAC_RP_PLACEHOLDER_07',1,'origin',3,2,'PLAYER_1'); R.Found(direct,0,'origin',1,3,'PLAYER_1'); R.SetCommunity(direct,'origin',0,3,'PLAYER_1'); R.SetCommunity(direct,'origin:revival_1',0,2,'PLAYER_1'); R.PreserveAsset(direct,'book','SCRIPTURE','PLAYER_0',0); R.Revive(direct,'slot_direct','book','origin',0,city); R.Found(discovered,0,'origin',1,4,'PLAYER_1'); R.SetCommunity(discovered,'origin',0,4,'PLAYER_1'); R.Discover(discovered,'slot_discovery','book','SCRIPTURE','MONK_0','MONK','CAVE',0); R.ResolveDiscovery(discovered,'slot_discovery','REVIVE',{revival='slot_discovered',community='origin',city=city}); local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local direct=R.Inspect('JAC_RP_PLACEHOLDER_05'); local discovered=R.Inspect('JAC_RP_PLACEHOLDER_06'); local other=R.Inspect('JAC_RP_PLACEHOLDER_07'); local city=Players[0]:GetCities():GetCapitalCity():GetID(); for _,entry in ipairs({{s=direct,revival='slot_direct',facilities=5},{s=discovered,revival='slot_discovered',facilities=4}}) do local s=entry.s; local v=s.revivals[entry.revival]; local old=s.communities.origin; if s.state~='PUBLIC' or s.followers~=2 or s.publicFacilities~=entry.facilities or s.revivalCount~=1 then error('collision revival totals') end; if not old or old.followers~=0 or old.holder~='PLAYER_1' or old.publicFacilities~=(entry.facilities==5 and 3 or 4) then error('existing community overwritten') end; if not v or v.effects~='APPLIED' or v.community=='origin' or v.city~=city or v.player~=0 then error('free slot receipt') end; local c=s.communities[v.community]; if not c or c.followers~=2 or c.publicFacilities~=0 or c.holder~='PLAYER_0' then error('new revival community') end; end; local reserved=direct.communities['origin:revival_1']; if not reserved or reserved.followers~=0 or reserved.publicFacilities~=2 or reserved.holder~='PLAYER_1' or direct.revivals.slot_direct.community=='origin:revival_1' then error('second occupied slot overwritten') end; if other.followers~=3 or other.publicFacilities~=2 or other.communities.origin.holder~='PLAYER_1' or other.revivalCount~=0 or next(other.assets)~=nil then error('other religion overwritten') end; if Players[0]:GetReligion():GetFaithBalance()~=80 then error('two revival costs not charged exactly once') end; return R.Snapshot()..'|'..tostring(Players[0]:GetReligion():GetFaithBalance())",
+      "capture_as": "RP_COLLISION"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-COLLISION",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-COLLISION",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local direct=R.Inspect('JAC_RP_PLACEHOLDER_05'); local discovered=R.Inspect('JAC_RP_PLACEHOLDER_06'); local other=R.Inspect('JAC_RP_PLACEHOLDER_07'); local city=Players[0]:GetCities():GetCapitalCity():GetID(); for _,entry in ipairs({{s=direct,revival='slot_direct',facilities=5},{s=discovered,revival='slot_discovered',facilities=4}}) do local s=entry.s; local v=s.revivals[entry.revival]; local old=s.communities.origin; if s.state~='PUBLIC' or s.followers~=2 or s.publicFacilities~=entry.facilities or s.revivalCount~=1 then error('collision revival totals') end; if not old or old.followers~=0 or old.holder~='PLAYER_1' or old.publicFacilities~=(entry.facilities==5 and 3 or 4) then error('existing community overwritten') end; if not v or v.effects~='APPLIED' or v.community=='origin' or v.city~=city or v.player~=0 then error('free slot receipt') end; local c=s.communities[v.community]; if not c or c.followers~=2 or c.publicFacilities~=0 or c.holder~='PLAYER_0' then error('new revival community') end; end; local reserved=direct.communities['origin:revival_1']; if not reserved or reserved.followers~=0 or reserved.publicFacilities~=2 or reserved.holder~='PLAYER_1' or direct.revivals.slot_direct.community=='origin:revival_1' then error('second occupied slot overwritten') end; if other.followers~=3 or other.publicFacilities~=2 or other.communities.origin.holder~='PLAYER_1' or other.revivalCount~=0 or next(other.assets)~=nil then error('other religion overwritten') end; if Players[0]:GetReligion():GetFaithBalance()~=80 then error('two revival costs not charged exactly once') end; return R.Snapshot()..'|'..tostring(Players[0]:GetReligion():GetFaithBalance())",
+      "equals_capture": "RP_COLLISION"
     }
   ]
 }

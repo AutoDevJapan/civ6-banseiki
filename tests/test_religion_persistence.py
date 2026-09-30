@@ -199,10 +199,21 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(manifest.findtext("./InGameActions/AddGameplayScripts/File"),
                          "Scripts/JAC_ReligionPersistence.lua")
         self.assertIsNone(manifest.find("./InGameActions/AddUserInterfaces"))
-        self.assertEqual(manifest.findtext("./ActionCriteria/Criteria/RuleSetInUse"),
-                         "RULESET_EXPANSION_2,RULESET_JAC_BANSEIKI")
         self.assertLess(int(manifest.findtext("./InGameActions/UpdateDatabase/Properties/LoadOrder")),
                         int(manifest.findtext("./InGameActions/AddGameplayScripts/Properties/LoadOrder")))
+
+    def test_every_ingame_action_requires_banseiki_and_excludes_standard_gs(self):
+        manifest = ET.parse(MOD / "JAC_PoC_ReligionPersistence.modinfo").getroot()
+        criteria = {c.get("id"): c for c in manifest.findall("./ActionCriteria/Criteria")}
+        actions = list(manifest.find("InGameActions"))
+        self.assertEqual({a.tag for a in actions}, {"UpdateDatabase", "UpdateText", "AddGameplayScripts"})
+        for action in actions:
+            with self.subTest(action=action.get("id")):
+                self.assertIn(action.get("criteria"), criteria)
+                rulesets = criteria[action.get("criteria")].findtext("RuleSetInUse").split(",")
+                self.assertEqual([r.strip() for r in rulesets], ["RULESET_JAC_BANSEIKI"])
+        self.assertIn("bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+                      {m.get("id") for m in manifest.findall("./Dependencies/Mod")})
 
     def test_all_catalog_and_state_names_have_ja_en_ru_text(self):
         rows = list(ET.parse(MOD / "Text/JAC_ReligionPersistence_Text.xml").getroot().iter("Row"))
@@ -337,6 +348,77 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(self.state()["revivalCount"], 2)
         self.reload()
         self.assertEqual(set(self.state()["revivals"]), {"r", "r2"})
+
+    def test_revival_picks_a_free_slot_and_preserves_both_religions(self):
+        for discovered in (False, True):
+            with self.subTest(discovered=discovered):
+                self.load()
+                self.found()
+                self.found(R2, followers=5, facilities=4)
+                self.rp.SetCommunity(R1, "origin", 0, 2, "PLAYER_0")
+                self.rp.SetCommunity(R1, "origin:revival_1", 0, 3, "ARCHIVE")
+                if discovered:
+                    self.rp.Discover(R1, "d", "book", "SCRIPTURE", "MONK_1", "MONK", "CAVE", 1)
+                else:
+                    self.rp.PreserveAsset(R1, "book", "SCRIPTURE", "PLAYER_1", 1)
+                self.reload()
+                original, other = self.state()["communities"], self.state(R2)
+                if discovered:
+                    self.rp.ResolveDiscovery(R1, "d", "REVIVE", self.options(community="origin"))
+                else:
+                    self.rp.Revive(R1, "r", "book", "origin", 1, 0)
+                revived = self.state()
+                selected = revived["revivals"]["r"]["community"]
+                self.assertNotIn(selected, original)
+                self.assertEqual({k: revived["communities"][k] for k in original}, original)
+                self.assertEqual(revived["communities"][selected],
+                                 {"followers": 2, "publicFacilities": 0, "holder": "PLAYER_1"})
+                self.assertEqual((revived["followers"], revived["publicFacilities"], revived["state"]),
+                                 (2, 5, "PUBLIC"))
+                self.assertEqual(self.state(R2), other)
+                self.assertEqual(self.g.ENGINE["1"].faith, 440)
+                self.reload()
+                self.assertEqual(self.state(), revived)
+                self.assertEqual(self.state(R2), other)
+
+    def test_revival_does_not_overwrite_a_slot_created_by_the_faith_callback(self):
+        self.found()
+        self.lost()
+        self.rp.PreserveAsset(R1, "book", "SCRIPTURE", "PLAYER_1", 1)
+        self.lua.execute("""
+            local religion = Players[1]:GetReligion()
+            local change = religion.ChangeFaithBalance
+            religion.ChangeFaithBalance = function(self, amount)
+                change(self, amount)
+                ExposedMembers.JAC_ReligionPersistence.SetCommunity(
+                    'JAC_RP_PLACEHOLDER_01', 'new', 0, 7, 'PLAYER_0')
+            end
+        """)
+        self.rp.Revive(R1, "r", "book", "new", 1, 0)
+        revived = self.state()
+        selected = revived["revivals"]["r"]["community"]
+        self.assertNotEqual(selected, "new")
+        self.assertEqual(revived["communities"]["new"],
+                         {"followers": 0, "publicFacilities": 7, "holder": "PLAYER_0"})
+        self.assertEqual(revived["communities"][selected],
+                         {"followers": 2, "publicFacilities": 0, "holder": "PLAYER_1"})
+        self.assertEqual((revived["followers"], revived["publicFacilities"], revived["revivalCount"]), (2, 7, 1))
+        self.assertEqual(self.g.ENGINE["1"].faith, 440)
+        self.reload()
+        self.assertEqual(self.state(), revived)
+
+    def test_revival_free_slot_respects_the_identifier_length_limit(self):
+        preferred = "x" * 128
+        self.rp.Found(R1, 0, preferred, 1, 1, "PLAYER_0")
+        self.rp.SetCommunity(R1, preferred, 0, 1, "PLAYER_0")
+        self.rp.PreserveAsset(R1, "book", "SCRIPTURE", "PLAYER_1", 1)
+        self.rp.Revive(R1, "r", "book", preferred, 1, 0)
+        selected = self.state()["revivals"]["r"]["community"]
+        self.assertNotEqual(selected, preferred)
+        self.assertLessEqual(len(selected), 128)
+        self.assertEqual(self.state()["communities"][preferred],
+                         {"followers": 0, "publicFacilities": 1, "holder": "PLAYER_0"})
+        self.reload()
 
     def test_discovery_accepts_all_listed_jobs_sites_and_both_item_kinds(self):
         self.found()
@@ -699,8 +781,8 @@ class ReligionPersistenceTests(unittest.TestCase):
                 loaded += 1
             elif step["action"] in ("autoplay", "end_turn"):
                 self.g.TURN += step["turns"]
-        self.assertEqual(loaded, 7)
-        self.assertEqual(compared, 11)
+        self.assertEqual(loaded, 8)
+        self.assertEqual(compared, 12)
         self.assertEqual(native_founded, 1)
         self.assertEqual(self.state()["revivalCount"], 1)
         self.assertEqual(self.state()["state"], "PUBLIC")
@@ -714,7 +796,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 39)
+        self.assertEqual(len(chunks), 41)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 

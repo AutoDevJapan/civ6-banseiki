@@ -65,7 +65,7 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | action | 必要な値 | 動作 |
 |---|---|---|
 | `restart_game` | なし（`timeout` は任意、既定 360 秒） | Civ6 を閉じて Steam から再起動し、左クリックでオープニングを飛ばして `FrontEnd` の応答を待つ。実行後はログ判定の開始位置を取り直す |
-| `enable_mods` | `ids`（MOD UUID 配列） | メインメニューで存在・有効化可否を確認し、有効化する。ほかの有効な MOD は変更しない |
+| `enable_mods` | `ids`（MOD UUID 配列）、任意で `disable_ids` | メインメニューで指定した MOD を有効化する。無効化を指定した場合は、それに依存する有効な MOD を、間接的な依存も含めて先に無効化する。実際に無効化した ID はステップの結果に記録する |
 | `configure` | `ruleset`, `map_size`, `speed`, `seed`, `players`。固定マップでは `map_file` も指定 | 既定のゲーム設定に戻し、ルールセット、地図ファイル・マップサイズ、速度、両シード、指導者・文明・人間/AI 枠を設定・照合する。`map_file` は `{MOD UUID}Maps/<ファイル>.Civ6Map` 形式。`build_setup` は HostGame で Create Game の設定をビルド・更新し、全指定枠が維持されたことを検査して設定を閉じる。`RULESET_JAC_BANSEIKI` では既定で true（明示的な `false` で無効）、他のルールセットでは既定 false。ビルドしないと暦の上書き（CALENDAR_STANDARD_FROM_START_ERA）が効かず、開始ターンが 16603 になって長い AI オートプレイが 31 ターン付近で止まった（2026-09-29 実機） |
 | `start_game` | なし | シングルプレイを開始し、`InGame` の操作可能状態を待つ。直前の `configure` が `RULESET_JAC_BANSEIKI` なら `GameConfiguration.GetStartTurn()` が 1 でなければ失敗する |
 | `autoplay` | `turns`、任意で `metrics: true`, `research_metrics: true`, `allow_human_elimination: true` | 指定ターンを自動進行し、`LuaEvents.AutoPlayEnd` の受信、実ターン数、停止、人間プレイヤーへの復帰を合わせて確認する。`metrics` はターン時間とプロセスメモリ、`research_metrics` は各メジャーの技術・社会制度の研究状態を JSONL に記録する。`allow_human_elimination` は人間勢力の滅亡をログに残し、目標ターンまで監視を続ける |
@@ -75,6 +75,8 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
+
+`enable_mods` は依存関係から無効化の順序を決め、同じ MOD を重ねて無効化しない。`ids` に含まれる MOD は無効化しない。その MOD が無効化対象に依存している場合や、対象の依存関係が循環している場合は、変更前にエラーにする。UUID の大文字・小文字の違いでこの検査を回避できない。無効化対象やその依存元に当たらない MOD は維持する。
 
 `wait_for` の Lua 条件は繰り返し評価されるため、ゲーム状態を変更しない、副作用のない判定式に限定する。確認済みの Lua `ERR` は直ちに失敗とする。送信後に応答が失われて実行有無が不明な場合は、状態変更を伴う Lua コードを再送しない。`start_game` と `load` では、Lua コマンド送信前の接続・状態照会エラーをそのまま失敗として記録し、送信後の応答不明時だけ読み取り専用のログ・状態確認で遷移を判定する。確認できなければ判定不能として停止する。ロード遷移中に `Lua.log` の再生成・切り詰めを検出した場合も、世代をまたいだ件数比較をせず判定不能として停止する。スクリーンショットは撮影完了後にステップ期限を確認し、超過していれば失敗とする。
 
@@ -125,6 +127,7 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 | ファイルと行 | 実際の呼び出し |
 |---|---|
 | `Base/Assets/UI/FrontEnd/Mods.lua:28,67,391,904`、`LoadGameMenu.lua:58` | `Modding.GetModGroups()`、`Modding.GetInstalledMods()`、`Modding.GetModHandle(id)`、`Modding.EnableMod(handle, true)`、`GameConfiguration.UpdateEnabledMods()` |
+| `Base/Assets/UI/FrontEnd/Mods.lua:255,296-327,545-569` | `Modding.GetModInfo(handle)`、`CanDisableMod(handle)`、`DisableMod(handle)`、`GetModAssociations(handle)`。無効化の依存元 ID と、依存・参照・競合の別配列を読む |
 | `Base/Assets/UI/Automation/Automation_StandardTests.lua:175–207` | `GameConfiguration.SetRuleSet(ruleSet)`、`MapConfiguration.SetMapSize(mapSize)`、`GameConfiguration.SetGameSpeedType(gameSpeed)`、`MapConfiguration.SetValue("RANDOM_SEED", mapSeed)`、`GameConfiguration.SetValue("GAME_SYNC_RANDOM_SEED", gameSeed)` |
 | 同 `:128–147,309,330–334`、`FrontEnd/PlayerSetupLogic.lua:80` | `PlayerConfigurations[id]:SetSlotStatus(...)`、`:SetLeaderTypeName(leaderType)`、`Network.HostGame(ServerType.SERVER_TYPE_NONE)`、`AutoplayManager.SetTurns(turnCount)` / `SetActive(true)` |
 | 同 `:24–37,378–417`、`FrontEnd/LoadGameMenu.lua:523` | `Network.SaveGame({Name, Location=SaveLocations.LOCAL_STORAGE, Type=SaveTypes.SINGLE_PLAYER, IsAutosave=false, IsQuicksave=false})`、`Events.SaveComplete`、`Network.LoadGame(loadGame, ServerType.SERVER_TYPE_NONE)`、`:SetCivilizationTypeName(...)` |

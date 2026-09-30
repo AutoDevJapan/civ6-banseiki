@@ -253,6 +253,16 @@ function RP.Discover(id, discoveryID, assetID, kind, actor, job, site, playerID)
   commit(state)
 end
 
+local function freeCommunityID(religion, preferredID)
+  local candidate, suffix = preferredID, 0
+  while religion.communities[candidate] ~= nil do
+    suffix = suffix + 1
+    local ending = ":revival_" .. suffix
+    candidate = preferredID:sub(1, 128 - #ending) .. ending
+  end
+  return candidate
+end
+
 local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID, cityID)
   local religion, p = get(state, id), player(playerID)
   identifier(revivalID, "revival")
@@ -265,12 +275,12 @@ local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID
   check(recoverySource(religion, sourceID), "no unused surviving revival source")
   check(religion.assets[sourceID].owner == playerID, "revival material not owned")
   check(religion.revivals[revivalID] == nil, "revival already recorded")
-  check(religion.communities[communityID] == nil, "revival requires a new community ID")
   for _, v in pairs(religion.revivals) do
     check(v.effects ~= "PENDING", "revival effect pending")
     check(Game.GetCurrentGameTurn() - v.turn >= RULES.REVIVAL_COOLDOWN_TURNS, "revival cooldown")
   end
   check(p:GetReligion():GetFaithBalance() >= RULES.REVIVAL_FAITH_COST, "insufficient revival faith")
+  communityID = freeCommunityID(religion, communityID)
   religion.revivals[revivalID] = { source = sourceID, community = communityID,
     followers = RULES.REVIVAL_FOLLOWERS, publicFacilities = 0, holder = "PLAYER_" .. playerID,
     player = playerID, city = cityID, faithCost = RULES.REVIVAL_FAITH_COST,
@@ -394,6 +404,9 @@ local function perform(state, id, plan)
   local asset = religion.assets[plan.asset]
   if plan.revival then
     local v = religion.revivals[plan.revival]
+    -- A gameplay callback during the faith charge may have occupied the planned
+    -- slot. Preserve that record too, and save the actual ID in the receipt.
+    v.community = freeCommunityID(religion, v.community)
     religion.communities[v.community] = community(v.community, RULES.REVIVAL_FOLLOWERS, 0, v.holder)
     religion.revivalCount, v.effects = religion.revivalCount + 1, "APPLIED"
     asset.holder = "MEMORIAL_PLAYER_" .. plan.player
