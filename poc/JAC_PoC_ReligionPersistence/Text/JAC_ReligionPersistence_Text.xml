@@ -1,6 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
 <GameData>
   <LocalizedText>
+    <Row Tag="LOC_JAC_RP_APPLIED" Language="ja_JP"><Text>効果を適用済み</Text></Row>
+    <Row Tag="LOC_JAC_RP_APPLIED" Language="en_US"><Text>Effects applied</Text></Row>
+    <Row Tag="LOC_JAC_RP_APPLIED" Language="ru_RU"><Text>Эффекты применены</Text></Row>
+    <Row Tag="LOC_JAC_RP_PENDING" Language="ja_JP"><Text>効果の処理中（失敗時は確認が必要）</Text></Row>
+    <Row Tag="LOC_JAC_RP_PENDING" Language="en_US"><Text>Effects pending (inspect after failure)</Text></Row>
+    <Row Tag="LOC_JAC_RP_PENDING" Language="ru_RU"><Text>Эффекты ожидают обработки (проверить при сбое)</Text></Row>
     <Row Tag="LOC_JAC_RP_PUBLIC" Language="ja_JP">
       <Text>公的に存続</Text>
     </Row>
@@ -65,13 +71,13 @@
       <Text>Источник для возрождения сохранился</Text>
     </Row>
     <Row Tag="LOC_JAC_RP_DEFERRED" Language="ja_JP">
-      <Text>分岐を記録（効果は未決）</Text>
+      <Text>旧仕様の選択記録（効果は未適用）</Text>
     </Row>
     <Row Tag="LOC_JAC_RP_DEFERRED" Language="en_US">
-      <Text>Branch recorded (effects undecided)</Text>
+      <Text>Legacy choice (effects not applied)</Text>
     </Row>
     <Row Tag="LOC_JAC_RP_DEFERRED" Language="ru_RU">
-      <Text>Ветка записана (эффекты не определены)</Text>
+      <Text>Старый выбор (эффекты не применены)</Text>
     </Row>
     <Row Tag="LOC_JAC_RP_SCRIPTURE" Language="ja_JP">
       <Text>教典</Text>

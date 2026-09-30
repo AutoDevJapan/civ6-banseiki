@@ -136,6 +136,9 @@ def validate_scenario(data: dict) -> None:
             for key in ("research_metrics", "allow_human_elimination"):
                 if key in step and type(step[key]) is not bool:
                     raise ScenarioError(f"Step {number}: {key} must be boolean")
+        elif action == "end_turn":
+            if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
+                raise ScenarioError(f"Step {number}: turns must be positive")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -1011,7 +1014,10 @@ class Runner:
                                   research_metrics=step.get("research_metrics", False),
                                   allow_human_elimination=step.get("allow_human_elimination", False))
         if action == "end_turn":
-            return self._end_turn(timeout, deadline=deadline)
+            results = []
+            for _ in range(step.get("turns", 1)):
+                results.append(self._end_turn(_remaining(deadline), deadline=deadline))
+            return "; ".join(results)
         if action == "ui_lua":
             attempts = 0
             while True:

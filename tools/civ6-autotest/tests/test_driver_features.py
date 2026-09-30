@@ -17,6 +17,25 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class DriverFeatureTests(unittest.TestCase):
+    def test_end_turn_honours_count_default_and_shared_deadline(self):
+        runner = Runner({}, Path("unused-output"), Path("unused-game"), Path("unused-user"), 4318)
+        with patch.object(runner, "_end_turn", return_value="advanced") as advance:
+            self.assertEqual(runner._run_step({"action": "end_turn", "turns": 2}), "advanced; advanced")
+            self.assertEqual(advance.call_count, 2)
+            self.assertEqual(advance.call_args_list[0].kwargs["deadline"], advance.call_args_list[1].kwargs["deadline"])
+            advance.reset_mock()
+            self.assertEqual(runner._run_step({"action": "end_turn"}), "advanced")
+            advance.assert_called_once()
+        with patch.object(runner, "_end_turn", side_effect=ScenarioError("deadline")) as advance:
+            with self.assertRaisesRegex(ScenarioError, "deadline"):
+                runner._run_step({"action": "end_turn", "turns": 2})
+            advance.assert_called_once()
+
+    def test_end_turn_rejects_invalid_counts(self):
+        for turns in (0, -1, True, 1.5, "2"):
+            with self.subTest(turns=turns), self.assertRaisesRegex(ScenarioError, "turns"):
+                validate_scenario({"name": "turn count", "steps": [{"action": "end_turn", "turns": turns}]})
+
     def test_build_setup_checks_every_player_after_refresh(self):
         players = [{"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": True},
                    {"leader": "LEADER_JAC_TAKEDA_NOBUTORA", "civ": "CIVILIZATION_JAC_TAKEDA", "human": False}]

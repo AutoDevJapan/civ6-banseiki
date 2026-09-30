@@ -61,3 +61,41 @@ INSERT INTO JAC_RP_Outcomes VALUES
 ('ARTIFACT', 'LOC_JAC_RP_ARTIFACT'),
 ('DIPLOMATIC_INCIDENT', 'LOC_JAC_RP_DIPLOMATIC_INCIDENT'),
 ('HERO', 'LOC_JAC_RP_HERO');
+
+-- SSOT 9.3: recommended PoC values, fixed at standard-speed magnitudes.
+CREATE TABLE JAC_RP_Rules (ID TEXT NOT NULL PRIMARY KEY, Value INTEGER NOT NULL);
+INSERT INTO JAC_RP_Rules VALUES
+('REVIVAL_FOLLOWERS', 2),
+('REVIVAL_FAITH_COST', 60),
+('REVIVAL_COOLDOWN_TURNS', 10),
+('SELL_GOLD', 40),
+('RESEARCH_SCIENCE', 20),
+('HERESY_CULTURE', 20),
+('ABSORB_FAITH', 20),
+('ARTIFACT_CULTURE', 30),
+('INCIDENT_FAVOR', 10),
+('HERO_FAITH_COST', 60);
+
+-- One modifier ID per religion and branch: even RunOnce grants never need to
+-- reattach the same ID to the same player. Lua enforces the corresponding limit.
+-- Official model: Base/Assets/Gameplay/Data/GoodyHuts.xml:72-107,233-245.
+INSERT INTO Modifiers (ModifierId, ModifierType, RunOnce, Permanent)
+SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'MODIFIER_PLAYER_GRANT_YIELD', 1, 1
+FROM JAC_RP_Religions r CROSS JOIN JAC_RP_Outcomes o
+WHERE o.ID IN ('RESEARCH', 'HERESY', 'ARTIFACT');
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'YieldType',
+  CASE o.ID WHEN 'RESEARCH' THEN 'YIELD_SCIENCE' ELSE 'YIELD_CULTURE' END
+FROM JAC_RP_Religions r CROSS JOIN JAC_RP_Outcomes o
+WHERE o.ID IN ('RESEARCH', 'HERESY', 'ARTIFACT');
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'Amount', rules.Value
+FROM JAC_RP_Religions r CROSS JOIN JAC_RP_Outcomes o
+JOIN JAC_RP_Rules rules ON rules.ID = CASE o.ID
+  WHEN 'RESEARCH' THEN 'RESEARCH_SCIENCE'
+  WHEN 'HERESY' THEN 'HERESY_CULTURE'
+  WHEN 'ARTIFACT' THEN 'ARTIFACT_CULTURE' END;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'Scale', 'false'
+FROM JAC_RP_Religions r CROSS JOIN JAC_RP_Outcomes o
+WHERE o.ID IN ('RESEARCH', 'HERESY', 'ARTIFACT');
