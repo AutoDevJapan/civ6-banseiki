@@ -332,7 +332,13 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(manifest.findtext("./InGameActions/AddGameplayScripts/File"),
                          "Scripts/JAC_ReligionPersistence.lua")
         self.assertEqual(manifest.findtext("./InGameActions/AddUserInterfaces/File"),
-                         "UI/JAC_ReligionPersistence_HeroUI.lua")
+                         "UI/JAC_ReligionPersistence_HeroUI.xml")
+        ui_file = MOD / manifest.findtext("./InGameActions/AddUserInterfaces/File")
+        context = ET.parse(ui_file).getroot()
+        self.assertEqual(context.tag, "Context")
+        self.assertEqual(context.get("Name"), ui_file.stem)
+        self.assertEqual(len(context), 0)  # No visible controls.
+        self.assertEqual(ui_file.with_suffix(".lua").read_text(encoding="utf-8"), UI_SCRIPT)
         self.assertLess(int(manifest.findtext("./InGameActions/UpdateDatabase/Properties/LoadOrder")),
                         int(manifest.findtext("./InGameActions/AddGameplayScripts/Properties/LoadOrder")))
 

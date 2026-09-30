@@ -55,7 +55,7 @@
     </AddGameplayScripts>
     <AddUserInterfaces id="JAC_RP_HeroUI" criteria="JAC_RP_BanseikiOnly">
       <Properties><Context>InGame</Context></Properties>
-      <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
+      <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
     </AddUserInterfaces>
   </InGameActions>
   <Files>
@@ -64,5 +64,6 @@
     <File>Text/JAC_ReligionPersistence_Text.xml</File>
     <File>Scripts/JAC_ReligionPersistence.lua</File>
     <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
+    <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
   </Files>
 </Mod>
