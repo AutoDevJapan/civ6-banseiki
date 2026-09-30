@@ -192,7 +192,6 @@
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
@@ -349,7 +348,6 @@
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
@@ -392,22 +390,18 @@
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
@@ -531,27 +525,22 @@
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
       "action": "end_turn",
-      "turns": 1,
       "timeout": 240
     },
     {
@@ -726,7 +715,22 @@
     },
     {
       "action": "end_turn",
-      "turns": 5,
+      "timeout": 1200
+    },
+    {
+      "action": "end_turn",
+      "timeout": 1200
+    },
+    {
+      "action": "end_turn",
+      "timeout": 1200
+    },
+    {
+      "action": "end_turn",
+      "timeout": 1200
+    },
+    {
+      "action": "end_turn",
       "timeout": 1200
     },
     {
@@ -908,6 +912,19 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal me=0;\nlocal city=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'));\nif not city then error('skill target city missing') end;\nlocal wanted={['JAC_PERSONA_ODA_NOBUHIDE_BASE']=true,['JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1']=true,['JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2']=true}; local args={['JAC_PERSONA_ODA_NOBUHIDE_BASE']={kind='GOLD',amount=10},['JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1']={kind='PRODUCTION',amount=10},['JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2']={kind='MILITARY',amount=20}}; local found={};\nlocal cname=Locale.Lookup(city:GetName());\nfor _,id in ipairs(GameEffects.GetModifiers()) do\n  local d=GameEffects.GetModifierDefinition(id);\n  if d and wanted[d.Id]~=nil and GameEffects.GetModifierActive(id) then\n    for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n      if GameEffects.GetObjectsPlayerId(obj)==me and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then\n        found[d.Id]=(found[d.Id] or 0)+1;\n      end\n    end\n  end\nend\nfor mid,active in pairs(wanted) do\n  if (found[mid] or 0)~=(active and 1 or 0) then error(mid..' effective city instances: '..tostring(found[mid])..' expected active '..tostring(active)) end;\n  local a=args[mid]; local vals={};\n  for r in GameInfo.ModifierArguments() do if r.ModifierId==mid then vals[r.Name]=r.Value end end;\n  if tonumber(vals.Amount)~=a.amount then error(mid..' amount differs') end;\n  if a.kind~='AMENITIES' and a.kind~='MILITARY' and vals.YieldType~='YIELD_'..a.kind then error(mid..' yield differs') end;\nend\nreturn 'ODA_NOBUHIDE native skill effects verified in city A'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; LuaEvents.GovernorDetailsPanel_OpenDetails(GameInfo.Governors[r.GovernorType].Index, true); return 'opened Date Governor details'"
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-governor-details.png"
     }
   ]
 }
