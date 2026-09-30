@@ -551,31 +551,31 @@ class LedgerTests(unittest.TestCase):
         self.turns(1, 66)
         r1 = self.g.LEDGER().history["r1"]
         self.assertEqual((r1.turn, r1.length), (66, 65))
-        # Imagawa: 3 cities, L = 65: golden ceil(31 x 65 / 300) = 7, dark ceil(17 x 65 / 300) = 4; no points -> dark.
-        self.assertEqual((r1.p3.golden, r1.p3.dark, r1.p3.age), (7, 4, "DARK"))
-        self.assertEqual((r1.p2.golden, r1.p2.dark), (7, 4))  # Hojo: 1 city
-        # 永禄 at turn 73, L = 7; one past dark age: shift 3 - 5 = -2 -> dark ceil(12 x 7 / 300) = 1, golden
-        # ceil(26 x 7 / 300) = 1 raised to dark + 1 = 2 (a normal age stays possible).
+        # Imagawa: 3 cities, L = 65: golden ceil(31 x 65 / 300) = 7, dark floor(17 x 65 / 300) = 3; no points -> dark.
+        self.assertEqual((r1.p3.golden, r1.p3.dark, r1.p3.age), (7, 3, "DARK"))
+        self.assertEqual((r1.p2.golden, r1.p2.dark), (7, 3))  # Hojo: 1 city
+        # 永禄 at turn 73, L = 7; one past dark age: shift 3 - 5 = -2 -> dark floor(12 x 7 / 300) = 0, golden
+        # ceil(26 x 7 / 300) = 1 raised to MIN_GOLDEN = 2.
         self.g.Players[3].research.techs[1] = True
         self.g.Players[3].research.techs[2] = True
         self.g.Players[3].research.techs[3] = True
         self.g.Players[3].research.techs[4] = True
         self.turns(67, 73)
         r2 = self.g.LEDGER().history["r2"]
-        self.assertEqual((r2.length, r2.p3.golden, r2.p3.dark, r2.p3.score), (7, 2, 1, 4))
+        self.assertEqual((r2.length, r2.p3.golden, r2.p3.dark, r2.p3.score), (7, 2, 0, 4))
         self.assertEqual(r2.p3.age, "HEROIC")  # golden right after dark
         self.assertEqual((self.house(3).golden, self.house(3).dark), (1, 1))
-        # Oda: 2 cities, one past dark: dark ceil(11 x 7 / 300) = 1, golden 2.
-        self.assertEqual((r2.p0.golden, r2.p0.dark, r2.p0.age), (2, 1, "DARK"))
-        self.assertEqual(self.house(0).dark, 2)
-        # Hojo after two dark ages at 元亀 (L = 37): shift 1 - 10 -> golden ceil(19 x 37 / 300) = 3,
-        # dark ceil(5 x 37 / 300) = 1.
+        # Oda: 2 cities, one past dark: dark floor(11 x 7 / 300) = 0, golden 2; no points in 7 turns is normal.
+        self.assertEqual((r2.p0.golden, r2.p0.dark, r2.p0.age), (2, 0, "NORMAL"))
+        self.assertEqual(self.house(0).dark, 1)
+        # Hojo after one dark age at 元亀 (L = 37): shift 1 - 5 -> golden ceil(24 x 37 / 300) = 3,
+        # dark floor(10 x 37 / 300) = 1.
         self.turns(74, 110)
         r3 = self.g.LEDGER().history["r3"]
         self.assertEqual((r3.p2.golden, r3.p2.dark), (3, 1))
         self.house(2).dark = 9
-        self.turns(111, 119)  # 天正, L = 9: (14 + 1 - 50) < 0 -> dark 1, golden 2
-        self.assertEqual((self.g.LEDGER().history["r4"].p2.golden, self.g.LEDGER().history["r4"].p2.dark), (2, 1))
+        self.turns(111, 119)  # 天正, L = 9: (14 + 1 - 50) < 0 -> dark 0, golden 2
+        self.assertEqual((self.g.LEDGER().history["r4"].p2.golden, self.g.LEDGER().history["r4"].p2.dark), (2, 0))
 
     def test_reign_turns_follow_the_calendar(self):
         self.turns(1, 200)
@@ -663,10 +663,12 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.house(1).policy, "JAC_AGE_POLICY_PIRATE")
         self.assertEqual(self.policy_flags(5, 5)["PIRATE"], (1, 1))
         self.assertTrue(any("already chosen" in line for line in self.g.LOG.values()))
-        self.turns(73)  # 永禄: dark again -> the default again, and a new choice is open
+        self.turns(73)  # 永禄 (L = 7): normal, the policy ends
+        self.assertEqual((self.house(1).age, self.house(1).policy), ("NORMAL", None))
+        self.turns(74, 110)  # 元亀 (L = 37): dark again -> the default again, and a new choice is open
         self.assertEqual((self.house(1).age, self.house(1).policy), ("DARK", "JAC_AGE_POLICY_ELITE"))
-        self.choose(1, "JAC_AGE_POLICY_TEMPLE", reign=2)
-        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 2))
+        self.choose(1, "JAC_AGE_POLICY_TEMPLE", reign=3)
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 3))
 
     def test_invalid_choices_are_dropped(self):
         self.turns(1, 30)
@@ -865,7 +867,75 @@ class KojiDistributionTests(unittest.TestCase):
         self.assertEqual([r1[f"p{pid}"].score for pid in range(len(KOJI_OBSERVED))], [s for s, _ in KOJI_OBSERVED])
         ages = [r1[f"p{pid}"].age for pid in range(len(KOJI_OBSERVED))]
         counts = {age: ages.count(age) for age in ("GOLDEN", "NORMAL", "DARK")}
-        self.assertEqual(counts, {"GOLDEN": 3, "NORMAL": 15, "DARK": 4})
+        self.assertEqual(counts, {"GOLDEN": 3, "NORMAL": 19, "DARK": 0})
+
+
+# Live 2026-09-30 (tools/civ6-autotest/artifacts/health-200-01/Lua.log, 200 turns, 22 AI houses, player 13 fell
+# before 元亀): per 改元 (judgement turn, [(score, cities) per player, None when fallen]). The scores are logged; the
+# city counts are not, so they are the middle of what the logged thresholds allow under the old rule
+# (a short period allows a wide range; its threshold barely depends on it). With them the old rule
+# (dark >= max(1, ceil(...))) gives back the logged ages of all 128 houses, whose counts
+# golden/heroic/normal/dark were 弘治 L=65 4/0/13/5, 永禄 L=7 0/0/8/14, 元亀 L=37 0/8/6/7, 天正 L=9 1/1/9/10,
+# 文禄 L=59 5/5/7/4, 慶長 L=11 4/0/6/11: the short periods scored 0-1 points and a 0 was dark.
+HEALTH_200 = [
+    (66, [(4, 2), (6, 6), (5, 6), (5, 6), (10, 6), (4, 2), (3, 2), (5, 6), (3, 2), (9, 2), (15, 11), (8, 6), (5, 2),
+          (3, 2), (5, 6), (6, 2), (4, 2), (3, 2), (5, 2), (5, 6), (2, 2), (4, 2)]),
+    (73, [(1, 2), (0, 6), (0, 6), (0, 6), (1, 6), (1, 2), (0, 2), (1, 6), (0, 2), (0, 2), (0, 11), (0, 6), (1, 2),
+          (0, 2), (1, 6), (0, 2), (1, 2), (1, 2), (0, 2), (0, 6), (0, 2), (0, 2)]),
+    (110, [(1, 3), (1, 12), (6, 8), (4, 4), (3, 10), (2, 3), (3, 5), (3, 7), (3, 5), (4, 3), (18, 15), (3, 7), (2, 3),
+           None, (4, 7), (0, 4), (2, 7), (2, 4), (2, 4), (2, 4), (4, 2), (5, 4)]),
+    (119, [(1, 3), (1, 12), (1, 8), (5, 4), (0, 10), (0, 3), (0, 5), (1, 7), (0, 5), (0, 3), (1, 15), (1, 7), (0, 3),
+           None, (1, 7), (2, 4), (0, 7), (1, 4), (1, 4), (0, 4), (0, 2), (1, 4)]),
+    (178, [(6, 4), (10, 12), (5, 9), (5, 7), (4, 12), (2, 2), (5, 7), (9, 9), (8, 4), (6, 4), (11, 19), (4, 9), (9, 4),
+           None, (6, 9), (8, 7), (5, 7), (4, 7), (7, 9), (4, 9), (3, 2), (4, 9)]),
+    (189, [(1, 4), (3, 12), (0, 9), (0, 7), (1, 12), (0, 2), (0, 7), (6, 9), (0, 4), (1, 4), (0, 19), (0, 9), (1, 4),
+           None, (0, 9), (1, 7), (2, 7), (0, 7), (0, 9), (4, 9), (0, 2), (1, 9)]),
+]
+HEALTH_200_OLD = [(4, 0, 13, 5), (0, 0, 8, 14), (0, 8, 6, 7), (1, 1, 9, 10), (5, 5, 7, 4), (4, 0, 6, 11)]
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
+class ShortReignDistributionTests(unittest.TestCase):
+    def ages(self, old_rule: bool = False) -> list[tuple[int, int, int, int]]:
+        script = (MOD / "Scripts/JAC_Sengoku_Ages.lua").read_text(encoding="utf-8")
+        if old_rule:  # dark >= max(1, ceil(...)), golden >= max(dark + 1, ceil(...))
+            for new, old in (("math.max(0, math.floor(", "math.max(1, math.ceil("),
+                             ("math.max(MIN_GOLDEN, ", "math.max(dark + 1, ")):
+                self.assertEqual(script.count(new), 1)
+                script = script.replace(new, old)
+        lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        lua.execute(STUBS, lua.table_from(ages_tables(), recursive=True),
+                    lua.table_from([f"CIVILIZATION_JAC_H{i}" for i in range(22)]), START_TURN)
+        g = lua.globals()
+        g.START_TURN(1)  # before the script: no ledger yet; the cities come in reign by reign
+        lua.execute(script)
+        g.START_TURN(2)
+        counts = []
+        for index, (due, houses) in enumerate(HEALTH_200, 1):
+            g.CITIES = lua.table_from([{"owner": pid, "x": n, "y": pid, "capital": n == 0}
+                                       for pid, house in enumerate(houses) if house for n in range(house[1])])
+            for pid, house in enumerate(houses):
+                g.ALIVE[pid] = house is not None
+                if house:
+                    g.LEDGER().houses[f"p{pid}"].score = house[0]
+            g.START_TURN(due)
+            reign = g.LEDGER().history[f"r{index}"]
+            ages = [reign[f"p{pid}"].age for pid, house in enumerate(houses) if house]
+            counts.append(tuple(ages.count(age) for age in ("GOLDEN", "HEROIC", "NORMAL", "DARK")))
+        return counts
+
+    def test_the_old_rule_gives_back_the_logged_ages(self):
+        self.assertEqual(self.ages(old_rule=True), HEALTH_200_OLD)
+
+    def test_short_periods_leave_most_houses_normal(self):
+        counts = self.ages()
+        for golden, heroic, normal, dark in counts:
+            total = golden + heroic + normal + dark
+            self.assertLessEqual(dark * 3, total)
+            self.assertGreater(normal, max(golden + heroic, dark))
+        self.assertTrue(any(golden + heroic for golden, heroic, _, _ in counts))
+        self.assertEqual(counts, [(4, 0, 17, 1), (0, 0, 22, 0), (5, 0, 13, 3), (1, 1, 19, 0), (6, 0, 10, 5),
+                                  (4, 0, 15, 2)])
 
 
 if __name__ == "__main__":
