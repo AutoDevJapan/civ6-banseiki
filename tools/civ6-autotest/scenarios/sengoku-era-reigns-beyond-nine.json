@@ -1,0 +1,181 @@
+{
+  "name": "Compressed 48-reign fixture using JAC_Test_EraTiming: official future to Shoho at 19 and Keian at 21, ledger and suppressed official UI",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
+      "map_size": "MAPSIZE_DUEL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620960,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('JAC_ERA_TIMING_TAIL', true)\nif GameConfiguration.GetValue('JAC_ERA_TIMING_TAIL')~=true then error('tail fixture flag not set') end\nreturn true"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' or GameConfiguration.GetStartTurn()~=1 then error('wrong ruleset/start turn') end\nif GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType~='GAMESPEED_STANDARD' then error('wrong speed') end\nlocal fixture=GameInfo.GlobalParameters['JAC_TEST_ERA_TAIL_VERSION']\nif not fixture or tonumber(fixture.Value)~=1 then error('optional tail fixture not loaded') end\nif tonumber(GameInfo.GlobalParameters['NEXT_ERA_TURN_COUNTDOWN'].Value)~=1 then error('wrong countdown') end\nlocal rows={}; for row in GameInfo.Eras_XP1() do rows[row.EraType]=row end\nlocal count=0\nfor era in GameInfo.Eras() do\n count=count+1\n local row=rows[era.EraType]\n if not row then error('missing era length '..era.EraType) end\n if era.EraType=='ERA_JAC_CHIDAI' then\n  if row.GameEraMinimumTurns~=nil or row.GameEraMaximumTurns~=nil then error('terminal era must be endless') end\n elseif row.GameEraMinimumTurns~=2 or row.GameEraMaximumTurns~=2 then error('compressed length missing '..era.EraType) end\nend\nif count~=48 then error('expected 48 eras') end\nreturn true"
+    },
+    {
+      "action": "autoplay",
+      "turns": 17,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local T,n,kind=18,8,'ERA_FUTURE'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local T,n,kind=18,8,'ERA_FUTURE'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nif Game.GetEras():GetCurrentEraStartTurn()~=17 then error('engine era start mismatch') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('official era popup shown') end\nStartEraShow()\nif not ContextPtr:IsHidden() then error('official era popup opened') end\nreturn 'official era popup suppressed'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local T,n,kind=19,9,'ERA_JAC_SHOHO'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\n\nlocal h=l.history['r'..n]\nif type(h)~='table' or h.turn~=T or h.due~=T or h.length~=2 or h.from~=n-1 then error('judgement mismatch on turn '..T) end\nif type(h.p0)~='table' then error('human judgement missing') end\nprint('[JAC_ERA_VERIFY] turn='..T..' reign='..n..' era='..kind..' ledgerEngineEra='..tostring(h.engineEra))\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local T,n,kind=19,9,'ERA_JAC_SHOHO'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\n\nlocal h=l.history['r'..n]\nif type(h)~='table' or h.turn~=T or h.due~=T or h.length~=2 or h.from~=n-1 then error('judgement mismatch on turn '..T) end\nif type(h.p0)~='table' then error('human judgement missing') end\nprint('[JAC_ERA_VERIFY] turn='..T..' reign='..n..' era='..kind..' ledgerEngineEra='..tostring(h.engineEra))\nif Game.GetEras():GetCurrentEraStartTurn()~=19 then error('engine era start mismatch') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('official era popup shown') end\nStartEraShow()\nif not ContextPtr:IsHidden() then error('official era popup opened') end\nreturn 'official era popup suppressed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER')\nlocal r=l and l.history and l.history['r9'] and l.history['r9'].p0\nif type(r)~='table' then error('human ledger result missing') end\nlocal last=JAC_REIGN_POPUP_LAST\nif type(last)~='table' or last.reign~=9 or last.reignType~='REIGN_SHOHO' or last.turn~=19 or last.age~=r.age or last.score~=r.score then error('automatic reign popup record mismatch') end\nif ContextPtr:IsHidden() and not JAC_ShowReignPopup(true) then error('cannot reopen reign popup') end\nif ContextPtr:IsHidden() then error('reign popup hidden') end\nif Controls.Title:GetText()~=Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_SHOHO_ANNOUNCEMENT')) then error('reign title mismatch') end\nif Controls.EraRibbonValue:GetText()~=JAC_AgesView_AgeLabel(r.age) then error('age label mismatch') end\nif Controls.Score:GetText()~=Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE','LOC_JAC_REIGN_KAN_EI_NAME',r.score) then error('score text mismatch') end\nOnClose()\nif not ContextPtr:IsHidden() then error('reign popup did not close') end\nreturn true"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local T,n,kind=20,9,'ERA_JAC_SHOHO'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local T,n,kind=20,9,'ERA_JAC_SHOHO'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nif Game.GetEras():GetCurrentEraStartTurn()~=19 then error('engine era start mismatch') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('official era popup shown') end\nStartEraShow()\nif not ContextPtr:IsHidden() then error('official era popup opened') end\nreturn 'official era popup suppressed'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local T,n,kind=21,10,'ERA_JAC_KEIAN'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\n\nlocal h=l.history['r'..n]\nif type(h)~='table' or h.turn~=T or h.due~=T or h.length~=2 or h.from~=n-1 then error('judgement mismatch on turn '..T) end\nif type(h.p0)~='table' then error('human judgement missing') end\nprint('[JAC_ERA_VERIFY] turn='..T..' reign='..n..' era='..kind..' ledgerEngineEra='..tostring(h.engineEra))\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local T,n,kind=21,10,'ERA_JAC_KEIAN'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\n\nlocal h=l.history['r'..n]\nif type(h)~='table' or h.turn~=T or h.due~=T or h.length~=2 or h.from~=n-1 then error('judgement mismatch on turn '..T) end\nif type(h.p0)~='table' then error('human judgement missing') end\nprint('[JAC_ERA_VERIFY] turn='..T..' reign='..n..' era='..kind..' ledgerEngineEra='..tostring(h.engineEra))\nif Game.GetEras():GetCurrentEraStartTurn()~=21 then error('engine era start mismatch') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('official era popup shown') end\nStartEraShow()\nif not ContextPtr:IsHidden() then error('official era popup opened') end\nreturn 'official era popup suppressed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER')\nlocal r=l and l.history and l.history['r10'] and l.history['r10'].p0\nif type(r)~='table' then error('human ledger result missing') end\nlocal last=JAC_REIGN_POPUP_LAST\nif type(last)~='table' or last.reign~=10 or last.reignType~='REIGN_KEIAN' or last.turn~=21 or last.age~=r.age or last.score~=r.score then error('automatic reign popup record mismatch') end\nif ContextPtr:IsHidden() and not JAC_ShowReignPopup(true) then error('cannot reopen reign popup') end\nif ContextPtr:IsHidden() then error('reign popup hidden') end\nif Controls.Title:GetText()~=Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_KEIAN_ANNOUNCEMENT')) then error('reign title mismatch') end\nif Controls.EraRibbonValue:GetText()~=JAC_AgesView_AgeLabel(r.age) then error('age label mismatch') end\nif Controls.Score:GetText()~=Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE','LOC_JAC_REIGN_SHOHO_NAME',r.score) then error('score text mismatch') end\nOnClose()\nif not ContextPtr:IsHidden() then error('reign popup did not close') end\nreturn true"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local T,n,kind=22,10,'ERA_JAC_KEIAN'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local T,n,kind=22,10,'ERA_JAC_KEIAN'\nlocal t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1\nif t~=T then error('turn '..t..' expected '..T) end\nlocal index=GameInfo.Eras[kind].Index\nif Game.GetEras():GetCurrentEra()~=index then error('era mismatch on turn '..T..': '..tostring(Game.GetEras():GetCurrentEra())) end\nlocal l=Game:GetProperty('JAC_AGES_LEDGER')\nif type(l)~='table' or l.reign~=n or type(l.history)~='table' then error('ledger reign mismatch on turn '..T) end\nif l.history['r'..(n+1)]~=nil then error('next reign judged early') end\nif Game.GetEras():GetCurrentEraStartTurn()~=21 then error('engine era start mismatch') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('official era popup shown') end\nStartEraShow()\nif not ContextPtr:IsHidden() then error('official era popup opened') end\nreturn 'official era popup suppressed'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('JAC_ERA_TIMING_TAIL', false)\nreturn true"
+    }
+  ]
+}
