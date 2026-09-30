@@ -25,6 +25,7 @@ class TuningReportTests(unittest.TestCase):
 [1] [JAC_ARB] refused player=1 pair=0-1 turn=21 legitimacy=60
 [1] [JAC_ARB] request player=2 pair=2-3 turn=40 power=1
 [1] [JAC_ARB] accepted pair=2-3 turn=41 truce_turns=10
+[1] [JAC_AGES] points player=3 part=ko +8 score=14 key=ko:1 turn=101
 '''
         with tempfile.TemporaryDirectory() as tmp:
             data = report.summarize(self.make_artifact(tmp, lua, []))
@@ -35,7 +36,9 @@ class TuningReportTests(unittest.TestCase):
         self.assertEqual(data['arbitration']['request'], 2)
         self.assertEqual(data['arbitration']['accepted'], 1)
         self.assertEqual(data['arbitration']['refused'], 1)
+        self.assertEqual(data['arbitration']['refused_cases'], 1)
         self.assertEqual(data['arbitration']['request_intervals'], [20])
+        self.assertEqual(data['elimination_point_events'], [{'capturer':3,'player':1,'turn':101}])
         self.assertFalse(data['complete_200_turns'])
 
     def test_duplicate_judgment_is_rejected(self):
