@@ -129,25 +129,29 @@ class HistoricalEventTests(unittest.TestCase):
                 expected = set() if "ALL" in e["affected_factions"] else {
                     f"CIVILIZATION_JAC_{f}" for f in e["affected_factions"]}
                 self.assertEqual(targets, expected)  # no rows: every major faction
-        # E5a: 19 events carry the advisor line, 54 a boost (documents/research/sengoku-events.md §2.6).
+        # E5a: 19 events carry the advisor line, 55 a boost (documents/research/sengoku-events.md §2.6).
         self.assertEqual(db.execute("SELECT SUM(Advisor), COUNT(BoostTech) + COUNT(BoostCivic) "
-                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 54))
+                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 55))
 
     def test_renames_are_the_ssot_stages(self):
-        # SSOT 3.2: Nagao->Uesugi, Matsudaira->Tokugawa, Oda->Hashiba->Toyotomi (Q56 option 1 dates, provisional).
+        # SSOT 3.2: every stage by research only (succession civics: C16 for Uesugi, Tokugawa, Hashiba; C24 for
+        # Toyotomi; owner decisions 2026-09-30, Q 1a), the event's year boosting that civic.
         db = load_db()
-        rows = db.execute("SELECT r.EventType, r.CivilizationType, r.Name, e.Year, e.Month FROM "
+        rows = db.execute("SELECT r.EventType, r.CivilizationType, r.Name, e.Year, e.Month, r.CivicType FROM "
                           "JAC_HistoricalEventRenames r JOIN JAC_HistoricalEvents e USING (EventType) "
                           "ORDER BY e.Year, e.Month").fetchall()
         self.assertEqual(rows, [
-            ("JAC_EVENT_NAGAO_TO_UESUGI", "CIVILIZATION_JAC_NAGAO", "LOC_JAC_EVENT_UESUGI_CIV_NAME", 1561, 4),
-            ("JAC_EVENT_MATSUDAIRA_TOKUGAWA", "CIVILIZATION_JAC_MATSUDAIRA", "LOC_JAC_EVENT_TOKUGAWA_CIV_NAME", 1567, 1),
-            ("JAC_EVENT_HONNOJI", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_HASHIBA_CIV_NAME", 1582, 6),
-            ("JAC_EVENT_TOYOTOMI_SURNAME", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME", 1586, 10),
+            ("JAC_EVENT_NAGAO_TO_UESUGI", "CIVILIZATION_JAC_NAGAO", "LOC_JAC_EVENT_UESUGI_CIV_NAME", 1561, 4,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_MATSUDAIRA_TOKUGAWA", "CIVILIZATION_JAC_MATSUDAIRA", "LOC_JAC_EVENT_TOKUGAWA_CIV_NAME", 1567, 1,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_HONNOJI", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_HASHIBA_CIV_NAME", 1582, 6,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_TOYOTOMI_SURNAME", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME", 1586, 10,
+             "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION"),
         ])
-        # Owner decision 2a: Nagao -> Uesugi keeps "year 1561 or the court-and-shogunate civic first".
-        self.assertIn(("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",), db.execute(
-            "SELECT CivicType FROM JAC_HistoricalEventPrereqCivics WHERE EventType = 'JAC_EVENT_NAGAO_TO_UESUGI'").fetchall())
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM JAC_HistoricalEventRenames r JOIN JAC_HistoricalEvents e "
+                                    "USING (EventType) WHERE r.CivicType IS NOT e.BoostCivic").fetchone()[0], 0)
 
     def test_year_to_turn_follows_the_sengoku_calendar(self):
         start, stages = calendar()

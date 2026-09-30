@@ -117,6 +117,13 @@ end
 
 local EVENTS = LoadEvents()
 
+local RESEARCH_RENAMES = {}
+for _, event in ipairs(EVENTS) do
+	for _, row in ipairs(event.renames) do
+		table.insert(RESEARCH_RENAMES, { event = event, row = row, civic = GameInfo.Civics[row.CivicType].Index })
+	end
+end
+
 local function CivType(playerID)
 	return PlayerConfigurations[playerID]:GetCivilizationTypeName()
 end
@@ -194,21 +201,31 @@ end
 -- SSOT 3.2: a house changes its name in stages (Oda -> Hashiba -> Toyotomi). A stage can come early by
 -- research or come again when a boosted faction researches later, so the stage with the latest due turn stays
 -- shown and an earlier stage never overwrites it.
-local function Rename(event, civType)
-	for _, row in ipairs(event.renames) do
-		if row.CivilizationType == civType then
-			local stage = Game:GetProperty(CIV_STAGE_PREFIX .. civType)
-			if stage == nil or event.due >= stage then
-				Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name)
-				Game:SetProperty(CIV_STAGE_PREFIX .. civType, event.due)
-			end
+local function SetName(event, row)
+	local civType = row.CivilizationType
+	local stage = Game:GetProperty(CIV_STAGE_PREFIX .. civType)
+	if stage == nil or (event.due >= stage and Game:GetProperty(CIV_NAME_PREFIX .. civType) ~= row.Name) then
+		Game:SetProperty(CIV_NAME_PREFIX .. civType, row.Name)
+		Game:SetProperty(CIV_STAGE_PREFIX .. civType, event.due)
+		return true
+	end
+	return false
+end
+
+-- Every stage (Nagao, Matsudaira, Oda: succession by research, owner decisions 2026-09-30) follows its civic only,
+-- whether or not the event has happened; the event's year gives only its boost toward the civic.
+local function RenameByResearch(player, playerID, civType, turn)
+	for _, stage in ipairs(RESEARCH_RENAMES) do
+		if stage.row.CivilizationType == civType and player:GetCulture():HasCivic(stage.civic)
+				and SetName(stage.event, stage.row) then
+			Log(string.format("renamed civ=%s name=%s player=%d civic=%s turn=%d", civType, stage.row.Name, playerID,
+				stage.row.CivicType, turn))
 		end
 	end
 end
 
 -- reason "prereq" (has the research) or "due" (the year of an event without research): effects and the flag.
--- reason "year": the year arrived without the research: boost only. The display-name switch still
--- follows the year (SSOT 3.2: Nagao -> Uesugi in 1561 or earlier with the civic).
+-- reason "year": the year arrived without the research: boost only. Names never follow the year (RenameByResearch).
 -- The advisor popup (UI/JAC_HistoricalEventsAdvisor.lua) reads the same two flags and shows on the turn the
 -- event first happens for the local player.
 local function Fire(event, player, playerID, civType, reason, turn)
@@ -223,7 +240,6 @@ local function Fire(event, player, playerID, civType, reason, turn)
 		for _, row in ipairs(event.modifiers) do player:AttachModifierByID(row.ModifierId) end
 		Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
 	end
-	Rename(event, civType)
 	-- A failed boost is retried next turn; announce once, when it goes through.
 	if not announced and done then Notify(event, playerID) end
 	Log(string.format("%s event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s",
@@ -251,6 +267,9 @@ local function OnGameTurnStarted()
 				if reason then Fire(event, player, playerID, civType, reason, turn) end
 			end
 		end
+	end
+	for _, playerID in ipairs(ids) do
+		RenameByResearch(Players[playerID], playerID, CivType(playerID), turn)
 	end
 end
 

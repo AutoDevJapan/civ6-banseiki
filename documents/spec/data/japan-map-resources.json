@@ -213,8 +213,8 @@
     }
   ],
   "trade_access": [
-    {"id": "niter-hirado", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "平戸", "province": "肥前", "coordinates": [129.553, 33.368], "available_from_year": 1586, "confidence": "medium", "source_ids": ["niter_trade"]},
-    {"id": "niter-sakai", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "堺", "province": "和泉", "coordinates": [135.483, 34.573], "available_from_year": null, "date_note": "16世紀の港交易圏としての仮置き。堺での個別硝石輸入を示す同時代史料は今回確認できず", "confidence": "low", "source_ids": ["niter_trade", "sakai_trade"]}
+    {"id": "niter-hirado", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "平戸", "province": "肥前", "coordinates": [129.553, 33.368], "available_from_year": 1586, "unlock_civic": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS", "confidence": "medium", "source_ids": ["niter_trade"]},
+    {"id": "niter-sakai", "commodity_ja": "硝石・焔硝", "civ6_id": "RESOURCE_NITER", "mode": "port_import_access", "port": "堺", "province": "和泉", "coordinates": [135.483, 34.573], "available_from_year": null, "unlock_civic": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS", "date_note": "16世紀の港交易圏としての仮置き。堺での個別硝石輸入を示す同時代史料は今回確認できず", "confidence": "low", "source_ids": ["niter_trade", "sakai_trade"]}
   ],
   "terrain": {
     "rivers": [
@@ -282,7 +282,7 @@
   "generator_rules": [
     "資源候補はWGS84から最寄りの適格タイルへ吸着。同一タイルは1資源のみとし、根拠強度・年代適合度で重複候補を監査する。",
     "1534年開始時にstart_yearが1534より後の資源を無条件に可視化しない。1590年代の開発地点は開始年・解禁条件を保持する。",
-    "RESOURCE_NITERを陸上鉱床として置かず、平戸・堺など交易アクセスとして保持する。",
+    "RESOURCE_NITERを陸上鉱床として置かず、平戸・堺など交易アクセスとして保持する。交易アクセスは年ではなく unlock_civic の研究で解放し、available_from_year は記録の年（オーナー判断 2026-09-30、SSOT 3.2）。",
     "河川は線をプロット共有辺へ変換する。利根川・石狩川・信濃川等の現代河道工事・分水路を年代補正する。",
     "湖沼はGSI湖岸形状を使い、現代の干拓・埋立を1534年に遡及しない。",
     "森林は適格陸地の45%を初期値、湿地は22-33タイルを上限に調整。火山は活火山の地形に1群1タイルを基本とする。",
