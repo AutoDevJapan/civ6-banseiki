@@ -23,7 +23,7 @@ STARTING_KNOWLEDGE = ROOT / "poc/JAC_PoC_SengokuTrees/Scripts/JAC_Sengoku_Starti
 CIVS = ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_NAGAO", "CIVILIZATION_JAC_DATE", "CIVILIZATION_JAC_SHIMAZU"]
 TABLES = ("JAC_HistoricalEvents", "JAC_HistoricalEventPrereqTechs", "JAC_HistoricalEventPrereqCivics",
           "JAC_HistoricalEventTargets",
-          "JAC_HistoricalEventModifiers", "JAC_HistoricalEventRenames", "JAC_HistoricalEventResources")
+          "JAC_HistoricalEventModifiers", "JAC_HistoricalEventRenames")
 
 STUBS = r"""
 local tables, civs, startTurn = ...
@@ -255,29 +255,25 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.assertEqual([(b[0], b[4]) for b in self.boosts("tech", self.teppo)], [(2, 30), (3, 30), (1, 31)])
         self.assertEqual(self.prop(1, "JAC_EVENT_BOOSTED_JAC_EVENT_TEPPO"), 31)
 
-    def test_resource_event_without_the_resources_mod_records_nothing(self):
-        self.g.Players[1].techs[self.tech("TECH_JAC_SENGOKU_MINE_MANAGEMENT")] = True  # Sado subjugation (Nagao)
-        self.run_turns(1, 1)
-        self.assertEqual(self.prop(1, "JAC_EVENT_FIRED_JAC_EVENT_SADO_SUBJUGATION"), 1)
-        self.assertIsNone(self.game("JAC_EVENT_RESOURCES_JAC_EVENT_SADO_SUBJUGATION"))
-        self.assertIn("[JAC_EVENTS] resource event=JAC_EVENT_SADO_SUBJUGATION skipped=resources_mod_not_loaded",
-                      self.log())
-
-    def test_only_reveal_rows_reach_the_resources_mod(self):
+    def test_resource_events_boost_the_sites_research_and_reveal_nothing(self):
+        # SSOT 3.2: the resources mod reveals a site in its own year or on its research; the event only boosts that
+        # research (Sado subjugation 1589/8; Nishimikawa's research is mine management).
         self.lua.execute("""
           REVEALED = {}
           ExposedMembers.JAC_Resources = {
             RevealSite = function(id) table.insert(REVEALED, id) end,
             IsRevealed = function() return true end,
-            GetSites = function() return { { id = "gold-sado-nishimikawa", plot = 10340 } } end,
+            GetSites = function() return {} end,
           }""")
-        self.g.Players[1].techs[self.tech("TECH_JAC_SENGOKU_MINE_MANAGEMENT")] = True  # Sado subjugation (reveal)
-        self.g.Players[3].civics[self.civic("CIVIC_JAC_SENGOKU_NANBAN_ENVOYS")] = True  # Hirado (trade access only)
-        self.run_turns(1, 2)
-        self.assertEqual(self.prop(3, "JAC_EVENT_FIRED_JAC_EVENT_HIRADO_PORTUGUESE"), 1)
-        # Sado subjugation and Aikawa (both Nagao, mine management), once each: not again on turn 2.
-        self.assertEqual(list(self.g.REVEALED.values()), ["gold-sado-nishimikawa", "gold-sado-aikawa"])
-        self.assertEqual(list(self.game("JAC_EVENT_RESOURCES_JAC_EVENT_SADO_SUBJUGATION").values()), [10340])
+        self.g.Players[2].civics[self.civic("CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES")] = True  # Aizu lacquer, early
+        sado = turn_for_year(1589, 8)
+        self.run_turns(1, sado)
+        self.assertEqual(self.prop(2, "JAC_EVENT_FIRED_JAC_EVENT_AIZU_LACQUER"), 1)
+        self.assertEqual(self.prop(1, "JAC_EVENT_BOOSTED_JAC_EVENT_SADO_SUBJUGATION"), sado)
+        self.assertIn((1, "tech", self.tech("TECH_JAC_SENGOKU_MINE_MANAGEMENT"), 1, sado),
+                      self.boosts("tech", self.tech("TECH_JAC_SENGOKU_MINE_MANAGEMENT")))
+        self.assertEqual(list(self.g.REVEALED.values()), [])
+        self.assertFalse([line for line in self.log() if "resource event=" in line])
 
     def test_rename_stages_keep_the_latest_even_when_an_earlier_stage_fires_later(self):
         # Oda has no research: Honnoji (1582/6) at turn 147 -> Hashiba, Toyotomi (1586/10) at turn 160.

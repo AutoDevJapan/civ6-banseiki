@@ -18,7 +18,7 @@
    ],
    "note": "発火するのは万世紀ルールセットの戦国パックで、採用の15 km日本マップ（SSOT 3.4。20 kmは比較用）を使うゲームだけ。実装ではこの3つをガードする"
   },
-  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない。action が ownership のときは owner_to（移転先の勢力ID）を必ず持つ",
+  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない。action が ownership のときは owner_to（移転先の勢力ID）を必ず持つ。reveal の地点は出来事では開示しない：資源 MOD が地点の年か、資源配置の REVEAL_TECH（tools/japan_map_scale/generate.py）の研究完了で開示する。出来事は史実の年に、その研究へのひらめき（boost）を与える（SSOT 3.2。オーナー判断 2026-09-30）。REVEAL_TECH のある reveal 地点の boost はその研究にする",
   "rename": "家名の表示切替（SSOT 3.2）。faction の表示名を from から to へ、このイベントの year／month で切り替える。同じ勢力の段階は年月順に from→to がつながる（織田→羽柴→豊臣）"
  },
  "events": [
@@ -233,8 +233,8 @@
    "note": "但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。",
    "boost": {
     "type": "tech",
-    "id": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
-    "short": "T06"
+    "id": "TECH_JAC_SENGOKU_CUPELLATION",
+    "short": "T09"
    },
    "advisor_popup": null
   },
@@ -3225,8 +3225,8 @@
    "note": "資源配置の gold-sado-aikawa（38.032, 138.235）。鶴子銀山（silver-sado-tsurushi、37.927, 138.351）とは別地点。",
    "boost": {
     "type": "tech",
-    "id": "TECH_JAC_SENGOKU_CUPELLATION",
-    "short": "T09"
+    "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "short": "T14"
    },
    "advisor_popup": null
   },

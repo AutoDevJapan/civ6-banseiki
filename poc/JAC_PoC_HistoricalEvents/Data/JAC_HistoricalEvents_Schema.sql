@@ -67,9 +67,10 @@ CREATE TABLE JAC_HistoricalEventRenames (
 
 -- Resources of an event. SiteId is a site of the Japan maps' resources mod (JAC_PoC_JapanMapScale
 -- Scripts/JAC_ResourceSites.lua) or of documents/spec/data/japan-map-resources.json.
--- reveal: the reserved site is revealed the first time the event happens for anyone (one row serves every map).
--- trade_access / ownership: recorded only (Q43: ownership is not transferred automatically); OwnerTo is the
--- civilization the ownership would go to.
+-- Records only; the event script does not read this table (SSOT 3.2).
+-- reveal: the reserved site the resources mod reveals in its own year or on its research; the event boosts that
+-- research instead of revealing it. trade_access / ownership: not implemented / not transferred automatically
+-- (Q43); OwnerTo is the civilization the ownership would go to.
 CREATE TABLE JAC_HistoricalEventResources (
 	EventType TEXT NOT NULL REFERENCES JAC_HistoricalEvents(EventType) ON DELETE CASCADE,
 	SiteId TEXT NOT NULL,

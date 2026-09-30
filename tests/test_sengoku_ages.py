@@ -478,26 +478,24 @@ class LedgerTests(unittest.TestCase):
 
     def relations(self, before_ledger: bool):
         """Start alliances Hojo-Imagawa and Oda-Takeda as JAC_Japan_1534Relations.lua: allied and a number property
-        at NewGameInitialized; the engine lapses them on turn 32 and the script re-makes them that turn."""
+        at NewGameInitialized; the engine lapses them on turn 32 and the script marks them false (not re-made)."""
         self.g.ALLIED["2-3"] = True
         self.g.ALLIED["0-1"] = True
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_HOJO-IMAGAWA", START_TURN)
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ODA-TAKEDA", START_TURN)
-        remake = self.lua.eval("""function()
-          if CURRENT_TURN - GameConfiguration.GetStartTurn() + 1 == 32 then
-            for _, pair in ipairs({{"2-3", "HOJO-IMAGAWA"}, {"0-1", "ODA-TAKEDA"}}) do
-              if type(Game:GetProperty("JAC_1534_ALLIANCE_" .. pair[2])) == "number" then
-                ALLIED[pair[1]] = true; Game:SetProperty("JAC_1534_ALLIANCE_" .. pair[2], CURRENT_TURN)
-              end
+        track = self.lua.eval("""function()
+          for _, pair in ipairs({{"2-3", "HOJO-IMAGAWA"}, {"0-1", "ODA-TAKEDA"}}) do
+            if type(Game:GetProperty("JAC_1534_ALLIANCE_" .. pair[2])) == "number" and not ALLIED[pair[1]] then
+              Game:SetProperty("JAC_1534_ALLIANCE_" .. pair[2], false)
             end
           end
         end""")
         if before_ledger:
             self.g.RESET_HANDLERS()
-            self.g.GameEvents.OnGameTurnStarted.Add(remake)
+            self.g.GameEvents.OnGameTurnStarted.Add(track)
             self.load_script()
         else:
-            self.g.GameEvents.OnGameTurnStarted.Add(remake)
+            self.g.GameEvents.OnGameTurnStarted.Add(track)
 
     def lapse_at_32(self):
         self.turns(1, 31)
@@ -505,16 +503,32 @@ class LedgerTests(unittest.TestCase):
         self.g.ALLIED["0-1"] = False
         self.turns(32, 34)
 
-    def test_start_alliance_lapse_and_remake_score_nothing_with_the_ledger_first(self):
+    def test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first(self):
         self.relations(before_ledger=False)
+        self.turns(1, 31)
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "start")
         self.lapse_at_32()
         self.assertEqual([self.score(p) for p in range(4)], [0, 0, 0, 0])
-        self.assertEqual(self.g.LEDGER().allies["2-3"], "start")
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "none")
+        self.assertIs(self.g.Game.GetProperty(None, "JAC_1534_ALLIANCE_HOJO-IMAGAWA"), False)
 
-    def test_start_alliance_lapse_and_remake_score_nothing_with_the_ledger_last(self):
+    def test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_last(self):
         self.relations(before_ledger=True)
         self.lapse_at_32()
         self.assertEqual([self.score(p) for p in range(4)], [0, 0, 0, 0])
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "none")
+
+    def test_a_pair_that_re_forms_on_the_lapse_turn_scores_in_either_order(self):
+        for before_ledger in (False, True):
+            with self.subTest(before_ledger=before_ledger):
+                self.setUp()
+                self.relations(before_ledger=before_ledger)
+                self.turns(1, 31)
+                self.g.ALLIED["2-3"] = False  # the engine lapse
+                self.turns(32)
+                self.g.ALLIED["2-3"] = True  # re-formed through diplomacy during turn 32
+                self.turns(33)
+                self.assertEqual((self.parts(2), self.parts(3)), ({"ally": 2}, {"ally": 2}))
 
     def test_ended_start_alliance_lingers_without_points_then_a_new_alliance_scores(self):
         self.relations(before_ledger=False)

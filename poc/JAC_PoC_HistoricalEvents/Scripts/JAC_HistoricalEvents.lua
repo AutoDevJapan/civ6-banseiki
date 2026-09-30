@@ -10,7 +10,6 @@
 
 local FIRED_PREFIX = "JAC_EVENT_FIRED_"          -- Player property: turn the event's effects were given (the flag)
 local BOOSTED_PREFIX = "JAC_EVENT_BOOSTED_"      -- Player property: turn the year arrived without the research (boost only)
-local RESOURCES_PREFIX = "JAC_EVENT_RESOURCES_"  -- Game property: plot indices where the event placed resources
 local CIV_NAME_PREFIX = "JAC_CIV_NAME_"          -- Game property read by CustomCivs UI/JAC_CivNameOverride.lua
 local CIV_STAGE_PREFIX = "JAC_CIV_NAME_STAGE_"   -- Game property: due turn of the rename shown now (latest stage wins)
 local FIRE_COUNT = "JAC_EVENTS_FIRE_COUNT"       -- Game property: total firings (for verification)
@@ -79,7 +78,7 @@ end
 
 local function LoadEvents()
 	local targets, modifiers = GroupBy("JAC_HistoricalEventTargets"), GroupBy("JAC_HistoricalEventModifiers")
-	local renames, resources = GroupBy("JAC_HistoricalEventRenames"), GroupBy("JAC_HistoricalEventResources")
+	local renames = GroupBy("JAC_HistoricalEventRenames")
 	local prereqTechs, prereqCivics = GroupBy("JAC_HistoricalEventPrereqTechs"), GroupBy("JAC_HistoricalEventPrereqCivics")
 	local boostRows = {}
 	for boost in GameInfo.Boosts() do
@@ -88,7 +87,7 @@ local function LoadEvents()
 	end
 	local events = {}
 	for row in GameInfo.JAC_HistoricalEvents() do
-		local event = { row = row, due = DueTurn(row), targets = nil, techs = {}, civics = {}, resources = {},
+		local event = { row = row, due = DueTurn(row), targets = nil, techs = {}, civics = {},
 			modifiers = modifiers[row.EventType] or {}, renames = renames[row.EventType] or {} }
 		if targets[row.EventType] then
 			event.targets = {}
@@ -106,10 +105,6 @@ local function LoadEvents()
 		end
 		if row.BoostCivic then
 			event.boostCivic, event.boostCivicRow = GameInfo.Civics[row.BoostCivic].Index, boostRows[row.BoostCivic]
-		end
-		-- Only reserved sites are placed; trade access and ownership rows are records (Q43).
-		for _, resource in ipairs(resources[row.EventType] or {}) do
-			if resource.Action == "reveal" then table.insert(event.resources, resource) end
 		end
 		table.insert(events, event)
 	end
@@ -192,34 +187,9 @@ local function Notify(event, playerID)
 	end
 end
 
--- Resources appear at the site the resources mod reserved (JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua,
--- ExposedMembers.JAC_Resources; loaded only on the Japan maps). RevealSite is a no-op when the site is
--- already revealed (by its own year/tech rule or an earlier event), so both paths agree on one tile.
--- The Sengoku pack runs on any map under the Banseiki ruleset (SSOT 3.2), but reserved sites exist only on
--- the Japan maps: without the resources mod the event places nothing and records nothing.
-local function PlaceResources(event)
-	local key = RESOURCES_PREFIX .. event.row.EventType
-	if #event.resources == 0 or Game:GetProperty(key) ~= nil then return end
-	local api = ExposedMembers and ExposedMembers.JAC_Resources
-	if not api then
-		Log(string.format("resource event=%s skipped=resources_mod_not_loaded", event.row.EventType))
-		return
-	end
-	local placed = {}
-	for _, row in ipairs(event.resources) do
-		api.RevealSite(row.SiteId)
-		local plot = nil
-		if api.IsRevealed(row.SiteId) then
-			for _, site in ipairs(api.GetSites()) do
-				if site.id == row.SiteId then plot = site.plot end
-			end
-		end
-		if plot then table.insert(placed, plot) end
-		Log(string.format("resource event=%s site=%s plot=%s", event.row.EventType, row.SiteId,
-			plot and tostring(plot) or "not_placed"))
-	end
-	Game:SetProperty(key, placed)
-end
+-- Resources: an event never places one (SSOT 3.2, owner decision 2026-09-30). The resources mod
+-- (JAC_PoC_JapanMapScale Scripts/JAC_Resources.lua) reveals each reserved site in its own year or when a faction
+-- finishes the site's research; the event's boost is that research. The event's resource rows are records only.
 
 -- SSOT 3.2: a house changes its name in stages (Oda -> Hashiba -> Toyotomi). A stage can come early by
 -- research or come again when a boosted faction researches later, so the stage with the latest due turn stays
@@ -237,8 +207,8 @@ local function Rename(event, civType)
 end
 
 -- reason "prereq" (has the research) or "due" (the year of an event without research): effects and the flag.
--- reason "year": the year arrived without the research: boost only. The display-name switch and the
--- resources still follow the year (SSOT 3.2: Nagao -> Uesugi in 1561 or earlier with the civic).
+-- reason "year": the year arrived without the research: boost only. The display-name switch still
+-- follows the year (SSOT 3.2: Nagao -> Uesugi in 1561 or earlier with the civic).
 -- The advisor popup (UI/JAC_HistoricalEventsAdvisor.lua) reads the same two flags and shows on the turn the
 -- event first happens for the local player.
 local function Fire(event, player, playerID, civType, reason, turn)
@@ -254,7 +224,6 @@ local function Fire(event, player, playerID, civType, reason, turn)
 		Game:SetProperty(FIRE_COUNT, (Game:GetProperty(FIRE_COUNT) or 0) + 1)
 	end
 	Rename(event, civType)
-	PlaceResources(event)
 	-- A failed boost is retried next turn; announce once, when it goes through.
 	if not announced and done then Notify(event, playerID) end
 	Log(string.format("%s event=%s player=%d civ=%s reason=%s turn=%d due=%d boost=%s",
