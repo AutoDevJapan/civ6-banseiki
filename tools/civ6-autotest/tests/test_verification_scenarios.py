@@ -30,6 +30,23 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_invalid_test_mode_is_rejected_before_any_game_call(self):
+        malformed = [None, {}, {"skipped_turns": -1, "continuous_performance_valid": False},
+                     {"skipped_turns": True, "continuous_performance_valid": False},
+                     {"skipped_turns": "0", "continuous_performance_valid": False},
+                     {"skipped_turns": 0, "continuous_performance_valid": True}]
+        for mode in malformed:
+            with self.subTest(mode=mode):
+                data = {"name": "invalid", "test_mode": mode,
+                        "steps": [{"action": "autoplay", "turns": 10, "fast_forward": True}]}
+                with self.assertRaisesRegex(ScenarioError, "test_mode needs"):
+                    validate_scenario(data)
+                runner = Runner(data, ROOT, ROOT, ROOT, 4318)
+                with patch.object(runner, "_lua") as game:
+                    with self.assertRaisesRegex(ScenarioError, "test_mode needs"):
+                        runner._fast_forward_autoplay(10, 10, deadline=time.monotonic()+10)
+                    game.assert_not_called()
+
     def test_fast_forward_processes_every_era_boundary_before_skipping_again(self):
         cases = [(17, list(range(3, 24, 2))),
                  (300, [66, 73, 110, 119, 178, 189, 246, 271, 334])]

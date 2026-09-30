@@ -120,7 +120,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 台帳・史実イベント・資源の年（`JAC_HistoricalEvents.lua`・`JAC_CourtArbitration_Rules.lua`・`JAC_Resources.lua`）は、速度の行をエンジンと同じ行の順に読む。以前は `MonthIncrement` の大きい順に並べ替えていたが、新しい暦では増減が交互になり並べ替えで順を戻せないため、ナビゲーションプロパティ `GameInfo.GameSpeeds[速度].GameSpeedTurnCollection`（`ORDER BY rowid`、`01_GameplaySchema.sql:3337`。公式の Lua も `leader.TraitCollection` の形で使う：`Base/Assets/UI/MapTacks.lua:172`）を読む。
 
-**要実機確認**：叙事詩・マラソンの倍率（150・300）での時代の長さ、`GameSpeedTurnCollection` がゲームプレイの Lua から読めること、叙事詩・マラソン・迅速・オンラインで改元の画面とトップパネルの年が合うこと。
+叙事詩・マラソンの倍率（150・300）での最初の3時代の長さは `perf-14`・`perf-15` で確認済み。`GameSpeedTurnCollection` をゲームプレイのLuaから読み、叙事詩の資源の年がUIの暦と合うことは `perf-17` で確認済み。迅速・オンラインを含む全ての改元の日付と画面の一致は引き続き要実機確認。
 
 ### ツリーの時代
 
@@ -148,7 +148,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 ## PR #79 の追加確認シナリオ
 
-以下は**実機未実行**。既存の標準・迅速プローブと標準速度の改元画面の実機結果は上記のまま。追加したシナリオは、状態が違えばLuaで失敗し、公式UIのエラーもログ判定で失敗にする。
+以下の5項目は**実機確認に成功**（2026-10-01）。偉人画面は `perf-08`、叙事詩は `perf-14`、マラソンは `perf-15`、追加時代は `perf-16`、資源の暦は `perf-17`。速度と資源の長い待ちは早送りし、時代の境界は通常進行させた。既存の標準・迅速プローブも `perf-10`・`perf-11` で再確認した。追加したシナリオは、状態が違えばLuaで失敗し、公式UIのエラーもログ判定で失敗にする。
 
 | ファイル | 期待するターンと検査 |
 |---|---|
@@ -174,7 +174,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 |---|---|
 | 叙事詩150・マラソン300 | `Base/Assets/Gameplay/Data/GameSpeeds.xml:31,22`。最短2と切り捨ては本書の実機結果 |
 | 時代の順と終わらない長さ | `Base/Assets/Gameplay/Data/Eras.xml:16`、`DLC/Expansion2/Data/Expansion2_Schema.sql:293-299`。48時代は本MODのデータ |
-| 非表示パラメーターと真偽値条件 | `Base/Assets/Configuration/Data/Schema/SetupParameters.sql:75-99`、`DLC/Babylon/Babylon.modinfo:38-43`。独自フラグの実機適用は要実機確認 |
+| 非表示パラメーターと真偽値条件 | `Base/Assets/Configuration/Data/Schema/SetupParameters.sql:75-99`、`DLC/Babylon/Babylon.modinfo:38-43`。独自フラグの実機適用は `perf-16` で確認済み |
 | 公式ポップアップと欠損画像 | `DLC/Expansion2/UI/Additions/EraCompletePopup.lua:64,68-113,75-78` |
 | 偉人画面の起動・閉鎖・描画 | `Base/Assets/UI/Popups/GreatPeoplePopup.lua:828-858,880-883,1000-1024,1220-1222` |
 | 偉人と削除時の連鎖 | `Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1519,1566,1573,1579,1598`。75人／音楽家0人は本実装とSQL検査 |

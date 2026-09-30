@@ -40,6 +40,12 @@ class ScenarioError(RuntimeError):
     pass
 
 
+def _validate_test_mode(mode) -> None:
+    if (not isinstance(mode, dict) or type(mode.get("skipped_turns")) is not int
+            or mode["skipped_turns"] < 0 or mode.get("continuous_performance_valid") is not False):
+        raise ScenarioError("test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false")
+
+
 def _remaining(deadline: float) -> float:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
@@ -85,6 +91,8 @@ def _safe_relative_path(value: str) -> Path:
 def validate_scenario(data: dict) -> None:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
         raise ScenarioError("Scenario needs a name")
+    if "test_mode" in data:
+        _validate_test_mode(data["test_mode"])
     if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth", "japan_map"):
         raise ScenarioError("judge_profile must be bundle0, generic, growth or japan_map")
     if data.get("judge_profile") == "growth":
@@ -885,6 +893,7 @@ class Runner:
 
     def _fast_forward_autoplay(self, turns: int, timeout: float, *, deadline: float, **metrics_flags) -> str:
         """Skip inside an era, processing its boundary normally before skipping again."""
+        _validate_test_mode(self.scenario.get("test_mode"))
         self._lua("InGame",
                   "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
                   "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true",
