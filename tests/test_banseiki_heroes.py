@@ -108,6 +108,19 @@ class NativeHeroDatabaseTests(unittest.TestCase):
 
 
 class NativeHeroPackageTests(unittest.TestCase):
+    def test_native_dlc_uses_registered_id_and_is_enabled_before_dependents(self):
+        import json
+        canonical = "8424840C-92EF-4426-A9B4-B4E0CB818049"
+        for folder in ("JAC_PoC_BanseikiRuleset", "JAC_PoC_Absorption"):
+            mod = ET.parse(ROOT / "poc" / folder / (folder + ".modinfo")).getroot()
+            self.assertIn(canonical, {node.get("id") for node in mod.findall("Dependencies/Mod")})
+        for name in ("absorption-japan.json", "absorption-hero-recall.json"):
+            data = json.loads((ROOT / "tools/civ6-autotest/scenarios" / name).read_text(encoding="utf-8"))
+            ids = data["steps"][0]["ids"]
+            self.assertEqual(ids[0], canonical)
+            self.assertLess(ids.index("ba3a1c58-9287-4654-a22f-85f9e6841e9b"),
+                            ids.index("bd7a82c5-6b38-4b69-a7f5-8dc9af534249"))
+
     def test_native_warlord_art_uses_generic_infantry_and_cavalry(self):
         root = ET.parse(MOD / "ArtDefs/Units.artdef").getroot()
         units = root.findall("m_RootCollections/Element/Element")

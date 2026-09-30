@@ -1282,7 +1282,7 @@ class AbsorptionPackageTests(unittest.TestCase):
         self.assertEqual(sum(step["action"] == "load" for step in steps), 2)
         configure = next(step for step in steps if step["action"] == "configure")
         enabled = next(step for step in steps if step['action'] == 'enable_mods')
-        self.assertIn('8424840c-92ef-4426-a9b4-b4e0cb818049', enabled['ids'])
+        self.assertIn('8424840C-92EF-4426-A9B4-B4E0CB818049', enabled['ids'])
         modes = [step for step in steps if step['action'] == 'ui_lua' and step['state_name'] == 'FrontEnd']
         self.assertEqual(len(modes), 1)
         self.assertIn("GameConfiguration.SetValue('GAMEMODE_HEROES',true)", modes[0]['code'])
@@ -1324,7 +1324,7 @@ class AbsorptionPackageTests(unittest.TestCase):
             self.assertTrue((MOD / name).is_file(), name)
         self.assertEqual({n.get("id") for n in root.findall("./Dependencies/Mod")},
                          {"4873eb62-8ccc-4574-b784-dda455e74e68", "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
-                          "8424840c-92ef-4426-a9b4-b4e0cb818049"})
+                          "8424840C-92EF-4426-A9B4-B4E0CB818049"})
         self.assertEqual(root.findtext("./ActionCriteria/Criteria/RuleSetInUse"), "RULESET_JAC_BANSEIKI")
 
     def test_all_text_has_exactly_japanese_english_and_russian(self):
