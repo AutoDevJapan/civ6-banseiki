@@ -33,7 +33,9 @@ class VerificationScenarioTests(unittest.TestCase):
                    for row in ET.parse(path).getroot().iter("Row") if "Tag" in row.attrib}
         self.assertGreater(len(defined), 0)
         for name in NEW_SCENARIOS + ("sengoku-era-reigns.json",):
-            keys = set(re.findall(r"LOC_JAC_[A-Z0-9_]+", json.dumps(scenario(name))))
+            chunks = "\n".join(step.get("code", "") + step.get("condition", {}).get("code", "")
+                               for step in scenario(name)["steps"])
+            keys = set(re.findall(r"['\"](LOC_JAC_[A-Z0-9_]*[A-Z0-9])['\"]", chunks))
             self.assertEqual(keys - defined, set(), name)
 
     def test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics(self):
