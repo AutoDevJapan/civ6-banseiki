@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -1262,6 +1263,7 @@ class Runner:
         for item in self.turn_metrics:
             groups.setdefault(item["group"], []).extend(item["recorder"].rows)
         result = {"scenario": self.scenario.get("name"), "passed": self.result_passed,
+                  "test_mode": self.scenario.get("test_mode"),
                   "completed_steps": self.completed_steps, "failure": self.failure,
                   "checks": self.result_checks,
                   "metrics": {"autoplay": runs, "turn_summary": summarize_turns(rows),
@@ -1271,10 +1273,38 @@ class Runner:
                                                  encoding="utf-8")
 
 
+def fast_forward_scenario(data: dict) -> dict:
+    """Skip waiting turns in a test game; never label the result a continuous performance run."""
+    data = copy.deepcopy(data)
+    steps = []
+    skipped = 0
+    for step in data["steps"]:
+        if step["action"] == "autoplay":
+            jump = max(0, step["turns"] - 2)
+            if jump:
+                steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
+                    "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
+                    "if type(Game.SetCurrentGameTurn) ~= 'function' then error('engine fast-forward unavailable') end\n"
+                    f"local target = Game.GetCurrentGameTurn() + {jump}\n"
+                    "Game.SetCurrentGameTurn(target)\n"
+                    "if Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\n"
+                    f"return 'TEST MODE: skipped {jump} turns; current=' .. target"})
+                step["turns"] -= jump
+                skipped += jump
+            if step.get("metrics"):
+                step["metrics_group"] = "TEST_MODE_" + step.get("metrics_group", "AUTOPLAY")
+        steps.append(step)
+    data["steps"] = steps
+    data["test_mode"] = {"skipped_turns": skipped, "continuous_performance_valid": False}
+    return data
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a Civ VI PoC scenario with automatic mod freshness checks")
     parser.add_argument("scenario", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate JSON only; do not connect to the game")
+    parser.add_argument("--test-mode", action="store_true",
+                        help="Fast-forward long autoplay waits; does not measure continuous-play performance")
     parser.add_argument("--output", type=Path, help="New directory for baseline, trace and screenshots")
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--saves", type=Path)
@@ -1287,6 +1317,9 @@ def main() -> int:
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
         validate_scenario(data)
+        if args.test_mode:
+            data = fast_forward_scenario(data)
+            validate_scenario(data)
         if args.check:
             print(f"VALID: {data['name']} ({len(data['steps'])} steps)")
             return 0

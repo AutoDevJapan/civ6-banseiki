@@ -165,6 +165,10 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 
 全ファイルは `tools/civ6-autotest/scenarios/` にある。20ターン版、追加時代の短縮試験、300ターン版の順に実行する。
 
+長い待ちを省いて手順を検証する場合は `--test-mode` を付ける。3ターン以上の自動進行は、GameCore の `Game.SetCurrentGameTurn` で最後の2ターンの直前まで進め、2ターンを通常進行させる。省いたターンでは研究・成長・戦争などの処理を実行しない。ゲーム本体の `GameCore_XP2_FinalRelease.dll` にこの関数があり、公式の `DLC/PolandScenario/Scripts/PolandScenario.lua:63` にも呼び出しの記載がある（コメント内）。実行時に関数と到達ターンを確認し、利用できなければ失敗する。
+
+このモードは時代の境界や保存・復元の手順を検証するためのもの。連続300ターンの性能やメモリ増加、長期プレイの安定性を検証したことにはならない。`result.json` の `test_mode` に省いたターン数と `continuous_performance_valid: false` を残し、計測の区分にも `TEST_MODE_` を付ける。通常進行の計測シナリオは変更しない。
+
 | シナリオ | 確認すること |
 |---|---|
 | `japan-15km-20turn-full-metrics.json` | 22勢力・全7 MODで20ターン。CSV、保存容量、開始時／終了時のロードと保存状態の一致、次ターン |

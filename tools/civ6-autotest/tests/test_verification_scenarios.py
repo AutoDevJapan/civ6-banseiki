@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SCENARIOS = ROOT / "tools/civ6-autotest/scenarios"
 sys.path.insert(0, str(SCENARIOS.parent))
 from judge import judge
-from scenario import ScenarioError, validate_scenario
+from scenario import ScenarioError, fast_forward_scenario, validate_scenario
 
 NEW_SCENARIOS = (
     "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
@@ -28,6 +28,37 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics(self):
+        original = scenario("japan-15km-300turn-full-metrics.json")
+        short = fast_forward_scenario(original)
+        validate_scenario(short)
+        self.assertEqual(short["test_mode"], {"skipped_turns": 288, "continuous_performance_valid": False})
+        self.assertEqual([s["turns"] for s in short["steps"] if s["action"] == "autoplay"], [2]*6+[1])
+        self.assertEqual([s["turns"] for s in original["steps"] if s["action"] == "autoplay"], [50]*6+[1])
+        self.assertTrue(all(s["metrics_group"].startswith("TEST_MODE_")
+                            for s in short["steps"] if s["action"] == "autoplay"))
+        self.assertEqual([s for s in short["steps"] if s["action"] in ("save", "load")],
+                         [s for s in original["steps"] if s["action"] in ("save", "load")])
+        jump = next(s["code"] for s in short["steps"] if "TEST MODE: skipped" in s.get("code", ""))
+        lua = lupa.LuaRuntime()
+        lua.execute("""
+            turn=1
+            GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end}
+            Game={GetCurrentGameTurn=function() return turn end,
+                  SetCurrentGameTurn=function(t) turn=t end}
+        """)
+        self.assertEqual(lua.execute(jump), "TEST MODE: skipped 48 turns; current=49")
+        self.assertEqual(lua.globals().turn, 49)
+        lua.execute("Game.SetCurrentGameTurn=function(t) end")
+        with self.assertRaisesRegex(lupa.LuaError, "engine fast-forward failed"):
+            lua.execute(jump)
+        lua.execute("Game.SetCurrentGameTurn=nil")
+        with self.assertRaisesRegex(lupa.LuaError, "engine fast-forward unavailable"):
+            lua.execute(jump)
+        lua.execute("GameConfiguration.GetRuleSet=function() return 'RULESET_STANDARD' end")
+        with self.assertRaisesRegex(lupa.LuaError, "test ruleset required"):
+            lua.execute(jump)
+
     def test_all_new_chunks_validate_and_compile_as_lua(self):
         lua = lupa.LuaRuntime()
         compile_chunk = lua.eval("function(code) local f,err=load(code); assert(f,err); return true end")
