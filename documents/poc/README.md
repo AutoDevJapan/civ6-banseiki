@@ -301,6 +301,8 @@ python tools/jac_art/build_art.py
 
 実機では公式アイコンと手帳の `Image` がすべて 26×26、縦の画面内オフセットが 39 で一致し、手帳は Era と Reports の間に表示された。`civ6-autotest` の開始シナリオ 4/4 手順と JAC エラー判定 2/2 件が成功。FireTuner から手帳ボタンの `DoLeftClick()` を2回呼び、手帳の開閉も確認した。右上バーを切り出して4倍に拡大した証跡は `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\final-01\ingame-v3\notebooks-normal-closeup-x4.png`、`notebooks-hover-offset40-closeup-x4.png`、`notebooks-pressed-offset80-closeup-x4.png`。後二者は入力ドライバのマウス移動が Civ6 のホバー判定に届かなかったため、ゲーム内の手帳 `Button` に背景テクスチャの縦オフセット 40px／80px を一時指定して撮影し、最後に 0px へ戻した。通常・ホバー・押下の背景表示で本の図柄は同じ中央位置を保った。実際のポインター入力によるホバー遷移はこの検証では確認できていない。
 
+2026-09-30 の大きさ調整：オーナーから「手帳のアイコンが両隣より大きすぎる」との指摘を受け、図柄の最大辺を 24px から 16px に縮めた（`build_art.py` の `NOTEBOOKS_GLYPH`）。公式の図柄は BLP 内にあり取り出せないため、上記の実機画像 `04-normal-full.png`（等倍）で、26×26 枠内の金色の画素を数えて測った。World Rankings は幅23×高さ18・223px、Era は20×22・175px、Reports は14×17・181px。旧手帳は23×24・約470px で、面積が両隣の2倍を超えていた。本は塗りつぶしの形で線画より重く見えるため、外形でなく面積を両隣の平均（約190px）に合わせ、15×16・約205px とした。`tools/jac_art/tests` の `test_notebooks_glyph_matches_official_neighbours` が、DDS の図柄の幅・高さが公式3種の範囲（±1px）に入り、面積が平均の±15%に収まり、中心が枠の中央から1px以内であることを検査する。比較画像は Git 除外の `tools/jac_art/build/previews/notebooks-button-vs-neighbours.png`（同じ実機画像の手帳ボタンの図柄を消し、新しい DDS を重ねたもの。背景の消し跡は合成による）。実機での見え方は `leader-portraits.json` シナリオの `notebooks-hook-bar-closeup.png` で確認する（未実施）。
+
 ### 互換性
 
 `ReplaceUIScript` は `PartialScreenHooks` を置換するため、同じスクリプトを置換する他 MOD との競合があり得る。動作確認はこの MOD 単独の有効化で行っており、競合する MOD との共存は未確認。製品版 MOD は総合改変 MOD として他 MOD を無効にする方針で、共存が必要になった場合は互換パッチを用意する。

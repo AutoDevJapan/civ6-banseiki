@@ -4,13 +4,13 @@
 		<Row>
 			<Type>LEADER_JAC_DATE_TANEMUNE</Type>
 			<Usage>Unique</Usage>
-			<PrimaryColor>COLOR_STANDARD_RED_DK</PrimaryColor>
+			<PrimaryColor>COLOR_STANDARD_WHITE_MD</PrimaryColor>
 			<SecondaryColor>COLOR_STANDARD_WHITE_LT</SecondaryColor>
 			<Alt1PrimaryColor>COLOR_STANDARD_WHITE_LT</Alt1PrimaryColor>
-			<Alt1SecondaryColor>COLOR_STANDARD_RED_DK</Alt1SecondaryColor>
+			<Alt1SecondaryColor>COLOR_STANDARD_WHITE_MD</Alt1SecondaryColor>
 			<Alt2PrimaryColor>COLOR_STANDARD_WHITE_LT</Alt2PrimaryColor>
-			<Alt2SecondaryColor>COLOR_STANDARD_RED_DK</Alt2SecondaryColor>
-			<Alt3PrimaryColor>COLOR_STANDARD_RED_DK</Alt3PrimaryColor>
+			<Alt2SecondaryColor>COLOR_STANDARD_WHITE_MD</Alt2SecondaryColor>
+			<Alt3PrimaryColor>COLOR_STANDARD_WHITE_MD</Alt3PrimaryColor>
 			<Alt3SecondaryColor>COLOR_STANDARD_WHITE_LT</Alt3SecondaryColor>
 		</Row>
 		<Row>

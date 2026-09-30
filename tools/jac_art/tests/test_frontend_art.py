@@ -4,6 +4,8 @@ Run after ``python tools/jac_art/build_art.py``.  CIV6_INSTALL_DIR may point to
 another local Civilization VI installation; the game is never started.
 """
 
+import itertools
+import math
 import mmap
 import os
 from pathlib import Path
@@ -16,6 +18,7 @@ from PIL import Image, ImageChops
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from draw_crests import NAMES as CREST_NAMES, MOTIFS as CREST_MOTIFS
+import build_art
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -290,6 +293,58 @@ class FrontEndArtTests(unittest.TestCase):
                 self.assertEqual(background, f"{leader}_DIPLOMACY_BACKGROUND")
         leader_package = MOD / "Platforms" / "Windows" / "BLPs" / "JAC_CustomCivs_Leaders.blp"
         self.assertEqual(package_textures(leader_package, texture_names), [])
+
+
+# Glyphs of the official hooks beside the notebooks button, measured on the in-game capture
+# civ6-art-local/final-01/ingame-v3/04-normal-full.png (1x, 2026-09-29): gold pixels inside the
+# 26x26 image frame. (width, height, covered pixels)
+OFFICIAL_HOOK_GLYPHS = {"WorldRankings": (23, 18, 223), "Era": (20, 22, 175), "Reports": (14, 17, 181)}
+
+
+class IconReadabilityTests(unittest.TestCase):
+    def test_notebooks_glyph_matches_official_neighbours(self):
+        dds = build_art.GROWTH_MOD / "UI" / "Textures" / "JAC_Notebooks_Hook.dds"
+        self.assertTrue(dds.is_file(), "run tools/jac_art/build_art.py first")
+        data = dds.read_bytes()
+        self.assertEqual(data[:4], b"DDS ")
+        height, width = int.from_bytes(data[12:16], "little"), int.from_bytes(data[16:20], "little")
+        self.assertEqual((width, height), (26, 26))
+        alpha = Image.frombytes("RGBA", (width, height), data[128:]).getchannel("A")
+        x0, y0, x1, y1 = alpha.point(lambda v: 255 if v >= 128 else 0).getbbox()
+        sizes = OFFICIAL_HOOK_GLYPHS.values()
+        self.assertTrue(min(w for w, _, _ in sizes) - 1 <= x1 - x0 <= max(w for w, _, _ in sizes) + 1, (x0, x1))
+        self.assertTrue(min(h for _, h, _ in sizes) - 1 <= y1 - y0 <= max(h for _, h, _ in sizes) + 1, (y0, y1))
+        coverage = sum(alpha.getdata()) / 255
+        mean = sum(area for _, _, area in sizes) / len(sizes)
+        self.assertLess(abs(coverage - mean), mean * 0.15, coverage)
+        self.assertLessEqual(abs((x0 + x1) / 2 - 13), 1)
+        self.assertLessEqual(abs((y0 + y1) / 2 - 13), 1)
+
+    def test_leader_icons_are_face_crops_framed_in_house_colour(self):
+        self.assertEqual(set(build_art.FACES) - {"_comment"}, set(build_art.LEADER_ORDER))
+        colors = build_art.house_colors()
+        self.assertEqual(set(colors), set(build_art.LEADER_ORDER))
+        for key, (x0, y0, x1, y1) in ((k, build_art.FACES[k]) for k in build_art.LEADER_ORDER):
+            self.assertTrue(0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1, key)
+        atlas = Image.open(build_art.PREVIEWS / "JAC_Leaders64.png").convert("RGBA")
+        for index, key in enumerate(build_art.LEADER_ORDER):
+            x, y = (index % 8) * 64, (index // 8) * 64
+            self.assertEqual(atlas.getpixel((x, y))[3], 0, key)
+            # Middle of the ring, 1.5px inside the outer edge at the top of the circle.
+            ring = atlas.getpixel((x + 32, y + 2))[:3]
+            self.assertLess(max(abs(a - b) for a, b in zip(ring, colors[key])), 40, (key, ring))
+
+    def test_house_primary_colours_are_distinct(self):
+        names = {}
+        for name in ("JAC_CustomCivs_Colors.xml", "JAC_Japan1534_Colors.xml"):
+            for row in ET.parse(build_art.MOD / "Data" / name).findall("./PlayerColors/Row"):
+                names[row.findtext("Type")] = row.findtext("PrimaryColor")
+        self.assertEqual(len(names), 22)
+        self.assertEqual(len(set(names.values())), 22, names)
+        # Official DK shades sit 46+ apart, so 40 flags only real look-alikes.
+        colors = build_art.house_colors()
+        for a, b in itertools.combinations(sorted(colors), 2):
+            self.assertGreaterEqual(math.dist(colors[a], colors[b]), 40, (a, b))
 
 
 if __name__ == "__main__":

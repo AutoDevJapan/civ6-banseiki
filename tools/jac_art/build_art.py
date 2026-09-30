@@ -2,9 +2,12 @@
 
 Usage: python tools/jac_art/build_art.py
 Optional: JAC_ART_LOCAL=<art store>, JAC_GROWTH_MOD=<GrowthUI mod directory>,
-          JAC_COOKER_DIR=<Civ6 SDK AssetModTools/Cooker directory>
+          JAC_COOKER_DIR=<Civ6 SDK AssetModTools/Cooker directory>,
+          CIV6_INSTALL_DIR=<Civ6 install, for PlayerStandardColors.xml>
 """
+import functools
 import hashlib
+import json
 import math
 import os
 import shutil
@@ -12,6 +15,7 @@ import struct
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
@@ -24,6 +28,12 @@ BUILD = Path(__file__).resolve().parent / "build"
 STAGING = BUILD / "cooked"
 STEWPOT = MOD / "Platforms" / "Windows" / "BLPs"
 COOKER_DIR = Path(os.environ.get("JAC_COOKER_DIR", r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker")).expanduser().resolve()
+GAME_DIR = Path(os.environ.get("CIV6_INSTALL_DIR", r"C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI"))
+FACES = json.loads((Path(__file__).resolve().parent / "leader_icon_faces.json").read_text(encoding="utf-8"))
+FACE_FILL = 0.60  # 顔（生え際・烏帽子の縁から顎）が円の直径に占める割合
+FACE_TOP = 0.28   # 円の上端から顔の上端までの割合。残りで冠り物の下部を見せる
+RING = 0.075      # 家の色の縁の幅（直径比）。45px で約3px
+NOTEBOOKS_GLYPH = 16  # 手帳ボタンの図柄の最大辺（26×26 の枠内）
 
 LEADER_ICON_SIZES = (32, 45, 48, 50, 55, 64, 80, 256)  # XP2 の ICON_ATLAS_LEADERS と同じ
 CIV_ICON_SIZES = (22, 30, 32, 36, 44, 45, 48, 50, 64, 80, 128, 200, 256)  # XP2 の文明アイコンと同じ
@@ -205,16 +215,40 @@ def background(key, size):
     return ImageOps.fit(src, size, method=Image.Resampling.LANCZOS).convert("RGBA")
 
 
+@functools.cache
+def house_colors():
+    """PrimaryColor of each leader's PlayerColors row, resolved to RGB via the game's standard colors."""
+    standard = {row.findtext("Type"): tuple(int(v) for v in row.findtext("Color").split(",")[:3])
+                for row in ET.parse(GAME_DIR / "Base" / "Assets" / "UI" / "Colors" / "PlayerStandardColors.xml")
+                .findall("./Colors/Row")}
+    colors = {}
+    for name in ("JAC_CustomCivs_Colors.xml", "JAC_Japan1534_Colors.xml"):
+        for row in ET.parse(MOD / "Data" / name).findall("./PlayerColors/Row"):
+            colors[row.findtext("Type").removeprefix("LEADER_JAC_")] = standard[row.findtext("PrimaryColor")]
+    return colors
+
+
 def leader_icon_master(key):
+    """Face-centred circle framed by the house colour ring, so small ribbon icons stay distinguishable."""
     src = Image.open(ORIGINALS / LEADERS[key]["portrait"]).convert("RGB")
-    edge = min(src.size)
-    face = ImageOps.fit(src, (edge, edge), method=Image.Resampling.LANCZOS)
-    size = 512
-    im = face.resize((size, size), Image.Resampling.LANCZOS).convert("RGBA")
-    big = Image.new("L", (size * 4, size * 4))
-    ImageDraw.Draw(big).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
-    im.putalpha(big.resize((size, size), Image.Resampling.LANCZOS))
-    return im
+    x0, y0, x1, y1 = FACES[key]
+    side = (y1 - y0) * src.height / FACE_FILL
+    cx, top = (x0 + x1) / 2 * src.width, y0 * src.height - FACE_TOP * side
+    box = (round(cx - side / 2), round(top), round(cx + side / 2), round(top + side))
+    if box[0] < 0 or box[1] < 0 or box[2] > src.width or box[3] > src.height:
+        raise ValueError(f"Face crop leaves the portrait: {key} {box}")
+    size, ss = 512, 4
+    big, ring, line = size * ss, round(size * ss * RING), ss * 5
+    face = src.crop(box).resize((big - 2 * ring, big - 2 * ring), Image.Resampling.LANCZOS)
+    inner = Image.new("L", face.size)
+    ImageDraw.Draw(inner).ellipse((0, 0, face.width - 1, face.height - 1), fill=255)
+    im = Image.new("RGBA", (big, big))
+    draw = ImageDraw.Draw(im)
+    draw.ellipse((0, 0, big - 1, big - 1), fill=house_colors()[key], outline=(20, 16, 12), width=line)
+    im.paste(face, (ring, ring), inner)
+    # 肖像と縁の境に暗線を引き、白や黄の家色でも顔との境を保つ。
+    draw.ellipse((ring - line, ring - line, big - ring + line, big - ring + line), outline=(20, 16, 12), width=line)
+    return im.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def symbol_icon_master(filename):
@@ -286,8 +320,9 @@ def growth_icon():
         raise ValueError("Empty notebooks icon")
     cut = keyed.crop(bounds)
     # PartialScreenHooks.xml renders this as a 26x26 Image with no sprite offset.
-    # Keep the artwork within that frame so the engine does not clip a 64x64 source.
-    cut.thumbnail((24, 24), Image.Resampling.LANCZOS)
+    # The official neighbours (World Rankings, Era, Reports) draw glyphs of about 14-23 px and
+    # 175-223 px of coverage inside that frame; the solid book matches them at 16 px.
+    cut.thumbnail((NOTEBOOKS_GLYPH, NOTEBOOKS_GLYPH), Image.Resampling.LANCZOS)
     out = Image.new("RGBA", (26, 26), (0, 0, 0, 0))
     out.alpha_composite(cut, ((26 - cut.width) // 2, (26 - cut.height) // 2))
     dest = GROWTH_MOD / "UI" / "Textures" / "JAC_Notebooks_Hook.dds"
