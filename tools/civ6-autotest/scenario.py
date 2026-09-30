@@ -144,6 +144,10 @@ def validate_scenario(data: dict) -> None:
             for key in ("research_metrics", "allow_human_elimination"):
                 if key in step and type(step[key]) is not bool:
                     raise ScenarioError(f"Step {number}: {key} must be boolean")
+            if "fast_forward" in step and type(step["fast_forward"]) is not bool:
+                raise ScenarioError(f"Step {number}: fast_forward must be boolean")
+            if step.get("fast_forward") and not isinstance(data.get("test_mode"), dict):
+                raise ScenarioError(f"Step {number}: fast_forward requires test mode")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -872,6 +876,50 @@ class Runner:
             detail += f"; research=autoplay-research-{self.metrics_runs}.jsonl"
         return detail
 
+    def _fast_forward_autoplay(self, turns: int, timeout: float, *, deadline: float, **metrics_flags) -> str:
+        """Skip inside an era, processing its boundary normally before skipping again."""
+        self._lua("InGame",
+                  "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
+                  "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true",
+                  min(5, _remaining(deadline)))
+        state_code = (
+            "local eras = Game.GetEras()\n"
+            "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. '|' .. "
+            "tostring(eras:GetCurrentEraMaximumEndTurn()) .. '|' .. tostring(eras:GetNextEraCountdown())"
+        )
+        def state():
+            values = self._lua("InGame", state_code, min(5, _remaining(deadline))).split("|")
+            try:
+                return tuple(int(v) for v in values)
+            except ValueError as exc:
+                raise ScenarioError(f"Invalid fast-forward era state: {values}") from exc
+        current, minimum, maximum, countdown = state()
+        target = current + turns
+        skipped = 0
+        while current < target:
+            boundary = current + countdown if countdown > 0 else minimum
+            # The terminal era does not end. Otherwise preserve even the earliest possible change.
+            limit = target - 2 if maximum < 0 else min(target - 2, boundary - 2)
+            if limit > current:
+                code = (
+                    "local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\n"
+                    "if not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\n"
+                    f"if Game.GetCurrentGameTurn() ~= {current} then error('turn changed before fast-forward') end\n"
+                    f"local target = {limit}\nGame.SetCurrentGameTurn(target)\n"
+                    "if Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\n"
+                    "return tostring(target)"
+                )
+                self._lua("GameCore_Tuner", code, min(5, _remaining(deadline)))
+                skipped += limit - current
+                self.scenario["test_mode"]["skipped_turns"] += limit - current
+                current = limit
+            before = current
+            self._autoplay(min(2, target - current), timeout, deadline=deadline, **metrics_flags)
+            current, minimum, maximum, countdown = state()
+            if current <= before or current > target:
+                raise ScenarioError(f"Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}")
+        return f"TEST MODE: reached turn {target}; skipped {skipped} turns; era boundaries processed normally"
+
     def _choose_dedication(self, human: int, deadline: float) -> str | None:
         """Pick the human's pending era dedication (Gathering Storm), which autoplay never chooses.
 
@@ -1032,7 +1080,8 @@ class Runner:
             self._check_start_turn(deadline)
             return "single-player game reached InGame"
         if action == "autoplay":
-            return self._autoplay(step["turns"], timeout, deadline=deadline,
+            autoplay = self._fast_forward_autoplay if step.get("fast_forward") else self._autoplay
+            return autoplay(step["turns"], timeout, deadline=deadline,
                                   record_metrics=step.get("metrics", False),
                                   research_metrics=step.get("research_metrics", False),
                                   allow_human_elimination=step.get("allow_human_elimination", False),
@@ -1275,29 +1324,15 @@ class Runner:
 
 
 def fast_forward_scenario(data: dict) -> dict:
-    """Skip waiting turns in a test game; never label the result a continuous performance run."""
+    """Opt into synthetic checkpoints without changing the original scenario."""
     data = copy.deepcopy(data)
-    steps = []
-    skipped = 0
     for step in data["steps"]:
         if step["action"] == "autoplay":
-            jump = max(0, step["turns"] - 2)
-            if jump:
-                steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
-                    "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
-                    "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\n"
-                    "if type(Game.SetCurrentGameTurn) ~= 'function' then error('engine fast-forward unavailable') end\n"
-                    f"local target = Game.GetCurrentGameTurn() + {jump}\n"
-                    "Game.SetCurrentGameTurn(target)\n"
-                    "if Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\n"
-                    f"return 'TEST MODE: skipped {jump} turns; current=' .. target"})
-                step["turns"] -= jump
-                skipped += jump
+            if step["turns"] > 2:
+                step["fast_forward"] = True
             if step.get("metrics"):
                 step["metrics_group"] = "TEST_MODE_" + step.get("metrics_group", "AUTOPLAY")
-        steps.append(step)
-    data["steps"] = steps
-    data["test_mode"] = {"skipped_turns": skipped, "continuous_performance_valid": False}
+    data["test_mode"] = {"skipped_turns": 0, "continuous_performance_valid": False}
     return data
 
 

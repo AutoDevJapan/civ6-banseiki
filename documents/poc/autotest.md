@@ -166,9 +166,9 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 
 全ファイルは `tools/civ6-autotest/scenarios/` にある。20ターン版、追加時代の短縮試験、300ターン版の順に実行する。
 
-長い待ちを省いて手順を検証する場合は `--test-mode` を付ける。3ターン以上の自動進行は、GameCore の `Game.SetCurrentGameTurn` で最後の2ターンの直前まで進め、2ターンを通常進行させる。省いたターンでは研究・成長・戦争などの処理を実行しない。ゲーム本体の `GameCore_XP2_FinalRelease.dll` にこの関数があり、公式の `DLC/PolandScenario/Scripts/PolandScenario.lua:63` にも呼び出しの記載がある（コメント内）。実行時に関数と到達ターンを確認し、利用できなければ失敗する。
+長い待ちを省いて手順を検証する場合は `--test-mode` を付ける。3ターン以上の自動進行は、画面側の時代APIから最短の終期とカウントダウンを読み、時代が変わりうる境界の2ターン前までだけ進める。境界は通常進行させ、次の時代を確認してから再び早送りする。短縮した追加時代のように2ターンで切り替わる区間は省かない。ターン番号を変えるのは GameCore の `Game.SetCurrentGameTurn`。省いたターンでは研究・成長・戦争などの処理を実行しない。ゲーム本体の `GameCore_XP2_FinalRelease.dll` にこの関数があり、公式の `DLC/PolandScenario/Scripts/PolandScenario.lua:63` にも呼び出しの記載がある（コメント内）。実行時に関数と到達ターンを確認し、利用できなければ失敗する。
 
-このモードは万世紀ルールセットの単独プレイに限定し、マルチプレイではターンを変更する前に失敗する（公式判定の例：`DLC/Expansion2/UI/Replacements/InGame.lua:115`）。このモードは時代の境界や保存・復元の手順を検証するためのもの。連続300ターンの性能やメモリ増加、長期プレイの安定性を検証したことにはならない。`result.json` の `test_mode` に省いたターン数と `continuous_performance_valid: false` を残し、計測の区分にも `TEST_MODE_` を付ける。通常進行の計測シナリオは変更しない。
+このモードは万世紀ルールセットの単独プレイに限定し、画面側で単独プレイを確認し、マルチプレイではターンを変更する前に失敗する（公式判定の例：`DLC/Expansion2/UI/Replacements/InGame.lua:115`）。このモードは時代の境界や保存・復元の手順を検証するためのもの。連続300ターンの性能やメモリ増加、長期プレイの安定性を検証したことにはならない。`result.json` の `test_mode` に実際に省いたターン数と `continuous_performance_valid: false` を残し、計測の区分にも `TEST_MODE_` を付ける。通常進行の計測シナリオは変更しない。
 
 | シナリオ | 確認すること |
 |---|---|

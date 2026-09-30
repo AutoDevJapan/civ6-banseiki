@@ -29,6 +29,11 @@
       "city_states": 0,
       "players": [
         {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": true
+        },
+        {
           "leader": "LEADER_JAC_ODA_NOBUHIDE",
           "civ": "CIVILIZATION_JAC_ODA",
           "human": false
@@ -129,11 +134,6 @@
           "human": false
         },
         {
-          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
-          "civ": "CIVILIZATION_JAC_RYUKYU",
-          "human": true
-        },
-        {
           "leader": "LEADER_JAC_AINU_TARIKONA",
           "civ": "CIVILIZATION_JAC_AINU",
           "human": false
@@ -157,7 +157,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); if t~=1 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=20 or not Players[20]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
+      "code": "local t=Game.GetCurrentGameTurn(); if t~=1 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=0 or PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_RYUKYU' or not Players[0]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
     },
     {
       "action": "save",
@@ -184,7 +184,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); if t~=1 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=20 or not Players[20]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
+      "code": "local t=Game.GetCurrentGameTurn(); if t~=1 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=0 or PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_RYUKYU' or not Players[0]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
     },
     {
       "action": "ui_lua",
@@ -202,7 +202,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); if t~=21 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=20 or not Players[20]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
+      "code": "local t=Game.GetCurrentGameTurn(); if t~=21 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=0 or PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_RYUKYU' or not Players[0]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
     },
     {
       "action": "save",
@@ -229,7 +229,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); if t~=21 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=20 or not Players[20]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
+      "code": "local t=Game.GetCurrentGameTurn(); if t~=21 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=0 or PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_RYUKYU' or not Players[0]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
     },
     {
       "action": "ui_lua",
@@ -247,7 +247,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game.GetCurrentGameTurn(); if t~=22 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=20 or not Players[20]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
+      "code": "local t=Game.GetCurrentGameTurn(); if t~=22 then error('turn mismatch '..t) end; if Game.GetLocalPlayer()~=0 or PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_RYUKYU' or not Players[0]:IsAlive() then error('Ryukyu must survive for reload') end; return 'measurement checkpoint turn='..t"
     }
   ],
   "strict_lua_errors": true

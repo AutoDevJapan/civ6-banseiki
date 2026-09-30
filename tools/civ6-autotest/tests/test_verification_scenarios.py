@@ -4,7 +4,9 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import time
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 import lupa
@@ -13,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SCENARIOS = ROOT / "tools/civ6-autotest/scenarios"
 sys.path.insert(0, str(SCENARIOS.parent))
 from judge import judge
-from scenario import ScenarioError, fast_forward_scenario, validate_scenario
+from scenario import Runner, ScenarioError, fast_forward_scenario, validate_scenario
 
 NEW_SCENARIOS = (
     "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
@@ -28,6 +30,53 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_fast_forward_processes_every_era_boundary_before_skipping_again(self):
+        cases = [(17, list(range(3, 24, 2))),
+                 (300, [66, 73, 110, 119, 178, 189, 246, 271, 334])]
+        for turns, boundaries in cases:
+            with self.subTest(turns=turns):
+                clock = {"turn": 1, "era": 0, "seen": [], "skipped": 0}
+                lua = lupa.LuaRuntime()
+                lua.globals().py_current = lambda: clock["turn"]
+                lua.globals().py_end = lambda: boundaries[clock["era"]]
+                def set_turn(target):
+                    self.assertLess(target, boundaries[clock["era"]])
+                    clock["skipped"] += target - clock["turn"]
+                    clock["turn"] = target
+                lua.globals().py_set = set_turn
+                lua.execute("""
+                    GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,
+                                       IsAnyMultiplayer=function() return false end}
+                    Game={GetCurrentGameTurn=function() return py_current() end,
+                          SetCurrentGameTurn=function(t) py_set(t) end,
+                          GetEras=function() return {
+                              GetCurrentEraMinimumEndTurn=function() return py_end() end,
+                              GetCurrentEraMaximumEndTurn=function() return py_end() end,
+                              GetNextEraCountdown=function() return -1 end} end}
+                """)
+                data = fast_forward_scenario({"name": "boundaries", "steps": [{"action": "autoplay", "turns": turns}]})
+                runner = Runner(data, ROOT, ROOT, ROOT, 4318)
+                def autoplay(count, timeout, **flags):
+                    self.assertLessEqual(count, 2)
+                    for _ in range(count):
+                        clock["turn"] += 1
+                        if clock["turn"] == boundaries[clock["era"]]:
+                            clock["seen"].append(clock["turn"])
+                            clock["era"] += 1
+                    return "done"
+                with patch.object(runner, "_lua", side_effect=lambda state, code, timeout: str(lua.execute(code))), \
+                        patch.object(runner, "_autoplay", side_effect=autoplay):
+                    runner._fast_forward_autoplay(turns, 10, deadline=time.monotonic()+10)
+                    self.assertEqual(clock["turn"], turns+1)
+                    self.assertEqual(clock["seen"], [b for b in boundaries if b <= turns+1])
+                    self.assertEqual(data["test_mode"]["skipped_turns"], clock["skipped"])
+                    self.assertEqual(clock["skipped"] == 0, turns == 17)
+                    old_turn = clock["turn"]
+                    lua.execute("GameConfiguration.IsAnyMultiplayer=function() return true end")
+                    with self.assertRaisesRegex(lupa.LuaError, "single-player test required"):
+                        runner._fast_forward_autoplay(10, 10, deadline=time.monotonic()+10)
+                    self.assertEqual(clock["turn"], old_turn)
+
     def test_scenario_localization_keys_exist_in_mod_text(self):
         defined = {row.attrib["Tag"] for path in (ROOT / "poc").glob("*/Text/*.xml")
                    for row in ET.parse(path).getroot().iter("Row") if "Tag" in row.attrib}
@@ -42,37 +91,15 @@ class VerificationScenarioTests(unittest.TestCase):
         original = scenario("japan-15km-300turn-full-metrics.json")
         short = fast_forward_scenario(original)
         validate_scenario(short)
-        self.assertEqual(short["test_mode"], {"skipped_turns": 288, "continuous_performance_valid": False})
-        self.assertEqual([s["turns"] for s in short["steps"] if s["action"] == "autoplay"], [2]*6+[1])
+        self.assertEqual(short["test_mode"], {"skipped_turns": 0, "continuous_performance_valid": False})
+        self.assertEqual([s["turns"] for s in short["steps"] if s["action"] == "autoplay"], [50]*6+[1])
         self.assertEqual([s["turns"] for s in original["steps"] if s["action"] == "autoplay"], [50]*6+[1])
+        self.assertTrue(all(s.get("fast_forward") for s in short["steps"] if s["action"] == "autoplay" and s["turns"] > 2))
+        self.assertFalse(any(s.get("fast_forward") for s in original["steps"]))
         self.assertTrue(all(s["metrics_group"].startswith("TEST_MODE_")
                             for s in short["steps"] if s["action"] == "autoplay"))
         self.assertEqual([s for s in short["steps"] if s["action"] in ("save", "load")],
                          [s for s in original["steps"] if s["action"] in ("save", "load")])
-        jump = next(s["code"] for s in short["steps"] if "TEST MODE: skipped" in s.get("code", ""))
-        lua = lupa.LuaRuntime()
-        lua.execute("""
-            turn=1
-            GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,
-                               IsAnyMultiplayer=function() return false end}
-            Game={GetCurrentGameTurn=function() return turn end,
-                  SetCurrentGameTurn=function(t) turn=t end}
-        """)
-        self.assertEqual(lua.execute(jump), "TEST MODE: skipped 48 turns; current=49")
-        self.assertEqual(lua.globals().turn, 49)
-        lua.execute("GameConfiguration.IsAnyMultiplayer=function() return true end")
-        with self.assertRaisesRegex(lupa.LuaError, "single-player test required"):
-            lua.execute(jump)
-        lua.execute("GameConfiguration.IsAnyMultiplayer=function() return false end")
-        lua.execute("Game.SetCurrentGameTurn=function(t) end")
-        with self.assertRaisesRegex(lupa.LuaError, "engine fast-forward failed"):
-            lua.execute(jump)
-        lua.execute("Game.SetCurrentGameTurn=nil")
-        with self.assertRaisesRegex(lupa.LuaError, "engine fast-forward unavailable"):
-            lua.execute(jump)
-        lua.execute("GameConfiguration.GetRuleSet=function() return 'RULESET_STANDARD' end")
-        with self.assertRaisesRegex(lupa.LuaError, "test ruleset required"):
-            lua.execute(jump)
 
     def test_all_new_chunks_validate_and_compile_as_lua(self):
         lua = lupa.LuaRuntime()
@@ -95,8 +122,8 @@ class VerificationScenarioTests(unittest.TestCase):
             with self.subTest(turns=turns):
                 self.assertEqual(steps[0]["ids"], base["steps"][0]["ids"])
                 self.assertEqual(len(steps[1]["players"]), 22)
-                self.assertEqual([i for i, p in enumerate(steps[1]["players"]) if p["human"]], [20])
-                self.assertEqual(steps[1]["players"][20]["civ"], "CIVILIZATION_JAC_RYUKYU")
+                self.assertEqual([i for i, p in enumerate(steps[1]["players"]) if p["human"]], [0])
+                self.assertEqual(steps[1]["players"][0]["civ"], "CIVILIZATION_JAC_RYUKYU")
                 self.assertIn("JAC_Japan_15km.Civ6Map", steps[1]["map_file"])
                 auto = [s for s in steps if s["action"] == "autoplay"]
                 self.assertEqual(sum(s["turns"] for s in auto[:-1]), turns)
