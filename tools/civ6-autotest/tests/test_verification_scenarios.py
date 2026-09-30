@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -16,6 +17,7 @@ SCENARIOS = ROOT / "tools/civ6-autotest/scenarios"
 sys.path.insert(0, str(SCENARIOS.parent))
 from judge import judge
 from scenario import Runner, ScenarioError, fast_forward_scenario, validate_scenario
+from tuner import LuaResponseUnknown
 
 NEW_SCENARIOS = (
     "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
@@ -30,6 +32,43 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_run_rejects_invalid_metadata_even_without_a_fast_forward_step(self):
+        for action in ({"action": "restart_game"}, {"action": "pause", "seconds": 0.1}):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
+                base = Path(folder)
+                runner = Runner({"name": "invalid entry", "test_mode": {}, "steps": [action]},
+                                base / "output", base, base, 4318)
+                with patch("scenario.single_civ_process") as process, \
+                        patch.object(runner, "_lua") as game, patch.object(runner, "_restart_game") as launch:
+                    with self.assertRaisesRegex(ScenarioError, "test_mode needs"):
+                        runner.run()
+                    process.assert_not_called()
+                    game.assert_not_called()
+                    launch.assert_not_called()
+                self.assertFalse(runner.output.exists())
+
+    def test_lost_jump_acknowledgment_marks_count_unknown_and_never_replays(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            data = fast_forward_scenario({"name": "lost ack", "steps": [{"action": "autoplay", "turns": 10}]})
+            runner = Runner(data, base, base, base, 4318)
+            clock = [1]
+            def game(state, code, timeout):
+                if state == "GameCore_Tuner":
+                    clock[0] = 9
+                    raise LuaResponseUnknown("fixture applied, acknowledgment lost")
+                return "1|100|100|-1" if "local eras" in code else "true"
+            with patch.object(runner, "_lua", side_effect=game) as calls:
+                with self.assertRaisesRegex(LuaResponseUnknown, "acknowledgment lost"):
+                    runner._fast_forward_autoplay(10, 10, deadline=time.monotonic()+10)
+                self.assertEqual(calls.call_count, 3)
+            self.assertEqual(clock[0], 9)
+            runner._write_result()
+            mode = json.loads((base / "result.json").read_text(encoding="utf-8"))["test_mode"]
+            self.assertIsNone(mode["skipped_turns"])
+            self.assertEqual(mode["acknowledged_skipped_turns"], 0)
+            self.assertEqual(mode["unconfirmed_jump"], {"from": 1, "to": 9})
+
     def test_invalid_test_mode_is_rejected_before_any_game_call(self):
         malformed = [None, {}, {"skipped_turns": -1, "continuous_performance_valid": False},
                      {"skipped_turns": True, "continuous_performance_valid": False},

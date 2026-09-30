@@ -925,7 +925,14 @@ class Runner:
                     "if Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\n"
                     "return tostring(target)"
                 )
-                self._lua("GameCore_Tuner", code, min(5, _remaining(deadline)))
+                try:
+                    self._lua("GameCore_Tuner", code, min(5, _remaining(deadline)))
+                except LuaResponseUnknown:
+                    mode = self.scenario["test_mode"]
+                    mode["acknowledged_skipped_turns"] = mode["skipped_turns"]
+                    mode["skipped_turns"] = None
+                    mode["unconfirmed_jump"] = {"from": current, "to": limit}
+                    raise  # Never replay a mutation whose acknowledgment was lost.
                 skipped += limit - current
                 self.scenario["test_mode"]["skipped_turns"] += limit - current
                 current = limit
@@ -1227,6 +1234,7 @@ class Runner:
         raise AssertionError(action)
 
     def run(self) -> int:
+        validate_scenario(self.scenario)
         self.output.mkdir(parents=True, exist_ok=False)
         self._log("start", "OK", self.scenario["name"])
         try:
