@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData><LocalizedText>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_NAME" Language="ja_JP"><Text>JAC PoC：勢力吸収</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_NAME" Language="en_US"><Text>JAC PoC: Faction Absorption</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_NAME" Language="ru_RU"><Text>JAC PoC: поглощение держав</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_DESCRIPTION" Language="ja_JP"><Text>都市・部隊・人物・英雄・所持品・宗教を移管し、保存と読込を検証する PoC。</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_DESCRIPTION" Language="en_US"><Text>A PoC for transferring cities, units, people, Heroes, belongings and religion, including save/load checks.</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_MOD_DESCRIPTION" Language="ru_RU"><Text>Проверка передачи городов, войск, персонажей, героев, имущества и религии с сохранением и загрузкой.</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_PENDING_BALANCE" Language="ja_JP"><Text>統治・忠誠・文化摩擦の効果量は判断待ちです。</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_PENDING_BALANCE" Language="en_US"><Text>Governance, loyalty and cultural friction effects await a decision.</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_PENDING_BALANCE" Language="ru_RU"><Text>Эффекты управления, лояльности и культурных трений ожидают решения.</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="ja_JP"><Text>勢力の吸収が完了しました。</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="en_US"><Text>Faction absorption is complete.</Text></Row>
+  <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="ru_RU"><Text>Поглощение державы завершено.</Text></Row>
+</LocalizedText></GameData>

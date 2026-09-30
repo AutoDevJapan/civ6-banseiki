@@ -1,0 +1,245 @@
+{
+  "name": "JAC Absorption: AI Ashina into AI Date on Japan 15 km; every asset, native religion, same-turn and post-AI-turn save/load",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption,'absorption mod not loaded'); local R=A.Rules\nlocal from,to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()\n  if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_DATE' then to=p:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman() and not Players[to]:IsHuman(),'need two AI houses')\nassert(Players[from]:GetCities():GetCount()>=2,'Ashina must have two cities')\nassert(#PlayerManager.GetAliveMajors()==22,'expected Japan map with 22 houses')\nlocal cap=Players[from]:GetCities():GetCapitalCity(); local x,y=cap:GetX(),cap:GetY()\nlocal function newlyCreated(create,kind)\n  local before={};for _,u in Players[from]:GetUnits():Members() do before[u:GetID()]=true end\n  create()\n  local result\n  for _,u in Players[from]:GetUnits():Members() do\n    if not before[u:GetID()] and GameInfo.Units[u:GetType()].UnitType==kind then assert(not result,'multiple new test units');result=u end\n  end\n  assert(result,'no new test '..kind);return result\nend\nlocal hero=newlyCreated(function() UnitManager.InitUnitValidAdjacentHex(from,'UNIT_WARRIOR',x,y,8) end,'UNIT_WARRIOR')\nlocal person=newlyCreated(function() UnitManager.InitUnitValidAdjacentHex(from,'UNIT_WARRIOR',x,y,8) end,'UNIT_WARRIOR')\nlocal individual\nfor row in GameInfo.GreatPersonIndividuals() do\n  if row.GreatPersonClassType=='GREAT_PERSON_CLASS_GENERAL' and (not individual or row.Index<individual.Index) then individual=row end\nend\nassert(individual,'no native general individual in database')\nlocal great=newlyCreated(function() Game.GetGreatPeople():CreatePerson(from,individual.Index,x,y) end,'UNIT_GREAT_GENERAL')\nassert(great:GetGreatPerson():GetIndividual()==individual.Index,'CreatePerson individual mismatch')\nlocal native=assert(GameInfo.Religions['RELIGION_CUSTOM_1'],'native test religion missing')\nassert(Players[from]:GetReligion():GetReligionTypeCreated()<0,'unexpected founded religion at Japan start')\nGame.GetReligion():FoundReligion(from,native.Index)\nassert(Players[from]:GetReligion():GetReligionTypeCreated()==native.Index,'FoundReligion failed')\nfor _,city in Players[from]:GetCities():Members() do city:GetReligion():AddReligiousPressure(0,native.Index,10000,from) end\nassert((A.CityReligion(cap)[tostring(native.Index)] or 0)>0,'native believers were not seeded')\nlocal priest=newlyCreated(function() UnitManager.InitUnitValidAdjacentHex(from,'UNIT_MISSIONARY',x,y,8) end,'UNIT_MISSIONARY')\npriest:GetReligion():SetReligionType(native.ReligionType)\nhero:SetProperty(R.PERSON_KEY,{ID='live:hero',Kind='HERO',Owner=from,Unit={Owner=from,ID=hero:GetID()},Contract='PROTECT',Loyalty=73,Lifespan=19,Relations={friend=25}})\nperson:SetProperty(R.PERSON_KEY,{ID='live:person',Kind='PERSON',Owner=from,Unit={Owner=from,ID=person:GetID()},Level=6,XP=17,Personality='LOYAL',Trait='DEVOUT',Equipment={'ARMOR'}})\nperson:SetProperty('JAC_POC_GROWTHUI_WARLORD',{Level=6,XP=17,Personality='LOYAL',Trait='DEVOUT',Equipment={'ARMOR'},Artifact='live:artifact'})\nperson:SetDamage(17);person:ChangeMovesRemaining(-1)\nlocal roster={\n ['live:hero']=hero:GetProperty(R.PERSON_KEY),['live:person']=person:GetProperty(R.PERSON_KEY),\n ['live:equipment']={ID='live:equipment',Kind='ITEM',Owner=from,Type='EQUIPMENT',Anchor={Kind='PERSON',ID='live:person'}},\n ['live:artifact']={ID='live:artifact',Kind='ITEM',Owner=from,Type='ARTIFACT',Anchor={Kind='VAULT',ID='live:vault'}},\n ['live:collection']={ID='live:collection',Kind='ITEM',Owner=from,Type='COLLECTION',City={Owner=from,X=x,Y=y}},\n ['live:religion']={ID='live:religion',Kind='RELIGION',Owner=from,ReligionID='POC_SECT',Founder=from,State='PUBLIC',Followers=9,\n   HolySites={{X=x,Y=y}},Clergy={'live:priest'},Scriptures={'live:scripture'},Relics={'live:artifact'},Sects={'POC_SECT'}},\n ['live:unlock']={ID='live:unlock',Kind='UNLOCK',Owner=from,Jobs={'POC_MONK'},Document='live:scripture'}\n}\nPlayers[from]:SetProperty(R.ROSTER_KEY,roster)\nPlayers[to]:SetProperty(R.ROSTER_KEY,{\n ['live:existing']={ID='live:existing',Kind='ITEM',Owner=to,Type='EQUIPMENT'},\n ['live:other-community']={ID='live:other-community',Kind='RELIGION',Owner=to,ReligionID='POC_SECT',Founder=from,State='UNDERGROUND',Followers=2}})\ncap:SetProperty(R.CITY_FAITH_KEY,{ReligionID='POC_SECT',Followers=4,HolySite=true,Clergy={'live:priest'},Scriptures={'live:scripture'},Relics={'live:artifact'},State='PUBLIC'})\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\npriest:SetProperty('JAC_ABSORPTION_LIVE_BELONGINGS',{Scripture='live:scripture',Relic='live:artifact'})\nlocal plan={ID='japan-live-absorption',From=from,To=to,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',Units={},Assets={}}\nlocal expected={From=from,To=to,Individual=individual.Index,Religion=native.Index,SourceRoster=A.GetRoster(from),TargetRoster=A.GetRoster(to),\n Units={},Cities={},Plots={},OriginalToCities=Players[to]:GetCities():GetCount(),OriginalToUnits=Players[to]:GetUnits():GetCount()}\nfor _,u in Players[from]:GetUnits():Members() do\n  local snap=A.SnapshotUnit(u);expected.Units[#expected.Units+1]=snap\n  plan.Units[R.UnitKey(from,u:GetID())]=snap.Kind=='UNIT' and 'INCORPORATE' or snap.Kind=='HERO' and 'PROTECT' or 'RECRUIT'\nend\nfor id,asset in pairs(roster) do plan.Assets[id]=asset.Kind=='HERO' and 'PROTECT' or asset.Kind=='PERSON' and 'RECRUIT' or asset.Kind=='RELIGION' and 'PRESERVE' or asset.Kind=='UNLOCK' and 'INHERIT' or 'TRANSFER' end\nfor _,c in Players[from]:GetCities():Members() do\n  expected.Cities[#expected.Cities+1]={X=c:GetX(),Y=c:GetY(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),PalaceWorks=A.PalaceWorks(c),Property=c:GetProperty(R.CITY_FAITH_KEY)}\nend\nfor i=0,Map.GetPlotCount()-1 do if Map.GetPlotByIndex(i):GetOwner()==from then expected.Plots[#expected.Plots+1]=i end end\nassert(#expected.Units>=4 and #expected.Plots>0,'empty source fixtures')\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==native.Index then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==from,'native religion definition not created')\nexpected.NativeDefinition=nativeDefinition\nGame:SetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1',expected)\nGame:SetProperty('JAC_ABSORPTION_LIVE_PLAN_V1',plan)\nreturn 'seeded two AI houses, native general and religion, people/Hero/three belongings, holy site/clergy/scripture/relic/sect/job'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local tx=A.Apply(assert(Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1')));assert(tx.Status=='COMPLETE','absorption incomplete');return 'AI Ashina absorbed into AI Date'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local R=A.Rules\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local plan=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1'))\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==e.Religion then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==e.From,'native religion identity/founder lost')\nA.Verify(plan.ID,true)\nassert(A.Canonical(nativeDefinition)==A.Canonical(e.NativeDefinition),'native religion beliefs changed')\nassert(Players[e.To]:GetCities():GetCount()==e.OriginalToCities+#e.Cities,'destination city count')\nassert(Players[e.To]:GetUnits():GetCount()==e.OriginalToUnits+#e.Units+1,'destination unit count including leader proxy')\nlocal function same(a,b,what) assert(A.Canonical(a)==A.Canonical(b),what) end\nfor _,old in ipairs(e.Units) do\n  local u=assert(A.FindUnit(e.To,plan.ID..':unit:'..old.ID),'missing transferred old unit '..old.ID)\n  assert(GameInfo.Units[u:GetType()].UnitType==old.Type,'unit type changed')\n  local gp=u:GetGreatPerson();assert((gp and gp:GetIndividual() or -1)==old.Individual,'native individual changed')\n  assert(u:GetDamage()==old.Damage and u:GetMovesRemaining()==old.Moves,'damage or moves changed')\n  assert(u:GetBuildCharges()==old.BuildCharges and u:GetSpreadCharges()==old.SpreadCharges,'charges changed')\n  assert(u:GetExperience():GetExperiencePoints()==old.XP,'experience changed')\n  for key,value in pairs(old.Properties) do if key~=R.PERSON_KEY then same(u:GetProperty(key),value,'transferred unit property '..key) end end\nend\nfor _,old in ipairs(e.Cities) do\n  local c=assert(CityManager.GetCityAt(old.X,old.Y));assert(c:GetOwner()==e.To and c:GetPopulation()==old.Population,'city moved incorrectly')\n  for _,work in ipairs(old.PalaceWorks) do assert(A.OwnedGreatWorks(e.To)[work],'Palace work lost') end\n  same(A.CityReligion(c),old.Faith,'native followers changed');same(A.CityAssets(c),old.Assets,'buildings/Great Works changed')\n  same(c:GetProperty(R.CITY_FAITH_KEY),old.Property,'holy site and clergy data changed')\nend\nfor _,i in ipairs(e.Plots) do assert(Map.GetPlotByIndex(i):GetOwner()==e.To,'old territory lost: '..i) end\nlocal roster=A.GetRoster(e.To)\nfor id,old in pairs(e.SourceRoster) do\n  local new=assert(roster[id],'missing asset '..id);assert(new.Owner==e.To,'asset owner '..id)\n  for key,value in pairs(old) do if key~='Owner' and key~='Unit' and key~='City' then same(new[key],value,'asset field '..id..'.'..key) end end\n  if old.Unit then assert(new.Unit.Owner==e.To and A.FindUnit(e.To,new.Unit.Token):GetID()==new.Unit.ID,'person/Hero reference') end\n  if old.City then assert(new.City.Owner==e.To and new.City.X==old.City.X and new.City.Y==old.City.Y,'collection city reference') end\nend\nfor id,old in pairs(e.TargetRoster) do same(roster[id],old,'pre-existing asset overwritten') end\nassert(roster['live:hero'].Lifespan==19 and roster['live:hero'].Loyalty==73 and roster['live:hero'].Relations.friend==25,'Hero attributes changed')\nassert(roster['live:person'].Level==6 and roster['live:person'].XP==17 and roster['live:person'].Personality=='LOYAL','person growth changed')\nassert(roster['live:equipment'].Anchor.ID=='live:person' and roster['live:artifact'].Anchor.ID=='live:vault','belongings detached')\nassert(roster['live:religion'].Founder==e.From and roster['live:religion'].Followers==9 and roster['live:religion'].State=='PUBLIC','religion identity changed')\nassert(roster['live:other-community'].Followers==2 and roster['live:other-community'].State=='UNDERGROUND','same sect community overwritten')\nlocal leader=assert(roster['leader:'..e.From]);assert(leader.Persistent and leader.Unit.Owner==e.To,'former leader lost')\nlocal saved=A.Canonical(A.GetState());A.Apply(plan);assert(A.Canonical(A.GetState())==saved,'same request replayed')\nlocal actual={State=A.GetState(),Roster=roster,SourceRoster=A.GetRoster(e.From),Units={},Cities={},Plots={}}\nfor _,old in ipairs(e.Units) do local u=A.FindUnit(e.To,plan.ID..':unit:'..old.ID);actual.Units[#actual.Units+1]=A.SnapshotUnit(u) end\nactual.Leader=A.SnapshotUnit(A.FindUnit(e.To,plan.ID..':leader'))\nfor _,old in ipairs(e.Cities) do local c=CityManager.GetCityAt(old.X,old.Y);actual.Cities[#actual.Cities+1]={Owner=c:GetOwner(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),Governance=c:GetProperty(R.GOVERNANCE_KEY),FaithProperty=c:GetProperty(R.CITY_FAITH_KEY)} end\nfor _,i in ipairs(e.Plots) do actual.Plots[i]=Map.GetPlotByIndex(i):GetOwner() end\nlocal transferred={Roster=R.Copy(roster),Properties={}}\nfor _,old in ipairs(e.Units) do transferred.Properties[tostring(old.ID)]=R.Copy(A.SnapshotUnit(A.FindUnit(e.To,plan.ID..':unit:'..old.ID)).Properties) end\ntransferred.Properties.leader=R.Copy(actual.Leader.Properties)\nlocal existing=Game:GetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1')\nif existing then assert(A.Canonical(existing)==A.Canonical(transferred),'transferred invariants changed after reload') else Game:SetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1',transferred) end\nactual.NativeDefinition=nativeDefinition\nreturn A.Canonical(actual)\n",
+      "capture_as": "ABSORPTION_IMMEDIATE"
+    },
+    {
+      "action": "save",
+      "name": "jac-absorption-immediate"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "jac-absorption-immediate",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local R=A.Rules\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local plan=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1'))\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==e.Religion then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==e.From,'native religion identity/founder lost')\nA.Verify(plan.ID,true)\nassert(A.Canonical(nativeDefinition)==A.Canonical(e.NativeDefinition),'native religion beliefs changed')\nassert(Players[e.To]:GetCities():GetCount()==e.OriginalToCities+#e.Cities,'destination city count')\nassert(Players[e.To]:GetUnits():GetCount()==e.OriginalToUnits+#e.Units+1,'destination unit count including leader proxy')\nlocal function same(a,b,what) assert(A.Canonical(a)==A.Canonical(b),what) end\nfor _,old in ipairs(e.Units) do\n  local u=assert(A.FindUnit(e.To,plan.ID..':unit:'..old.ID),'missing transferred old unit '..old.ID)\n  assert(GameInfo.Units[u:GetType()].UnitType==old.Type,'unit type changed')\n  local gp=u:GetGreatPerson();assert((gp and gp:GetIndividual() or -1)==old.Individual,'native individual changed')\n  assert(u:GetDamage()==old.Damage and u:GetMovesRemaining()==old.Moves,'damage or moves changed')\n  assert(u:GetBuildCharges()==old.BuildCharges and u:GetSpreadCharges()==old.SpreadCharges,'charges changed')\n  assert(u:GetExperience():GetExperiencePoints()==old.XP,'experience changed')\n  for key,value in pairs(old.Properties) do if key~=R.PERSON_KEY then same(u:GetProperty(key),value,'transferred unit property '..key) end end\nend\nfor _,old in ipairs(e.Cities) do\n  local c=assert(CityManager.GetCityAt(old.X,old.Y));assert(c:GetOwner()==e.To and c:GetPopulation()==old.Population,'city moved incorrectly')\n  for _,work in ipairs(old.PalaceWorks) do assert(A.OwnedGreatWorks(e.To)[work],'Palace work lost') end\n  same(A.CityReligion(c),old.Faith,'native followers changed');same(A.CityAssets(c),old.Assets,'buildings/Great Works changed')\n  same(c:GetProperty(R.CITY_FAITH_KEY),old.Property,'holy site and clergy data changed')\nend\nfor _,i in ipairs(e.Plots) do assert(Map.GetPlotByIndex(i):GetOwner()==e.To,'old territory lost: '..i) end\nlocal roster=A.GetRoster(e.To)\nfor id,old in pairs(e.SourceRoster) do\n  local new=assert(roster[id],'missing asset '..id);assert(new.Owner==e.To,'asset owner '..id)\n  for key,value in pairs(old) do if key~='Owner' and key~='Unit' and key~='City' then same(new[key],value,'asset field '..id..'.'..key) end end\n  if old.Unit then assert(new.Unit.Owner==e.To and A.FindUnit(e.To,new.Unit.Token):GetID()==new.Unit.ID,'person/Hero reference') end\n  if old.City then assert(new.City.Owner==e.To and new.City.X==old.City.X and new.City.Y==old.City.Y,'collection city reference') end\nend\nfor id,old in pairs(e.TargetRoster) do same(roster[id],old,'pre-existing asset overwritten') end\nassert(roster['live:hero'].Lifespan==19 and roster['live:hero'].Loyalty==73 and roster['live:hero'].Relations.friend==25,'Hero attributes changed')\nassert(roster['live:person'].Level==6 and roster['live:person'].XP==17 and roster['live:person'].Personality=='LOYAL','person growth changed')\nassert(roster['live:equipment'].Anchor.ID=='live:person' and roster['live:artifact'].Anchor.ID=='live:vault','belongings detached')\nassert(roster['live:religion'].Founder==e.From and roster['live:religion'].Followers==9 and roster['live:religion'].State=='PUBLIC','religion identity changed')\nassert(roster['live:other-community'].Followers==2 and roster['live:other-community'].State=='UNDERGROUND','same sect community overwritten')\nlocal leader=assert(roster['leader:'..e.From]);assert(leader.Persistent and leader.Unit.Owner==e.To,'former leader lost')\nlocal saved=A.Canonical(A.GetState());A.Apply(plan);assert(A.Canonical(A.GetState())==saved,'same request replayed')\nlocal actual={State=A.GetState(),Roster=roster,SourceRoster=A.GetRoster(e.From),Units={},Cities={},Plots={}}\nfor _,old in ipairs(e.Units) do local u=A.FindUnit(e.To,plan.ID..':unit:'..old.ID);actual.Units[#actual.Units+1]=A.SnapshotUnit(u) end\nactual.Leader=A.SnapshotUnit(A.FindUnit(e.To,plan.ID..':leader'))\nfor _,old in ipairs(e.Cities) do local c=CityManager.GetCityAt(old.X,old.Y);actual.Cities[#actual.Cities+1]={Owner=c:GetOwner(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),Governance=c:GetProperty(R.GOVERNANCE_KEY),FaithProperty=c:GetProperty(R.CITY_FAITH_KEY)} end\nfor _,i in ipairs(e.Plots) do actual.Plots[i]=Map.GetPlotByIndex(i):GetOwner() end\nlocal transferred={Roster=R.Copy(roster),Properties={}}\nfor _,old in ipairs(e.Units) do transferred.Properties[tostring(old.ID)]=R.Copy(A.SnapshotUnit(A.FindUnit(e.To,plan.ID..':unit:'..old.ID)).Properties) end\ntransferred.Properties.leader=R.Copy(actual.Leader.Properties)\nlocal existing=Game:GetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1')\nif existing then assert(A.Canonical(existing)==A.Canonical(transferred),'transferred invariants changed after reload') else Game:SetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1',transferred) end\nactual.NativeDefinition=nativeDefinition\nreturn A.Canonical(actual)\n",
+      "equals_capture": "ABSORPTION_IMMEDIATE"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive()"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local R=A.Rules\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local plan=Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1')\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==e.Religion then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==e.From,'native religion identity/founder lost')\nlocal tx=A.GetState().Transactions[plan.ID];assert(Game.GetCurrentGameTurn()>tx.Turn,'AI turn did not advance')\nassert(Players[e.From]:GetCities():GetCount()==0 and Players[e.From]:GetUnits():GetCount()==0,'donor regained an engine asset')\nassert(next(A.GetRoster(e.From))==nil,'donor roster regained an asset')\nlocal transferred=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1'),'no immediate invariants')\nlocal actual={State=A.GetState(),Roster=A.GetRoster(e.To),Units={},Cities={},Plots={}}\nfor id,expected in pairs(transferred.Roster) do\n local record=assert(actual.Roster[id],'persistent asset lost after AI turn: '..id)\n assert(record.Owner==e.To and record.ID==id,'persistent asset ownership after AI turn: '..id)\n assert(A.Canonical(record)==A.Canonical(expected),'persistent asset changed after AI turn: '..id)\nend\nfor _,old in ipairs(e.Units) do\n local u=assert(A.FindUnit(e.To,plan.ID..':unit:'..old.ID),'transferred unit lost after AI turn')\n assert(u:GetOwner()==e.To and GameInfo.Units[u:GetType()].UnitType==old.Type,'unit owner/type after AI turn')\n local gp=u:GetGreatPerson();assert((gp and gp:GetIndividual() or -1)==old.Individual,'native general identity after AI turn')\n local snap=A.SnapshotUnit(u)\n assert(A.Canonical(snap.Properties)==A.Canonical(transferred.Properties[tostring(old.ID)]),'transferred unit properties changed after AI turn: '..old.ID)\n actual.Units[#actual.Units+1]=snap\nend\nactual.Leader=A.SnapshotUnit(assert(A.FindUnit(e.To,plan.ID..':leader')))\nassert(A.Canonical(actual.Leader.Properties)==A.Canonical(transferred.Properties.leader),'leader properties changed after AI turn')\nfor _,old in ipairs(e.Cities) do local c=assert(CityManager.GetCityAt(old.X,old.Y));assert(c:GetOwner()==e.To,'city owner after AI turn');actual.Cities[#actual.Cities+1]={Owner=c:GetOwner(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),Governance=c:GetProperty(R.GOVERNANCE_KEY),FaithProperty=c:GetProperty(R.CITY_FAITH_KEY)} end\nfor _,old in ipairs(e.Cities) do for _,work in ipairs(old.PalaceWorks) do assert(A.OwnedGreatWorks(e.To)[work],'Palace work lost after AI turn') end end\nfor _,i in ipairs(e.Plots) do local owner=Map.GetPlotByIndex(i):GetOwner();assert(owner==e.To,'old territory lost after AI turn');actual.Plots[i]=owner end\nassert(actual.Roster['live:hero'].Lifespan==19 and actual.Roster['live:religion'].Founder==e.From,'persistent Hero/religion data changed')\nactual.NativeDefinition=nativeDefinition\nreturn A.Canonical(actual)\n",
+      "capture_as": "ABSORPTION_AFTER_AI_TURN"
+    },
+    {
+      "action": "save",
+      "name": "jac-absorption-after-turn"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "jac-absorption-after-turn",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local R=A.Rules\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local plan=Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1')\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==e.Religion then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==e.From,'native religion identity/founder lost')\nlocal tx=A.GetState().Transactions[plan.ID];assert(Game.GetCurrentGameTurn()>tx.Turn,'AI turn did not advance')\nassert(Players[e.From]:GetCities():GetCount()==0 and Players[e.From]:GetUnits():GetCount()==0,'donor regained an engine asset')\nassert(next(A.GetRoster(e.From))==nil,'donor roster regained an asset')\nlocal transferred=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_TRANSFERRED_V1'),'no immediate invariants')\nlocal actual={State=A.GetState(),Roster=A.GetRoster(e.To),Units={},Cities={},Plots={}}\nfor id,expected in pairs(transferred.Roster) do\n local record=assert(actual.Roster[id],'persistent asset lost after AI turn: '..id)\n assert(record.Owner==e.To and record.ID==id,'persistent asset ownership after AI turn: '..id)\n assert(A.Canonical(record)==A.Canonical(expected),'persistent asset changed after AI turn: '..id)\nend\nfor _,old in ipairs(e.Units) do\n local u=assert(A.FindUnit(e.To,plan.ID..':unit:'..old.ID),'transferred unit lost after AI turn')\n assert(u:GetOwner()==e.To and GameInfo.Units[u:GetType()].UnitType==old.Type,'unit owner/type after AI turn')\n local gp=u:GetGreatPerson();assert((gp and gp:GetIndividual() or -1)==old.Individual,'native general identity after AI turn')\n local snap=A.SnapshotUnit(u)\n assert(A.Canonical(snap.Properties)==A.Canonical(transferred.Properties[tostring(old.ID)]),'transferred unit properties changed after AI turn: '..old.ID)\n actual.Units[#actual.Units+1]=snap\nend\nactual.Leader=A.SnapshotUnit(assert(A.FindUnit(e.To,plan.ID..':leader')))\nassert(A.Canonical(actual.Leader.Properties)==A.Canonical(transferred.Properties.leader),'leader properties changed after AI turn')\nfor _,old in ipairs(e.Cities) do local c=assert(CityManager.GetCityAt(old.X,old.Y));assert(c:GetOwner()==e.To,'city owner after AI turn');actual.Cities[#actual.Cities+1]={Owner=c:GetOwner(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),Governance=c:GetProperty(R.GOVERNANCE_KEY),FaithProperty=c:GetProperty(R.CITY_FAITH_KEY)} end\nfor _,old in ipairs(e.Cities) do for _,work in ipairs(old.PalaceWorks) do assert(A.OwnedGreatWorks(e.To)[work],'Palace work lost after AI turn') end end\nfor _,i in ipairs(e.Plots) do local owner=Map.GetPlotByIndex(i):GetOwner();assert(owner==e.To,'old territory lost after AI turn');actual.Plots[i]=owner end\nassert(actual.Roster['live:hero'].Lifespan==19 and actual.Roster['live:religion'].Founder==e.From,'persistent Hero/religion data changed')\nactual.NativeDefinition=nativeDefinition\nreturn A.Canonical(actual)\n",
+      "equals_capture": "ABSORPTION_AFTER_AI_TURN"
+    }
+  ]
+}
