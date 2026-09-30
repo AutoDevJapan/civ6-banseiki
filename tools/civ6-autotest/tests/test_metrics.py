@@ -9,12 +9,45 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import lupa
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from metrics import TurnMetrics, process_memory
 from scenario import AutoplayStatus, Runner, ScenarioError, validate_scenario
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_fast_forward_uses_core_clock_and_discards_stale_ui_measurement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            runner = Runner({"test_mode": {"skipped_turns": 94}}, base, base, base, 4318)
+            lua = lupa.LuaRuntime()
+            lua.execute("""
+                Game={GetCurrentGameTurn=function() return 1 end,GetLocalPlayer=function() return 0 end}
+                Players={[0]={IsAlive=function() return true end}}
+                PlayerTypes={NONE=-1}
+                LuaEvents={AutoPlayEnd={Add=function() end,Remove=function() end}}
+                AutoplayManager={IsActive=function() return false end,SetTurns=function() end,
+                                 SetReturnAsPlayer=function() end,SetObserveAsPlayer=function() end,
+                                 SetActive=function() end}
+            """)
+            def run_lua(state, code, timeout=5):
+                value = lua.execute(code)
+                return str(value).lower() if isinstance(value, bool) else str(value)
+            statuses = iter((AutoplayStatus(1, True, False, 2, -1),
+                             AutoplayStatus(96, True, False, 1, -1),
+                             AutoplayStatus(97, False, True, 0, 0)))
+            with patch.object(runner, "_lua", side_effect=run_lua), \
+                    patch.object(runner, "_autoplay_status", side_effect=lambda deadline: next(statuses)), \
+                    patch.object(runner, "_close_diplomacy", return_value=[]), \
+                    patch.object(runner, "_close_options_menu"), patch.object(runner, "_dismiss_advisor"), \
+                    patch("scenario.single_civ_process", return_value=(123, 0)), \
+                    patch("scenario.process_memory", return_value={"working_set_bytes": 80, "private_bytes": 100}), \
+                    patch("scenario.time.sleep"):
+                detail = runner._autoplay(2, 10, record_metrics=True, start_turn_override=95)
+            self.assertIn("95->97", detail)
+            self.assertEqual([r["turn"] for r in runner.turn_metrics[0]["recorder"].rows], [95, 96, 97])
+
     def test_fast_forward_csv_files_warn_against_continuous_performance_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)

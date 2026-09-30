@@ -693,7 +693,8 @@ class Runner:
 
     def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
                   record_metrics: bool = False, research_metrics: bool = False,
-                  allow_human_elimination: bool = False, metrics_group: str = "AUTOPLAY") -> str:
+                  allow_human_elimination: bool = False, metrics_group: str = "AUTOPLAY",
+                  start_turn_override: int | None = None) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
         # An open partial screen and the base game's advisor can both hold input.
         self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true",
@@ -701,8 +702,9 @@ class Runner:
         self._close_options_menu(deadline)
         self._dismiss_advisor(deadline)
         start_code = (
-            "if AutoplayManager.IsActive() then error('autoplay already active') end\n"
-            "local startTurn = Game.GetCurrentGameTurn()\n"
+            "if AutoplayManager.IsActive() then error('autoplay already active') end\n" +
+            (f"local startTurn = {start_turn_override}\n" if start_turn_override is not None
+             else "local startTurn = Game.GetCurrentGameTurn()\n") +
             "local human = Game.GetLocalPlayer()\n"
             "if human < 0 then error('no local human player to return to') end\n"
             "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
@@ -776,6 +778,11 @@ class Runner:
                     # The read-only query may be starved by an open diplomacy screen: close it at the top
                     # of the loop and ask again. If nothing was open, the failure stops the step as before.
                     status_failure = exc
+                    continue
+                if start_turn_override is not None and status.turn < start_turn:
+                    # GameCore writes are visible to UI only after its next update.
+                    # Do not interpret the cached UI clock as an early stop or a measurement.
+                    time.sleep(min(0.1, _remaining(deadline)))
                     continue
                 if recorder and status.turn != recorder.turn:
                     process = single_civ_process()
@@ -914,7 +921,8 @@ class Runner:
                 self.scenario["test_mode"]["skipped_turns"] += limit - current
                 current = limit
             before = current
-            self._autoplay(min(2, target - current), timeout, deadline=deadline, **metrics_flags)
+            self._autoplay(min(2, target - current), timeout, deadline=deadline,
+                           start_turn_override=current, **metrics_flags)
             current, minimum, maximum, countdown = state()
             if current <= before or current > target:
                 raise ScenarioError(f"Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}")
