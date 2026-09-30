@@ -2,6 +2,14 @@
 
 SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状態を明記する。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
 
+## JAC_PoC_Assassin：暗殺者（束2）
+
+[暗殺者の検証記録](assassin.md)。生産と全国ロック、マップUnitの任務、実行時抽選と保存を試作。実機は未実行。外交罰則、指導者差替、国家の統治、通常生産キューへの統合は未実証・未接続である。
+
+| 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス・利用条件 | 元ファイル |
+|---|---|---|---|---|---|
+| 暗殺者PoCの仮アイコン | Civ6 Scout のUnit・FOW・Portrait・白旗アイコン | Firaxis Games / 2K | 導入済みゲームの `Base/Assets/UI/Icons/Icons_Units.xml:32,133`、`Icons_UnitPortraits.xml:77`、`Icons_UnitFlags.xml:47` | 導入済みゲームの素材をIDで参照。公式DDSは再配布・同梱しない | `Data/JAC_Assassin_Icons.xml` のAtlas／Index参照。借用理由は時計・任務の技術検証を先に行うため。専用モデルは未作成 |
+
 ## 共通の準備
 
 | 項目 | 内容 |

@@ -1,0 +1,356 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_ASN_MOD_NAME" Language="ja_JP">
+      <Text>JAC PoC：暗殺者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MOD_NAME" Language="en_US">
+      <Text>JAC PoC: Assassin</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MOD_NAME" Language="ru_RU">
+      <Text>JAC PoC: убийца</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="ja_JP">
+      <Text>日本マップの暗殺者募集・任務・保存の試作。未決の国家の行方は保留として記録。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="en_US">
+      <Text>Japan-map recruitment, missions and persistence. Undecided governance is recorded as pending.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="ru_RU">
+      <Text>Набор, задания и сохранение на картах Японии. Неопределённое управление записывается как ожидающее решения.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_NINJA_NAME" Language="ja_JP">
+      <Text>暗殺忍者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_NINJA_NAME" Language="en_US">
+      <Text>Assassin Ninja</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_NINJA_NAME" Language="ru_RU">
+      <Text>Ниндзя-убийца</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_COMMON_NAME" Language="ja_JP">
+      <Text>暗殺者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_COMMON_NAME" Language="en_US">
+      <Text>Assassin</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_COMMON_NAME" Language="ru_RU">
+      <Text>Убийца</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_UNIT_DESCRIPTION" Language="ja_JP">
+      <Text>地図を歩く暗殺者。都市を指定して通常100ターン・最短20ターンで募集。完成後は全国10ターン募集不可。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_UNIT_DESCRIPTION" Language="en_US">
+      <Text>An assassin who travels on the map. Recruit in one city: normally 100 turns, at least 20. After completion, recruitment is locked nationwide for 10 turns.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_UNIT_DESCRIPTION" Language="ru_RU">
+      <Text>Убийца, передвигающийся по карте. Набор в одном городе: обычно 100 ходов, минимум 20. После завершения набор запрещён во всей стране на 10 ходов.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION" Language="ja_JP">
+      <Text>潜入</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION" Language="en_US">
+      <Text>Infiltration</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION" Language="ru_RU">
+      <Text>Проникновение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION_DESCRIPTION" Language="ja_JP">
+      <Text>他国の領土に入れる。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION_DESCRIPTION" Language="en_US">
+      <Text>May enter foreign territory.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_INFILTRATION_DESCRIPTION" Language="ru_RU">
+      <Text>Может входить на чужую территорию.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TITLE" Language="ja_JP">
+      <Text>暗殺者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TITLE" Language="en_US">
+      <Text>Assassins</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TITLE" Language="ru_RU">
+      <Text>Убийцы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CLOSE" Language="ja_JP">
+      <Text>閉じる</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CLOSE" Language="en_US">
+      <Text>Close</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CLOSE" Language="ru_RU">
+      <Text>Закрыть</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCE" Language="ja_JP">
+      <Text>募集を開始</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCE" Language="en_US">
+      <Text>Start recruiting</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCE" Language="ru_RU">
+      <Text>Начать набор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CANCEL" Language="ja_JP">
+      <Text>募集を中止</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CANCEL" Language="en_US">
+      <Text>Cancel recruitment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CANCEL" Language="ru_RU">
+      <Text>Отменить набор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_ATTEMPT" Language="ja_JP">
+      <Text>暗殺を実行</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_ATTEMPT" Language="en_US">
+      <Text>Attempt assassination</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_ATTEMPT" Language="ru_RU">
+      <Text>Начать покушение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_WAIT" Language="ja_JP">
+      <Text>任務中</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_WAIT" Language="en_US">
+      <Text>On a mission</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_WAIT" Language="ru_RU">
+      <Text>На задании</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_SELECT" Language="ja_JP">
+      <Text>募集は都市を指定。暗殺は地図上の暗殺者を選び、対象の近くへ移動して実行。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_SELECT" Language="en_US">
+      <Text>Choose a city to recruit. Select an assassin on the map and move near a target to attempt a mission.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_SELECT" Language="ru_RU">
+      <Text>Выберите город для набора. Выберите убийцу на карте и переместите его к цели, чтобы начать задание.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_STATUS" Language="ja_JP">
+      <Text>募集ロック：あと{1}ターン／暗殺コマンド待機：あと{2}ターン</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_STATUS" Language="en_US">
+      <Text>Recruitment lock: {1} turns / command wait: {2} turns</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_STATUS" Language="ru_RU">
+      <Text>Запрет набора: {1} ходов / ожидание команды: {2} ходов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CITY" Language="ja_JP">
+      <Text>{1}：募集{2}ターン</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CITY" Language="en_US">
+      <Text>{1}: recruit in {2} turns</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_CITY" Language="ru_RU">
+      <Text>{1}: набор за {2} ходов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TRAINING" Language="ja_JP">
+      <Text>都市{1}で募集中：あと{2}ターン</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TRAINING" Language="en_US">
+      <Text>Recruiting in city {1}: {2} turns remaining</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TRAINING" Language="ru_RU">
+      <Text>Набор в городе {1}: осталось {2} ходов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MISSION" Language="ja_JP">
+      <Text>{1}への任務：あと{2}ターン</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MISSION" Language="en_US">
+      <Text>Mission against {1}: {2} turns remaining</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_MISSION" Language="ru_RU">
+      <Text>Задание против {1}: осталось {2} ходов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TARGET" Language="ja_JP">
+      <Text>{1}・{2}：基本{3}%、補正後{5}%、{4}ターン</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TARGET" Language="en_US">
+      <Text>{1}, {2}: base {3}%, adjusted {5}%, {4} turns</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_TARGET" Language="ru_RU">
+      <Text>{1}, {2}: базовый шанс {3}%, итоговый {5}%, {4} ходов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_GOVERNOR" Language="ja_JP">
+      <Text>Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_GOVERNOR" Language="en_US">
+      <Text>Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_GOVERNOR" Language="ru_RU">
+      <Text>Губернатор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCED" Language="ja_JP">
+      <Text>暗殺者の募集が完了。全国の次の募集まで{1}ターン。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCED" Language="en_US">
+      <Text>Recruitment complete. Nationwide recruitment unlocks in {1} turns.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_PRODUCED" Language="ru_RU">
+      <Text>Набор завершён. Набор во всей стране станет доступен через {1} ходов.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT" Language="ja_JP">
+      <Text>暗殺任務：{1}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT" Language="en_US">
+      <Text>Assassination mission: {1}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT" Language="ru_RU">
+      <Text>Задание убийцы: {1}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_LEADER_DEAD_PENDING" Language="ja_JP">
+      <Text>指導者死亡。国家の行方は判断待ち。領土は移管されない。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_LEADER_DEAD_PENDING" Language="en_US">
+      <Text>Leader dead. Governance pending a decision; territory is retained.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_LEADER_DEAD_PENDING" Language="ru_RU">
+      <Text>Правитель погиб. Управление ожидает решения; территория сохранена.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_GOVERNOR_DEAD_PENDING" Language="ja_JP">
+      <Text>Governor死亡。既存枠の処理は未確認。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_GOVERNOR_DEAD_PENDING" Language="en_US">
+      <Text>Governor dead; native-slot handling is unverified.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_GOVERNOR_DEAD_PENDING" Language="ru_RU">
+      <Text>Губернатор погиб; обработка штатного слота не проверена.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_UNIT_KILLED" Language="ja_JP">
+      <Text>対象Unit死亡。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_UNIT_KILLED" Language="en_US">
+      <Text>Target unit killed.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_UNIT_KILLED" Language="ru_RU">
+      <Text>Целевой юнит погиб.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_FAILED" Language="ja_JP">
+      <Text>失敗。暗殺者死亡。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_FAILED" Language="en_US">
+      <Text>Failed. Assassin killed.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_FAILED" Language="ru_RU">
+      <Text>Неудача. Убийца погиб.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_TARGET_GONE" Language="ja_JP">
+      <Text>対象が失われたため任務終了。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_TARGET_GONE" Language="en_US">
+      <Text>Mission ended: target no longer exists.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_TARGET_GONE" Language="ru_RU">
+      <Text>Задание завершено: цель больше не существует.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_ACTOR_GONE" Language="ja_JP">
+      <Text>暗殺者が失われたため成功効果を中断。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_ACTOR_GONE" Language="en_US">
+      <Text>Success effect cancelled: assassin no longer exists.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_RESULT_ACTOR_GONE" Language="ru_RU">
+      <Text>Эффект успеха отменён: убийцы больше не существует.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCING" Language="ja_JP">
+      <Text>別の都市で既に募集中。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCING" Language="en_US">
+      <Text>Recruitment is already in progress.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCING" Language="ru_RU">
+      <Text>Набор уже идёт.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCTION_LOCK" Language="ja_JP">
+      <Text>完成後の全国募集ロック中。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCTION_LOCK" Language="en_US">
+      <Text>Nationwide recruitment lock is active.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_PRODUCTION_LOCK" Language="ru_RU">
+      <Text>Действует запрет набора во всей стране.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_MISSION_ACTIVE" Language="ja_JP">
+      <Text>自国の暗殺任務が進行中。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_MISSION_ACTIVE" Language="en_US">
+      <Text>A national assassination mission is active.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_MISSION_ACTIVE" Language="ru_RU">
+      <Text>Задание убийцы от вашей страны уже идёт.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_COMMAND_LOCK" Language="ja_JP">
+      <Text>前回の実行からの全国待機中。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_COMMAND_LOCK" Language="en_US">
+      <Text>Nationwide command waiting period is active.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_COMMAND_LOCK" Language="ru_RU">
+      <Text>Действует общестрановое ожидание после предыдущей команды.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_GONE" Language="ja_JP">
+      <Text>対象が存在しない。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_GONE" Language="en_US">
+      <Text>Target no longer exists.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_GONE" Language="ru_RU">
+      <Text>Цель больше не существует.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_UNKNOWN" Language="ja_JP">
+      <Text>対象の所在を確認する。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_UNKNOWN" Language="en_US">
+      <Text>Discover the target location.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_UNKNOWN" Language="ru_RU">
+      <Text>Установите местонахождение цели.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_CITY_GONE" Language="ja_JP">
+      <Text>生産都市が存在しない。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_CITY_GONE" Language="en_US">
+      <Text>Recruitment city no longer exists.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_CITY_GONE" Language="ru_RU">
+      <Text>Города набора больше не существует.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_KIND" Language="ja_JP">
+      <Text>この対象には実行できない。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_KIND" Language="en_US">
+      <Text>Invalid target.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TARGET_KIND" Language="ru_RU">
+      <Text>Недопустимая цель.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_ASSASSIN_REQUIRED" Language="ja_JP">
+      <Text>暗殺者Unitを選択する。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_ASSASSIN_REQUIRED" Language="en_US">
+      <Text>Select an assassin unit.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_ASSASSIN_REQUIRED" Language="ru_RU">
+      <Text>Выберите юнит убийцы.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TOO_FAR" Language="ja_JP">
+      <Text>対象の近くまで移動する。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TOO_FAR" Language="en_US">
+      <Text>Move closer to the target.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_TOO_FAR" Language="ru_RU">
+      <Text>Подойдите ближе к цели.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_DURATION_UNSET" Language="ja_JP">
+      <Text>任務期間が未設定。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_DURATION_UNSET" Language="en_US">
+      <Text>Mission duration is unset.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_ASN_REASON_DURATION_UNSET" Language="ru_RU">
+      <Text>Длительность задания не задана.</Text>
+    </Row>
+  </LocalizedText>
+</GameData>

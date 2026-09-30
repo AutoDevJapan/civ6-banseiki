@@ -1,0 +1,351 @@
+{
+  "name": "Assassin: 100-turn recruitment; forced AI leader death; pending governance; nationwide locks and two save/load cycles",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620995,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local a,b; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local c=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(); if c=='CIVILIZATION_JAC_ODA' then a=p:GetID() elseif c=='CIVILIZATION_JAC_MATSUDAIRA' then b=p:GetID() end end; assert(a and b,'test houses missing'); assert(not Players[b]:IsHuman(),'target must be AI'); local city=Players[b]:GetCities():GetCapitalCity(); local u=UnitManager.InitUnitValidAdjacentHex(a,R.UNIT,city:GetX(),city:GetY(),1); assert(u,'grant failed'); local cities={}; for _,c in Players[a]:GetCities():Members() do cities[#cities+1]=c:GetID() end; table.sort(cities); assert(#cities>=2,'two producing cities required'); Game:SetProperty(R.TEST,1); Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='FREE_STATE'}); local before={}; for _,id in ipairs({a,b}) do before[tostring(id)]={}; for _,c in Players[id]:GetCities():Members() do table.insert(before[tostring(id)],c:GetID()) end end; Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=a,Target=b,Unit=u:GetID(),Cities=cities,Before=before,Start=R.Turn()}); assert(R.CHANCES.LEADER==1); assert(R.ProductionTurns({})==100); assert(R.ProductionTurns({Building=1000})==20); assert(R.WaitTurns({})==50); assert(R.WaitTurns({Security=0,Relation=1,School=1,Governor=1,Hero=1,GreatPerson=1})==1); return 'AI target, map unit grant, production/cooldown constants verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AssassinPanel",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(Game.GetLocalPlayer()==t.Actor,'wrong human'); assert(JAC_AssassinProduce(t.Cities[1]),'production not sent'); assert(JAC_AssassinAttempt(t.Unit,t.Target,'LEADER'),'attempt not sent'); return 'production and assassination sent through EXECUTE_SCRIPT'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); return s.Production~=nil and s.Mission~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production.Turns==100 and s.Production.Due-s.Production.Start==100,'base production'); assert(s.Mission.Success and not s.Mission.Detected and s.Mission.Branch=='FREE_STATE','forced outcome not frozen'); assert(s.CommandUnlock-s.LastCommand==50,'command clock'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCING','parallel city bypass'); local u=UnitManager.InitUnitValidAdjacentHex(t.Actor,R.UNIT,Players[t.Target]:GetCities():GetCapitalCity():GetX(),Players[t.Target]:GetCities():GetCapitalCity():GetY(),1); assert(u,'second grant failed'); local ok,why=R.StartAttempt(t.Actor,u:GetID(),t.Target,'LEADER'); assert(not ok and why=='MISSION_ACTIVE','second unit bypass'); t.SecondUnit=u:GetID(); t.Frozen=s.Mission; t.ProductionDue=s.Production.Due; Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'one city and one active mission enforced; three independent clocks'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-Pending",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-Pending",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production.Due==t.ProductionDue,'production changed on load'); assert(s.Mission,'pending mission lost'); for _,k in ipairs({'Start','Due','Success','Detected','SuccessRoll','DetectionRoll','BranchRoll','Branch'}) do assert(s.Mission[k]==t.Frozen[k],'rerolled '..k) end; assert(Players[t.Target]:GetProperty(R.NATION)==nil,'premature leader death'); return 'pending mission, RNG rolls and production survive load'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 10,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Mission==nil and s.LastMission.Result=='LEADER_DEAD_PENDING','mission did not finish'); local n=Players[t.Target]:GetProperty(R.NATION); assert(n and n.LeaderDead==1 and n.State=='PENDING_FREE_STATE' and n.DecisionRequired==1,'post-death state'); assert(n.DeathTurn==t.Frozen.Due,'wrong death time'); assert(Players[t.Target]:IsAlive(),'native player incorrectly eliminated'); for _,id in ipairs({t.Actor,t.Target}) do local count=0; for _,c in Players[id]:GetCities():Members() do count=count+1; local found=false; for _,old in ipairs(t.Before[tostring(id)]) do if c:GetID()==old then found=true end end; assert(found,'city transferred or created') end; assert(count==#t.Before[tostring(id)],'city lost or acquired') end; local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait ignored after success'); return 'logical leader death, pending nation, no territory acquisition; command wait retained'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 90,
+      "timeout": 1800
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.ProductionDue,'base recruitment completion'); assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin'); assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'produced unit absent'); for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK','city lock bypass') end; R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock'); t.Completion=s.LastCompletion; t.Lock=s.ProductionUnlock; Game:SetProperty('JAC_ASN_LIVE_TEST',t); return '100-turn completion; 10-turn nationwide lock in both cities, cancellation cannot clear it'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-Lock",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-Lock",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.LastCompletion==t.Completion and s.ProductionUnlock==t.Lock,'lock changed on load'); assert(Players[t.Target]:GetProperty(R.NATION).LeaderDead==1,'death state lost'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCTION_LOCK','load cleared lock'); return 'nation state and nationwide lock survive load'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 9,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(R.Turn()==t.Lock-1,'wrong lock boundary'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCTION_LOCK','unlocked one turn early'); return 'completion+9 locked'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(R.Turn()==t.Lock,'wrong unlock boundary'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000}); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(ok,tostring(why)); local s=R.State(t.Actor); assert(s.Production.City==t.Cities[2] and s.Production.Turns==20,'minimum recruitment in new city'); t.MinStart=R.Turn(); Game:SetProperty('JAC_ASN_LIVE_TEST',t); Game:SetProperty(R.TEST,nil); return 'completion+10 unlocked in another city; minimum recruitment started; forced test mode disabled'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 19,
+      "timeout": 900
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(R.Turn()==t.MinStart+19,'wrong minimum boundary'); assert(s.Production~=nil and s.LastCompletion==t.Completion,'completed before 20'); return 'minimum recruitment still active after 19 turns'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.MinStart+20,'did not complete at 20'); assert(s.ProductionUnlock==s.LastCompletion+10,'second nationwide lock'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil); return 'minimum 20-turn completion and new nationwide lock verified'"
+    }
+  ]
+}
