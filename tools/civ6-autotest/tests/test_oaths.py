@@ -5,7 +5,7 @@ import unittest
 import lupa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scenario import validate_scenario
+from scenario import validate_scenario, fast_forward_scenario
 
 
 class OathScenarioTests(unittest.TestCase):
@@ -40,3 +40,28 @@ class OathScenarioTests(unittest.TestCase):
                 self.assertTrue(ok, error)
                 checked += 1
         self.assertGreaterEqual(checked, 12)
+
+    def test_automatic_popup_assertion_cannot_force_a_missing_screen_open(self):
+        code = next(s['code'] for s in self.data['steps'] if s.get('state_name') == 'DedicationPopup')
+        lua = lupa.LuaRuntime()
+        lua.execute("ContextPtr={IsHidden=function() return true end}; JAC_ShowOaths=function() error('forced popup') end")
+        with self.assertRaisesRegex(lupa.LuaError, 'did not automatically open'):
+            lua.execute(code)
+
+    def test_fast_forward_runs_engine_jump_with_scope_checks_and_keeps_source_intact(self):
+        source = {'name': 'test', 'steps': [{'action': 'autoplay', 'turns': 64, 'timeout': 14400}]}
+        result = fast_forward_scenario(source)
+        self.assertEqual(source['steps'][0]['turns'], 64)
+        self.assertEqual(result['steps'][1]['turns'], 2)
+        self.assertEqual(result['test_mode'], {'skipped_turns': 62, 'continuous_performance_valid': False})
+        lua = lupa.LuaRuntime()
+        lua.execute("TURN=1; RULE='RULESET_JAC_BANSEIKI'; MULTI=false; Game={GetCurrentGameTurn=function() return TURN end,SetCurrentGameTurn=function(t) TURN=t end}; GameConfiguration={GetRuleSet=function() return RULE end,IsAnyMultiplayer=function() return MULTI end}")
+        code = result['steps'][0]['code']
+        lua.execute(code)
+        self.assertEqual(lua.globals().TURN, 63)
+        for rule, multi, message in (('RULESET_STANDARD', False, 'test ruleset required'),
+                                     ('RULESET_JAC_BANSEIKI', True, 'single-player test required')):
+            lua.globals().RULE, lua.globals().MULTI = rule, multi
+            with self.assertRaisesRegex(lupa.LuaError, message):
+                lua.execute(code)
+            self.assertEqual(lua.globals().TURN, 63)

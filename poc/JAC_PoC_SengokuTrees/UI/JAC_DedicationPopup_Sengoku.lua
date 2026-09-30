@@ -34,10 +34,7 @@ function JAC_OathsUI_Choices(house)
 end
 
 local function Pending()
-	local l, house, player = State()
-	return l and player and player:IsHuman() and l.reign > 0 and house
-		and house.oathReign == l.reign and house.oathChosen ~= l.reign
-		and #JAC_OathsUI_Choices(house) > 0
+	return JAC_AgesView_PendingOath(JAC_AgesView_Ledger(), Game.GetLocalPlayer()) ~= nil
 end
 
 local function SelectedCount()
@@ -170,3 +167,4 @@ LuaEvents.JAC_SengokuReignPopup_Closed.Add(function(showChoice)
 	m_ReignPopupOpen = false
 	if showChoice then JAC_ShowOaths(true) end
 end)
+LuaEvents.JAC_SengokuOaths_Open.Add(function() JAC_ShowOaths(true) end)

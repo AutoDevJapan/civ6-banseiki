@@ -7,6 +7,67 @@ include("ActionPanel_Expansion2")
 include("JAC_SengokuAgesView")
 
 local BASE_RealizeEraIndicator = RealizeEraIndicator
+local BASE_DoEndTurn = DoEndTurn
+local BASE_OnInputHandler = OnInputHandler
+local BASE_AllowAutoEndTurn = AllowAutoEndTurn_Expansion
+local BASE_OnRefresh = OnRefresh
+
+-- 通知の有無ではなく、保存された判定ターンと選択済みの期で手番の終了を止める。
+-- ボタン・Enter・通知の追加ボタンは公式 ActionPanel.lua:250,297,605,1298 の DoEndTurn を通る。
+function JAC_IsDarkPolicyEndTurnBlocked()
+	local ledger, id = JAC_AgesView_Ledger(), Game.GetLocalPlayer()
+	return JAC_AgesView_PendingOath(ledger, id) ~= nil
+		or JAC_AgesView_PendingDarkPolicy(ledger, id) ~= nil
+end
+
+-- 公式の Shift+Enter は DoEndTurn を通さず直接終了する（ActionPanel.lua:1093-1106）。
+function OnInputHandler(input)
+	if JAC_IsDarkPolicyEndTurnBlocked() and input:GetMessageType() == KeyEvents.KeyUp
+		and input:GetKey() == Keys.VK_RETURN then
+		DoEndTurn()
+		return true
+	end
+	return BASE_OnInputHandler(input)
+end
+
+function DoEndTurn(optionalNewBlocker)
+	if JAC_IsDarkPolicyEndTurnBlocked() then
+		local player = Players[Game.GetLocalPlayer()]
+		if player and player:IsTurnActive() then
+			LuaEvents.JAC_SengokuReignPopup_CloseForPolicy()
+			if JAC_AgesView_PendingOath(JAC_AgesView_Ledger(), Game.GetLocalPlayer()) then
+				LuaEvents.JAC_SengokuOaths_Open()
+			else
+				LuaEvents.JAC_SengokuDarkPolicy_Open(JAC_AgesView_Ledger().reign)
+			end
+		end
+		return
+	end
+	return BASE_DoEndTurn(optionalNewBlocker)
+end
+
+-- 自動終了も止める。公式 ActionPanel.lua:497-520 の拡張用フック。
+function AllowAutoEndTurn_Expansion()
+	return not JAC_IsDarkPolicyEndTurnBlocked() and BASE_AllowAutoEndTurn()
+end
+
+function OnRefresh()
+	BASE_OnRefresh()
+	local player = Players[Game.GetLocalPlayer()]
+	if not JAC_IsDarkPolicyEndTurnBlocked() or not player or not player:IsTurnActive() then return end
+	local oath = JAC_AgesView_PendingOath(JAC_AgesView_Ledger(), Game.GetLocalPlayer())
+	Controls.EndTurnText:SetText(Locale.Lookup(oath and "LOC_JAC_OATH_CHOOSE" or "LOC_JAC_AGE_DARK_CHOICE_TITLE"))
+	Controls.EndTurnButton:SetToolTipString(Locale.Lookup(oath and "LOC_JAC_OATH_PENDING" or "LOC_JAC_AGE_DARK_CHOICE_REQUIRED"))
+	Controls.CurrentTurnBlockerIcon:SetHide(false)
+	Controls.CurrentTurnBlockerIcon:SetIcon("ICON_NOTIFICATION_USER_DEFINED_3")
+	Controls.CountImage:SetHide(true)
+end
+
+-- 公式 Initialize は include 中に元の関数を登録する（ActionPanel.lua:1368）。包んだ関数を登録し直す。
+ContextPtr:SetRefreshHandler(OnRefresh)
+ContextPtr:SetInputHandler(OnInputHandler, true)
+Events.GameCoreEventPublishComplete.Add(function() ContextPtr:RequestRefresh() end)
+Events.LoadScreenClose.Add(function() ContextPtr:RequestRefresh() end)
 
 -- 自動テストが確かめる、最後に出した説明。
 JAC_ERA_INDICATOR_TEXT = nil

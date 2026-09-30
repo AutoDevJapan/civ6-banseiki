@@ -12,7 +12,8 @@ include("JAC_HouseNames")
 JAC_InstallHouseNames("JAC_SengokuReignPopup")
 include("JAC_SengokuAgesView")
 
-local m_ShownReign = -1
+local savedLedger = JAC_AgesView_Ledger()
+local m_ShownReign = savedLedger and savedLedger.reign or -1 -- 読み込みは通知から再開する
 
 -- 自動テストが確かめる、最後に出した改元（閉じた後も残る）。
 JAC_REIGN_POPUP_LAST = nil
@@ -94,3 +95,4 @@ Controls.Continue:RegisterCallback(Mouse.eLClick, OnClose)
 Events.LocalPlayerTurnBegin.Add(OnTurnBegin)
 LuaEvents.AutoPlayEnd.Add(OnTurnBegin)
 Events.LocalPlayerTurnEnd.Add(function() Hide(false) end)  -- 公式 ActionPanel.lua:1335。次の手番へ持ち越さない
+LuaEvents.JAC_SengokuReignPopup_CloseForPolicy.Add(function() Hide(false) end)

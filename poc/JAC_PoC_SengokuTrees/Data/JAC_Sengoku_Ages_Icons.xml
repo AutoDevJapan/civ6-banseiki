@@ -5,5 +5,6 @@
 		     USER_DEFINED_1 belongs to JAC_PoC_HistoricalEvents. Picture: the official dedication icon
 		     (DLC/Expansion2/Data/Expansion1_Icons_Notifications.xml:36). -->
 		<Row Name="ICON_NOTIFICATION_USER_DEFINED_2" Atlas="ICON_ATLAS_EXPANSION1_NOTIFICATIONS" Index="7"/>
+		<Row Name="ICON_NOTIFICATION_USER_DEFINED_3" Atlas="ICON_ATLAS_EXPANSION1_NOTIFICATIONS" Index="7"/>
 	</IconDefinitions>
 </GameInfo>

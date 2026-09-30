@@ -95,6 +95,36 @@ local function PolicyRow(policyType)
 	return nil
 end
 
+-- Shared by the choice and notification UI. This is the saved judgement turn, not the era's predicted due turn.
+function JAC_AgesView_PendingDarkPolicy(l, playerID)
+	local player = Players[playerID]
+	if player == nil or not player:IsHuman() then return nil end
+	local house = l and l.houses and l.houses["p" .. tostring(playerID)]
+	local judged = l and l.history and l.history["r" .. tostring(l.reign)]
+	if house and house.age == "DARK" and house.chosen ~= l.reign
+		and judged and judged.turn == JAC_AgesView_ElapsedTurn() then return house end
+	return nil
+end
+
+-- One predicate for the oath popup, policy routing and every ActionPanel end-turn path.
+function JAC_AgesView_PendingOath(l, playerID)
+	local player = Players[playerID]
+	local house = l and l.houses and l.houses["p" .. tostring(playerID)]
+	if not player or not player:IsHuman() or not house or l.reign < 1
+		or house.oathReign ~= l.reign or house.oathChosen == l.reign then return nil end
+	for row in GameInfo.JAC_SengokuOaths() do
+		if row.CivilizationType == house.civ then return house end
+	end
+	return nil
+end
+
+-- Custom notification properties: DLC/PiratesScenario/Scripts/PiratesScenario_PropKeys.lua:85-89 and
+-- UI/Replacements/NotificationPanel_PiratesScenario.lua:81,145. Never capture an official dedication.
+function JAC_AgesView_DarkPolicyNotification(notification)
+	return notification ~= nil and notification:GetType() == NotificationTypes.USER_DEFINED_3
+		and type(notification:GetValue("JAC_DARK_POLICY_REIGN")) == "number"
+end
+
 -- 改元の画面に出す、自分の家の今の期の判定。elapsed を渡すと、そのターンに判定した改元のときだけ返す。
 function JAC_AgesView_Reign(l, playerID, elapsed)
 	if l == nil or type(l.reign) ~= "number" or l.reign < 1 or type(l.history) ~= "table" then return nil end
@@ -112,7 +142,7 @@ function JAC_AgesView_Reign(l, playerID, elapsed)
 		index = l.reign, reign = reigns[l.reign], previous = reigns[from], turn = judged.turn,
 		age = result.age, score = result.score, golden = result.golden, dark = result.dark,
 		policy = dark and house.policy or nil,
-		pendingChoice = dark and house.age == "DARK" and house.chosen ~= l.reign,
+		pendingChoice = dark and JAC_AgesView_PendingDarkPolicy(l, playerID) ~= nil,
 		oathText = oathText, pendingOath = pendingOath,
 	}
 end

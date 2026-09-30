@@ -119,6 +119,7 @@ class SengokuTreeTests(unittest.TestCase):
             "UI/JAC_SengokuDarkPolicy.xml", "UI/JAC_SengokuDarkPolicy.lua",
             "UI/JAC_SengokuReignPopup.xml", "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuAgesView.lua",
             "UI/JAC_EraProgressPanel_Sengoku.lua", "UI/JAC_EraCompletePopup_Sengoku.lua", "UI/JAC_ActionPanel_Sengoku.lua",
+            "UI/JAC_NotificationPanel_Sengoku.lua",
             "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
             "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",

@@ -8,7 +8,7 @@ from pathlib import Path
 import lupa
 from tests import test_sengoku_ages as ages
 AUDIT, MOD, UI_STUBS = ages.AUDIT, ages.MOD, ages.UI_STUBS
-from tests.test_sengoku_ages_screens import SCREEN_STUBS, _files
+from tests.test_sengoku_ages_screens import SCREEN_STUBS, ACTION_PANEL_STUBS, NOTIFICATION_PANEL_STUBS, _files
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = json.loads((ROOT/'documents/poc/data/sengoku-oaths.json').read_text(encoding='utf-8'))['houses']
@@ -443,6 +443,62 @@ class OathPopupTests(unittest.TestCase):
         self.g.APPLY_DELAYED()
         self.assertEqual(self.house(0).oathChosen,1)
         self.assertFalse(dark.ContextPtr.hidden)
+
+    def test_notification_and_all_end_turn_paths_require_oath_before_dark_policy(self):
+        read = lambda name: (MOD / f'UI/{name}.lua').read_text(encoding='utf-8')
+        dark = self.g.NEW_CONTEXT('JAC_SengokuDarkPolicy', read('JAC_SengokuDarkPolicy'))
+        reign = self.g.NEW_CONTEXT('JAC_SengokuReignPopup', read('JAC_SengokuReignPopup'))
+        self.lua.execute(SCREEN_STUBS, self.lua.table_from(dict(_files(), ActionPanel_Expansion2=ACTION_PANEL_STUBS)))
+        action = self.g.NEW_CONTEXT('ActionPanel', read('JAC_ActionPanel_Sengoku'))
+        panel = self.g.NEW_CONTEXT('NotificationPanel', NOTIFICATION_PANEL_STUBS, read('JAC_NotificationPanel_Sengoku'))
+        panel.RegisterHandlers()
+        self.judge('DARK')
+        self.g.LOCAL_TURN_BEGIN()
+        self.assertFalse(reign.ContextPtr.hidden)
+        note = self.g.NotificationManager.FindType(3, 0)
+        panel.OnNotificationActivated(0, note.id, True)
+        self.assertTrue(reign.ContextPtr.hidden)
+        self.assertFalse(self.ui.ContextPtr.hidden)
+        self.assertTrue(dark.ContextPtr.hidden)
+        self.assertFalse(dark.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE'))
+        self.assertEqual(len(self.g.REQUESTS), 0)
+        for invoke in (action.DoEndTurn, action.OnEndTurnClicked,
+                       lambda: action.OnInputActionTriggered('END_TURN'),
+                       lambda: action.ContextPtr.input(action.KEY_INPUT(13, False)),
+                       lambda: action.ContextPtr.input(action.KEY_INPUT(13, True))):
+            self.ui.OnClose()
+            invoke()
+            self.assertFalse(self.ui.ContextPtr.hidden)
+            self.assertTrue(dark.ContextPtr.hidden)
+        action.CheckAutoEndTurn()
+        self.assertEqual((action.END_TURN_REQUESTS, action.AUTO_END_TURN_REQUESTS, action.FORCED_END_TURN_REQUESTS), (0, 0, 0))
+        self.lua.execute('UI.RequestPlayerOperation=function(id,op,params) DELAYED={id=id,params=params} end')
+        self.assertTrue(self.ui.JAC_ChooseOath(ODA[0]))
+        self.g.GAME_CORE_PUBLISH()
+        self.assertTrue(dark.ContextPtr.hidden)
+        self.g.CHOOSE_OATHS(0, self.g.DELAYED.params)
+        self.g.GAME_CORE_PUBLISH()
+        self.assertFalse(dark.ContextPtr.hidden)
+        self.assertTrue(action.JAC_IsDarkPolicyEndTurnBlocked())
+        self.g.CHOOSE(0, self.lua.table_from({'Reign': 1, 'PolicyType': 'JAC_AGE_POLICY_TEMPLE'}))
+        self.g.GAME_CORE_PUBLISH()
+        self.assertFalse(action.JAC_IsDarkPolicyEndTurnBlocked())
+        action.DoEndTurn()
+        self.assertEqual(action.END_TURN_REQUESTS, 1)
+
+    def test_normal_and_golden_oaths_block_until_chosen_even_without_policy_notification(self):
+        for age in ('NORMAL', 'GOLDEN'):
+            self.setUp()
+            self.lua.execute(SCREEN_STUBS, self.lua.table_from(dict(_files(), ActionPanel_Expansion2=ACTION_PANEL_STUBS)))
+            action = self.g.NEW_CONTEXT('ActionPanel', (MOD / 'UI/JAC_ActionPanel_Sengoku.lua').read_text(encoding='utf-8'))
+            self.judge(age)
+            action.DoEndTurn()
+            self.assertFalse(self.ui.ContextPtr.hidden)
+            self.assertEqual(action.END_TURN_REQUESTS, 0)
+            self.assertTrue(self.ui.JAC_ChooseOath(ODA[1]))
+            self.assertFalse(action.JAC_IsDarkPolicyEndTurnBlocked())
+            action.DoEndTurn()
+            self.assertEqual(action.END_TURN_REQUESTS, 1)
 
 
 if __name__=='__main__':

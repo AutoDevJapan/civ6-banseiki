@@ -98,6 +98,7 @@
 			<File>UI/JAC_ActionPanel_Sengoku.lua</File>
 			<File>UI/JAC_DedicationPopup_Sengoku.lua</File>
 			<File>Scripts/JAC_Sengoku_Oaths.lua</File>
+			<File>UI/JAC_NotificationPanel_Sengoku.lua</File>
 		</ImportFiles>
 		<!-- 右下の時代の目盛りの説明を元号にする。Gathering Storm の差し替え（LoadOrder なし = 0）の後に効かせる -->
 		<ReplaceUIScript id="JAC_Sengoku_ActionPanel" criteria="JAC_Sengoku_BanseikiOnly">
@@ -158,6 +159,7 @@
 		<File>UI/JAC_EraProgressPanel_Sengoku.lua</File>
 		<File>UI/JAC_EraCompletePopup_Sengoku.lua</File>
 		<File>UI/JAC_ActionPanel_Sengoku.lua</File>
+		<File>UI/JAC_NotificationPanel_Sengoku.lua</File>
 		<File>Data/JAC_Sengoku_Icons.xml</File>
 		<File>Config/JAC_Sengoku_Victories.xml</File>
 		<File>Config/JAC_Sengoku_Calendar.xml</File>
