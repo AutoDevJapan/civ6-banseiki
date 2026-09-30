@@ -142,6 +142,6 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 - `tests/test_sengoku_trees.py`：列の元号、`tests/test_sengoku_ages_screens.py`：公式の新しい時代の画面を出さない
 - 実機シナリオ `tools/civ6-autotest/scenarios/sengoku-era-reigns.json`（15 km 日本地図、標準速度、75 ターン）：時代の表、ツリーの見出し、エンジンの時代が弘治（66）・永禄（73）ちょうどで変わること（GameCore と InGame）、台帳の判定、改元の画面が1回ずつ出て公式の画面は出ないこと、公式の時代スコアと年齢が止まったままのこと。改元の画面は、`JAC_REIGN_POPUP_LAST` で出た改元（元号・ターン・年齢・点が台帳どおり）を確かめ、自動進行の間にドライバが閉じていれば（`scenario.py` の `POPUP_CLOSERS`）`JAC_ShowReignPopup(true)` で出し直してから、見出し・年齢・点の文を確かめて閉じる
 
-実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。
+実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。再実行の `era-equals-reign-07`（2026-09-30）で全手順が通り、弘治・永禄の改元の画面の元号・年齢・点が台帳と一致した。同じ日に `sengoku-house-names-oda`・`-takeda`・`sengoku-ages`（読み込み直後の黄金の生産効果を含む）・`sengoku-ages-screens`・`historical-events-15km`・`court-arbitration`・`sengoku-trees` も通った（`era-equals-reign-10`〜`-16`）。
 
-**要実機確認**：`sengoku-era-reigns.json` の再実行（改元の画面の確認以降）。48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。
+**要実機確認**：48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。
