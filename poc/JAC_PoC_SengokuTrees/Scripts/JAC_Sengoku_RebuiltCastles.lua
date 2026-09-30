@@ -86,7 +86,6 @@ ExposedMembers.JAC_UnificationCastles = {
     end
     return cities;
   end,
-  HasCastles = function() return next(Registered()) ~= nil; end,  -- false on settler starts (Q64)
 };
 
 GameEvents.CityBuilt.Add(OnCityBuilt);

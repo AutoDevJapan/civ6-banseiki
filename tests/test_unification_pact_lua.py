@@ -53,6 +53,7 @@ Map = { GetPlot = function(x, y)
   plots[i] = plots[i] or { GetX = function() return x end, GetY = function() return y end, GetIndex = function() return i end }
   return plots[i]
 end }
+Map.GetPlotByIndex = function(i) return Map.GetPlot(i % WIDTH, math.floor(i / WIDTH)) end
 CITIES, BUILT = {}, {}  -- plot index -> city; {building, plot} placed
 function CITY(owner, x, y, capital)
   local buildings = {}
@@ -69,7 +70,8 @@ function CITY(owner, x, y, capital)
   return city
 end
 CityManager = { GetCityAt = function(x, y) return CITIES[y * WIDTH + x] end }
-Players, MAJORS, ALLIED = {}, {}, {}
+Players, PlayerConfigurations, MAJORS, ALLIED, WAR = {}, {}, {}, {}, {}
+local CIVS = { "ODA", "DATE", "ASHINA", "SHIMAZU" }
 for id, spec in ipairs({ { human = true }, {}, {}, { human = true } }) do
   local pid = id - 1
   local p = { team = pid }
@@ -78,7 +80,11 @@ for id, spec in ipairs({ { human = true }, {}, {}, { human = true } }) do
   p.IsAlive = function() return not p.dead end
   p.IsHuman = function() return spec.human == true end
   p.GetTeam = function() return p.team end
-  p.GetDiplomacy = function() return { HasAllied = function(_, other) return ALLIED[pid .. "-" .. other] == true end } end
+  p.GetDiplomacy = function() return {
+    HasAllied = function(_, other) return ALLIED[pid .. "-" .. other] == true end,
+    IsAtWarWith = function(_, other) return WAR[math.min(pid, other) .. "-" .. math.max(pid, other)] == true end,
+  } end
+  PlayerConfigurations[pid] = { GetCivilizationTypeName = function() return "CIVILIZATION_JAC_" .. CIVS[id] end }
   p.GetCities = function() return { GetCapitalCity = function()
     for _, c in pairs(CITIES) do if c.owner == pid and c.capital then return c end end
   end } end
@@ -90,7 +96,7 @@ PlayerManager = { GetAliveMajors = function()
   local alive = {}
   for _, p in ipairs(MAJORS) do if not p.dead then alive[#alive + 1] = p end end
   return alive
-end }
+end, GetWasEverAliveCount = function() return #MAJORS end }
 ExposedMembers = {}
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
@@ -195,19 +201,157 @@ class UnificationPactTests(unittest.TestCase):
         self.request("Propose", ODA, DATE)
         self.assertEqual(self.marked()[-1], (self.unified(), 5 * 32 + 6))
 
-    def test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win(self):
-        self.g.ALLIED[f"{ODA}-{DATE}"] = True
-        self.date_castle.owner = ASHINA
+    def ally(self, a: int, b: int):
+        self.g.ALLIED[f"{a}-{b}"] = True
+        self.g.ALLIED[f"{b}-{a}"] = True
+
+    def pact_of_oda_date_shimazu(self):
+        self.ally(ODA, DATE)
         self.request("Propose", ODA, DATE)
-        self.assertEqual(self.lead(DATE), ODA)
+        self.request("Propose", ODA, SHIMAZU)
+        self.request("Accept", SHIMAZU, ODA)
+        self.assertEqual((self.lead(ODA), self.lead(DATE), self.lead(SHIMAZU)), (ODA, ODA, ODA))
+
+    def test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win(self):
+        self.date_castle.owner = ASHINA
+        self.pact_of_oda_date_shimazu()
         taken = self.g.CITIES[5 * 32 + 25]  # Oda takes Date's capital, Date's last city
         taken.owner, taken.capital = ODA, False
         self.g.Players[DATE].dead = True
         self.g.FIRE("CityConquered", ODA, DATE, 0, 25, 5)
+        self.assertEqual((self.lead(ODA), self.lead(SHIMAZU)), (ODA, ODA), "two houses remain")
         self.assertEqual(self.marked(), [], "Ashina still holds a castle")
         self.date_castle.owner = ODA
         self.g.FIRE("CityConquered", ODA, ASHINA, 0, 25, 14)
         self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 6)], "the lead's capital")
+
+    def test_a_pact_left_with_one_house_is_dissolved(self):
+        self.ally(ODA, DATE)
+        self.request("Propose", ODA, DATE)
+        self.g.Players[DATE].dead = True
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertIsNone(self.lead(ODA))
+        self.assertEqual(self.result(ODA), "DISSOLVED")
+
+    def test_a_member_leaves_at_once_and_the_rest_stay(self):
+        self.pact_of_oda_date_shimazu()
+        self.g.FIRE("JAC_UnificationPactLeave", SHIMAZU, self.lua.table_from({"Target": SHIMAZU}))
+        self.assertEqual((self.lead(ODA), self.lead(DATE), self.lead(SHIMAZU)), (ODA, ODA, None))
+        self.assertEqual(self.result(SHIMAZU), "LEFT")
+        self.g.FIRE("JAC_UnificationPactLeave", SHIMAZU, None)  # not in a pact
+        self.assertEqual(self.result(SHIMAZU), "INVALID")
+        self.request("Accept", SHIMAZU, ODA)  # the old proposal was used up
+        self.assertIsNone(self.lead(SHIMAZU))
+        self.request("Propose", ODA, SHIMAZU)
+        self.request("Accept", SHIMAZU, ODA)
+        self.assertEqual(self.lead(SHIMAZU), ODA)
+
+    def test_the_lead_leaving_passes_the_pact_and_a_pact_of_two_dissolves(self):
+        self.pact_of_oda_date_shimazu()
+        self.g.FIRE("JAC_UnificationPactLeave", ODA, None)
+        # Date holds two castles, Shimazu none: Date leads.
+        self.assertEqual((self.lead(ODA), self.lead(DATE), self.lead(SHIMAZU)), (None, DATE, DATE))
+        self.g.FIRE("JAC_UnificationPactLeave", SHIMAZU, None)
+        self.assertEqual((self.lead(DATE), self.result(DATE), self.result(SHIMAZU)), (None, "DISSOLVED", "LEFT"))
+
+    def test_members_at_war_leave_and_the_lead_stays(self):
+        self.pact_of_oda_date_shimazu()
+        self.g.WAR[f"{ODA}-{DATE}"] = True
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual((self.lead(ODA), self.lead(DATE), self.lead(SHIMAZU)), (ODA, None, ODA))
+        self.assertEqual(self.result(DATE), "AT_WAR")
+        self.assertIn("JAC_Sengoku_UnificationPact: 1 left the pact of 0 (at war with 0)", list(self.g.LOG.values()))
+
+    def test_two_warring_members_both_leave(self):
+        self.pact_of_oda_date_shimazu()
+        self.g.WAR[f"{DATE}-{SHIMAZU}"] = True
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual((self.lead(ODA), self.lead(DATE), self.lead(SHIMAZU)), (None, None, None))
+        self.assertEqual((self.result(ODA), self.result(SHIMAZU)), ("DISSOLVED", "AT_WAR"))
+        log = list(self.g.LOG.values())
+        self.assertIn("JAC_Sengoku_UnificationPact: 1 left the pact of 0 (at war with 3)", log)
+        self.assertIn("JAC_Sengoku_UnificationPact: pact of 0 dissolved", log)
+        # Date (AI, allied with Oda, 2 of 4 castles) then proposes again under the AI rule.
+        self.assertEqual((self.result(DATE), self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0")), ("PROPOSED", DATE))
+
+    def test_a_pact_of_two_dissolves_when_they_go_to_war(self):
+        self.ally(ODA, DATE)
+        self.date_castle.owner = ASHINA
+        self.request("Propose", ODA, DATE)
+        self.g.WAR[f"{ODA}-{DATE}"] = True
+        self.date_castle.owner = ODA  # a conquest checks at once, before any marker
+        self.g.FIRE("CityConquered", ODA, ASHINA, 0, 25, 14)
+        self.assertEqual(self.marked(), [])
+        self.g.CITIES[5 * 32 + 25].owner = ODA  # Oda takes Date's capital
+        self.g.FIRE("CityConquered", ODA, DATE, 0, 25, 5)
+        self.assertEqual((self.lead(ODA), self.lead(DATE)), (None, None))
+        self.assertEqual((self.result(ODA), self.result(DATE)), ("DISSOLVED", "AT_WAR"))
+        self.assertEqual(self.marked(), [])
+
+    def test_ai_proposes_to_an_allied_ai_when_they_hold_enough_castles(self):
+        self.ally(DATE, ASHINA)  # Date holds 2 of 4 castles: 50% >= 30%
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual((self.lead(DATE), self.lead(ASHINA)), (DATE, DATE))
+
+    def test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated(self):
+        self.ally(DATE, ODA)
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0"), DATE)
+        self.assertEqual(self.result(DATE), "PROPOSED")
+        self.assertIsNone(self.lead(ODA))
+        self.g.FIRE("OnGameTurnStarted", 16605)
+        self.assertEqual(sum("proposed a pact" in line for line in self.g.LOG.values()), 1)
+        self.request("Accept", ODA, DATE)
+        self.assertEqual((self.lead(ODA), self.lead(DATE)), (DATE, DATE))
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0"))
+
+    def test_ai_does_not_propose_to_a_house_it_is_at_war_with(self):
+        # Live owner-o-02: HasAllied stayed true across the war, and Ashina proposed to Oda at once.
+        self.ally(DATE, ODA)
+        self.g.WAR[f"{ODA}-{DATE}"] = True
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0"))
+        self.assertIsNone(self.result(DATE))
+        self.request("Propose", DATE, ODA)
+        self.assertEqual(self.result(DATE), "INVALID")
+
+    def test_ai_does_not_propose_below_the_share_or_without_an_alliance(self):
+        self.ally(ASHINA, SHIMAZU)  # no castles between them
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_3"))
+        self.assertIsNone(self.lead(ASHINA))
+        self.assertIsNone(self.lead(DATE), "Date is allied with no one")
+
+    def test_an_active_start_alliance_pools_and_its_holder_of_more_castles_leads(self):
+        self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ASHINA-DATE", 16603)
+        for x, y in ((6, 5), (6, 14), (25, 14)):
+            self.g.CITIES[y * 32 + x].owner = ASHINA
+        self.g.CITIES[5 * 32 + 6].capital = False
+        self.g.FIRE("CityConquered", ASHINA, ODA, 0, 6, 5)
+        self.assertEqual(self.marked(), [(self.unified(), 10 * 32 + 16)], "Ashina (3 castles) leads, not Date")
+        self.assertIsNone(self.lead(ASHINA), "no pact is formed")
+
+    def test_an_ended_start_alliance_does_not_pool(self):
+        self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ASHINA-DATE", False)
+        for x, y in ((6, 5), (6, 14)):
+            self.g.CITIES[y * 32 + x].owner = ASHINA
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual(self.marked(), [])
+
+    def test_a_start_alliance_tie_goes_to_the_lowest_id(self):
+        self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ASHINA-DATE", 16603)
+        for x, y in ((6, 5), (6, 14)):
+            self.g.CITIES[y * 32 + x].owner = ASHINA  # Ashina 2, Date 2
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 25)], "tie: Date, the lower ID")
+
+    def test_a_start_alliance_inside_one_pact_is_left_to_the_pact(self):
+        self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ASHINA-DATE", 16603)
+        for x, y in ((6, 5), (6, 14)):
+            self.g.CITIES[y * 32 + x].owner = ASHINA
+        self.ally(ASHINA, DATE)
+        self.request("Propose", ASHINA, DATE)
+        self.assertEqual(self.marked(), [(self.unified(), 10 * 32 + 16)], "the pact lead Ashina, not the pair's Date")
 
     def test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact(self):
         self.g.ALLIED[f"{ODA}-{DATE}"] = True
@@ -221,13 +365,40 @@ class UnificationPactTests(unittest.TestCase):
         self.request("Propose", ODA, DATE)  # an eliminated player cannot be invited again
         self.assertEqual(self.result(ODA), "INVALID")
 
-    def test_no_pact_without_registered_castles(self):
+    def test_without_registered_castles_the_pact_pools_home_capitals(self):
+        # Owner decision O-8: settler starts pool every major's first capital, as the capital rule.
         self.setUp(no_castles=True)
-        self.g.ALLIED[f"{ODA}-{DATE}"] = True
+        self.ally(ODA, DATE)
         self.request("Propose", ODA, DATE)
-        self.assertEqual(self.result(ODA), "NO_CASTLES")
-        self.assertIsNone(self.lead(DATE))
-        self.assertEqual(self.marked(), [])
+        self.assertEqual((self.result(ODA), self.lead(DATE)), ("JOINED", ODA))
+        self.assertEqual(self.g.Game.GetProperty(None, "JAC_UNIFICATION_HOME_CAPITAL_2"), 10 * 32 + 16)
+        self.assertEqual(self.marked(), [], "Ashina's and Shimazu's capitals stand outside the pact")
+        ashina_home = self.g.CITIES[10 * 32 + 16]
+        ashina_home.owner, ashina_home.capital = DATE, False
+        self.g.Players[ASHINA].dead = True
+        self.g.FIRE("CityConquered", DATE, ASHINA, 0, 16, 10)
+        self.assertEqual(self.marked(), [], "Shimazu's home capital")
+        shimazu_home = self.g.CITIES[3 * 32 + 3]
+        shimazu_home.owner, shimazu_home.capital = ODA, False
+        self.g.Players[SHIMAZU].dead = True
+        self.g.FIRE("CityConquered", ODA, SHIMAZU, 0, 3, 3)
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 6)], "every home capital, dead houses included")
+
+    def test_home_capitals_count_only_once_every_major_has_founded(self):
+        self.setUp(no_castles=True)
+        del self.g.CITIES[3 * 32 + 3]  # Shimazu still has its settler
+        self.g.FIRE("OnGameTurnStarted", 16603)  # records the founded capitals
+        self.g.CITIES[10 * 32 + 16].owner = ODA
+        self.g.CITIES[10 * 32 + 16].capital = False
+        self.ally(ODA, DATE)
+        self.request("Propose", ODA, DATE)
+        self.assertEqual(self.marked(), [], "Shimazu has not founded yet")
+        self.g.CITY(SHIMAZU, 3, 3, True)
+        self.g.FIRE("CityBuilt", SHIMAZU, 0, 3, 3)
+        self.assertEqual(self.marked(), [], "Shimazu's new capital stands outside the pact")
+        self.g.CITIES[3 * 32 + 3].owner = DATE
+        self.g.FIRE("CityConquered", DATE, SHIMAZU, 0, 3, 3)
+        self.assertEqual(self.marked(), [(self.unified(), 5 * 32 + 6)])
 
     def pact_of_oda_date_ashina(self):
         self.g.ALLIED[f"{ODA}-{DATE}"] = True
@@ -249,7 +420,7 @@ class UnificationPactTests(unittest.TestCase):
         self.pact_of_oda_date_ashina()
         self.eliminate_oda(ASHINA, ASHINA)  # Ashina 3 castles, Date 1: the count beats the lower ID
         self.assertEqual((self.lead(DATE), self.lead(ASHINA)), (ASHINA, ASHINA))
-        self.assertIn("JAC_Sengoku_UnificationPact: lead 0 eliminated; 2 leads the pact (3 castles)",
+        self.assertIn("JAC_Sengoku_UnificationPact: lead 0 gone; 2 leads the pact (3 targets)",
                       list(self.g.LOG.values()))
         self.assertEqual(self.marked(), [(self.unified(), 10 * 32 + 16)], "the new lead's capital")
         self.g.FIRE("OnGameTurnStarted", 16604)
