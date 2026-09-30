@@ -198,10 +198,13 @@ local function Faction(id)
 	return civ and string.match(civ, "^CIVILIZATION_JAC_(.+)$")
 end
 
--- §5.4: a pair's state is "none", "ally" or "start". Start alliances (and their re-making) carry the pair's
--- Game property as a number and never score; after the property turns false the lingering alliance keeps its
--- state, so only an alliance made from "none" scores, once per pair and period. Same-team pairs never score.
--- HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua:76,102); GetAllianceType is UI-only (nil here).
+-- §5.4: a pair's state is "none", "ally" or "start". A start alliance carries the pair's Game property as a
+-- number while allied and never scores; the property turns false when it lapses (not re-made, owner decision K)
+-- or an event ends it. A lingering alliance after false keeps its state, so only an alliance made from "none"
+-- scores, once per pair and period; a pair that re-forms after the lapse scores. Checking HasAllied with the
+-- number makes the lapse turn read "none" whether the ledger runs before or after JAC_Japan_1534Relations.lua.
+-- Same-team pairs never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua
+-- TrackStartAlliances); GetAllianceType is UI-only (nil here).
 local function IntakeAlliances(l)
 	local ids = AliveMajorIDs()
 	for i = 1, #ids do
@@ -217,7 +220,7 @@ local function IntakeAlliances(l)
 			end
 			local previous = l.allies[key]
 			local state = allied and "ally" or "none"
-			if type(property) == "number" then
+			if type(property) == "number" and allied then
 				state = "start"
 			elseif allied and previous == "none" and Players[a]:GetTeam() ~= Players[b]:GetTeam() then
 				local pairKey = "ally:" .. tostring(a) .. ":" .. tostring(b) .. ":" .. tostring(l.reign)
@@ -300,10 +303,12 @@ end
 
 -- LOC keys, not looked-up text: each machine shows its own language (JAC_HistoricalEvents.lua:158-167).
 -- USER_DEFINED_2 has its own icon (Data/JAC_Sengoku_Ages_Icons.xml).
-local function Notify(id, reign, age, policy)
+-- The heading has no era name: Q36 (provisional ①) shows it only on the 改元 screen and the era score screen
+-- (UI/JAC_SengokuReignPopup.lua, UI/JAC_EraProgressPanel_Sengoku.lua); the 改元 screen is the main presentation.
+local function Notify(id, age, policy)
 	local summary = AGE_ANNOUNCEMENTS[age == "DARK" and policy or age]
 	NotificationManager.SendNotification(id, NotificationTypes.USER_DEFINED_2,
-		{ [ParameterTypes.MESSAGE] = reign.announcement, [ParameterTypes.SUMMARY] = summary })
+		{ [ParameterTypes.MESSAGE] = "LOC_JAC_AGE_REIGN_NOTIFICATION", [ParameterTypes.SUMMARY] = summary })
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.
@@ -347,11 +352,27 @@ local function Judge(l, index)
 			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s",
 				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy or ""))
 			house.score, house.parts = 0, {}
-			Notify(id, reign, age, house.policy)
+			Notify(id, age, house.policy)
 		end
 	end
 	l.history["r" .. tostring(index)] = results
 	l.reign, l.reignStart = index, reign.due
+end
+
+-- For the era score screen (UI only reads the ledger): the next 改元's turn and each house's thresholds for the
+-- current period with its cities at this turn start, by the same Thresholds as the judgement. None after the last.
+local function Project(l)
+	local nextReign = REIGNS[l.reign + 1]
+	l.nextDue = nextReign and nextReign.due or nil
+	local _, counts = CurrentCities()
+	for _, key in ipairs(SortedKeys(l.houses)) do
+		local house = l.houses[key]
+		house.next = nil
+		if nextReign then
+			local golden, dark = Thresholds(house, counts[tonumber(string.sub(key, 2))] or 0, nextReign.due - l.reignStart)
+			house.next = { golden = golden, dark = dark }
+		end
+	end
 end
 
 local function Initialize()
@@ -399,6 +420,7 @@ local function OnGameTurnStarted()
 		end
 		IntakeEvents(l, nil)
 	end
+	Project(l)
 	WriteProperties(l)
 	Game:SetProperty(LEDGER_KEY, l)
 end

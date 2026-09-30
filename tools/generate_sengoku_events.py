@@ -125,7 +125,12 @@ def build() -> tuple[str, str]:
             romaji, en, ru = RENAME_NAMES[r["to"]]
             key = f"LOC_JAC_EVENT_{romaji}_CIV_NAME"
             text[key] = {"ja_JP": r["to"], "en_US": en, "ru_RU": ru}
-            renames.append((et, civ(r["faction"]), key))
+            by = r.get("by")
+            # SSOT 3.2 (owner decisions 2026-09-30, Q 1a): every stage follows its civic only (succession by
+            # research); the event's year gives only its boost, which must be that civic.
+            if not by or by["type"] != "civic" or by != e["boost"]:
+                raise SystemExit(f"{e['id']}: rename.by must be a civic and the event's boost")
+            renames.append((et, civ(r["faction"]), key, by["id"]))
         if r := e.get("resource"):
             site = site_of(r, points, trades)
             if r["action"] == "reveal" and site not in reserved:
@@ -144,9 +149,11 @@ def build() -> tuple[str, str]:
         "\nINSERT INTO JAC_HistoricalEventPrereqTechs (EventType, TechnologyType) VALUES\n", values(prereq_techs),
         "\nINSERT INTO JAC_HistoricalEventPrereqCivics (EventType, CivicType) VALUES\n", values(prereq_civics),
         "\nINSERT INTO JAC_HistoricalEventTargets (EventType, CivilizationType) VALUES\n", values(targets),
-        "\nINSERT INTO JAC_HistoricalEventRenames (EventType, CivilizationType, Name) VALUES\n", values(renames),
-        "\n-- reveal: the reserved site of the resources mod. trade_access and ownership are recorded only\n"
-        "-- (trade access is not implemented; Q43: ownership is not transferred automatically).\n",
+        "\nINSERT INTO JAC_HistoricalEventRenames (EventType, CivilizationType, Name, CivicType) VALUES\n",
+        values(renames),
+        "\n-- Records only. reveal: the reserved site of the resources mod, which reveals it in its own year or on its\n"
+        "-- research (SSOT 3.2: the event boosts that research instead); trade access opens by research and is not\n"
+        "-- implemented yet; ownership is never transferred automatically (SSOT 3.2: former domains are AI targets only).\n",
         "INSERT INTO JAC_HistoricalEventResources (EventType, SiteId, Action, OwnerTo) VALUES\n", values(resources),
         "\n-- TriggerBoost needs a Boosts row. Placeholder rows (暫定) for the event boosts the tree does not define;\n"
         "-- the class never triggers by itself (official: Base/Assets/Gameplay/Data/Technologies.xml:440,505).\n",

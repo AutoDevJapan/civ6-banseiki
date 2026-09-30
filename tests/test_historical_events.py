@@ -129,25 +129,29 @@ class HistoricalEventTests(unittest.TestCase):
                 expected = set() if "ALL" in e["affected_factions"] else {
                     f"CIVILIZATION_JAC_{f}" for f in e["affected_factions"]}
                 self.assertEqual(targets, expected)  # no rows: every major faction
-        # E5a: 19 events carry the advisor line, 54 a boost (documents/research/sengoku-events.md §2.6).
+        # E5a: 19 events carry the advisor line, 55 a boost (documents/research/sengoku-events.md §2.6).
         self.assertEqual(db.execute("SELECT SUM(Advisor), COUNT(BoostTech) + COUNT(BoostCivic) "
-                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 54))
+                                    "FROM JAC_HistoricalEvents").fetchone(), (19, 55))
 
     def test_renames_are_the_ssot_stages(self):
-        # SSOT 3.2: Nagao->Uesugi, Matsudaira->Tokugawa, Oda->Hashiba->Toyotomi (Q56 option 1 dates, provisional).
+        # SSOT 3.2: every stage by research only (succession civics: C16 for Uesugi, Tokugawa, Hashiba; C24 for
+        # Toyotomi; owner decisions 2026-09-30, Q 1a), the event's year boosting that civic.
         db = load_db()
-        rows = db.execute("SELECT r.EventType, r.CivilizationType, r.Name, e.Year, e.Month FROM "
+        rows = db.execute("SELECT r.EventType, r.CivilizationType, r.Name, e.Year, e.Month, r.CivicType FROM "
                           "JAC_HistoricalEventRenames r JOIN JAC_HistoricalEvents e USING (EventType) "
                           "ORDER BY e.Year, e.Month").fetchall()
         self.assertEqual(rows, [
-            ("JAC_EVENT_NAGAO_TO_UESUGI", "CIVILIZATION_JAC_NAGAO", "LOC_JAC_EVENT_UESUGI_CIV_NAME", 1561, 4),
-            ("JAC_EVENT_MATSUDAIRA_TOKUGAWA", "CIVILIZATION_JAC_MATSUDAIRA", "LOC_JAC_EVENT_TOKUGAWA_CIV_NAME", 1567, 1),
-            ("JAC_EVENT_HONNOJI", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_HASHIBA_CIV_NAME", 1582, 6),
-            ("JAC_EVENT_TOYOTOMI_SURNAME", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME", 1586, 10),
+            ("JAC_EVENT_NAGAO_TO_UESUGI", "CIVILIZATION_JAC_NAGAO", "LOC_JAC_EVENT_UESUGI_CIV_NAME", 1561, 4,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_MATSUDAIRA_TOKUGAWA", "CIVILIZATION_JAC_MATSUDAIRA", "LOC_JAC_EVENT_TOKUGAWA_CIV_NAME", 1567, 1,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_HONNOJI", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_HASHIBA_CIV_NAME", 1582, 6,
+             "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"),
+            ("JAC_EVENT_TOYOTOMI_SURNAME", "CIVILIZATION_JAC_ODA", "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME", 1586, 10,
+             "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION"),
         ])
-        # Owner decision 2a: Nagao -> Uesugi keeps "year 1561 or the court-and-shogunate civic first".
-        self.assertIn(("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",), db.execute(
-            "SELECT CivicType FROM JAC_HistoricalEventPrereqCivics WHERE EventType = 'JAC_EVENT_NAGAO_TO_UESUGI'").fetchall())
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM JAC_HistoricalEventRenames r JOIN JAC_HistoricalEvents e "
+                                    "USING (EventType) WHERE r.CivicType IS NOT e.BoostCivic").fetchone()[0], 0)
 
     def test_year_to_turn_follows_the_sengoku_calendar(self):
         start, stages = calendar()
@@ -202,11 +206,11 @@ class HistoricalEventTests(unittest.TestCase):
         scenario = (ROOT / "tools/civ6-autotest/scenarios/historical-events-15km.json").read_text(encoding="utf-8")
         self.assertNotIn("Game.GetCurrentGameTurn()~=", scenario)  # raw turn compares break at start turn 16603
 
-    def test_resource_events_use_the_reserved_sites_of_the_resources_mod(self):
+    def test_resource_events_boost_the_research_of_the_reserved_sites(self):
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
-        self.assertIn("ExposedMembers.JAC_Resources", lua)
-        self.assertIn("api.RevealSite(row.SiteId)", lua)
-        self.assertIn('resource.Action == "reveal"', lua)  # trade access and ownership are records only (Q43)
+        # SSOT 3.2: the resources mod alone reveals a site (its year or research); the resource rows are records only.
+        self.assertNotIn("RevealSite", lua)
+        self.assertNotIn("JAC_HistoricalEventResources", lua)
         self.assertNotIn("ResourceBuilder", lua)  # the resources mod is the only writer of reserved sites
         self.assertNotIn("TransferCity", lua)
         sites: dict[str, list[dict[str, str]]] = {}
@@ -229,11 +233,15 @@ class HistoricalEventTests(unittest.TestCase):
             if action == "reveal":
                 with self.subTest(site=site_id):
                     self.assertIn(site_id, sites)  # a reserved site of the resources mod
-                    # The site's own research reveals it too; that research is one of the event's prerequisites.
+                    # The site's research reveals it; the event boosts that research and has it as a prerequisite.
                     techs = {s.get("tech") for s in sites[site_id]} - {None}
                     prereqs = {t for (t,) in db.execute("SELECT TechnologyType FROM JAC_HistoricalEventPrereqTechs "
                                                         "WHERE EventType = ?", (event,))}
                     self.assertLessEqual(techs, prereqs)
+                    boost = db.execute("SELECT BoostTech FROM JAC_HistoricalEvents WHERE EventType = ?",
+                                       (event,)).fetchone()[0]
+                    if techs:
+                        self.assertEqual(techs, {boost})
         # Nishimikawa is reserved on the adopted 15 km map only (SSOT 3.2; 20 km is for comparison).
         self.assertEqual(len(sites["gold-sado-nishimikawa"]), 1)
 
@@ -291,7 +299,7 @@ class HistoricalEventTests(unittest.TestCase):
         schema = (MOD / "Data/JAC_HistoricalEvents_Schema.sql").read_text(encoding="utf-8")
         tables = set(re.findall(r"CREATE TABLE (\w+)", schema))
         referenced = {a or b for a, b in re.findall(r'"(JAC_HistoricalEvent\w*)"|GameInfo\.(JAC_\w+)', lua)}
-        self.assertEqual(referenced, tables)
+        self.assertEqual(referenced, tables - {"JAC_HistoricalEventResources"})  # records only (SSOT 3.2)
         # The UI name override reads the same Game property the gameplay script writes.
         ui = (ROOT / "poc/JAC_PoC_CustomCivs/UI/JAC_CivNameOverride.lua").read_text(encoding="utf-8")
         self.assertIn('local CIV_NAME_PREFIX = "JAC_CIV_NAME_"', lua)
