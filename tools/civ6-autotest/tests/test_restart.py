@@ -164,7 +164,9 @@ class RestartActionTests(unittest.TestCase):
                 runner, "_restart_game"
             ) as restart, patch.object(runner, "_wait"), patch.object(
                 runner, "_run_step", return_value="done"
-            ), patch("scenario.require_single_civ_process"):
+            ), patch("scenario.require_single_civ_process"), patch(
+                "scenario.single_civ_process", return_value=(12, 100.0)
+            ):
                 self.assertEqual(runner.run(), 0)
             folders.assert_not_called()
             restart.assert_not_called()

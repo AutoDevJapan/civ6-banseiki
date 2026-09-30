@@ -373,7 +373,7 @@ class UnificationVictoryTests(unittest.TestCase):
                 "SELECT Plot FROM Buildings WHERE BuildingType='BUILDING_PALACE'")}
         self.assertEqual({registry[plot] for plot in capitals}, {0, 1})
         if test_map.OFFICIAL.is_file():  # regenerate with the same tooling and compare
-            with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            with tempfile.TemporaryDirectory() as folder:
                 fresh = Path(folder) / path.name
                 test_map.build(fresh)
                 self.assertEqual(test_map.castle_rows(fresh), registry)

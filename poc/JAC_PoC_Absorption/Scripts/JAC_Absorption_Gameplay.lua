@@ -778,10 +778,6 @@ local function MovedAssets(tx)
       end
     end
     if tx.RecallRecords and tx.RecallRecords[id] then record = R.Copy(tx.RecallRecords[id]) end
-    if record.Kind == "GREAT_PERSON" and (record.Outcome == "RESEARCH" or record.Outcome == "FAITH" or record.Outcome == "CULTURE") then
-      record.ConversionReward = R.CONVERTED_GREAT_PERSON_REWARD_POC
-      record.RewardPending = true
-    end
     if record.Owner < 0 then archive[id] = record else
       rosters[record.Owner] = rosters[record.Owner] or GetRoster(record.Owner)
       assert(not rosters[record.Owner][id] or R.Equal(rosters[record.Owner][id], record), "destination asset collision")

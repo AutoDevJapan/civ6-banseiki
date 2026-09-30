@@ -302,15 +302,15 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 5, 2))
 
     def test_non_transfer_branches_keep_original_snapshots_and_detach_person_references(self):
-        self.run_lua('''PLAN.Units['1:3']='ESCAPE';PLAN.Units['1:8']='CULTURE';PLAN.Units['1:11']='HIDE';PLAN.Assets.hero='HIDE'
+        self.run_lua('''PLAN.Units['1:3']='ESCAPE';PLAN.Units['1:8']='RETIRE';PLAN.Units['1:11']='HIDE';PLAN.Assets.hero='HIDE'
           PLAN.Units['1:12']='RETIRE';PLAN.Assets.person='RETIRE';PLAN.Assets.artifact='SCATTER';PLAN.Assets.unlock='PRESERVE';PLAN.Leader='EXILE' ''')
         self.apply()
         self.assertTrue(self.a.Verify("test-absorption", True))
         self.run_lua('''local s=ExposedMembers.JAC_Absorption.GetState();local ar=s.Archive
           assert(ar.hero.Owner==-1 and ar.hero.Lifespan==19 and ar.hero.Unit==nil and ar.hero.FormerUnit.ID==11)
           assert(ar.person.Outcome=='RETIRE' and ar.artifact.Outcome=='SCATTER' and ar['leader:1'].LeaderType=='LEADER_TEST_1')
-          local converted=ExposedMembers.JAC_Absorption.GetRoster(2)['native-person:1:8']
-          assert(converted.Owner==2 and converted.Outcome=='CULTURE' and converted.NativeIndividual==42 and converted.Unit==nil)
+          local retired=ar['native-person:1:8']
+          assert(retired.Owner==-1 and retired.Outcome=='RETIRE' and retired.NativeIndividual==42 and retired.Unit==nil)
           assert(s.Transactions['test-absorption'].Units[1].Properties.JAC_POC_GROWTHUI_WARLORD.Level==4)
           assert(not Players[2]:GetTechs():HasTech(11) and not Players[2]:GetCulture():HasCivic(12))''')
 
@@ -325,7 +325,7 @@ class AbsorptionTests(unittest.TestCase):
             "UNIT": {"SURRENDER", "INCORPORATE", "DISSOLVE", "ESCAPE", "RESIST"},
             "PERSON": {"CAPTURE", "RECRUIT", "SUBMIT", "EXILE", "EXECUTE", "RETIRE", "DEFECT"},
             "HERO": {"RECRUIT", "PROTECT", "RECONTRACT", "DEFECT", "HIDE", "SUICIDE"},
-            "GREAT_PERSON": {"RECRUIT", "RESEARCH", "FAITH", "CULTURE", "EXILE", "RETIRE"},
+            "GREAT_PERSON": {"RECRUIT", "EXILE", "RETIRE"},
             "ITEM": {"TRANSFER", "LOOT", "SEIZE", "RETURN", "SCATTER"},
             "UNLOCK": {"INHERIT", "PRESERVE"}, "RELIGION": {"PRESERVE"},
         }
@@ -335,6 +335,11 @@ class AbsorptionTests(unittest.TestCase):
             self.assertEqual(self.a.Rules.Destination(row["Kind"], row["Outcome"]), row["Destination"])
         self.assertEqual(actual, expected)
         self.assert_rejected_unchanged("PLAN.Assets.hero='EXECUTE'", "invalid disposition")
+
+    def test_great_people_cannot_be_converted_to_yields(self):
+        for outcome in ('RESEARCH', 'FAITH', 'CULTURE'):
+            with self.subTest(outcome=outcome):
+                self.assert_rejected_unchanged(f"PLAN.Units['1:8']='{outcome}'", "invalid disposition")
 
     def test_missing_unit_decision_is_rejected_before_any_mutation(self):
         self.assert_rejected_unchanged("PLAN.Units['1:3']=nil", "explicit disposition")
