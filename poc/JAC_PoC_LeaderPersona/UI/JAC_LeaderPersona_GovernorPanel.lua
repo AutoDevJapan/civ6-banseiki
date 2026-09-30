@@ -1,6 +1,10 @@
 -- Keep native assignment/base ability; skill purchases use the custom permanent tree.
 include("GovernorPanel");
-local baseCandidate, baseShared, baseAppoint, baseName = AddGovernorCandidate, AddGovernorShared, OnAppointGovernor, OnNameButton;
+local baseCandidate, baseShared, baseAppoint, baseName, basePromote =
+    AddGovernorCandidate, AddGovernorShared, OnAppointGovernor, OnNameButton, OnPromoteGovernor;
+local function Disabled(governor)
+    return GameInfo.JAC_PersonaDisabledGovernors[governor.GovernorType] ~= nil;
+end
 local function Persona(governor)
     for row in GameInfo.JAC_LeaderPersonas() do
         if row.GovernorType == governor.GovernorType then return row; end
@@ -13,7 +17,7 @@ local function Eligible(row)
 end
 function AddGovernorCandidate(governor, canAppoint)
     local row = Persona(governor);
-    if not row or not Eligible(row) then return; end
+    if Disabled(governor) or (row and not Eligible(row)) then return; end
     baseCandidate(governor, canAppoint);
 end
 function AddGovernorShared(governor)
@@ -29,8 +33,9 @@ function AddGovernorShared(governor)
 end
 function OnAppointGovernor(id)
     local def = GameInfo.Governors[id];
+    if not def or Disabled(def) then return; end
     local row = def and Persona(def);
-    if not row or not Eligible(row) then return; end
+    if row and not Eligible(row) then return; end
     baseAppoint(id);
 end
 function OnNameButton(id)
@@ -41,6 +46,7 @@ end
 -- No native non-base promotions are registered for personas. Also guard old UI callbacks.
 function OnPromoteGovernor(id, promotion)
     local def = GameInfo.Governors[id];
+    if not def or Disabled(def) then return; end
     local row = def and Persona(def);
-    if row then LuaEvents.JAC_PersonaTree_Open(row.LeaderType); else return; end
+    if row then LuaEvents.JAC_PersonaTree_Open(row.LeaderType); else basePromote(id, promotion); end
 end

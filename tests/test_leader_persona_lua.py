@@ -219,6 +219,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def inject_database(self):
         for table,key in [("JAC_PersonaTreeNodes","NodeType"),("JAC_PersonaTreePeople","LeaderType"),
+                          ("JAC_PersonaDisabledGovernors","GovernorType"),
                           ("JAC_PersonaCategories","CategoryType"),("JAC_PersonaCategoryAccess","AccessType"),
                           ("JAC_PersonaRouteTemplates","RouteType"),("JAC_PersonaTreeParameters","Name"),
                           ("JAC_PersonaMeritRules","Profile"),("Buildings","BuildingType")]:
@@ -283,6 +284,31 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def test_purchase_is_only_available_through_the_gameplay_event(self):
         self.assertIsNone(self.api.Purchase)
+
+    def test_governor_panel_preserves_foreign_governors_but_blocks_official_and_unjoined_personas(self):
+        self.lua.execute("""
+            GOVDEFS[#GOVDEFS+1]={GovernorType='GOVERNOR_OTHER_MOD',Index=90,Hash=9090}
+            GOVDEFS[#GOVDEFS+1]={GovernorType='GOVERNOR_THE_DEFENDER',Index=91,Hash=9191}
+            GameInfo.Governors=collection(GOVDEFS,'GovernorType')
+            GameInfo.JAC_PersonaDisabledGovernors=collection({{GovernorType='GOVERNOR_THE_DEFENDER'}},'GovernorType')
+            PANEL_CALLS={}
+            AddGovernorCandidate=function(def,can) PANEL_CALLS[#PANEL_CALLS+1]='candidate:'..def.GovernorType..':'..tostring(can) end
+            AddGovernorShared=function() return {GovernorPortrait=control(),GovernorTitle=control()} end
+            OnAppointGovernor=function(id) PANEL_CALLS[#PANEL_CALLS+1]='appoint:'..id end
+            OnNameButton=function(id) PANEL_CALLS[#PANEL_CALLS+1]='name:'..id end
+            OnPromoteGovernor=function(id,promotion) PANEL_CALLS[#PANEL_CALLS+1]='promote:'..id..':'..promotion end
+        """)
+        self.lua.execute((MOD / "UI/JAC_LeaderPersona_GovernorPanel.lua").read_text(encoding="utf-8"))
+        self.lua.execute("""
+            AddGovernorCandidate(GameInfo.Governors[90],true)
+            OnAppointGovernor(90); OnPromoteGovernor(90,77); OnNameButton(90)
+            AddGovernorCandidate(GameInfo.Governors[91],true)
+            OnAppointGovernor(91); OnPromoteGovernor(91,77)
+            AddGovernorCandidate(GameInfo.Governors[22],true)
+            OnAppointGovernor(22)
+        """)
+        self.assertEqual(list(self.g.PANEL_CALLS.values()),
+                         ["candidate:GOVERNOR_OTHER_MOD:true", "appoint:90", "promote:90:77", "name:90"])
 
     def test_only_established_unneutralized_city_governance_earns_once_across_reload(self):
         governor = self.settled()
