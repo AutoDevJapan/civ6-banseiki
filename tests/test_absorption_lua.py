@@ -1004,6 +1004,11 @@ class AbsorptionTests(unittest.TestCase):
     def test_native_hero_detected_by_engine_flag_with_a_nonstandard_type_is_rejected(self):
         self.assert_rejected_unchanged("local u=UNIT(1,13,'UNIT_WARRIOR');u.IsHero=function() return true end;PLAN.Units['1:13']='INCORPORATE'", "native Hero")
 
+    def test_missing_native_great_person_charge_api_blocks_before_any_mutation(self):
+        self.assert_rejected_unchanged(
+            "Players[1].units[8].GetGreatPerson=function() return {GetIndividual=function() return 42 end} end",
+            "native great-person charges unavailable")
+
     def test_spent_native_great_person_charges_do_not_reset_on_transfer(self):
         self.run_lua("Players[1].units[8].gpcharges=1")
         with self.assertRaisesRegex(Exception, "spent great-person charges"):

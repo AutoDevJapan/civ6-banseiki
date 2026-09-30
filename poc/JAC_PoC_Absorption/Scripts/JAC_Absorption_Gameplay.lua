@@ -330,6 +330,10 @@ local function Prepare(plan, state)
     snap.Destination = DestinationOwner(snap.Kind, snap.Outcome, decision, tx)
     snap.RequestedDestination = snap.Destination
     snap.KeepUnit = R.KeepUnit(snap.Kind, snap.Outcome)
+    if snap.KeepUnit and snap.Individual >= 0 then
+      assert(type(snap.GreatPersonCharges) == "number" and snap.GreatPersonCharges >= 0,
+        "native great-person charges unavailable; transfer requires a lossless snapshot")
+    end
     snap.Token = plan.ID .. ":unit:" .. snap.ID
     tx.Units[#tx.Units + 1] = snap
     if snap.Hero then
