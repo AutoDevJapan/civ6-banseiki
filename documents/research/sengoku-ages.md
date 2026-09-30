@@ -265,8 +265,9 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 
 - 台帳への書き込みは**ゲームプレイ側の Lua だけ**で行う（`AddGameplayScripts`）。UI 側の Lua は Game プロパティを読むだけにする（家名の切り替えと同じ設計要件：SSOT 3.1）。端末ごとの設定値は使わない。
 - 書き込みのきっかけは `GameEvents.OnGameTurnStarted`・`GameEvents.CityConquered`・`GameEvents.CityBuilt`（§5.2）と、下の選択の受け付けだけにする。全端末で同じ順に同じ処理が走るように、家は番号順、城はタイル番号順に処理し、`pairs` の順番に依存して書き込まない。乱数は使わない。
-- 人間の選択（誓約・暗黒期の専用政策）は UI から `UI.RequestPlayerOperation(..., PlayerOperations.EXECUTE_SCRIPT, ...)` で送り、ゲームプレイ側の `GameEvents` で受けて台帳に書く（公式の先例：`DLC/BlackDeathScenario/Scripts/BlackDeathScenario_StateUtils.lua:64-74`）。受け側で「送った家が本人か」「今の期の選択か」「まだ選んでいないか」「候補にある誓約・政策か」を確かめ、合わないものは捨てる。
-- AI の選択は家ごとの決まった順位表で選ぶ（乱数なし）。人間が期の間に選ばなかった場合も、次のターン開始で順位表の先頭を選んだものとする。
+- 人間の選択（誓約・暗黒期の専用政策）は UI から `UI.RequestPlayerOperation(..., PlayerOperations.EXECUTE_SCRIPT, ...)` で送り、ゲームプレイ側の `GameEvents` で受けて台帳に書く（公式の先例：`DLC/BlackDeathScenario/Scripts/BlackDeathScenario_StateUtils.lua:64-74`）。暗黒期の政策は、判定した改元のターンだけ1回選べる（SSOT 3.2）。受け側で「送った家が人間の本人か」「暗黒期か」「今の期の選択か」「台帳の判定のターンが今のターンか」「まだ選んでいないか」「候補にある政策か」を確かめ、合わないものは捨てる。保存した判定のターンで受付期間を決めるため、読み込みで期間は延びない。
+- AI の家は家ごとの既定の政策を使う（SSOT 3.2、乱数なし）。人間の家にも改元の判定時に同じ既定を適用し、そのターンの選択が届いたら置き換える。人間は選択するまで手番を終えられない。
+- ターン終了は保存台帳の未選択の記録で止める。`JAC_ActionPanel_Sengoku.lua` が通常ボタン・終了キーの `DoEndTurn`、Shift＋Enter の入力処理、自動終了の拡張フックを包む（公式の経路：`Base/Assets/UI/ActionPanel.lua:497-520,526,605-606,1093-1106,1294-1297`）。改元の通知は、保存対象にした `USER_DEFINED_3` から政策画面を開き直す入口にする（公式の期限設定：`DLC/PiratesScenario/Data/PiratesScenario_Notifications.xml:7-10`）。選択の受理を同期済み台帳で確認してから、このMODの印のある通知だけを消す。台帳より先に通知が届いた場合は保持する。以前に試した `COMMEMORATION_AVAILABLE` の転用では、実機の送信後に通知が存在せず、保存できなかった。調査の根拠と実機結果は [実装メモ](../poc/sengoku-ages.md#暗黒期の政策の選択)。
 - 重複の防止は §5.1 のキーで行う。同じキーを 2 回数えない。
 - **未検証**：マルチプレイの実機。家名の切り替えと同じく、マルチプレイ時の同期・決定性は未検証として扱う（[PoC README「マルチプレイ同期と決定性」](../../poc/README.md#マルチプレイ同期と決定性)）。
 
@@ -324,11 +325,12 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 ## 8. 画面と演出（Civ6 と同じ見せ方）
 
 - **改元の画面**：公式の時代の画面（`EraCompletePopup`／`EraReviewPopup`）と同じ作りで、「天文から弘治へ改元」、その家の判定結果（黄金期・通常期・暗黒期・英雄期）、誓約と暗黒期の専用政策の選択を出す。表示の元は台帳（Game プロパティ）。
+- **暗黒期の政策の選択画面**：改元の画面を閉じたときに1回だけ出す。選ばずに閉じても、その手番の改元の通知から開き直せる。手番の始まりや読み込みのたびには出さない。通知の起動経路は公式の `Base/Assets/UI/Panels/NotificationPanel.lua:1637-1646,1691-1710` と `DLC/Expansion2/UI/Replacements/NotificationPanel_Expansion1.lua:51-63,132` に合わせる。改元のターンを過ぎた通知からは政策を選べない。選択済みの台帳と、未選択の同じターンの通知は保存・読み込み後も保つ（SSOT 3.2、§6.2）。
 - **時代スコアの画面**（`EraProgressPanel`）：台帳の点・内訳（本拠陥落、支城の占領、同盟など）・黄金期と暗黒期の閾値・次の改元までのターンを出す。公式の画面の組み立て（前の期の合計と今の期の内訳、`EraProgressPanel.lua:61-133`）に合わせる。
-- 公式の時代（ツリーの 4 期）が進んだときの公式の画面では、年齢の部分を出さない（公式の年齢は止めてあり、常に「通常」になるため）。
+- 元号は Civ6 の時代と同じで、天文から遅代まで48時代を持つ（SSOT 3.2、[元号＝時代の実装メモ](../poc/era-equals-reign.md)）。公式の新しい時代の画面は出さず、改元の画面に置き換える。
 - 家固有名の表示切り替えが同じ画面を差し替えている（`poc/JAC_PoC_BanseikiRuleset/UI/JAC_EraProgressPanel.lua`、`JAC_EraCompletePopup.lua`、`JAC_EraReviewPopup.lua`）。台帳の表示は同じ差し替えに足し、別の差し替えを作って競合させない。
 - 年齢の呼び名は Civ6 のとおり「黄金期」「通常期」「暗黒期」「英雄期」（SSOT 3.2 は「黄金期」「暗黒期」とそのまま呼ぶ）。ja・en・ru を用意する。
-- **時代の名前は元号**（オーナー判断 L-1、2026-09-30。旧 Q36）：通常「XX時代」（XX Era）と出る所を、今の元号で「弘治の世」「Kōji Era」「Эпоха Кодзи」と出す。公式の UI が今の時代の名前を出す所は、`GameInfo.Eras[...].Name` を `Locale.Lookup` する次の所（公式のパス）：右下の時代の目盛りの説明（`DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:187-216` の `RealizeEraIndicator`、基の `Base/Assets/UI/ActionPanel.lua:343-364,1161-1168`）、時代スコアの画面の題（`DLC/Expansion2/UI/Additions/EraProgressPanel.lua:60-68`）、時代の終わりの予告（`NewTurnPanel_Expansion1.lua:11-24`）、公式の時代の画面（`Base/Assets/UI/Popups/EraCompletePopup.lua:55`、`DLC/Expansion2/UI/Additions/EraReviewPopup.lua:62`、`DedicationPopup.lua:53`）。このうち前の 2 つと改元の通知を元号にした（[実装メモ](../poc/sengoku-ages.md)）。残り（予告と時代の画面）はツリーの段階が変わる時機に出るので段階の名前のままにし、扱いは Q74。技術・社会制度ツリー（`TechTree.lua:1013`、`CivicsTree.lua:1126`）と偉人（`GreatPeoplePopup.lua:179`）の時代名は、それぞれの項目の段階を指すので変えない。
+- **時代の名前は元号**（オーナー判断 L-1、2026-09-30。旧 Q36）：通常「XX時代」（XX Era）と出る所を、今の元号で「弘治の世」「Kōji Era」「Эпоха Кодзи」と出す。公式の UI が今の時代の名前を出す所は、`GameInfo.Eras[...].Name` を `Locale.Lookup` する次の所（公式のパス）：右下の時代の目盛りの説明（`DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:187-216` の `RealizeEraIndicator`、基の `Base/Assets/UI/ActionPanel.lua:343-364,1161-1168`）、時代スコアの画面の題（`DLC/Expansion2/UI/Additions/EraProgressPanel.lua:60-68`）、時代の終わりの予告（`NewTurnPanel_Expansion1.lua:11-24`）、公式の時代の画面（`Base/Assets/UI/Popups/EraCompletePopup.lua:55`、`DLC/Expansion2/UI/Additions/EraReviewPopup.lua:62`、`DedicationPopup.lua:53`）。このうち前の 2 つと改元の通知を元号にした（[実装メモ](../poc/sengoku-ages.md)）。予告と公式の時代名も、元号＝時代のデータ（`Data/JAC_Sengoku_Eras.sql`。上記の実装メモ）から元号の名前を読む。公式の新しい時代の画面は上記のとおり出さない。技術・社会制度ツリー（`TechTree.lua:1013`、`CivicsTree.lua:1126`）と偉人（`GreatPeoplePopup.lua:179`）は、各項目が属する時代の元号を表示する（SSOT 3.2）。
 - 自動判定で見た目の成功は主張しない。画面は実装後に人が見る。
 
 ## 9. 統一勝利・約 200 ターンとの関係
