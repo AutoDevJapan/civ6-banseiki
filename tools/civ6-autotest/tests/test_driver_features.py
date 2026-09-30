@@ -17,6 +17,28 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class DriverFeatureTests(unittest.TestCase):
+    def test_shortened_turns_require_explicit_test_mode(self):
+        runner = Runner({}, Path("unused-output"), Path("unused-game"), Path("unused-user"), 4318)
+        step = {"action": "end_turn", "turns": 10, "test_turns": 1}
+        with patch.object(runner, "_end_turn", return_value="advanced") as advance:
+            runner._run_step(step)
+            self.assertEqual(advance.call_count, 10)
+            advance.reset_mock()
+            runner.test_mode = True
+            self.assertEqual(runner._run_step(step), "advanced")
+            advance.assert_called_once()
+
+    def test_configuration_clears_test_mode_on_ordinary_runs(self):
+        step = json.loads((SCENARIOS / "religion-persistence.json").read_text(encoding="utf-8"))["steps"][1]
+        runner = Runner({}, Path("unused-output"), Path("unused-game"), Path("unused-user"), 4318)
+        for enabled in (True, False):
+            runner.test_mode = enabled
+            with self.subTest(enabled=enabled), patch.object(runner, "_lua", return_value="true") as lua:
+                runner._run_step(step)
+                self.assertIn("GameConfiguration.SetValue('JAC_AUTOTEST', " + str(int(enabled)) + ")",
+                              lua.call_args.args[1])
+                self.assertIn("GameConfiguration.UpdateEnabledMods()", lua.call_args.args[1])
+
     def test_end_turn_honours_count_default_and_shared_deadline(self):
         runner = Runner({}, Path("unused-output"), Path("unused-game"), Path("unused-user"), 4318)
         with patch.object(runner, "_end_turn", return_value="advanced") as advance:
@@ -35,6 +57,8 @@ class DriverFeatureTests(unittest.TestCase):
         for turns in (0, -1, True, 1.5, "2"):
             with self.subTest(turns=turns), self.assertRaisesRegex(ScenarioError, "turns"):
                 validate_scenario({"name": "turn count", "steps": [{"action": "end_turn", "turns": turns}]})
+            with self.subTest(test_turns=turns), self.assertRaisesRegex(ScenarioError, "test_turns"):
+                validate_scenario({"name": "turn count", "steps": [{"action": "end_turn", "test_turns": turns}]})
 
     def test_build_setup_checks_every_player_after_refresh(self):
         players = [{"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": True},
@@ -51,7 +75,7 @@ class DriverFeatureTests(unittest.TestCase):
                     "speed": "GAMESPEED_STANDARD", "seed": 1, "players": players, "build_setup": True}
             with patch.object(runner, "_lua", return_value="true") as lua:
                 runner._run_step(step)
-            self.assertEqual([call.args[0] for call in lua.call_args_list], ["FrontEnd", "HostGame"])
+            self.assertEqual([call.args[0] for call in lua.call_args_list], ["FrontEnd", "HostGame", "FrontEnd"])
             self.assertEqual(lua.call_args_list[1].args[1], code)
 
     def test_build_setup_defaults_on_for_banseiki_only(self):
@@ -66,7 +90,7 @@ class DriverFeatureTests(unittest.TestCase):
                 runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
                 with patch.object(runner, "_lua", return_value="true") as lua:
                     runner._run_step({**base, "ruleset": ruleset, **extra})
-                self.assertEqual([call.args[0] for call in lua.call_args_list], states)
+                    self.assertEqual([call.args[0] for call in lua.call_args_list], states + ["FrontEnd"])
 
     def test_start_turn_guard(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -28,6 +28,14 @@
     <Criteria id="JAC_RP_BanseikiOnly">
       <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
     </Criteria>
+    <Criteria id="JAC_RP_Autotest">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Game</Group>
+        <ConfigurationId>JAC_AUTOTEST</ConfigurationId>
+        <Value>1</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
   </ActionCriteria>
   <InGameActions>
     <UpdateDatabase id="JAC_RP_Data" criteria="JAC_RP_BanseikiOnly">
@@ -37,6 +45,10 @@
     <UpdateText id="JAC_RP_Text" criteria="JAC_RP_BanseikiOnly">
       <File>Text/JAC_ReligionPersistence_Text.xml</File>
     </UpdateText>
+    <UpdateDatabase id="JAC_RP_TestDeadlines" criteria="JAC_RP_Autotest">
+      <Properties><LoadOrder>150</LoadOrder></Properties>
+      <File>Data/JAC_ReligionPersistence_Test.sql</File>
+    </UpdateDatabase>
     <AddGameplayScripts id="JAC_RP_Gameplay" criteria="JAC_RP_BanseikiOnly">
       <Properties><LoadOrder>200</LoadOrder></Properties>
       <File>Scripts/JAC_ReligionPersistence.lua</File>
@@ -44,6 +56,7 @@
   </InGameActions>
   <Files>
     <File>Data/JAC_ReligionPersistence.sql</File>
+    <File>Data/JAC_ReligionPersistence_Test.sql</File>
     <File>Text/JAC_ReligionPersistence_Text.xml</File>
     <File>Scripts/JAC_ReligionPersistence.lua</File>
   </Files>

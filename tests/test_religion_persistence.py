@@ -327,6 +327,22 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertIn("bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
                       {m.get("id") for m in manifest.findall("./Dependencies/Mod")})
 
+    def test_fast_deadlines_are_gated_and_leave_production_values_intact(self):
+        manifest = ET.parse(MOD / "JAC_PoC_ReligionPersistence.modinfo").getroot()
+        action = manifest.find("./InGameActions/UpdateDatabase[@id='JAC_RP_TestDeadlines']")
+        criterion = manifest.find("./ActionCriteria/Criteria[@id='" + action.get("criteria") + "']")
+        self.assertEqual(criterion.findtext("ConfigurationValueMatches/ConfigurationId"), "JAC_AUTOTEST")
+        self.assertEqual(criterion.findtext("ConfigurationValueMatches/Value"), "1")
+        with sqlite3.connect(":memory:") as db:
+            db.executescript("CREATE TABLE JAC_RP_Rules(ID TEXT PRIMARY KEY, Value INTEGER);"
+                             "INSERT INTO JAC_RP_Rules VALUES('REVIVAL_COOLDOWN_TURNS',10);"
+                             "CREATE TABLE GlobalParameters(Name TEXT PRIMARY KEY, Value INTEGER);"
+                             "INSERT INTO GlobalParameters VALUES('DIPLOMACY_ALLIANCE_TIME_LIMIT',30);")
+            db.executescript((MOD / action.findtext("File")).read_text(encoding="utf-8"))
+            self.assertEqual(db.execute("SELECT Value FROM JAC_RP_Rules").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT Value FROM GlobalParameters").fetchone()[0], 1)
+        self.assertEqual(next(r["Value"] for r in self.tables["Rules"] if r["ID"] == "REVIVAL_COOLDOWN_TURNS"), 10)
+
     def test_all_catalog_and_state_names_have_ja_en_ru_text(self):
         rows = list(ET.parse(MOD / "Text/JAC_ReligionPersistence_Text.xml").getroot().iter("Row"))
         texts = {(r.get("Tag"), r.get("Language")): r.findtext("Text") for r in rows}

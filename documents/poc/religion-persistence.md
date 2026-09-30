@@ -100,7 +100,7 @@ Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`を使う�
 
 ```powershell
 python -m unittest discover -s tests -t .
-python -m unittest discover -s tools/civ6-autotest/tests -t .
+python -m unittest discover -s tools/civ6-autotest/tests
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --check
 ```
 
@@ -109,7 +109,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 実機はメインセッションでMODを配置して、次の1シナリオを実行する。
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
 ```
 
 万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。85ステップ、8回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
@@ -127,18 +127,12 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 | 同じ資料での再興 | 10ターン進めて再び信徒0にし、残した同じ資料で信仰20・信徒1の再興ができること |
 | 宗教同盟の終了 | さらに31ターン進め、外交の同盟が自然に切れたこと、両方向の制限が解除され終了記録が残ること。強制講和と同ターンの強制宣戦は使わない |
 
-比較にはドライバー側の`capture_as/equals_capture`を使う。台帳と期待値が一緒に消えても成功にならず、不一致はLuaの`error()`か外部比較で失敗する。実機には最後の期限切れの検査まで計41ターンを追加で進める時間が必要。
+比較にはドライバー側の`capture_as/equals_capture`を使う。台帳と期待値が一緒に消えても成功にならず、不一致はLuaの`error()`か外部比較で失敗する。`--test-mode`を明示した自動検証では、保存される設定値で検証用SQLだけを読み込み、再興の待機期間とエンジンの同盟期限を1ターンにする。期限の検査は実際のターン経過で行い、計3ターン待つ。通常実行の再興10ターン・同盟30ターンは変えない。
 
 既存のレビュー修正は保持した。MODは万世紀専用、再興で既存コミュニティを上書きしない。MOD切り替えのドライバーは、有効化指定と矛盾しない範囲で間接依存を先に無効化し、その結果を記録する。今回そのドライバーは変更していない。
 
 ## 結果と未検証
 
-宗教のlupaテスト50件、85ステップの形式検査とLua55片の構文検査が成功。実機はこの作業では実行していない。圧力の減算・市民人数の丸め、GameplayでのEurekaフラグと英雄の管理API、公式Modifierによる直接加入、外交残高の端数と同盟の期限切れ、台帳の保存、日英露表示は要実機確認。標準ゲームの弾圧への接続、自然な探索・布教・台帳の自動同期、マルチプレイは未接続・未検証。
+2026-10-01、依頼されたコマンドをそのまま実行し、main取り込み後の396件と自動検証ツール159件が成功。Luaのスキップなし。前の作業で必要だった権限の実行補助は使用していない。残っていた空の一時フォルダー3件は確認して削除した。
 
-指定の全件テストでは、Windowsの制限付きトークンによる0700一時フォルダーの再アクセス不可と、unittestが自動検証ツールの名前空間パッケージを検出できない問題を確認した。新しく作る一時フォルダーだけに親の権限を継承させ、既存の名前空間パッケージの全テストを列挙する実行補助を`C:/Users/makhmeto/AppData/Local/Temp/religion-run-unittest.py`に置いた。既存フォルダーのACLは変更せず、リポジトリへ実行補助や`__init__.py`は追加していない。補助を使い、全376件（宗教50件を含む）と自動検証ツール159件が成功。スキップなし。
-
-別モデルのレビューはCodexのアプリサーバー起動時に`Access is denied`で停止し、未実施。共有ToDoの登録も`D:/CC/Tools/todo/todo.lock`への書き込み権限で拒否された。この作業ではコミット・pushを行わず、変更は作業ツリーに残す。
-
-補助を使う前の失敗で作られた`tmpixfeu7wh/`は、読み取り・削除とも権限で拒否されたため残っている。大きさは読み取れない。指定のDownloads内の削除希望フォルダーも、このセッションの書き込み許可範囲に含まれないため移動できない。
-
-後片付けの記録のDiscord投稿も`D:/CC/Tools/discord-ask/state.lock`への書き込み権限で拒否された。記録本文は`C:/Users/makhmeto/AppData/Local/Temp/religion-cleanup-record.txt`に残した。
+確定回答を反映した実機結果と現在の変更の別モデルレビューは実施中。吸収の圧力減算・人数の丸め、GameplayのEureka・英雄API、公式Modifierによる加入、金の端数、同盟の期限切れは実機結果で確認する。弾圧の接続口、自然な探索・布教・台帳の自動同期、マルチプレイはPoCの範囲外として残る。

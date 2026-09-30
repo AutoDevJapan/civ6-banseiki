@@ -140,6 +140,8 @@ def validate_scenario(data: dict) -> None:
         elif action == "end_turn":
             if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
+            if "test_turns" in step and (type(step["test_turns"]) is not int or step["test_turns"] < 1):
+                raise ScenarioError(f"Step {number}: test_turns must be positive")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -331,8 +333,10 @@ def _build_setup_code(players: list[dict]) -> str:
 
 class Runner:
     def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int,
-                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False):
+                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False,
+                 test_mode: bool = False):
         self.scenario = scenario
+        self.test_mode = test_mode
         self.owner_start = owner_start
         self.output = output
         self.logs = logs
@@ -1023,6 +1027,11 @@ class Runner:
             build = _builds_setup(step)
             if build:
                 self._lua("HostGame", _build_setup_code(step["players"]), min(30, _remaining(deadline)))
+            # Set after FullRefresh: test-only database criteria use this saved
+            # configuration flag. Explicitly clear it on ordinary runs.
+            self._lua("FrontEnd", "GameConfiguration.SetValue('JAC_AUTOTEST', "
+                      + ("1" if self.test_mode else "0") + ")\nGameConfiguration.UpdateEnabledMods()\nreturn true",
+                      min(5, _remaining(deadline)))
             return (f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, "
                     f"players={len(step['players'])}"
                     + ("; Create Game setup built and checked" if build else ""))
@@ -1058,7 +1067,8 @@ class Runner:
                                   allow_human_elimination=step.get("allow_human_elimination", False))
         if action == "end_turn":
             results = []
-            for _ in range(step.get("turns", 1)):
+            turns = step.get("test_turns", step.get("turns", 1)) if self.test_mode else step.get("turns", 1)
+            for _ in range(turns):
                 results.append(self._end_turn(_remaining(deadline), deadline=deadline))
             return "; ".join(results)
         if action == "ui_lua":
@@ -1257,6 +1267,7 @@ def main() -> int:
     parser.add_argument("--no-auto-restart", action="store_true", help="Skip startup freshness check (debugging only)")
     parser.add_argument("--owner-start", action="store_true",
                         help="Open the configured Create Game screen and wait for the owner to press Start Game")
+    parser.add_argument("--test-mode", action="store_true", help="Enable test-only shortened deadlines")
     args = parser.parse_args()
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
@@ -1269,7 +1280,7 @@ def main() -> int:
         saves = args.saves or (Path.home() / "Documents" / "My Games" / "Sid Meier's Civilization VI" / "Saves" / "Single")
         return Runner(data, output, args.logs or default_log_dir(), saves, args.port,
                       auto_restart=not args.no_auto_restart, mods_dir=args.mods,
-                      owner_start=args.owner_start).run()
+                      owner_start=args.owner_start, test_mode=args.test_mode).run()
     except (OSError, json.JSONDecodeError, ScenarioError, ValueError) as exc:
         parser.exit(2, f"Scenario error: {exc}\n")
 

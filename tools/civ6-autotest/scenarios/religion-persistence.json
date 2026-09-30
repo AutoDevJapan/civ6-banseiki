@@ -467,6 +467,7 @@
     {
       "action": "end_turn",
       "turns": 10,
+      "test_turns": 1,
       "timeout": 1200
     },
     {
@@ -477,6 +478,7 @@
     {
       "action": "end_turn",
       "turns": 31,
+      "test_turns": 2,
       "timeout": 3600
     },
     {
