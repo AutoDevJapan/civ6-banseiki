@@ -8,19 +8,7 @@ local PROPOSAL_PREFIX = "JAC_UNIFICATION_PACT_PROPOSAL_"
 local RESULT = "JAC_UNIFICATION_PACT_RESULT"
 
 local m_Rows = InstanceManager:new("PlayerRow", "Root", Controls.Rows)
-
--- 同盟は登録城のある地図だけ（Q64）。登録は JAC_Sengoku_RebuiltCastles.lua と同じ行を読む（(-1, -1) は空の印）
-local function HasCastles()
-	local castle = {}
-	for row in GameInfo.RequirementSetRequirements() do
-		if row.RequirementSetId == "JAC_UNIFICATION_CITY_IS_CASTLE" then castle[row.RequirementId] = true end
-	end
-	for row in GameInfo.RequirementArguments() do
-		if castle[row.RequirementId] and row.Name == "X" and tonumber(row.Value) >= 0 then return true end
-	end
-	return false
-end
-local HAS_CASTLES = HasCastles()
+local m_ShownProposal = nil -- 自動で開いた申し込み（同じ申し込みでは開き直さない）
 
 local function Name(playerID)
 	return Locale.Lookup(PlayerConfigurations[playerID]:GetCivilizationShortDescription())
@@ -30,7 +18,7 @@ local function LeadOf(playerID)
 	return Game:GetProperty(LEAD_PREFIX .. playerID)
 end
 
--- 申し込み（Propose）と受諾（Accept）。どちらも Target に相手のプレイヤー ID を渡す
+-- 申し込み（Propose）・受諾（Accept）・脱退（Leave）。Target に相手のプレイヤー ID を渡す（脱退では使わない）
 function JAC_RequestPact(onStart, target)
 	UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT,
 		{ OnStart = "JAC_UnificationPact" .. onStart, Target = target })
@@ -40,12 +28,8 @@ local function Refresh()
 	m_Rows:ResetInstances()
 	local me = Game.GetLocalPlayer()
 	if me == -1 then return end
-	if not HAS_CASTLES then
-		Controls.Status:SetText(Locale.Lookup("LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES"))
-		Controls.PactPanel:DoAutoSize()
-		return
-	end
 	local myLead = LeadOf(me)
+	Controls.LeaveButton:SetHide(myLead == nil)
 	local status = Locale.Lookup("LOC_JAC_UNIFICATION_PACT_NONE")
 	if myLead ~= nil then
 		status = Locale.Lookup("LOC_JAC_UNIFICATION_PACT_MEMBER", Name(myLead))
@@ -84,10 +68,17 @@ function JAC_TogglePactPanel()
 	if not Controls.PactPanel:IsHidden() then Refresh() end
 end
 
+-- 自分への申し込みが新しく届いたら画面を開く（AI からの申し込みも含む。受けるかは画面で選ぶ）
 local function OnRefreshIfShown()
+	local me = Game.GetLocalPlayer()
+	local proposal = me ~= -1 and LeadOf(me) == nil and Game:GetProperty(PROPOSAL_PREFIX .. me) or nil
+	if proposal ~= nil and proposal ~= m_ShownProposal then Controls.PactPanel:SetHide(false) end
+	m_ShownProposal = proposal
 	if not Controls.PactPanel:IsHidden() then Refresh() end
 end
 
 Controls.PactToggle:RegisterCallback(Mouse.eLClick, JAC_TogglePactPanel)
+Controls.LeaveButton:RegisterCallback(Mouse.eLClick, function() JAC_RequestPact("Leave", Game.GetLocalPlayer()) end)
 Events.LocalPlayerTurnBegin.Add(OnRefreshIfShown) -- Base/Assets/UI/ActionPanel.lua:1334
 Events.GameCoreEventPublishComplete.Add(OnRefreshIfShown) -- 要求の処理後に更新（Base/Assets/UI/Choosers/ResearchChooser.lua:485）
+Events.LoadScreenClose.Add(OnRefreshIfShown) -- 読み込み直後にも届いている申し込みを出す（Base/Assets/UI/Popups/PlayerChange.lua:298）

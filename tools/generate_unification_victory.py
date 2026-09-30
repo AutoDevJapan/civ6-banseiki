@@ -12,10 +12,11 @@ hidden BUILDING_JAC_REBUILT_ON_CASTLE from Scripts/JAC_Sengoku_RebuiltCastles.lu
 and is excluded. Maps without registered castles
 (settler starts, ordinary maps) use the official domination rule: every original
 capital (SSOT 3.1).
-A 天下統一同盟 (unification pact, SSOT 3.1) pools castles across teams: once the pact's teams
-hold every counted castle, Scripts/JAC_Sengoku_UnificationPact.lua puts the hidden
+A 天下統一同盟 (unification pact, SSOT 3.1) and a 1534 start alliance pool castles across teams
+(on maps without counted castles: every major's home capital, owner decision O-8): once the
+group's teams hold every target, Scripts/JAC_Sengoku_UnificationPact.lua puts the hidden
 BUILDING_JAC_PACT_UNIFIED in the lead's capital, and the pact branch lets only the team
-owning that city (the lead's) win.
+owning that city (the lead's) win. The branch does not depend on the map kind.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ REBUILT = "BUILDING_JAC_REBUILT_ON_CASTLE"
 UNIFIED = "BUILDING_JAC_PACT_UNIFIED"  # pact lead's capital, placed by JAC_Sengoku_UnificationPact.lua
 PACT_SCENARIO = SCENARIOS / "unification-pact.json"
 PACT_LEAD_PREFIX = "JAC_UNIFICATION_PACT_LEAD_"  # + player ID -> the pact lead's player ID (Game property)
+PACT_PROPOSAL_PREFIX = "JAC_UNIFICATION_PACT_PROPOSAL_"  # + target ID -> proposer ID
 PACT_RESULT = "JAC_UNIFICATION_PACT_RESULT"  # player property: outcome of the player's last request
 RAZED_PREFIX = "JAC_UNIFICATION_RAZED_CASTLE_PLOT_"  # + plot index; Game property set by the script
 TEST_MAP = test_map.TEST_MOD / "Maps" / f"{test_map.MAP_NAME}.Civ6Map"
@@ -107,9 +109,10 @@ def sql() -> str:
 -- the never-matching (-1,-1) entry keeps the set defined when no castle file is loaded.
 -- A city rebuilt on a razed castle's plot holds {REBUILT} (placed by
 -- Scripts/JAC_Sengoku_RebuiltCastles.lua) and is not counted (owner decision 3a).
--- Pact branch (天下統一同盟, SSOT 3.1): the team owns a city holding {UNIFIED}, which
--- Scripts/JAC_Sengoku_UnificationPact.lua puts in the pact lead's capital once the pact's teams
--- together hold every counted castle. Partners do not own that city, so only the lead wins.
+-- Pact branch (天下統一同盟 and 1534 start alliances, SSOT 3.1): the team owns a city holding {UNIFIED},
+-- which Scripts/JAC_Sengoku_UnificationPact.lua puts in the lead's capital once the group's teams
+-- together hold every counted castle, or with none counted every home capital (owner decision O-8).
+-- Partners do not own that city, so only the lead wins, on either kind of map.
 INSERT INTO Types (Type, Kind) VALUES ('{VICTORY}', 'KIND_VICTORY'), ('{REBUILT}', 'KIND_BUILDING'),
     ('{UNIFIED}', 'KIND_BUILDING');
 INSERT INTO Buildings (BuildingType, Name, PrereqDistrict, Cost, InternalOnly) VALUES
@@ -396,8 +399,9 @@ def registry_scenario() -> dict:
 
 
 def pact_scenario() -> dict:
-    """天下統一同盟 on the test map: Oda (human) leads, Date (AI) joins, the pact survives save/load,
-    pooled castles make only Oda win.
+    """天下統一同盟 on the test map. With Ashina first: join, leave (the pact of two dissolves), join again,
+    war between the members dissolves it (owner decision O-7). Then Oda (human) leads, Date (AI) joins,
+    the pact survives save/load, pooled castles make only Oda win.
 
     Requests go through the pact panel's UI.RequestPlayerOperation like a click; results are read from
     the properties the gameplay script writes (a log_line wait only sees lines after the previous step).
@@ -411,8 +415,42 @@ def pact_scenario() -> dict:
     not_allied = ids + result.format("NOT_ALLIED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..date)==nil"
     joined = (ids + result.format("JOINED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..date)=={HUMAN}"
               f" and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')=={HUMAN}")
-    # Ashina (outside the pact) takes Date's non-capital castle, so the pact holds 3 of 4 when it forms.
+    # Ashina holds no castle, so a pact with it holds 2 of 4 and never marks.
     # Alliance as the 1534 relations script sets it (friendship, then SetHasAllied; live since #40).
+    ally_ashina = (
+        ids + f"local a,b=Players[{HUMAN}]:GetDiplomacy(),Players[ashina]:GetDiplomacy(); "
+        f"a:SetHasMet(ashina); b:SetHasMet({HUMAN}); a:SetHasDeclaredFriendship(ashina,true); "
+        f"b:SetHasDeclaredFriendship({HUMAN},true); a:SetHasAllied(ashina,true); "
+        "if not a:HasAllied(ashina) then error('Oda and Ashina not allied') end; return 'Oda and Ashina allied'"
+    )
+    propose_ashina = ids + "JAC_RequestPact('Propose',ashina); return 'Oda proposes to Ashina'"
+    joined_ashina = (ids + result.format("JOINED") + f" and Game:GetProperty('{PACT_LEAD_PREFIX}'..ashina)=={HUMAN}"
+                     f" and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')=={HUMAN}")
+    leave = f"JAC_RequestPact('Leave',{HUMAN}); return 'Oda leaves the pact'"
+    dissolved = (f"Game:GetProperty('{PACT_LEAD_PREFIX}'..ashina)==nil and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')==nil"
+                 f" and Players[ashina]:GetProperty('{PACT_RESULT}')=='DISSOLVED'")
+    left = ids + result.format("LEFT") + " and " + dissolved
+    # The gameplay side has no declare-war event, so the pact checks wars at the next turn start.
+    # A forced war on an ally is not verified live; the step fails with that message if the engine refuses.
+    war = (
+        ids + f"Players[{HUMAN}]:GetDiplomacy():DeclareWarOn(ashina,WarTypes.FORMAL_WAR,true); "
+        f"if not Players[{HUMAN}]:GetDiplomacy():IsAtWarWith(ashina) then "
+        "error('DeclareWarOn(true) did not start a war between the allies Oda and Ashina (engine refuses war on an ally?)') end; "
+        "return 'Oda at war with its pact partner Ashina'"
+    )
+    # Peace is forced the turn after the war (a war on the turn of a forced peace hung the engine,
+    # court-arbitration-08; MakePeaceWith(b, true) ends a war inside the minimum war length, court-arbitration-06).
+    war_dissolved = (
+        # The result strings are only the last change: an AI may make a new (legitimate) proposal in the same
+        # autoplay turn (owner-o-02), so assert the pact state and that no proposal crossed the war.
+        ids + f"if not (Game:GetProperty('{PACT_LEAD_PREFIX}'..ashina)==nil and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')==nil) then "
+        f"error('pact not dissolved by the war: ashina='..tostring(Players[ashina]:GetProperty('{PACT_RESULT}'))..' oda='..tostring(Players[{HUMAN}]:GetProperty('{PACT_RESULT}'))) end; "
+        f"if Game:GetProperty('{PACT_PROPOSAL_PREFIX}{HUMAN}')==ashina then error('Ashina proposed a pact to Oda while at war') end; "
+        f"Players[{HUMAN}]:GetDiplomacy():MakePeaceWith(ashina,true); "
+        f"if Players[{HUMAN}]:GetDiplomacy():IsAtWarWith(ashina) then error('peace with Ashina failed') end; "
+        "return 'war dissolved the pact; peace restored'"
+    )
+    # Ashina (outside the pact) takes Date's non-capital castle, so the pact holds 3 of 4 when it forms.
     prepare = (
         ids + _castle_lua(rows) + "local capital=Players[date]:GetCities():GetCapitalCity(); local moved=nil; "
         "for _,city in Players[date]:GetCities():Members() do "
@@ -446,12 +484,28 @@ def pact_scenario() -> dict:
     )
     panel = "JAC_UnificationPact"
     return {
-        "name": "Sengoku unification pact on the test map: the AI joins only when allied, pooled castles, only the lead wins",
+        "name": "Sengoku unification pact on the test map: leave and war dissolve a pact, the AI joins only when allied, pooled castles, only the lead wins",
         "judge_profile": "generic",
         "steps": [
             *start,
             {"action": "wait_for", "condition": {"type": "lua", "state_name": panel, "code":
              "return JAC_RequestPact~=nil"}, "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": ally_ashina},
+            {"action": "ui_lua", "state_name": panel, "code": propose_ashina},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined_ashina},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": panel, "code": leave},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": left},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": panel, "code": propose_ashina},
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": joined_ashina},
+             "timeout": 30},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": war},
+            {"action": "autoplay", "turns": 1, "timeout": 300},
+            {"action": "ui_lua", "state_name": "GameCore_Tuner", "code": war_dissolved},
+            # EXECUTE_SCRIPT sent before the local turn is active is dropped (court-arbitration-03).
+            {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code":
+             "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"}, "timeout": 600},
             {"action": "ui_lua", "state_name": panel, "code": propose},
             {"action": "wait_for", "condition": {"type": "lua", "state_name": "InGame", "code": not_allied},
              "timeout": 30},
