@@ -6,7 +6,7 @@
 - ゲームプレイ Lua：`Scripts/JAC_Sengoku_Ages.lua`
 - UI Lua：`UI/JAC_SengokuDarkPolicy.lua`・`.xml`（暗黒期の政策の選択画面。下の「暗黒期の政策の選択」）、`UI/JAC_SengokuReignPopup.lua`・`.xml`（改元の画面）、`UI/JAC_EraProgressPanel_Sengoku.lua`（時代スコアの画面。公式の画面への差分）、`UI/JAC_SengokuAgesView.lua`（画面が共有する台帳の読み方と文の組み立て）、`UI/JAC_ActionPanel_Sengoku.lua`（右下の時代の目盛りの説明を元号にする。下の「時代の名前（元号）」）
 - テスト：`tests/test_sengoku_ages.py`（公式データを読むデータの断面と、lupa で台帳と選択画面を動かす単体テスト）、`tests/test_sengoku_ages_screens.py`（lupa で改元の画面と時代スコアの画面を台帳の上で動かす単体テスト）
-- 実機シナリオ：`tools/civ6-autotest/scenarios/sengoku-ages.json`（2026-09-30 に PASS。後から足した確認は未実行。下の「実機確認」）、`sengoku-dark-policy.json`（暗黒期の政策の選択。以前の版は2026-09-30 に PASS。今回の通知と受付期間は未実行）、`sengoku-ages-screens.json`（改元の画面・時代の目盛りの説明・時代スコアの画面。未実行）
+- 実機シナリオ：`tools/civ6-autotest/scenarios/sengoku-ages.json`（2026-09-30 に PASS。後から足した確認は未実行。下の「実機確認」）、`sengoku-dark-policy.json`（暗黒期の政策の選択。以前の版は2026-09-30 に PASS。2026-10-01 dark-policy-at-reign-07 で全47手順に PASS）、`sengoku-ages-screens.json`（改元の画面・時代の目盛りの説明・時代スコアの画面。2026-10-01 dark-policy-at-reign-08 で全28手順に PASS）
 
 ## オーナー判断 L（2026-09-30、旧 Q36〜Q39）
 
@@ -89,6 +89,8 @@
 
 以前の実装は 2026-09-30 の ages-dark-choice-01 で PASS（寺院学問の選択、都市の旗、2回目の拒否、保存・読み込み）。受付を改元だけに限定した後の実機 dark-policy-at-reign-01/02 は、改元時に自動表示するところまで成功し、印付きの `COMMEMORATION_AVAILABLE` 通知が見つからず失敗した。同じログには、通知パネルを include した追加スクリプトが公式のワイルドカードから自分自身を再読込し、Cスタックが128回であふれた記録もある。これを修正し、通知の本体条件に依存せず、保存台帳で操作を止める。
 
+旧処理は `NotificationManager.SendNotification(playerID, NotificationTypes.COMMEMORATION_AVAILABLE, data)` で通知を送っていた。`data` には本文と見出し、期の番号、手動消去を禁止する値を入れていた。この辞書形式のAPI自体は公式の `DLC/PiratesScenario/Scripts/PiratesScenario_Shared_Script.lua:324-338` にある。実機の調査では、有効な人間のプレイヤーIDでも呼び出しは nil を返し、その直後の一覧に誓約通知は無かった。保存の段階まで通知が存在しないので、この方式で保存・読み込みによる必須選択を実現することはできなかった。
+
 公式にはゲームプレイ Lua から `FILL_CIVIC_SLOT` を送って終了を止める例がある（`DLC/PiratesScenario/Scripts/PiratesScenario_Shared_Script.lua:958`）。したがって「ゲームプレイから送る通知はすべて終了を止められない」わけではない。ただし政策スロットの通知を暗黒政策に転用すると、本来の政策選択と混ざる。独自通知に終了阻止型を指定する公式の列はなく（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2109-2123`）、`COMMEMORATION_AVAILABLE` の型を送ることだけで専用ブロックが付くと示す公式例もない。型固有の生成・失効条件は本体内部にあり、消えた理由の細部は未確認。修正後の dark-policy-at-reign-03 でも API はエラーにならず nil を返し、その後の一覧に誓約通知は無かった。`sengoku-dark-policy.json` に同じAPI呼び出しの実機調査を含め、生成後に残る通知・印・ブロック型を記録する。
 実機シナリオは `sengoku-dark-policy.json`。政策を選択した後は既存のドライバーで1ターンだけ自動進行し、次のターンで政策の保存と期限を調べる。これにより手番の途中に来るAI外交画面も、既存の閉じる処理で扱う。ターン65まで自動進行し、テスト用に武田の点を −1000 にしてから、実際の ActionPanel の Shift＋Enter 入力で弘治の改元を迎える。改元の前は政策の必須選択が無いことを先に確認する。自動進行中の人間の家をAIとして判定する経路では、終了ブロックを検証できないためである。
 
@@ -103,7 +105,20 @@
 | ターン67 | 画面を開けず変更できない。テスト用に未選択の古いセーブを模した状態でも、遅い要求は Gameplay が拒否する |
 | 選択済みで保存・読み込み | 寺院学問・選択済みの印・旗が残り、政策の通知も画面も出ない |
 
-**確認待ち**：この修正の2シナリオは、commit と push の後に指定の実機連続実行で検証する。英語の政策画面は dark-policy-at-reign-05 の画像で4候補と右下の政策選択の表示を確認した。日本語・ロシア語の本文の折り返しとマルチプレイは別途未確認。日本地図は世界会議なし。終了タイマーや他のMODが本体へ直接終了を要求する経路は、今回のUIガードの検証範囲外。
+実行の記録（2026-10-01、今回の修正）：
+
+| 実行ID | シナリオ | 結果 |
+|---|---|---|
+| dark-policy-at-reign-03 | sengoku-dark-policy.json | 通知パネルの再帰エラーは解消。通常通知が保存前に消え、15/47で失敗。専用の保存通知と台帳の公開待ちへ修正 |
+| dark-policy-at-reign-04 | sengoku-ages-screens.json | 改元前のターン進行が応答待ちで失敗 |
+| dark-policy-at-reign-05 | sengoku-dark-policy.json | 通知保存・再開・必須選択・解除まで成功。選択後のターン待ちで応答が途切れ35/47で失敗。選択後だけ既存の自動進行で外交画面を閉じる形へ修正 |
+| dark-policy-at-reign-06 | sengoku-ages-screens.json | 全28手順とログの3検査に PASS（53f4f4bの前） |
+| dark-policy-at-reign-07 | sengoku-dark-policy.json | 全47手順とログの3検査に PASS。未選択・選択済みの2回の保存／読み込み、重複・期限外の要求拒否 |
+| dark-policy-at-reign-08 | sengoku-ages-screens.json | 全28手順とログの3検査に PASS。改元画面、時代の目盛り、通知からの再開、選択後の台帳と翌ターン |
+
+成果物は共用実機作業フォルダー `civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/<実行ID>/` の `steps.jsonl`、`Lua.log`、`Modding.log` と画像。追加のゲーム設定・シナリオでは検証していない。
+
+**実機の結果**：dark-policy-at-reign-07（2026-10-01）は全47手順、dark-policy-at-reign-08 は全28手順に PASS。両方とも53f4f4bをcommit・pushしてから、指定の `live_chain.py` で実行した。終了ボタン・終了キー・Shift＋Enter・自動終了の阻止、未選択と選択済みの保存・読み込み、保存した通知からの再開、都市の旗、重複・期限外の要求の拒否を確認した。終了を止める判定はエンジンの `UI.CanEndTurn` ではなく、実際の ActionPanel と保存台帳を検査している。英語の政策画面は dark-policy-at-reign-05/07 の画像で4候補と右下の政策選択の表示を確認した。日本語・ロシア語の本文の折り返しとマルチプレイは別途未確認。日本地図は世界会議なし。終了タイマーや他のMODが本体へ直接終了を要求する経路は、今回のUIガードの検証範囲外。
 
 ## 改元の画面と時代スコアの画面（後続3、[設計](../research/sengoku-ages.md) §8）
 
@@ -116,7 +131,7 @@
 5. **自動テストの driver**：`scenario.py` の `POPUP_CLOSERS` に `JAC_SengokuReignPopup` の `OnClose()` を足した（選択画面より先に閉じる。閉じると選択画面が出るので、同じ回に続けて閉じる）。どちらの画面も入力を奪わないので、閉じなくても autoplay は止まらない
 6. 自動テスト用に、改元の画面は最後に出した改元を `JAC_REIGN_POPUP_LAST`（閉じた後も残る）に、時代スコアの画面は最後に出した中身を `JAC_AGES_PANEL_VIEW` に残す。`JAC_ShowReignPopup(true)` は最後の改元を出し直す
 
-実機シナリオ `sengoku-ages-screens.json`（設定は `sengoku-dark-policy.json` と同じ。15 km 史実領土版、22勢力、武田が人間。改元直前に武田の点を −1000 にするテスト用の操作で暗黒期にし、実際の ActionPanel の終了入力で改元する）。**未実行**：
+実機シナリオ `sengoku-ages-screens.json`（設定は `sengoku-dark-policy.json` と同じ。15 km 史実領土版、22勢力、武田が人間。改元直前に武田の点を −1000 にするテスト用の操作で暗黒期にし、実際の ActionPanel の終了入力で改元する）。dark-policy-at-reign-08（2026-10-01）で全28手順に PASS：
 
 | 時点 | 確かめること |
 |---|---|
@@ -213,7 +228,7 @@ MOD と設定は `ages-probe.json` と同じ（15 km 史実領土版、22勢力�
 
 1. ~~暗黒期の専用政策を選ぶ画面と受け付け、AI の家ごとの順位表~~ → 上の「暗黒期の政策の選択」（実機 PASS：ages-dark-choice-01、2026-09-30）
 2. 誓約（L-4：各家に固有の誓約を3つずつ、共通の誓約なし。22家 × 3 = 66 の中身を別の表で作る）と、誓約の達成の点。織田家の3つのうち1つは「天下布武」（オーナー判断 U-1、2026-09-30。それまでは表示しない）
-3. ~~改元の画面・時代スコアの画面（§8）~~ → 上の「改元の画面と時代スコアの画面」（実機は未実行）
+3. ~~改元の画面・時代スコアの画面（§8）~~ → 上の「改元の画面と時代スコアの画面」（dark-policy-at-reign-08 で PASS）
 4. 数値の調整（設計 §5.3、§10 の 5）
 
 ## 公式の根拠
