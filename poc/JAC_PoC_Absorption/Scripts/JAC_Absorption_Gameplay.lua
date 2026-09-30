@@ -1025,10 +1025,13 @@ function A.BeginHeroRecall(id, transactionID, recordID)
   end
   local source = tx.SourceRoster[recordID]
   assert(source and source.Kind == "HERO" and source.NativeHero and source.NativeHero.Class == class
-    and source.Unit and source.Unit.Owner == tx.From and record.OriginalOwner == tx.From,
+    and source.Unit and source.Unit.Owner == tx.From,
     "Hero record is unrelated to this absorption")
-  local original = tx.UnitMap[R.UnitKey(tx.From, source.Unit.ID)]
-  assert(original and original.Token, "original native Hero transfer mapping missing")
+  local current = (tx.HeroRecallUnits or {})[source.Unit.ID] or tx.UnitMap[R.UnitKey(tx.From, source.Unit.ID)]
+  -- OriginalOwner is historical provenance and can predate this transaction.
+  -- The current transfer/recall mapping identifies the last unit associated with it.
+  assert(current and record.Unit and record.Unit.Owner == tx.To and record.Unit.ID == current.ID
+    and record.Unit.Token == current.Token, "current native Hero transfer mapping mismatch")
   for otherID, other in pairs(GetRoster(tx.To)) do
     assert(otherID == recordID or not (other.Kind == "HERO" and other.NativeHero
       and other.NativeHero.Class == class and other.Outcome ~= "SUICIDE"), "ambiguous native Hero person record")

@@ -599,6 +599,41 @@ class AbsorptionTests(unittest.TestCase):
         self.assertTrue(self.a.Verify('test-absorption', False))
         self.assertEqual(len(self.a.GetRoster(2).native.RecallHistory), 1)
 
+    def test_recall_after_second_absorption_preserves_original_owner_and_uses_current_mapping(self):
+        self.add_native_hero()
+        self.apply()
+        self.run_lua('''
+          local a=ExposedMembers.JAC_Absorption
+          local p={ID='second-absorption',From=2,To=3,Mode='MERGER',EntryConditionsMet=true,
+            RelationsResolved=true,Leader='RECRUIT',Units={},Assets={}}
+          for _,u in Players[2]:GetUnits():Members() do
+            local s=a.SnapshotUnit(u)
+            p.Units[a.Rules.UnitKey(2,u:GetID())]=s.Kind=='UNIT' and 'INCORPORATE' or 'RECRUIT'
+          end
+          for id,r in pairs(a.GetRoster(2)) do
+            p.Assets[id]=r.Kind=='ITEM' and 'TRANSFER' or r.Kind=='UNLOCK' and 'INHERIT'
+              or r.Kind=='RELIGION' and 'PRESERVE' or 'RECRUIT'
+          end
+          a.Apply(p)
+          local r=a.GetRoster(3).native
+          assert(r.OriginalOwner==1 and r.Owner==3)
+          UnitManager.Kill(a.FindUnit(3,r.Unit.Token))
+        ''')
+        self.load_scripts()
+        self.a.BeginHeroRecall('second-recall', 'second-absorption', 'native')
+        self.run_lua("HERO_MANAGER:CreateHero(3,0,4,0)")
+        self.a.CompleteHeroRecall('second-recall')
+        self.run_lua('''
+          local a=ExposedMembers.JAC_Absorption;local r=a.GetRoster(3).native
+          local u=assert(a.FindUnit(3,r.Unit.Token))
+          assert(r.Owner==3 and r.OriginalOwner==1 and r.Unit.ID==u:GetID())
+          assert(r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29)
+          assert(u:GetProperty(a.Rules.PERSON_KEY).OriginalOwner==1)
+        ''')
+        self.load_scripts()
+        self.a.CompleteHeroRecall('second-recall')
+        self.assertEqual(len(self.a.GetRoster(3).native.RecallHistory), 1)
+
     def test_recall_rejects_candidate_and_token_collisions_without_killing_them(self):
         self.add_native_hero()
         self.apply()
