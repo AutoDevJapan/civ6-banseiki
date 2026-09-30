@@ -1,0 +1,131 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="ja_JP">
+      <Text>JAC PoC：指導者の人物化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="en_US">
+      <Text>JAC PoC: Leader Persona</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="ru_RU">
+      <Text>JAC PoC: лидер как персонаж</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="ja_JP">
+      <Text>加入した指導者を偉人にし、同名の総督へ進化させる検証。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="en_US">
+      <Text>Joined leaders become Great People and evolve into Governors of the same name.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="ru_RU">
+      <Text>Присоединившиеся лидеры становятся великими людьми и затем губернаторами с тем же именем.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="ja_JP">
+      <Text>仲間の指導者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="en_US">
+      <Text>Joined leader</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="ru_RU">
+      <Text>Присоединившийся лидер</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ja_JP">
+      <Text>城主</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="en_US">
+      <Text>Castellan</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ru_RU">
+      <Text>Комендант</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ja_JP">
+      <Text>加入した指導者。都市への配置と昇進は総督の操作を使う。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="en_US">
+      <Text>A joined leader. Assign and promote through the Governor screen.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ru_RU">
+      <Text>Присоединившийся лидер. Назначение и повышение доступны на экране губернаторов.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_BASE" Language="ja_JP">
+      <Text>就任</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_BASE" Language="en_US">
+      <Text>Appointment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_BASE" Language="ru_RU">
+      <Text>Назначение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="ja_JP">
+      <Text>昇進の検証</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="en_US">
+      <Text>Promotion test</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="ru_RU">
+      <Text>Проверка повышения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="ja_JP">
+      <Text>検証用の技能。追加の効果はない。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="en_US">
+      <Text>Test skill with no additional effect.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="ru_RU">
+      <Text>Проверочный навык без дополнительного эффекта.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ja_JP">
+      <Text>仲間の指導者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="en_US">
+      <Text>Joined leaders</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ru_RU">
+      <Text>Присоединившиеся лидеры</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="ja_JP">
+      <Text>総督の画面を開く</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="en_US">
+      <Text>Open Governors</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="ru_RU">
+      <Text>Открыть губернаторов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="ja_JP">
+      <Text>総督へ進化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="en_US">
+      <Text>Evolve to Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="ru_RU">
+      <Text>Стать губернатором</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="ja_JP">
+      <Text>偉人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="en_US">
+      <Text>Great Person</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="ru_RU">
+      <Text>Великий человек</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="ja_JP">
+      <Text>総督の任命待ち</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="en_US">
+      <Text>Awaiting appointment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="ru_RU">
+      <Text>Ожидает назначения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="ja_JP">
+      <Text>総督</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="en_US">
+      <Text>Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="ru_RU">
+      <Text>Губернатор</Text>
+    </Row>
+  </LocalizedText>
+</GameData>

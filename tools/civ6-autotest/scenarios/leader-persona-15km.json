@@ -1,0 +1,608 @@
+{
+  "name": "Leader persona on 15 km Japan: AI joins -> persistent native Great Person -> same-name native Governor -> placement, establishment, reassignment, promotion, save/load at every state",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_LeaderPersona_View",
+        "code": "return JAC_EvolveLeader~=nil and JAC_AppointLeader~=nil and JAC_AssignLeader~=nil and JAC_PromoteLeader~=nil"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); if me~=0 then error('scenario expects the configured human in slot 0') end; local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('STATE')~=nil or count~=0 or gov~=nil then error('leader joined before explicit join') end; if governors:GetGovernorPoints()~=0 then error('official governor title sources restored') end; local n=0; for r in GameInfo.JAC_LeaderPersonas() do n=n+1 end; if n~=22 then error('expected 22 persona definitions, got '..n) end; return 'no automatic joining; 22 definitions; no ordinary title source'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local me=0; local source=nil; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()=='LEADER_JAC_DATE_TANEMUNE' then source=p:GetID() end end; if source==nil or Players[source]:IsHuman() then error('AI Date leader required') end; local cities=Players[me]:GetCities(); local a=cities:GetCapitalCity(); local b=nil; for _,c in cities:Members() do if c:GetID()~=a:GetID() and (not b or c:GetID()<b:GetID()) then b=c end end; if not a or not b then error('two own cities required') end; Game:SetProperty('JAC_PERSONA_SCENARIO_SOURCE',source); Game:SetProperty('JAC_PERSONA_SCENARIO_CITY_A',a:GetID()); Game:SetProperty('JAC_PERSONA_SCENARIO_CITY_B',b:GetID()); local api=ExposedMembers.JAC_LeaderPersona; if not api then error('gameplay context missing') end; local result=api.Join(me,source,'CALM','ASTUTE'); if result~='JOINED' then error('join failed: '..tostring(result)) end; if not Players[source]:IsAlive() then error('PoC join eliminated the source faction') end; return 'AI Date leader joined human; personality/trait are test inputs, no territory transferred'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_STATE')=='GREAT_PERSON'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GREAT_PERSON' or count~=1 or gov~=nil or governors:HasGovernor(def.Hash) then error('expected exactly one native Great Person and no Governor') end; if unit:GetID()~=prop('UNIT') then error('saved unit id differs') end; if Locale.Lookup(unit:GetName())~=Locale.Lookup(row.Name) then error('native Great Person name differs: '..tostring(unit:GetName())) end; if unit:GetGreatPerson():GetActionCharges()~=0 then error('persona can retire by using a charge') end; local _,_,texture=IconManager:FindIconAtlas(row.PortraitIcon,64); if texture==nil then error('leader portrait unresolved') end; return 'native Great Person, name, portrait, zero charges, personality and trait verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "UnitPanel",
+      "code": "local me=Game.GetLocalPlayer(); local row=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; for _,u in Players[me]:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then local a,b,c,d=GetUnitPortraitIconNames(u); if a~=row.PortraitIcon or b~=a or c~=a or d~=a then error('native UnitPanel portrait lookup differs') end; return 'UnitPanel resolves the correct leader portrait' end end; error('native Great Person absent')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GREAT_PERSON' or count~=1 or gov~=nil or governors:HasGovernor(def.Hash) then error('expected exactly one native Great Person and no Governor') end; if unit:GetID()~=prop('UNIT') then error('saved unit id differs') end; if Locale.Lookup(unit:GetName())~=Locale.Lookup(row.Name) then error('native Great Person name differs: '..tostring(unit:GetName())) end; if unit:GetGreatPerson():GetActionCharges()~=0 then error('persona can retire by using a charge') end; local _,_,texture=IconManager:FindIconAtlas(row.PortraitIcon,64); if texture==nil then error('leader portrait unresolved') end; return 'native Great Person, name, portrait, zero charges, personality and trait verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-GreatPerson",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-GreatPerson",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GREAT_PERSON' or count~=1 or gov~=nil or governors:HasGovernor(def.Hash) then error('expected exactly one native Great Person and no Governor') end; if unit:GetID()~=prop('UNIT') then error('saved unit id differs') end; if Locale.Lookup(unit:GetName())~=Locale.Lookup(row.Name) then error('native Great Person name differs: '..tostring(unit:GetName())) end; if unit:GetGreatPerson():GetActionCharges()~=0 then error('persona can retire by using a charge') end; local _,_,texture=IconManager:FindIconAtlas(row.PortraitIcon,64); if texture==nil then error('leader portrait unresolved') end; return 'native Great Person, name, portrait, zero charges, personality and trait verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local me=0; local r=ExposedMembers.JAC_LeaderPersona.Join(me,Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE'),'BRAVE','VALIANT'); if r~='ALREADY_JOINED' then error('join not idempotent after load') end; return r"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GREAT_PERSON' or count~=1 or gov~=nil or governors:HasGovernor(def.Hash) then error('expected exactly one native Great Person and no Governor') end; if unit:GetID()~=prop('UNIT') then error('saved unit id differs') end; if Locale.Lookup(unit:GetName())~=Locale.Lookup(row.Name) then error('native Great Person name differs: '..tostring(unit:GetName())) end; if unit:GetGreatPerson():GetActionCharges()~=0 then error('persona can retire by using a charge') end; local _,_,texture=IconManager:FindIconAtlas(row.PortraitIcon,64); if texture==nil then error('leader portrait unresolved') end; return 'native Great Person, name, portrait, zero charges, personality and trait verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_DATE_TANEMUNE'); return 'request without a title'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[Game.GetLocalPlayer()]:GetProperty('JAC_PERSONA_RESULT')=='NO_TITLE'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GREAT_PERSON' or count~=1 or gov~=nil or governors:HasGovernor(def.Hash) then error('expected exactly one native Great Person and no Governor') end; if unit:GetID()~=prop('UNIT') then error('saved unit id differs') end; if Locale.Lookup(unit:GetName())~=Locale.Lookup(row.Name) then error('native Great Person name differs: '..tostring(unit:GetName())) end; if unit:GetGreatPerson():GetActionCharges()~=0 then error('persona can retire by using a charge') end; local _,_,texture=IconManager:FindIconAtlas(row.PortraitIcon,64); if texture==nil then error('leader portrait unresolved') end; return 'native Great Person, name, portrait, zero charges, personality and trait verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local result=ExposedMembers.JAC_LeaderPersona.GrantTestTitle(0,'LEADER_JAC_DATE_TANEMUNE','APPOINT'); if result~='TITLE_GRANTED' then error('appointment fixture failed: '..result) end; return result"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local g=Players[Game.GetLocalPlayer()]:GetGovernors(); return g:GetGovernorPoints()-g:GetGovernorPointsSpent()==1"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_DATE_TANEMUNE'); return 'native appointment requested by evolution command'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_STATE')=='GOVERNOR'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; if gov:GetAssignedCity()~=nil then error('Governor assigned before placement') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Governor",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Governor",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; if gov:GetAssignedCity()~=nil then error('Governor assigned before placement') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_AssignLeader('LEADER_JAC_DATE_TANEMUNE',Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); return 'place in city A'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; local c=gov and gov:GetAssignedCity(); return c~=nil and c:GetID()==Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsOnSite()~=0 then error('establishment progress differs: '..gov:GetTurnsOnSite()) end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsOnSite()~=1 then error('establishment progress differs: '..gov:GetTurnsOnSite()) end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Establishing",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Establishing",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsOnSite()~=1 then error('establishment progress differs: '..gov:GetTurnsOnSite()) end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; if gov:IsEstablished()~=true then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_AssignLeader('LEADER_JAC_DATE_TANEMUNE',Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')); return 'reassign to city B'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; local c=gov and gov:GetAssignedCity(); return c~=nil and c:GetID()==Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsOnSite()~=0 then error('establishment progress differs: '..gov:GetTurnsOnSite()) end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Reassigned",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Reassigned",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsOnSite()~=0 then error('establishment progress differs: '..gov:GetTurnsOnSite()) end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_PromoteLeader('LEADER_JAC_DATE_TANEMUNE'); return 'native promotion request without a title'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_AppointLeader('LEADER_JAC_DATE_TANEMUNE'); UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaFinalize',Leader='LEADER_JAC_DATE_TANEMUNE'}); return 'barrier'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[Game.GetLocalPlayer()]:GetProperty('JAC_PERSONA_RESULT')=='ALREADY_EVOLVED'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=false then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local result=ExposedMembers.JAC_LeaderPersona.GrantTestTitle(0,'LEADER_JAC_DATE_TANEMUNE','PROMOTE'); if result~='TITLE_GRANTED' then error('promotion fixture failed: '..result) end; return result"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local g=Players[Game.GetLocalPlayer()]:GetGovernors(); return g:GetGovernorPoints()-g:GetGovernorPointsSpent()==1"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_PromoteLeader('LEADER_JAC_DATE_TANEMUNE'); return 'promote native Governor'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; return gov~=nil and gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=true then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=false then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=true then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=true then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Promoted",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Promoted",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=true then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=true then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local me=0; local api=ExposedMembers.JAC_LeaderPersona; for _,phase in ipairs({'APPOINT','PROMOTE'}) do if api.GrantTestTitle(me,'LEADER_JAC_DATE_TANEMUNE',phase)~='TITLE_ALREADY_GRANTED' then error('fixture title duplicated after load') end end; local g=Players[me]:GetGovernors(); if g:GetGovernorPoints()~=2 or g:GetGovernorPointsSpent()~=2 then error('native titles were not each spent once') end; return 'two titles granted/spent once across all loads'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_DATE_TANEMUNE'); return 'repeat evolution after final load'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[Game.GetLocalPlayer()]:GetProperty('JAC_PERSONA_RESULT')=='ALREADY_EVOLVED'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local p=Players[me]; local leader='LEADER_JAC_DATE_TANEMUNE'; local row=GameInfo.JAC_LeaderPersonas[leader]; if not row then error('persona database missing') end; local prefix='JAC_PERSONA_'..leader..'_'; local function prop(k) return Game:GetProperty(prefix..k) end; local def=GameInfo.Governors[row.GovernorType]; local governors=p:GetGovernors(); local gov=governors:HasGovernor(def.Hash) and governors:GetGovernor(def.Hash) or nil; local count=0; local unit=nil; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); if gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()] and GameInfo.GreatPersonIndividuals[gp:GetIndividual()].GreatPersonIndividualType==row.PersonType then count=count+1; unit=u end end; if prop('OWNER')~=me or prop('SOURCE')~=Game:GetProperty('JAC_PERSONA_SCENARIO_SOURCE') then error('identity ownership changed') end; if prop('NAME')~=row.Name or prop('PORTRAIT')~='ICON_'..leader then error('name or portrait reference changed') end; if prop('PERSONALITY')~='CALM' or prop('TRAIT')~='ASTUTE' then error('fixture personality/trait changed') end; if prop('STATE')~='GOVERNOR' or count~=0 or prop('UNIT')~=nil or not gov or not governors:HasGovernor(def.Hash) then error('expected one native Governor and no Great Person') end; local _,list=governors:GetGovernorList(); if #list~=1 or gov:GetType()~=def.Index then error('native governor count or type differs') end; if def.Name~=row.Name then error('Governor name differs') end; if not gov:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) then error('base ability missing') end; if gov:HasPromotion(GameInfo.GovernorPromotions[row.PromotionType].Hash)~=true then error('promotion state differs') end; local cityID=Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B'); local city=CityManager.GetCity(me,cityID); local assigned=gov:GetAssignedCity(); if not city or not assigned or assigned:GetOwner()~=me or assigned:GetID()~=cityID then error('assignment differs') end; local occupant=governors:GetAssignedGovernor(city); if not occupant or occupant:GetType()~=def.Index then error('city has a different Governor') end; local old=CityManager.GetCity(me,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); local occupant=governors:GetAssignedGovernor(old); if occupant and occupant:GetType()==def.Index then error('Governor still occupies old city') end; if gov:IsEstablished()~=true then error('establishment state differs') end; if gov:GetTurnsToEstablish()~=5 then error('native standard establishment duration changed') end; return 'native Governor identity, city, establishment, promotion and sole occupancy verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "Controls.PersonaPanel:SetHide(false); JAC_RefreshPersonas(); return 'show the joined leader with original portrait'"
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-after-load.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "LuaEvents.GovernorPanel_Open(); return 'open official Governor screen'"
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-native-governor.png"
+    }
+  ]
+}
