@@ -227,7 +227,7 @@
     {
       "action": "end_turn",
       "turns": 90,
-      "timeout": 1800
+      "timeout": 4050
     },
     {
       "action": "wait_for",

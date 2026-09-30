@@ -638,6 +638,19 @@ class ScenarioSafetyTests(unittest.TestCase):
                     self.assertEqual(sum("SetActive(true)" in code for code in commands), 1)
                     self.assertFalse(any("SetActive(false)" in code for code in commands))
 
+    def test_end_turn_honours_turns_and_rejects_invalid_values(self):
+        # assassin-03: "turns" was silently ignored, so a 10-turn wait ended one turn and the check still passed.
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_end_turn", return_value="human turn") as end_turn:
+            runner._run_step({"action": "end_turn", "turns": 3, "timeout": 60})
+            self.assertEqual(end_turn.call_count, 3)
+            runner._run_step({"action": "end_turn", "timeout": 60})
+            self.assertEqual(end_turn.call_count, 4)
+        base = {"name": "t", "steps": []}
+        for bad in (0, -1, "2", 1.5):
+            with self.assertRaisesRegex(ScenarioError, "turns must be positive"):
+                validate_scenario({**base, "steps": [{"action": "end_turn", "turns": bad}]})
+
     def test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         commands = []

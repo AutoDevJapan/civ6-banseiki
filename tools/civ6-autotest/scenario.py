@@ -136,6 +136,11 @@ def validate_scenario(data: dict) -> None:
             for key in ("research_metrics", "allow_human_elimination"):
                 if key in step and type(step[key]) is not bool:
                     raise ScenarioError(f"Step {number}: {key} must be boolean")
+        elif action == "end_turn":
+            # "turns" used to be silently ignored (one turn only), so a scenario could pass --check and then test
+            # something else live (assassin-03). Validate it like autoplay's.
+            if "turns" in step and (type(step["turns"]) is not int or step["turns"] < 1):
+                raise ScenarioError(f"Step {number}: turns must be positive")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -1011,7 +1016,8 @@ class Runner:
                                   research_metrics=step.get("research_metrics", False),
                                   allow_human_elimination=step.get("allow_human_elimination", False))
         if action == "end_turn":
-            return self._end_turn(timeout, deadline=deadline)
+            results = [self._end_turn(timeout, deadline=deadline) for _ in range(step.get("turns", 1))]
+            return results[0] if len(results) == 1 else f"{len(results)} turns: {results[0]} … {results[-1]}"
         if action == "ui_lua":
             attempts = 0
             while True:
