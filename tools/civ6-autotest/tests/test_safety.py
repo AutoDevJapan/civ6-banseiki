@@ -16,6 +16,12 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def setUp(self):
+        # Every test supplies its own process state; never launch the real game.
+        process = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        process.start()
+        self.addCleanup(process.stop)
+
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -246,7 +252,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 encoding="utf-8").splitlines()]
             self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
 
-    def test_no_civ_process_reports_connection_failure_before_tuner_access(self):
+    def test_failed_cold_start_is_reported_before_tuner_access(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
@@ -255,7 +261,9 @@ class ScenarioSafetyTests(unittest.TestCase):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "one game", "steps": [{"action": "pause", "seconds": 0.1}]},
                             base / "output", logs, base, 4318, auto_restart=False)
-            with redirect_stdout(StringIO()), patch.object(civ_click, "_civ_process_ids", return_value=set()), patch.object(
+            with redirect_stdout(StringIO()), patch("scenario.single_civ_process", return_value=None), patch.object(
+                runner, "_restart_game", side_effect=ScenarioError("Steam could not start Civ VI")
+            ) as restart, patch.object(
                 runner, "_wait"
             ) as wait:
                 self.assertEqual(runner.run(), 1)
@@ -263,7 +271,8 @@ class ScenarioSafetyTests(unittest.TestCase):
             records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
                 encoding="utf-8").splitlines()]
             self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
-            self.assertIn("FireTuner に接続できません（Civ6 が起動していない可能性）", records[-1]["detail"])
+            restart.assert_called_once_with(360)
+            self.assertIn("Steam could not start Civ VI", records[-1]["detail"])
             self.assertNotIn("Multiple", records[-1]["detail"])
 
     def test_unreachable_tuner_reports_connection_failure(self):
@@ -380,7 +389,9 @@ class ScenarioSafetyTests(unittest.TestCase):
     def test_lua_wait_unknown_reply_fails_without_reexecution(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         condition = {"type": "lua", "state_name": "InGame", "code": "return true"}
-        with patch.object(runner, "_lua", side_effect=LuaResponseUnknown("command may have run")) as run_lua, patch(
+        with patch.object(runner, "_states", return_value=[]), patch.object(
+            runner, "_lua", side_effect=LuaResponseUnknown("command may have run")
+        ) as run_lua, patch(
             "scenario.time.sleep"
         ) as sleep:
             with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
@@ -661,6 +672,11 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 
 class InputSafetyTests(unittest.TestCase):
+    def setUp(self):
+        process = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        process.start()
+        self.addCleanup(process.stop)
+
     def test_deadline_expiring_during_focus_sends_no_key(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1
