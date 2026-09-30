@@ -444,7 +444,7 @@ local function ApplyNation(m)
       if p.Identity and p.Identity~=m.Target.Identity and p.Dead~=1 and
         not RegisteredDead(sourceInput,housePeople,p.Identity) then
         local entry=Copy(p); entry.House=id; entry.Role=free and "UNAFFILIATED" or "MEMBER"; entry.City=nil
-        entry.SourceUnit=entry.Unit; entry.SourceGovernor=entry.Governor
+        entry.SourceUnit=entry.Unit or entry.SourceUnit; entry.SourceGovernor=entry.Governor or entry.SourceGovernor
         entry.Unit=nil; entry.Governor=nil -- archived roles must not refer to removed map objects
         people[p.Identity]=entry
         if p.Kind=="GREAT_PERSON" and p.Unit then registeredUnits[p.Unit]=p.Identity end
@@ -453,11 +453,13 @@ local function ApplyNation(m)
     for _,p in ipairs(m.Snapshot.Candidates or {}) do if SuccessorPresent(id,p) then Preserve(p) end end
     for _,p in ipairs(Candidates(id)) do Preserve(p) end -- people added during the mission also survive
     for _,p in pairs(target:GetProperty(R.PEOPLE) or {}) do Preserve(p) end
-    for _,g in pairs(R.Input(target).Governors or {}) do Preserve(g) end
+    for key,g in pairs(R.Input(target).Governors or {}) do
+      local person=Copy(g); person.Governor=tonumber(key); Preserve(person)
+    end
     for _,uid in ipairs(units) do
       local u=target:GetUnits():FindID(uid)
       if R.Classify(u)=="GREAT_PERSON" and not registeredUnits[uid] then
-        Preserve({Identity=u:GetProperty(R.PERSON) or Token(u),Kind="GREAT_PERSON",Type=u:GetType()})
+        Preserve({Identity=u:GetProperty(R.PERSON) or Token(u),Kind="GREAT_PERSON",Type=u:GetType(),Unit=uid})
       end
       n.DisbandedUnits[#n.DisbandedUnits+1]=uid
       UnitManager.Kill(u)

@@ -30,7 +30,7 @@ R.PROVISIONAL = {
   CongressFreeVotes=1, CongressFavorStep=10,
   CongressDefaultBallot="ALLY_SUCCESSOR_RECIPIENT_ABSORPTION_OTHER_FREE",
   ProductionBuilding=10, ProductionDistrict=10, ProductionPolicy=10,
-  ProductionGovernment=10, ProductionTrait=15, ProductionJob=15, ProductionRelation=10,
+  ProductionGovernment=10, ProductionTrait=15, ProductionJob=15,
   WaitSecurity=10, WaitRelation=10, WaitSchool=10, WaitGovernor=7, WaitHero=6, WaitGreatPerson=6,
   DetectionPercent=25, FriendshipPenalty=10, Grievances=25,
   FailureDisposition="DEATH", -- capture needs a prisoner/release specification
@@ -70,7 +70,6 @@ function R.ProductionTurns(f, speed)
   for _,kind in ipairs({"Building","District","Policy","Government","Trait","Job"}) do
     turns=turns - (f[kind] or 0)*p["Production"..kind]
   end
-  turns=turns-p.ProductionRelation*R.Clamp(f.Relation or 0,0,1)
   return R.Scale(math.max(R.MIN_PRODUCTION,turns),speed)
 end
 function R.WaitTurns(f, speed)
@@ -182,12 +181,8 @@ function R.Relation(a,b)
 end
 function R.ProductionInput(id, city)
   local a,b=R.Input(Players[id]),R.Input(city)
-  local relation=0
-  for _,other in ipairs(PlayerManager.GetAliveMajors()) do
-    if other:GetID()~=id then relation=math.max(relation,R.Relation(id,other:GetID())) end
-  end
   return { Security=a.Security, Building=b.Building, District=b.District,
-    Policy=a.Policy, Government=a.Government, Trait=b.Trait, Job=b.Job, Relation=relation }
+    Policy=a.Policy, Government=a.Government, Trait=b.Trait, Job=b.Job }
 end
 function R.RefreshTraining(id,p,city,turn)
   -- Re-evaluate total time against elapsed time; no accumulated fractions or RNG.

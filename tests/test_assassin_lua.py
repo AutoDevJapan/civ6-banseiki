@@ -260,7 +260,7 @@ class AssassinLuaTests(unittest.TestCase):
           Players[0]:SetProperty(A.INPUT,{Security=100}); ADVANCE(1)
           assert(A.State(0).Production.Due==1120 and A.State(0).Production.Start==1000)
           Players[0]:SetProperty(A.INPUT,{Security=0,Policy=1,Relations={['1']=1}}); ADVANCE(1)
-          assert(A.State(0).Production.Due==1060)
+          assert(A.State(0).Production.Due==1070)
           Players[0]:GetCities():FindID(10):SetProperty(A.INPUT,{Building=1000})
           ADVANCE(7); assert(NOW==1019 and A.State(0).Production.Due==1020)
           assert(A.State(0).LastCompletion==nil); ADVANCE(1)
@@ -449,7 +449,8 @@ class AssassinLuaTests(unittest.TestCase):
           assert(DATA[0].Cities[10].Owner==0 and Players[3]:GetCities():GetCount()==2)
           assert(n.People.PERSON_GP.Role=='UNAFFILIATED' and n.People.PERSON_GP.SourceUnit==gp:GetID())
           assert(n.People.PERSON_GP.Unit==nil and n.People.GOV.Governor==nil and n.People.LEADER_1.Dead==1)
-          assert(n.People.GOV.Role=='UNAFFILIATED' and #n.Cities==2 and #n.DisbandedUnits==2)
+          assert(n.People.GOV.Role=='UNAFFILIATED' and n.People.GOV.SourceGovernor==7)
+          assert(#n.Cities==2 and #n.DisbandedUnits==2)
           assert(n.People.OLD.Dead==1 and n.People.OLD.Role=='DEAD' and n.People.OLD.SourceUnit==999)
           assert(n.People.OLD.Unit==nil and n.People.OLD.Governor==nil and n.People.OLD.City==nil)
           assert(A.State(0).CommandUnlock==1050)
@@ -572,6 +573,16 @@ class AssassinLuaTests(unittest.TestCase):
           ADVANCE(2); assert(DATA[1].Units[target] and A.State(0).LastMission.Result=='TARGET_GONE')
         """)
 
+    def test_diplomacy_changes_do_not_change_training_duration(self):
+        self.run_lua("""
+          assert(A.StartProduction(0,10))
+          DATA[0].Wars[1]=true; Players[0]:SetProperty(A.INPUT,{Relations={['1']=1}})
+          ADVANCE(1); assert(A.State(0).Production.Due==1100)
+          Players[1]:SetProperty('JAC_ASN_DIPLOMACY_V1',{Friendship={['0']=-10}})
+          ADVANCE(1); assert(A.State(0).Production.Due==1100)
+          assert(A.ProductionTurns({Relation=1})==100)
+        """)
+
     def test_relation_penalty_increases_hostility_and_shortens_wait(self):
         self.run_lua("""
           local before=A.WaitTurns(A.CommandInput(0,1))
@@ -586,7 +597,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.StartProduction(0,10)); FORCE(false,true)
           assert(A.StartAttempt(0,U,1,'LEADER')); ADVANCE(101)
           assert(Players[1]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances['0']==25)
-          assert(A.State(0).LastCompletion==1099 and A.State(0).Production==nil) -- current relation also affects training
+          assert(A.State(0).LastCompletion==1100 and A.State(0).Production==nil)
           local n=Players[0]:GetUnits():GetCount(); ADVANCE(2); assert(Players[0]:GetUnits():GetCount()==n)
         """)
 
@@ -624,6 +635,14 @@ class AssassinLuaTests(unittest.TestCase):
                   A.Tick(); ADVANCE(2); assert(Players[1]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances['0']==25)
                 """)
 
+    def test_unregistered_great_person_keeps_original_unit_id_when_archived(self):
+        self.run_lua("""
+          local gp=GRANT(1,2,2,0); gp:SetProperty(A.PERSON,'UNREGISTERED_GP')
+          FORCE(true,false,'FREE_STATE'); assert(A.StartAttempt(0,U,1,'LEADER')); ADVANCE(5)
+          local person=A.Nation(1).People.UNREGISTERED_GP
+          assert(person.Role=='UNAFFILIATED' and person.SourceUnit==gp:GetID() and person.Unit==nil)
+        """)
+
     def test_absorption_freezes_recipient_transfers_cities_disbands_and_preserves_people(self):
         self.run_lua("""
           DATA[2].Cities[12]={ID=12,Owner=2,X=4,Y=2,Properties={}}
@@ -638,6 +657,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(Players[1]:GetCities():GetCount()==0 and Players[1]:GetUnits():GetCount()==0 and not DATA[1].Alive)
           assert(Players[2]:GetCities():GetCount()==5 and Players[0]:GetCities():GetCount()==3)
           assert(Players[2]:GetProperty(A.PEOPLE).GOV.Role=='MEMBER')
+          assert(Players[2]:GetProperty(A.PEOPLE).GOV.SourceGovernor==7)
           assert(Players[2]:GetProperty(A.PEOPLE)['LEADER_1']==nil)
           assert(Game:GetProperty(A.NATIONS)['1'].State=='ABSORPTION' and RAND_CALLS==3)
           local count=#TRANSFERS; A.Tick(); ADVANCE(1); assert(#TRANSFERS==count)
