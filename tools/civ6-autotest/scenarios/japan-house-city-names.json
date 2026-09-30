@@ -1,0 +1,168 @@
+{
+  "name": "Japan map: a newly founded city takes a name from its own house's pool",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": false,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620961,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset after refresh') end; HideGameSetup(); return 'headless setup refreshed'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do n=n+p:GetCities():GetCount() end; return n>=56"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "--[[ Found one city per house the way the Tuner does (Base/Assets/UI/Tuner/TunerMapPanel.lua:111-121, player:GetCities():Create(x,y)). Create returns nil on an invalid plot, so candidates follow the placement rules: land, passable (no mountain), not a city or natural wonder, unowned or owned by the house, and farther than CITY_MIN_RANGE from every city; they are tried nearest-first from the house capital. ]] local rng=GameInfo.GlobalParameters['CITY_MIN_RANGE']; local minD=((rng and tonumber(rng.Value)) or 3)+1; local R=12; local tries=25; local cities={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do for _,c in p:GetCities():Members() do cities[#cities+1]={c:GetX(),c:GetY()} end end; local function ok(pl,id) if pl:IsWater() or pl:IsImpassable() or pl:IsCity() or pl:IsNaturalWonder() then return false end; local o=pl:GetOwner(); if o~=-1 and o~=id then return false end; for _,xy in ipairs(cities) do if Map.GetPlotDistance(pl:GetX(),pl:GetY(),xy[1],xy[2])<minD then return false end end; return true end; local function candidates(cap,id) local list={}; for i=0,Map.GetPlotCount()-1 do local pl=Map.GetPlotByIndex(i); local d=Map.GetPlotDistance(cap:GetX(),cap:GetY(),pl:GetX(),pl:GetY()); if d<=R and ok(pl,id) then list[#list+1]={d,i,pl} end end; table.sort(list,function(a,b) if a[1]~=b[1] then return a[1]<b[1] end; return a[2]<b[2] end); return list end; local n=0; local skipped={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); local civ=PlayerConfigurations[id]:GetCivilizationTypeName(); local pool={}; for row in GameInfo.CityNames() do if row.CivilizationType==civ and row.SortIndex>=0 then pool[row.CityName]=true end end; local cap=p:GetCities():GetCapitalCity(); local c,target; if cap then for k,cand in ipairs(candidates(cap,id)) do if k>tries then break end; c=p:GetCities():Create(cand[3]:GetX(),cand[3]:GetY()); if c then target=cand[3]; break end end end; if not c then skipped[#skipped+1]=civ; print('[JAC_HOUSE_CITY_NAMES] skip civ='..civ..' reason='..(cap and ('no plot within '..R..' of the capital accepted Create') or 'no capital')) else local name=c:GetName(); print('[JAC_HOUSE_CITY_NAMES] civ='..civ..' plot='..target:GetIndex()..' owner='..target:GetOwner()..' name='..tostring(name)..' text='..Locale.Lookup(name)); if not pool[name] or string.sub(name,1,17)~='LOC_JAC_CITYNAME_' then error(civ..' founded '..tostring(name)..', not a name from its own pool or the shared province list') end; cities[#cities+1]={c:GetX(),c:GetY()}; n=n+1 end end; if n<20 then error('expected at least 20 houses checked, got '..n..' (skipped: '..table.concat(skipped,',')..')') end; return 'house names: '..n..' checked, skipped: '..(#skipped>0 and table.concat(skipped,',') or 'none')"
+    },
+    {
+      "action": "screenshot",
+      "path": "japan-house-city-names.png"
+    }
+  ]
+}

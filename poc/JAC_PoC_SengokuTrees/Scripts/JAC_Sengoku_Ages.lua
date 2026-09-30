@@ -225,12 +225,14 @@ local function Friends(diplomacy, other)
 	return diplomacy:HasDeclaredFriendship(other) == true
 end
 
--- One relation of a pair (§5.4): its state is "none", "on" or "start". A start relation (and its re-making)
--- carries the pair's Game property as a number and never scores; after the property turns false the lingering
--- relation keeps its state, so only a relation made from "none" scores, once per pair, kind and period. Same-team
--- pairs never score. Returns the new state.
+-- One relation of a pair (§5.4): its state is "none", "on" or "start". A start relation carries the pair's Game
+-- property as a number while the relation holds and never scores; the property turns false when the start
+-- alliance lapses (not re-made, owner decision K) or an event ends it. A lingering relation after false keeps its
+-- state, so only a relation made from "none" scores, once per pair, kind and period; a pair that re-forms after
+-- the lapse scores. Checking the relation with the number makes the lapse turn read "none" whether the ledger runs
+-- before or after JAC_Japan_1534Relations.lua. Same-team pairs never score. Returns the new state.
 local function TrackRelation(l, kind, a, b, on, start, previous, sameTeam)
-	if start then return "start" end
+	if start and on then return "start" end
 	if on and previous == "none" and not sameTeam then
 		local pairKey = kind .. ":" .. tostring(a) .. ":" .. tostring(b) .. ":" .. tostring(l.reign)
 		if not l.keys[pairKey] then
@@ -244,7 +246,7 @@ end
 
 -- §5.4: alliances (2 points each) and declared friendships (1 point each, owner decision L-2), both in the
 -- alliance part. The start relations of JAC_Japan_1534Relations.lua (friendship, then alliance, and the pair's
--- property: :37,59,151-156) never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua:76,102);
+-- property) never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua TrackStartAlliances);
 -- GetAllianceType is UI-only (nil here).
 local function IntakeAlliances(l)
 	l.friends = l.friends or {}  -- ledgers saved before the friendship points

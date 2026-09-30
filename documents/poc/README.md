@@ -102,7 +102,7 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 
 `python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-15km-200turn-full.json` で実行する。50ターンごとに要約を2行出す。要約はエラーにならず、失敗した場合も `summary failed: <理由>` を返す。
 
-1. `GameCore_Tuner` の行：`T+<経過ターン> engine=<内部ターン> alive=<生存勢力数> dead=[滅亡した家] cities=[家=都市数,…] ages reign=<改元の番号>:<ReignType> last(G/N/D/H)=<直近の判定の黄金/通常/暗黒/英雄の家数> events=<史実イベントの発火数> lapses=<開始時同盟の失効数> arb pending=<審理中> truce=<停戦中の組> await=<講和待ちの組> peace=<講和させた組> outlaw=<討伐対象の家> lastReq=<最後の請求ターン> winner=<勝利チーム。未決は -1>`。値を返さない呼び出しは `nil` と出す（Lua 5.1 の `tostring()` は引数なしだとエラーになるため、要約は `S(v)` で包む）
+1. `GameCore_Tuner` の行：`T+<経過ターン> engine=<内部ターン> alive=<生存勢力数> dead=[滅亡した家] cities=[家=都市数,…] ages reign=<改元の番号>:<ReignType> last(G/N/D/H)=<直近の判定の黄金/通常/暗黒/英雄の家数> events=<史実イベントの発火数> alliances=<今同盟している主要勢力の組の数> arb pending=<審理中> truce=<停戦中の組> await=<講和待ちの組> peace=<講和させた組> outlaw=<討伐対象の家> lastReq=<最後の請求ターン> winner=<勝利チーム。未決は -1>`。値を返さない呼び出しは `nil` と出す（Lua 5.1 の `tostring()` は引数なしだとエラーになるため、要約は `S(v)` で包む）
 2. `InGame` の行：`year=<暦の表示> localPlayer=<操作プレイヤー> officialEraScore=<公式の時代スコアの合計>`。万世紀では公式の時代スコアは常に0なので、`OK` 以外（`NONZERO [家ID=値,…]`）は不具合として扱う
 
 最後の手順だけが合否を決め、200ターンに届かない（`T+201` 未満）か生存勢力が0ならエラーにする。ターンごとの時間とメモリは `autoplay-metrics-<N>.jsonl`、研究の推移は `autoplay-research-<N>.jsonl`（N は50ターン区切りの番号）に出る。
@@ -116,7 +116,7 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 3. 公式の時代スコアはすべての確認で0。判定は 8/8、Lua の実行時エラーなし
 4. 元号ごとの時代（黄金/英雄/通常/暗黒の家数）：弘治 4/0/13/5、永禄 0/0/8/14、元亀 0/8/6/7、天正 1/1/9/10、文禄 5/5/7/4、慶長 4/0/6/11。短い元号で暗黒に偏る件は `fix/ages-short-reigns` で修正中
 5. 史実イベントの発火は108回、ブーストは231回
-6. 開始時同盟の結び直しは48回
+6. 開始時同盟の結び直しは48回（当時の実装。オーナー判断K で結び直しをやめ、要約の `lapses=` は `alliances=` に替えた）
 7. AI からの仲裁請求はなし（AI の請求は MVP では未実装）
 8. この回では `GameCore_Tuner` の要約（手順8・11・14・17）がすべて `summary failed: bad argument #1 to 'tostring' (value expected)` になった。値を返さない呼び出しを `tostring()` に直接渡していたためで、`S(v)` で包むように直した（上の数値は他のログから集計）
 
@@ -360,7 +360,7 @@ MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
 - `Players:Expansion2_Players` に両組だけを登録する。公式 GS と独自ルールセット「万世紀」が `RulesetDomainOverrides` でこのドメインを選ぶため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
-- 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
+- 日英露の名前・説明・基本外交文を登録する。都市名は家ごとの史実の地名一覧を使う（[city-names.md](city-names.md)。以前は公式の日本の一覧を共有していた）
 - ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 - 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
 

@@ -1,0 +1,244 @@
+{
+  "name": "Probe: can a script end a start alliance immediately? JAC Japan map 15 km (historical), OUCHI human, turns 2-5, one variant per start-alliance pair: E1 R02 forced formal war (peace next turn), E2 R04 forced surprise war (kept), E3 R19 unforced formal war (peace next turn if it started), E4 R05 friendship off then SetHasAllied(false), E5 R07 SetHasAllied(false) from both sides, E6 R08 SetPermanentAlliance then SetHasAllied(false), E7 R03 SetHasAllied(false) inside OnGameTurnStarted, E0 R06 control; KeepStartAlliances disabled via JAC_1534_KEEP_ALLIANCES_DISABLED",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "JAC_EAP={}; local P=JAC_EAP; P.pairs={{'R02','E1','HOJO','IMAGAWA'},{'R04','E2','DATE','ASHINA'},{'R19','E3','SHIMAZU','RYUKYU'},{'R05','E4','ASHIKAGA','ROKKAKU'},{'R07','E5','ASHIKAGA','ASAKURA'},{'R08','E6','AMAGO','MORI'},{'R03','E7','OUCHI','MORI'},{'R06','E0','ASAKURA','ROKKAKU'}}; function P.q(f) local ok,v=pcall(f); if ok then return tostring(v) end; return 'ERR('..(string.gsub(tostring(v),'[\\r\\n]+',' '))..')' end; function P.ids() local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; return id end; P.names={}; for f,i in pairs(P.ids()) do P.names[i]=f end; function P.nm(i) return P.names[i] or tostring(i) end; function P.isPair(i,j) local x,y=P.names[i],P.names[j]; for _,r in ipairs(P.pairs) do if (r[3]==x and r[4]==y) or (r[3]==y and r[4]==x) then return true end end; return false end; function P.print(s) print('[JAC_END_ALLIANCE_PROBE] '..s) end; P.t0=GameConfiguration.GetStartTurn(); function P.rel() return Game.GetCurrentGameTurn()-P.t0+1 end; function P.state(a,b) return P.q(function() local i=Players[a]:GetDiplomaticAI():GetDiplomaticStateIndex(b); local r=GameInfo.DiplomaticStates[i]; return r and r.StateType or ('index '..tostring(i)) end) end; function P.Log(label) local id=P.ids(); local out={}; for _,r in ipairs(P.pairs) do local a,b=id[r[3]],id[r[4]]; local s; if a==nil or b==nil then s='missing player' else s=P.q(function() return P.row(a,b) end) end; local line='ctx='..P.ctx..' turn='..P.q(P.rel)..' at='..label..' '..r[1]..' '..r[2]..' '..r[3]..'-'..r[4]..' '..s; P.print(line); out[#out+1]=line end; return table.concat(out,' | ') end; local ev={}; for _,n in ipairs({'AllianceEnded','DiplomacyRelationshipChanged','DiplomacyDeclareWar','DiplomacyMakePeace'}) do ev[#ev+1]=n..'='..P.q(function() Events[n].Add(function(...) local t={...}; if P.isPair(t[1],t[2]) then local s={}; for i=1,select('#',...) do s[i]=tostring(t[i]) end; P.print('ctx='..P.ctx..' event='..n..' turn='..P.q(P.rel)..' args='..table.concat(s,',')..' '..P.nm(t[1])..'-'..P.nm(t[2])) end end); return true end) end; P.ctx='GameCore_Tuner'; function P.row(a,b) local q=P.q; local da,db=Players[a]:GetDiplomacy(),Players[b]:GetDiplomacy(); local x,y=P.nm(a),P.nm(b); if x>y then x,y=y,x end; return 'hasAllied='..q(function() return da:HasAllied(b) end)..'/'..q(function() return db:HasAllied(a) end)..' atWar='..q(function() return da:IsAtWarWith(b) end)..'/'..q(function() return db:IsAtWarWith(a) end)..' friend='..q(function() return da:HasDeclaredFriendship(b) end)..'/'..q(function() return db:HasDeclaredFriendship(a) end)..' canWar='..q(function() return da:CanDeclareWarOn(b) end)..' state='..P.state(a,b)..'/'..P.state(b,a)..' keepProp='..q(function() return Game:GetProperty('JAC_1534_ALLIANCE_'..x..'-'..y) end) end; P.war={}; function P.Act(tag,from,to,f) local id=P.ids(); local a,b=id[from],id[to]; local s; if a==nil or b==nil then s='missing player' else s=P.q(function() return f(Players[a]:GetDiplomacy(),a,b) end)..' recheck='..P.q(function() Players[a]:GetDiplomacy():RecheckVisibilityOnAll(); Players[b]:GetDiplomacy():RecheckVisibilityOnAll(); return true end)..' now '..P.q(function() return P.row(a,b) end) end; s='ctx=GameCore_Tuner turn='..P.q(P.rel)..' variant='..tag..' '..from..'-'..to..' '..s; P.print(s); return s end; function P.War(tag,from,to,wt,force) P.war[tag]=P.rel(); return P.Act(tag..(force and ' DeclareWarOn(forced)' or ' DeclareWarOn(unforced)'),from,to,function(d,a,b) if force then d:DeclareWarOn(b,wt,true) else d:DeclareWarOn(b,wt) end; return 'called' end) end; function P.Peace(tag,from,to) if P.war[tag]==nil or P.war[tag]>=P.rel() then local s='ctx=GameCore_Tuner turn='..P.rel()..' variant='..tag..' peace skipped (no war this run or same turn as the war)'; P.print(s); return s end; return P.Act(tag..' MakePeaceWith(true) next turn',from,to,function(d,a,b) if not d:IsAtWarWith(b) then return 'not at war, skipped' end; d:MakePeaceWith(b,true); return 'called' end) end; function P.Run() if P.ran then return 'already ran' end; P.ran=true; local out={}; out[#out+1]=P.War('E1','HOJO','IMAGAWA',WarTypes.FORMAL_WAR,true); out[#out+1]=P.War('E2','DATE','ASHINA',WarTypes.SURPRISE_WAR,true); out[#out+1]=P.War('E3','SHIMAZU','RYUKYU',WarTypes.FORMAL_WAR,false); out[#out+1]=P.Act('E4 friendship false both, then SetHasAllied(false)','ASHIKAGA','ROKKAKU',function(d,a,b) local db=Players[b]:GetDiplomacy(); return 'friendAB='..P.q(function() d:SetHasDeclaredFriendship(b,false); return d:HasDeclaredFriendship(b) end)..' friendBA='..P.q(function() db:SetHasDeclaredFriendship(a,false); return db:HasDeclaredFriendship(a) end)..' allied='..P.q(function() d:SetHasAllied(b,false); return d:HasAllied(b) end) end); out[#out+1]=P.Act('E5 SetHasAllied(false) from B, then from A','ASAKURA','ASHIKAGA',function(d,a,b) local db=Players[b]:GetDiplomacy(); return 'BtoA='..P.q(function() d:SetHasAllied(b,false); return d:HasAllied(b) end)..' AtoB='..P.q(function() db:SetHasAllied(a,false); return db:HasAllied(a) end) end); out[#out+1]=P.Act('E6 SetPermanentAlliance, then SetHasAllied(false)','AMAGO','MORI',function(d,a,b) return 'perm='..P.q(function() d:SetPermanentAlliance(b); return d:HasAllied(b) end)..' allied='..P.q(function() d:SetHasAllied(b,false); return d:HasAllied(b) end) end); return table.concat(out,' | ') end; function P.RunPeace() local out={}; out[#out+1]=P.Peace('E1','HOJO','IMAGAWA'); out[#out+1]=P.Peace('E3','SHIMAZU','RYUKYU'); return table.concat(out,' | ') end; local keep=P.q(function() Game:SetProperty('JAC_1534_KEEP_ALLIANCES_DISABLED', true); return Game:GetProperty('JAC_1534_KEEP_ALLIANCES_DISABLED') end); local e7=P.q(function() GameEvents.OnGameTurnStarted.Add(function() if P.rel()==3 and not P.e7done then P.e7done=true; P.Act('E7 SetHasAllied(false) in OnGameTurnStarted','MORI','OUCHI',function(d,a,b) d:SetHasAllied(b,false); return 'called' end) end end); return true end); local head='ctx=GameCore_Tuner setup turn='..P.q(P.rel)..' keepDisabled='..keep..' e7Handler='..e7..' warTypes='..P.q(function() return tostring(WarTypes.FORMAL_WAR)..'/'..tostring(WarTypes.SURPRISE_WAR) end)..' denounceSetter='..P.q(function() return type(Players[0]:GetDiplomacy().SetHasDenounced) end)..' events '..table.concat(ev,' '); P.print(head); return head..' | '..P.Log('setup')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "JAC_EAP={}; local P=JAC_EAP; P.pairs={{'R02','E1','HOJO','IMAGAWA'},{'R04','E2','DATE','ASHINA'},{'R19','E3','SHIMAZU','RYUKYU'},{'R05','E4','ASHIKAGA','ROKKAKU'},{'R07','E5','ASHIKAGA','ASAKURA'},{'R08','E6','AMAGO','MORI'},{'R03','E7','OUCHI','MORI'},{'R06','E0','ASAKURA','ROKKAKU'}}; function P.q(f) local ok,v=pcall(f); if ok then return tostring(v) end; return 'ERR('..(string.gsub(tostring(v),'[\\r\\n]+',' '))..')' end; function P.ids() local id={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local f=string.match(PlayerConfigurations[p:GetID()]:GetCivilizationTypeName() or '','^CIVILIZATION_JAC_(.+)$'); if f then id[f]=p:GetID() end end; return id end; P.names={}; for f,i in pairs(P.ids()) do P.names[i]=f end; function P.nm(i) return P.names[i] or tostring(i) end; function P.isPair(i,j) local x,y=P.names[i],P.names[j]; for _,r in ipairs(P.pairs) do if (r[3]==x and r[4]==y) or (r[3]==y and r[4]==x) then return true end end; return false end; function P.print(s) print('[JAC_END_ALLIANCE_PROBE] '..s) end; P.t0=GameConfiguration.GetStartTurn(); function P.rel() return Game.GetCurrentGameTurn()-P.t0+1 end; function P.state(a,b) return P.q(function() local i=Players[a]:GetDiplomaticAI():GetDiplomaticStateIndex(b); local r=GameInfo.DiplomaticStates[i]; return r and r.StateType or ('index '..tostring(i)) end) end; function P.Log(label) local id=P.ids(); local out={}; for _,r in ipairs(P.pairs) do local a,b=id[r[3]],id[r[4]]; local s; if a==nil or b==nil then s='missing player' else s=P.q(function() return P.row(a,b) end) end; local line='ctx='..P.ctx..' turn='..P.q(P.rel)..' at='..label..' '..r[1]..' '..r[2]..' '..r[3]..'-'..r[4]..' '..s; P.print(line); out[#out+1]=line end; return table.concat(out,' | ') end; local ev={}; for _,n in ipairs({'AllianceEnded','DiplomacyRelationshipChanged','DiplomacyDeclareWar','DiplomacyMakePeace'}) do ev[#ev+1]=n..'='..P.q(function() Events[n].Add(function(...) local t={...}; if P.isPair(t[1],t[2]) then local s={}; for i=1,select('#',...) do s[i]=tostring(t[i]) end; P.print('ctx='..P.ctx..' event='..n..' turn='..P.q(P.rel)..' args='..table.concat(s,',')..' '..P.nm(t[1])..'-'..P.nm(t[2])) end end); return true end) end; P.ctx='InGame'; function P.valid(a,b,act) return P.q(function() local ok,res=Players[a]:GetDiplomacy():IsDiplomaticActionValid(act,b,true); local why={}; if res and res.FailureReasons then for _,w in ipairs(res.FailureReasons) do why[#why+1]=tostring(w) end end; return tostring(ok)..'('..table.concat(why,',')..')' end) end; function P.row(a,b) local q=P.q; local da=Players[a]:GetDiplomacy(); local function cap(x,y) return q(function() local c=Players[y]:GetCities():GetCapitalCity(); return PlayersVisibility[x]:IsVisible(c:GetX(),c:GetY()) end) end; return 'state='..P.state(a,b)..'/'..P.state(b,a)..' atWar='..q(function() return da:IsAtWarWith(b) end)..' type='..q(function() return da:GetAllianceType(b) end)..' level='..q(function() return da:GetAllianceLevel(b) end)..' turnsLeft='..q(function() return da:GetAllianceTurnsUntilExpiration(b) end)..' capVisible='..cap(a,b)..'/'..cap(b,a)..' valid denounce='..P.valid(a,b,'DIPLOACTION_DENOUNCE')..' formalWar='..P.valid(a,b,'DIPLOACTION_DECLARE_FORMAL_WAR')..' surpriseWar='..P.valid(a,b,'DIPLOACTION_DECLARE_SURPRISE_WAR') end; local head='ctx=InGame setup turn='..P.q(P.rel)..' localPlayer='..P.q(function() return P.nm(Game.GetLocalPlayer()) end)..' events '..table.concat(ev,' '); P.print(head); return head..' | '..P.Log('setup')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('before') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('before') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Run() or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('after') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('after') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.RunPeace() or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('after') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('after') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_EAP and JAC_EAP.Log('start') or 'JAC_EAP missing (context reloaded?)'"
+    }
+  ]
+}

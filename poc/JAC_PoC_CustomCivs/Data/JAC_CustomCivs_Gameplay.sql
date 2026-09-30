@@ -39,22 +39,10 @@ INSERT INTO LeaderTraits (LeaderType, TraitType) VALUES
     ('LEADER_JAC_ODA_NOBUHIDE', 'TRAIT_JAC_ODA_NOBUHIDE'),
     ('LEADER_JAC_TAKEDA_NOBUTORA', 'TRAIT_JAC_TAKEDA_NOBUTORA');
 
--- 日本の都市名を PoC 用に共有する。首都だけは両家で別にする。
+-- 首都名。2都市目以降は各家の史実の地名（Data/JAC_CityNames_Gameplay.sql、生成）。
 INSERT INTO CityNames (CivilizationType, CityName, SortIndex) VALUES
     ('CIVILIZATION_JAC_ODA', 'LOC_JAC_1534_CAPITAL_ODA', -1),
     ('CIVILIZATION_JAC_TAKEDA', 'LOC_JAC_1534_CAPITAL_TAKEDA', -1);
-
-INSERT INTO CityNames (CivilizationType, CityName, SortIndex)
-SELECT 'CIVILIZATION_JAC_ODA', CityName, SortIndex
-FROM CityNames
-WHERE CivilizationType = 'CIVILIZATION_JAPAN' AND CityName <> 'LOC_CITY_NAME_NAGOYA'
-ORDER BY ID;
-
-INSERT INTO CityNames (CivilizationType, CityName, SortIndex)
-SELECT 'CIVILIZATION_JAC_TAKEDA', CityName, SortIndex
-FROM CityNames
-WHERE CivilizationType = 'CIVILIZATION_JAPAN'
-ORDER BY ID;
 
 INSERT INTO LeaderQuotes (LeaderType, Quote) VALUES
     ('LEADER_JAC_ODA_NOBUHIDE', 'LOC_JAC_ODA_NOBUHIDE_QUOTE'),
