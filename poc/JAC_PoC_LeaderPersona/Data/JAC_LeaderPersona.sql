@@ -140,14 +140,17 @@ INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'Yiel
 INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId) SELECT GovernorPromotionType, ModifierId FROM JAC_PersonaSkills;
 UPDATE GlobalParameters SET Value=MAX(CAST(Value AS INTEGER), 30) WHERE Name='MAX_GOVERNOR_APPOINTMENTS';
 
--- This map-scoped component supplies the complete new-game governor roster.
+-- This map-scoped component disables only the eight standard official governors.
 -- An unattached synthetic TraitType crashed CanEverAppointGovernor in live runs
 -- leaderperson-01/02. Remove official candidates rather than make native trait
 -- checks dereference it. Native governor child tables cascade on deletion
 -- (Expansion2_Schema.sql:337-370, GovernorPromotionSets).
 CREATE TABLE JAC_PersonaDisabledGovernors (GovernorType TEXT PRIMARY KEY);
 INSERT INTO JAC_PersonaDisabledGovernors
-SELECT GovernorType FROM Governors WHERE GovernorType NOT IN (SELECT GovernorType FROM JAC_LeaderPersonas);
+SELECT GovernorType FROM Governors WHERE GovernorType IN (
+ 'GOVERNOR_THE_DEFENDER', 'GOVERNOR_THE_CARDINAL', 'GOVERNOR_THE_BUILDER',
+ 'GOVERNOR_THE_AMBASSADOR', 'GOVERNOR_THE_RESOURCE_MANAGER', 'GOVERNOR_THE_MERCHANT',
+ 'GOVERNOR_THE_EDUCATOR', 'GOVERNOR_IBRAHIM');
 DELETE FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_PersonaDisabledGovernors);
 
 -- Official shape: DLC/Expansion2/Data/Expansion1_Civics.xml:64-66,77-80,90-140.

@@ -27,6 +27,7 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
         # This existing loader intentionally omits other DLC tables/data. Record its dangling
         # official references, then reject every additional violation introduced by this PoC.
         cls.before_fk = set(cls.db.execute("PRAGMA foreign_key_check"))
+        cls.before_persona = cls.db.serialize()
         for file in ["JAC_LeaderPersona.sql", "JAC_LeaderPersona_Trees.sql"]:
             cls.db.executescript((MOD / "Data" / file).read_text(encoding="utf-8"))
 
@@ -150,6 +151,27 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE GovernorType IN (SELECT GovernorType FROM JAC_PersonaDisabledGovernors)").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType IS NOT NULL").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Kinds WHERE Kind='KIND_TRAIT'").fetchone()[0],1)
+
+    def test_official_governor_removal_preserves_another_mods_governor_and_children(self):
+        db = sqlite3.connect(":memory:")
+        try:
+            db.create_function("Make_Hash", 1, lambda value: hash(value) & 0x7FFFFFFF)
+            db.deserialize(self.before_persona)
+            db.execute("PRAGMA foreign_keys=ON")
+            foreign = "GOVERNOR_OTHER_MOD"
+            db.execute("INSERT INTO Types (Type,Kind) VALUES (?, 'KIND_GOVERNOR')", (foreign,))
+            db.execute("INSERT INTO Governors (GovernorType,Name,Description,Title,ShortTitle,PortraitImage,PortraitImageSelected) "
+                       "SELECT ?,Name,Description,Title,ShortTitle,PortraitImage,PortraitImageSelected FROM Governors "
+                       "WHERE GovernorType='GOVERNOR_THE_DEFENDER'", (foreign,))
+            promotion = db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType='GOVERNOR_THE_DEFENDER' ORDER BY GovernorPromotion LIMIT 1").fetchone()[0]
+            db.execute("INSERT INTO GovernorPromotionSets VALUES (?, ?)", (foreign, promotion))
+            for file in ["JAC_LeaderPersona.sql", "JAC_LeaderPersona_Trees.sql"]:
+                db.executescript((MOD / "Data" / file).read_text(encoding="utf-8"))
+            self.assertEqual(db.execute("SELECT GovernorType FROM Governors WHERE GovernorType=?", (foreign,)).fetchall(), [(foreign,)])
+            self.assertEqual(db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType=?", (foreign,)).fetchall(), [(promotion,)])
+            self.assertEqual(db.execute("SELECT GovernorType FROM JAC_PersonaDisabledGovernors WHERE GovernorType=?", (foreign,)).fetchall(), [])
+        finally:
+            db.close()
 
 
 

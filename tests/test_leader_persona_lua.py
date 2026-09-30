@@ -612,6 +612,29 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.Players[0].spent), ("GOVERNOR", 2, 2))
         self.assertEqual(list(self.g.GRANTS[0].values()), [-1])
 
+    def test_two_pending_evolutions_cannot_share_the_native_appointment_title(self):
+        self.join()
+        self.assertEqual(self.api.Join(0, 2), "JOINED")
+        self.g.Players[0].points = 3
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
+        self.assertEqual(self.api.PrepareEvolution(0, HOJO), "NO_TITLE")
+        self.assertEqual((self.prop("STATE", HOJO), self.g.Players[0].points), ("GREAT_PERSON", 2))
+        self.assertIsNone(self.prop("EVOLUTION_SURCHARGE", HOJO))
+        self.g.JAC_RefreshPersonas()
+        self.assertTrue(self.g.VIEWS[1].disabled)
+        self.assertTrue(self.g.VIEWS[2].disabled)
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.assertEqual(self.api.PrepareEvolution(0, HOJO), "NO_TITLE")
+        self.g.JAC_AppointLeader(DATE); self.g.DRAIN()
+        self.assertEqual(self.prop("STATE"), "GOVERNOR")
+        self.assertEqual(self.api.PrepareEvolution(0, HOJO), "NO_TITLE")
+        self.g.Players[0].points += 1
+        self.assertEqual(self.api.PrepareEvolution(0, HOJO), "EVOLVING")
+        self.g.JAC_AppointLeader(HOJO); self.g.DRAIN()
+        self.assertEqual(self.prop("STATE", HOJO), "GOVERNOR")
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 2))
+        self.assertEqual(list(self.g.GRANTS[0].values()), [-1, -1])
+
     def test_native_rejection_of_negative_delta_never_allows_cheaper_evolution(self):
         self.join()
         self.g.Players[0].points = 2

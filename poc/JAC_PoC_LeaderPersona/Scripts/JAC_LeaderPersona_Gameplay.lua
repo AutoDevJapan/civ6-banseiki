@@ -111,7 +111,11 @@ local function PrepareEvolution(owner, leader)
     if state ~= "GREAT_PERSON" or not FindPerson(owner, row) then return Finish(owner, "PERSON_MISSING"); end
     if NativeGovernor(owner, row) then return Finish(owner, "GOVERNOR_EXISTS"); end
     local cost = EvolutionCost(leader);
-    if AvailableTitles(p) < cost or not p:GetGovernors():CanAppoint() then return Finish(owner, "NO_TITLE"); end
+    -- Each pending appointment still needs one native title. Its persisted state
+    -- reserves that title until completion, so another person cannot count it again.
+    if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost or not p:GetGovernors():CanAppoint() then
+        return Finish(owner, "NO_TITLE");
+    end
     -- Reserve the surcharge. Native APPOINT_GOVERNOR spends the remaining ONE title.
     -- Debug/Player.ltp:295,654,676; Expansion2/UI/Additions/GovernorPanel.lua:547-562.
     local surcharge = cost - 1;

@@ -4,6 +4,15 @@ local Rules = JAC_PersonaTreeRules;
 function Rules.Key(leader, field) return "JAC_PERSONA_" .. leader .. "_" .. field; end
 function Rules.Get(leader, field) return Game:GetProperty(Rules.Key(leader, field)); end
 function Rules.Merit(leader) return Rules.Get(leader, "MERIT") or 0; end
+function Rules.ReservedAppointments(owner)
+    local reserved = 0;
+    for person in GameInfo.JAC_LeaderPersonas() do
+        if Rules.Get(person.LeaderType, "OWNER") == owner and Rules.Get(person.LeaderType, "STATE") == "EVOLVING" then
+            reserved = reserved + 1;
+        end
+    end
+    return reserved;
+end
 function Rules.Owned(node) return Rules.Get(node.LeaderType, "NODE_" .. node.NodeType) == 1; end
 function Rules.Nodes(leader, category)
     local nodes = {};

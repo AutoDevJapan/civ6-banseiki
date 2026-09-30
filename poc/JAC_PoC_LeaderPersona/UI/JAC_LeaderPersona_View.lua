@@ -80,10 +80,11 @@ function JAC_RefreshPersonas()
             view.Evolve:SetHide(state == "GOVERNOR");
             local cost = Get(leader, "EVOLUTION_COST") or row.EvolutionCost;
             local governors = Players[owner]:GetGovernors();
-            local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
+            local available = math.max(0, governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() -
+                JAC_PersonaTreeRules.ReservedAppointments(owner));
             local noTitle = state == "GREAT_PERSON" and (available < cost or not governors:CanAppoint());
             view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost));
-            view.Evolve:SetDisabled(not Active() or noTitle);
+            view.Evolve:SetDisabled(not Active() or noTitle or state == "EVOLVING");
             view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost, available));
             view.Name:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_PERSONALITY_" .. Get(leader, "PERSONALITY")) ..
                 " / " .. Locale.Lookup("LOC_JAC_PERSONA_TRAIT_" .. Get(leader, "TRAIT")));
