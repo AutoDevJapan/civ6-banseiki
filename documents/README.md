@@ -30,6 +30,7 @@
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
+| [`poc/tuning-200-resume.md`](poc/tuning-200-resume.md) | 共有スケジューラから約200ターンの作業を再開する場所と残作業 |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと61件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階（織田は研究による襲名）・旧領と AI の攻略目標・助言ポップアップ・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
 | [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チーム・1534年の開始時の同盟・天下統一同盟）：同盟の申し込み・脱退の画面、交戦での解消、AI からの申し込み、登録城のない地図での本拠の合算、主体だけが勝つ仕組み、公式根拠、実機確認項目 |
@@ -118,5 +119,3 @@ grep -rn '^| CYP-N |' documents/spec/ssot/
 - 仕様は揃いつつあるが、MOD の技術的成立性はまだ実証していない。次の作業は SSOT 16.1 の PoC で、束0（単独プレイの成立）と束1（MVP基盤）から始める
 - 実装用ディレクトリ（SSOT 15.1 の `core-content/` 等）はまだ存在しない
 - 世界マップの基準日・実ポリゴン・タイル座標は未入力。JSON のタイル関連フィールドはすべて空
-| [`poc/tuning-200-resume.md`](poc/tuning-200-resume.md) | 共有スケジューラから約200ターンの作業を再開する場所と残作業 |
-
