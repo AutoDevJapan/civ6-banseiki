@@ -6,6 +6,10 @@ R.COMMON_UNIT = "UNIT_JAC_ASSASSIN"
 R.STATE = "JAC_ASN_STATE_V1"
 R.INPUT = "JAC_ASN_INPUT_V1"
 R.NATION = "JAC_ASN_NATION_V1"
+R.NATIONS = "JAC_ASN_NATIONS_V1"
+R.PEOPLE = "JAC_ASN_HOUSE_PEOPLE_V1"
+R.PERSON = "JAC_ASN_PERSON_V1"
+R.BINDINGS = "JAC_ASN_PERSON_UNITS_V1"
 R.TOKEN = "JAC_ASN_INDIVIDUAL_V1"
 R.ACTORS = "JAC_ASN_ACTORS_V1"
 R.TEST = "JAC_ASN_TEST_MODE"
@@ -22,18 +26,19 @@ R.PROVISIONAL = {
   BranchBase=100, BranchSecurity=1, BranchUnrest=1, BranchStrength=100, BranchRelation=25,
   NeighborDistance=6,
   ProductionBuilding=10, ProductionDistrict=10, ProductionPolicy=10,
-  ProductionGovernment=10, ProductionTrait=15, ProductionJob=15,
+  ProductionGovernment=10, ProductionTrait=15, ProductionJob=15, ProductionRelation=10,
   WaitSecurity=10, WaitRelation=10, WaitSchool=10, WaitGovernor=7, WaitHero=6, WaitGreatPerson=6,
   DetectionPercent=25, FriendshipPenalty=10, Grievances=25,
   FailureDisposition="DEATH", -- capture needs a prisoner/release specification
-  AllowNonWarTargets=true,
-  PostDeath="RECORD_ONLY", -- no territory transfer, Free City conversion or invented successor
-  ProductionSnapshot="START", -- OWNER_UNDECIDED: factor changes during recruitment
-  Snapshot="COMMAND", -- death-time status vs command-time draw: owner question
-  ActorLoss="ABORT_SUCCESS_KEEP_FIXED_PENALTIES", -- OWNER_UNDECIDED: no ghost assassination
   Visibility="REVEALED_CITY_VISIBLE_UNIT", -- OWNER_UNDECIDED: do not disclose hidden units
   Weights={ FREE_STATE=1, ABSORPTION=1, CONGRESS=1, SUCCESSION=1 },
 }
+-- Owner answers, 2026-09-30 (SSOT 9.5). Q75 recommendations remain reviewable proposals.
+R.DECISIONS={Snapshot="COMMAND",TrainingModifiers="EVERY_TURN",
+  ActorLoss="CANCEL_ALL_RESULTS_FIXED_PENALTY",AllowNonWarTargets=true}
+R.POST_DEATH={FreeState="SAME_SLOT_COUNCIL",Absorption="STRONGEST_NEIGHBOR_DISBAND",
+  Congress="ONE_MAJOR_ONE_VOTE",Succession="KIN_FIRST_SINGLE_ROLE",
+  MissingRecipient="FREE_STATE",MissingSuccessor="FREE_STATE",CongressTie="FREE_STATE"}
 R.SPEEDS={ GAMESPEED_ONLINE=0.5, GAMESPEED_QUICK=0.67, GAMESPEED_STANDARD=1,
            GAMESPEED_EPIC=1.5, GAMESPEED_MARATHON=3 }
 -- Confirmed Japanese house participants, not a map-wide or ethnicity-wide name assignment.
@@ -61,6 +66,7 @@ function R.ProductionTurns(f, speed)
   for _,kind in ipairs({"Building","District","Policy","Government","Trait","Job"}) do
     turns=turns - (f[kind] or 0)*p["Production"..kind]
   end
+  turns=turns-p.ProductionRelation*R.Clamp(f.Relation or 0,0,1)
   return R.Scale(math.max(R.MIN_PRODUCTION,turns),speed)
 end
 function R.WaitTurns(f, speed)
@@ -126,6 +132,10 @@ function R.Branch(snapshot, roll)
   for _,row in ipairs(rows) do n=n-row[2]; if n<0 then return row[1] end end
 end
 function R.State(id) return Players[id]:GetProperty(R.STATE) or {Version=1} end
+function R.Nation(id)
+  return (Game:GetProperty(R.NATIONS) or {})[tostring(id)] or
+    (Players[id] and Players[id]:GetProperty(R.NATION))
+end
 function R.Input(object) return object:GetProperty(R.INPUT) or {} end
 function R.IsAssassin(unit)
   if not unit then return false end
@@ -150,8 +160,20 @@ function R.Relation(a,b)
 end
 function R.ProductionInput(id, city)
   local a,b=R.Input(Players[id]),R.Input(city)
+  local relation=0
+  for _,other in ipairs(PlayerManager.GetAliveMajors()) do
+    if other:GetID()~=id then relation=math.max(relation,R.Relation(id,other:GetID())) end
+  end
   return { Security=a.Security, Building=b.Building, District=b.District,
-    Policy=a.Policy, Government=a.Government, Trait=b.Trait, Job=b.Job }
+    Policy=a.Policy, Government=a.Government, Trait=b.Trait, Job=b.Job, Relation=relation }
+end
+function R.RefreshTraining(id,p,city,turn)
+  -- Re-evaluate total time against elapsed time; no accumulated fractions or RNG.
+  -- Start and Speed are saved, so loading cannot reset progress or change rounding.
+  p.Speed=p.Speed or R.Speed() -- migration of the earlier PoC save format
+  p.Turns=R.ProductionTurns(R.ProductionInput(id,city),p.Speed)
+  p.Due=p.Start+p.Turns
+  p.EvaluatedTurn=turn
 end
 function R.CommandInput(id,target)
   local a=R.Input(Players[id])
@@ -169,17 +191,17 @@ end
 function R.ResolveTarget(id,kind,objectID)
   if not Players[id] or not Players[id]:IsAlive() then return nil,"TARGET_GONE" end
   if kind=="LEADER" then
-    local nation=Players[id]:GetProperty(R.NATION)
-    if nation and nation.LeaderDead==1 then return nil,"TARGET_GONE" end
+    local nation=R.Nation(id)
+    if nation and nation.LeaderDead==1 and not nation.CurrentLeader then return nil,"TARGET_GONE" end
     local city=Players[id]:GetCities():GetCapitalCity()
     if not city then return nil,"TARGET_GONE" end
     return {Kind=kind,Owner=id,ID=city:GetID(),X=city:GetX(),Y=city:GetY(),
-      Identity=PlayerConfigurations[id]:GetLeaderTypeName()}
+      Identity=nation and nation.CurrentLeader or PlayerConfigurations[id]:GetLeaderTypeName()}
   elseif kind=="GOVERNOR" then
     -- Personised Governors are registered by their content provider, with stable IDs and city IDs.
     local governors=R.Input(Players[id]).Governors or {}
     local g=governors[tostring(objectID)]
-    if not g or g.Dead==1 then return nil,"TARGET_GONE" end
+    if not g or g.Dead==1 or g.Retired==1 then return nil,"TARGET_GONE" end
     local city=Players[id]:GetCities():FindID(g.City)
     if not city then return nil,"TARGET_GONE" end
     return {Kind=kind,Owner=id,ID=objectID,X=city:GetX(),Y=city:GetY(),Identity=g.Identity}
@@ -200,7 +222,7 @@ function R.CheckAttempt(id,unitID,target,kind,objectID)
   local destination,why=R.ResolveTarget(target,kind,objectID)
   if not destination then return false,why end
   if not R.KnownTarget(id,destination) then return false,"TARGET_UNKNOWN" end
-  if not R.PROVISIONAL.AllowNonWarTargets and not Players[id]:GetDiplomacy():IsAtWarWith(target) then
+  if not R.DECISIONS.AllowNonWarTargets and not Players[id]:GetDiplomacy():IsAtWarWith(target) then
     return false,"TARGET_KIND"
   end
   local distance=Map.GetPlotDistance(unit:GetX(),unit:GetY(),destination.X,destination.Y)

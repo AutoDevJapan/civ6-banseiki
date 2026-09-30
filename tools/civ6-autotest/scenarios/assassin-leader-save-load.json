@@ -1,5 +1,5 @@
 {
-  "name": "Assassin: 100-turn recruitment; forced AI leader death; pending governance; nationwide locks and two save/load cycles",
+  "name": "Assassin: dynamic 100/120/80/20 training, four proposed death outcomes, lost-actor penalties, three save/load cycles",
   "judge_profile": "japan_map",
   "steps": [
     {
@@ -156,12 +156,12 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local a,b; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local c=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName(); if c=='CIVILIZATION_JAC_ODA' then a=p:GetID() elseif c=='CIVILIZATION_JAC_MATSUDAIRA' then b=p:GetID() end end; assert(a and b,'test houses missing'); assert(not Players[b]:IsHuman(),'target must be AI'); local city=Players[b]:GetCities():GetCapitalCity(); local had={}; for _,x in Players[a]:GetUnits():Members() do had[x:GetID()]=true end; UnitManager.InitUnitValidAdjacentHex(a,R.UNIT,city:GetX(),city:GetY(),1); local u; local want=GameInfo.Units[R.UNIT] and GameInfo.Units[R.UNIT].Index; for _,x in Players[a]:GetUnits():Members() do if not had[x:GetID()] and (want==nil or x:GetType()==want) then u=x end end; assert(u,'grant failed (InitUnitValidAdjacentHex returns no unit object; DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:193 ignores it too)'); local cities={}; for _,c in Players[a]:GetCities():Members() do cities[#cities+1]=c:GetID() end; table.sort(cities); assert(#cities>=2,'two producing cities required'); Game:SetProperty(R.TEST,1); Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='FREE_STATE'}); local before={}; for _,id in ipairs({a,b}) do before[tostring(id)]={}; for _,c in Players[id]:GetCities():Members() do table.insert(before[tostring(id)],c:GetID()) end end; Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=a,Target=b,Unit=u:GetID(),Cities=cities,Before=before,Start=R.Turn()}); assert(R.CHANCES.LEADER==1); assert(R.ProductionTurns({})==100); assert(R.ProductionTurns({Building=1000})==20); assert(R.WaitTurns({})==50); assert(R.WaitTurns({Security=0,Relation=1,School=1,Governor=1,Hero=1,GreatPerson=1})==1); return 'AI target, map unit grant, production/cooldown constants verified'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local houses={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do houses[PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()]=p:GetID() end local a,b=houses.CIVILIZATION_JAC_ODA,houses.CIVILIZATION_JAC_MATSUDAIRA assert(a and b,'test houses missing'); assert(not Players[b]:IsHuman(),'target must be AI') local city=Players[b]:GetCities():GetCapitalCity(); local u=Grant(a,R.UNIT,city) assert(PlayersVisibility[a]:IsRevealed(city:GetX(),city:GetY()),'grant did not reveal capital') local cities={}; for _,c in Players[a]:GetCities():Members() do cities[#cities+1]=c:GetID() end table.sort(cities); assert(#cities>=2,'two training cities required') Game:SetProperty(R.TEST,1); Players[a]:SetProperty(R.INPUT,{Security=50}) Players[a]:GetCities():FindID(cities[1]):SetProperty(R.INPUT,nil) Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='FREE_STATE'}) Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=a,Target=b,Unit=u:GetID(),Cities=cities,Houses=houses,Start=R.Turn()}) assert(R.CHANCES.LEADER==1 and R.ProductionTurns({})==100 and R.ProductionTurns({Building=1000})==20) assert(R.WaitTurns({})==50 and R.WaitTurns({Security=0,Relation=1,School=1,Governor=1,Hero=1,GreatPerson=1})==1) return 'base 100/minimum 20; no-return unit grant found by ID delta' "
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_AssassinPanel",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(Game.GetLocalPlayer()==t.Actor,'wrong human'); assert(JAC_AssassinProduce(t.Cities[1]),'production not sent'); assert(JAC_AssassinAttempt(t.Unit,t.Target,'LEADER'),'attempt not sent'); return 'production and assassination sent through EXECUTE_SCRIPT'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; assert(Game.GetLocalPlayer()==t.Actor,'wrong human') assert(JAC_AssassinProduce(t.Cities[1]),'training not sent') assert(JAC_AssassinAttempt(t.Unit,t.Target,'LEADER'),'attempt not sent') return 'training and mission sent via EXECUTE_SCRIPT during the active turn'"
     },
     {
       "action": "wait_for",
@@ -175,11 +175,30 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production.Turns==100 and s.Production.Due-s.Production.Start==100,'base production'); assert(s.Mission.Success and not s.Mission.Detected and s.Mission.Branch=='FREE_STATE','forced outcome not frozen'); assert(s.CommandUnlock-s.LastCommand==50,'command clock'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCING','parallel city bypass'); local had={}; for _,x in Players[t.Actor]:GetUnits():Members() do had[x:GetID()]=true end; UnitManager.InitUnitValidAdjacentHex(t.Actor,R.UNIT,Players[t.Target]:GetCities():GetCapitalCity():GetX(),Players[t.Target]:GetCities():GetCapitalCity():GetY(),1); local u; for _,x in Players[t.Actor]:GetUnits():Members() do if not had[x:GetID()] and x:GetType()==GameInfo.Units[R.UNIT].Index then u=x end end; assert(u,'second grant failed'); local ok,why=R.StartAttempt(t.Actor,u:GetID(),t.Target,'LEADER'); assert(not ok and why=='MISSION_ACTIVE','second unit bypass'); t.SecondUnit=u:GetID(); t.Frozen=s.Mission; t.ProductionDue=s.Production.Due; Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'one city and one active mission enforced; three independent clocks'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); assert(s.Production.Turns==100 and s.Production.Speed==1,'base training') assert(s.Mission.Success and not s.Mission.Detected and s.Mission.Branch=='FREE_STATE','frozen outcome') assert(s.CommandUnlock-s.LastCommand==50,'command clock') local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCING','parallel city') local u=Grant(t.Actor,R.UNIT,Players[t.Target]:GetCities():GetCapitalCity()) local ok,why=R.StartAttempt(t.Actor,u:GetID(),t.Target,'LEADER'); assert(not ok and why=='MISSION_ACTIVE','second unit') t.SecondUnit=u:GetID(); t.Frozen=s.Mission; Game:SetProperty('JAC_ASN_LIVE_TEST',t) Players[t.Actor]:SetProperty(R.INPUT,{Security=100}); return 'separate clocks and saved proposal plan' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; local s=R.State(t.Actor); assert(R.Turn()==t.Start+1,'end_turn must honor turns') assert(s.Production.Due==t.Start+120 and s.Production.Turns==120,'current security did not extend training') return 'training extended from 100 to 120 on the next turn'"
     },
     {
       "action": "save",
-      "name": "JAC-Assassin-Pending",
+      "name": "JAC-Assassin-Dynamic",
       "timeout": 60
     },
     {
@@ -188,7 +207,7 @@
     },
     {
       "action": "load",
-      "name": "JAC-Assassin-Pending",
+      "name": "JAC-Assassin-Dynamic",
       "timeout": 300
     },
     {
@@ -203,78 +222,12 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production.Due==t.ProductionDue,'production changed on load'); assert(s.Mission,'pending mission lost'); for _,k in ipairs({'Start','Due','Success','Detected','SuccessRoll','DetectionRoll','BranchRoll','Branch'}) do assert(s.Mission[k]==t.Frozen[k],'rerolled '..k) end; assert(Players[t.Target]:GetProperty(R.NATION)==nil,'premature leader death'); return 'pending mission, RNG rolls and production survive load'"
-    },
-    {
-      "action": "end_turn",
-      "turns": 10,
-      "timeout": 600
-    },
-    {
-      "action": "wait_for",
-      "timeout": 600,
-      "condition": {
-        "type": "lua",
-        "state_name": "InGame",
-        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
-      }
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Mission==nil and s.LastMission.Result=='LEADER_DEAD_PENDING','mission did not finish'); local n=Players[t.Target]:GetProperty(R.NATION); assert(n and n.LeaderDead==1 and n.State=='PENDING_FREE_STATE' and n.DecisionRequired==1,'post-death state'); assert(n.DeathTurn==t.Frozen.Due,'wrong death time'); assert(Players[t.Target]:IsAlive(),'native player incorrectly eliminated'); for _,id in ipairs({t.Actor,t.Target}) do local count=0; for _,c in Players[id]:GetCities():Members() do count=count+1; local found=false; for _,old in ipairs(t.Before[tostring(id)]) do if c:GetID()==old then found=true end end; assert(found,'city transferred or created') end; assert(count==#t.Before[tostring(id)],'city lost or acquired') end; local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait ignored after success'); return 'logical leader death, pending nation, no territory acquisition; command wait retained'"
-    },
-    {
-      "action": "end_turn",
-      "turns": 90,
-      "timeout": 4050
-    },
-    {
-      "action": "wait_for",
-      "timeout": 600,
-      "condition": {
-        "type": "lua",
-        "state_name": "InGame",
-        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
-      }
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.ProductionDue,'base recruitment completion'); assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin'); assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'produced unit absent'); for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK','city lock bypass') end; R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock'); t.Completion=s.LastCompletion; t.Lock=s.ProductionUnlock; Game:SetProperty('JAC_ASN_LIVE_TEST',t); return '100-turn completion; 10-turn nationwide lock in both cities, cancellation cannot clear it'"
-    },
-    {
-      "action": "save",
-      "name": "JAC-Assassin-Lock",
-      "timeout": 60
-    },
-    {
-      "action": "exit_to_menu",
-      "timeout": 60
-    },
-    {
-      "action": "load",
-      "name": "JAC-Assassin-Lock",
-      "timeout": 300
-    },
-    {
-      "action": "wait_for",
-      "timeout": 600,
-      "condition": {
-        "type": "lua",
-        "state_name": "InGame",
-        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
-      }
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.LastCompletion==t.Completion and s.ProductionUnlock==t.Lock,'lock changed on load'); assert(Players[t.Target]:GetProperty(R.NATION).LeaderDead==1,'death state lost'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCTION_LOCK','load cleared lock'); return 'nation state and nationwide lock survive load'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); assert(s.Production.Start==t.Start and s.Production.Due==t.Start+120,'training lost on load') assert(s.Mission,'mission lost'); for _,k in ipairs({'Start','Due','Success','Detected','SuccessRoll','DetectionRoll','BranchRoll','Branch'}) do assert(s.Mission[k]==t.Frozen[k],'rerolled '..k) end assert(s.Mission.PostDeathPlan.Policy.FreeState=='SAME_SLOT_COUNCIL','plan lost') Players[t.Actor]:SetProperty(R.INPUT,{Security=0}); return 'load retains start, speed, inputs and frozen result' "
     },
     {
       "action": "end_turn",
       "turns": 9,
-      "timeout": 600
+      "timeout": 540
     },
     {
       "action": "wait_for",
@@ -288,7 +241,26 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(R.Turn()==t.Lock-1,'wrong lock boundary'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCTION_LOCK','unlocked one turn early'); return 'completion+9 locked'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); assert(R.Turn()==t.Start+10,'turn count') assert(s.Production.Due==t.Start+80 and s.Production.Turns==80,'current security did not shorten training') local n=R.Nation(t.Target); assert(s.LastMission.Result=='LEADER_FREE_STATE' and n.State=='FREE_STATE','council not installed') assert(n.LeaderDead==1 and n.DeathTurn==t.Frozen.Due and n.Government=='COUNCIL' and n.DecisionRequired==nil) assert(n.Slot=='RETAINED' and Players[t.Target]:IsAlive(),'council slot') local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait') return 'council governs same nation; completion moved to 80' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 69,
+      "timeout": 4140
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; assert(R.Turn()==t.Start+79,'wrong training boundary'); assert(R.State(t.Actor).Production,'completed before 80') return 'dynamic training remains active at 79'"
     },
     {
       "action": "end_turn",
@@ -307,12 +279,78 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); assert(R.Turn()==t.Lock,'wrong unlock boundary'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000}); local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(ok,tostring(why)); local s=R.State(t.Actor); assert(s.Production.City==t.Cities[2] and s.Production.Turns==20,'minimum recruitment in new city'); t.MinStart=R.Turn(); Game:SetProperty('JAC_ASN_LIVE_TEST',t); Game:SetProperty(R.TEST,nil); return 'completion+10 unlocked in another city; minimum recruitment started; forced test mode disabled'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.Start+80,'80-turn completion') assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin') assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'trained unit absent') for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK') end R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock') t.Completion=s.LastCompletion; t.Lock=s.ProductionUnlock; Game:SetProperty('JAC_ASN_LIVE_TEST',t) return '80-turn dynamic completion; nationwide 10-turn lock' "
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-Lock",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-Lock",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; local s=R.State(t.Actor); assert(s.LastCompletion==t.Completion and s.ProductionUnlock==t.Lock,'lock lost') assert(R.Nation(t.Target).State=='FREE_STATE','council lost'); return 'nation and lock survive load'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 9,
+      "timeout": 540
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; assert(R.Turn()==t.Lock-1,'wrong lock boundary'); local ok,why=R.StartProduction(t.Actor,t.Cities[2]) assert(not ok and why=='PRODUCTION_LOCK','unlocked early'); return 'completion+9 locked'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; assert(R.Turn()==t.Lock,'wrong unlock boundary'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000}) assert(R.StartProduction(t.Actor,t.Cities[2])); t.MinStart=R.Turn(); Game:SetProperty('JAC_ASN_LIVE_TEST',t) return 'completion+10 unlocked; 20-turn training begins'"
     },
     {
       "action": "end_turn",
       "turns": 19,
-      "timeout": 900
+      "timeout": 1140
     },
     {
       "action": "wait_for",
@@ -326,7 +364,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(R.Turn()==t.MinStart+19,'wrong minimum boundary'); assert(s.Production~=nil and s.LastCompletion==t.Completion,'completed before 20'); return 'minimum recruitment still active after 19 turns'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; assert(R.Turn()==t.MinStart+19 and R.State(t.Actor).Production,'minimum violated'); return 'minimum+19 active'"
     },
     {
       "action": "end_turn",
@@ -345,7 +383,227 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.MinStart+20,'did not complete at 20'); assert(s.ProductionUnlock==s.LastCompletion+10,'second nationwide lock'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil); return 'minimum 20-turn completion and new nationwide lock verified'"
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end; local s=R.State(t.Actor); assert(s.LastCompletion==t.MinStart+20 and s.Production==nil,'minimum completion') Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil) return 'minimum 20 and second nationwide lock verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Houses.CIVILIZATION_JAC_IMAGAWA; assert(b and Players[b]:IsAlive() and not Players[b]:IsHuman(),'branch target') local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'capital absent') local u=Grant(t.Actor,R.UNIT,city); local input=R.Input(Players[b])  local gp=Grant(b,'UNIT_GREAT_GENERAL',city) input.Successors={{Identity='JAC_LIVE_HEIR',Kind='GREAT_PERSON',Unit=gp:GetID(),Kin=0}} t.HeirUnit=gp:GetID()  Players[b]:SetProperty(R.INPUT,input) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='SUCCESSION'}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'LEADER')); local m=R.State(t.Actor).Mission assert(m.Due==R.Turn()+5,'grant is outside the near-distance band') t.BranchTarget=b; t.BranchDue=m.Due; t.BranchPlan=m.PostDeathPlan t.BranchAssets={}; for _,c in Players[b]:GetCities():Members() do t.BranchAssets[#t.BranchAssets+1]={X=c:GetX(),Y=c:GetY()} end if m.Branch=='CONGRESS' then input.Congress.Votes={}; Players[b]:SetProperty(R.INPUT,input) end Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'SUCCESSION proposal frozen at command' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 5,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local n=R.Nation(t.BranchTarget) assert(s.Mission==nil and n and n.Branch=='SUCCESSION' and n.DecisionRequired==nil,'branch unresolved') assert(n.DeathTurn==t.BranchDue,'wrong resolution turn')  assert(n.State=='SUCCESSION' and n.CurrentLeader=='JAC_LIVE_HEIR' and n.Slot=='RETAINED') assert(Players[t.BranchTarget]:GetUnits():FindID(t.HeirUnit)==nil,'GP occupies two roles') assert(R.ResolveTarget(t.BranchTarget,'LEADER').Identity=='JAC_LIVE_HEIR','successor not targetable') return 'SUCCESSION city/unit/leader/slot consequences verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Houses.CIVILIZATION_JAC_ASAKURA; assert(b and Players[b]:IsAlive() and not Players[b]:IsHuman(),'branch target') local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'capital absent') local u=Grant(t.Actor,R.UNIT,city); local input=R.Input(Players[b])  Players[b]:SetProperty(R.INPUT,input) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='ABSORPTION'}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'LEADER')); local m=R.State(t.Actor).Mission assert(m.Due==R.Turn()+5,'grant is outside the near-distance band') t.BranchTarget=b; t.BranchDue=m.Due; t.BranchPlan=m.PostDeathPlan t.BranchAssets={}; for _,c in Players[b]:GetCities():Members() do t.BranchAssets[#t.BranchAssets+1]={X=c:GetX(),Y=c:GetY()} end if m.Branch=='CONGRESS' then input.Congress.Votes={}; Players[b]:SetProperty(R.INPUT,input) end Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'ABSORPTION proposal frozen at command' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 5,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local n=R.Nation(t.BranchTarget) assert(s.Mission==nil and n and n.Branch=='ABSORPTION' and n.DecisionRequired==nil,'branch unresolved') assert(n.DeathTurn==t.BranchDue,'wrong resolution turn')  assert(n.State=='ABSORPTION' and n.Recipient==t.BranchPlan.Recipient,'wrong recipient') assert(Players[t.BranchTarget]:GetCities():GetCount()==0 and Players[t.BranchTarget]:GetUnits():GetCount()==0,'old assets remain') assert(not Players[t.BranchTarget]:IsAlive(),'empty native slot still active: requires engine adapter') for _,c in ipairs(t.BranchAssets) do local actual=CityManager.GetCityAt(c.X,c.Y) assert(actual and actual:GetOwner()==n.Recipient,'city transfer failed') end assert(n.Slot=='RETIRED' and n.AI=='RECIPIENT_SLOT','old AI retained') return 'ABSORPTION city/unit/leader/slot consequences verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Houses.CIVILIZATION_JAC_ASHIKAGA; assert(b and Players[b]:IsAlive() and not Players[b]:IsHuman(),'branch target') local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'capital absent') local u=Grant(t.Actor,R.UNIT,city); local input=R.Input(Players[b])  local votes={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do votes[tostring(p:GetID())]='FREE_STATE' end input.Congress={Enabled=true,Votes=votes}  Players[b]:SetProperty(R.INPUT,input) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='CONGRESS'}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'LEADER')); local m=R.State(t.Actor).Mission assert(m.Due==R.Turn()+5,'grant is outside the near-distance band') t.BranchTarget=b; t.BranchDue=m.Due; t.BranchPlan=m.PostDeathPlan t.BranchAssets={}; for _,c in Players[b]:GetCities():Members() do t.BranchAssets[#t.BranchAssets+1]={X=c:GetX(),Y=c:GetY()} end if m.Branch=='CONGRESS' then input.Congress.Votes={}; Players[b]:SetProperty(R.INPUT,input) end Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'CONGRESS proposal frozen at command' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 5,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local n=R.Nation(t.BranchTarget) assert(s.Mission==nil and n and n.Branch=='CONGRESS' and n.DecisionRequired==nil,'branch unresolved') assert(n.DeathTurn==t.BranchDue,'wrong resolution turn')  assert(n.State=='FREE_STATE' and n.Plan.Resolution=='FREE_STATE' and n.Plan.Tally.FREE_STATE>0,'ballot changed') assert(Players[t.BranchTarget]:IsAlive(),'Congress council eliminated') return 'CONGRESS city/unit/leader/slot consequences verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Target; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital') local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID())) local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {} assert(m.Due==R.Turn()+2,'unit targets are too far apart') t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0 t.LossCommandUnlock=R.State(t.Actor).CommandUnlock t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0 UnitManager.Kill(u); Game:SetProperty('JAC_ASN_LIVE_TEST',t) return 'lost-actor fixture with success=1, detected=0' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(s.LastMission.ID==t.LossMission.ID and s.LastMission.Result=='ACTOR_GONE' and s.LastMission.Cancelled,'ghost result') assert(Players[t.Target]:GetUnits():FindID(t.LossVictim),'ghost success killed target') assert(ledger.Grievances[tostring(t.Actor)]==t.LossGrievances+25 and ledger.Friendship[tostring(t.Actor)]==t.LossFriendship-10,'fixed penalty') assert((ledger.WarReason or {})[tostring(t.Actor)]==nil,'ghost detection') for _,p in ipairs(PlayerManager.GetAliveMajors()) do assert(p:GetProperty('JAC_ASN_DENOUNCE_'..t.Actor)==nil,'ghost denunciation') end local before=ledger.Grievances[tostring(t.Actor)]; R.Tick() assert(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty') assert(s.CommandUnlock==t.LossCommandUnlock,'wait changed') return 'all outcomes cancelled; fixed penalty once; nationwide wait retained' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Target; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital') local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=1}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID())) local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {} assert(m.Due==R.Turn()+2,'unit targets are too far apart') t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0 t.LossCommandUnlock=R.State(t.Actor).CommandUnlock t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0 UnitManager.Kill(u); Game:SetProperty('JAC_ASN_LIVE_TEST',t) return 'lost-actor fixture with success=1, detected=1' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(s.LastMission.ID==t.LossMission.ID and s.LastMission.Result=='ACTOR_GONE' and s.LastMission.Cancelled,'ghost result') assert(Players[t.Target]:GetUnits():FindID(t.LossVictim),'ghost success killed target') assert(ledger.Grievances[tostring(t.Actor)]==t.LossGrievances+25 and ledger.Friendship[tostring(t.Actor)]==t.LossFriendship-10,'fixed penalty') assert((ledger.WarReason or {})[tostring(t.Actor)]==nil,'ghost detection') for _,p in ipairs(PlayerManager.GetAliveMajors()) do assert(p:GetProperty('JAC_ASN_DENOUNCE_'..t.Actor)==nil,'ghost denunciation') end local before=ledger.Grievances[tostring(t.Actor)]; R.Tick() assert(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty') assert(s.CommandUnlock==t.LossCommandUnlock,'wait changed') return 'all outcomes cancelled; fixed penalty once; nationwide wait retained' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Target; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital') local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=0,Detected=0}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID())) local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {} assert(m.Due==R.Turn()+2,'unit targets are too far apart') t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0 t.LossCommandUnlock=R.State(t.Actor).CommandUnlock t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0 UnitManager.Kill(u); Game:SetProperty('JAC_ASN_LIVE_TEST',t) return 'lost-actor fixture with success=0, detected=0' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(s.LastMission.ID==t.LossMission.ID and s.LastMission.Result=='ACTOR_GONE' and s.LastMission.Cancelled,'ghost result') assert(Players[t.Target]:GetUnits():FindID(t.LossVictim),'ghost success killed target') assert(ledger.Grievances[tostring(t.Actor)]==t.LossGrievances+25 and ledger.Friendship[tostring(t.Actor)]==t.LossFriendship-10,'fixed penalty') assert((ledger.WarReason or {})[tostring(t.Actor)]==nil,'ghost detection') for _,p in ipairs(PlayerManager.GetAliveMajors()) do assert(p:GetProperty('JAC_ASN_DENOUNCE_'..t.Actor)==nil,'ghost denunciation') end local before=ledger.Grievances[tostring(t.Actor)]; R.Tick() assert(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty') assert(s.CommandUnlock==t.LossCommandUnlock,'wait changed') return 'all outcomes cancelled; fixed penalty once; nationwide wait retained' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local b=t.Target; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital') local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city) local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s) Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=0,Detected=1}) assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID())) local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {} assert(m.Due==R.Turn()+2,'unit targets are too far apart') t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0 t.LossCommandUnlock=R.State(t.Actor).CommandUnlock t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0 UnitManager.Kill(u); Game:SetProperty('JAC_ASN_LIVE_TEST',t) return 'lost-actor fixture with success=0, detected=1' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local s=R.State(t.Actor); local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(s.LastMission.ID==t.LossMission.ID and s.LastMission.Result=='ACTOR_GONE' and s.LastMission.Cancelled,'ghost result') assert(Players[t.Target]:GetUnits():FindID(t.LossVictim),'ghost success killed target') assert(ledger.Grievances[tostring(t.Actor)]==t.LossGrievances+25 and ledger.Friendship[tostring(t.Actor)]==t.LossFriendship-10,'fixed penalty') assert((ledger.WarReason or {})[tostring(t.Actor)]==nil,'ghost detection') for _,p in ipairs(PlayerManager.GetAliveMajors()) do assert(p:GetProperty('JAC_ASN_DENOUNCE_'..t.Actor)==nil,'ghost denunciation') end local before=ledger.Grievances[tostring(t.Actor)]; R.Tick() assert(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty') assert(s.CommandUnlock==t.LossCommandUnlock,'wait changed') return 'all outcomes cancelled; fixed penalty once; nationwide wait retained' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') local s=R.State(t.Actor); assert(s.LastMission.Result=='ACTOR_GONE') t.FinalGrievances=ledger.Grievances[tostring(t.Actor)]; t.FinalFriendship=ledger.Friendship[tostring(t.Actor)] t.FinalApplied=ledger.Applied; t.FinalMissionID=s.LastMission.ID; t.FinalWait=s.CommandUnlock Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'pre-save penalty and applied mission expectations recorded' "
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-Outcomes",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-Outcomes",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local h=t.Houses assert(R.Nation(t.Target).State=='FREE_STATE','council lost') assert(R.Nation(h.CIVILIZATION_JAC_IMAGAWA).CurrentLeader=='JAC_LIVE_HEIR','successor lost') assert(R.Nation(h.CIVILIZATION_JAC_ASAKURA).State=='ABSORPTION','absorption history lost') assert(R.Nation(h.CIVILIZATION_JAC_ASHIKAGA).Branch=='CONGRESS','ballot history lost') local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(ledger.Grievances[tostring(t.Actor)]==t.FinalGrievances and ledger.Friendship[tostring(t.Actor)]==t.FinalFriendship,'load changed penalties') for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'load lost applied mission') end for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'load added applied mission') end local s=R.State(t.Actor); assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE','cancelled result lost') assert(s.CommandUnlock==t.FinalWait,'load changed wait'); R.Tick() return 'four branches, cancelled result and pre-save penalty expectations survive load' "
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); local function Grant(owner,kind,city)\n      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)\n      local found; for _,u in Players[owner]:GetUnits():Members() do\n        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end\n      end\n      assert(found,'unit grant failed'); return found\n    end;  local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1') assert(ledger.Grievances[tostring(t.Actor)]==t.FinalGrievances and ledger.Friendship[tostring(t.Actor)]==t.FinalFriendship,'next turn repeated penalties') for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'next turn lost applied mission') end for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'next turn added applied mission') end local s=R.State(t.Actor); assert(s.LastMission.ID==t.FinalMissionID and s.CommandUnlock==t.FinalWait,'next turn changed result or wait') Game:SetProperty(R.TEST,nil); Players[t.Actor]:SetProperty(R.INPUT,nil) return 'next turn leaves penalties and applied missions unchanged; test mode disabled' "
     }
   ]
 }

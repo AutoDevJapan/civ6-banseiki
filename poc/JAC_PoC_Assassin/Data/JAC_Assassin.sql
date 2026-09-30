@@ -1,7 +1,7 @@
--- Timed city recruitment is gameplay-managed. Native hammers, purchases and upgrades cannot bypass 20 turns.
+-- Timed city training is gameplay-managed. Native hammers, purchases and upgrades cannot bypass 20 turns.
 -- Base unit schema: Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2833-2902.
 -- OWNER_UNDECIDED PoC constants: Moves=3, Sight=2, Combat=10 (Scout stand-ins), upkeep=0.
--- Cost=1 is an unused native schema value, NOT the recruitment time/cost; CanTrain=0 for both types.
+-- Cost=1 is an unused native schema value, NOT the training time/cost; CanTrain=0 for both types.
 INSERT INTO Types (Type,Kind) VALUES
   ('UNIT_JAC_JAPAN_SENGOKU_ASSASSIN','KIND_UNIT'),
   ('UNIT_JAC_ASSASSIN','KIND_UNIT'),

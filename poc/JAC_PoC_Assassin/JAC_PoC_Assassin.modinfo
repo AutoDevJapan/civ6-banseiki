@@ -21,9 +21,9 @@
       <ru_RU>JAC PoC: убийца</ru_RU>
     </Text>
     <Text id="LOC_JAC_ASN_MOD_DESCRIPTION">
-      <ja_JP>日本マップの暗殺者募集・任務・保存の試作。未決の国家の行方は保留として記録。</ja_JP>
-      <en_US>Japan-map recruitment, missions and persistence. Undecided governance is recorded as pending.</en_US>
-      <ru_RU>Набор, задания и сохранение на картах Японии. Неопределённое управление записывается как ожидающее решения.</ru_RU>
+      <ja_JP>日本マップの暗殺者育成・任務・保存の試作。死亡後の四分岐は明示した推奨案で処理。</ja_JP>
+      <en_US>Japan-map training, missions and persistence. Post-death branches use explicit proposed policies.</en_US>
+      <ru_RU>Подготовка, задания и сохранение на картах Японии. После гибели правителя применяются явно предложенные правила.</ru_RU>
     </Text>
   </LocalizedText>
   <ActionCriteria>

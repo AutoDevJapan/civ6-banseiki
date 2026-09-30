@@ -18,6 +18,8 @@ function JAC_AssassinAttempt(unitID,target,kind,objectID)
   return Send({Action="ATTEMPT",Unit=unitID,Target=target,Kind=kind,Object=objectID})
 end
 local function Name(id)
+  local nation=R.Nation(id)
+  if nation and nation.CountryName then return Locale.Lookup(nation.CountryName) end
   return Locale.Lookup(PlayerConfigurations[id]:GetCivilizationDescription())
 end
 local function Add(text,caption,enabled,callback,reason)
@@ -73,7 +75,8 @@ local function Refresh()
         Add(Locale.Lookup("LOC_JAC_ASN_TARGET",Name(target),label,R.CHANCES[kind],missionTurns,actual),
           "LOC_JAC_ASN_ATTEMPT",ok,function() JAC_AssassinAttempt(assassin:GetID(),target,kind,object) end,reason)
       end
-      Candidate("LEADER",nil,Locale.Lookup(PlayerConfigurations[target]:GetLeaderName()))
+      local nation=R.Nation(target)
+      Candidate("LEADER",nil,Locale.Lookup(nation and nation.CurrentLeaderName or PlayerConfigurations[target]:GetLeaderName()))
       local governors=R.Input(Players[target]).Governors or {}
       local keys={}; for key in pairs(governors) do keys[#keys+1]=key end; table.sort(keys)
       for _,key in ipairs(keys) do

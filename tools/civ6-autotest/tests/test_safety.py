@@ -16,6 +16,16 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def setUp(self):
+        # Safety fixtures exercise the driver, independently of whether Civ6 is
+        # running on the test machine. Never fall through to a real Steam launch.
+        process = patch("scenario.single_civ_process", return_value=(1234, 1.0))
+        process.start()
+        self.addCleanup(process.stop)
+        launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted a real Steam launch"))
+        self.steam_launch = launch.start()
+        self.addCleanup(launch.stop)
+
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -594,6 +604,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             statuses = [(record["action"], record["status"]) for record in records]
             self.assertIn(("2/4 wait_for", "OK"), statuses)
             self.assertEqual(statuses[-1], ("4/4 wait_for", "FAIL"))
+            self.steam_launch.assert_not_called()
 
     def test_oserror_after_autoplay_start_attempts_cleanup_without_replay(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
