@@ -1,14 +1,13 @@
--- 公式の通知パネルを読んだ後、このMODの印のある改元の通知だけを政策選択へつなぐ。
--- Base/Assets/UI/Panels/NotificationPanel.lua:1896 の wildcard で公式の拡張も読み込まれる。
--- RegisterHandlers は LateInitialize (:1854) で呼ばれるので、公式のハンドラー登録の後で包める。
-include("NotificationPanel")
+-- 公式の NotificationPanel.lua:1896 の wildcard から読み込まれる追加スクリプト。
+-- ここで公式パネルを include すると自分自身も再読込される（実機 dark-policy-at-reign-01/02）。
+-- 公式の NotificationPanel_Expansion1.lua:3-6 と同じく、登録関数だけを包む。
 include("JAC_SengokuAgesView")
 
 local BASE_RegisterHandlers = RegisterHandlers
 
 function RegisterHandlers()
 	BASE_RegisterHandlers()
-	local handler = g_notificationHandlers[NotificationTypes.COMMEMORATION_AVAILABLE]
+	local handler = g_notificationHandlers[NotificationTypes.USER_DEFINED_2]
 	local activate, dismiss = handler.Activate, handler.TryDismiss
 	handler.Activate = function(entry, notificationID, activatedByUser)
 		local notification = GetActiveNotificationFromEntry(entry, notificationID)

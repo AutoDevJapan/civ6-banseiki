@@ -50,6 +50,9 @@
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_TITLE" Language="ja_JP"><Text>暗黒期の政策</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_TITLE" Language="en_US"><Text>Dark Age Policy</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_TITLE" Language="ru_RU"><Text>Политика тёмного века</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_CHOICE_REQUIRED" Language="ja_JP"><Text>暗黒期の政策を選ぶまで手番を終えられない。クリックして政策を選ぶ。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_CHOICE_REQUIRED" Language="en_US"><Text>Choose a Dark Age policy before ending this turn. Click to choose.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_DARK_CHOICE_REQUIRED" Language="ru_RU"><Text>Выберите политику тёмного века, прежде чем закончить ход. Нажмите, чтобы выбрать.</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_BODY" Language="ja_JP"><Text>当家は暗黒期に入った。改元したこのターンに1度だけ政策を選べる。選ぶまで「{1_Policy}」が効き、手番は終えられない。閉じた後は改元の通知から開き直せる。</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_BODY" Language="en_US"><Text>Your house is in a Dark Age. Choose its policy once on this era's first turn. Until you choose, "{1_Policy}" applies and you cannot end the turn. Reopen this screen from the era notification.</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_BODY" Language="ru_RU"><Text>Ваш дом в тёмном веке. Выберите политику один раз в первый ход новой эры. До выбора действует «{1_Policy}», и ход завершить нельзя. Откройте это окно снова через уведомление о новой эре.</Text></Row>

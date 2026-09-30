@@ -356,15 +356,14 @@ local function Notify(id, reign, index, age, policy)
 	local summary = AGE_ANNOUNCEMENTS[age == "DARK" and policy or age]
 	local data = { [ParameterTypes.MESSAGE] = reign.notification, [ParameterTypes.SUMMARY] = summary }
 	local kind = NotificationTypes.USER_DEFINED_2
-	-- Use the engine's dedication notification type. Whether a scripted notification has the native blocker
-	-- is checked by the live scenarios (the Lua stubs alone cannot prove it). Official:
-	-- DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:29 and Base/Assets/UI/ActionPanel.lua:553-602.
+	-- A scripted COMMEMORATION_AVAILABLE did not survive to the UI (live dark-policy-at-reign-01/02).
+	-- Keep the normal reign notification as the reopen entry. ActionPanel reads the saved ledger to block
+	-- turn end; it does not depend on a notification's native blocking type.
 	-- IsHuman in gameplay: DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:49.
 	-- Custom properties and non-dismissable notifications: DLC/PiratesScenario/Scripts/
 	-- PiratesScenario_PropKeys.lua:85-89, PiratesScenario_StartScript.lua:340-343; UI reads them at
 	-- UI/Replacements/NotificationPanel_PiratesScenario.lua:81,145.
 	if age == "DARK" and Players[id]:IsHuman() then
-		kind = NotificationTypes.COMMEMORATION_AVAILABLE
 		data.JAC_DARK_POLICY_REIGN = index
 		data[NotificationParameterTypes.CanUserDismiss] = false
 	end

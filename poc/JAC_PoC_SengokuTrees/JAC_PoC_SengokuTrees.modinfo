@@ -104,13 +104,6 @@
 				<LuaReplace>UI/JAC_ActionPanel_Sengoku.lua</LuaReplace>
 			</Properties>
 		</ReplaceUIScript>
-		<ReplaceUIScript id="JAC_Sengoku_NotificationPanel" criteria="JAC_Sengoku_BanseikiOnly">
-			<Properties>
-				<LoadOrder>100</LoadOrder>
-				<LuaContext>NotificationPanel</LuaContext>
-				<LuaReplace>UI/JAC_NotificationPanel_Sengoku.lua</LuaReplace>
-			</Properties>
-		</ReplaceUIScript>
 	</InGameActions>
 	<FrontEndActions>
 		<UpdateDatabase id="JAC_Sengoku_VictorySettings">

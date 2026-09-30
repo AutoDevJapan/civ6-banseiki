@@ -4,7 +4,7 @@
 -- UI のイベントはマルチプレイで同期しない）。受け側が「暗黒期の家か・今の期か・未選択か・表にある政策か」を確かめる。
 -- 画面の出し方・閉じ方は公式の DLC/Expansion2/UI/Additions/DisloyalCityChooser.lua（ContextPtr:SetHide、OnClose）。
 -- 改元の画面を閉じたときに1回だけ出し、そのターンの改元の通知から開き直す（SSOT 3.2）。
--- 終了ブロックはゲームプレイ側が送る公式の COMMEMORATION_AVAILABLE 通知に任せる。
+-- 終了ブロックは JAC_ActionPanel_Sengoku.lua が同期済み台帳から判定する。
 include("InstanceManager")
 include("JAC_SengokuAgesView")
 

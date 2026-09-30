@@ -1065,14 +1065,15 @@ class LedgerTests(unittest.TestCase):
         self.choose(1, "JAC_AGE_POLICY_TEMPLE")
         self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_TEMPLE", 1))
 
-    def test_ai_keeps_its_default_and_only_dark_humans_get_the_native_blocker(self):
+    def test_ai_keeps_its_default_and_only_dark_humans_get_the_reopen_notification(self):
         self.turns(1, 66)
         before = self.snapshot()
         self.choose(0, "JAC_AGE_POLICY_TEMPLE")
         self.assertEqual(self.snapshot(), before)
-        self.assertEqual([n.kind for n in self.g.NOTIFICATIONS.values()], [2, 71, 2, 71])
-        self.assertEqual([n.data.JAC_DARK_POLICY_REIGN for n in self.g.NOTIFICATIONS.values() if n.kind == 71], [1, 1])
-        notification = self.g.NotificationManager.FindType(71, 1)
+        self.assertEqual([n.kind for n in self.g.NOTIFICATIONS.values()], [2, 2, 2, 2])
+        self.assertEqual([n.data.JAC_DARK_POLICY_REIGN for n in self.g.NOTIFICATIONS.values()
+                          if n.data.JAC_DARK_POLICY_REIGN is not None], [1, 1])
+        notification = self.g.NotificationManager.FindType(2, 1)
         self.assertFalse(notification.CanUserDismiss(notification))
 
     def test_load_does_not_count_again(self):
@@ -1105,6 +1106,9 @@ local function control()
   function c:RegisterCallback(_, f) self.click = f end
   function c:SetTexture(t) self.texture = t end
   function c:SetToolTipString(t) self.tooltip = t end
+  function c:SetRefreshHandler(f) self.refresh = f end
+  function c:SetInputHandler(f) self.input = f end
+  function c:RequestRefresh() if self.refresh then self.refresh() end end
   return c
 end
 CONTROL = control
@@ -1229,7 +1233,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
     def test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice(self):
         self.turns(1, 66)
         self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
-        notification = self.g.NotificationManager.FindType(71, 1)
+        notification = self.g.NotificationManager.FindType(2, 1)
         self.g.OnClose()
         self.g.PUBLISH()
         self.assertFalse(notification.dismissed)
@@ -1240,7 +1244,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
 
     def test_rejected_request_does_not_clear_the_blocker(self):
         self.turns(1, 66)
-        notification = self.g.NotificationManager.FindType(71, 1)
+        notification = self.g.NotificationManager.FindType(2, 1)
         self.g.CHOOSE(1, self.lua.table_from({"PolicyType": "JAC_AGE_POLICY_TEMPLE", "Reign": 0}))
         self.g.PUBLISH()
         self.assertFalse(notification.dismissed)
@@ -1251,8 +1255,8 @@ class DarkPolicyScreenTests(unittest.TestCase):
         official = self.g.NotificationManager.FindType(71, 1)
         self.turns(1, 66)
         current = next(n for n in self.g.NOTIFICATIONS.values() if n.player == 1 and n.data.JAC_DARK_POLICY_REIGN == 1)
-        other = self.g.NotificationManager.FindType(71, 3)
-        self.g.NotificationManager.SendNotification(1, 71, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
+        other = self.g.NotificationManager.FindType(2, 3)
+        self.g.NotificationManager.SendNotification(1, 2, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
         stale = self.g.NOTIFICATIONS[len(self.g.NOTIFICATIONS)]
         self.g.PUBLISH()
         self.assertTrue(stale.dismissed)
@@ -1270,7 +1274,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.g.LOAD_SCREEN_CLOSE()
         self.g.LOCAL_TURN_BEGIN()
         self.assertFalse(self.shown())
-        self.assertFalse(self.g.NotificationManager.FindType(71, 1).dismissed)
+        self.assertFalse(self.g.NotificationManager.FindType(2, 1).dismissed)
         self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
         self.assertTrue(self.shown())
 
