@@ -114,8 +114,28 @@ local function OwnedGreatWorks(owner)
 end
 A.OwnedGreatWorks = OwnedGreatWorks
 
+-- The installed engine separates game mutations from UI-only manager getters.
+-- UI closures keep their own engine context; they return only scalars/component IDs.
+local function NativeHeroesManager()
+  local native = Game.GetHeroesManager and Game.GetHeroesManager()
+  if not native then return nil end
+  local manager = {}
+  for _, name in ipairs({ "CreateHero", "SetHeroDiscovered", "IsHeroDiscovered",
+    "GetHeroClaimPlayer", "GetHeroOriginCityID", "GetPlayerHeroOriginBuildingType" }) do
+    local method = native[name]
+    local read = ExposedMembers.JAC_HeroReadAPI and ExposedMembers.JAC_HeroReadAPI[name]
+    if method then
+      manager[name] = function(_, ...) return method(native, ...) end
+    elseif read then
+      manager[name] = function(_, ...) return read(...) end
+    end
+  end
+  return manager
+end
+A.GetHeroesManager = NativeHeroesManager
+
 local function Heroes()
-  local manager = Game.GetHeroesManager and Game.GetHeroesManager()
+  local manager = NativeHeroesManager()
   assert(manager and manager.CreateHero and manager.GetHeroClaimPlayer and manager.GetHeroOriginCityID
     and manager.IsHeroDiscovered and manager.SetHeroDiscovered and manager.GetPlayerHeroOriginBuildingType,
     "native Hero requires gameplay HeroesManager (enable Heroes & Legends)")
@@ -149,7 +169,7 @@ local function SnapshotHero(unit, info)
   local class = unit:GetHeroClassType()
   local def = assert(GameInfo.HeroClasses and GameInfo.HeroClasses[class], "native Hero class missing")
   assert(def.UnitType == info.UnitType, "native Hero class/unit type mismatch")
-  local manager, owner = Game.GetHeroesManager and Game.GetHeroesManager(), unit:GetOwner()
+  local manager, owner = NativeHeroesManager(), unit:GetOwner()
   local claim, origin, rawOrigin, discovered, building
   if manager then
     if manager.GetHeroClaimPlayer then
@@ -245,7 +265,7 @@ local function HeroSuicide(snap, cause)
   snap.RequestedOutcome = snap.RequestedOutcome or snap.Outcome
   snap.Outcome, snap.Destination, snap.KeepUnit = "SUICIDE", -1, false
   snap.SuicideCause = cause
-  local manager = Game.GetHeroesManager and Game.GetHeroesManager()
+  local manager = NativeHeroesManager()
   if manager and manager.GetHeroClaimPlayer then
     local ok, owner = pcall(manager.GetHeroClaimPlayer, manager, snap.Hero.Class)
     if ok then snap.NativeClaimAfter = owner end
@@ -253,7 +273,7 @@ local function HeroSuicide(snap, cause)
 end
 
 local function HeroTransferProblem(tx, snap, origins)
-  local hero, manager = snap.Hero, Game.GetHeroesManager and Game.GetHeroesManager()
+  local hero, manager = snap.Hero, NativeHeroesManager()
   if not manager or not manager.CreateHero or not manager.SetHeroDiscovered then return "NATIVE_MANAGER_UNAVAILABLE" end
   if hero.ClaimOwner ~= tx.From then return "CLAIM_UNAVAILABLE" end
   if not hero.Origin or hero.Origin.Owner ~= tx.From then return "ORIGIN_UNAVAILABLE" end
@@ -373,7 +393,7 @@ local function Prepare(plan, state)
   -- Claimed heroes without a Unit have no supported claim-only transfer. Keep their
   -- available native state and any existing person record as explicit suicide history.
   if GameInfo.HeroClasses and Game.GetHeroesManager then
-    local manager = Game.GetHeroesManager()
+    local manager = NativeHeroesManager()
     if manager and manager.GetHeroClaimPlayer then
       for def in GameInfo.HeroClasses() do
         if manager:GetHeroClaimPlayer(def.Index) == tx.From then

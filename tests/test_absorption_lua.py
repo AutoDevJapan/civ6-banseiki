@@ -409,6 +409,29 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()  # The original request still identifies the completed operation.
         self.assertEqual(self.snapshot(), before)
 
+    def test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes(self):
+        self.add_native_hero(second=True)
+        self.run_lua("""local full=Game.GetHeroesManager()
+          UI_HERO_MANAGER={GetHeroClaimPlayer=full.GetHeroClaimPlayer,
+            GetHeroOriginCityID=full.GetHeroOriginCityID,
+            GetPlayerHeroOriginBuildingType=full.GetPlayerHeroOriginBuildingType}
+          CORE_HERO_MANAGER={CreateHero=full.CreateHero,SetHeroDiscovered=full.SetHeroDiscovered,
+            IsHeroDiscovered=full.IsHeroDiscovered}
+          Game.GetHeroesManager=function() return UI_HERO_MANAGER end
+          Events={LoadScreenClose={Add=function() end}}""")
+        self.run_lua((MOD / "UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8"))
+        self.run_lua("""Game.GetHeroesManager=function() return CORE_HERO_MANAGER end
+          assert(ExposedMembers.JAC_HeroReadAPI.CreateHero==nil)
+          assert(ExposedMembers.JAC_HeroReadAPI.SetHeroDiscovered==nil)""")
+        self.apply()
+        self.load_scripts()
+        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.run_lua("""local a=ExposedMembers.JAC_Absorption
+          local u=assert(a.FindUnit(2,'test-absorption:unit:13'))
+          local h=a.SnapshotUnit(u).Hero
+          assert(h.ClaimOwner==2 and h.Origin.Owner==2 and h.Lifespan==17 and h.ActionCharges==2)
+          assert(a.GetState().Transactions['test-absorption'].HeroResults.native.Outcome~='SUICIDE')""")
+
     def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
         self.add_native_hero(second=True)
         self.apply()

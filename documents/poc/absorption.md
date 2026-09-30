@@ -1,6 +1,6 @@
 # 束2 PoC：勢力吸収
 
-公式英雄の API 調査では、古い FireTuner パネルの `GetLifespan` / `SetLifespan` の例だけでは判断しない。導入済みの `Base/Assets/UI/Panels/UnitPanel.lua:2269` は、残り寿命を `unit:GetProperty(UnitPropertyKeys.LifespanRemaining)` で読む。実機ではこの定数表が画面側にだけ存在したため、画面側の実際の数値キーを共有してゲーム処理側から読む。手番経過後の本体の寿命消費は実機シナリオで検査する。
+公式英雄の API 調査では、古い FireTuner パネルの `GetLifespan` / `SetLifespan` の例だけでは判断しない。導入済みの `Base/Assets/UI/Panels/UnitPanel.lua:2269` は、残り寿命を `unit:GetProperty(UnitPropertyKeys.LifespanRemaining)` で読む。実機ではこの定数表が画面側にだけ存在したため、画面側の実際の数値キーを共有してゲーム処理側から読む。実機診断では、所有者・召喚元都市・召喚元建物の照会も画面側にだけあり、生成と発見の変更はゲーム処理側にだけあった。画面側の照会関数は数値と都市IDだけを返す窓口として公開し、変更はゲーム処理側で行う。手番経過後の本体の寿命消費は実機シナリオで検査する。
 
 `poc/JAC_PoC_Absorption` は、SSOT 9.1 と 16.1「吸収」の移管・保存の検証を行う。実機の最新試行は英雄の生成準備で失敗し、吸収と再召喚の成功はまだ確認できていない。Lua の模擬エンジンでの成功と、Civ6 本体での成功は分けて扱う。
 
@@ -11,7 +11,7 @@
 - MOD ID：`61320778-2e75-4c11-9009-94101b519aba`。Gathering Storm、Babylon DLC、万世紀ルールセットを依存 MOD とする。SSOT 9.1 の公式英雄が必須という判断に従う。日本地図シナリオは既存のカスタム文明・戦国ツリー・日本地図も有効にする。
 - `Data/JAC_Absorption.sql`：資産の種類・分岐結果・受入先の表。確率や効果量は持たない。
 - `Scripts/JAC_Absorption_Rules.lua`：保存キー、未決事項の PoC 定数、分岐の検証、複製、照合、人物の Unit 参照の付け替え。
-- `Scripts/JAC_Absorption_Gameplay.lua`：ゲーム側の移管、保存、再開、照合。`UI/JAC_Absorption_HeroKeys.lua` は画面側にある本体の寿命キーだけを共有し、ゲーム状態を変更しない。
+- `Scripts/JAC_Absorption_Gameplay.lua`：ゲーム側の移管、保存、再開、照合。`UI/JAC_Absorption_HeroKeys.lua` は画面側にある本体の寿命キーと英雄管理表の照会関数を公開し、ゲーム状態を変更しない。
 - `Text/JAC_Absorption_Text.xml` と modinfo：日本語・英語・ロシア語。新しい文明・指導者や画像は追加しない。旧当主の代理 Unit に公式の大将軍を使うのは、人物の存続を検証するためである。
 
 ゲーム側 Lua / `GameCore_Tuner` から次の形で呼ぶ。画面・AI の将来の加入判定が結果を選び、この API に渡す。外交の関係宣言だけで自動吸収するイベントは登録しない。
@@ -171,7 +171,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-
 | absorb-02 | absorption-hero-recall.json | 同じ依存関係エラー。吸収や再召喚には未到達 |
 | absorb-03 | absorption-japan.json | 依存関係の解決・英雄モードの設定・新規ゲーム開始は成功。ゲーム処理側に寿命キーの定数表がなく、英雄生成前に停止。画面側からキーを共有する処理を追加した。アイコンSQLの列名エラーも修正した |
 | absorb-04（再起動の再試行を含む） | absorption-japan.json | ゲーム起動待ちで停止。起動要求4回の後も指定期限まで待つドライバーへ修正し、回帰テストを追加した。英雄の移管は未到達 |
-| absorb-05 | absorption-japan.json | 旧ゲームの報告用プロセスだけが残りSteamの再起動を妨げていたため、所属と旧ゲームの終了を確認して閉じた。再要求後はゲーム開始、22家、英雄モード、吸収MODと寿命キーの読込みまで成功。英雄の生成準備で所有者照会が「function expected instead of nil」となり停止。吸収には未到達 |
+| absorb-05 | absorption-japan.json | 旧ゲームの報告用プロセスだけが残りSteamの再起動を妨げていたため、所属と旧ゲームの終了を確認して閉じた。再要求後はゲーム開始、22家、英雄モード、吸収MODと寿命キーの読込みまで成功。英雄の生成準備で所有者照会が「function expected instead of nil」となり停止。診断で3照会が画面側にしかないことを確認し、両側のAPIを使う窓口を追加した。吸収には未到達 |
 
 InGame側で読み出した本体の寿命キーを共有し、GameCore_Tuner側から同じ数値を読めることは実機で確認した。absorb-05ではMOD自身によるキー公開とゲーム処理側の吸収APIの読込みまで確認した。独自英雄2体の生成・移管、寿命消費、保存・読み込み、再召喚購入は未確認である。
 
