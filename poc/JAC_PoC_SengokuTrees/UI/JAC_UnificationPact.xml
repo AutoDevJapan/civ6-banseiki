@@ -7,6 +7,7 @@
 		Hidden="1" ConsumeAllMouse="1">
 		<Stack ID="Rows" Anchor="L,T" Offset="10,10" StackGrowth="Down" Padding="4">
 			<Label ID="Status" WrapWidth="400"/>
+			<GridButton ID="LeaveButton" Size="150,26" Style="ButtonControl" String="LOC_JAC_UNIFICATION_PACT_LEAVE" Hidden="1"/>
 			<Label WrapWidth="400" String="LOC_JAC_UNIFICATION_PACT_RULES"/>
 		</Stack>
 	</Grid>

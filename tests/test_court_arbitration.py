@@ -241,9 +241,34 @@ class ArbitrationTurnTests(unittest.TestCase):
         pending = self.game("JAC_ARB_PENDING")
         self.assertEqual((pending.Requester, pending.A, pending.B, pending.Power), (2, 0, 1, 3))
         self.assertEqual(sorted(n[1] for n in self.g.NOTES.values()), [0, 1])  # both parties answer
+        # Owner decision O-3: the shogun's 3x also divides the cost (rounded up) ...
+        ashikaga = self.g.Players[self.ASHIKAGA]
+        self.assertEqual((ashikaga.favor, ashikaga.gold, self.player(self.ASHIKAGA, "JAC_LEGITIMACY")),
+                         (100 - 7, 500 - 34, 50 - 2))
         self.next_turn()
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 2 + 30)
+
+    def test_refusing_a_shogun_ruling_costs_three_times_as_much(self):
+        # ... and multiplies the refusal penalty (O-3): Legitimacy -45, 30 turns of cause.
+        self.g.Players[self.OTOMO].cities = 4  # 4 > 1.5 * 2
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual(self.player(self.OTOMO, "JAC_LEGITIMACY"), 50 - 45)
+        self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 2 + 30)
+        self.assertIn("[JAC_ARB] refused player=1 pair=0-1 turn=2 legitimacy=5 outlaw_until=32 power=3", self.log())
+
+    def test_the_shogun_can_afford_a_ruling_at_a_third_of_the_cost(self):
+        ashikaga = self.g.Players[self.ASHIKAGA]
+        ashikaga.favor, ashikaga.gold = 7, 34
+        ashikaga.SetProperty(None, "JAC_LEGITIMACY", 2)
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.assertEqual((ashikaga.favor, ashikaga.gold, self.player(self.ASHIKAGA, "JAC_LEGITIMACY")), (0, 0, 0))
+        self.assertEqual(self.game("JAC_ARB_PENDING").Power, 3)
+        R = self.g.JAC_ARB
+        self.assertEqual(tuple(R.Costs(1)), (20, 100, 5))
+        self.assertEqual(tuple(R.RefusalPenalty(1)), (15, 10))
 
     def test_after_1573_ashikaga_survives_but_cannot_call_rulings_for_others(self):
         self.next_turn(120)
@@ -255,6 +280,7 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.g.SET_WAR(self.ASHIKAGA, self.MORI, True)
         self.g.REQUEST(self.ASHIKAGA, self.ASHIKAGA, self.MORI)
         self.assertEqual(self.game("JAC_ARB_PENDING").Power, 1)
+        self.assertEqual(self.g.Players[self.ASHIKAGA].favor, 100 - 20)  # full cost at normal power
         self.next_turn()
         self.assertEqual(self.game("JAC_ARB_TRUCE_2_3"), 121 + 10)
 
@@ -483,7 +509,7 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
                 self.assertIs(self.lua.execute(step["condition"]["code"]), True)
         self.assertIn("accepted-path pair CIVILIZATION_JAC_MORI 3 - CIVILIZATION_JAC_ODA 4", results[1])
         self.assertIn("accepted ruling: 3-4 made peace on turn 2", results[3])
-        self.assertEqual(results[-3], "refused by Ouchi (legitimacy 35, outlaw until 13); accepted pair 3-4 still at peace")
+        self.assertEqual(results[-3], "refused by Ouchi (legitimacy 50-45=5, outlaw until 33 = 3+10x3); accepted pair 3-4 still at peace")
         # The breach is forced only past the minimum peace length (court-arbitration-08 hung when forced on turn 2).
         self.assertEqual(results[-2], "forced war inside the truce between 3 and 4 on turn 13")
         self.assertEqual(results[-1], "truce breach 3-4 forced on turn 13 undone on turn 14, truce still until 32")

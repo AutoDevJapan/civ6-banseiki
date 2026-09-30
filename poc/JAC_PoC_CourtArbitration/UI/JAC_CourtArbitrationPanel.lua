@@ -76,8 +76,9 @@ local function Refresh()
 		return
 	end
 	local player, turn = Players[localID], R.GameTurn()
+	local favor, gold, legitimacy = R.Costs(R.Power(localID, turn))
 	local status = Locale.Lookup("LOC_JAC_ARB_STATUS", R.Legitimacy(localID), R.Favor(localID),
-		player:GetTreasury():GetGoldBalance(), R.COST_FAVOR, R.COST_GOLD, R.COST_LEGITIMACY)
+		player:GetTreasury():GetGoldBalance(), favor, gold, legitimacy)
 	if R.IsEmpoweredShogun(localID, turn) then
 		status = status .. "[NEWLINE]" .. Locale.Lookup("LOC_JAC_ARB_SHOGUN_POWER", R.MUROMACHI_END_YEAR)
 	end

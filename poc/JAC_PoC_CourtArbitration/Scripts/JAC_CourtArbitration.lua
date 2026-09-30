@@ -1,6 +1,6 @@
 -- 朝廷・将軍の停戦裁定（SSOT 3.2）。日本マップ4種でだけ読み込まれる（modinfo）。
 -- 1. 戦争中の当事者は相手との停戦裁定を請求できる。足利将軍家は、人間・AI を問わず、室町幕府の終わり（1573年）
---    までは他家どうしの停戦も発議でき、その裁定の力（停戦の再宣戦制限のターン数）は3倍になる。
+--    までは他家どうしの停戦も発議でき、その裁定の力は3倍になる（停戦のターン数と拒否の不利益が3倍、費用は3分の1）。
 -- 2. 請求者は外交的支持・金・正当性を払う。請求は UI から EXECUTE_SCRIPT で届き、次のターンの初めに裁く。
 -- 3. 答える側：人間は画面で応否を送る（届かなければ拒否）。AI は Rules の暫定規則で決める。
 -- 4. 全員が応じればその場で講和し（最短の戦争期間を越える MakePeaceWith(相手, true)）、停戦中に戦争になって
@@ -48,17 +48,18 @@ local function OnRequest(requester, params)
 	end
 	if requester == b then a, b = b, a end -- 当事者の請求では A を請求者にそろえる
 	local player = Players[requester]
+	local turn = R.GameTurn()
+	local power = R.Power(requester, turn)
+	local favor, gold, legitimacy = R.Costs(power) -- 将軍家の請求は3分の1（オーナー判断 O-3）
 	-- ゲームプレイ側の Favor は Player:GetDiplomacy():ChangeFavor（R.Favor の注記）。公式 Lua に使用例が無いので、
 	-- 失敗したら何も払わせずに断る
-	local paid, err = pcall(function() player:GetDiplomacy():ChangeFavor(-R.COST_FAVOR) end)
+	local paid, err = pcall(function() player:GetDiplomacy():ChangeFavor(-favor) end)
 	if not paid then
 		Log(string.format("FAILED favor payment player=%d: %s", requester, tostring(err)))
 		return
 	end
-	player:GetTreasury():ChangeGoldBalance(-R.COST_GOLD) -- AustraliaScenario.lua:847
-	player:SetProperty(R.LEGITIMACY_KEY, R.Legitimacy(requester) - R.COST_LEGITIMACY)
-	local turn = R.GameTurn()
-	local power = R.IsEmpoweredShogun(requester, turn) and R.SHOGUN_POWER or 1
+	player:GetTreasury():ChangeGoldBalance(-gold) -- AustraliaScenario.lua:847
+	player:SetProperty(R.LEGITIMACY_KEY, R.Legitimacy(requester) - legitimacy)
 	local pending = { Requester = requester, A = a, B = b, Turn = turn, Power = power }
 	Game:SetProperty(R.PENDING_KEY, pending)
 	Game:SetProperty(R.LAST_REQUEST_KEY, turn)
@@ -195,12 +196,14 @@ local function Resolve(turn)
 			a, b, turn, truceTurns, pending.Power, peace and "true" or "deferred reason=" .. reason))
 		Notify(everyone, "LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME", summary, R.NameKey(a), R.NameKey(b), truceTurns)
 	else
+		-- 将軍家の裁定を拒めば不利益も3倍（オーナー判断 O-3）
+		local loss, outlawTurns = R.RefusalPenalty(pending.Power)
 		for _, id in ipairs(refusers) do
-			local legitimacy = R.Legitimacy(id) - R.REFUSAL_LEGITIMACY
+			local legitimacy = R.Legitimacy(id) - loss
 			Players[id]:SetProperty(R.LEGITIMACY_KEY, legitimacy)
-			Players[id]:SetProperty(R.OUTLAW_KEY, turn + R.OUTLAW_TURNS)
-			Log(string.format("refused player=%d pair=%d-%d turn=%d legitimacy=%d outlaw_until=%d", id, a, b, turn,
-				legitimacy, turn + R.OUTLAW_TURNS))
+			Players[id]:SetProperty(R.OUTLAW_KEY, turn + outlawTurns)
+			Log(string.format("refused player=%d pair=%d-%d turn=%d legitimacy=%d outlaw_until=%d power=%d", id, a, b, turn,
+				legitimacy, turn + outlawTurns, pending.Power))
 			Notify(everyone, "LOC_JAC_ARB_NOTIFY_REFUSED_NAME", "LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY", R.NameKey(id), R.NameKey(a), R.NameKey(b))
 		end
 	end

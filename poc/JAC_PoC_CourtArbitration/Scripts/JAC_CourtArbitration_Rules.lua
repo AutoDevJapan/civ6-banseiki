@@ -3,8 +3,8 @@
 -- 状態の変更はゲームプレイ側だけが行う（公式：BlackDeathScenario.lua:3 が Rules を include する形）。
 -- 両方の文脈にある API だけを使う（Players / Game / GameInfo / GameConfiguration / PlayerConfigurations）。
 --
--- 数値はすべて暫定（documents/questions.md Q57〜Q60）。正当性は SSOT で未定義のため、
--- Player プロパティの数値を置き場として使う（効果なし。Q57）。
+-- 数値はすべて暫定で、実機の約200ターンの進行で調整する（オーナー判断 O-3、2026-09-30）。
+-- 正当性は SSOT で未定義のため、Player プロパティの数値を置き場として使う（効果なし。Q57）。
 
 JAC_ARB = {}
 local R = JAC_ARB
@@ -19,6 +19,8 @@ R.OUTLAW_TURNS = 10          -- 拒否した勢力に「討伐の大義」が立
 -- 停戦の再宣戦制限。公式の講和後の最短期間 DIPLOMACY_PEACE_MIN_TURNS と同じ値
 -- （Base/Assets/Gameplay/Data/GlobalParameters.xml:248）。将軍家の裁定はこれが3倍になる。
 R.TRUCE_TURNS = 10
+-- 将軍家の裁定の力（SSOT 3.2「3倍」）。停戦のターン数と拒否の不利益（正当性の低下・討伐の大義のターン数）に掛け、
+-- 費用はこれで割る（切り上げ）。オーナー判断 O-3（2026-09-30）
 R.SHOGUN_POWER = 3
 -- AI の応諾（暫定の決定的規則）：自分の都市数が相手の 1.5 倍を超える（優勢）なら拒み、それ以外は応じる
 R.AI_REFUSE_NUM, R.AI_REFUSE_DEN = 3, 2
@@ -80,6 +82,21 @@ function R.IsEmpoweredShogun(id, turn)
 	return R.IsAshikaga(id) and turn < R.ShogunateEndTurn()
 end
 
+-- 請求の力：裁定の力を持つ将軍家の請求は3倍、それ以外は1
+function R.Power(requester, turn)
+	return R.IsEmpoweredShogun(requester, turn) and R.SHOGUN_POWER or 1
+end
+
+-- 請求の費用（外交的支持・金・正当性）。力で割り、切り上げる（将軍家は 7・34・2）
+function R.Costs(power)
+	return math.ceil(R.COST_FAVOR / power), math.ceil(R.COST_GOLD / power), math.ceil(R.COST_LEGITIMACY / power)
+end
+
+-- 拒否の不利益（正当性の低下・討伐の大義のターン数）。力を掛ける（将軍家の裁定では 45・30）
+function R.RefusalPenalty(power)
+	return R.REFUSAL_LEGITIMACY * power, R.OUTLAW_TURNS * power
+end
+
 function R.Legitimacy(id)
 	return Players[id]:GetProperty(R.LEGITIMACY_KEY) or R.LEGITIMACY_START
 end
@@ -132,9 +149,10 @@ function R.CheckRequest(requester, a, b)
 		return false, "ONE_PER_TURN"
 	end
 	local player = Players[requester]
-	if R.Favor(requester) < R.COST_FAVOR then return false, "FAVOR" end
-	if player:GetTreasury():GetGoldBalance() < R.COST_GOLD then return false, "GOLD" end
-	if R.Legitimacy(requester) < R.COST_LEGITIMACY then return false, "LEGITIMACY" end
+	local favor, gold, legitimacy = R.Costs(R.Power(requester, turn))
+	if R.Favor(requester) < favor then return false, "FAVOR" end
+	if player:GetTreasury():GetGoldBalance() < gold then return false, "GOLD" end
+	if R.Legitimacy(requester) < legitimacy then return false, "LEGITIMACY" end
 	return true
 end
 

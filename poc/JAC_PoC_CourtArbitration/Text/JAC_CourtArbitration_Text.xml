@@ -13,9 +13,9 @@
 		<Row Tag="LOC_JAC_ARB_STATUS" Language="ja_JP"><Text>正当性 {1_Legitimacy}、外交的支持 {2_Favor}、金 {3_Gold}。裁定の費用：外交的支持 {4_CostFavor}、金 {5_CostGold}、正当性 {6_CostLegitimacy}</Text></Row>
 		<Row Tag="LOC_JAC_ARB_STATUS" Language="en_US"><Text>Legitimacy {1_Legitimacy}, Diplomatic Favor {2_Favor}, Gold {3_Gold}. Cost of a ruling: {4_CostFavor} Favor, {5_CostGold} Gold, {6_CostLegitimacy} Legitimacy</Text></Row>
 		<Row Tag="LOC_JAC_ARB_STATUS" Language="ru_RU"><Text>Легитимность {1_Legitimacy}, дипломатическая поддержка {2_Favor}, золото {3_Gold}. Цена решения: поддержка {4_CostFavor}, золото {5_CostGold}, легитимность {6_CostLegitimacy}</Text></Row>
-		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ja_JP"><Text>将軍家は他家どうしの停戦も発議でき、{1_Year}年までは裁定の力が3倍になる。</Text></Row>
-		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="en_US"><Text>The Shogunate may also call ceasefires between other houses; its rulings are three times as strong until {1_Year}.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ru_RU"><Text>Сёгунат может объявлять перемирие и между другими домами; до {1_Year} года сила его решений утроена.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ja_JP"><Text>将軍家は他家どうしの停戦も発議でき、{1_Year}年までは裁定の力が3倍になる（停戦のターン数と、拒んだ家の不利益が3倍、費用は3分の1）。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="en_US"><Text>The Shogunate may also call ceasefires between other houses; until {1_Year} its rulings are three times as strong (three times the truce and the penalty for refusing, one third of the cost).</Text></Row>
+		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ru_RU"><Text>Сёгунат может объявлять перемирие и между другими домами; до {1_Year} года сила его решений утроена (втрое дольше перемирие и втрое тяжелее наказание за отказ, цена — треть).</Text></Row>
 		<Row Tag="LOC_JAC_ARB_PAIR" Language="ja_JP"><Text>{1_A}と{2_B}の停戦</Text></Row>
 		<Row Tag="LOC_JAC_ARB_PAIR" Language="en_US"><Text>Ceasefire between {1_A} and {2_B}</Text></Row>
 		<Row Tag="LOC_JAC_ARB_PAIR" Language="ru_RU"><Text>Перемирие: {1_A} и {2_B}</Text></Row>

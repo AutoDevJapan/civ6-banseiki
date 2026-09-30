@@ -295,7 +295,7 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertIn("PlayerOperations.EXECUTE_SCRIPT", panel)
         for call in ("SetProperty", "CreateIncompleteBuilding", "TransferCity"):
             self.assertNotIn(call, panel)
-        for event in ("JAC_UnificationPactPropose", "JAC_UnificationPactAccept"):
+        for event in ("JAC_UnificationPactPropose", "JAC_UnificationPactAccept", "JAC_UnificationPactLeave"):
             self.assertIn(f"GameEvents.{event}.Add(", pact)
         # Every text the panel can show exists in all three languages (checked with the victory texts).
         texts = {row.get("Tag") for row in ET.parse(TREE_MOD / "Text/JAC_Sengoku_Unification_Text.xml")
@@ -304,7 +304,7 @@ class UnificationVictoryTests(unittest.TestCase):
         used = set(re.findall(r'"(LOC_JAC_UNIFICATION_PACT_[A-Z_]+)"', panel + xml)) - {"LOC_JAC_UNIFICATION_PACT_RESULT_"}
         used |= {f"LOC_JAC_UNIFICATION_PACT_RESULT_{code}"
                  for code in re.findall(r'SetProperty\(RESULT, "([A-Z_]+)"\)', pact)}
-        self.assertEqual(len(used), 12)
+        self.assertEqual(len(used), 15)
         self.assertLessEqual(used, texts)
 
     def test_rebuilt_castle_script_marks_razed_plots_and_survives_capture(self):
@@ -458,14 +458,25 @@ class UnificationVictoryTests(unittest.TestCase):
         steps = data["steps"]
         self.assertEqual(steps[:5], scenario()["steps"][:5])
         codes = [json.dumps(step, ensure_ascii=False) for step in steps]
-        propose = [i for i, code in enumerate(codes) if "JAC_RequestPact('Propose'" in code]
+        propose = [i for i, code in enumerate(codes) if "JAC_RequestPact('Propose',date)" in code]
         self.assertEqual(len(propose), 2)
         self.assertTrue(all(steps[i]["state_name"] == "JAC_UnificationPact" for i in propose))
         first = lambda needle: next(i for i, code in enumerate(codes) if needle in code)
         not_allied, allied = first("NOT_ALLIED"), first("SetHasAllied(date,true)")
-        joined, held_out = first("=='JOINED'"), first("pact marked with 3 of 4 castles")
-        handover = first("TransferCity(last,date)")
+        joined = first("=='JOINED' and Game:GetProperty('JAC_UNIFICATION_PACT_LEAD_'..date)")
+        held_out, handover = first("pact marked with 3 of 4 castles"), first("TransferCity(last,date)")
         self.assertTrue(propose[0] < not_allied < allied < propose[1] < joined < held_out < handover)
+        # Owner decision O-7, before Date: a pact with Ashina is left (a pact of two dissolves), formed again,
+        # then dissolved by a war between the two at the next turn start; peace is forced the turn after.
+        with_ashina = [i for i, code in enumerate(codes) if "JAC_RequestPact('Propose',ashina)" in code]
+        leave, left = first("JAC_RequestPact('Leave',"), first("=='LEFT'")
+        war, dissolved = first("DeclareWarOn(ashina"), first("=='AT_WAR'")
+        self.assertEqual(len(with_ashina), 2)
+        self.assertTrue(first("SetHasAllied(ashina,true)") < with_ashina[0] < leave < left < with_ashina[1] < war
+                        < dissolved < propose[0])
+        self.assertEqual([s["action"] for s in steps[war + 1:dissolved]], ["autoplay"])
+        self.assertIn("MakePeaceWith(ashina,true)", codes[dissolved])
+        self.assertTrue(all(steps[i]["state_name"] == "JAC_UnificationPact" for i in (*with_ashina, leave)))
         # The formed pact is saved and loaded, and its properties are checked again before the handover.
         actions = [step["action"] for step in steps]
         save = actions.index("save")
