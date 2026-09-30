@@ -11,13 +11,13 @@
       <Text>JAC PoC: убийца</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="ja_JP">
-      <Text>日本マップの暗殺者育成・任務・保存の試作。死亡後の四分岐は明示した推奨案で処理。</Text>
+      <Text>日本マップの暗殺者育成・任務・保存の試作。自由都市への分裂、隣国吸収、外交支持による採決、後継者の継承を処理。</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="en_US">
-      <Text>Japan-map training, missions and persistence. Post-death branches use explicit proposed policies.</Text>
+      <Text>Japan-map training, missions and persistence. Leader death uses free cities, weighted neighbours, favor-weighted voting or succession.</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_MOD_DESCRIPTION" Language="ru_RU">
-      <Text>Подготовка, задания и сохранение на картах Японии. После гибели правителя применяются явно предложенные правила.</Text>
+      <Text>Подготовка, задания и сохранение на картах Японии. После гибели правителя: вольные города, поглощение соседом, голосование с дипломатическим влиянием или наследование.</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_NINJA_NAME" Language="ja_JP">
       <Text>暗殺忍者</Text>
@@ -209,13 +209,13 @@
       <Text>Задание убийцы: {1}</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_RESULT_LEADER_FREE_STATE" Language="ja_JP">
-      <Text>指導者死亡。都市とUnitは同じ国の評議会が引き継ぐ。</Text>
+      <Text>指導者死亡。各都市が自由都市へ分裂し、旧軍は解散。</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_RESULT_LEADER_FREE_STATE" Language="en_US">
-      <Text>Leader dead. A council retains the cities and units in the same nation.</Text>
+      <Text>Leader dead. The nation splits into free cities and its army is disbanded.</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_RESULT_LEADER_FREE_STATE" Language="ru_RU">
-      <Text>Правитель погиб. Города и юниты остаются у совета той же страны.</Text>
+      <Text>Правитель погиб. Страна распалась на вольные города, армия распущена.</Text>
     </Row>
     <Row Tag="LOC_JAC_ASN_RESULT_LEADER_ABSORPTION" Language="ja_JP">
       <Text>指導者死亡。隣国へ都市を移管し、旧軍を解散。存命人物は受入国へ加入。</Text>

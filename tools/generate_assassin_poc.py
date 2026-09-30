@@ -14,7 +14,7 @@ MOD_ID = "fbb5219d-d7b9-4b31-884f-057f623476a0"
 MAP_ID = "403be889-1455-4de7-967b-ad54c0ff3431"
 TEXT = {
     "MOD_NAME": ("JAC PoC：暗殺者", "JAC PoC: Assassin", "JAC PoC: убийца"),
-    "MOD_DESCRIPTION": ("日本マップの暗殺者育成・任務・保存の試作。死亡後の四分岐は明示した推奨案で処理。", "Japan-map training, missions and persistence. Post-death branches use explicit proposed policies.", "Подготовка, задания и сохранение на картах Японии. После гибели правителя применяются явно предложенные правила."),
+    "MOD_DESCRIPTION": ("日本マップの暗殺者育成・任務・保存の試作。自由都市への分裂、隣国吸収、外交支持による採決、後継者の継承を処理。", "Japan-map training, missions and persistence. Leader death uses free cities, weighted neighbours, favor-weighted voting or succession.", "Подготовка, задания и сохранение на картах Японии. После гибели правителя: вольные города, поглощение соседом, голосование с дипломатическим влиянием или наследование."),
     "NINJA_NAME": ("暗殺忍者", "Assassin Ninja", "Ниндзя-убийца"),
     "COMMON_NAME": ("暗殺者", "Assassin", "Убийца"),
     "UNIT_DESCRIPTION": ("地図を歩く暗殺者。都市を指定して通常100ターン・最短20ターンで育成。完成後は全国10ターン育成不可。", "An assassin who travels on the map. Train in one city: normally 100 turns, at least 20. After completion, training is locked nationwide for 10 turns.", "Убийца, передвигающийся по карте. Подготовка в одном городе: обычно 100 ходов, минимум 20. После завершения подготовка запрещена во всей стране на 10 ходов."),
@@ -36,7 +36,7 @@ TEXT = {
     "SUCCESSOR": ("後継者", "Successor", "Преемник"),
     "PRODUCED": ("暗殺者の育成が完了。全国の次の育成まで{1}ターン。", "Training complete. Nationwide training unlocks in {1} turns.", "Подготовка завершена. Подготовка во всей стране станет доступна через {1} ходов."),
     "RESULT": ("暗殺任務：{1}", "Assassination mission: {1}", "Задание убийцы: {1}"),
-    "RESULT_LEADER_FREE_STATE": ("指導者死亡。都市とUnitは同じ国の評議会が引き継ぐ。", "Leader dead. A council retains the cities and units in the same nation.", "Правитель погиб. Города и юниты остаются у совета той же страны."),
+    "RESULT_LEADER_FREE_STATE": ("指導者死亡。各都市が自由都市へ分裂し、旧軍は解散。", "Leader dead. The nation splits into free cities and its army is disbanded.", "Правитель погиб. Страна распалась на вольные города, армия распущена."),
     "RESULT_LEADER_ABSORPTION": ("指導者死亡。隣国へ都市を移管し、旧軍を解散。存命人物は受入国へ加入。", "Leader dead. Cities transferred to a neighbor; old units disbanded and surviving people enrolled.", "Правитель погиб. Города переданы соседу; войска распущены, выжившие личности приняты."),
     "RESULT_LEADER_SUCCESSION": ("指導者死亡。登録済みの後継者が同じ国と資産を継承。", "Leader dead. A registered successor inherits the same nation and assets.", "Правитель погиб. Зарегистрированный преемник наследует страну и имущество."),
     "RESULT_GOVERNOR_DEAD_PENDING": ("Governor死亡。既存枠の処理は未確認。", "Governor dead; native-slot handling is unverified.", "Губернатор погиб; обработка штатного слота не проверена."),
@@ -139,7 +139,8 @@ def active():
         "code":"local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"}}
 
 
-def scenarios():
+def build_scenario():
+    """Build without writing, so a test can compare the checked-in JSON with the generator."""
     source=json.loads((ROOT/"tools/civ6-autotest/scenarios/court-arbitration.json").read_text(encoding="utf-8"))
     enable=copy.deepcopy(source["steps"][0])
     enable["ids"]=[i for i in enable["ids"] if i!="4785cfe4-8d9a-4deb-89ea-d2d566551fec"]+[MOD_ID]
@@ -155,13 +156,21 @@ def scenarios():
       end
       assert(found,'unit grant failed'); return found
     end; """
+    equality="""local function Same(a,b)
+      if type(a)~=type(b) then return false end
+      if type(a)~='table' then return a==b end
+      for k,v in pairs(a) do if not Same(v,b[k]) then return false end end
+      for k,v in pairs(b) do if not Same(v,a[k]) then return false end end
+      return true
+    end; """
     steps=[enable,configure,{"action":"start_game","timeout":300},active()]
 
     def check(code, state="GameCore_Tuner"):
-        steps.append(ui(prefix+grant+" ".join(line.strip() for line in code.splitlines()),state))
+        steps.append(ui(prefix+grant+equality+" ".join(line.strip() for line in code.splitlines()),state))
 
-    def advance(n):
-        steps.extend([{"action":"end_turn","turns":n,"timeout":max(180,n*60)},active()])
+    def advance(n=1):
+        # assassin-04: ~150 seconds per human turn on 15 km / 22 houses.
+        steps.extend([{"action":"end_turn","turns":n,"timeout":max(600,n*240)},active()])
 
     def round_trip(name):
         steps.extend([{"action":"save","name":name,"timeout":60},{"action":"exit_to_menu","timeout":60},
@@ -175,12 +184,16 @@ def scenarios():
       assert(a and b,'test houses missing'); assert(not Players[b]:IsHuman(),'target must be AI')
       local city=Players[b]:GetCities():GetCapitalCity(); local u=Grant(a,R.UNIT,city)
       assert(PlayersVisibility[a]:IsRevealed(city:GetX(),city:GetY()),'grant did not reveal capital')
+      local gp=Grant(b,'UNIT_GREAT_GENERAL',city)
+      Players[b]:SetProperty(R.INPUT,{Successors={{Identity='JAC_LIVE_FREE_PERSON',Kind='GREAT_PERSON',Unit=gp:GetID()}}})
+      local assets={}; for _,c in Players[b]:GetCities():Members() do assets[#assets+1]={X=c:GetX(),Y=c:GetY()} end
       local cities={}; for _,c in Players[a]:GetCities():Members() do cities[#cities+1]=c:GetID() end
       table.sort(cities); assert(#cities>=2,'two training cities required')
       Game:SetProperty(R.TEST,1); Players[a]:SetProperty(R.INPUT,{Security=50})
       Players[a]:GetCities():FindID(cities[1]):SetProperty(R.INPUT,nil)
       Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='FREE_STATE'})
-      Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=a,Target=b,Unit=u:GetID(),Cities=cities,Houses=houses,Start=R.Turn()})
+      Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=a,Target=b,Unit=u:GetID(),Cities=cities,Houses=houses,
+        Start=R.Turn(),FreeAssets=assets,FreePersonUnit=gp:GetID(),LossTarget=houses.CIVILIZATION_JAC_IMAGAWA})
       assert(R.CHANCES.LEADER==1 and R.ProductionTurns({})==100 and R.ProductionTurns({Building=1000})==20)
       assert(R.WaitTurns({})==50 and R.WaitTurns({Security=0,Relation=1,School=1,Governor=1,Hero=1,GreatPerson=1})==1)
       return 'base 100/minimum 20; no-return unit grant found by ID delta'
@@ -198,64 +211,88 @@ def scenarios():
       local ok,why=R.StartProduction(t.Actor,t.Cities[2]); assert(not ok and why=='PRODUCING','parallel city')
       local u=Grant(t.Actor,R.UNIT,Players[t.Target]:GetCities():GetCapitalCity())
       local ok,why=R.StartAttempt(t.Actor,u:GetID(),t.Target,'LEADER'); assert(not ok and why=='MISSION_ACTIVE','second unit')
-      t.SecondUnit=u:GetID(); t.Frozen=s.Mission; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
-      Players[t.Actor]:SetProperty(R.INPUT,{Security=100}); return 'separate clocks and saved proposal plan'
+      t.SecondUnit=u:GetID(); t.Frozen=s.Mission; t.CommandUnlock=s.CommandUnlock
+      Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+      Players[t.Actor]:SetProperty(R.INPUT,{Security=100}); return 'separate clocks and saved national plan'
     """)
-    advance(1)
+    advance()
     check("""local s=R.State(t.Actor); assert(R.Turn()==t.Start+1,'end_turn must honor turns')
       assert(s.Production.Due==t.Start+120 and s.Production.Turns==120,'current security did not extend training')
+      t.Dynamic=s.Production; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
       return 'training extended from 100 to 120 on the next turn'""")
     round_trip("JAC-Assassin-Dynamic")
     check("""
-      local s=R.State(t.Actor); assert(s.Production.Start==t.Start and s.Production.Due==t.Start+120,'training lost on load')
-      assert(s.Mission,'mission lost'); for _,k in ipairs({'Start','Due','Success','Detected','SuccessRoll','DetectionRoll','BranchRoll','Branch'}) do
-        assert(s.Mission[k]==t.Frozen[k],'rerolled '..k)
-      end
-      assert(s.Mission.PostDeathPlan.Policy.FreeState=='SAME_SLOT_COUNCIL','plan lost')
-      Players[t.Actor]:SetProperty(R.INPUT,{Security=0}); return 'load retains start, speed, inputs and frozen result'
+      local s=R.State(t.Actor); assert(Same(s.Production,t.Dynamic),'training lost on load')
+      assert(s.Production.Start==t.Start and s.Production.Due==t.Start+120,'training clocks lost')
+      assert(Same(s.Mission,t.Frozen),'mission snapshot/SuccessRoll/DetectionRoll/BranchRoll rerolled')
+      assert(s.Mission.PostDeathPlan.Policy.FreeState=='ENGINE_FREE_CITIES','plan lost')
+      assert(s.CommandUnlock==t.CommandUnlock,'command wait lost')
+      Players[t.Actor]:SetProperty(R.INPUT,{Security=0}); return 'load retains all training and mission fields'
     """)
-    advance(9)
+    advance()
     check("""
-      local s=R.State(t.Actor); assert(R.Turn()==t.Start+10,'turn count')
+      local s=R.State(t.Actor); assert(R.Turn()==t.Start+2,'turn count')
       assert(s.Production.Due==t.Start+80 and s.Production.Turns==80,'current security did not shorten training')
-      local n=R.Nation(t.Target); assert(s.LastMission.Result=='LEADER_FREE_STATE' and n.State=='FREE_STATE','council not installed')
-      assert(n.LeaderDead==1 and n.DeathTurn==t.Frozen.Due and n.Government=='COUNCIL' and n.DecisionRequired==nil)
-      assert(n.Slot=='RETAINED' and Players[t.Target]:IsAlive(),'council slot')
-      local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait')
-      return 'council governs same nation; completion moved to 80'
+      assert(s.Production and s.Mission and s.LastCompletion==nil,'premature result')
+      assert(R.TestAdvanceDeadlines(t.Actor,{Training=true,Mission=true}))
+      local accelerated=R.State(t.Actor); t.FastDue=R.Turn()+1; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+      assert(accelerated.Production.Due==t.FastDue and accelerated.Mission.Due==t.FastDue,'test deadlines not saved')
+      assert(accelerated.Production.Start==t.Start and accelerated.Production.Turns==80,'hook changed training rule')
+      assert(accelerated.CommandUnlock==s.CommandUnlock and accelerated.Mission.SuccessRoll==s.Mission.SuccessRoll,'hook changed outcome/wait')
+      return 'normal 80-turn deadline verified; test-only training and mission deadlines shortened'
     """)
-    advance(69)
-    check("""assert(R.Turn()==t.Start+79,'wrong training boundary'); assert(R.State(t.Actor).Production,'completed before 80')
-      return 'dynamic training remains active at 79'""")
-    advance(1)
+    advance()
     check("""
-      local s=R.State(t.Actor); assert(s.Production==nil and s.LastCompletion==t.Start+80,'80-turn completion')
+      local s=R.State(t.Actor); local n=R.Nation(t.Target)
+      assert(R.Turn()==t.FastDue and s.Mission==nil and s.LastMission.Result=='LEADER_FREE_STATE','mission result')
+      assert(n.State=='FREE_STATE' and n.LeaderDead==1 and n.DeathTurn==t.FastDue and n.Government=='FREE_CITIES')
+      assert(n.Slot=='RETIRED' and n.AI=='FREE_CITIES_ENGINE' and not Players[t.Target]:IsAlive(),'free-city old slot')
+      assert(Players[t.Target]:GetCities():GetCount()==0 and Players[t.Target]:GetUnits():GetCount()==0,'old assets remain')
+      local free=PlayerManager.GetFreeCitiesPlayerID(); assert(n.FreeCitiesPlayer==free and Players[free]:GetCities():GetCount()>0,'free cities absent')
+      for _,c in ipairs(t.FreeAssets) do local actual=CityManager.GetCityAt(c.X,c.Y)
+        assert(actual and actual:GetOwner()==free,'city did not become free') end
+      assert(n.People.JAC_LIVE_FREE_PERSON.Role=='UNAFFILIATED' and n.People.JAC_LIVE_FREE_PERSON.Unit==nil,'free person not archived')
+      assert(n.People.JAC_LIVE_FREE_PERSON.SourceUnit==t.FreePersonUnit,'free person identity lost')
+      local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait')
+      assert(s.Production==nil and s.LastCompletion==t.FastDue and Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'training not processed')
       assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin')
-      assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'trained unit absent')
       for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK') end
       R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock')
-      t.Completion=s.LastCompletion; t.Lock=s.ProductionUnlock; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
-      return '80-turn dynamic completion; nationwide 10-turn lock'
+      t.Completion=s.LastCompletion; t.Lock=s.ProductionUnlock; t.FreeNation=n; t.LockState=R.State(t.Actor)
+      Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'real turn creates free cities and trained unit; nationwide 10-turn lock'
     """)
     round_trip("JAC-Assassin-Lock")
-    check("""local s=R.State(t.Actor); assert(s.LastCompletion==t.Completion and s.ProductionUnlock==t.Lock,'lock lost')
-      assert(R.Nation(t.Target).State=='FREE_STATE','council lost'); return 'nation and lock survive load'""")
-    advance(9)
-    check("""assert(R.Turn()==t.Lock-1,'wrong lock boundary'); local ok,why=R.StartProduction(t.Actor,t.Cities[2])
-      assert(not ok and why=='PRODUCTION_LOCK','unlocked early'); return 'completion+9 locked'""")
-    advance(1)
-    check("""assert(R.Turn()==t.Lock,'wrong unlock boundary'); Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000})
-      assert(R.StartProduction(t.Actor,t.Cities[2])); t.MinStart=R.Turn(); Game:SetProperty('JAC_ASN_LIVE_TEST',t)
-      return 'completion+10 unlocked; 20-turn training begins'""")
-    advance(19)
-    check("""assert(R.Turn()==t.MinStart+19 and R.State(t.Actor).Production,'minimum violated'); return 'minimum+19 active'""")
-    advance(1)
-    check("""local s=R.State(t.Actor); assert(s.LastCompletion==t.MinStart+20 and s.Production==nil,'minimum completion')
+    check("""
+      local s=R.State(t.Actor); assert(Same(s,t.LockState),'lock/state lost')
+      assert(Same(R.Nation(t.Target),t.FreeNation),'free-city history or people lost')
+      assert(not Players[t.Target]:IsAlive(),'load resurrected retired slot')
+      for _,c in ipairs(t.FreeAssets) do local actual=CityManager.GetCityAt(c.X,c.Y)
+        assert(actual and actual:GetOwner()==t.FreeNation.FreeCitiesPlayer,'load lost free city') end
+      local ok,why=R.CanProduce(s,t.Lock-1); assert(not ok and why=='PRODUCTION_LOCK','completion+9 boundary')
+      assert(R.CanProduce(s,t.Lock),'completion+10 boundary')
+      assert(R.TestAdvanceDeadlines(t.Actor,{ProductionLock=true,CommandLock=true}))
+      t.FastLock=R.Turn()+1; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+      for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK','shortened lock early') end
+      return 'saved original +9/+10 boundaries verified; shortened nationwide locks still reject before deadline'
+    """)
+    advance()
+    check("""
+      assert(R.Turn()==t.FastLock,'wrong shortened unlock boundary')
+      Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000})
+      assert(R.StartProduction(t.Actor,t.Cities[2])); local s=R.State(t.Actor)
+      t.MinStart=R.Turn(); assert(s.Production.Start==t.MinStart and s.Production.Turns==20 and s.Production.Due==t.MinStart+20,'minimum rule')
+      assert(s.LastCompletion==t.Completion,'minimum completed early')
+      assert(R.TestAdvanceDeadlines(t.Actor,{Training=true}))
+      Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'nationwide unlock permits other city; normal minimum 20 verified before acceleration'
+    """)
+    advance()
+    check("""local s=R.State(t.Actor); assert(s.LastCompletion==t.MinStart+1 and s.Production==nil,'shortened minimum completion')
+      assert(s.ProductionUnlock==s.LastCompletion+10,'second nationwide lock')
+      assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'second trained unit absent')
       Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil)
-      return 'minimum 20 and second nationwide lock verified'""")
+      return 'real turn completes second training and starts a new full 10-turn lock'""")
 
-    # Each subsequent fixture clears only the actor wait, then uses real StartAttempt/Tick.
-    # They use separate AI nations so a prior death is never undone for a new test.
+    # All branch plans freeze at command; only deadlines are accelerated.
     for branch,house in (("SUCCESSION","IMAGAWA"),("ABSORPTION","ASAKURA"),("CONGRESS","ASHIKAGA")):
         check("""
           local b=t.Houses.CIVILIZATION_JAC_"""+house+"""; assert(b and Players[b]:IsAlive() and not Players[b]:IsHuman(),'branch target')
@@ -266,25 +303,57 @@ def scenarios():
           input.Successors={{Identity='JAC_LIVE_HEIR',Kind='GREAT_PERSON',Unit=gp:GetID(),Kin=0}}
           t.HeirUnit=gp:GetID()
         """ if branch=="SUCCESSION" else "")+("""
-          local votes={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do votes[tostring(p:GetID())]='FREE_STATE' end
+          input.Successor={Identity='JAC_LIVE_ABSORBED_PERSON',Kind='PERSON'}
+        """ if branch=="ABSORPTION" else "")+("""
+          local votes={}; t.FavorBefore={}; local count=0
+          for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+            local id=p:GetID(); local diplo=p:GetDiplomacy(); local favor=diplo:GetFavor()
+            t.FavorBefore[tostring(id)]=favor; diplo:ChangeFavor(-favor)
+            assert(diplo:GetFavor()==0,'favor reset'); votes[tostring(id)]='FREE_STATE'; count=count+1
+          end
+          assert(count>2,'favor fixture requires opposing majority')
+          Players[t.Actor]:GetDiplomacy():ChangeFavor(100000); votes[tostring(t.Actor)]='SUCCESSION'
+          input.Successor={Identity='JAC_LIVE_VOTE_HEIR',Kind='PERSON'}
           input.Congress={Enabled=true,Votes=votes}
         """ if branch=="CONGRESS" else "")+"""
           Players[b]:SetProperty(R.INPUT,input)
-          local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s)
+          local s=R.State(t.Actor); assert(s.Mission==nil and R.CanCommand(s,R.Turn()),'branch wait not expired')
           Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='"""+branch+"""'})
           assert(R.StartAttempt(t.Actor,u:GetID(),b,'LEADER')); local m=R.State(t.Actor).Mission
           assert(m.Due==R.Turn()+5,'grant is outside the near-distance band')
-          t.BranchTarget=b; t.BranchDue=m.Due; t.BranchPlan=m.PostDeathPlan
+          t.BranchTarget=b; t.BranchPlan=m.PostDeathPlan; t.BranchSnapshot=m.Snapshot
           t.BranchAssets={}; for _,c in Players[b]:GetCities():Members() do t.BranchAssets[#t.BranchAssets+1]={X=c:GetX(),Y=c:GetY()} end
-          if m.Branch=='CONGRESS' then input.Congress.Votes={}; Players[b]:SetProperty(R.INPUT,input) end
-          Game:SetProperty('JAC_ASN_LIVE_TEST',t); return '"""+branch+""" proposal frozen at command'
+        """+("""
+          local x=m.Snapshot.Selection; local best,score
+          for _,n in ipairs(m.Snapshot.Neighbors) do
+            assert(n.Strength==n.Cities+n.Military/x.MilitaryPerCity,'strength input')
+            local f={Strength=n.Strength/math.max(1,x.MaxStrength),Friendship=n.Friendship,
+              Border=n.Border and n.Border/math.max(1,x.MaxBorder),Distance=math.max(0,1-n.Distance/x.NeighborDistance),
+              Religion=n.Religion,Culture=n.Culture}
+            local sum,total=0,0
+            for _,key in ipairs({'Strength','Friendship','Border','Distance','Religion','Culture'}) do
+              if f[key]~=nil then sum=sum+x.Weights[key]*f[key]; total=total+x.Weights[key] end
+            end
+            local actual=sum/total; assert(math.abs(actual-n.Score)<0.000001,'receiver formula')
+            if not score or actual>score or (actual==score and n.Player<best) then best,score=n.Player,actual end
+          end
+          assert(best and m.PostDeathPlan.Recipient==best,'receiver choice not maximum score')
+        """ if branch=="ABSORPTION" else "")+("""
+          local plan=m.PostDeathPlan; local ballot=plan.Ballots[tostring(t.Actor)]
+          assert(ballot.Favor==100000 and ballot.Weight>plan.Tally.FREE_STATE,'favor did not outweigh majority')
+          assert(plan.Tally.SUCCESSION==ballot.Weight and plan.Resolution=='SUCCESSION' and plan.Voting=='FAVOR_WEIGHTED_EQUIVALENT','favor ballot')
+          Players[t.Actor]:GetDiplomacy():ChangeFavor(-100000)
+          input.Congress.Votes={}; Players[b]:SetProperty(R.INPUT,input)
+        """ if branch=="CONGRESS" else "")+"""
+          assert(R.TestAdvanceDeadlines(t.Actor,{Mission=true,CommandLock=true})); t.BranchDue=R.Turn()+1
+          assert(Same(R.State(t.Actor).Mission.PostDeathPlan,t.BranchPlan),'hook changed plan')
+          Game:SetProperty('JAC_ASN_LIVE_TEST',t); return '"""+branch+""" plan frozen; real next turn resolves it'
         """)
-        # Grant is at most one tile from the capital, so the base leader duration is five.
-        advance(5)
+        advance()
         check("""
           local s=R.State(t.Actor); local n=R.Nation(t.BranchTarget)
           assert(s.Mission==nil and n and n.Branch=='"""+branch+"""' and n.DecisionRequired==nil,'branch unresolved')
-          assert(n.DeathTurn==t.BranchDue,'wrong resolution turn')
+          assert(n.DeathTurn==t.BranchDue and Same(n.Plan,t.BranchPlan) and Same(n.Snapshot,t.BranchSnapshot),'frozen plan changed')
         """+("""
           assert(n.State=='SUCCESSION' and n.CurrentLeader=='JAC_LIVE_HEIR' and n.Slot=='RETAINED')
           assert(Players[t.BranchTarget]:GetUnits():FindID(t.HeirUnit)==nil,'GP occupies two roles')
@@ -292,20 +361,29 @@ def scenarios():
         """ if branch=="SUCCESSION" else "")+("""
           assert(n.State=='ABSORPTION' and n.Recipient==t.BranchPlan.Recipient,'wrong recipient')
           assert(Players[t.BranchTarget]:GetCities():GetCount()==0 and Players[t.BranchTarget]:GetUnits():GetCount()==0,'old assets remain')
-          assert(not Players[t.BranchTarget]:IsAlive(),'empty native slot still active: requires engine adapter')
+          assert(not Players[t.BranchTarget]:IsAlive(),'empty native slot still active')
           for _,c in ipairs(t.BranchAssets) do local actual=CityManager.GetCityAt(c.X,c.Y)
             assert(actual and actual:GetOwner()==n.Recipient,'city transfer failed') end
+          assert(Players[n.Recipient]:GetProperty(R.PEOPLE).JAC_LIVE_ABSORBED_PERSON.Role=='MEMBER','living person not joined')
           assert(n.Slot=='RETIRED' and n.AI=='RECIPIENT_SLOT','old AI retained')
         """ if branch=="ABSORPTION" else "")+("""
-          assert(n.State=='FREE_STATE' and n.Plan.Resolution=='FREE_STATE' and n.Plan.Tally.FREE_STATE>0,'ballot changed')
-          assert(Players[t.BranchTarget]:IsAlive(),'Congress council eliminated')
+          assert(n.State=='SUCCESSION' and n.Plan.Resolution=='SUCCESSION' and n.CurrentLeader=='JAC_LIVE_VOTE_HEIR','favor/ballot changed')
+          assert(n.Plan.Tally.SUCCESSION>n.Plan.Tally.FREE_STATE and Players[t.BranchTarget]:IsAlive(),'favor-weighted vote failed')
+          for id,favor in pairs(t.FavorBefore) do local diplo=Players[tonumber(id)]:GetDiplomacy()
+            diplo:ChangeFavor(favor-diplo:GetFavor()) end
         """ if branch=="CONGRESS" else "")+"""return '"""+branch+""" city/unit/leader/slot consequences verified'""")
 
-    for success,detected in ((1,0),(1,1),(0,0),(0,1)):
+    for index,(success,detected) in enumerate(((1,0),(1,1),(0,0),(0,1))):
+        if index:
+            check("""assert(R.TestAdvanceDeadlines(t.Actor,{CommandLock=true}))
+              t.LossWait=R.Turn()+1; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+              local ok,why=R.CanCommand(R.State(t.Actor),R.Turn()); assert(not ok and why=='COMMAND_LOCK')
+              return 'next fixture waits one real turn for shortened nationwide command lock'""")
+            advance()
         check("""
-          local b=t.Target; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital')
+          local b=t.LossTarget; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital')
           local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city)
-          local s=R.State(t.Actor); assert(s.Mission==nil); s.CommandUnlock=R.Turn(); Players[t.Actor]:SetProperty(R.STATE,s)
+          local s=R.State(t.Actor); assert(s.Mission==nil and R.CanCommand(s,R.Turn()),'loss command wait')
           Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success="""+str(success)+",Detected="+str(detected)+"""})
           assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID()))
           local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {}
@@ -313,59 +391,68 @@ def scenarios():
           t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0
           t.LossCommandUnlock=R.State(t.Actor).CommandUnlock
           t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0
-          UnitManager.Kill(u); Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+          UnitManager.Kill(u); assert(R.TestAdvanceDeadlines(t.Actor,{Mission=true}))
+          assert(R.State(t.Actor).CommandUnlock==t.LossCommandUnlock,'hook changed lost-actor wait')
+          Game:SetProperty('JAC_ASN_LIVE_TEST',t)
           return 'lost-actor fixture with success="""+str(success)+", detected="+str(detected)+"""'
         """)
-        advance(2)
+        advance()
         check("""
-          local s=R.State(t.Actor); local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+          local s=R.State(t.Actor); local ledger=Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1')
           assert(s.LastMission.ID==t.LossMission.ID and s.LastMission.Result=='ACTOR_GONE' and s.LastMission.Cancelled,'ghost result')
-          assert(Players[t.Target]:GetUnits():FindID(t.LossVictim),'ghost success killed target')
+          assert(Players[t.LossTarget]:GetUnits():FindID(t.LossVictim),'ghost success killed target')
           assert(ledger.Grievances[tostring(t.Actor)]==t.LossGrievances+25 and ledger.Friendship[tostring(t.Actor)]==t.LossFriendship-10,'fixed penalty')
           assert((ledger.WarReason or {})[tostring(t.Actor)]==nil,'ghost detection')
           for _,p in ipairs(PlayerManager.GetAliveMajors()) do assert(p:GetProperty('JAC_ASN_DENOUNCE_'..t.Actor)==nil,'ghost denunciation') end
           local before=ledger.Grievances[tostring(t.Actor)]; R.Tick()
-          assert(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty')
+          assert(Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances[tostring(t.Actor)]==before,'duplicate penalty')
           assert(s.CommandUnlock==t.LossCommandUnlock,'wait changed')
-          return 'all outcomes cancelled; fixed penalty once; nationwide wait retained'
+          return 'all outcomes cancelled; fixed penalty once; original nationwide wait retained'
         """)
     check("""
-      local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+      local ledger=Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1')
       local s=R.State(t.Actor); assert(s.LastMission.Result=='ACTOR_GONE')
       t.FinalGrievances=ledger.Grievances[tostring(t.Actor)]; t.FinalFriendship=ledger.Friendship[tostring(t.Actor)]
       t.FinalApplied=ledger.Applied; t.FinalMissionID=s.LastMission.ID; t.FinalWait=s.CommandUnlock
-      Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'pre-save penalty and applied mission expectations recorded'
+      t.FinalNations=Game:GetProperty(R.NATIONS); t.FinalState=s
+      Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'full national histories, state, penalties and applied missions recorded before save'
     """)
     round_trip("JAC-Assassin-Outcomes")
     check("""
-      local h=t.Houses
-      assert(R.Nation(t.Target).State=='FREE_STATE','council lost')
-      assert(R.Nation(h.CIVILIZATION_JAC_IMAGAWA).CurrentLeader=='JAC_LIVE_HEIR','successor lost')
-      assert(R.Nation(h.CIVILIZATION_JAC_ASAKURA).State=='ABSORPTION','absorption history lost')
-      assert(R.Nation(h.CIVILIZATION_JAC_ASHIKAGA).Branch=='CONGRESS','ballot history lost')
-      local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+      assert(Same(Game:GetProperty(R.NATIONS),t.FinalNations),'load changed national histories/people/plans')
+      local ledger=Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1')
       assert(ledger.Grievances[tostring(t.Actor)]==t.FinalGrievances and ledger.Friendship[tostring(t.Actor)]==t.FinalFriendship,'load changed penalties')
       for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'load lost applied mission') end
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'load added applied mission') end
-      local s=R.State(t.Actor); assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE','cancelled result lost')
-      assert(s.CommandUnlock==t.FinalWait,'load changed wait'); R.Tick()
-      return 'four branches, cancelled result and pre-save penalty expectations survive load'
+      local s=R.State(t.Actor); assert(Same(s,t.FinalState),'load changed state')
+      assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE' and s.CommandUnlock==t.FinalWait,'load changed result or wait')
+      R.Tick(); return 'all branch histories, cancelled results and pre-save penalties survive load'
     """)
-    advance(1)
+    advance()
     check("""
-      local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+      assert(Same(Game:GetProperty(R.NATIONS),t.FinalNations),'next turn changed national histories')
+      local ledger=Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1')
       assert(ledger.Grievances[tostring(t.Actor)]==t.FinalGrievances and ledger.Friendship[tostring(t.Actor)]==t.FinalFriendship,'next turn repeated penalties')
       for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'next turn lost applied mission') end
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'next turn added applied mission') end
-      local s=R.State(t.Actor); assert(s.LastMission.ID==t.FinalMissionID and s.CommandUnlock==t.FinalWait,'next turn changed result or wait')
+      local s=R.State(t.Actor); assert(Same(s,t.FinalState),'next turn changed state')
+      assert(s.LastMission.ID==t.FinalMissionID and s.CommandUnlock==t.FinalWait,'next turn changed result or wait')
+      assert(not Players[t.Target]:IsAlive() and not Players[t.Houses.CIVILIZATION_JAC_ASAKURA]:IsAlive(),'retired slot resurrected')
+      assert(R.Turn()-t.Start<=20,'scenario exceeded live turn budget')
       Game:SetProperty(R.TEST,nil); Players[t.Actor]:SetProperty(R.INPUT,nil)
-      return 'next turn leaves penalties and applied missions unchanged; test mode disabled'
+      local ok,why=R.TestAdvanceDeadlines(t.Actor); assert(not ok and why=='TEST_MODE_OFF','hook active outside test mode')
+      assert(Same(R.State(t.Actor),s),'disabled hook changed saved state')
+      return 'next turn cannot repeat effects; test mode disabled; hook inert; at most 20 end_turns'
     """)
-    data={"name":"Assassin: dynamic 100/120/80/20 training, four proposed death outcomes, lost-actor penalties, three save/load cycles",
-          "judge_profile":"japan_map","steps":steps}
-    path=ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json"
-    path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    turns=sum(s.get("turns",1) for s in steps if s["action"]=="end_turn")
+    assert turns==16, f"unexpected live turn budget: {turns}"
+    return {"name":"Assassin: 16 live turns, dynamic 100/120/80/20 training, decided death outcomes, favor vote, lost actors, three save/load cycles",
+            "judge_profile":"japan_map","steps":steps}
 
+
+def scenarios():
+    path=ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json"
+    path.write_text(json.dumps(build_scenario(),ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
 
 if __name__ == "__main__":
     packaging()

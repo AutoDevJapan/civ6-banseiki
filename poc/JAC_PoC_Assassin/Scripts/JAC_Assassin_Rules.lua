@@ -25,6 +25,10 @@ R.PROVISIONAL = {
   ChanceSecurityDivisor=100, ChanceRelation=0.25, ChanceGuard=0.5,
   BranchBase=100, BranchSecurity=1, BranchUnrest=1, BranchStrength=100, BranchRelation=25,
   NeighborDistance=6,
+  RecipientMilitaryPerCity=100,
+  RecipientWeights={Strength=35,Friendship=25,Border=15,Distance=15,Religion=5,Culture=5},
+  CongressFreeVotes=1, CongressFavorStep=10,
+  CongressDefaultBallot="ALLY_SUCCESSOR_RECIPIENT_ABSORPTION_OTHER_FREE",
   ProductionBuilding=10, ProductionDistrict=10, ProductionPolicy=10,
   ProductionGovernment=10, ProductionTrait=15, ProductionJob=15, ProductionRelation=10,
   WaitSecurity=10, WaitRelation=10, WaitSchool=10, WaitGovernor=7, WaitHero=6, WaitGreatPerson=6,
@@ -33,11 +37,11 @@ R.PROVISIONAL = {
   Visibility="REVEALED_CITY_VISIBLE_UNIT", -- OWNER_UNDECIDED: do not disclose hidden units
   Weights={ FREE_STATE=1, ABSORPTION=1, CONGRESS=1, SUCCESSION=1 },
 }
--- Owner answers, 2026-09-30 (SSOT 9.5). Q75 recommendations remain reviewable proposals.
+-- Owner answers, 2026-09-30 / 2026-10-01 (SSOT 9.5). Numeric coefficients remain provisional.
 R.DECISIONS={Snapshot="COMMAND",TrainingModifiers="EVERY_TURN",
   ActorLoss="CANCEL_ALL_RESULTS_FIXED_PENALTY",AllowNonWarTargets=true}
-R.POST_DEATH={FreeState="SAME_SLOT_COUNCIL",Absorption="STRONGEST_NEIGHBOR_DISBAND",
-  Congress="ONE_MAJOR_ONE_VOTE",Succession="KIN_FIRST_SINGLE_ROLE",
+R.POST_DEATH={FreeState="ENGINE_FREE_CITIES",Absorption="WEIGHTED_NEIGHBOR_DISBAND",
+  Congress="FAVOR_WEIGHTED_JAPAN_BALLOT",Succession="KIN_FIRST_SINGLE_ROLE",
   MissingRecipient="FREE_STATE",MissingSuccessor="FREE_STATE",CongressTie="FREE_STATE"}
 R.SPEEDS={ GAMESPEED_ONLINE=0.5, GAMESPEED_QUICK=0.67, GAMESPEED_STANDARD=1,
            GAMESPEED_EPIC=1.5, GAMESPEED_MARATHON=3 }
@@ -107,6 +111,24 @@ function R.CanCommand(s, turn)
   if turn < (s.CommandUnlock or -1) then return false,"COMMAND_LOCK" end
   return true
 end
+function R.RecipientScore(n,selection)
+  local f={Strength=n.Strength/math.max(1,selection.MaxStrength),Friendship=n.Friendship,
+    Border=n.Border and n.Border/math.max(1,selection.MaxBorder) or nil,
+    Distance=R.Clamp(1-n.Distance/selection.NeighborDistance,0,1),Religion=n.Religion,Culture=n.Culture}
+  local score,weight=0,0
+  for _,key in ipairs({"Strength","Friendship","Border","Distance","Religion","Culture"}) do
+    if f[key]~=nil then
+      score=score+selection.Weights[key]*f[key]; weight=weight+selection.Weights[key]
+    end
+  end
+  return score/weight,f,weight
+end
+function R.FavorVotes(favor)
+  -- Equivalent budget weighting, not a native Congress operation. First vote free;
+  -- extra votes have increasing provisional costs 10,20,30,... (total step*k*(k+1)/2).
+  local step=R.PROVISIONAL.CongressFavorStep
+  return R.PROVISIONAL.CongressFreeVotes+math.floor((math.sqrt(1+8*math.max(0,favor)/step)-1)/2)
+end
 function R.BranchWeights(snapshot)
   local p=R.PROVISIONAL; local weights=p.Weights
   local security=R.Clamp(snapshot.Security or 50,0,100)
@@ -173,6 +195,8 @@ function R.RefreshTraining(id,p,city,turn)
   p.Speed=p.Speed or R.Speed() -- migration of the earlier PoC save format
   p.Turns=R.ProductionTurns(R.ProductionInput(id,city),p.Speed)
   p.Due=p.Start+p.Turns
+  -- A saved test deadline survives reload and every-turn recomputation. Normal games ignore it.
+  if Game:GetProperty(R.TEST)==1 and p.TestDue then p.Due=math.min(p.Due,p.TestDue) end
   p.EvaluatedTurn=turn
 end
 function R.CommandInput(id,target)

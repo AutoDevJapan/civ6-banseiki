@@ -6,12 +6,12 @@ assert(R.DECISIONS.TrainingModifiers=="EVERY_TURN","JAC_ASN: training policy not
 assert(R.DECISIONS.Snapshot=="COMMAND","JAC_ASN: snapshot policy not implemented")
 assert(R.PROVISIONAL.FailureDisposition=="DEATH","JAC_ASN: captivity rules not implemented")
 assert(R.DECISIONS.ActorLoss=="CANCEL_ALL_RESULTS_FIXED_PENALTY","JAC_ASN: actor loss policy not implemented")
-assert(R.POST_DEATH.FreeState=="SAME_SLOT_COUNCIL" and
-  R.POST_DEATH.Absorption=="STRONGEST_NEIGHBOR_DISBAND" and
-  R.POST_DEATH.Congress=="ONE_MAJOR_ONE_VOTE" and
+assert(R.POST_DEATH.FreeState=="ENGINE_FREE_CITIES" and
+  R.POST_DEATH.Absorption=="WEIGHTED_NEIGHBOR_DISBAND" and
+  R.POST_DEATH.Congress=="FAVOR_WEIGHTED_JAPAN_BALLOT" and
   R.POST_DEATH.Succession=="KIN_FIRST_SINGLE_ROLE" and
   R.POST_DEATH.MissingRecipient=="FREE_STATE" and R.POST_DEATH.MissingSuccessor=="FREE_STATE" and
-  R.POST_DEATH.CongressTie=="FREE_STATE","JAC_ASN: post-death proposal not implemented")
+  R.POST_DEATH.CongressTie=="FREE_STATE","JAC_ASN: post-death decision not implemented")
 local function Log(s) print("[JAC_ASN] "..s) end
 local function Save(id,s)
   Players[id]:SetProperty(R.STATE,s)
@@ -65,6 +65,20 @@ end
 function R.CancelProduction(id)
   local s=R.State(id); s.Production=nil; Save(id,s)
   -- Cancellation never clears the nationwide completion lock; elapsed progress is discarded.
+end
+function R.TestAdvanceDeadlines(id,clocks)
+  if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
+  if not Players[id] then return false,"TARGET_GONE" end
+  local s=R.State(id); local due=R.Turn()+1
+  local function selected(key) return clocks==nil or clocks[key]==true end
+  if selected("Training") and s.Production then
+    s.Production.TestDue=math.min(s.Production.Due,due); s.Production.Due=s.Production.TestDue
+  end
+  if selected("Mission") and s.Mission then s.Mission.Due=math.min(s.Mission.Due,due) end
+  if selected("ProductionLock") and s.ProductionUnlock then s.ProductionUnlock=math.min(s.ProductionUnlock,due) end
+  if selected("CommandLock") and s.CommandUnlock then s.CommandUnlock=math.min(s.CommandUnlock,due) end
+  Save(id,s) -- no Tick / grant / resolution here: the real next turn processes the saved clocks
+  return true,due
 end
 local function Copy(v)
   if type(v)~="table" then return v end
@@ -131,33 +145,105 @@ local function Candidates(target)
   end)
   return valid
 end
+local function Allied(a,b)
+  -- Gameplay getter, unlike the UI-only GetAllianceType. Official VikingScenario.lua:77.
+  return Players[a]:GetDiplomacy():HasAllied(b)
+end
+local function Religion(id)
+  local player=Players[id]
+  local religion=player.GetReligion and player:GetReligion()
+  local value=religion and religion.GetReligionInMajorityOfCities and religion:GetReligionInMajorityOfCities()
+  local row=type(value)=="number" and value>=0 and GameInfo.Religions and GameInfo.Religions[value]
+  -- Generic pantheons are not a shared majority religion (Religions.xml:38).
+  if row and row.Pantheon~=true and row.Pantheon~=1 then return value end
+end
+local function Culture(id)
+  -- A supplied cultural group takes precedence over the provisional ethnicity proxy.
+  local group=R.Input(Players[id]).CultureGroup
+  local civ=GameInfo.Civilizations and GameInfo.Civilizations[PlayerConfigurations[id]:GetCivilizationTypeName()]
+  group=group or (civ and civ.Ethnicity)
+  return group~="" and group or nil
+end
+local function Borders(target)
+  if not Map.GetPlotCount or not Map.GetPlotByIndex or not Map.GetAdjacentPlots then return nil end
+  local borders={}
+  for i=0,Map.GetPlotCount()-1 do
+    local plot=Map.GetPlotByIndex(i)
+    if plot:GetOwner()==target then
+      -- Official gameplay enumeration: PiratesScenario_Shared_Script.lua:159,161.
+      for _,other in ipairs(Map.GetAdjacentPlots(plot:GetX(),plot:GetY())) do
+        local owner=other:GetOwner()
+        if owner and owner>=0 and owner~=target then borders[owner]=(borders[owner] or 0)+1 end
+      end
+    end
+  end
+  return borders
+end
 local function Snapshot(target)
   local input=R.Input(Players[target]); local neighbors={}
   local targetCities=Players[target]:GetCities()
+  local borders=Borders(target)
+  local religion,culture=Religion(target),Culture(target)
+  local selection={Weights=Copy(R.PROVISIONAL.RecipientWeights),
+    MilitaryPerCity=R.PROVISIONAL.RecipientMilitaryPerCity,NeighborDistance=R.PROVISIONAL.NeighborDistance,
+    MaxStrength=1,MaxBorder=1}
   for _,id in ipairs(Majors()) do
     if id~=target then
-      local close=false
+      local distance=math.huge
       for _,a in targetCities:Members() do for _,b in Players[id]:GetCities():Members() do
-        if Map.GetPlotDistance(a:GetX(),a:GetY(),b:GetX(),b:GetY())<=R.PROVISIONAL.NeighborDistance then close=true end
+        distance=math.min(distance,Map.GetPlotDistance(a:GetX(),a:GetY(),b:GetX(),b:GetY()))
       end end
-      if close then neighbors[#neighbors+1]={Player=id,Cities=Players[id]:GetCities():GetCount(),
-        Relation=R.Relation(target,id)} end
+      local border=borders and (borders[id] or 0)
+      if (border and border>0) or distance<=selection.NeighborDistance then
+        local player=Players[id]; local relation=R.Relation(target,id)
+        local stats=player.GetStats and player:GetStats()
+        local military=stats and stats.GetMilitaryStrength and stats:GetMilitaryStrength() or 0
+        local cities=player:GetCities():GetCount()
+        local otherReligion,otherCulture=Religion(id),Culture(id)
+        local n={Player=id,Cities=cities,Military=military,Strength=cities+military/selection.MilitaryPerCity,
+          Relation=relation,Allied=Allied(target,id),Border=border,Distance=distance,
+          MajorityReligion=otherReligion,CultureGroup=otherCulture,
+          Religion=religion and otherReligion and (religion==otherReligion and 1 or 0),
+          Culture=culture and otherCulture and (culture==otherCulture and 1 or 0)}
+        n.Friendship=relation>=1 and 0 or (n.Allied and 1 or (1-relation)/2)
+        selection.MaxStrength=math.max(selection.MaxStrength,n.Strength)
+        selection.MaxBorder=math.max(selection.MaxBorder,border or 0)
+        neighbors[#neighbors+1]=n
+      end
     end
   end
+  for _,n in ipairs(neighbors) do n.Score,n.Components,n.AvailableWeight=R.RecipientScore(n,selection) end
   table.sort(neighbors,function(a,b)
-    if a.Cities~=b.Cities then return a.Cities>b.Cities end
-    if a.Relation~=b.Relation then return a.Relation<b.Relation end
+    if a.Score~=b.Score then return a.Score>b.Score end
     return a.Player<b.Player
   end)
   local candidates=Candidates(target)
-  -- This PoC loads only on Japan maps, where there is no Congress. A test-only ballot
-  -- provider exercises the otherwise unreachable branch, without inventing a Court.
-  local congress=Game:GetProperty(R.TEST)==1 and input.Congress and input.Congress.Enabled==true
+  -- Japan disables CAPABILITY_WORLD_CONGRESS. Owner-approved equivalent uses native
+  -- diplomacy Favor in gameplay (Debug/Player.ltp:694), without opening a native session.
+  local congress=not input.Congress or input.Congress.Enabled~=false
+  local recipient=neighbors[1] and neighbors[1].Player
+  local votes,ballots={},{}
+  if congress then
+    for _,voter in ipairs(Majors()) do
+      local choice=((input.Congress or {}).Votes or {})[tostring(voter)]
+      if choice==nil then
+        assert(R.PROVISIONAL.CongressDefaultBallot=="ALLY_SUCCESSOR_RECIPIENT_ABSORPTION_OTHER_FREE")
+        if candidates[1] and (voter==target or Allied(target,voter)) then choice="SUCCESSION"
+        elseif voter==recipient then choice="ABSORPTION" else choice="FREE_STATE" end
+      end
+      local favor=math.max(0,Players[voter]:GetDiplomacy():GetFavor())
+      votes[tostring(voter)]=choice
+      ballots[tostring(voter)]={Choice=choice,Favor=favor,Weight=R.FavorVotes(favor)}
+    end
+  end
   return {Security=input.Security or R.PROVISIONAL.SecurityDefault,
     Cities=targetCities:GetCount(),Regions=Copy(input.Regions),Neighbors=neighbors,
-    Neighbor=#neighbors>0,Recipient=neighbors[1] and neighbors[1].Player,
+    MajorityReligion=religion,CultureGroup=culture,
+    Selection=selection,Neighbor=#neighbors>0,Recipient=recipient,
     Congress=congress or false,Voters=congress and Majors() or nil,
-    Votes=congress and Copy(input.Congress.Votes or {}) or nil,
+    Votes=congress and votes or nil,Ballots=congress and ballots or nil,
+    VotingRules=congress and {FreeVotes=R.PROVISIONAL.CongressFreeVotes,FavorStep=R.PROVISIONAL.CongressFavorStep,
+      DefaultBallot=R.PROVISIONAL.CongressDefaultBallot} or nil,
     Successor=candidates[1],Candidates=candidates,
     RecordedTurn=R.Turn()}
 end
@@ -168,6 +254,10 @@ local function Plan(branch,snapshot)
   if recipient==nil then -- earlier PoC saves stored neighbors but no selected recipient
     local neighbors=Copy(snapshot.Neighbors or {})
     table.sort(neighbors,function(a,b)
+      if a.Score and b.Score then
+        if a.Score~=b.Score then return a.Score>b.Score end
+        return a.Player<b.Player
+      end
       if a.Cities~=b.Cities then return a.Cities>b.Cities end
       if (a.Relation or 0)~=(b.Relation or 0) then return (a.Relation or 0)<(b.Relation or 0) end
       return a.Player<b.Player
@@ -178,16 +268,21 @@ local function Plan(branch,snapshot)
   if branch=="CONGRESS" then
     local tally={FREE_STATE=0,ABSORPTION=0,SUCCESSION=0}
     for _,voter in ipairs(snapshot.Voters or {}) do
-      local choice=(snapshot.Votes or {})[tostring(voter)]
+      local ballot=(snapshot.Ballots or {})[tostring(voter)]
+      local choice=ballot and ballot.Choice or (snapshot.Votes or {})[tostring(voter)]
       if tally[choice] and (choice~="ABSORPTION" or snapshot.Neighbor) and
-        (choice~="SUCCESSION" or snapshot.Successor) then tally[choice]=tally[choice]+1 end
+        (choice~="SUCCESSION" or snapshot.Successor) then
+        tally[choice]=tally[choice]+(ballot and ballot.Weight or 1) -- legacy saves keep their accepted ballots
+      end
     end
     local winner,high,tied="FREE_STATE",0,false
     for _,choice in ipairs({"FREE_STATE","ABSORPTION","SUCCESSION"}) do
       if tally[choice]>high then winner,high,tied=choice,tally[choice],false
       elseif tally[choice]==high then tied=true end
     end
-    plan.Tally=tally; plan.Resolution=tied and R.POST_DEATH.CongressTie or winner
+    plan.Ballots=Copy(snapshot.Ballots); plan.VotingRules=Copy(snapshot.VotingRules); plan.Tally=tally
+    plan.Voting=snapshot.Ballots and "FAVOR_WEIGHTED_EQUIVALENT" or "LEGACY_SAVED_BALLOTS"
+    plan.Resolution=tied and R.POST_DEATH.CongressTie or winner
   end
   return plan
 end
@@ -295,9 +390,7 @@ local function ApplyNation(m)
   local dead=housePeople[m.Target.Identity] or {Identity=m.Target.Identity}
   dead.Dead=1; dead.Role="DEAD_LEADER"; housePeople[m.Target.Identity]=dead
   target:SetProperty(R.PEOPLE,housePeople)
-  if outcome=="FREE_STATE" then
-    n.Government="COUNCIL" -- same nation; never Civ6 Free Cities
-  elseif outcome=="SUCCESSION" then
+  if outcome=="SUCCESSION" then
     local person=plan.Successor
     n.CurrentLeader=person.Identity; n.CurrentLeaderName=person.Name or "LOC_JAC_ASN_SUCCESSOR"
     n.Government="SUCCESSOR"
@@ -319,20 +412,38 @@ local function ApplyNation(m)
       if p.Identity~=person.Identity then rest[#rest+1]=p end
     end
     input.Successors=rest; target:SetProperty(R.INPUT,input)
-  elseif outcome=="ABSORPTION" then
-    local recipient=plan.Recipient; n.Recipient=recipient
-    n.Slot="RETIRED"; n.AI="RECIPIENT_SLOT"; n.Diplomacy="RECIPIENT_EXISTING"
-    n.Government="MERGED"; n.Cities={}; n.DisbandedUnits={}
+  elseif outcome=="ABSORPTION" or outcome=="FREE_STATE" then
+    local free=outcome=="FREE_STATE"
+    -- Official free-city engine entry point: Debug/City.ltp:277; free player: BlackDeathScenario.lua:46.
+    local recipient=free and PlayerManager.GetFreeCitiesPlayerID() or plan.Recipient
+    if free then
+      assert(recipient and recipient>=0 and Players[recipient] and CityManager.TransferCityToFreeCities,
+        "JAC_ASN: free-city engine unavailable")
+      n.FreeCitiesPlayer=recipient
+    else n.Recipient=recipient end
+    n.Slot="RETIRED"; n.AI=free and "FREE_CITIES_ENGINE" or "RECIPIENT_SLOT"
+    n.Diplomacy=free and "NATIVE_ELIMINATION" or "RECIPIENT_EXISTING"
+    n.Government=free and "FREE_CITIES" or "MERGED"; n.Cities={}; n.DisbandedUnits={}
     local cities,units={},{}
     for _,city in target:GetCities():Members() do cities[#cities+1]={ID=city:GetID(),X=city:GetX(),Y=city:GetY()} end
     for _,u in target:GetUnits():Members() do units[#units+1]=u:GetID() end
     table.sort(cities,function(a,b) return a.ID<b.ID end); table.sort(units)
-    local people=Players[recipient]:GetProperty(R.PEOPLE) or {}; local registeredUnits={}
+    local people=free and Copy(housePeople) or (Players[recipient]:GetProperty(R.PEOPLE) or {})
+    local registeredUnits={}
     local sourceInput=R.Input(target)
+    if free then
+      for identity,p in pairs(people) do
+        p.Identity=p.Identity or identity; p.House=id
+        if RegisteredDead(sourceInput,housePeople,p.Identity) then p.Dead=1 end
+        p.Role=p.Dead==1 and (p.Role=="DEAD_LEADER" and "DEAD_LEADER" or "DEAD") or "UNAFFILIATED"
+        p.SourceUnit=p.Unit or p.SourceUnit; p.SourceGovernor=p.Governor or p.SourceGovernor
+        p.Unit=nil; p.Governor=nil; p.City=nil
+      end
+    end
     local function Preserve(p)
       if p.Identity and p.Identity~=m.Target.Identity and p.Dead~=1 and
         not RegisteredDead(sourceInput,housePeople,p.Identity) then
-        local entry=Copy(p); entry.House=id; entry.Role="MEMBER"; entry.City=nil
+        local entry=Copy(p); entry.House=id; entry.Role=free and "UNAFFILIATED" or "MEMBER"; entry.City=nil
         entry.SourceUnit=entry.Unit; entry.SourceGovernor=entry.Governor
         entry.Unit=nil; entry.Governor=nil -- archived roles must not refer to removed map objects
         people[p.Identity]=entry
@@ -351,12 +462,16 @@ local function ApplyNation(m)
       n.DisbandedUnits[#n.DisbandedUnits+1]=uid
       UnitManager.Kill(u)
     end
-    Players[recipient]:SetProperty(R.PEOPLE,people)
+    n.People=Copy(people) -- archive before the old native slot loses its final city
+    if free then target:SetProperty(R.PEOPLE,people) else Players[recipient]:SetProperty(R.PEOPLE,people) end
     local input=R.Input(target); input.Governors=nil; input.Successor=nil; input.Successors=nil
-    target:SetProperty(R.INPUT,input); target:SetProperty(R.PEOPLE,nil)
+    target:SetProperty(R.INPUT,input)
+    if not free then target:SetProperty(R.PEOPLE,nil) end
     -- Kill/disband before the final city changes hands; last-city elimination may remove units.
+    SaveNation(id,n)
     for _,c in ipairs(cities) do
-      CityManager.TransferCity(target:GetCities():FindID(c.ID),recipient)
+      local city=target:GetCities():FindID(c.ID)
+      if free then CityManager.TransferCityToFreeCities(city) else CityManager.TransferCity(city,recipient) end
       n.Cities[#n.Cities+1]={X=c.X,Y=c.Y,Owner=recipient}
     end
     n.NativeAlive=target:IsAlive() -- elimination/AI shutdown are checked by the live scenario

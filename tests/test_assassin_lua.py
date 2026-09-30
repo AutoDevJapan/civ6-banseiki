@@ -25,7 +25,7 @@ function clone(v)
   if type(v)~='table' then return v end
   local t={}; for k,x in pairs(v) do t[k]=clone(x) end; return t
 end
-NOW, SPEED, RAND_CALLS, SPAWN_BLOCKED = 1000, 'GAMESPEED_STANDARD', 0, false
+NOW, SPEED, RAND_CALLS, SPAWN_BLOCKED, MAX_MAJOR = 1000, 'GAMESPEED_STANDARD', 0, false, 2
 GAME_PROPS, DATA, NOTES, KILLS, EVENTS = {}, {}, {}, {}, {}
 Game={GetCurrentGameTurn=function() return NOW end, GetLocalPlayer=function() error('gameplay must not read local player') end,
   GetRandNum=function(max,label) RAND_CALLS=RAND_CALLS+1; return ROLL or 0 end,
@@ -39,12 +39,23 @@ local unitRows={
  {UnitType='UNIT_HERO_HERCULES',Index=3,Combat=30,BuildCharges=0},
  {UnitType='UNIT_WARRIOR',Index=4,Combat=20,BuildCharges=0},
  {UnitType='UNIT_JAC_ASSASSIN',Index=5,Combat=10,BuildCharges=0}}
-GameInfo={GameSpeeds={},Units={}}
+GameInfo={GameSpeeds={},Units={},Religions={
+  [0]={ReligionType='RELIGION_PANTHEON',Pantheon=true},
+  [1]={ReligionType='RELIGION_BUDDHISM',Pantheon=false},
+  [2]={ReligionType='RELIGION_CATHOLICISM',Pantheon=false}}}
 for _,speed in ipairs({'ONLINE','QUICK','STANDARD','EPIC','MARATHON'}) do
   local key='GAMESPEED_'..speed; GameInfo.GameSpeeds[key]={GameSpeedType=key}
 end
 for _,row in ipairs(unitRows) do GameInfo.Units[row.Index]=row; GameInfo.Units[row.UnitType]=row end
-Map={GetPlotDistance=function(ax,ay,bx,by) return math.max(math.abs(ax-bx),math.abs(ay-by)) end}
+PLOTS={}
+Map={GetPlotDistance=function(ax,ay,bx,by) return math.max(math.abs(ax-bx),math.abs(ay-by)) end,
+  GetPlotCount=function() return #PLOTS end,
+  GetPlotByIndex=function(i) local d=PLOTS[i+1]; return {
+    GetOwner=function() return d.Owner end,GetX=function() return i end,GetY=function() return 0 end} end,
+  GetAdjacentPlots=function(x,y) local d=PLOTS[x+1]; local result={}
+    for dir=0,5 do local owner=(d.Adjacent or {})[dir]
+      if owner then result[#result+1]={GetOwner=function() return owner end} end
+    end; return result end}
 PlayersVisibility={}
 for id=0,2 do PlayersVisibility[id]={IsRevealed=function() return not HIDDEN_CITY end,
   IsVisible=function() return not HIDDEN_UNIT end} end
@@ -72,25 +83,32 @@ function makeCity(d)
   props(c,d); return c
 end
 function rebuild()
-  for id=0,2 do
+  for id=0,MAX_MAJOR+1 do
     local d=DATA[id]
     local cities=memberCollection(d.Cities,makeCity)
     cities.GetCapitalCity=function() return cities:FindID(d.Capital) end
     local p={GetID=function() return id end,IsAlive=function() return d.Alive end,
+      IsHuman=function() return id==0 end,IsTurnActive=function() return d.Alive end,
       GetCities=function() return cities end,GetUnits=function() return memberCollection(d.Units,makeUnit) end,
-      GetDiplomacy=function() return {IsAtWarWith=function(_,other) return d.Wars[other]==true end} end}
+      GetStats=function() return {GetMilitaryStrength=function() return d.Military end} end,
+      GetReligion=function() return {GetReligionInMajorityOfCities=function() return d.Religion end} end,
+      GetDiplomacy=function() return {IsAtWarWith=function(_,other) return d.Wars[other]==true end,
+        HasAllied=function(_,other) return d.Allies[other]==true end,
+        GetFavor=function() return d.Favor end,ChangeFavor=function(_,n) d.Favor=d.Favor+n end} end}
     props(p,d); Players[id]=p
     PlayerConfigurations[id]={GetLeaderTypeName=function() return 'LEADER_'..id end,
-      GetCivilizationTypeName=function() return ({[0]='CIVILIZATION_JAC_ODA',[1]='CIVILIZATION_JAC_MATSUDAIRA',[2]='CIVILIZATION_JAC_AINU'})[id] end}
+      GetCivilizationTypeName=function() return d.Civilization or ({[0]='CIVILIZATION_JAC_ODA',[1]='CIVILIZATION_JAC_MATSUDAIRA',[2]='CIVILIZATION_JAC_AINU'})[id] end}
   end
 end
-for id=0,2 do
-  DATA[id]={Properties={},Units={},Cities={},Capital=10,Alive=true,Wars={}}
-  for _,cid in ipairs({10,11}) do DATA[id].Cities[cid]={ID=cid,Owner=id,X=id*2,Y=cid-10,Properties={}} end
+for id=0,3 do
+  DATA[id]={Properties={},Units={},Cities={},Capital=10,Alive=id~=3,Wars={},Allies={},Favor=0,Military=0,Religion=-1}
+  if id~=3 then
+    for _,cid in ipairs({10,11}) do DATA[id].Cities[cid]={ID=cid,Owner=id,X=id*2,Y=cid-10,Properties={}} end
+  end
 end
 rebuild()
-PlayerManager={GetAliveMajors=function()
-  local t={}; for id=2,0,-1 do if DATA[id].Alive then t[#t+1]=Players[id] end end; return t
+PlayerManager={GetFreeCitiesPlayerID=function() return MAX_MAJOR+1 end,GetAliveMajors=function()
+  local t={}; for id=MAX_MAJOR,0,-1 do if DATA[id].Alive then t[#t+1]=Players[id] end end; return t
 end}
 NEXT_UNIT=1
 function GRANT(owner,unitType,x,y)
@@ -112,6 +130,16 @@ CityManager={TransferCity=function(city,owner)
   TRANSFERS[#TRANSFERS+1]={From=from,To=owner,X=d.X,Y=d.Y}
   DATA[from].Alive=Players[from]:GetCities():GetCount()>0 or Players[from]:GetUnits():GetCount()>0
 end}
+FREE_CITY_CALLS=0
+CityManager.TransferCityToFreeCities=function(city)
+  local free=PlayerManager.GetFreeCitiesPlayerID()
+  FREE_CITY_CALLS=FREE_CITY_CALLS+1; CityManager.TransferCity(city,free); DATA[free].Alive=true
+end
+CityManager.GetCityAt=function(x,y)
+  for id=0,MAX_MAJOR+1 do for _,city in pairs(DATA[id].Cities) do
+    if city.X==x and city.Y==y then return makeCity(city) end
+  end end
+end
 GameEvents=setmetatable({}, {__index=function(t,k)
   local event={Add=function(f) EVENTS[k]=f end}; rawset(t,k,event); return event
 end})
@@ -266,6 +294,51 @@ class AssassinLuaTests(unittest.TestCase):
           ADVANCE(68); assert(A.State(0).LastCompletion==1080)
         """)
 
+    def test_test_deadline_hook_is_inert_when_test_mode_is_off(self):
+        self.run_lua("""
+          assert(A.StartProduction(0,10)); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local original=A.State(0); original.ProductionUnlock=1099; Players[0]:SetProperty(A.STATE,original)
+          local ok,reason=ExposedMembers.JAC_Assassin.TestAdvanceDeadlines(0)
+          assert(not ok and reason=='TEST_MODE_OFF')
+          local s=A.State(0)
+          assert(s.Production.Due==1100 and s.Production.TestDue==nil and s.Production.Start==1000)
+          assert(s.Mission.Due==1005 and s.Mission.SuccessRoll==original.Mission.SuccessRoll)
+          assert(s.CommandUnlock==1050 and s.ProductionUnlock==1099 and RAND_CALLS==3)
+        """)
+
+    def test_test_deadlines_survive_recomputation_reload_and_resolve_on_real_turn(self):
+        self.run_lua("""
+          FORCE(true,false,'FREE_STATE'); assert(A.StartProduction(0,10)); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local s=A.State(0); s.ProductionUnlock=1099; Players[0]:SetProperty(A.STATE,s)
+          assert(A.TestAdvanceDeadlines(0))
+          s=A.State(0)
+          assert(s.Production.Due==1001 and s.Production.TestDue==1001 and s.Production.Turns==100)
+          assert(s.Mission.Due==1001 and s.CommandUnlock==1001 and s.ProductionUnlock==1001)
+          assert(s.LastMission==nil and s.LastCompletion==nil and FREE_CITY_CALLS==0 and RAND_CALLS==3)
+          SAVED={Game=clone(GAME_PROPS),Players=clone(DATA),Now=NOW}
+          GAME_PROPS,DATA,NOW=clone(SAVED.Game),clone(SAVED.Players),SAVED.Now; rebuild(); EVENTS={}
+        """)
+        self.lua.execute(RULES); self.lua.execute(GAMEPLAY)
+        self.run_lua("""
+          A=JAC_ASN; ADVANCE(1); local s=A.State(0)
+          assert(s.LastCompletion==1001 and s.Production==nil and s.ProductionUnlock==1011)
+          assert(s.Mission==nil and s.LastMission.Result=='LEADER_FREE_STATE' and FREE_CITY_CALLS==2)
+          assert(RAND_CALLS==3); ADVANCE(1); assert(FREE_CITY_CALLS==2)
+        """)
+
+    def test_test_deadline_hook_selects_clocks_and_never_extends_expired_locks(self):
+        self.run_lua("""
+          Game:SetProperty(A.TEST,1); assert(A.StartProduction(0,10)); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local s=A.State(0); s.ProductionUnlock=1000; Players[0]:SetProperty(A.STATE,s)
+          assert(A.TestAdvanceDeadlines(0,{ProductionLock=true,CommandLock=true}))
+          s=A.State(0); assert(s.ProductionUnlock==1000 and s.CommandUnlock==1001)
+          assert(s.Production.Due==1100 and s.Mission.Due==1005)
+          assert(A.TestAdvanceDeadlines(0,{Training=true}))
+          Game:SetProperty(A.TEST,nil); ADVANCE(1)
+          assert(A.State(0).Production.Due==1100 and A.State(0).Production.Turns==100)
+          assert(A.State(0).LastCompletion==nil)
+        """)
+
     def test_only_full_stack_reaches_wait_one(self):
         self.run_lua("""
           assert(A.WaitTurns({})==50)
@@ -361,14 +434,45 @@ class AssassinLuaTests(unittest.TestCase):
           assert(not A.State(0).Mission.Success)
         """)
 
-    def test_leader_death_does_not_eliminate_player_or_transfer_territory(self):
+    def test_leader_death_splits_all_cities_disbands_units_and_archives_people(self):
         self.run_lua("""
+          local gp=GRANT(1,2,2,0); GRANT(1,4,2,0)
+          Players[1]:SetProperty(A.INPUT,{Successors={{Identity='PERSON_GP',Kind='GREAT_PERSON',Unit=gp:GetID()}},
+            Governors={['7']={City=10,Identity='GOV'}}})
+          Players[1]:SetProperty(A.PEOPLE,{OLD={Identity='OLD',Dead=1,Unit=999,Governor=8,City=10}})
           FORCE(true,false,'FREE_STATE'); assert(A.StartAttempt(0,U,1,'LEADER')); ADVANCE(5)
-          local n=Players[1]:GetProperty(A.NATION)
+          local n=A.Nation(1)
           assert(n.LeaderDead==1 and n.State=='FREE_STATE' and n.DeathTurn==1005)
-          assert(n.DecisionRequired==nil and n.Government=='COUNCIL' and n.Slot=='RETAINED' and DATA[1].Alive)
-          assert(DATA[0].Cities[10].Owner==0 and DATA[1].Cities[10].Owner==1)
+          assert(n.DecisionRequired==nil and n.Government=='FREE_CITIES' and n.Slot=='RETIRED' and not DATA[1].Alive)
+          assert(n.FreeCitiesPlayer==3 and n.AI=='FREE_CITIES_ENGINE' and FREE_CITY_CALLS==2)
+          assert(Players[1]:GetCities():GetCount()==0 and Players[1]:GetUnits():GetCount()==0)
+          assert(DATA[0].Cities[10].Owner==0 and Players[3]:GetCities():GetCount()==2)
+          assert(n.People.PERSON_GP.Role=='UNAFFILIATED' and n.People.PERSON_GP.SourceUnit==gp:GetID())
+          assert(n.People.PERSON_GP.Unit==nil and n.People.GOV.Governor==nil and n.People.LEADER_1.Dead==1)
+          assert(n.People.GOV.Role=='UNAFFILIATED' and #n.Cities==2 and #n.DisbandedUnits==2)
+          assert(n.People.OLD.Dead==1 and n.People.OLD.Role=='DEAD' and n.People.OLD.SourceUnit==999)
+          assert(n.People.OLD.Unit==nil and n.People.OLD.Governor==nil and n.People.OLD.City==nil)
           assert(A.State(0).CommandUnlock==1050)
+          Players[1]:SetProperty(A.NATION,nil); Players[1]:SetProperty(A.PEOPLE,nil)
+          assert(A.Nation(1).People.PERSON_GP.Role=='UNAFFILIATED')
+          local count=FREE_CITY_CALLS; A.Tick(); ADVANCE(1); assert(FREE_CITY_CALLS==count)
+        """)
+
+    def test_eliminated_human_slot_cancels_saved_training_after_reload_without_retransferring(self):
+        self.run_lua("""
+          assert(A.StartProduction(0,10)); local enemy=GRANT(2,0,1,0)
+          Game:SetProperty(A.TEST,1); Players[2]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='FREE_STATE'})
+          assert(A.StartAttempt(2,enemy:GetID(),0,'LEADER')); ADVANCE(5)
+          assert(not Players[0]:IsAlive() and Players[0]:IsHuman() and A.Nation(0).Slot=='RETIRED')
+          assert(Players[0]:GetUnits():GetCount()==0 and Players[0]:GetCities():GetCount()==0 and FREE_CITY_CALLS==2)
+          SAVED={Game=clone(GAME_PROPS),Players=clone(DATA),Now=NOW}
+          GAME_PROPS,DATA,NOW=clone(SAVED.Game),clone(SAVED.Players),SAVED.Now; rebuild(); EVENTS={}
+        """)
+        self.lua.execute(RULES); self.lua.execute(GAMEPLAY)
+        self.run_lua("""
+          A=JAC_ASN; ADVANCE(1)
+          assert(A.State(0).Production==nil and A.State(0).LastCompletion==nil and not Players[0]:IsAlive())
+          assert(A.Nation(0).State=='FREE_STATE' and FREE_CITY_CALLS==2 and RAND_CALLS==3)
         """)
 
     def test_post_death_snapshot_and_branch_are_frozen(self):
@@ -382,10 +486,14 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.Input(Players[1]).Successor=='PERSON_2') -- a new, different candidate is retained
         """)
 
-    def test_no_congress_branch_on_japan_map(self):
+    def test_equivalent_favor_vote_is_available_without_test_mode_on_japan_map(self):
         self.run_lua("""
-          for roll=0,100 do assert(A.Branch({Neighbor=true,Successor='P',Congress=false},roll)~='CONGRESS') end
-          FORCE(true,false,'CONGRESS')
+          assert(Game:GetProperty(A.TEST)==nil); DATA[2].Favor=60
+          assert(A.StartAttempt(0,U,1,'LEADER'))
+          local snapshot=A.State(0).Mission.Snapshot
+          assert(snapshot.Congress and snapshot.Ballots['2'].Favor==60 and snapshot.Ballots['2'].Weight==4)
+          Players[0]:SetProperty(A.STATE,nil); Players[1]:SetProperty(A.INPUT,{Congress={Enabled=false}})
+          FORCE(true,false,'CONGRESS') -- an explicit disabled vote provider still excludes this branch
         """)
         with self.assertRaisesRegex(Exception,"Congress absent"):
             self.run_lua("A.StartAttempt(0,U,1,'LEADER')")
@@ -535,11 +643,79 @@ class AssassinLuaTests(unittest.TestCase):
           local count=#TRANSFERS; A.Tick(); ADVANCE(1); assert(#TRANSFERS==count)
         """)
 
+    def test_recipient_formula_combines_strength_friendship_border_distance_religion_culture(self):
+        self.run_lua("""
+          DATA[2].Military=200; DATA[0].Religion=1; DATA[1].Religion=1; DATA[2].Religion=2
+          Players[0]:SetProperty(A.INPUT,{CultureGroup='A'})
+          Players[2]:SetProperty(A.INPUT,{CultureGroup='B'})
+          Players[1]:SetProperty(A.INPUT,{CultureGroup='A',Relations={['0']=-1,['2']=1}})
+          PLOTS={{Owner=1,Adjacent={[0]=0,[1]=0,[2]=2}}}
+          FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local snapshot=A.State(0).Mission.Snapshot; local a,b=snapshot.Neighbors[1],snapshot.Neighbors[2]
+          assert(a.Player==0 and b.Player==2 and snapshot.Recipient==0)
+          assert(a.Military==0 and b.Military==200 and a.Border==2 and b.Border==1 and a.Distance==2)
+          assert(math.abs(a.Score-0.775)<0.000001 and math.abs(b.Score-0.525)<0.000001)
+          assert(a.AvailableWeight==100 and a.Components.Religion==1 and b.Components.Culture==0)
+          DATA[2].Military=10000; DATA[1].Allies[2]=true; Players[1]:SetProperty(A.INPUT,{Relations={['2']=-1}})
+          ADVANCE(5); assert(A.Nation(1).Recipient==0 and A.Nation(1).Snapshot.Neighbors[1].Score==a.Score)
+        """)
+
+    def test_recipient_alliance_is_gameplay_and_optional_closeness_does_not_reward_missing_data(self):
+        self.run_lua("""
+          DATA[1].Allies[2]=true
+          FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local snapshot=A.State(0).Mission.Snapshot; local n=snapshot.Neighbors[1]
+          assert(n.Player==2 and n.Friendship==1 and n.Allied and n.AvailableWeight==90)
+          assert(n.Components.Religion==nil and n.Components.Culture==nil)
+          assert(snapshot.Recipient==2)
+        """)
+
+    def test_recipient_omits_pantheon_and_missing_apis_and_prefers_supplied_culture_over_proxy(self):
+        self.run_lua("""
+          DATA[0].Religion=0; DATA[1].Religion=0; DATA[2].Religion=0
+          GameInfo.Civilizations={CIVILIZATION_JAC_ODA={Ethnicity='ASIAN'},
+            CIVILIZATION_JAC_MATSUDAIRA={Ethnicity='ASIAN'},CIVILIZATION_JAC_AINU={Ethnicity='OTHER'}}
+          Players[0]:SetProperty(A.INPUT,{CultureGroup='SUPPLIED'})
+          Players[0].GetStats=nil; Map.GetAdjacentPlots=nil
+          FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          for _,n in ipairs(A.State(0).Mission.Snapshot.Neighbors) do
+            assert(n.Components.Religion==nil and n.Components.Border==nil and n.AvailableWeight==80)
+            assert(n.Culture==0 and n.Military==0 and n.Strength==n.Cities)
+          end
+        """)
+
+    def test_recipient_distance_and_border_can_change_choice_and_ties_use_player_id(self):
+        self.run_lua("""
+          FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          assert(A.State(0).Mission.PostDeathPlan.Recipient==0)
+          Players[0]:SetProperty(A.STATE,nil)
+          DATA[2].Cities[10].X=3; DATA[2].Cities[11].X=3
+          PLOTS={{Owner=1,Adjacent={[0]=2,[1]=2}}}
+          FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          assert(A.State(0).Mission.PostDeathPlan.Recipient==2)
+        """)
+
+    def test_favor_vote_weight_outvotes_more_nations_and_is_frozen_at_command(self):
+        self.run_lua("""
+          assert(A.FavorVotes(-10)==1 and A.FavorVotes(0)==1 and A.FavorVotes(9)==1)
+          assert(A.FavorVotes(10)==2 and A.FavorVotes(29)==2 and A.FavorVotes(30)==3 and A.FavorVotes(60)==4)
+          DATA[0].Favor=60
+          Players[1]:SetProperty(A.INPUT,{Successor='HEIR',Congress={Votes={['0']='SUCCESSION',
+            ['1']='FREE_STATE',['2']='FREE_STATE',['999']='FREE_STATE'}}})
+          FORCE(true,false,'CONGRESS'); assert(A.StartAttempt(0,U,1,'LEADER'))
+          local plan=A.State(0).Mission.PostDeathPlan
+          assert(plan.Tally.SUCCESSION==4 and plan.Tally.FREE_STATE==2 and plan.Resolution=='SUCCESSION')
+          assert(plan.Ballots['0'].Favor==60 and plan.Voting=='FAVOR_WEIGHTED_EQUIVALENT')
+          DATA[0].Favor=0; DATA[1].Favor=1000; Players[1]:SetProperty(A.INPUT,{Congress={Votes={['0']='FREE_STATE'}}})
+          ADVANCE(5); local n=A.Nation(1)
+          assert(n.State=='SUCCESSION' and n.CurrentLeader=='HEIR' and n.Plan.Tally.SUCCESSION==4 and RAND_CALLS==3)
+        """)
+
     def test_lost_absorption_recipient_falls_back_without_new_draw(self):
         self.run_lua("""
           DATA[2].Cities[12]={ID=12,Owner=2,X=4,Y=2,Properties={}}
           FORCE(true,false,'ABSORPTION'); assert(A.StartAttempt(0,U,1,'LEADER')); DATA[2].Alive=false
-          ADVANCE(5); assert(A.Nation(1).State=='FREE_STATE' and #TRANSFERS==0 and RAND_CALLS==3)
+          ADVANCE(5); assert(A.Nation(1).State=='FREE_STATE' and FREE_CITY_CALLS==2 and RAND_CALLS==3)
         """)
 
     def test_successor_kin_first_and_single_role_for_gp_and_governor(self):
@@ -589,7 +765,7 @@ class AssassinLuaTests(unittest.TestCase):
                         self.run_lua("local i=A.Input(Players[1]); i.Successors={{Identity='HEIR',Dead=1}}; Players[1]:SetProperty(A.INPUT,i)")
                     self.run_lua("""
                       ADVANCE(5); assert(A.Nation(1).State=='FREE_STATE' and A.Nation(1).CurrentLeader==nil)
-                      assert(DATA[1].Units[GP] and A.Input(Players[1]).Governors['7'].Retired==nil)
+                      assert(DATA[1].Units[GP]==nil and A.Input(Players[1]).Governors==nil)
                       assert(RAND_CALLS==3)
                     """)
 
@@ -663,7 +839,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.Nation(1).State=='FREE_STATE' and A.Nation(1).Previous.CurrentLeader=='HEIR')
         """)
 
-    def test_registered_country_name_survives_kin_succession_and_council(self):
+    def test_registered_country_name_survives_kin_succession_and_free_city_archive(self):
         self.run_lua("""
           Players[1]:SetProperty(A.INPUT,{Successor={Identity='FOUNDER',CountryName='LOC_NEW_COUNTRY'}})
           FORCE(true,false,'SUCCESSION'); assert(A.StartAttempt(0,U,1,'LEADER')); ADVANCE(50)
@@ -675,7 +851,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.Nation(1).CountryName=='LOC_NEW_COUNTRY')
         """)
 
-    def test_congress_ballots_freeze_count_one_vote_and_tie_goes_to_council(self):
+    def test_congress_ballots_freeze_favor_weight_and_tie_goes_to_free_cities(self):
         for votes,outcome in (("{['0']='SUCCESSION',['1']='SUCCESSION',['999']='ABSORPTION'}","SUCCESSION"),
                               ("{['0']='FREE_STATE',['1']='SUCCESSION'}","FREE_STATE"),
                               ("{['0']='ABSORPTION',['1']='ABSORPTION'}","ABSORPTION"),
@@ -761,6 +937,54 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.Nation(1).CurrentLeader=='OLD_PERSON') -- use Game archive when native slot data is unavailable
         """)
 
+    def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
+        from tools.generate_assassin_poc import build_scenario
+        self.run_lua("""
+          MAX_MAJOR=4
+          local civs={'ODA','MATSUDAIRA','IMAGAWA','ASAKURA','ASHIKAGA'}
+          DATA={}
+          for id=0,MAX_MAJOR+1 do
+            DATA[id]={Properties={},Units={},Cities={},Capital=10,Alive=id<=MAX_MAJOR,
+              Wars={},Allies={},Favor=0,Military=0,Religion=-1,
+              Civilization=civs[id+1] and 'CIVILIZATION_JAC_'..civs[id+1] or 'CIVILIZATION_FREE_CITIES'}
+            if id<=MAX_MAJOR then for _,cid in ipairs({10,11}) do
+              DATA[id].Cities[cid]={ID=cid,Owner=id,X=id*2,Y=cid-10,Properties={}}
+            end end
+          end
+          rebuild()
+          function JAC_AssassinProduce(city)
+            EVENTS.JAC_AssassinOperation(0,{Action='PRODUCE',City=city}); return true
+          end
+          function JAC_AssassinAttempt(unit,target,kind)
+            EVENTS.JAC_AssassinOperation(0,{Action='ATTEMPT',Unit=unit,Target=target,Kind=kind}); return true
+          end
+          LIVE_SAVES={}
+        """)
+        turns=0
+        for index,step in enumerate(build_scenario()["steps"]):
+            with self.subTest(step=index,action=step["action"]):
+                # UI alone may read the human player; core scripts keep the context guard.
+                self.run_lua("Game.GetLocalPlayer=function() error('gameplay must not read local player') end")
+                if step.get("state_name")=="JAC_AssassinPanel":
+                    self.run_lua("Game.GetLocalPlayer=function() return 0 end")
+                if step["action"]=="ui_lua":
+                    self.run_lua(step["code"])
+                elif step["action"]=="end_turn":
+                    turns+=step.get("turns",1)
+                    self.run_lua(f"ADVANCE({step.get('turns',1)})")
+                elif step["action"]=="wait_for":
+                    code=step["condition"]["code"]
+                    if step["condition"]["state_name"]=="InGame":
+                        self.run_lua("Game.GetLocalPlayer=function() return 0 end")
+                    self.assertTrue(self.run_lua(code))
+                elif step["action"]=="save":
+                    self.run_lua("LIVE_SAVES['"+step["name"]+"']={Game=clone(GAME_PROPS),Players=clone(DATA),Now=NOW}")
+                elif step["action"]=="load":
+                    self.run_lua("local s=LIVE_SAVES['"+step["name"]+"']; GAME_PROPS,DATA,NOW=clone(s.Game),clone(s.Players),s.Now; rebuild(); EVENTS={}")
+                    self.lua.execute(RULES); self.lua.execute(GAMEPLAY)
+        self.assertEqual(turns,16)
+        self.run_lua("assert(NOW==1016 and RAND_CALLS==20 and FREE_CITY_CALLS==2 and Game:GetProperty('JAC_ASN_TEST_MODE')==nil)")
+
     def test_live_final_check_rejects_penalty_added_during_load(self):
         scenario=json.loads((ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json").read_text(encoding="utf-8"))
         checks=[s["code"] for s in scenario["steps"] if "load changed penalties" in s.get("code","")]
@@ -768,11 +992,13 @@ class AssassinLuaTests(unittest.TestCase):
         self.run_lua("""
           Game:SetProperty(A.NATIONS,{['1']={State='FREE_STATE'},['2']={CurrentLeader='JAC_LIVE_HEIR'},
             ['3']={State='ABSORPTION'},['4']={Branch='CONGRESS'}})
-          Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,Target=1,Houses={CIVILIZATION_JAC_IMAGAWA=2,
+          Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,Target=1,LossTarget=1,Houses={CIVILIZATION_JAC_IMAGAWA=2,
             CIVILIZATION_JAC_ASAKURA=3,CIVILIZATION_JAC_ASHIKAGA=4},
             FinalGrievances=100,FinalFriendship=-40,FinalApplied={m=1},FinalMissionID='m',FinalWait=1100})
           Players[1]:SetProperty('JAC_ASN_DIPLOMACY_V1',{Grievances={['0']=100},Friendship={['0']=-40},Applied={m=1}})
           Players[0]:SetProperty(A.STATE,{LastMission={ID='m',Result='ACTOR_GONE'},CommandUnlock=1100})
+          local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); t.FinalNations=Game:GetProperty(A.NATIONS)
+          t.FinalState=A.State(0); Game:SetProperty('JAC_ASN_LIVE_TEST',t)
         """)
         self.run_lua(checks[0])
         self.run_lua("""
@@ -829,10 +1055,15 @@ class AssassinPackagingTests(unittest.TestCase):
         scenario=json.loads((ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json").read_text(encoding="utf-8"))
         actions=[s["action"] for s in scenario["steps"]]
         self.assertEqual(actions.count("save"),3); self.assertEqual(actions.count("load"),3)
+        turns=sum(s.get("turns",1) for s in scenario["steps"] if s["action"]=="end_turn")
+        self.assertEqual(turns,16)
+        self.assertTrue(all(s["timeout"]>=600 for s in scenario["steps"] if s["action"]=="end_turn"))
         code="\n".join(s.get("code","") for s in scenario["steps"])
         for needle in ("IsHuman()","SuccessRoll","FREE_STATE","ABSORPTION","SUCCESSION","CONGRESS",
                        "PRODUCTION_LOCK","MISSION_ACTIVE","COMMAND_LOCK","t.Lock-1","s.LastCompletion+10",
-                       "t.Start+120","t.Start+80","ACTOR_GONE","LossGrievances+25","WarReason","PostDeathPlan"):
+                       "t.Start+120","t.Start+80","t.MinStart+20","ACTOR_GONE","LossGrievances+25","WarReason","PostDeathPlan",
+                       "TestAdvanceDeadlines","TEST_MODE_OFF","GetFreeCitiesPlayerID","receiver formula",
+                       "GetDiplomacy()","ChangeFavor","favor did not outweigh majority","Same(s.Mission,t.Frozen)"):
             self.assertIn(needle,code)
         self.assertNotIn("PENDING_",code)
         self.assertNotRegex(code,r"local u=UnitManager.InitUnitValidAdjacentHex")
@@ -841,6 +1072,12 @@ class AssassinPackagingTests(unittest.TestCase):
             if step["action"]=="ui_lua":
                 self.assertIn("assert(",step["code"])
                 lua.compile(step["code"])
+
+    def test_live_scenario_matches_generator_exactly(self):
+        from tools.generate_assassin_poc import build_scenario
+        expected=json.dumps(build_scenario(),ensure_ascii=False,indent=2)+"\n"
+        actual=(ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json").read_text(encoding="utf-8")
+        self.assertEqual(actual,expected,"Regenerate with python tools/generate_assassin_poc.py")
 
 
 if __name__ == "__main__":
