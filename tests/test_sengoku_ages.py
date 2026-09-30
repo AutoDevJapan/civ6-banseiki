@@ -10,6 +10,7 @@ The stubs have only gameplay-side calls (no GetAllianceType / CanTriggerBoost / 
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sqlite3
 import sys
@@ -39,11 +40,27 @@ def _audit():
 AUDIT = _audit()
 
 
+def _generator():
+    name = "generate_sengoku_reigns"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, ROOT / f"tools/{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+REIGNS_GEN = _generator()
+REIGNS_JSON = json.loads((ROOT / "documents/spec/data/sengoku-reigns.json").read_text(encoding="utf-8"))
+
+
 def ages_tables() -> dict:
     """The pack's own ages tables plus the calendar, from an in-memory load of the SQL (no official data)."""
     db = sqlite3.connect(":memory:")
     db.row_factory = lambda cursor, row: {c[0]: v for c, v in zip(cursor.description, row)}
-    lines = (MOD / "Data/JAC_Sengoku_Ages.sql").read_text(encoding="utf-8").splitlines()
+    lines = []
+    for name in ("Data/JAC_Sengoku_Ages.sql", "Data/JAC_Sengoku_Reigns.sql"):  # the modinfo's order
+        lines += (MOD / name).read_text(encoding="utf-8").splitlines()
     sql = "\n".join(line.split("--")[0] for line in lines)
     for statement in sql.split(";"):
         if "CREATE TABLE JAC_" in statement or "INSERT INTO JAC_" in statement:
@@ -109,9 +126,9 @@ class AgesDataTests(unittest.TestCase):
         self.assertEqual(self.q("SELECT GameEraMaximumTurns FROM Eras_XP1 WHERE EraType = 'ERA_RENAISSANCE'"), [(10000,)])
 
     def test_reigns_policies_and_effect_modifiers(self):
-        self.assertEqual(self.q("SELECT ReignType, Year, Month FROM JAC_SengokuReigns ORDER BY Year, Month"), [
-            ("REIGN_KOJI", 1555, 11), ("REIGN_EIROKU", 1558, 3), ("REIGN_GENKI", 1570, 5), ("REIGN_TENSHO", 1573, 8),
-            ("REIGN_BUNROKU", 1593, 1), ("REIGN_KEICHO", 1596, 12), ("REIGN_GENNA", 1615, 9), ("REIGN_KAN_EI", 1624, 4)])
+        rows = self.q("SELECT ReignType, Year, Month, ForcedAge FROM JAC_SengokuReigns ORDER BY Year, Month")
+        self.assertEqual(rows, [("REIGN_" + r["id"], r["year"], r["month"], r.get("forced_age"))
+                                for r in REIGNS_JSON["reigns"]])
         self.assertEqual(len(self.q("SELECT * FROM JAC_SengokuDarkAgePolicies")), 4)
         attached = [r[0] for r in self.q("SELECT ModifierId FROM TraitModifiers WHERE ModifierId LIKE 'JAC_AGE_%' "
                                          "AND TraitType = 'TRAIT_LEADER_MAJOR_CIV'")]
@@ -155,6 +172,7 @@ class AgesDataTests(unittest.TestCase):
 
     def test_text_keys_are_translated(self):
         keys = {r[0] for r in self.q("SELECT Name FROM JAC_SengokuReigns UNION SELECT Announcement FROM JAC_SengokuReigns "
+                                     "UNION SELECT Notification FROM JAC_SengokuReigns "
                                      "UNION SELECT Name FROM JAC_SengokuDarkAgePolicies "
                                      "UNION SELECT Description FROM JAC_SengokuDarkAgePolicies "
                                      "UNION SELECT Announcement FROM JAC_SengokuDarkAgePolicies")}
@@ -169,23 +187,30 @@ class AgesDataTests(unittest.TestCase):
         # UI/JAC_EraProgressPanel_Sengoku.lua, UI/JAC_SengokuAgesView.lua) and the notification heading.
         screens = "".join((MOD / name).read_text(encoding="utf-8") for name in (
             "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuReignPopup.xml", "UI/JAC_EraProgressPanel_Sengoku.lua",
-            "UI/JAC_SengokuAgesView.lua", "Scripts/JAC_Sengoku_Ages.lua"))
+            "UI/JAC_SengokuAgesView.lua", "UI/JAC_ActionPanel_Sengoku.lua", "Scripts/JAC_Sengoku_Ages.lua"))
         screen_keys = {k for k in re.findall(r"LOC_JAC_[A-Z0-9_]+", screens) if not k.endswith("_")}
         screen_keys |= {f"LOC_JAC_AGE_PART_{part}" for part in ("HOME", "REGAIN", "CASTLE", "KO", "ALLY", "RESEARCH", "EVENT")}
-        self.assertIn("LOC_JAC_AGE_REIGN_NOTIFICATION", screen_keys)
+        self.assertLessEqual({"LOC_JAC_AGE_ERA_NAME", "LOC_JAC_AGE_ERA_ENDS_IN", "LOC_JAC_REIGN_TENBUN_NAME"}, screen_keys)
         keys |= screen_keys
         text = {}
-        for row in ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row"):
-            text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
+        for name in ("Text/JAC_Sengoku_Ages_Text.xml", "Text/JAC_Sengoku_Reigns_Text.xml"):
+            for row in ET.parse(MOD / name).getroot().findall("./LocalizedText/Row"):
+                text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
         self.assertEqual(set(text), keys)
         self.assertTrue(all(langs == {"ja_JP", "en_US", "ru_RU"} for langs in text.values()))
+
+
+class ReignFilesTests(unittest.TestCase):
+    def test_generated_reign_files_are_current(self):
+        for path, content in REIGNS_GEN.outputs().items():
+            self.assertEqual(path.read_text(encoding="utf-8"), content, f"run tools/generate_sengoku_reigns.py: {path}")
 
 
 START_TURN = 16603  # live 1534 calendar
 CIVS = ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_TAKEDA", "CIVILIZATION_JAC_HOJO", "CIVILIZATION_JAC_IMAGAWA"]
 
 STUBS = r"""
-local tables, civs, startTurn = ...
+local tables, civs, startTurn, speed = ...
 local function gameInfoTable(rows, key)
   local t = {}
   for i, row in ipairs(rows) do row.Index = i - 1; if key then t[row[key]] = row end end
@@ -199,7 +224,7 @@ for i = 1, 10 do techs[i] = { TechnologyType = "T" .. i } end
 for i = 1, 10 do civics[i] = { CivicType = "C" .. i } end
 GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
-  GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD" } },
+  GameSpeeds = { [0] = { GameSpeedType = speed or "GAMESPEED_STANDARD" } },
   GameSpeed_Turns = gameInfoTable(tables.GameSpeed_Turns),
   Technologies = gameInfoTable(techs), Civics = gameInfoTable(civics),
   JAC_SengokuReigns = gameInfoTable(tables.JAC_SengokuReigns),
@@ -226,7 +251,8 @@ Map = { GetPlot = function(x, y)
   return PLOTS[index]
 end }
 CITIES = {}          -- list of {owner, x, y, capital}
-ALLIED, TEAM, ALIVE = {}, {}, {}
+ALLIED, FRIENDS, TEAM, ALIVE = {}, {}, {}, {}
+NO_FRIENDSHIP_API = false  -- true: the gameplay diplomacy object has no HasDeclaredFriendship
 Players, PlayerConfigurations = {}, {}
 local function citiesOf(id)
   local list = {}
@@ -252,8 +278,13 @@ local function makePlayer(id, civ)
   } end
   p.GetTechs = function() return { HasTech = function(_, t) return p.research.techs[t] == true end } end
   p.GetCulture = function() return { HasCivic = function(_, c) return p.research.civics[c] == true end } end
-  p.GetDiplomacy = function() return { HasAllied = function(_, b)
-    local a, bb = math.min(id, b), math.max(id, b); return ALLIED[a .. "-" .. bb] == true end } end
+  p.GetDiplomacy = function()
+    local d = { HasAllied = function(_, b)
+      local a, bb = math.min(id, b), math.max(id, b); return ALLIED[a .. "-" .. bb] == true end }
+    if not NO_FRIENDSHIP_API then d.HasDeclaredFriendship = function(_, b)
+      local a, bb = math.min(id, b), math.max(id, b); return FRIENDS[a .. "-" .. bb] == true end end
+    return d
+  end
   p.GetProperty, p.SetProperty = properties()
   Players[id] = p
   PlayerConfigurations[id] = { GetCivilizationTypeName = function() return civ end }
@@ -490,6 +521,8 @@ class LedgerTests(unittest.TestCase):
         at NewGameInitialized; the engine lapses them on turn 32 and the script marks them false (not re-made)."""
         self.g.ALLIED["2-3"] = True
         self.g.ALLIED["0-1"] = True
+        self.g.FRIENDS["2-3"] = True  # the script declares friendship before the alliance (:151-154)
+        self.g.FRIENDS["0-1"] = True
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_HOJO-IMAGAWA", START_TURN)
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ODA-TAKEDA", START_TURN)
         track = self.lua.eval("""function()
@@ -510,6 +543,7 @@ class LedgerTests(unittest.TestCase):
         self.turns(1, 31)
         self.g.ALLIED["2-3"] = False  # the engine lapses before any script runs
         self.g.ALLIED["0-1"] = False
+        self.g.FRIENDS["2-3"] = False  # the start friendship ends with it; nothing re-makes either (owner decision K)
         self.turns(32, 34)
 
     def test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first(self):
@@ -608,9 +642,10 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.g.LEDGER().reign, 6)
         notes = [tuple(n.values()) for n in self.g.NOTES.values()]
         self.assertEqual(len(notes), 6 * 4)
-        # Q36 ①: the era name is only on the 改元 and era score screens, so the heading is the generic one.
-        self.assertIn((0, 2, "LOC_JAC_AGE_REIGN_NOTIFICATION", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
-        self.assertEqual({n[2] for n in notes}, {"LOC_JAC_AGE_REIGN_NOTIFICATION"})
+        # L-1: the heading names the new era (「改元：弘治の世」).
+        self.assertIn((0, 2, "LOC_JAC_REIGN_KOJI_NOTIFICATION", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
+        self.assertEqual({n[2] for n in notes}, {f"LOC_JAC_REIGN_{r}_NOTIFICATION" for r in
+                                                 ("KOJI", "EIROKU", "GENKI", "TENSHO", "BUNROKU", "KEICHO")})
 
     def test_projection_for_the_era_score_screen_matches_the_next_judgement(self):
         self.turns(1, 40)
@@ -621,10 +656,143 @@ class LedgerTests(unittest.TestCase):
         r1 = self.g.LEDGER().history["r1"]
         self.assertEqual(projected, {pid: (r1[f"p{pid}"].golden, r1[f"p{pid}"].dark) for pid in range(4)})
         self.assertEqual(self.g.LEDGER().nextDue, 73)  # 永禄
-        self.turns(67, 400)  # past 寛永, the last 改元: nothing to project
-        self.assertEqual(self.g.LEDGER().reign, 8)
+        self.turns(1757)  # 遅代 (2119), the last 改元: nothing to project
+        self.assertEqual(self.g.LEDGER().reign, len(REIGNS_JSON["reigns"]))
         self.assertIsNone(self.g.LEDGER().nextDue)
         self.assertIsNone(self.house(0).next)
+
+    # --- declared friendships (§5.4, owner decision L-2) ---
+
+    def test_new_friendship_scores_one_point_each_once_per_period(self):
+        self.turns(1, 5)
+        self.g.FRIENDS["2-3"] = True
+        self.turns(6)
+        self.assertEqual((self.parts(2), self.parts(3)), ({"ally": 1}, {"ally": 1}))
+        self.g.FRIENDS["2-3"] = False  # lapsed or ended, then declared again in the same period
+        self.turns(7)
+        self.g.FRIENDS["2-3"] = True
+        self.turns(8)
+        self.assertEqual((self.score(2), self.score(3)), (1, 1))
+        self.g.ALLIED["2-3"] = True  # then an alliance: 2 more each, in the same alliance part
+        self.turns(9)
+        self.assertEqual((self.parts(2), self.parts(3)), ({"ally": 3}, {"ally": 3}))
+        self.g.FRIENDS["2-3"] = False
+        self.turns(10, 66)  # 弘治: a new period
+        self.g.FRIENDS["2-3"] = True
+        self.turns(67)
+        self.assertEqual((self.score(2), self.score(3)), (1, 1))
+
+    def test_friendship_of_the_start_and_of_one_team_never_scores(self):
+        self.relations(before_ledger=False)  # the start pairs are friends and allies
+        self.g.TEAM[1] = 0
+        self.turns(1, 5)
+        self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ODA-TAKEDA", False)  # ended; one team from now on
+        self.g.FRIENDS["0-1"] = False
+        self.turns(6)
+        self.g.FRIENDS["0-1"] = True
+        self.lapse_at_32()
+        self.assertEqual([self.score(p) for p in range(4)], [0, 0, 0, 0])
+        self.assertEqual(self.g.LEDGER().friends["2-3"], "none")
+        self.g.FRIENDS["2-3"] = True  # declared again by diplomacy after the lapse: a new friendship
+        self.turns(35)
+        self.assertEqual([self.score(p) for p in range(4)], [0, 0, 1, 1])
+
+    def test_friendship_existing_at_initialization_does_not_score(self):
+        self.g.FRIENDS["1-2"] = True  # not a start pair, but friends before the first turn start
+        self.turns(1, 5)
+        self.assertEqual(self.score(1), 0)
+
+    def test_without_the_gameplay_friendship_call_nothing_scores_and_the_log_says_so(self):
+        self.g.NO_FRIENDSHIP_API = True
+        self.turns(1, 5)
+        self.g.FRIENDS["2-3"] = True
+        self.turns(6, 8)
+        self.assertEqual(self.score(2), 0)
+        self.assertEqual(len([x for x in self.g.LOG.values() if "no gameplay HasDeclaredFriendship" in x]), 1)
+        self.g.ALLIED["2-3"] = True  # alliances still score
+        self.turns(9)
+        self.assertEqual(self.parts(2), {"ally": 2})
+
+    # --- the reign table up to 遅代 (owner decision L-3) ---
+
+    def test_reign_table_from_koji_to_chidai(self):
+        reigns = REIGNS_JSON["reigns"]
+        self.assertEqual(len(reigns), 47)
+        self.assertEqual([r["id"] for r in reigns[:8]],
+                         ["KOJI", "EIROKU", "GENKI", "TENSHO", "BUNROKU", "KEICHO", "GENNA", "KAN_EI"])
+        self.assertEqual([r["id"] for r in reigns[-6:]], ["MEIJI", "TAISHO", "SHOWA", "HEISEI", "REIWA", "CHIDAI"])
+        dates = [(r["year"], r["month"]) for r in reigns]
+        self.assertEqual(dates, sorted(dates))
+        self.assertEqual(len(set(dates)), len(dates))
+        self.assertEqual(dates[-2:], [(2019, 5), (2119, 5)])  # 令和 lasts 100 years
+        self.assertEqual([r["id"] for r in reigns if r.get("forced_age")], ["CHIDAI"])
+        self.assertEqual(len({r["id"] for r in reigns}), len(reigns))
+
+    def test_reign_turns_at_every_speed_match_the_generator_and_never_share_a_turn(self):
+        expected = REIGNS_GEN.turns_by_speed()
+        self.assertEqual(expected["GAMESPEED_STANDARD"][:8], [66, 73, 110, 119, 178, 189, 246, 271])
+        self.assertEqual(expected["GAMESPEED_STANDARD"][-2:], [1457, 1757])
+        for speed in REIGNS_GEN.SPEEDS:
+            with self.subTest(speed=speed):
+                lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+                lua.execute(STUBS, lua.table_from(ages_tables(), recursive=True), lua.table_from(CIVS), START_TURN, speed)
+                g = lua.globals()
+                lua.execute((MOD / "Scripts/JAC_Sengoku_Ages.lua").read_text(encoding="utf-8"))
+                g.START_TURN(1)
+                dues = []
+                while g.LEDGER().nextDue is not None:  # jump from 改元 to 改元
+                    dues.append(g.LEDGER().nextDue)
+                    g.START_TURN(dues[-1])
+                    self.assertEqual(g.LEDGER().history[f"r{len(dues)}"].turn, dues[-1])
+                self.assertEqual(dues, expected[speed])
+                self.assertEqual(dues, sorted(set(dues)))  # strictly increasing: no period of length 0
+
+    def test_reigns_on_one_turn_merge_into_the_last_and_are_judged_once(self):
+        tables = ages_tables()
+        # A made-up 改元 a month before 弘治: both fall in turn 66 (1555-09..12), a period of length 0.
+        tables["JAC_SengokuReigns"].insert(0, {"ReignType": "REIGN_TEST", "Year": 1555, "Month": 10,
+                                               "Name": "LOC_T", "Announcement": "LOC_T", "Notification": "LOC_T_NOTE"})
+        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        self.lua.execute(STUBS, self.lua.table_from(tables, recursive=True), self.lua.table_from(CIVS), START_TURN)
+        self.g = self.lua.globals()
+        self.g.FOUND(3, 12, 12, True, True)
+        self.load_script()
+        self.turns(1, 65)
+        self.assertEqual(self.g.LEDGER().nextDue, 66)
+        self.assertEqual(self.house(3).next.golden, 7)  # the projection is for the merged period (L = 65)
+        self.g.Players[3].research.techs[1] = True
+        self.turns(66, 73)
+        l = self.g.LEDGER()
+        self.assertIsNone(l.history["r1"])  # REIGN_TEST: merged, never judged
+        r2 = l.history["r2"]  # 弘治: judged once for the whole period since the start
+        self.assertEqual((r2.turn, r2.length, r2["from"]), (66, 65, 0))
+        self.assertEqual(l.history["r3"]["from"], 2)
+        notes = [tuple(n.values()) for n in self.g.NOTES.values()]
+        self.assertEqual([n[2] for n in notes if n[4] == 66], ["LOC_JAC_REIGN_KOJI_NOTIFICATION"] * 4)
+        self.assertNotIn("LOC_T_NOTE", {n[2] for n in notes})
+
+    def test_chidai_makes_every_house_dark_whatever_its_score_and_lasts_to_the_end(self):
+        self.turns(1, 5)
+        self.turns(1457)  # 令和 (2019)
+        self.assertEqual(self.g.LEDGER().history["r46"].turn, 1457)
+        self.house(1).age = "DARK"  # a dark house reaching golden would be heroic at an ordinary 改元
+        self.assertEqual(self.house(0).next.forced, "DARK")
+        for pid in range(4):
+            self.house(pid).score = 1000
+        self.turns(1757)  # 遅代 (2119-05)
+        l = self.g.LEDGER()
+        r = l.history["r47"]
+        self.assertEqual((r.turn, r.forced), (1757, "DARK"))
+        self.assertEqual([r[f"p{pid}"].age for pid in range(4)], ["DARK"] * 4)
+        self.assertEqual([r[f"p{pid}"].score for pid in range(4)], [1000] * 4)
+        self.assertEqual([self.house(p).policy for p in range(4)],
+                         ["JAC_AGE_POLICY_ELITE", "JAC_AGE_POLICY_ELITE", "JAC_AGE_POLICY_VALOR", "JAC_AGE_POLICY_TEMPLE"])
+        self.choose(1, "JAC_AGE_POLICY_PIRATE", reign=47)  # the dark-age policy choice still applies
+        self.assertEqual((self.house(1).policy, self.house(1).chosen), ("JAC_AGE_POLICY_PIRATE", 47))
+        self.assertIsNone(l.nextDue)
+        self.turns(3000)  # no more judgements: 遅代 lasts until the game ends
+        self.assertEqual((self.g.LEDGER().reign, self.house(1).age), (47, "DARK"))
+        self.assertIsNone(self.g.LEDGER().history["r48"])
 
     def plot_properties(self) -> dict:
         names = ["JAC_AGE_GOLDEN"] + [f"JAC_AGE_{kind}_{p}" for kind in ("POLICY", "ANCHOR")

@@ -30,7 +30,8 @@ local GOLDEN_FLAG = "JAC_AGE_GOLDEN"               -- plot properties read by Da
 -- §5.1 points and §5.3 threshold constants (official GS: Expansion2_GlobalParameters.xml:66,126,250-264;
 -- standard era length 50 = middle of 40/60, Expansion1_Eras.xml:4). Kept here because the SQL overwrites
 -- the official GlobalParameters.
-local POINTS = { home = 6, ko = 8, regain = 3, castle = 2, ally = 2, research = 1 }
+-- friend: a declared friendship made during the game, in the alliance part (owner decision L-2, 2026-09-30).
+local POINTS = { home = 6, ko = 8, regain = 3, castle = 2, ally = 2, friend = 1, research = 1 }
 local GOLDEN_BASE, DARK_BASE, PAST_AGE_SHIFT, STANDARD_LENGTH = 28, 14, 5, 50
 -- Official era points per ledger point (§5.3). The ledger scores far less than the official era score: live
 -- 2026-09-29 (15 km map, 22 AI houses, turns 1-65) the houses had 3-12 points (research ~0.08 a turn, a few
@@ -65,14 +66,27 @@ local function TurnContaining(year, month)
 	return turn
 end
 
+-- Date order (the UI's order, UI/JAC_SengokuAgesView.lua); turns never decrease with the date. forced: the age of
+-- every house at that 改元 (遅代: DARK, SSOT 3.2).
 local REIGNS = {}
 for row in GameInfo.JAC_SengokuReigns() do
-	table.insert(REIGNS, { type = row.ReignType, due = TurnContaining(row.Year, row.Month), announcement = row.Announcement })
+	table.insert(REIGNS, { type = row.ReignType, date = row.Year * 12 + row.Month, due = TurnContaining(row.Year, row.Month),
+		notification = row.Notification, forced = row.ForcedAge })
 end
 table.sort(REIGNS, function(a, b)
-	if a.due ~= b.due then return a.due < b.due end
+	if a.date ~= b.date then return a.date < b.date end
 	return a.type < b.type
 end)
+
+-- The next 改元 judged after the period `reign`, or nil after the last. 改元 falling on one turn leave periods of
+-- length 0: they merge into the last of that turn, which is judged once (§4.1). No two share a turn in the table at
+-- any speed (tests/test_sengoku_ages.py); the rule keeps the judgement deterministic if a table or calendar changes.
+local function NextJudged(reign)
+	local index = reign + 1
+	if REIGNS[index] == nil then return nil end
+	while REIGNS[index + 1] and REIGNS[index + 1].due == REIGNS[index].due do index = index + 1 end
+	return index
+end
 
 local POLICIES = {}
 for row in GameInfo.JAC_SengokuDarkAgePolicies() do table.insert(POLICIES, row) end
@@ -198,39 +212,62 @@ local function Faction(id)
 	return civ and string.match(civ, "^CIVILIZATION_JAC_(.+)$")
 end
 
--- §5.4: a pair's state is "none", "ally" or "start". A start alliance carries the pair's Game property as a
--- number while allied and never scores; the property turns false when it lapses (not re-made, owner decision K)
--- or an event ends it. A lingering alliance after false keeps its state, so only an alliance made from "none"
--- scores, once per pair and period; a pair that re-forms after the lapse scores. Checking HasAllied with the
--- number makes the lapse turn read "none" whether the ledger runs before or after JAC_Japan_1534Relations.lua.
--- Same-team pairs never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua
--- TrackStartAlliances); GetAllianceType is UI-only (nil here).
+-- Gameplay-side friendship: the DLL exports HasDeclaredFriendship (GameCore_XP2_FinalRelease.dll strings) but no
+-- official script calls it, and GetDeclaredFriendshipTurn was nil in gameplay live (documents/poc/
+-- japan-1534-relations.md). Without the call, friendships score nothing and the log says so once (要実機確認).
+local m_NoFriendshipLogged = false
+local function Friends(diplomacy, other)
+	if type(diplomacy.HasDeclaredFriendship) ~= "function" then
+		if not m_NoFriendshipLogged then Log("no gameplay HasDeclaredFriendship: friendships are not scored") end
+		m_NoFriendshipLogged = true
+		return nil
+	end
+	return diplomacy:HasDeclaredFriendship(other) == true
+end
+
+-- One relation of a pair (§5.4): its state is "none", "on" or "start". A start relation carries the pair's Game
+-- property as a number while the relation holds and never scores; the property turns false when the start
+-- alliance lapses (not re-made, owner decision K) or an event ends it. A lingering relation after false keeps its
+-- state, so only a relation made from "none" scores, once per pair, kind and period; a pair that re-forms after
+-- the lapse scores. Checking the relation with the number makes the lapse turn read "none" whether the ledger runs
+-- before or after JAC_Japan_1534Relations.lua. Same-team pairs never score. Returns the new state.
+local function TrackRelation(l, kind, a, b, on, start, previous, sameTeam)
+	if start and on then return "start" end
+	if on and previous == "none" and not sameTeam then
+		local pairKey = kind .. ":" .. tostring(a) .. ":" .. tostring(b) .. ":" .. tostring(l.reign)
+		if not l.keys[pairKey] then
+			l.keys[pairKey] = true
+			AddPoints(l, a, "ally", POINTS[kind])
+			AddPoints(l, b, "ally", POINTS[kind])
+		end
+	end
+	return on and "on" or "none"
+end
+
+-- §5.4: alliances (2 points each) and declared friendships (1 point each, owner decision L-2), both in the
+-- alliance part. The start relations of JAC_Japan_1534Relations.lua (friendship, then alliance, and the pair's
+-- property) never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua TrackStartAlliances);
+-- GetAllianceType is UI-only (nil here).
 local function IntakeAlliances(l)
+	l.friends = l.friends or {}  -- ledgers saved before the friendship points
 	local ids = AliveMajorIDs()
 	for i = 1, #ids do
 		for j = i + 1, #ids do
 			local a, b = ids[i], ids[j]
 			local key = tostring(a) .. "-" .. tostring(b)
-			local allied = Players[a]:GetDiplomacy():HasAllied(b)
+			local diplomacy = Players[a]:GetDiplomacy()
 			local fa, fb = Faction(a), Faction(b)
-			local property = nil
+			local start = false
 			if fa and fb then
 				if fa > fb then fa, fb = fb, fa end
-				property = Game:GetProperty(ALLIANCE_PREFIX .. fa .. "-" .. fb)
+				start = type(Game:GetProperty(ALLIANCE_PREFIX .. fa .. "-" .. fb)) == "number"
 			end
-			local previous = l.allies[key]
-			local state = allied and "ally" or "none"
-			if type(property) == "number" and allied then
-				state = "start"
-			elseif allied and previous == "none" and Players[a]:GetTeam() ~= Players[b]:GetTeam() then
-				local pairKey = "ally:" .. tostring(a) .. ":" .. tostring(b) .. ":" .. tostring(l.reign)
-				if not l.keys[pairKey] then
-					l.keys[pairKey] = true
-					AddPoints(l, a, "ally", POINTS.ally)
-					AddPoints(l, b, "ally", POINTS.ally)
-				end
+			local sameTeam = Players[a]:GetTeam() == Players[b]:GetTeam()
+			l.allies[key] = TrackRelation(l, "ally", a, b, diplomacy:HasAllied(b), start, l.allies[key], sameTeam)
+			local friends = Friends(diplomacy, b)
+			if friends ~= nil then
+				l.friends[key] = TrackRelation(l, "friend", a, b, friends, start, l.friends[key], sameTeam)
 			end
-			l.allies[key] = state
 		end
 	end
 end
@@ -303,12 +340,11 @@ end
 
 -- LOC keys, not looked-up text: each machine shows its own language (JAC_HistoricalEvents.lua:158-167).
 -- USER_DEFINED_2 has its own icon (Data/JAC_Sengoku_Ages_Icons.xml).
--- The heading has no era name: Q36 (provisional ①) shows it only on the 改元 screen and the era score screen
--- (UI/JAC_SengokuReignPopup.lua, UI/JAC_EraProgressPanel_Sengoku.lua); the 改元 screen is the main presentation.
-local function Notify(id, age, policy)
+-- The heading names the new era ("改元：弘治の世"; owner decision L-1: the 元号 is the era wherever one is named).
+local function Notify(id, reign, age, policy)
 	local summary = AGE_ANNOUNCEMENTS[age == "DARK" and policy or age]
 	NotificationManager.SendNotification(id, NotificationTypes.USER_DEFINED_2,
-		{ [ParameterTypes.MESSAGE] = "LOC_JAC_AGE_REIGN_NOTIFICATION", [ParameterTypes.SUMMARY] = summary })
+		{ [ParameterTypes.MESSAGE] = reign.notification, [ParameterTypes.SUMMARY] = summary })
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.
@@ -329,13 +365,16 @@ local function Judge(l, index)
 	local reign = REIGNS[index]
 	local length = reign.due - l.reignStart
 	local _, counts = CurrentCities()
-	local results = { turn = ElapsedTurn(), due = reign.due, length = length }
+	-- from: the period judged (its 改元; 0 is 天文). The previous index unless 改元 of one turn were merged.
+	local results = { turn = ElapsedTurn(), due = reign.due, length = length, from = l.reign, forced = reign.forced }
 	for _, id in ipairs(AliveMajorIDs()) do
 		local house = House(l, id)
 		if house then
 			local golden, dark = Thresholds(house, counts[id] or 0, length)
 			local age = "DARK"
-			if house.score >= golden then
+			if reign.forced == "DARK" then
+				house.dark = house.dark + 1  -- 遅代: dark whatever the score, so never heroic (SSOT 3.2)
+			elseif house.score >= golden then
 				age = house.age == "DARK" and "HEROIC" or "GOLDEN"
 				house.golden = house.golden + 1
 			elseif house.score >= dark then
@@ -349,10 +388,11 @@ local function Judge(l, index)
 			house.policy = age == "DARK" and (DEFAULT_POLICY[house.civ] or POLICIES[1].PolicyType) or nil
 			house.age = age
 			results["p" .. tostring(id)] = { age = age, score = house.score, golden = golden, dark = dark }
-			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s",
-				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy or ""))
+			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s%s",
+				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy or "",
+				reign.forced and " forced" or ""))
 			house.score, house.parts = 0, {}
-			Notify(id, age, house.policy)
+			Notify(id, reign, age, house.policy)
 		end
 	end
 	l.history["r" .. tostring(index)] = results
@@ -360,9 +400,11 @@ local function Judge(l, index)
 end
 
 -- For the era score screen (UI only reads the ledger): the next 改元's turn and each house's thresholds for the
--- current period with its cities at this turn start, by the same Thresholds as the judgement. None after the last.
+-- current period with its cities at this turn start, by the same Thresholds as the judgement, and the forced age of
+-- that 改元 (遅代). None after the last.
 local function Project(l)
-	local nextReign = REIGNS[l.reign + 1]
+	local nextIndex = NextJudged(l.reign)
+	local nextReign = nextIndex and REIGNS[nextIndex]
 	l.nextDue = nextReign and nextReign.due or nil
 	local _, counts = CurrentCities()
 	for _, key in ipairs(SortedKeys(l.houses)) do
@@ -370,17 +412,20 @@ local function Project(l)
 		house.next = nil
 		if nextReign then
 			local golden, dark = Thresholds(house, counts[tonumber(string.sub(key, 2))] or 0, nextReign.due - l.reignStart)
-			house.next = { golden = golden, dark = dark }
+			house.next = { golden = golden, dark = dark, forced = nextReign.forced }
 		end
 	end
 end
 
 local function Initialize()
 	local turn = ElapsedTurn()
-	local l = { version = 1, reign = 0, reignStart = 1, houses = {}, cities = {}, allies = {}, keys = {}, history = {} }
+	local l = { version = 1, reign = 0, reignStart = 1, houses = {}, cities = {}, allies = {}, friends = {}, keys = {},
+		history = {} }
 	-- A ledger started mid-game (the pack added to a save) skips the 改元 already passed.
-	while REIGNS[l.reign + 1] and REIGNS[l.reign + 1].due <= turn do
-		l.reign, l.reignStart = l.reign + 1, REIGNS[l.reign + 1].due
+	local index = NextJudged(l.reign)
+	while index and REIGNS[index].due <= turn do
+		l.reign, l.reignStart = index, REIGNS[index].due
+		index = NextJudged(l.reign)
 	end
 	for _, id in ipairs(AliveMajorIDs()) do
 		local player = Players[id]
@@ -397,7 +442,7 @@ local function Initialize()
 	for _, key in ipairs(SortedKeys(cities)) do
 		if l.cities[key] == nil then RegisterCity(l, key, cities[key].owner) end
 	end
-	IntakeAlliances(l)  -- records the alliances of the start without points
+	IntakeAlliances(l)  -- records the alliances and friendships of the start without points
 	Log(string.format("initialized turn=%d houses=%d cities=%d reign=%d", turn, #SortedKeys(l.houses),
 		#SortedKeys(l.cities), l.reign))
 	return l
@@ -414,9 +459,11 @@ local function OnGameTurnStarted()
 		IntakeCities(l)
 		IntakeAlliances(l)
 		IntakeResearch(l)
-		while REIGNS[l.reign + 1] and REIGNS[l.reign + 1].due <= turn do
-			IntakeEvents(l, REIGNS[l.reign + 1].due)
-			Judge(l, l.reign + 1)
+		local index = NextJudged(l.reign)
+		while index and REIGNS[index].due <= turn do
+			IntakeEvents(l, REIGNS[index].due)
+			Judge(l, index)
+			index = NextJudged(l.reign)
 		end
 		IntakeEvents(l, nil)
 	end

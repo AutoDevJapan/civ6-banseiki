@@ -1,5 +1,5 @@
 {
-  "name": "Sengoku ages screens on the 15 km Japan map: the human house (Takeda) sees the era-name change (改元) screen at Koji (turn 66) with its judged age and 元号, the screen closes, and the era score screen (the official era progress panel from the top panel button) shows the ledger: period, merit by category, thresholds, turns to the next era name and the past judgement",
+  "name": "Sengoku ages screens on the 15 km Japan map: the human house (Takeda) sees the era-name change (改元) screen at Koji (turn 66) with its judged age and 元号, the era indicator tooltip (bottom right) names the Koji era with the turns to Eiroku, the screen closes, and the era score screen (the official era progress panel from the top panel button) shows the ledger: period, merit by category, thresholds, turns to the next era name and the past judgement",
   "judge_profile": "generic",
   "steps": [
     {
@@ -158,6 +158,11 @@
     {
       "action": "screenshot",
       "path": "01-reign-popup.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; RealizeEraIndicator(); local text = JAC_ERA_INDICATOR_TEXT; if type(text) ~= 'string' then error('era indicator not replaced') end; local want = Locale.Lookup('LOC_JAC_AGE_ERA_NAME', 'LOC_JAC_REIGN_KOJI_NAME') .. '[NEWLINE][NEWLINE]' .. Locale.Lookup('LOC_JAC_AGE_ERA_ENDS_IN', l.nextDue - elapsed); if text ~= want then error('era indicator: ' .. text .. ' ~= ' .. want) end; if string.find(text, Locale.Lookup('LOC_JAC_REIGN_KOJI_NAME'), 1, true) == nil then error('no Koji in ' .. text) end; return 'era indicator tooltip (ActionPanel EraToolTipArea1/2): ' .. text"
     },
     {
       "action": "ui_lua",
