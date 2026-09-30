@@ -310,7 +310,8 @@ class Runner:
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
         self.metrics_runs = 0
         self.turn_metrics: list[dict] = []
-        self.save_load_metrics = SaveLoadMetrics(output / "save-load-metrics.csv")
+        self.save_load_metrics = SaveLoadMetrics(output / "save-load-metrics.csv",
+                                                test_mode=bool(scenario.get("test_mode")))
         self.result_passed = False
         self.completed_steps = 0
         self.result_checks: list[dict] = []
@@ -732,7 +733,7 @@ class Runner:
                 self.metrics_runs += 1
             if record_metrics:
                 recorder = TurnMetrics(self.output / f"autoplay-metrics-{self.metrics_runs}.jsonl", start_turn,
-                                       started_at=metrics_started_at)
+                                       started_at=metrics_started_at, test_mode=bool(self.scenario.get("test_mode")))
                 self.turn_metrics.append({"recorder": recorder, "pid": metrics_pid, "requested_turns": turns,
                                           "group": metrics_group})
                 recorder.start(initial_memory)
@@ -1284,6 +1285,7 @@ def fast_forward_scenario(data: dict) -> dict:
             if jump:
                 steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
                     "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
+                    "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\n"
                     "if type(Game.SetCurrentGameTurn) ~= 'function' then error('engine fast-forward unavailable') end\n"
                     f"local target = Game.GetCurrentGameTurn() + {jump}\n"
                     "Game.SetCurrentGameTurn(target)\n"

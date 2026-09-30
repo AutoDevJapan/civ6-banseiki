@@ -15,6 +15,23 @@ from scenario import AutoplayStatus, Runner, ScenarioError, validate_scenario
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_fast_forward_csv_files_warn_against_continuous_performance_comparison(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            runner = Runner({"name": "short", "test_mode": {"skipped_turns": 48}, "steps": []},
+                            base, base, base, 4318)
+            runner.save_load_metrics.record("save", "synthetic-turn-51", 51, 400, 2.0)
+            recorder = TurnMetrics(base / "turns.jsonl", 49, test_mode=True)
+            recorder.start({"working_set_bytes": 80, "private_bytes": 100})
+            recorder.sample(50, {"working_set_bytes": 85, "private_bytes": 110})
+            for name in ("save-load-metrics.csv", "turns.csv"):
+                with (base / name).open(encoding="utf-8", newline="") as handle:
+                    rows = list(csv.DictReader(handle))
+                self.assertGreater(len(rows), 0)
+                for row in rows:
+                    self.assertEqual(row["test_mode"], "True")
+                    self.assertEqual(row["continuous_performance_valid"], "False")
+
     def test_csv_and_summary_keep_skipped_turns_and_untimed_intervals_explicit(self):
         clock = [10.0]
         with tempfile.TemporaryDirectory() as folder:

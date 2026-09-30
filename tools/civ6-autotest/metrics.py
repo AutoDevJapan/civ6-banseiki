@@ -55,10 +55,11 @@ class TurnMetrics:
     """Observed turn changes; missed polling intervals remain explicit nulls."""
 
     COLUMNS = ("phase", "at", "turn", "observed", "duration_seconds", "elapsed_seconds",
-               "working_set_bytes", "private_bytes")
+               "working_set_bytes", "private_bytes", "test_mode", "continuous_performance_valid")
 
     def __init__(self, path: Path, start_turn: int, *, clock=time.monotonic,
-                 started_at: float | None = None):
+                 started_at: float | None = None, test_mode: bool = False):
+        self.test_mode = test_mode
         self.path = path
         self.csv_path = path.with_suffix(".csv")
         self.start_turn = start_turn
@@ -71,6 +72,7 @@ class TurnMetrics:
         self.rows: list[dict] = []
 
     def _write(self, row: dict) -> None:
+        row.update(test_mode=self.test_mode, continuous_performance_valid=not self.test_mode)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
         new_file = not self.csv_path.exists()
@@ -136,16 +138,19 @@ def summarize_turns(rows: list[dict]) -> dict:
 
 
 class SaveLoadMetrics:
-    COLUMNS = ("at", "action", "save_name", "turn", "save_bytes", "duration_seconds")
+    COLUMNS = ("at", "action", "save_name", "turn", "save_bytes", "duration_seconds",
+               "test_mode", "continuous_performance_valid")
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, test_mode: bool = False):
+        self.test_mode = test_mode
         self.path = path
         self.rows: list[dict] = []
 
     def record(self, action: str, name: str, turn: int, size: int, seconds: float) -> dict:
         row = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
                "save_name": name, "turn": turn, "save_bytes": size,
-               "duration_seconds": round(seconds, 3)}
+               "duration_seconds": round(seconds, 3), "test_mode": self.test_mode,
+               "continuous_performance_valid": not self.test_mode}
         new_file = not self.path.exists()
         with self.path.open("a", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=self.COLUMNS)

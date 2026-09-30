@@ -43,12 +43,17 @@ class VerificationScenarioTests(unittest.TestCase):
         lua = lupa.LuaRuntime()
         lua.execute("""
             turn=1
-            GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end}
+            GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,
+                               IsAnyMultiplayer=function() return false end}
             Game={GetCurrentGameTurn=function() return turn end,
                   SetCurrentGameTurn=function(t) turn=t end}
         """)
         self.assertEqual(lua.execute(jump), "TEST MODE: skipped 48 turns; current=49")
         self.assertEqual(lua.globals().turn, 49)
+        lua.execute("GameConfiguration.IsAnyMultiplayer=function() return true end")
+        with self.assertRaisesRegex(lupa.LuaError, "single-player test required"):
+            lua.execute(jump)
+        lua.execute("GameConfiguration.IsAnyMultiplayer=function() return false end")
         lua.execute("Game.SetCurrentGameTurn=function(t) end")
         with self.assertRaisesRegex(lupa.LuaError, "engine fast-forward failed"):
             lua.execute(jump)
@@ -111,7 +116,7 @@ class VerificationScenarioTests(unittest.TestCase):
                     if s.get("capture_as") == "PERF_INITIAL_STATE")
         lua = lupa.LuaRuntime()
         lua.execute("""
-            state={population=3,owner=0,ledger={reign=0,history={}}}
+            state={population=3,owner=0,unitX=2,damage=4,unitPresent=true,warlord={XP=20},ledger={reign=0,history={}}}
             local city={GetID=function() return 7 end,GetX=function() return 2 end,
                         GetY=function() return 3 end,GetPopulation=function() return state.population end}
             local cities={Members=function() local done=false; return function()
@@ -119,7 +124,15 @@ class VerificationScenarioTests(unittest.TestCase):
             end end}
             local research={HasTech=function() return true end}
             local culture={HasCivic=function() return true end}
+            local unit={GetID=function() return 8 end,GetOwner=function() return 0 end,
+                        GetUnitType=function() return 1 end,GetX=function() return state.unitX end,
+                        GetY=function() return 3 end,GetDamage=function() return state.damage end,
+                        GetProperty=function(_,key) return state.warlord end}
+            local units={Members=function() local done=false; return function()
+                if done or not state.unitPresent then return nil end; done=true; return 0,unit
+            end end}
             local player={IsAlive=function() return true end,GetCities=function() return cities end,
+                          GetUnits=function() return units end,
                           GetTechs=function() return research end,GetCulture=function() return culture end}
             Players={};for i=0,21 do Players[i]=player end
             Game={GetCurrentGameTurn=function() return 1 end,
@@ -140,6 +153,20 @@ class VerificationScenarioTests(unittest.TestCase):
         lua.globals().state.population = 4
         self.assertNotEqual(before, lua.execute(code))
         lua.globals().state.population = 3
+        self.assertEqual(before, lua.execute(code))
+        for key, changed in (("unitX", 7), ("damage", 10)):
+            old = lua.globals().state[key]
+            lua.globals().state[key] = changed
+            self.assertNotEqual(before, lua.execute(code))
+            lua.globals().state[key] = old
+            self.assertEqual(before, lua.execute(code))
+        lua.globals().state.warlord.XP = 40
+        self.assertNotEqual(before, lua.execute(code))
+        lua.globals().state.warlord.XP = 20
+        lua.globals().state.unitPresent = False
+        self.assertNotEqual(before, lua.execute(code))
+        lua.globals().state.unitPresent = True
+        self.assertEqual(before, lua.execute(code))
         lua.globals().state.owner = 1
         self.assertNotEqual(before, lua.execute(code))
 
