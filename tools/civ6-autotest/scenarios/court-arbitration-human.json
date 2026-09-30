@@ -1,0 +1,636 @@
+{
+  "name": "Human respondent to a court arbitration: real accept/refuse controls, EXECUTE_SCRIPT acknowledgement, next-turn legitimacy and peace/order consequences, and six save/load round trips. AI incoming petitions are seeded test fixtures because AI petitioning is not implemented. Two distinct wars avoid redeclaring on the turn of forced peace. Only two real turns.",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620973,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal human\nlocal ids={}\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  if p:IsHuman() then\n    if human then error('more than one human') end\n    human=p:GetID()\n  else ids[#ids+1]=p:GetID() end\nend\nif human==nil or PlayerConfigurations[human]:GetCivilizationTypeName()~=R.ASHIKAGA then\n  error('expected Ashikaga human')\nend\nif R.GameTurn()~=1 or Game:GetProperty(R.PENDING_KEY)~=nil then\n  error('unexpected turn or pending request before accept')\nend\ntable.sort(ids)\nlocal previous=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nlocal other\nfor _,id in ipairs(ids) do\n  local d=Players[human]:GetDiplomacy()\n  if other==nil and (not previous or id~=previous.other) and not d:IsAtWarWith(id)\n    and not d:HasAllied(id) and Players[id]:GetCities():GetCount()>0 then other=id end\nend\nif other==nil then error('no independent AI opponent for accept') end\nif Game:GetProperty(R.TruceKey(human,other))~=nil then error('fixture opponent already under a truce') end\nPlayers[other]:GetDiplomacy():DeclareWarOn(human,WarTypes.FORMAL_WAR,true)\nif not Players[human]:GetDiplomacy():IsAtWarWith(other) then error('fixture war not started') end\nPlayers[human]:SetProperty(R.LEGITIMACY_KEY,65)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,50)\nPlayers[other]:GetTreasury():ChangeGoldBalance(200)\nlocal ok,reason=R.CheckRequest(other,other,human)\nif not ok then error('fixture request invalid: '..tostring(reason)) end\nlocal turn=R.GameTurn()\n-- AI petitions are not implemented yet. Seed the same paid, incoming state as OnRequest;\n-- only the human answer below must travel through the actual screen and EXECUTE_SCRIPT.\nPlayers[other]:GetTreasury():ChangeGoldBalance(-100)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,45)\nGame:SetProperty(R.PENDING_KEY,{Requester=other,A=other,B=human,Turn=turn,Power=1})\nGame:SetProperty(R.LAST_REQUEST_KEY,turn)\nGame:SetProperty('JAC_ARB_HUMAN_TEST',{case='accept',human=human,other=other,turn=turn,initial=65})\nNotificationManager.SendNotification(human,NotificationTypes.USER_DEFINED_1,{\n  [ParameterTypes.MESSAGE]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_NAME'),\n  [ParameterTypes.SUMMARY]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY',\n    Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(human)))})\nreturn 'accept: incoming arbitration seeded for human '..human..' from AI '..other"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_CourtArbitrationPanel",
+        "code": "return not Controls.OpenButton:IsHidden()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "screenshot",
+      "path": "accept-01-incoming.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "ACCEPT_UNANSWERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-accept-unanswered",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    Game:SetProperty(R.PENDING_KEY,nil)\n    Players[t.human]:SetProperty(R.LEGITIMACY_KEY,1)\n    return 'unsaved unanswered state corrupted to prove reload restores it'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-accept-unanswered",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "ACCEPT_UNANSWERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "local p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n        local p=Game:GetProperty(R.PENDING_KEY)\n        return p~=nil and p.Requester==t.other and p.B==t.human and p.AnswerB==true\n          and Game:GetProperty(R.LAST_EVENT_KEY)=='respond player='..t.human..' turn='..t.turn"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "Controls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+    },
+    {
+      "action": "screenshot",
+      "path": "accept-02-answered.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "ACCEPT_ANSWERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-accept-answered",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    local p=Game:GetProperty(R.PENDING_KEY)\n    if not p or p.AnswerB~=true then error('answer missing before save mutation') end\n    p.AnswerB=false\n    Game:SetProperty(R.PENDING_KEY,p)\n    return 'unsaved answer inverted to prove reload restores the saved boolean'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-accept-answered",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "ACCEPT_ANSWERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    t.income=R.LegitimacyIncome(t.human,t.turn+1)\n    if t.income<1 or t.income>3 then error('unexpected legitimacy income') end\n    Game:SetProperty('JAC_ARB_HUMAN_TEST',t)\n    return 'next-turn legitimacy income recorded: '..t.income"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    if R.GameTurn()~=t.turn+1 then error('ruling advanced more than one turn') end\n    if Game:GetProperty(R.PENDING_KEY)~=nil then error('arbitration not resolved') end\n    local expected=t.initial+t.income+5\n    if R.Legitimacy(t.human)~=expected then\n      error('human legitimacy '..R.Legitimacy(t.human)..' expected '..expected)\n    end\n    if Game:GetProperty(R.AwaitKey(t.human,t.other))~=nil then error('unexpected deferred peace') end\n\n        if Players[t.human]:GetDiplomacy():IsAtWarWith(t.other) or Players[t.other]:GetDiplomacy():IsAtWarWith(t.human) then\n          error('accepted arbitration did not make peace')\n        end\n        if Game:GetProperty(R.TruceKey(t.human,t.other))~=t.turn+1+10\n          or Game:GetProperty(R.PeaceTurnKey(t.human,t.other))~=t.turn+1 then error('wrong truce or peace turn') end\n        if Players[t.human]:GetProperty(R.OUTLAW_KEY)~=nil or Players[t.other]:GetProperty(R.OUTLAW_KEY)~=nil then\n          error('acceptance unexpectedly caused an outlaw order')\n        end\n        local count=0\n        for _,c in Players[t.human]:GetCities():Members() do\n          local pl=Map.GetPlot(c:GetX(),c:GetY())\n          if pl:GetProperty(R.FLAG_HIGH)~=1 or pl:GetProperty(R.FLAG_LOW)~=0 then error('high legitimacy flags missing') end\n          count=count+1\n        end\n        if count==0 then error('no human cities checked') end\n        return 'human acceptance: +5 plus income, immediate peace, 10-turn truce, high flags in '..count..' cities'"
+    },
+    {
+      "action": "screenshot",
+      "path": "accept-03-ruling.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "ACCEPT_RESOLVED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-accept-resolved",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    Game:SetProperty(R.TruceKey(t.human,t.other),nil)\n    Players[t.human]:SetProperty(R.OUTLAW_KEY,nil)\n    Players[t.human]:SetProperty(R.LEGITIMACY_KEY,1)\n    Players[t.other]:SetProperty(R.JoinedKey(t.human),nil)\n    return 'unsaved ruling state corrupted to prove reload restores the saved consequences'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-accept-resolved",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "ACCEPT_RESOLVED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    if R.GameTurn()~=t.turn+1 then error('ruling advanced more than one turn') end\n    if Game:GetProperty(R.PENDING_KEY)~=nil then error('arbitration not resolved') end\n    local expected=t.initial+t.income+5\n    if R.Legitimacy(t.human)~=expected then\n      error('human legitimacy '..R.Legitimacy(t.human)..' expected '..expected)\n    end\n    if Game:GetProperty(R.AwaitKey(t.human,t.other))~=nil then error('unexpected deferred peace') end\n\n        if Players[t.human]:GetDiplomacy():IsAtWarWith(t.other) or Players[t.other]:GetDiplomacy():IsAtWarWith(t.human) then\n          error('accepted arbitration did not make peace')\n        end\n        if Game:GetProperty(R.TruceKey(t.human,t.other))~=t.turn+1+10\n          or Game:GetProperty(R.PeaceTurnKey(t.human,t.other))~=t.turn+1 then error('wrong truce or peace turn') end\n        if Players[t.human]:GetProperty(R.OUTLAW_KEY)~=nil or Players[t.other]:GetProperty(R.OUTLAW_KEY)~=nil then\n          error('acceptance unexpectedly caused an outlaw order')\n        end\n        local count=0\n        for _,c in Players[t.human]:GetCities():Members() do\n          local pl=Map.GetPlot(c:GetX(),c:GetY())\n          if pl:GetProperty(R.FLAG_HIGH)~=1 or pl:GetProperty(R.FLAG_LOW)~=0 then error('high legitimacy flags missing') end\n          count=count+1\n        end\n        if count==0 then error('no human cities checked') end\n        return 'human acceptance: +5 plus income, immediate peace, 10-turn truce, high flags in '..count..' cities'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal human\nlocal ids={}\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  if p:IsHuman() then\n    if human then error('more than one human') end\n    human=p:GetID()\n  else ids[#ids+1]=p:GetID() end\nend\nif human==nil or PlayerConfigurations[human]:GetCivilizationTypeName()~=R.ASHIKAGA then\n  error('expected Ashikaga human')\nend\nif R.GameTurn()~=2 or Game:GetProperty(R.PENDING_KEY)~=nil then\n  error('unexpected turn or pending request before refuse')\nend\ntable.sort(ids)\nlocal previous=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nlocal other\nfor _,id in ipairs(ids) do\n  local d=Players[human]:GetDiplomacy()\n  if other==nil and (not previous or id~=previous.other) and not d:IsAtWarWith(id)\n    and not d:HasAllied(id) and Players[id]:GetCities():GetCount()>0 then other=id end\nend\nif other==nil then error('no independent AI opponent for refuse') end\nif Game:GetProperty(R.TruceKey(human,other))~=nil then error('fixture opponent already under a truce') end\nPlayers[other]:GetDiplomacy():DeclareWarOn(human,WarTypes.FORMAL_WAR,true)\nif not Players[human]:GetDiplomacy():IsAtWarWith(other) then error('fixture war not started') end\nPlayers[human]:SetProperty(R.LEGITIMACY_KEY,40)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,50)\nPlayers[other]:GetTreasury():ChangeGoldBalance(200)\nlocal ok,reason=R.CheckRequest(other,other,human)\nif not ok then error('fixture request invalid: '..tostring(reason)) end\nlocal turn=R.GameTurn()\n-- AI petitions are not implemented yet. Seed the same paid, incoming state as OnRequest;\n-- only the human answer below must travel through the actual screen and EXECUTE_SCRIPT.\nPlayers[other]:GetTreasury():ChangeGoldBalance(-100)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,45)\nGame:SetProperty(R.PENDING_KEY,{Requester=other,A=other,B=human,Turn=turn,Power=1})\nGame:SetProperty(R.LAST_REQUEST_KEY,turn)\nGame:SetProperty('JAC_ARB_HUMAN_TEST',{case='refuse',human=human,other=other,turn=turn,initial=40})\nNotificationManager.SendNotification(human,NotificationTypes.USER_DEFINED_1,{\n  [ParameterTypes.MESSAGE]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_NAME'),\n  [ParameterTypes.SUMMARY]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY',\n    Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(human)))})\nreturn 'refuse: incoming arbitration seeded for human '..human..' from AI '..other"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_CourtArbitrationPanel",
+        "code": "return not Controls.OpenButton:IsHidden()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "screenshot",
+      "path": "refuse-01-incoming.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "REFUSE_UNANSWERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-refuse-unanswered",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    Game:SetProperty(R.PENDING_KEY,nil)\n    Players[t.human]:SetProperty(R.LEGITIMACY_KEY,1)\n    return 'unsaved unanswered state corrupted to prove reload restores it'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-refuse-unanswered",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "REFUSE_UNANSWERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "local p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n        local p=Game:GetProperty(R.PENDING_KEY)\n        return p~=nil and p.Requester==t.other and p.B==t.human and p.AnswerB==false\n          and Game:GetProperty(R.LAST_EVENT_KEY)=='respond player='..t.human..' turn='..t.turn"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "Controls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+    },
+    {
+      "action": "screenshot",
+      "path": "refuse-02-answered.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "REFUSE_ANSWERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-refuse-answered",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    local p=Game:GetProperty(R.PENDING_KEY)\n    if not p or p.AnswerB~=false then error('answer missing before save mutation') end\n    p.AnswerB=true\n    Game:SetProperty(R.PENDING_KEY,p)\n    return 'unsaved answer inverted to prove reload restores the saved boolean'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-refuse-answered",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "REFUSE_ANSWERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    t.income=R.LegitimacyIncome(t.human,t.turn+1)\n    if t.income<1 or t.income>3 then error('unexpected legitimacy income') end\n    Game:SetProperty('JAC_ARB_HUMAN_TEST',t)\n    return 'next-turn legitimacy income recorded: '..t.income"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    if R.GameTurn()~=t.turn+1 then error('ruling advanced more than one turn') end\n    if Game:GetProperty(R.PENDING_KEY)~=nil then error('arbitration not resolved') end\n    local expected=t.initial+t.income+-15\n    if R.Legitimacy(t.human)~=expected then\n      error('human legitimacy '..R.Legitimacy(t.human)..' expected '..expected)\n    end\n    if Game:GetProperty(R.AwaitKey(t.human,t.other))~=nil then error('unexpected deferred peace') end\n\n        if not Players[t.human]:GetDiplomacy():IsAtWarWith(t.other) or not Players[t.other]:GetDiplomacy():IsAtWarWith(t.human) then\n          error('refused arbitration unexpectedly made peace')\n        end\n        if Game:GetProperty(R.TruceKey(t.human,t.other))~=nil or Game:GetProperty(R.PeaceTurnKey(t.human,t.other))~=nil then\n          error('refused arbitration unexpectedly created a truce')\n        end\n        if Players[t.human]:GetProperty(R.OUTLAW_KEY)~=t.turn+1+10 then error('wrong human outlaw expiry') end\n        if not R.HasJoined(t.other,t.human,R.GameTurn()) then error('AI opponent did not join the order against the human') end\n        local ok,reason=R.CheckRequest(t.human,t.human,t.other)\n        if ok or reason~='LEGITIMACY' then error('human below 30 still allowed to petition: '..tostring(reason)) end\n        local count=0\n        for _,c in Players[t.human]:GetCities():Members() do\n          local pl=Map.GetPlot(c:GetX(),c:GetY())\n          if pl:GetProperty(R.FLAG_LOW)~=1 or pl:GetProperty(R.FLAG_HIGH)~=0 then error('low legitimacy flags missing') end\n          count=count+1\n        end\n        if count==0 then error('no human cities checked') end\n        return 'human refusal: -15 plus income, war continues, 10-turn order, low flags in '..count..' cities'"
+    },
+    {
+      "action": "screenshot",
+      "path": "refuse-03-ruling.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "capture_as": "REFUSE_RESOLVED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Autotest-Human-refuse-resolved",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    Game:SetProperty(R.TruceKey(t.human,t.other),nil)\n    Players[t.human]:SetProperty(R.OUTLAW_KEY,nil)\n    Players[t.human]:SetProperty(R.LEGITIMACY_KEY,1)\n    Players[t.other]:SetProperty(R.JoinedKey(t.human),nil)\n    return 'unsaved ruling state corrupted to prove reload restores the saved consequences'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Autotest-Human-refuse-resolved",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\nlocal p=Game:GetProperty(R.PENDING_KEY)\nlocal out={t.case, tostring(R.GameTurn()), tostring(R.Legitimacy(t.human)),\n  tostring(R.Legitimacy(t.other)), tostring(Players[t.human]:GetTreasury():GetGoldBalance()),\n  tostring(Players[t.other]:GetTreasury():GetGoldBalance()),\n  tostring(Game:GetProperty(R.LAST_REQUEST_KEY)), tostring(Game:GetProperty(R.LAST_EVENT_KEY)),\n  tostring(Game:GetProperty(R.TruceKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.PeaceTurnKey(t.human,t.other))),\n  tostring(Game:GetProperty(R.AwaitKey(t.human,t.other))),\n  tostring(Players[t.human]:GetProperty(R.OUTLAW_KEY)),\n  tostring(Players[t.other]:GetProperty(R.JoinedKey(t.human))),\n  tostring(Players[t.human]:GetDiplomacy():IsAtWarWith(t.other)),\n  tostring(Players[t.other]:GetDiplomacy():IsAtWarWith(t.human))}\nif p then\n  for _,k in ipairs({'Requester','A','B','Turn','Power','AnswerA','AnswerB'}) do\n    out[#out+1]=k..'='..tostring(p[k])\n  end\nelse out[#out+1]='no pending' end\nlocal cities={}\nfor _,id in ipairs({t.human,t.other}) do\n  for _,c in Players[id]:GetCities():Members() do\n    local pl=Map.GetPlot(c:GetX(),c:GetY())\n    cities[#cities+1]=id..':'..pl:GetIndex()..':'..tostring(pl:GetProperty(R.FLAG_HIGH))\n      ..':'..tostring(pl:GetProperty(R.FLAG_LOW))..':'..tostring(pl:GetProperty(R.FLAG_SUBJUGATION))\n  end\nend\ntable.sort(cities)\nout[#out+1]=table.concat(cities,',')\nreturn table.concat(out,'|')",
+      "equals_capture": "REFUSE_RESOLVED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal t=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nif not t or not Players[t.human]:IsHuman() then error('human fixture missing or no longer human') end\n\n    if R.GameTurn()~=t.turn+1 then error('ruling advanced more than one turn') end\n    if Game:GetProperty(R.PENDING_KEY)~=nil then error('arbitration not resolved') end\n    local expected=t.initial+t.income+-15\n    if R.Legitimacy(t.human)~=expected then\n      error('human legitimacy '..R.Legitimacy(t.human)..' expected '..expected)\n    end\n    if Game:GetProperty(R.AwaitKey(t.human,t.other))~=nil then error('unexpected deferred peace') end\n\n        if not Players[t.human]:GetDiplomacy():IsAtWarWith(t.other) or not Players[t.other]:GetDiplomacy():IsAtWarWith(t.human) then\n          error('refused arbitration unexpectedly made peace')\n        end\n        if Game:GetProperty(R.TruceKey(t.human,t.other))~=nil or Game:GetProperty(R.PeaceTurnKey(t.human,t.other))~=nil then\n          error('refused arbitration unexpectedly created a truce')\n        end\n        if Players[t.human]:GetProperty(R.OUTLAW_KEY)~=t.turn+1+10 then error('wrong human outlaw expiry') end\n        if not R.HasJoined(t.other,t.human,R.GameTurn()) then error('AI opponent did not join the order against the human') end\n        local ok,reason=R.CheckRequest(t.human,t.human,t.other)\n        if ok or reason~='LEGITIMACY' then error('human below 30 still allowed to petition: '..tostring(reason)) end\n        local count=0\n        for _,c in Players[t.human]:GetCities():Members() do\n          local pl=Map.GetPlot(c:GetX(),c:GetY())\n          if pl:GetProperty(R.FLAG_LOW)~=1 or pl:GetProperty(R.FLAG_HIGH)~=0 then error('low legitimacy flags missing') end\n          count=count+1\n        end\n        if count==0 then error('no human cities checked') end\n        return 'human refusal: -15 plus income, war continues, 10-turn order, low flags in '..count..' cities'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+    },
+    {
+      "action": "screenshot",
+      "path": "refuse-04-reloaded-order.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CourtArbitrationPanel",
+      "code": "Controls.CloseButton:DoLeftClick(); return \"closed\""
+    }
+  ]
+}
