@@ -145,7 +145,7 @@ local function SnapshotHero(unit, info)
   assert(unit.GetHeroClassType, "native Hero class API missing")
   -- Shipped UnitPanel.lua:2269 uses this property. Debug/Heroes.ltp's Get/SetLifespan
   -- and Get/SetRenown are absent from the installed XP2 Lua registrations; do not require or guess them.
-  local lifeKey = UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining
+  local lifeKey = (UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining) or ExposedMembers.JAC_HeroLifespanKey
   local class = unit:GetHeroClassType()
   local def = assert(GameInfo.HeroClasses and GameInfo.HeroClasses[class], "native Hero class missing")
   assert(def.UnitType == info.UnitType, "native Hero class/unit type mismatch")

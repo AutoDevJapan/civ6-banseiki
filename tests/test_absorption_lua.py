@@ -714,6 +714,24 @@ class AbsorptionTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, 'manager owner changed'):
             self.a.Verify('test-absorption', False)
 
+    def test_ui_publishes_engine_enum_when_gameplay_has_no_unit_property_keys(self):
+        self.add_native_hero()
+        ui = (ROOT / "poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8")
+        self.run_lua('''
+          NATIVE_TEST_LIFE_KEY=UnitPropertyKeys.LifespanRemaining
+          UnitPropertyKeys={LifespanRemaining=-1318296071}
+          Events={LoadScreenClose={Add=function(f) HERO_KEYS_ON_LOAD=f end}}
+        ''')
+        self.run_lua(ui)
+        self.assertEqual(self.g.ExposedMembers.JAC_HeroLifespanKey, -1318296071)
+        self.run_lua('''
+          UnitPropertyKeys=nil
+          local u=Players[1].units[13]
+          u.GetProperty=function(self,key) if key==-1318296071 then return self.lifespan end;return self.props[key] end
+          local snap=ExposedMembers.JAC_Absorption.SnapshotUnit(u)
+          assert(snap.Hero.LifespanKey==-1318296071 and snap.Hero.Lifespan==17)
+        ''')
+
     def test_shipped_lifespan_property_is_used_without_legacy_lifespan_or_renown_methods(self):
         self.add_native_hero()
         self.run_lua('''
@@ -1319,7 +1337,8 @@ class AbsorptionPackageTests(unittest.TestCase):
         root = ET.parse(MOD / "JAC_PoC_Absorption.modinfo").getroot()
         files = {n.text for n in root.findall("./Files/File")}
         self.assertEqual(files, {"Data/JAC_Absorption.sql", "Text/JAC_Absorption_Text.xml",
-                                 "Scripts/JAC_Absorption_Rules.lua", "Scripts/JAC_Absorption_Gameplay.lua"})
+                                 "Scripts/JAC_Absorption_Rules.lua", "Scripts/JAC_Absorption_Gameplay.lua",
+                                 "UI/JAC_Absorption_HeroKeys.lua", "UI/JAC_Absorption_HeroKeys.xml"})
         for name in files:
             self.assertTrue((MOD / name).is_file(), name)
         self.assertEqual({n.get("id") for n in root.findall("./Dependencies/Mod")},

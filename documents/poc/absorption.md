@@ -1,6 +1,6 @@
 # 束2 PoC：勢力吸収
 
-公式英雄の API 調査では、古い FireTuner パネルの `GetLifespan` / `SetLifespan` の例だけでは判断しない。導入済みの `Base/Assets/UI/Panels/UnitPanel.lua:2269` は、残り寿命を `unit:GetProperty(UnitPropertyKeys.LifespanRemaining)` で読む。ゲーム側で同じキーを保存・復元できるかと、手番経過後に本体が寿命を消費するかを実機で確認する。
+公式英雄の API 調査では、古い FireTuner パネルの `GetLifespan` / `SetLifespan` の例だけでは判断しない。導入済みの `Base/Assets/UI/Panels/UnitPanel.lua:2269` は、残り寿命を `unit:GetProperty(UnitPropertyKeys.LifespanRemaining)` で読む。実機ではこの定数表が画面側にだけ存在したため、画面側の実際の数値キーを共有してゲーム処理側から読む。手番経過後の本体の寿命消費は実機シナリオで検査する。
 
 `poc/JAC_PoC_Absorption` は、SSOT 9.1 と 16.1「吸収」の移管・保存の検証を行う。実機では未実行。Lua の模擬エンジンでの成功と、Civ6 本体での成功は分けて扱う。
 
@@ -11,7 +11,7 @@
 - MOD ID：`61320778-2e75-4c11-9009-94101b519aba`。Gathering Storm、Babylon DLC、万世紀ルールセットを依存 MOD とする。SSOT 9.1 の公式英雄が必須という判断に従う。日本地図シナリオは既存のカスタム文明・戦国ツリー・日本地図も有効にする。
 - `Data/JAC_Absorption.sql`：資産の種類・分岐結果・受入先の表。確率や効果量は持たない。
 - `Scripts/JAC_Absorption_Rules.lua`：保存キー、未決事項の PoC 定数、分岐の検証、複製、照合、人物の Unit 参照の付け替え。
-- `Scripts/JAC_Absorption_Gameplay.lua`：ゲーム側の移管、保存、再開、照合。UI スクリプトはない。
+- `Scripts/JAC_Absorption_Gameplay.lua`：ゲーム側の移管、保存、再開、照合。`UI/JAC_Absorption_HeroKeys.lua` は画面側にある本体の寿命キーだけを共有し、ゲーム状態を変更しない。
 - `Text/JAC_Absorption_Text.xml` と modinfo：日本語・英語・ロシア語。新しい文明・指導者や画像は追加しない。旧当主の代理 Unit に公式の大将軍を使うのは、人物の存続を検証するためである。
 
 ゲーム側 Lua / `GameCore_Tuner` から次の形で呼ぶ。画面・AI の将来の加入判定が結果を選び、この API に渡す。外交の関係宣言だけで自動吸収するイベントは登録しない。
@@ -163,7 +163,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-
 
 基準コミット `cc07efb` について以前報告された root 370件・ドライバー150件と CI の結果は、Shepherd が再検証する。今回の Lua／パッケージテスト75件は成功した。2本のシナリオは `--check` で各26・23手順の JSON と Lua 構文を検査したが、実機では未実行。ACL の変更、パッケージマーカーの追加、一時ディレクトリへの回避策は使っていない。
 
-Shepherd が汎用ドライバーで設定を扱う場合に必要なのは、Game グループの `GAMEMODE_HEROES=true`（XML の照合値は1）と、DLC ID `8424840c-92ef-4426-a9b4-b4e0cb818049` の有効化である。現シナリオは既存の `ui_lua` / `FrontEnd` で適用するため、汎用ドライバーは変更していない。
+Shepherd が汎用ドライバーで設定を扱う場合に必要なのは、Game グループの `GAMEMODE_HEROES=true`（XML の照合値は1）と、DLC ID `8424840C-92EF-4426-A9B4-B4E0CB818049` の有効化である。現シナリオは既存の `ui_lua` / `FrontEnd` で適用するため、汎用ドライバーは変更していない。
 
 ## 公式英雄の未解決点と実機確認
 

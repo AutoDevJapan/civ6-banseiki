@@ -135,16 +135,19 @@ class NativeHeroPackageTests(unittest.TestCase):
     def test_icons_preserve_every_size_of_generic_units(self):
         db = sqlite3.connect(":memory:")
         self.addCleanup(db.close)
-        db.execute('CREATE TABLE IconDefinitions(Name TEXT,Size INTEGER,"Index" INTEGER,Atlas TEXT,PRIMARY KEY(Name,Size))')
+        db.execute('CREATE TABLE IconDefinitions(Name TEXT PRIMARY KEY,"Index" INTEGER,Atlas TEXT)')
+        db.execute('CREATE TABLE IconTextureAtlases(Name TEXT,IconSize INTEGER,PRIMARY KEY(Name,IconSize))')
+        db.executemany('INSERT INTO IconTextureAtlases VALUES (?,?)',
+                       [("BASE_UNITS", size) for size in (32, 38, 50, 80, 256)])
         for unit in ("WARRIOR", "HORSEMAN"):
-            db.executemany('INSERT INTO IconDefinitions VALUES (?,?,?,?)',
-                           [("ICON_UNIT_" + unit, size, 7, "BASE_UNITS") for size in (32, 38, 50, 80, 256)])
+            db.execute('INSERT INTO IconDefinitions VALUES (?,?,?)', ("ICON_UNIT_" + unit, 7, "BASE_UNITS"))
         db.executescript((MOD / "Data/JAC_Banseiki_Hero_Icons.sql").read_text(encoding="utf-8"))
         for suffix, source in (("A", "WARRIOR"), ("B", "HORSEMAN")):
-            original = list(db.execute('SELECT Size,"Index",Atlas FROM IconDefinitions WHERE Name=? ORDER BY Size', ("ICON_UNIT_" + source,)))
+            query = 'SELECT a.IconSize,d."Index",d.Atlas FROM IconDefinitions d JOIN IconTextureAtlases a ON a.Name=d.Atlas WHERE d.Name=? ORDER BY a.IconSize'
+            original = list(db.execute(query, ("ICON_UNIT_" + source,)))
             self.assertEqual(len(original), 5)
             for prefix in ("ICON_UNIT_HERO_JAC_WARLORD_", "ICON_HEROCLASS_JAC_WARLORD_"):
-                self.assertEqual(list(db.execute('SELECT Size,"Index",Atlas FROM IconDefinitions WHERE Name=? ORDER BY Size', (prefix + suffix,))), original)
+                self.assertEqual(list(db.execute(query, (prefix + suffix,))), original)
 
     def test_all_custom_names_have_three_languages_and_actions_are_scoped(self):
         texts = ET.parse(MOD / "Text/JAC_Banseiki_Heroes_Text.xml").getroot().find("LocalizedText")
