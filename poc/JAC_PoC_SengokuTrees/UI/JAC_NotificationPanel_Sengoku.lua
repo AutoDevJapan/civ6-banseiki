@@ -7,7 +7,7 @@ local BASE_RegisterHandlers = RegisterHandlers
 
 function RegisterHandlers()
 	BASE_RegisterHandlers()
-	local handler = g_notificationHandlers[NotificationTypes.USER_DEFINED_2]
+	local handler = g_notificationHandlers[NotificationTypes.USER_DEFINED_3]
 	local activate, dismiss = handler.Activate, handler.TryDismiss
 	handler.Activate = function(entry, notificationID, activatedByUser)
 		local notification = GetActiveNotificationFromEntry(entry, notificationID)

@@ -364,10 +364,15 @@ local function Notify(id, reign, index, age, policy)
 	-- PiratesScenario_PropKeys.lua:85-89, PiratesScenario_StartScript.lua:340-343; UI reads them at
 	-- UI/Replacements/NotificationPanel_PiratesScenario.lua:81,145.
 	if age == "DARK" and Players[id]:IsHuman() then
+		kind = NotificationTypes.USER_DEFINED_3 -- durable choice entry; ordinary reign notices still expire
 		data.JAC_DARK_POLICY_REIGN = index
 		data[NotificationParameterTypes.CanUserDismiss] = false
+		data.AlwaysUnique = true
 	end
 	NotificationManager.SendNotification(id, kind, data)
+	if age == "DARK" then
+		Log(string.format("policy notification sent player=%d reign=%d type=%s human=%s turn=%d", id, index, tostring(kind), tostring(Players[id]:IsHuman()), ElapsedTurn()))
+	end
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.

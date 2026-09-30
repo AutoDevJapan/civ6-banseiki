@@ -162,7 +162,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local id = Game.GetLocalPlayer(); local ok, result = pcall(NotificationManager.SendNotification, id, NotificationTypes.COMMEMORATION_AVAILABLE, {[ParameterTypes.MESSAGE]='LOC_JAC_REIGN_KOJI_NOTIFICATION', [ParameterTypes.SUMMARY]='LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT', JAC_NATIVE_POLICY_PROBE=1, [NotificationParameterTypes.CanUserDismiss]=false}); if not ok then error('native notification API failed: ' .. tostring(result)) end; return 'native SendNotification type=' .. tostring(NotificationTypes.COMMEMORATION_AVAILABLE) .. ' returned ' .. tostring(result)"
+      "code": "local id = Game.GetLocalPlayer(); if id == nil or id < 0 or Players[id] == nil then error('native probe has no valid player') end; local ok, result = pcall(NotificationManager.SendNotification, id, NotificationTypes.COMMEMORATION_AVAILABLE, {[ParameterTypes.MESSAGE]='LOC_JAC_REIGN_KOJI_NOTIFICATION', [ParameterTypes.SUMMARY]='LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT', JAC_NATIVE_POLICY_PROBE=1, [NotificationParameterTypes.CanUserDismiss]=false}); if not ok then error('native notification API failed: ' .. tostring(result)) end; return 'native SendNotification player=' .. id .. ' human=' .. tostring(Players[id]:IsHuman()) .. ' type=' .. tostring(NotificationTypes.COMMEMORATION_AVAILABLE) .. ' returned ' .. tostring(result)"
     },
     {
       "action": "ui_lua",
@@ -170,16 +170,17 @@
       "code": "local id = Game.GetLocalPlayer(); local notes = {}; for _, key in pairs(NotificationManager.GetList(id) or {}) do local n = NotificationManager.Find(id,key); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.COMMEMORATION_AVAILABLE then table.insert(notes,'id=' .. key .. ',probe=' .. tostring(n:GetValue('JAC_NATIVE_POLICY_PROBE')) .. ',blocker=' .. tostring(n:GetEndTurnBlocking())); if n:GetValue('JAC_NATIVE_POLICY_PROBE') == 1 then NotificationManager.Dismiss(id,key) end end end; return 'native commemoration notifications after gameplay send: ' .. (#notes == 0 and 'none' or table.concat(notes,';'))"
     },
     {
-      "action": "end_turn",
-      "timeout": 600
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "if JAC_IsDarkPolicyEndTurnBlocked() then error('cannot advance: a dark policy is still pending') end; local input = {GetMessageType=function() return KeyEvents.KeyUp end, GetKey=function() return Keys.VK_RETURN end, IsShiftDown=function() return true end}; if not OnInputHandler(input) then error('end-turn input was not handled') end; return 'actual Shift+Enter handler requested the next turn after the policy guard cleared'"
     },
     {
       "action": "wait_for",
-      "timeout": 120,
+      "timeout": 600,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+        "code": "local p = Players[Game.GetLocalPlayer()]; return Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1 == 66 and p ~= nil and p:IsTurnActive()"
       }
     },
     {
@@ -200,7 +201,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved reign policy notification') end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; n:Activate(true); return 'saved reign notification activated through the official event on turn 66'"
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then local all = {}; for _, key in pairs(NotificationManager.GetList(me) or {}) do local v = NotificationManager.Find(me,key); all[#all+1] = tostring(key) .. ':' .. (v and tostring(v:GetType()) .. ':' .. tostring(v:GetValue('JAC_DARK_POLICY_REIGN')) .. ':' .. tostring(v:IsDismissed()) or 'missing') end; error('no saved reign policy notification; list=' .. table.concat(all,',')) end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; n:Activate(true); return 'saved reign notification activated through the official event on turn 66'"
     },
     {
       "action": "ui_lua",
@@ -210,7 +211,7 @@
     {
       "action": "ui_lua",
       "state_name": "ActionPanel",
-      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved reign policy notification') end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; if not JAC_IsDarkPolicyEndTurnBlocked() then error('saved pending ledger does not block turn end') end; if AllowAutoEndTurn_Expansion() then error('auto end-turn allows a pending policy') end; OnRefresh(); if Controls.EndTurnText:GetText() ~= Locale.Lookup('LOC_JAC_AGE_DARK_CHOICE_TITLE') then error('end-turn label does not ask for a policy') end; OnEndTurnClicked(); return 'actual end-turn button handler reopens the choice without ending turn'"
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then local all = {}; for _, key in pairs(NotificationManager.GetList(me) or {}) do local v = NotificationManager.Find(me,key); all[#all+1] = tostring(key) .. ':' .. (v and tostring(v:GetType()) .. ':' .. tostring(v:GetValue('JAC_DARK_POLICY_REIGN')) .. ':' .. tostring(v:IsDismissed()) or 'missing') end; error('no saved reign policy notification; list=' .. table.concat(all,',')) end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; if not JAC_IsDarkPolicyEndTurnBlocked() then error('saved pending ledger does not block turn end') end; if AllowAutoEndTurn_Expansion() then error('auto end-turn allows a pending policy') end; OnRefresh(); if Controls.EndTurnText:GetText() ~= Locale.Lookup('LOC_JAC_AGE_DARK_CHOICE_TITLE') then error('end-turn label does not ask for a policy') end; OnEndTurnClicked(); return 'actual end-turn button handler reopens the choice without ending turn'"
     },
     {
       "action": "ui_lua",
@@ -220,7 +221,7 @@
     {
       "action": "ui_lua",
       "state_name": "ActionPanel",
-      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved reign policy notification') end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; if not JAC_IsDarkPolicyEndTurnBlocked() then error('saved pending ledger does not block turn end') end; if AllowAutoEndTurn_Expansion() then error('auto end-turn allows a pending policy') end; OnInputActionTriggered(Input.GetActionId('EndTurn')); local input = {GetMessageType=function() return KeyEvents.KeyUp end, GetKey=function() return Keys.VK_RETURN end, IsShiftDown=function() return true end}; if not OnInputHandler(input) then error('forced Shift+Enter not consumed') end; CheckAutoEndTurn(EndTurnBlockingTypes.NO_ENDTURN_BLOCKING); if elapsed ~= 66 then error('turn advanced without a choice') end; return 'end-turn hotkey, forced Shift+Enter and automatic end-turn remain blocked on turn 66'"
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then local all = {}; for _, key in pairs(NotificationManager.GetList(me) or {}) do local v = NotificationManager.Find(me,key); all[#all+1] = tostring(key) .. ':' .. (v and tostring(v:GetType()) .. ':' .. tostring(v:GetValue('JAC_DARK_POLICY_REIGN')) .. ':' .. tostring(v:IsDismissed()) or 'missing') end; error('no saved reign policy notification; list=' .. table.concat(all,',')) end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; if not JAC_IsDarkPolicyEndTurnBlocked() then error('saved pending ledger does not block turn end') end; if AllowAutoEndTurn_Expansion() then error('auto end-turn allows a pending policy') end; OnInputActionTriggered(Input.GetActionId('EndTurn')); local input = {GetMessageType=function() return KeyEvents.KeyUp end, GetKey=function() return Keys.VK_RETURN end, IsShiftDown=function() return true end}; if not OnInputHandler(input) then error('forced Shift+Enter not consumed') end; CheckAutoEndTurn(EndTurnBlockingTypes.NO_ENDTURN_BLOCKING); if elapsed ~= 66 then error('turn advanced without a choice') end; return 'end-turn hotkey, forced Shift+Enter and automatic end-turn remain blocked on turn 66'"
     },
     {
       "action": "save",
@@ -258,7 +259,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then error('no saved reign policy notification') end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; n:Activate(true); return 'saved reign notification activated through the official event on turn 66'"
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; local n = findNote(); if n == nil then local all = {}; for _, key in pairs(NotificationManager.GetList(me) or {}) do local v = NotificationManager.Find(me,key); all[#all+1] = tostring(key) .. ':' .. (v and tostring(v:GetType()) .. ':' .. tostring(v:GetValue('JAC_DARK_POLICY_REIGN')) .. ':' .. tostring(v:IsDismissed()) or 'missing') end; error('no saved reign policy notification; list=' .. table.concat(all,',')) end; if n:CanUserDismiss() then error('reign notification can be dismissed before choosing') end; if elapsed ~= 66 or h.chosen == l.reign or h.age ~= 'DARK' then error('wrong pending judgement turn') end; n:Activate(true); return 'saved reign notification activated through the official event on turn 66'"
     },
     {
       "action": "ui_lua",
@@ -280,7 +281,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then return false end; return findNote() == nil"
+        "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; if h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or h.chosen ~= 1 then return false end; return findNote() == nil"
       }
     },
     {
@@ -299,16 +300,17 @@
       "code": "if not ContextPtr:IsHidden() then error('choice screen stayed open after acceptance') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('second UI choice accepted') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_SengokuDarkPolicyChoose', PolicyType='JAC_AGE_POLICY_PIRATE', Reign=l.reign}); return 'UI rejects a second choice; forged duplicate sent to test the gameplay receiver'"
     },
     {
-      "action": "end_turn",
-      "timeout": 600
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "if JAC_IsDarkPolicyEndTurnBlocked() then error('cannot advance: a dark policy is still pending') end; local input = {GetMessageType=function() return KeyEvents.KeyUp end, GetKey=function() return Keys.VK_RETURN end, IsShiftDown=function() return true end}; if not OnInputHandler(input) then error('end-turn input was not handled') end; return 'actual Shift+Enter handler requested the next turn after the policy guard cleared'"
     },
     {
       "action": "wait_for",
-      "timeout": 120,
+      "timeout": 600,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p = Players[Game.GetLocalPlayer()]; return p ~= nil and p:IsTurnActive()"
+        "code": "local p = Players[Game.GetLocalPlayer()]; return Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1 == 67 and p ~= nil and p:IsTurnActive()"
       }
     },
     {
@@ -372,7 +374,7 @@
     {
       "action": "ui_lua",
       "state_name": "ActionPanel",
-      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_2 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; if elapsed ~= 67 or h.chosen ~= 1 or h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or findNote() ~= nil or JAC_IsDarkPolicyEndTurnBlocked() then error('chosen save did not preserve choice/unblock') end; return 'chosen save keeps policy, dismisses notification and releases UI block'"
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if me == nil or me < 0 or type(l) ~= 'table' then error('no local house/ledger') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; local function findNote() local found; for _, id in pairs(NotificationManager.GetList(me) or {}) do local n = NotificationManager.Find(me, id); if n and not n:IsDismissed() and n:GetType() == NotificationTypes.USER_DEFINED_3 and n:GetValue('JAC_DARK_POLICY_REIGN') == l.reign then if found then error('duplicate reign policy notification') end; found = n end end; return found end; if elapsed ~= 67 or h.chosen ~= 1 or h.policy ~= 'JAC_AGE_POLICY_TEMPLE' or findNote() ~= nil or JAC_IsDarkPolicyEndTurnBlocked() then error('chosen save did not preserve choice/unblock') end; return 'chosen save keeps policy, dismisses notification and releases UI block'"
     }
   ]
 }

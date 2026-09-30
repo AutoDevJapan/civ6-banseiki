@@ -52,7 +52,7 @@ function OnRefresh()
 	Controls.EndTurnText:SetText(Locale.Lookup("LOC_JAC_AGE_DARK_CHOICE_TITLE"))
 	Controls.EndTurnButton:SetToolTipString(Locale.Lookup("LOC_JAC_AGE_DARK_CHOICE_REQUIRED"))
 	Controls.CurrentTurnBlockerIcon:SetHide(false)
-	Controls.CurrentTurnBlockerIcon:SetIcon("ICON_NOTIFICATION_USER_DEFINED_2")
+	Controls.CurrentTurnBlockerIcon:SetIcon("ICON_NOTIFICATION_USER_DEFINED_3")
 	Controls.CountImage:SetHide(true)
 end
 

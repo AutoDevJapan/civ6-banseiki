@@ -59,7 +59,7 @@
 4. **占領・建設のイベント**：`GameEvents.CityConquered` はその場で奪取を数え、城の記録を書き換える（直後に破却されても点と滅亡の点が残り、次のターンの差分は同じ奪取を数えない）。`GameEvents.CityBuilt` は移管でも出るので点を付けず、新しいタイルの城の登録とタイルのプロパティの書き直しだけをする
 5. **改元の判定**（§5.3）：改元の月を含むターン（標準速度で 66・73・110・119・178・189・246・271…1457（令和）・1757（遅代））の開始時に、取り込み（改元のターンに付いた出来事のフラグを除く）→ 全勢力の判定 → 残りの出来事の取り込み、の順に処理する。閾値は `(28 or 14 + 都市数 + 5×過去の黄金期 − 5×過去の暗黒期) × 期の長さ / (50 × 6)` を、黄金は切り上げて下限 2、暗黒は切り捨てて下限 0（6 は台帳の 1 点あたりの公式の点。根拠は設計 §5.3）。暗黒を切り捨てるのは、短い期（7〜11 ターン）の点が 0〜1 で、旧式（切り上げ・下限 1）では点 0 の家がすべて暗黒期になったため（下の「約200ターンの割合」）。結果は `history.r<番号>` に残し、各家の期の点を 0 に戻す
 6. **効果**（§7.1）：タイルのプロパティを書く関数（毎回全都市を台帳から書き直す。冪等）が、都市の中心タイルに 0/1 の旗を書く。`JAC_AGE_GOLDEN`（黄金期・英雄期の家の全都市）、`JAC_AGE_POLICY_<名前>`（暗黒期の政策を持つ家の全都市）、`JAC_AGE_ANCHOR_<名前>`（その家の要の都市＝タイル番号が最小の都市だけ）。Modifier は `REQUIREMENT_PLOT_PROPERTY_MATCHES` でこの旗を読む
-7. **通知**：改元のとき、人間の暗黒期の家に公式の終了ブロックを持つ `NOTIFICATION_COMMEMORATION_AVAILABLE`、その他の生存している主要勢力に `NOTIFICATION_USER_DEFINED_2` を送る。見出しは「改元：弘治の世」（改元ごとのキー。L-1）、本文はその家の結果（黄金期・英雄期・通常期、暗黒期は割り当てた政策と効果）。LOC キーのまま渡し、各端末の言語で出る。人間への主な見せ方は改元の画面（下の「改元の画面と時代スコアの画面」）で、通知は残す
+7. **通知**：改元のとき、生存している主要勢力に通知を送る。人間の暗黒期の家は保存対象の `NOTIFICATION_USER_DEFINED_3`、その他はその手番で消える `NOTIFICATION_USER_DEFINED_2`。暗黒期の家は、この通知から政策を選ぶ画面を開き直せる。終了の阻止は保存台帳で行う（下の「暗黒期の政策の選択」）。見出しは「改元：弘治の世」（改元ごとのキー。L-1）、本文はその家の結果（黄金期・英雄期・通常期、暗黒期は割り当てた政策と効果）。LOC キーのまま渡し、各端末の言語で出る。人間への主な見せ方は改元の画面（下の「改元の画面と時代スコアの画面」）で、通知は残す
 8. **時代スコアの画面のための見込み**：ターン開始のたびに、次の改元のターン（`nextDue`）と、各家の今の期の閾値（`houses.p<ID>.next`。判定と同じ式に、その時点の都市数と期の長さを入れたもの）を台帳に書く。UI は式を持たず、これを読むだけ。次の改元が遅代なら見込みに `forced = "DARK"` を付ける。遅代の後（次の改元が無い）は両方とも無し
 
 ## 設計からの差分（理由つき）
@@ -83,14 +83,14 @@
 1. **家ごとの政策**：改元で暗黒期になった家には `JAC_SengokuDarkAgePolicyDefaults` の政策をすぐ適用する。表に無い文明は最小の `Priority`（背水の陣）。AI の家はこのまま、人間の家は選択が受理されるまでこの効果が続く。割り当ては SSOT 3.2 のとおりで、変更しない。
 2. **画面**：改元の画面を閉じたときに政策の4候補を出す。自動表示は1つの改元に1回だけ。閉じた後の手番開始や読み込みでは自動表示しない。同じターンの改元の通知か、通常のターン終了ボタンから開き直せる。読み込みでも通知と判定のターンを保ち、受付期間を延ばさない。
 3. **送信と受付**：画面は自分の手番が始まっているときだけ `EXECUTE_SCRIPT` で要求する（手番前の要求は落ちる。実機 court-arbitration-03）。Gameplay はエンジンが渡す送信者を使い、人間の家・暗黒期・今の期・保存した `history.r<期>.turn` が現在ターンと一致・未選択・有効な候補を確認する。受理したら政策と `chosen`、都市の旗を保存する。次のターンは、古い未選択セーブであっても拒否する。
-4. **ターン終了の阻止と通知**：改元の通知は全家で `USER_DEFINED_2` を使う。人間の暗黒期の通知には期の番号と手動消去を禁止する値を付け、保存済み台帳を先に公開する。終了の阻止は `JAC_ActionPanel_Sengoku.lua` が台帳の人間・暗黒期・未選択・判定ターンを毎回読む。通常ボタン、Enter、終了ホットキーを通す `DoEndTurn` と、直接終了する Shift＋Enter の入力処理を包む。自動終了の拡張フックも未選択なら false を返す。ボタンには「暗黒期の政策」と表示する。通知は開き直す入口であり、消えても終了の阻止は続く。通知パネルの追加スクリプトは公式のワイルドカードから読み、公式パネルを再読込しない。
-5. **解除**：同期済み台帳で選択の受理を確認した後、UI がこのMODの通知だけを消す。画面を閉じたり、拒否された要求を送ったりしても消さない。通知の全IDを調べるので、同じ型の公式通知があっても消し漏れない。古いターン・古い期の通知も消す。
+4. **ターン終了の阻止と通知**：人間の暗黒期には `USER_DEFINED_3` を使い、データベースで手番終了時の自動消去を止める（公式の Pirates シナリオと同じ設定）。通知には期の番号と手動消去を禁止する値を付け、保存済み台帳を先に公開する。通常の改元通知は `USER_DEFINED_2` のまま。終了の阻止は `JAC_ActionPanel_Sengoku.lua` が台帳の人間・暗黒期・未選択・判定ターンを毎回読む。通常ボタン、Enter、終了ホットキーを通す `DoEndTurn` と、直接終了する Shift＋Enter の入力処理を包む。自動終了の拡張フックも未選択なら false を返す。ボタンには「暗黒期の政策」と表示する。通知は開き直す入口であり、消えても終了の阻止は続く。通知パネルの追加スクリプトは公式のワイルドカードから読み、公式パネルを再読込しない。
+5. **解除**：同期済み台帳で選択の受理を確認した後、UI がこのMODの通知だけを消す。通知より台帳の公開が遅れた場合は、未公開の期の通知を保つ。操作中の家が一時的に人間でなくても、それだけでは消さない。画面を閉じたり、拒否された要求を送ったりしても消さない。通知の全IDを調べるので、同じ型の公式通知があっても消し漏れない。古いターン・古い期の通知も消す。
 6. **保存**：政策、選択済みの期、判定のターン、都市の旗は従来の台帳・タイルのプロパティを使う。読み込みで再初期化しない。改元の次のターンには選択・変更できない。次の改元で暗黒期なら、その家の政策を適用し、新しい選択を受け付ける。
 
 以前の実装は 2026-09-30 の ages-dark-choice-01 で PASS（寺院学問の選択、都市の旗、2回目の拒否、保存・読み込み）。受付を改元だけに限定した後の実機 dark-policy-at-reign-01/02 は、改元時に自動表示するところまで成功し、印付きの `COMMEMORATION_AVAILABLE` 通知が見つからず失敗した。同じログには、通知パネルを include した追加スクリプトが公式のワイルドカードから自分自身を再読込し、Cスタックが128回であふれた記録もある。これを修正し、通知の本体条件に依存せず、保存台帳で操作を止める。
 
-公式にはゲームプレイ Lua から `FILL_CIVIC_SLOT` を送って終了を止める例がある（`DLC/PiratesScenario/Scripts/PiratesScenario_Shared_Script.lua:958`）。したがって「ゲームプレイから送る通知はすべて終了を止められない」わけではない。ただし政策スロットの通知を暗黒政策に転用すると、本来の政策選択と混ざる。独自通知に終了阻止型を指定する公式の列はなく（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2109-2123`）、`COMMEMORATION_AVAILABLE` の型を送ることだけで専用ブロックが付くと示す公式例もない。型固有の生成・失効条件は本体内部にあり、消えた理由の細部は未確認。`sengoku-dark-policy.json` に同じAPI呼び出しの実機調査を含め、生成後に残る通知・印・ブロック型を記録する。
-実機シナリオは `sengoku-dark-policy.json`。ターン65まで自動進行し、テスト用に武田の点を −1000 にしてから、通常の手番終了で弘治の改元を迎える。自動進行中の人間の家をAIとして判定する経路では、終了ブロックを検証できないためである。
+公式にはゲームプレイ Lua から `FILL_CIVIC_SLOT` を送って終了を止める例がある（`DLC/PiratesScenario/Scripts/PiratesScenario_Shared_Script.lua:958`）。したがって「ゲームプレイから送る通知はすべて終了を止められない」わけではない。ただし政策スロットの通知を暗黒政策に転用すると、本来の政策選択と混ざる。独自通知に終了阻止型を指定する公式の列はなく（`Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2109-2123`）、`COMMEMORATION_AVAILABLE` の型を送ることだけで専用ブロックが付くと示す公式例もない。型固有の生成・失効条件は本体内部にあり、消えた理由の細部は未確認。修正後の dark-policy-at-reign-03 でも API はエラーにならず nil を返し、その後の一覧に誓約通知は無かった。`sengoku-dark-policy.json` に同じAPI呼び出しの実機調査を含め、生成後に残る通知・印・ブロック型を記録する。
+実機シナリオは `sengoku-dark-policy.json`。ターン65まで自動進行し、テスト用に武田の点を −1000 にしてから、実際の ActionPanel の Shift＋Enter 入力で弘治の改元を迎える。改元の前は政策の必須選択が無いことを先に確認する。自動進行中の人間の家をAIとして判定する経路では、終了ブロックを検証できないためである。
 
 | 時点 | 検査する動き |
 |---|---|
@@ -116,11 +116,11 @@
 5. **自動テストの driver**：`scenario.py` の `POPUP_CLOSERS` に `JAC_SengokuReignPopup` の `OnClose()` を足した（選択画面より先に閉じる。閉じると選択画面が出るので、同じ回に続けて閉じる）。どちらの画面も入力を奪わないので、閉じなくても autoplay は止まらない
 6. 自動テスト用に、改元の画面は最後に出した改元を `JAC_REIGN_POPUP_LAST`（閉じた後も残る）に、時代スコアの画面は最後に出した中身を `JAC_AGES_PANEL_VIEW` に残す。`JAC_ShowReignPopup(true)` は最後の改元を出し直す
 
-実機シナリオ `sengoku-ages-screens.json`（設定は `sengoku-dark-policy.json` と同じ。15 km 史実領土版、22勢力、武田が人間。改元直前に武田の点を −1000 にするテスト用の操作で暗黒期にし、通常の手番終了で改元する）。**未実行**：
+実機シナリオ `sengoku-ages-screens.json`（設定は `sengoku-dark-policy.json` と同じ。15 km 史実領土版、22勢力、武田が人間。改元直前に武田の点を −1000 にするテスト用の操作で暗黒期にし、実際の ActionPanel の終了入力で改元する）。**未実行**：
 
 | 時点 | 確かめること |
 |---|---|
-| ターン66（64ターンの autoplay と通常の手番終了の後） | 弘治の判定がターン66、次の改元が73、武田の閾値の見込みがある |
+| ターン66（64ターンの autoplay と終了入力の後） | 弘治の判定がターン66、次の改元が73、武田の閾値の見込みがある |
 | 同上 | 改元の画面が弘治・ターン66・台帳どおりの年齢と点で出た（autoplay の途中で driver が閉じていれば出し直す）。見出し・帯・武功の文・ボタン（暗黒期で選択待ちなら「暗黒期の政策を選ぶ」）。画面を撮る |
 | 同上（`ActionPanel`） | 右下の時代の目盛りの説明が「弘治の世」と「次の改元まで：7ターン」（`JAC_ERA_INDICATOR_TEXT`。L-1） |
 | 同上 | 改元の画面を閉じると政策の画面が1回出る。閉じても自動再表示せず、エンジンの通知ブロックが続く。通知から開き直して寺院学問を選ぶと専用のブロックが消える |
@@ -235,7 +235,8 @@ MOD と設定は `ages-probe.json` と同じ（15 km 史実領土版、22勢力�
 | 暗黒期の選択の終了ブロック（公式） | `DLC/Expansion2/Data/Expansion1_Notifications.xml:70`（終了で消えない）、`DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:29`（専用のブロック型）、`Base/Assets/UI/ActionPanel.lua:500-519,553-602`（自動終了・ボタンが通知を確認）、`Base/Assets/UI/Panels/NotificationPanel.lua:1637-1646,1691-1703,1896`（起動と読み込み）、`DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:340-343`・`PiratesScenario_PropKeys.lua:85-89`（任意プロパティと手動消去の禁止）、`DLC/PiratesScenario/UI/Replacements/NotificationPanel_PiratesScenario.lua:74-84`（IDを列挙して消す） |
 | 台帳による終了の阻止 | `Base/Assets/UI/ActionPanel.lua:526,605-606,1093-1106,1294-1297`（終了ボタン・Enter・Shift＋Enter・終了ホットキー）、`:497-520`（自動終了の拡張フック）、`:316-328,1363-1368`（表示・入力/再描画の登録）、`DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:224-227`（初期化後の再描画の登録） |
 | 通知パネルの追加読み込み | `Base/Assets/UI/Panels/NotificationPanel.lua:1893-1896`、`DLC/Expansion2/UI/Replacements/NotificationPanel_Expansion1.lua:3-6`（追加スクリプトでは公式パネルを include しない） |
+| 通知の手番をまたぐ保存 | `Base/Assets/Gameplay/Data/Notifications.xml:166-167`（USER_DEFINED_2/3 は初期値で手番終了時に消える）、`DLC/PiratesScenario/Data/PiratesScenario_Notifications.xml:7-10`（自動消去を止める公式例） |
 | ゲームプレイからの通知と保存 | `DLC/PiratesScenario/Scripts/PiratesScenario_Shared_Script.lua:324-338,958`（任意の値を持つ通知・政策スロットの終了阻止）、`DLC/BlackDeathScenario/Scripts/BlackDeathScenario_Support.lua:106`（通知データの直列化）、`Base/Assets/UI/Panels/NotificationPanel.lua:1798,1878`（表示の復元）。実際の保存・読み込みは実機シナリオで確認 |
 | 改元の画面・時代スコアの画面 | `DLC/Expansion2/UI/Additions/EraReviewPopup.xml`・`.lua:62-124`（組み立て、年齢ごとの絵、指導者の肖像）、`EraProgressPanel.xml`・`.lua:212-321,387-407`（欄、`Refresh`、他の家の一覧、`Open`）、`EraCompletePopup.lua:107-112,120,268-274`（通常の枠、音、手番の始まりに出す）、`DLC/Expansion2/UI/Replacements/PartialScreenHooks_Expansion1.lua:40-56,73`（上部の時代のボタン）、`Base/Assets/UI/ActionPanel.lua:1335,1350`（`LocalPlayerTurnEnd`、`LuaEvents.AutoPlayEnd`）、`Base/Assets/UI/Civilopedia/CivilopediaScreen.lua:13`（ワイルドカード include）、`DLC/Expansion2/UI/Additions/DisloyalCityChooser.lua`（`ContextPtr:SetHide` の出し入れ） |
 | 時代の名前を出す所（L-1） | `Base/Assets/UI/ActionPanel.lua:343-364,1161-1168`、`DLC/Expansion2/UI/Replacements/ActionPanel_Expansion1.lua:181,187-216`、`ActionPanel_Expansion2.lua:6`、`DLC/Expansion2/Expansion2.modinfo:366-371`、`DLC/Expansion2/UI/Additions/EraProgressPanel.lua:60-68`、`NewTurnPanel_Expansion1.lua:11-24`、`Base/Assets/UI/Popups/EraCompletePopup.lua:55`、`DLC/Expansion2/UI/Additions/EraReviewPopup.lua:62`・`DedicationPopup.lua:53` |
-| 通知とアイコン | `Base/Assets/Gameplay/Data/Notifications.xml:52-60`（`NOTIFICATION_USER_DEFINED_2`）、`DLC/Expansion2/Data/Expansion1_Icons_Notifications.xml:36`（誓約の通知の絵）。`USER_DEFINED_1` は史実の出来事が使う |
+| 通知とアイコン | `Base/Assets/Gameplay/Data/Notifications.xml:52-60`（`NOTIFICATION_USER_DEFINED_2`・`3`）、`DLC/Expansion2/Data/Expansion1_Icons_Notifications.xml:36`（誓約の通知の絵）。`USER_DEFINED_1` は史実の出来事が使う |

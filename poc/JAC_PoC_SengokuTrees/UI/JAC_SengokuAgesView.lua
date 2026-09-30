@@ -89,7 +89,7 @@ end
 -- Custom notification properties: DLC/PiratesScenario/Scripts/PiratesScenario_PropKeys.lua:85-89 and
 -- UI/Replacements/NotificationPanel_PiratesScenario.lua:81,145. Never capture an official dedication.
 function JAC_AgesView_DarkPolicyNotification(notification)
-	return notification ~= nil and notification:GetType() == NotificationTypes.USER_DEFINED_2
+	return notification ~= nil and notification:GetType() == NotificationTypes.USER_DEFINED_3
 		and type(notification:GetValue("JAC_DARK_POLICY_REIGN")) == "number"
 end
 

@@ -134,7 +134,7 @@ function RegisterHandlers()
     Activate = function() OFFICIAL_ACTIVATIONS = OFFICIAL_ACTIVATIONS + 1 end,
     TryDismiss = function(entry) NotificationManager.Dismiss(entry.m_PlayerID, entry.id) end,
   }
-  g_notificationHandlers[NotificationTypes.USER_DEFINED_2] = {
+  g_notificationHandlers[NotificationTypes.USER_DEFINED_3] = {
     Activate = function() OFFICIAL_ACTIVATIONS = OFFICIAL_ACTIVATIONS + 1 end,
     TryDismiss = function(entry) NotificationManager.Dismiss(entry.m_PlayerID, entry.id) end,
   }
@@ -322,7 +322,7 @@ class DarkPolicyNotificationTests(ScreenTestBase):
         self.g.LOCAL_TURN_BEGIN()
         self.g.AUTOPLAY_END()
         self.assertFalse(self.dark_shown())
-        notification = self.g.NotificationManager.FindType(2, 1)
+        notification = self.g.NotificationManager.FindType(3, 1)
         self.panel.OnNotificationActivated(1, notification.id, True)
         self.assertTrue(self.dark_shown())
         self.assertEqual(self.dark.JAC_DARK_POLICY_SHOW_COUNT, 2)
@@ -330,7 +330,7 @@ class DarkPolicyNotificationTests(ScreenTestBase):
         self.action.DoEndTurn()
         self.assertEqual(self.action.END_TURN_REQUESTS, 0)
         self.assertTrue(self.dark_shown())
-        self.panel.g_notificationHandlers[2].TryDismiss(self.panel.Entry(notification))
+        self.panel.g_notificationHandlers[3].TryDismiss(self.panel.Entry(notification))
         self.assertFalse(notification.dismissed)
         self.assertTrue(self.dark.JAC_ChooseDarkPolicy("JAC_AGE_POLICY_TEMPLE"))
         self.assertTrue(notification.dismissed)
@@ -346,7 +346,7 @@ class DarkPolicyNotificationTests(ScreenTestBase):
         self.turns(66)
         self.g.LOCAL_TURN_BEGIN()
         self.assertTrue(self.shown())
-        notification = self.g.NotificationManager.FindType(2, 1)
+        notification = self.g.NotificationManager.FindType(3, 1)
         self.panel.OnNotificationActivated(1, notification.id, True)
         self.assertFalse(self.shown())
         self.assertTrue(self.dark_shown())
@@ -361,9 +361,9 @@ class DarkPolicyNotificationTests(ScreenTestBase):
     def test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen(self):
         self.make_dark(1)
         self.turns(66)
-        self.g.NotificationManager.SendNotification(1, 2, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
+        self.g.NotificationManager.SendNotification(1, 3, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
         self.panel.OnNotificationActivated(1, len(self.g.NOTIFICATIONS), True)
-        other = self.g.NotificationManager.FindType(2, 3)
+        other = self.g.NotificationManager.FindType(3, 3)
         self.panel.OnNotificationActivated(3, other.id, True)
         self.assertFalse(self.dark_shown())
 
@@ -383,7 +383,7 @@ class DarkPolicyNotificationTests(ScreenTestBase):
         self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
         self.assertFalse(self.dark_shown())
         self.assertEqual(self.dark.JAC_DARK_POLICY_SHOW_COUNT, 0)
-        n = self.g.NotificationManager.FindType(2, 1)
+        n = self.g.NotificationManager.FindType(3, 1)
         self.panel.OnNotificationActivated(1, n.id, True)
         self.assertTrue(self.dark_shown())
         self.assertFalse(n.dismissed)
@@ -410,7 +410,7 @@ class DarkPolicyNotificationTests(ScreenTestBase):
         self.action.CheckAutoEndTurn()
         self.assertEqual((self.action.END_TURN_REQUESTS, self.action.AUTO_END_TURN_REQUESTS), (0, 0))
         # Even a missing/dismissed notification must not let a pending human end the turn.
-        n = self.g.NotificationManager.FindType(2, 1)
+        n = self.g.NotificationManager.FindType(3, 1)
         self.g.NotificationManager.Dismiss(1, n.id)
         self.action.DoEndTurn(123)
         self.assertEqual(self.action.END_TURN_REQUESTS, 0)

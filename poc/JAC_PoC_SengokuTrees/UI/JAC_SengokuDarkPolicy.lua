@@ -97,9 +97,16 @@ local function RefreshNotification()
 	-- Official: DLC/PiratesScenario/UI/Replacements/NotificationPanel_PiratesScenario.lua:74-84.
 	for _, notificationID in pairs(NotificationManager.GetList(id) or {}) do
 		local notification = NotificationManager.Find(id, notificationID)
-		if JAC_AgesView_DarkPolicyNotification(notification) and not notification:IsDismissed()
-			and (pending == nil or notification:GetValue("JAC_DARK_POLICY_REIGN") ~= l.reign) then
-			NotificationManager.Dismiss(id, notificationID)
+		if l and JAC_AgesView_DarkPolicyNotification(notification) and not notification:IsDismissed() then
+			local reign = notification:GetValue("JAC_DARK_POLICY_REIGN")
+			local house = l.houses and l.houses["p" .. tostring(id)]
+			local judged = l.history and l.history["r" .. tostring(reign)]
+			-- A notification can reach the UI before its ledger. Keep future/unknown judgements until
+			-- the published ledger confirms a choice or its deadline. IsHuman/turn-active can also be transient.
+			if reign < l.reign or (reign == l.reign and judged
+				and ((house and house.chosen == reign) or judged.turn < JAC_AgesView_ElapsedTurn())) then
+				NotificationManager.Dismiss(id, notificationID)
+			end
 		end
 	end
 	if pending == nil then OnClose() end

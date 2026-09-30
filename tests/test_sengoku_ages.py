@@ -85,6 +85,12 @@ class AgesDataTests(unittest.TestCase):
     def q(self, sql: str, *args):
         return self.db.execute(sql, args).fetchall()
 
+    def test_pending_policy_notification_survives_turn_end_without_retaining_ordinary_notices(self):
+        self.assertEqual(self.q("SELECT NotificationType, ExpiresEndOfTurn, AutoNotify FROM Notifications "
+                                "WHERE NotificationType IN ('NOTIFICATION_USER_DEFINED_2', 'NOTIFICATION_USER_DEFINED_3') "
+                                "ORDER BY NotificationType"),
+                         [("NOTIFICATION_USER_DEFINED_2", 1, 0), ("NOTIFICATION_USER_DEFINED_3", 0, 0)])
+
     def test_official_ages_and_dedications_are_off(self):
         params = dict(self.q("SELECT Name, Value FROM GlobalParameters WHERE Name LIKE '%AGE_SCORE_BASE_THRESHOLD' "
                              "OR Name LIKE 'THRESHOLD_SHIFT_%' OR Name LIKE 'COMMEMORATE_%'"))
@@ -408,7 +414,7 @@ PlayerManager = {
 }
 ParameterTypes = { MESSAGE = "MESSAGE", SUMMARY = "SUMMARY" }
 NotificationParameterTypes = { CanUserDismiss = "CanUserDismiss" }
-NotificationTypes = { USER_DEFINED_2 = 2, COMMEMORATION_AVAILABLE = 71 }
+NotificationTypes = { USER_DEFINED_2 = 2, USER_DEFINED_3 = 3, COMMEMORATION_AVAILABLE = 71 }
 EndTurnBlockingTypes = { NO_ENDTURN_BLOCKING = -1, ENDTURN_BLOCKING_COMMEMORATION_AVAILABLE = 71 }
 NOTES, NOTIFICATIONS = {}, {}
 NotificationManager = { SendNotification = function(id, kind, data)
@@ -419,7 +425,8 @@ NotificationManager = { SendNotification = function(id, kind, data)
   function n:GetType() return self.kind end
   function n:GetValue(key) return self.data[key] end
   function n:IsDismissed() return self.dismissed end
-  -- This models the proposed native notification. It does NOT prove DLL behavior; the live scenario checks it.
+  -- Model official notifications separately; USER_DEFINED_2 has no native blocker.
+  -- The policy tests execute the real MOD ActionPanel guard rather than assuming DLL behavior.
   function n:GetEndTurnBlocking() return self.kind == 71 and 71 or -1 end
   function n:CanUserDismiss() return self.data.CanUserDismiss ~= false end
   table.insert(NOTIFICATIONS, n)
@@ -1070,10 +1077,10 @@ class LedgerTests(unittest.TestCase):
         before = self.snapshot()
         self.choose(0, "JAC_AGE_POLICY_TEMPLE")
         self.assertEqual(self.snapshot(), before)
-        self.assertEqual([n.kind for n in self.g.NOTIFICATIONS.values()], [2, 2, 2, 2])
+        self.assertEqual([n.kind for n in self.g.NOTIFICATIONS.values()], [2, 3, 2, 3])
         self.assertEqual([n.data.JAC_DARK_POLICY_REIGN for n in self.g.NOTIFICATIONS.values()
                           if n.data.JAC_DARK_POLICY_REIGN is not None], [1, 1])
-        notification = self.g.NotificationManager.FindType(2, 1)
+        notification = self.g.NotificationManager.FindType(3, 1)
         self.assertFalse(notification.CanUserDismiss(notification))
 
     def test_load_does_not_count_again(self):
@@ -1233,7 +1240,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
     def test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice(self):
         self.turns(1, 66)
         self.g.LuaEvents.JAC_SengokuReignPopup_Closed(True)
-        notification = self.g.NotificationManager.FindType(2, 1)
+        notification = self.g.NotificationManager.FindType(3, 1)
         self.g.OnClose()
         self.g.PUBLISH()
         self.assertFalse(notification.dismissed)
@@ -1244,7 +1251,7 @@ class DarkPolicyScreenTests(unittest.TestCase):
 
     def test_rejected_request_does_not_clear_the_blocker(self):
         self.turns(1, 66)
-        notification = self.g.NotificationManager.FindType(2, 1)
+        notification = self.g.NotificationManager.FindType(3, 1)
         self.g.CHOOSE(1, self.lua.table_from({"PolicyType": "JAC_AGE_POLICY_TEMPLE", "Reign": 0}))
         self.g.PUBLISH()
         self.assertFalse(notification.dismissed)
@@ -1255,8 +1262,8 @@ class DarkPolicyScreenTests(unittest.TestCase):
         official = self.g.NotificationManager.FindType(71, 1)
         self.turns(1, 66)
         current = next(n for n in self.g.NOTIFICATIONS.values() if n.player == 1 and n.data.JAC_DARK_POLICY_REIGN == 1)
-        other = self.g.NotificationManager.FindType(2, 3)
-        self.g.NotificationManager.SendNotification(1, 2, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
+        other = self.g.NotificationManager.FindType(3, 3)
+        self.g.NotificationManager.SendNotification(1, 3, self.lua.table_from({"JAC_DARK_POLICY_REIGN": 0}))
         stale = self.g.NOTIFICATIONS[len(self.g.NOTIFICATIONS)]
         self.g.PUBLISH()
         self.assertTrue(stale.dismissed)
@@ -1274,9 +1281,29 @@ class DarkPolicyScreenTests(unittest.TestCase):
         self.g.LOAD_SCREEN_CLOSE()
         self.g.LOCAL_TURN_BEGIN()
         self.assertFalse(self.shown())
-        self.assertFalse(self.g.NotificationManager.FindType(2, 1).dismissed)
+        self.assertFalse(self.g.NotificationManager.FindType(3, 1).dismissed)
         self.g.LuaEvents.JAC_SengokuDarkPolicy_Open(1)
         self.assertTrue(self.shown())
+
+    def test_cleanup_waits_for_the_notification_judgement_to_reach_the_ui(self):
+        self.turns(1, 65)
+        old = self.g.LEDGER()
+        self.turns(66)
+        current = self.g.NotificationManager.FindType(3, 1)
+        saved = self.g.LEDGER()
+        # Notification arrives first; a publish/turn event can still expose an older or absent ledger.
+        self.g.Game.SetProperty(self.g.Game, "JAC_AGES_LEDGER", old)
+        self.g.PUBLISH()
+        self.assertFalse(current.dismissed)
+        self.g.Game.SetProperty(self.g.Game, "JAC_AGES_LEDGER", None)
+        self.g.PUBLISH()
+        self.assertFalse(current.dismissed)
+        self.g.Game.SetProperty(self.g.Game, "JAC_AGES_LEDGER", saved)
+        self.g.PUBLISH()
+        self.assertFalse(current.dismissed)
+        self.turns(67)
+        self.g.PUBLISH()
+        self.assertTrue(current.dismissed)
 
     def test_not_shown_for_a_house_that_is_not_dark(self):
         self.turns(1, 30)
