@@ -129,7 +129,7 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
         self.assertEqual(dict(self.db.execute("SELECT Name,Value FROM JAC_PersonaTreeParameters WHERE Name LIKE '%COST_%'")),
                          {"NODE_COST_1":10,"NODE_COST_2":15,"NODE_COST_3":22,"STRONG_COST_1":8,"STRONG_COST_2":12,"STRONG_COST_3":18})
 
-    def test_titles_come_only_from_15_sengoku_civics_and_official_governors_require_unobtainable_trait(self):
+    def test_titles_come_only_from_15_sengoku_civics_and_only_persona_governors_exist(self):
         modifiers=self.db.execute("SELECT ModifierId FROM Modifiers JOIN DynamicModifiers USING(ModifierType) WHERE EffectType='EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS'").fetchall()
         self.assertEqual(modifiers,[("JAC_PERSONA_CIVIC_EVOLUTION_TITLE",)])
         grants=self.db.execute("SELECT CivicType FROM CivicModifiers WHERE ModifierId='JAC_PERSONA_CIVIC_EVOLUTION_TITLE'").fetchall()
@@ -140,12 +140,14 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
         for table in ["GameModifiers","TraitModifiers","BuildingModifiers","GovernorModifiers","GreatPersonIndividualActionModifiers"]:
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE ModifierId='JAC_PERSONA_CIVIC_EVOLUTION_TITLE'").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM GoodyHutSubTypes WHERE ModifierID='JAC_PERSONA_CIVIC_EVOLUTION_TITLE'").fetchone()[0],0)
-        blocked="TRAIT_JAC_PERSONA_OFFICIAL_GOVERNORS_DISABLED"
-        official=self.db.execute("SELECT GovernorType,TraitType FROM Governors WHERE GovernorType NOT IN (SELECT GovernorType FROM JAC_LeaderPersonas)").fetchall()
-        self.assertGreaterEqual(len(official),8)
-        self.assertTrue(all(r[1]==blocked for r in official))
-        for table in ["LeaderTraits","CivilizationTraits"]:
-            self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE TraitType=?",(blocked,)).fetchone()[0],0)
+        disabled={r[0] for r in self.db.execute("SELECT GovernorType FROM JAC_PersonaDisabledGovernors")}
+        self.assertEqual(disabled, {"GOVERNOR_THE_DEFENDER", "GOVERNOR_THE_CARDINAL", "GOVERNOR_THE_BUILDER",
+                                   "GOVERNOR_THE_AMBASSADOR", "GOVERNOR_THE_RESOURCE_MANAGER", "GOVERNOR_THE_MERCHANT",
+                                   "GOVERNOR_THE_EDUCATOR", "GOVERNOR_IBRAHIM"})
+        self.assertEqual(set(self.db.execute("SELECT GovernorType FROM Governors")),
+                         set(self.db.execute("SELECT GovernorType FROM JAC_LeaderPersonas")))
+        for table in ["GovernorPromotionSets", "GovernorModifiers", "Governors_XP2", "GovernorsCannotAssign"]:
+            self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE GovernorType IN (SELECT GovernorType FROM JAC_PersonaDisabledGovernors)").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType IS NOT NULL").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Kinds WHERE Kind='KIND_TRAIT'").fetchone()[0],1)
 
@@ -228,7 +230,7 @@ class LeaderPersonaStaticTests(unittest.TestCase):
         for i,code in enumerate(codes):
             with self.subTest(code=i):self.assertNotIsInstance(lua.eval("load")(code),tuple)
         assertions="\n".join(codes)
-        for text in ["SetCulturalProgress","CanEverAppointGovernor","GetGovernorPointsSpent","JAC_TreeConfirm", "JAC_TreeCancel",
+        for text in ["SetCulturalProgress","JAC_PersonaDisabledGovernors","GetGovernorPointsSpent","JAC_TreeConfirm", "JAC_TreeCancel",
                      "CATEGORY_LOCKED","BRANCH_LOCKED","PREREQ_LOCKED","MERIT","NODE_", "GOVERN_LAST_TURN",
                      "EVOLUTION_SURCHARGE","IsEstablished","GetAssignedCity","GameEffects.GetModifierSubjects","GameEffects.GetModifierActive"]:
             self.assertIn(text,assertions)

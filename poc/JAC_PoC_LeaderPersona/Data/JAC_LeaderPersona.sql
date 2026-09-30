@@ -140,13 +140,15 @@ INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'Yiel
 INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId) SELECT GovernorPromotionType, ModifierId FROM JAC_PersonaSkills;
 UPDATE GlobalParameters SET Value=MAX(CAST(Value AS INTEGER), 30) WHERE Name='MAX_GOVERNOR_APPOINTMENTS';
 
--- Trait gating is native (Ibrahim: DLC/Expansion2/Data/Expansion2_Governors.xml:16;
--- schema TraitType FK: DLC/Expansion2/Data/Expansion2_Schema.sql:351-355).
--- No civilization/leader receives this trait; hide the same candidates in the UI too.
-INSERT INTO Types (Type, Kind) VALUES ('TRAIT_JAC_PERSONA_OFFICIAL_GOVERNORS_DISABLED', 'KIND_TRAIT');
-INSERT INTO Traits (TraitType) VALUES ('TRAIT_JAC_PERSONA_OFFICIAL_GOVERNORS_DISABLED');
-UPDATE Governors SET TraitType='TRAIT_JAC_PERSONA_OFFICIAL_GOVERNORS_DISABLED'
-WHERE GovernorType NOT IN (SELECT GovernorType FROM JAC_LeaderPersonas);
+-- This map-scoped component supplies the complete new-game governor roster.
+-- An unattached synthetic TraitType crashed CanEverAppointGovernor in live runs
+-- leaderperson-01/02. Remove official candidates rather than make native trait
+-- checks dereference it. Native governor child tables cascade on deletion
+-- (Expansion2_Schema.sql:337-370, GovernorPromotionSets).
+CREATE TABLE JAC_PersonaDisabledGovernors (GovernorType TEXT PRIMARY KEY);
+INSERT INTO JAC_PersonaDisabledGovernors
+SELECT GovernorType FROM Governors WHERE GovernorType NOT IN (SELECT GovernorType FROM JAC_LeaderPersonas);
+DELETE FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_PersonaDisabledGovernors);
 
 -- Official shape: DLC/Expansion2/Data/Expansion1_Civics.xml:64-66,77-80,90-140.
 -- That installed GS file grants 13 civics; this provisional Sengoku set has 15.
