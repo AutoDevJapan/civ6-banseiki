@@ -30,6 +30,8 @@
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
+| [`poc/tuning-200.md`](poc/tuning-200.md) | 約200ターンで暫定値を測る手順・結果・再開記録 |
+| [poc/data/tuning-200-03.json](poc/data/tuning-200-03.json) | 完全性を確認した200ターンの年齢判定・観測・裁定・滅亡の実測 |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと61件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階（織田は研究による襲名）・旧領と AI の攻略目標・助言ポップアップ・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
 | [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チーム・1534年の開始時の同盟・天下統一同盟）：同盟の申し込み・脱退の画面、交戦での解消、AI からの申し込み、登録城のない地図での本拠の合算、主体だけが勝つ仕組み、公式根拠、実機確認項目 |
@@ -39,9 +41,9 @@
 | [`poc/court-arbitration.md`](poc/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定（請求・費用・拒否の不利益・将軍家の3倍と1573年・正当性・討伐の勅命）の実装、公式の根拠、実機確認 |
 | [`poc/court-arbitration-human-progress.md`](poc/court-arbitration-human-progress.md) | 人間が裁定に回答するシナリオの検証結果と、実機確認を再開するための記録 |
 | [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
-| [`poc/era-equals-reign.md`](poc/era-equals-reign.md) | 元号＝時代（オーナー判断 T）：エンジンの時代の長さのプローブ（テスト専用 MOD `JAC_Test_EraTiming`）の結果と本実装（元号ごとの 48 の時代、速度とのずれ、ツリーの時代、台帳の判定、実機シナリオ `sengoku-era-reigns.json`） |
+| [`poc/era-equals-reign.md`](poc/era-equals-reign.md) | 元号＝時代（オーナー判断 T）：エンジンの時代の長さのプローブ（テスト専用 MOD `JAC_Test_EraTiming`）の結果と本実装（元号ごとの 48 の時代、速度とのずれ、ツリーの時代、台帳の判定、実機シナリオ `sengoku-era-reigns.json`、叙事詩・マラソン・追加時代・偉人画面・資源の年の追加確認） |
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
-| [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方とログ判定 |
+| [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方、時間・メモリ・保存容量・ロード時間のCSVと集計、実機シナリオとログ判定 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
 | [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |

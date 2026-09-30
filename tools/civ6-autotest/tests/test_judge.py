@@ -235,10 +235,15 @@ class JudgeTests(unittest.TestCase):
             "japan-no-world-congress.json", "japan-city-names.json", "japan-house-city-names.json",
             "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
             "japan-map-15km-200turn.json", "japan-15km-200turn-full.json",
+            "japan-15km-200turn-tuning.json",
             "japan-prosperous-15km.json",
             "court-arbitration.json", "court-arbitration-human.json", "probe-make-peace.json",
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
+            "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
+            "sengoku-era-reigns-epic.json", "sengoku-era-reigns-marathon.json",
+            "sengoku-era-reigns-beyond-nine.json", "great-people-zero-musicians.json",
+            "resources-calendar-epic.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

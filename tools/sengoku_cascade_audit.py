@@ -82,10 +82,31 @@ def _xp2_files() -> list[Path]:
     return files
 
 
+def _register_audit_hash(db: sqlite3.Connection) -> None:
+    """Collision-free stand-in for Make_Hash; these are audit IDs, not engine hashes.
+
+    Python's randomized 31-bit hash sometimes collided in Types.Hash and silently
+    dropped official rows (INSERT OR IGNORE) or rejected a mod. Preserve IDs when
+    copying a database and assign a fresh one to each new type.
+    """
+    has_types = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='Types'").fetchone()
+    assigned = dict(db.execute("SELECT Type, Hash FROM Types")) if has_types else {}
+    next_id = max(assigned.values(), default=0) + 1
+
+    def make_hash(name: str) -> int:
+        nonlocal next_id
+        if name not in assigned:
+            assigned[name] = next_id
+            next_id += 1
+        return assigned[name]
+
+    db.create_function("Make_Hash", 1, make_hash)
+
+
 def official_db() -> sqlite3.Connection:
     """In-memory copy of the official GS gameplay data (foreign keys off while loading)."""
     db = sqlite3.connect(":memory:")
-    db.create_function("Make_Hash", 1, lambda s: hash(s) & 0x7FFFFFFF)
+    _register_audit_hash(db)
     for sql in ("Schema/01_GameplaySchema.sql", "Schema/02_AddTriggers.sql"):
         db.executescript((BASE_DATA / sql).read_text(encoding="utf-8-sig"))
     xp2 = _xp2_files()
@@ -102,7 +123,7 @@ def official_db() -> sqlite3.Connection:
 def _run_sengoku(source: sqlite3.Connection, with_deletes: bool) -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
     source.backup(db)
-    db.create_function("Make_Hash", 1, lambda s: hash(s) & 0x7FFFFFFF)
+    _register_audit_hash(db)
     db.execute("PRAGMA foreign_keys=ON")
     meta = ET.parse(SENGOKU / "JAC_PoC_SengokuTrees.modinfo").getroot()
     for file in meta.findall("./InGameActions/UpdateDatabase/File"):  # modinfo order
