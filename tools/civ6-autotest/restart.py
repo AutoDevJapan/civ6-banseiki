@@ -18,6 +18,7 @@ DEFAULT_MODS_DIR = (Path.home() / "Documents" / "My Games" /
                     "Sid Meier's Civilization VI" / "Mods")
 STEAM_URI = "steam://rungameid/289070"
 PROCESS_TERMINATE = 0x0001
+SYNCHRONIZE = 0x100000
 EPOCH_DIFFERENCE = 11644473600
 
 kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.FILETIME),
@@ -26,6 +27,8 @@ kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.FI
 kernel32.GetProcessTimes.restype = wintypes.BOOL
 kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
 kernel32.TerminateProcess.restype = wintypes.BOOL
+kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+kernel32.WaitForSingleObject.restype = wintypes.DWORD
 
 
 def enabled_mod_folders(scenario: dict, mods_dir: Path = DEFAULT_MODS_DIR) -> list[Path]:
@@ -179,9 +182,12 @@ def close_orphan_civ_reporters() -> None:
     if _civ_process_ids():
         return
     for pid in sorted(_process_ids({"firaxisbugreporter.exe"})):
-        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                                       False, pid)
         if not process:
-            continue  # It may have exited between the snapshot and OpenProcess.
+            if pid not in _process_ids({"firaxisbugreporter.exe"}):
+                continue  # It exited between the snapshot and OpenProcess.
+            raise InputError(f"Cannot open remaining crash reporter {pid}")
         try:
             executable = ctypes.create_unicode_buffer(32768)
             length = wintypes.DWORD(len(executable))
@@ -194,6 +200,8 @@ def close_orphan_civ_reporters() -> None:
                 return  # The game appeared while enumerating; keep its reporter.
             if not kernel32.TerminateProcess(process, 1):
                 raise InputError(f"Could not close orphan Civ VI crash reporter {pid}")
+            if kernel32.WaitForSingleObject(process, 10_000) != 0:
+                raise InputError(f"Orphan Civ VI crash reporter {pid} did not finish exiting")
             print(f"Closed orphan Civ VI crash reporter {pid}", flush=True)
         finally:
             kernel32.CloseHandle(process)

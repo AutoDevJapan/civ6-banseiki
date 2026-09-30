@@ -40,13 +40,16 @@ class CrashReporterTests(unittest.TestCase):
                     return True
                 kernel.QueryFullProcessImageNameW.side_effect = image
                 kernel.TerminateProcess.return_value = True
+                kernel.WaitForSingleObject.return_value = 0
                 close_orphan_civ_reporters()
                 enumerate_reporters.assert_called_once_with({"firaxisbugreporter.exe"})
-                kernel.OpenProcess.assert_called_once_with(0x1001, False, 7)
+                kernel.OpenProcess.assert_called_once_with(0x101001, False, 7)
                 if terminated:
                     kernel.TerminateProcess.assert_called_once_with(55, 1)
+                    kernel.WaitForSingleObject.assert_called_once_with(55, 10_000)
                 else:
                     kernel.TerminateProcess.assert_not_called()
+                    kernel.WaitForSingleObject.assert_not_called()
                 kernel.CloseHandle.assert_called_once_with(55)
 
     def test_running_game_keeps_reporters(self):
@@ -70,12 +73,41 @@ class CrashReporterTests(unittest.TestCase):
 
     def test_exited_reporter_is_ignored(self):
         with patch("restart._civ_process_ids", return_value=set()), patch(
-            "restart._process_ids", return_value={7}
+            "restart._process_ids", side_effect=[{7}, set()]
         ), patch("restart.kernel32") as kernel:
             kernel.OpenProcess.return_value = 0
             close_orphan_civ_reporters()
         kernel.TerminateProcess.assert_not_called()
         kernel.CloseHandle.assert_not_called()
+
+    def test_remaining_reporter_that_cannot_be_opened_stops_launch(self):
+        with patch("restart._civ_process_ids", return_value=set()), patch(
+            "restart._process_ids", return_value={7}
+        ), patch("restart.kernel32") as kernel, patch("restart.os.startfile") as start:
+            kernel.OpenProcess.return_value = 0
+            with self.assertRaisesRegex(InputError, "Cannot open remaining crash reporter 7"):
+                launch_via_steam()
+            start.assert_not_called()
+            kernel.TerminateProcess.assert_not_called()
+
+    def test_reporter_must_finish_exiting_before_launch(self):
+        for wait_result in (0x102, 0xFFFFFFFF):
+            with self.subTest(wait_result=wait_result), patch(
+                "restart._civ_process_ids", return_value=set()
+            ), patch("restart._process_ids", return_value={7}), patch(
+                "restart.kernel32"
+            ) as kernel, patch("restart.os.startfile") as start:
+                kernel.OpenProcess.return_value = 55
+                def image(_handle, _flags, buffer, _length):
+                    buffer.value = self.REPORTER
+                    return True
+                kernel.QueryFullProcessImageNameW.side_effect = image
+                kernel.TerminateProcess.return_value = True
+                kernel.WaitForSingleObject.return_value = wait_result
+                with self.assertRaisesRegex(InputError, "did not finish exiting"):
+                    launch_via_steam()
+                start.assert_not_called()
+                kernel.CloseHandle.assert_called_once_with(55)
 
     def test_steam_launch_clears_reporters_before_sending_uri(self):
         events = []
