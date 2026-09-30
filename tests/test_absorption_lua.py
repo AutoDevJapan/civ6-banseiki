@@ -714,6 +714,15 @@ class AbsorptionTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, 'manager owner changed'):
             self.a.Verify('test-absorption', False)
 
+    def test_all_gameplay_scenario_chunks_use_shared_lifespan_key(self):
+        for name in ('absorption-japan.json', 'absorption-hero-recall.json'):
+            data = json.loads((ROOT / 'tools/civ6-autotest/scenarios' / name).read_text(encoding='utf-8'))
+            for step in data['steps']:
+                if step.get('state_name') == 'GameCore_Tuner':
+                    code = step.get('code', '')
+                    self.assertNotIn('UnitPropertyKeys.LifespanRemaining', code.replace('(UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining)', ''), name)
+            self.assertIn('ExposedMembers.JAC_HeroLifespanKey', ''.join(step.get('code', '') for step in data['steps']))
+
     def test_ui_publishes_engine_enum_when_gameplay_has_no_unit_property_keys(self):
         self.add_native_hero()
         ui = (ROOT / "poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8")
@@ -1013,6 +1022,7 @@ class AbsorptionTests(unittest.TestCase):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json").read_text(encoding="utf-8"))
         steps = [step for step in data["steps"] if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner"]
         self.run_lua('''
+          ExposedMembers.JAC_HeroLifespanKey=UnitPropertyKeys.LifespanRemaining
           local majors={};for id=0,21 do
             local n=id;majors[#majors+1]={GetID=function() return n end}
           end

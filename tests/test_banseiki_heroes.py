@@ -120,6 +120,8 @@ class NativeHeroPackageTests(unittest.TestCase):
             self.assertEqual(ids[0], canonical)
             self.assertLess(ids.index("ba3a1c58-9287-4654-a22f-85f9e6841e9b"),
                             ids.index("bd7a82c5-6b38-4b69-a7f5-8dc9af534249"))
+            self.assertLess(ids.index("bd7a82c5-6b38-4b69-a7f5-8dc9af534249"),
+                            ids.index("61320778-2e75-4c11-9009-94101b519aba"))
 
     def test_native_warlord_art_uses_generic_infantry_and_cavalry(self):
         root = ET.parse(MOD / "ArtDefs/Units.artdef").getroot()

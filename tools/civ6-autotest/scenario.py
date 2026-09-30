@@ -473,9 +473,9 @@ class Runner:
                 if not str(exc).startswith("Multiple Civ VI processes found"):
                     raise
                 process_present = True  # Never launch another copy during an overlap.
-            if not process_present and now >= next_launch:
-                if attempts >= 4:
-                    raise ScenarioError(f"Steam did not start Civ VI after {attempts} attempts; last: {last}")
+            if not process_present and now >= next_launch and attempts < 4:
+                # Exhausting launch requests is not the caller's timeout: Steam can
+                # complete the fourth request later. Keep waiting without launching again.
                 launch_via_steam()
                 attempts += 1
                 next_launch = now + 45
@@ -485,7 +485,7 @@ class Runner:
                 return
             except InputError as exc:
                 last = str(exc)
-        raise ScenarioError(f"Civ VI window did not appear after Steam launch; last: {last}")
+        raise ScenarioError(f"Civ VI window did not appear after {attempts} Steam launch attempts within the deadline; last: {last}")
 
     LOADSCREEN_READY = "LoadScreen: OnLoadGameViewStateDone"
 

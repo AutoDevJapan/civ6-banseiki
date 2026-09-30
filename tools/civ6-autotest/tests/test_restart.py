@@ -239,6 +239,43 @@ class RestartActionTests(unittest.TestCase):
             runner._launch_steam_and_wait(120)
         self.assertEqual(launch.call_count, 2)
 
+    def test_four_launch_requests_still_wait_for_delayed_window_until_deadline(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def wait(short_deadline):
+            clock[0] = short_deadline
+            if clock[0] < 230:
+                raise InputError("Steam launch is still pending")
+            return 123
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.launch_via_steam") as launch, patch(
+            "scenario.wait_for_civ_window", side_effect=wait
+        ):
+            runner._launch_steam_and_wait(420)
+        self.assertEqual(launch.call_count, 4)
+        self.assertEqual(clock[0], 230)
+
+    def test_exhausted_launch_requests_fail_at_the_supplied_deadline(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def wait(short_deadline):
+            clock[0] = short_deadline
+            raise InputError("no window")
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.launch_via_steam") as launch, patch(
+            "scenario.wait_for_civ_window", side_effect=wait
+        ):
+            with self.assertRaisesRegex(ScenarioError, "within the deadline"):
+                runner._launch_steam_and_wait(420)
+        self.assertEqual(launch.call_count, 4)
+        self.assertEqual(clock[0], 420)
+
     def test_single_process_waits_for_exiting_process_to_disappear(self):
         with patch("restart._civ_process_ids", side_effect=[{1, 2}, {1, 2}, {2}]), patch(
             "restart.process_start_time", return_value=100.0
