@@ -140,6 +140,30 @@ Game.GetProperty=function(self,key) if key=='JAC_AGES_LEDGER' then return {reign
         self.assertEqual(count,5)
         self.assertIn('saved judgment rosters do not cover all six expected reigns',issues)
 
+    def test_missing_player_in_both_history_and_log_is_not_complete(self):
+        snapshots,rows = self.full_coverage_fixture()
+        snapshots = [s.replace('players=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21',
+                               'players=0,1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21') for s in snapshots]
+        rows = [r for r in rows if r['player']!=13]
+        issues,_ = report.coverage(snapshots,rows)
+        self.assertIn('saved roster survivor coverage mismatch: REIGN_GENKI',issues)
+
+    def test_survivors_are_reconciled_with_dated_elimination_events(self):
+        snapshots,rows = self.full_coverage_fixture()
+        for index in (3,4):
+            snapshots[index] = snapshots[index].replace('house player=13 alive=true','house player=13 alive=false')
+        for index in (3,4):
+            parts = snapshots[index].split(' ; ')
+            for n,part in enumerate(parts):
+                if part.startswith('judgment-roster ') and int(part.split('turn=')[1].split()[0])>=119:
+                    parts[n] = part.replace(',13,',',')
+            snapshots[index] = ' ; '.join(parts)
+        rows = [r for r in rows if not (r['player']==13 and r['turn']>=119)]
+        falls = [{'capturer':10,'player':13,'turn':115}]
+        self.assertEqual(report.coverage(snapshots,rows,falls),([],5))
+        issues,_ = report.coverage(snapshots,rows)
+        self.assertIn('cannot reconcile survivors with elimination events: T+151',issues)
+
 
 if __name__ == '__main__':
     unittest.main()

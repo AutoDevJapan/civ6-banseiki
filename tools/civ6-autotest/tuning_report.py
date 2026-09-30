@@ -18,9 +18,14 @@ EXPECTED_REIGNS = [('REIGN_KOJI',66), ('REIGN_EIROKU',73), ('REIGN_GENKI',110),
                    ('REIGN_TENSHO',119), ('REIGN_BUNROKU',178), ('REIGN_KEICHO',189)]
 
 
-def coverage(checkpoints: list[str], judgments: list[dict]) -> tuple[list[str], int]:
-    """Compare log rows with the saved gameplay history, not an inferred survivor count."""
-    issues, seen, rosters = [], set(), {}
+def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | None = None) -> tuple[list[str], int]:
+    """Cross-check saved history, initial players, elimination events and checkpoints.
+
+    If a revival or a defeat without a merit event breaks this chain, report partial
+    coverage rather than guessing which players should have been judged.
+    """
+    issues, seen, rosters, alive = [], set(), {}, {}
+    falls = falls or []
     for checkpoint in checkpoints:
         parts = checkpoint.split(' ; ')
         header = re.fullmatch(r'checkpoint turn=(\d+) era=\S+ targets=\d+', parts[0])
@@ -34,6 +39,10 @@ def coverage(checkpoints: list[str], judgments: list[dict]) -> tuple[list[str], 
         houses = [int(m[1]) for part in parts for m in [re.match(r'house player=(\d+) ',part)] if m]
         if len(houses)!=22 or set(houses)!=set(range(22)):
             issues.append(f'incomplete house observations: T+{turn}')
+        statuses = [m.groups() for part in parts for m in [re.match(r'house player=(\d+) .*?\balive=(true|false)\b',part)] if m]
+        if len(statuses)!=22 or {int(i) for i,_ in statuses}!=set(range(22)):
+            issues.append(f'incomplete survivor observations: T+{turn}')
+        alive[turn] = {int(i) for i,status in statuses if status=='true'}
         local_rosters = set()
         for part in parts:
             if not part.startswith('judgment-roster '):
@@ -54,6 +63,13 @@ def coverage(checkpoints: list[str], judgments: list[dict]) -> tuple[list[str], 
             rosters[index]=(due,ids)
     if seen!=EXPECTED_CHECKPOINTS:
         issues.append(f'checkpoint turns mismatch: {sorted(seen)}')
+    initial = alive.get(1,set())
+    if initial!=set(range(22)):
+        issues.append('initial roster is not the configured 22 houses')
+    for turn,ids in alive.items():
+        expected = initial - {f['player'] for f in falls if f['turn']<=turn}
+        if ids!=expected:
+            issues.append(f'cannot reconcile survivors with elimination events: T+{turn}')
     actual_reigns = {row['reign'] for row in judgments}
     if actual_reigns!={name for name,_ in EXPECTED_REIGNS}:
         issues.append('age log does not contain all six expected reigns')
@@ -66,6 +82,9 @@ def coverage(checkpoints: list[str], judgments: list[dict]) -> tuple[list[str], 
             continue
         if expected[0]!=turn or any(row['turn']!=turn for row in rows):
             issues.append(f'judgment turn mismatch: {name}')
+        survivors = initial - {f['player'] for f in falls if f['turn']<=turn}
+        if set(expected[1])!=survivors:
+            issues.append(f'saved roster survivor coverage mismatch: {name}')
         if {row['player'] for row in rows}!=set(expected[1]) or len(rows)!=len(expected[1]):
             issues.append(f'age log player coverage mismatch: {name}')
     return issues, len(seen & EXPECTED_CHECKPOINTS)
@@ -114,7 +133,7 @@ def summarize(artifact: Path) -> dict:
     full = (len(completed) == 4 and all('autoplay completed 50 turns' in s for s in completed)
             and any('return=T+201 surviving majors=' in s['detail'] for s in steps if s['status'] == 'OK')
             and bool(judge) and judge[-1]['status'] == 'OK' and not failures)
-    issues, checkpoint_count = coverage(checkpoints, judgments)
+    issues, checkpoint_count = coverage(checkpoints, judgments, falls)
     return dict(artifact=artifact.name, lua_sha256=hashlib.sha256(lua_bytes).hexdigest(),
                 complete_200_turns=full, autoplay=completed, overview=overview, checkpoints=checkpoints,
                 reigns=grouped, judgments=judgments, arbitration=counts, elimination_point_events=falls,
