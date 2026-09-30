@@ -10,9 +10,9 @@
 		<Row Tag="LOC_JAC_ARB_CLOSE" Language="ja_JP"><Text>閉じる</Text></Row>
 		<Row Tag="LOC_JAC_ARB_CLOSE" Language="en_US"><Text>Close</Text></Row>
 		<Row Tag="LOC_JAC_ARB_CLOSE" Language="ru_RU"><Text>Закрыть</Text></Row>
-		<Row Tag="LOC_JAC_ARB_STATUS" Language="ja_JP"><Text>正当性 {1_Legitimacy}、外交的支持 {2_Favor}、金 {3_Gold}。裁定の費用：外交的支持 {4_CostFavor}、金 {5_CostGold}、正当性 {6_CostLegitimacy}</Text></Row>
-		<Row Tag="LOC_JAC_ARB_STATUS" Language="en_US"><Text>Legitimacy {1_Legitimacy}, Diplomatic Favor {2_Favor}, Gold {3_Gold}. Cost of a ruling: {4_CostFavor} Favor, {5_CostGold} Gold, {6_CostLegitimacy} Legitimacy</Text></Row>
-		<Row Tag="LOC_JAC_ARB_STATUS" Language="ru_RU"><Text>Легитимность {1_Legitimacy}, дипломатическая поддержка {2_Favor}, золото {3_Gold}. Цена решения: поддержка {4_CostFavor}, золото {5_CostGold}, легитимность {6_CostLegitimacy}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="ja_JP"><Text>正当性 {1_Legitimacy}（毎ターン +{2_Income}）、金 {3_Gold}。裁定の費用：金 {4_CostGold}、正当性 {5_CostLegitimacy}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="en_US"><Text>Legitimacy {1_Legitimacy} (+{2_Income} per turn), Gold {3_Gold}. Cost of a ruling: {4_CostGold} Gold, {5_CostLegitimacy} Legitimacy</Text></Row>
+		<Row Tag="LOC_JAC_ARB_STATUS" Language="ru_RU"><Text>Легитимность {1_Legitimacy} (+{2_Income} за ход), золото {3_Gold}. Цена решения: золото {4_CostGold}, легитимность {5_CostLegitimacy}</Text></Row>
 		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ja_JP"><Text>将軍家は他家どうしの停戦も発議でき、{1_Year}年までは裁定の力が3倍になる（停戦のターン数と、拒んだ家の不利益が3倍、費用は3分の1）。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="en_US"><Text>The Shogunate may also call ceasefires between other houses; until {1_Year} its rulings are three times as strong (three times the truce and the penalty for refusing, one third of the cost).</Text></Row>
 		<Row Tag="LOC_JAC_ARB_SHOGUN_POWER" Language="ru_RU"><Text>Сёгунат может объявлять перемирие и между другими домами; до {1_Year} года сила его решений утроена (втрое дольше перемирие и втрое тяжелее наказание за отказ, цена — треть).</Text></Row>
@@ -46,15 +46,12 @@
 		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="ja_JP"><Text>裁定は1ターンに1件まで。次のターンに請求できる。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="en_US"><Text>Only one ruling per turn. Petition again next turn.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_ONE_PER_TURN" Language="ru_RU"><Text>Не более одного решения за ход. Попробуйте в следующем ходу.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="ja_JP"><Text>外交的支持が足りない。</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="en_US"><Text>Not enough Diplomatic Favor.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_FAVOR" Language="ru_RU"><Text>Недостаточно дипломатической поддержки.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="ja_JP"><Text>金が足りない。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="en_US"><Text>Not enough Gold.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_REASON_GOLD" Language="ru_RU"><Text>Недостаточно золота.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ja_JP"><Text>正当性が足りない。</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="en_US"><Text>Not enough Legitimacy.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ru_RU"><Text>Недостаточно легитимности.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ja_JP"><Text>正当性が30未満の家は裁定を請求できない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="en_US"><Text>A house with less than 30 Legitimacy cannot petition.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_LEGITIMACY" Language="ru_RU"><Text>Дом с легитимностью ниже 30 не может подавать прошения.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="ja_JP"><Text>停戦裁定の請求</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="en_US"><Text>Ceasefire Petition</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REQUEST_NAME" Language="ru_RU"><Text>Прошение о перемирии</Text></Row>
@@ -73,8 +70,50 @@
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ja_JP"><Text>停戦裁定の拒否</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="en_US"><Text>Ceasefire Ruling Refused</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_NAME" Language="ru_RU"><Text>Решение о перемирии отвергнуто</Text></Row>
-		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ja_JP"><Text>{1_Refuser}は{2_A}と{3_B}の停戦裁定を拒み、正当性を失った。諸家には{1_Refuser}を討つ大義が立つ。</Text></Row>
-		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="en_US"><Text>{1_Refuser} refused the ceasefire ruling between {2_A} and {3_B} and lost Legitimacy. The other houses now have cause to subdue {1_Refuser}.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ru_RU"><Text>{1_Refuser} отверг решение о перемирии между {2_A} и {3_B} и потерял легитимность. У других домов появился повод выступить против {1_Refuser}.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ja_JP"><Text>{1_Refuser}は{2_A}と{3_B}の停戦裁定を拒み、正当性を失った。{4_Until}ターンまで{1_Refuser}への討伐の勅命が出る。「朝廷に停戦を請う」の画面から参加でき、期間中に{1_Refuser}の都市を攻め取った家は褒賞を得る。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="en_US"><Text>{1_Refuser} refused the ceasefire ruling between {2_A} and {3_B} and lost Legitimacy. An order to subdue {1_Refuser} stands until turn {4_Until}; join it from the Court ceasefire screen. Houses that take a city of {1_Refuser} meanwhile are rewarded.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ru_RU"><Text>{1_Refuser} отверг решение о перемирии между {2_A} и {3_B} и потерял легитимность. До хода {4_Until} действует приказ о походе на {1_Refuser}; присоединиться можно на экране двора. Дома, взявшие за это время город {1_Refuser}, получат награду.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ja_JP"><Text>正当性が{1_High}以上なら全都市の忠誠度 +2/ターン、{2_Low}未満なら -2/ターンで、裁定を請求できない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="en_US"><Text>At {1_High} Legitimacy or more all cities gain +2 Loyalty per turn; below {2_Low} they lose 2 per turn and the house cannot petition.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ru_RU"><Text>При легитимности {1_High} и выше все города получают +2 лояльности за ход; ниже {2_Low} теряют 2 за ход, и дом не может подавать прошения.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="ja_JP"><Text>討伐の勅命：{1_Target}（{2_Until}ターンまで）。参加：{3_Joined}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="en_US"><Text>Order to subdue {1_Target} (until turn {2_Until}). Joined: {3_Joined}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="ru_RU"><Text>Приказ о походе на {1_Target} (до хода {2_Until}). Участники: {3_Joined}</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LIST_SEPARATOR" Language="ja_JP"><Text>、</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LIST_SEPARATOR" Language="en_US"><Text>, </Text></Row>
+		<Row Tag="LOC_JAC_ARB_LIST_SEPARATOR" Language="ru_RU"><Text>, </Text></Row>
+		<Row Tag="LOC_JAC_ARB_NONE" Language="ja_JP"><Text>なし</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NONE" Language="en_US"><Text>none</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NONE" Language="ru_RU"><Text>нет</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOIN" Language="ja_JP"><Text>参加する</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOIN" Language="en_US"><Text>Join</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOIN" Language="ru_RU"><Text>Присоединиться</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOINED" Language="ja_JP"><Text>参加中</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOINED" Language="en_US"><Text>Joined</Text></Row>
+		<Row Tag="LOC_JAC_ARB_JOINED" Language="ru_RU"><Text>Участвует</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_NAME" Language="ja_JP"><Text>討伐の勅命への参加</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_NAME" Language="en_US"><Text>Joined the Order to Subdue</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_NAME" Language="ru_RU"><Text>Присоединение к походу</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_SUMMARY" Language="ja_JP"><Text>{1_Joiner}が{2_Target}への討伐の勅命に加わった。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_SUMMARY" Language="en_US"><Text>{1_Joiner} has joined the order to subdue {2_Target}.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_JOINED_SUMMARY" Language="ru_RU"><Text>{1_Joiner} присоединился к походу на {2_Target}.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_NAME" Language="ja_JP"><Text>討伐の褒賞</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_NAME" Language="en_US"><Text>Reward for the Subjugation</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_NAME" Language="ru_RU"><Text>Награда за поход</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_SUMMARY" Language="ja_JP"><Text>{1_Capturer}は討伐の勅命に従って{2_Target}の都市を攻め取り、金 {3_Gold} と正当性 {4_Legitimacy} を得た。{2_Target}は正当性 {4_Legitimacy} を失った。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_SUMMARY" Language="en_US"><Text>{1_Capturer} took a city of {2_Target} under the order to subdue and gains {3_Gold} Gold and {4_Legitimacy} Legitimacy. {2_Target} loses {4_Legitimacy} Legitimacy.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_CAPTURE_SUMMARY" Language="ru_RU"><Text>{1_Capturer} взял город {2_Target} по приказу о походе и получает {3_Gold} золота и {4_Legitimacy} легитимности. {2_Target} теряет {4_Legitimacy} легитимности.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME" Language="ja_JP"><Text>討伐の勅命の終わり</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME" Language="en_US"><Text>Order to Subdue Ended</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME" Language="ru_RU"><Text>Приказ о походе окончен</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_SUMMARY" Language="ja_JP"><Text>{1_Target}への討伐の勅命は期限を迎えて終わった。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_SUMMARY" Language="en_US"><Text>The order to subdue {1_Target} has expired.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_NOTIFY_ORDER_ENDED_SUMMARY" Language="ru_RU"><Text>Приказ о походе на {1_Target} истёк.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NO_ORDER" Language="ja_JP"><Text>この家への討伐の勅命は出ていない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NO_ORDER" Language="en_US"><Text>There is no order to subdue this house.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_NO_ORDER" Language="ru_RU"><Text>Приказа о походе на этот дом нет.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ALREADY" Language="ja_JP"><Text>すでに参加している。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ALREADY" Language="en_US"><Text>Already joined.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_REASON_ALREADY" Language="ru_RU"><Text>Уже участвует.</Text></Row>
 	</LocalizedText>
 </GameInfo>

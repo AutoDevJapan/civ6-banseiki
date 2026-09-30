@@ -305,6 +305,16 @@ class UnificationPactTests(unittest.TestCase):
         self.assertEqual((self.lead(ODA), self.lead(DATE)), (DATE, DATE))
         self.assertIsNone(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0"))
 
+    def test_ai_does_not_propose_to_a_house_it_is_at_war_with(self):
+        # Live owner-o-02: HasAllied stayed true across the war, and Ashina proposed to Oda at once.
+        self.ally(DATE, ODA)
+        self.g.WAR[f"{ODA}-{DATE}"] = True
+        self.g.FIRE("OnGameTurnStarted", 16604)
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_UNIFICATION_PACT_PROPOSAL_0"))
+        self.assertIsNone(self.result(DATE))
+        self.request("Propose", DATE, ODA)
+        self.assertEqual(self.result(DATE), "INVALID")
+
     def test_ai_does_not_propose_below_the_share_or_without_an_alliance(self):
         self.ally(ASHINA, SHIMAZU)  # no castles between them
         self.g.FIRE("OnGameTurnStarted", 16604)

@@ -63,11 +63,13 @@ local function AliveIDs()
   return ids;
 end
 
--- The target may join the proposer's pact: both alive majors on different teams, the target in no pact,
--- the proposer in none or leading one.
+-- The target may join the proposer's pact: both alive majors on different teams and not at war, the target
+-- in no pact, the proposer in none or leading one. The war check is explicit: live (owner-o-02) an AI still
+-- counted as allied with a house it was at war with and proposed to it the turn their pact dissolved.
 local function CanJoin(lead, target)
   if lead == target or not Alive(lead) or not Alive(target) then return false; end
   if Players[lead]:GetTeam() == Players[target]:GetTeam() then return false; end
+  if Players[lead]:GetDiplomacy():IsAtWarWith(target) then return false; end
   local lead_of = LeadOf(lead);
   return LeadOf(target) == nil and (lead_of == nil or lead_of == lead);
 end
@@ -250,7 +252,7 @@ local function Propose(playerID, target)
   end
 end
 
--- AI proposals (header). Allied houses are at peace, so a proposal never meets a war.
+-- AI proposals (header). CanJoin rules out a house at war with the proposer.
 local function AiPropose()
   local targets = Targets();
   if #targets == 0 then return; end

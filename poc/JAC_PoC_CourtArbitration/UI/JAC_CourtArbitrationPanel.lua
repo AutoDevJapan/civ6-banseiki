@@ -39,11 +39,20 @@ function JAC_RespondArbitration(accept)
 	return Send("JAC_CourtArbitrationRespond", { Accept = accept and 1 or 0 })
 end
 
+function JAC_JoinSubjugation(target)
+	return Send("JAC_CourtArbitrationJoin", { Target = target })
+end
+
 -- 請求できる組。自分が戦っている相手と、裁定の力を持つ将軍家なら他家どうしの戦争も
-local function Candidates(localID, turn)
+local function SortedIDs()
 	local ids = {}
 	for _, player in ipairs(PlayerManager.GetAliveMajors()) do table.insert(ids, player:GetID()) end
 	table.sort(ids)
+	return ids
+end
+
+local function Candidates(localID, turn)
+	local ids = SortedIDs()
 	local shogun = R.IsEmpoweredShogun(localID, turn)
 	local list = {}
 	for i = 1, #ids do
@@ -63,6 +72,7 @@ local function AddRow(text)
 	local row = m_rows:GetInstance()
 	row.Text:SetText(text)
 	row.Action2:SetHide(true)
+	row.Action:SetHide(false)
 	row.Action:SetDisabled(false)
 	row.Action:SetToolTipString("")
 	return row
@@ -76,9 +86,10 @@ local function Refresh()
 		return
 	end
 	local player, turn = Players[localID], R.GameTurn()
-	local favor, gold, legitimacy = R.Costs(R.Power(localID, turn))
-	local status = Locale.Lookup("LOC_JAC_ARB_STATUS", R.Legitimacy(localID), R.Favor(localID),
-		player:GetTreasury():GetGoldBalance(), favor, gold, legitimacy)
+	local gold, legitimacy = R.Costs(R.Power(localID, turn))
+	local status = Locale.Lookup("LOC_JAC_ARB_STATUS", R.Legitimacy(localID), R.LegitimacyIncome(localID, turn),
+		player:GetTreasury():GetGoldBalance(), gold, legitimacy)
+		.. "[NEWLINE]" .. Locale.Lookup("LOC_JAC_ARB_LEGITIMACY_EFFECTS", R.LEGITIMACY_HIGH, R.LEGITIMACY_LOW)
 	if R.IsEmpoweredShogun(localID, turn) then
 		status = status .. "[NEWLINE]" .. Locale.Lookup("LOC_JAC_ARB_SHOGUN_POWER", R.MUROMACHI_END_YEAR)
 	end
@@ -107,6 +118,24 @@ local function Refresh()
 		if not ok then row.Action:SetToolTipString(Locale.Lookup("LOC_JAC_ARB_REASON_" .. reason)) end
 		row.Action:RegisterCallback(Mouse.eLClick, function() JAC_RequestArbitration(a, b); Refresh() end)
 		count = count + 1
+	end
+	-- 討伐の勅命の一覧（対象・期限・参加者）と参加のボタン
+	for _, target in ipairs(SortedIDs()) do
+		if R.IsTarget(target, turn) then
+			local names = {}
+			for _, id in ipairs(SortedIDs()) do
+				if R.HasJoined(id, target, turn) then table.insert(names, Name(id)) end
+			end
+			local row = AddRow(Locale.Lookup("LOC_JAC_ARB_ORDER_ROW", Name(target), Players[target]:GetProperty(R.OUTLAW_KEY),
+				#names > 0 and table.concat(names, Locale.Lookup("LOC_JAC_ARB_LIST_SEPARATOR")) or Locale.Lookup("LOC_JAC_ARB_NONE")))
+			local ok, reason = R.CheckJoin(localID, target, turn)
+			row.Action:SetText(Locale.Lookup(R.HasJoined(localID, target, turn) and "LOC_JAC_ARB_JOINED" or "LOC_JAC_ARB_JOIN"))
+			row.Action:SetHide(target == localID)
+			row.Action:SetDisabled(not ok or not TurnActive())
+			if not ok then row.Action:SetToolTipString(Locale.Lookup("LOC_JAC_ARB_REASON_" .. reason)) end
+			row.Action:RegisterCallback(Mouse.eLClick, function() JAC_JoinSubjugation(target); Refresh() end)
+			count = count + 1
+		end
 	end
 	Controls.Rows:CalculateSize()
 	Controls.Scroll:CalculateInternalSize()

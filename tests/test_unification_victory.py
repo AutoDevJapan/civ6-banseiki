@@ -470,12 +470,13 @@ class UnificationVictoryTests(unittest.TestCase):
         # then dissolved by a war between the two at the next turn start; peace is forced the turn after.
         with_ashina = [i for i, code in enumerate(codes) if "JAC_RequestPact('Propose',ashina)" in code]
         leave, left = first("JAC_RequestPact('Leave',"), first("=='LEFT'")
-        war, dissolved = first("DeclareWarOn(ashina"), first("=='AT_WAR'")
+        war, dissolved = first("DeclareWarOn(ashina"), first("pact not dissolved by the war")
         self.assertEqual(len(with_ashina), 2)
         self.assertTrue(first("SetHasAllied(ashina,true)") < with_ashina[0] < leave < left < with_ashina[1] < war
                         < dissolved < propose[0])
         self.assertEqual([s["action"] for s in steps[war + 1:dissolved]], ["autoplay"])
         self.assertIn("MakePeaceWith(ashina,true)", codes[dissolved])
+        self.assertIn("proposed a pact to Oda while at war", codes[dissolved])
         self.assertTrue(all(steps[i]["state_name"] == "JAC_UnificationPact" for i in (*with_ashina, leave)))
         # The formed pact is saved and loaded, and its properties are checked again before the handover.
         actions = [step["action"] for step in steps]

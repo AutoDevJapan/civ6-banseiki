@@ -60,6 +60,9 @@
 		</Criteria>
 	</ActionCriteria>
 	<InGameActions>
+		<UpdateDatabase id="JAC_Arbitration_Data_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
+			<File>Data/JAC_CourtArbitration_Legitimacy.sql</File>
+		</UpdateDatabase>
 		<UpdateText id="JAC_Arbitration_Text_20km_Historical" criteria="JAC_Arbitration_20km_Historical">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
 		</UpdateText>
@@ -70,6 +73,9 @@
 			<Properties><Context>InGame</Context></Properties>
 			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
+		<UpdateDatabase id="JAC_Arbitration_Data_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
+			<File>Data/JAC_CourtArbitration_Legitimacy.sql</File>
+		</UpdateDatabase>
 		<UpdateText id="JAC_Arbitration_Text_15km_Historical" criteria="JAC_Arbitration_15km_Historical">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
 		</UpdateText>
@@ -80,6 +86,9 @@
 			<Properties><Context>InGame</Context></Properties>
 			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
+		<UpdateDatabase id="JAC_Arbitration_Data_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
+			<File>Data/JAC_CourtArbitration_Legitimacy.sql</File>
+		</UpdateDatabase>
 		<UpdateText id="JAC_Arbitration_Text_20km_Settlers" criteria="JAC_Arbitration_20km_Settlers">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
 		</UpdateText>
@@ -90,6 +99,9 @@
 			<Properties><Context>InGame</Context></Properties>
 			<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		</AddUserInterfaces>
+		<UpdateDatabase id="JAC_Arbitration_Data_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
+			<File>Data/JAC_CourtArbitration_Legitimacy.sql</File>
+		</UpdateDatabase>
 		<UpdateText id="JAC_Arbitration_Text_15km_Settlers" criteria="JAC_Arbitration_15km_Settlers">
 			<File>Text/JAC_CourtArbitration_Text.xml</File>
 		</UpdateText>
@@ -109,6 +121,7 @@
 		</ImportFiles>
 	</InGameActions>
 	<Files>
+		<File>Data/JAC_CourtArbitration_Legitimacy.sql</File>
 		<File>Text/JAC_CourtArbitration_Text.xml</File>
 		<File>Scripts/JAC_CourtArbitration.lua</File>
 		<File>Scripts/JAC_CourtArbitration_Rules.lua</File>

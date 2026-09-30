@@ -43,6 +43,7 @@ REBUILT = "BUILDING_JAC_REBUILT_ON_CASTLE"
 UNIFIED = "BUILDING_JAC_PACT_UNIFIED"  # pact lead's capital, placed by JAC_Sengoku_UnificationPact.lua
 PACT_SCENARIO = SCENARIOS / "unification-pact.json"
 PACT_LEAD_PREFIX = "JAC_UNIFICATION_PACT_LEAD_"  # + player ID -> the pact lead's player ID (Game property)
+PACT_PROPOSAL_PREFIX = "JAC_UNIFICATION_PACT_PROPOSAL_"  # + target ID -> proposer ID
 PACT_RESULT = "JAC_UNIFICATION_PACT_RESULT"  # player property: outcome of the player's last request
 RAZED_PREFIX = "JAC_UNIFICATION_RAZED_CASTLE_PLOT_"  # + plot index; Game property set by the script
 TEST_MAP = test_map.TEST_MOD / "Maps" / f"{test_map.MAP_NAME}.Civ6Map"
@@ -440,10 +441,11 @@ def pact_scenario() -> dict:
     # Peace is forced the turn after the war (a war on the turn of a forced peace hung the engine,
     # court-arbitration-08; MakePeaceWith(b, true) ends a war inside the minimum war length, court-arbitration-06).
     war_dissolved = (
-        ids + f"if not (Players[ashina]:GetProperty('{PACT_RESULT}')=='AT_WAR' and "
-        f"Players[{HUMAN}]:GetProperty('{PACT_RESULT}')=='DISSOLVED' and "
-        f"Game:GetProperty('{PACT_LEAD_PREFIX}'..ashina)==nil and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')==nil) then "
+        # The result strings are only the last change: an AI may make a new (legitimate) proposal in the same
+        # autoplay turn (owner-o-02), so assert the pact state and that no proposal crossed the war.
+        ids + f"if not (Game:GetProperty('{PACT_LEAD_PREFIX}'..ashina)==nil and Game:GetProperty('{PACT_LEAD_PREFIX}{HUMAN}')==nil) then "
         f"error('pact not dissolved by the war: ashina='..tostring(Players[ashina]:GetProperty('{PACT_RESULT}'))..' oda='..tostring(Players[{HUMAN}]:GetProperty('{PACT_RESULT}'))) end; "
+        f"if Game:GetProperty('{PACT_PROPOSAL_PREFIX}{HUMAN}')==ashina then error('Ashina proposed a pact to Oda while at war') end; "
         f"Players[{HUMAN}]:GetDiplomacy():MakePeaceWith(ashina,true); "
         f"if Players[{HUMAN}]:GetDiplomacy():IsAtWarWith(ashina) then error('peace with Ashina failed') end; "
         "return 'war dissolved the pact; peace restored'"
