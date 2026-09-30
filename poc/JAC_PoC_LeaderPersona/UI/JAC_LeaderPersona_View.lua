@@ -23,6 +23,24 @@ ExposedMembers.JAC_LeaderPersonaNativeRead = function(owner, leader)
     return result;
 end;
 
+-- leaderperson-05: GreatPerson:IsGreatPerson/GetIndividual are UI reads too.
+-- Return identity values only; creation and destruction remain in gameplay.
+ExposedMembers.JAC_LeaderPersonaPersonRead = function(owner, leader)
+    local row = GameInfo.JAC_LeaderPersonas[leader];
+    local p = Players[owner];
+    if not p or not row then return nil; end
+    for _,unit in p:GetUnits():Members() do
+        local gp = unit:GetGreatPerson();
+        if gp and gp:IsGreatPerson() then
+            local individual = GameInfo.GreatPersonIndividuals[gp:GetIndividual()];
+            if individual and individual.GreatPersonIndividualType == row.PersonType then
+                return {unitID=unit:GetID(), unitType=unit:GetType()};
+            end
+        end
+    end
+    return {};
+end;
+
 local m_Rows = InstanceManager:new("PersonaRow", "Root", Controls.Rows);
 local m_Attempts, m_Finalize = {}, {};
 local function Get(leader, field) return Game:GetProperty("JAC_PERSONA_" .. leader .. "_" .. field); end

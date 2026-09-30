@@ -29,17 +29,14 @@ end
 
 local function FindPerson(owner, row)
     local p = Player(owner, false);
-    local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
-    if not p or not individual then return nil; end
-    -- CreatePerson has no documented return contract. Scan by the native individual identity.
-    -- Base/Assets/UI/Panels/UnitPanel.lua:2273-2277.
-    for _, unit in p:GetUnits():Members() do
-        local gp = unit:GetGreatPerson();
-        if gp and gp:IsGreatPerson() then
-            local actual = GameInfo.GreatPersonIndividuals[gp:GetIndividual()];
-            if actual and actual.GreatPersonIndividualType == row.PersonType then return unit; end
-        end
-    end
+    local read = ExposedMembers.JAC_LeaderPersonaPersonRead;
+    if not p or type(read) ~= "function" then return nil, false; end
+    local native = read(owner, row.LeaderType);
+    if not native then return nil, false; end
+    if native.unitID == nil then return nil, true; end
+    local unit = p:GetUnits():FindID(native.unitID);
+    if not unit or unit:GetOwner() ~= owner or unit:GetType() ~= native.unitType then return nil, false; end
+    return unit, true;
 end
 
 local function NativeGovernor(owner, row)
@@ -67,7 +64,8 @@ local function Join(owner, source, personality, trait)
     if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
     local city = p:GetCities():GetCapitalCity();
     if not city then return Finish(owner, "NO_CITY"); end
-    local unit = FindPerson(owner, row);
+    local unit, ready = FindPerson(owner, row);
+    if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if not unit then
         -- Official placement call: Base/Assets/UI/Tuner/TunerMapPanel.lua:190.
         Game.GetGreatPeople():CreatePerson(owner, GameInfo.GreatPersonIndividuals[row.PersonType].Index,
@@ -105,7 +103,10 @@ local function PrepareEvolution(owner, leader)
     local state = Get(leader, "STATE");
     if state == "GOVERNOR" then return Finish(owner, "ALREADY_EVOLVED"); end
     if state == "EVOLVING" then return Finish(owner, "EVOLVING"); end
-    if state ~= "GREAT_PERSON" or not FindPerson(owner, row) then return Finish(owner, "PERSON_MISSING"); end
+    if state ~= "GREAT_PERSON" then return Finish(owner, "PERSON_MISSING"); end
+    local person, ready = FindPerson(owner, row);
+    if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
+    if not person then return Finish(owner, "PERSON_MISSING"); end
     local native = NativeGovernor(owner, row);
     if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
@@ -142,9 +143,11 @@ local function CompleteEvolution(owner, leader)
     local native = NativeGovernor(owner, row);
     if not native or not native.appointed or not native.base then return Finish(owner, "APPOINTMENT_PENDING"); end
     -- Retain the Great Person until the engine has really appointed its Governor.
-    local unit = FindPerson(owner, row);
+    local unit, ready = FindPerson(owner, row);
+    if not ready then return Finish(owner, "REMOVAL_PENDING"); end
     if unit then p:GetUnits():Destroy(unit); end -- TunerMapPanel.lua:199, also accepts no return value
-    if FindPerson(owner, row) then return Finish(owner, "REMOVAL_PENDING"); end
+    local remaining, observed = FindPerson(owner, row);
+    if remaining or not observed then return Finish(owner, "REMOVAL_PENDING"); end
     Set(leader, "UNIT", nil);
     Set(leader, "STATE", "GOVERNOR");
     SnapshotAlliances(owner, leader);

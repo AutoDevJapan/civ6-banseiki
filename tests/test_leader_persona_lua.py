@@ -103,8 +103,12 @@ Game.GetGreatPeople=function() return { CreatePerson=function(_,owner,individual
     assert(GameInfo.GreatPersonIndividuals[individual], 'individual INDEX required')
     assert(x==1 and y==owner)
     nextUnit=nextUnit+1; local id=nextUnit
-    local u={ individual=individual, GetID=function() return id end }
-    u.GetGreatPerson=function() return {IsGreatPerson=function() return true end, GetIndividual=function() return u.individual end} end
+    local u={ individual=individual, GetID=function() return id end,
+        GetOwner=function() return owner end, GetType=function() return 99 end }
+    u.GetGreatPerson=function()
+        if GAMECORE_UNIT_READS and not UI_NATIVE_READ then return {} end
+        return {IsGreatPerson=function() return true end, GetIndividual=function() return u.individual end}
+    end
     NATIVE_UNITS[owner][id]=u
     -- Deliberately NO return: neither creation nor removal is used as an object-returning API.
 end } end
@@ -289,6 +293,15 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             local original=Players[0].GetGovernors
             local read=ExposedMembers.JAC_LeaderPersonaNativeRead
             UI_NATIVE_READ=false
+            GAMECORE_UNIT_READS=true
+            local personRead=ExposedMembers.JAC_LeaderPersonaPersonRead
+            ExposedMembers.JAC_LeaderPersonaPersonRead=function(owner,leader)
+                UI_NATIVE_READ=true
+                local ok,result=pcall(personRead,owner,leader)
+                UI_NATIVE_READ=false
+                if not ok then error(result) end
+                return result
+            end
             Players[0].GetGovernors=function()
                 local all=original()
                 if UI_NATIVE_READ then return all end
@@ -339,6 +352,23 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
         self.assertEqual((self.prop("STATE"), self.g.DESTROYS), ("EVOLVING", 0))
         self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = read
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
+
+    def test_missing_person_reader_preserves_native_unit_and_reserved_titles(self):
+        read = self.g.ExposedMembers.JAC_LeaderPersonaPersonRead
+        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = None
+        self.assertEqual(self.api.Join(0, 1), "NATIVE_UNAVAILABLE")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = read
+        self.join()
+        self.grant_titles(0, DATE)
+        self.api.PrepareEvolution(0, DATE)
+        self.g.NEWGOV(0, DATE)
+        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = None
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "REMOVAL_PENDING")
+        self.assertEqual((self.prop("STATE"), self.g.DESTROYS), ("EVOLVING", 0))
+        self.assertEqual(self.g.Players[0].points, 1)
+        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = read
         self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
 
     def test_purchase_is_only_available_through_the_gameplay_event(self):
