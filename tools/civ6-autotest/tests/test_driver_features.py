@@ -17,6 +17,21 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class DriverFeatureTests(unittest.TestCase):
+    def test_end_turn_honours_turns_and_stops_on_failure_with_one_shared_deadline(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_end_turn", return_value="done") as end:
+                self.assertEqual(runner._run_step({"action":"end_turn", "turns":5, "timeout":1200}), "done")
+                self.assertEqual(end.call_count,5)
+                self.assertEqual(len({call.kwargs["deadline"] for call in end.call_args_list}),1)
+            with patch.object(runner, "_end_turn", side_effect=["done",ScenarioError("failed")]) as end:
+                with self.assertRaisesRegex(ScenarioError,"failed"):
+                    runner._run_step({"action":"end_turn", "turns":5})
+                self.assertEqual(end.call_count,2)
+            for turns in (0,-1,True,2.5):
+                with self.subTest(turns=turns), self.assertRaisesRegex(ScenarioError,"turns must be positive"):
+                    validate_scenario({"name":"turn validation", "steps":[{"action":"end_turn", "turns":turns}]})
+
     def test_build_setup_checks_every_player_after_refresh(self):
         players = [{"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": True},
                    {"leader": "LEADER_JAC_TAKEDA_NOBUTORA", "civ": "CIVILIZATION_JAC_TAKEDA", "human": False}]

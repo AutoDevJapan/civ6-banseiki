@@ -53,7 +53,7 @@ def _load_xml(db: sqlite3.Connection, path: Path, tables: set[str]) -> None:
         if table.tag not in tables:
             continue
         for op in table:
-            if op.tag in ("Row", "Replace"):
+            if op.tag in ("Row", "Replace", "InsertOrIgnore"):
                 row = _fields(op)
                 verb = "INSERT OR REPLACE" if op.tag == "Replace" else "INSERT OR IGNORE"
                 db.execute(f'{verb} INTO "{table.tag}" ({",".join(map(repr, row))}) '

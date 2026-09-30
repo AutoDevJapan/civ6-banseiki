@@ -9,10 +9,12 @@
     </Stack>
   </Grid>
   <Instance Name="PersonaRow">
-    <Container ID="Root" Size="420,70">
+    <Container ID="Root" Size="420,96">
       <Image ID="Portrait" Size="64,64" Anchor="L,C"/>
       <Label ID="Name" Anchor="L,T" Offset="74,5"/>
       <Label ID="Status" Anchor="L,T" Offset="74,29"/>
+      <Label ID="Merit" Anchor="L,T" Offset="74,55"/>
+      <GridButton ID="Tree" Anchor="R,B" Offset="0,5" Size="130,28" Style="ButtonControl" String="LOC_JAC_PERSONA_TREE"/>
       <GridButton ID="Evolve" Anchor="R,C" Size="130,28" Style="ButtonControl" String="LOC_JAC_PERSONA_EVOLVE"/>
     </Container>
   </Instance>

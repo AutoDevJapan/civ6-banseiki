@@ -6,6 +6,7 @@ from pathlib import Path
 import unittest
 
 from lupa import LuaRuntime, LuaError  # Required: never silently skip Lua tests.
+import tests.test_leader_persona as persona_test_support
 
 ROOT = Path(__file__).resolve().parents[1]
 MOD = ROOT / "poc/JAC_PoC_LeaderPersona"
@@ -37,16 +38,12 @@ for i,n in ipairs(names) do
         Name='LOC_'..leader..'_NAME', PortraitIcon='ICON_'..leader,
         PersonType='GREAT_PERSON_INDIVIDUAL_JAC_PERSONA_'..n, GovernorType='GOVERNOR_JAC_PERSONA_'..n,
         BasePromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_BASE',
-        PromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_PROMOTION_1',
-        SecondPromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_PROMOTION_2',
         Personality=i==1 and 'BOLD' or 'CALM', Trait=i==3 and 'DEVOUT' or 'ASTUTE',
         EvolutionCost=i==1 and 1 or 2}
     ROWS[i]=row
     INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, Index=i+10, Name=row.Name}
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
-    PROMOS[#PROMOS+1]={GovernorPromotionType=row.PromotionType, Index=i+40, Hash=3000+i}
-    PROMOS[#PROMOS+1]={GovernorPromotionType=row.SecondPromotionType, Index=i+50, Hash=4000+i}
 end
 GameInfo={ JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
@@ -65,19 +62,23 @@ for i,row in ipairs(ROWS) do
     config.GetCivilizationTypeName=function() return config.civ end
     PlayerConfigurations[id]=config
     NATIVE_UNITS[id], NATIVE_GOVS[id], GRANTS[id], CITIES[id]={},{},{},{}
-    local p={points=0,spent=0,alive=true,major=true,active=true}
+    local p={points=0,spent=0,alive=true,major=true,active=true,human=true,allies={}}
     p.GetID=function() return id end
     p.IsAlive=function() return p.alive end; p.IsMajor=function() return p.major end
     p.IsTurnActive=function() return p.active end
+    p.IsHuman=function() return p.human end
+    p.GetDiplomacy=function() return {HasAllied=function(_,other) return p.allies[other]==true end} end
     p.GetProperty,p.SetProperty=store()
     p.GetUnits=function() return {Members=function() return members(NATIVE_UNITS[id]) end,
+        FindID=function(_,unit) return NATIVE_UNITS[id][unit] end,
         Destroy=function(_,u) DESTROYS=DESTROYS+1; if not FAIL_DESTROY then NATIVE_UNITS[id][u:GetID()]=nil end end} end
     for j=1,2 do
         local cityid=id*10+j
         CITIES[id][cityid]={GetID=function() return cityid end, GetOwner=function() return id end,
             GetX=function() return j end, GetY=function() return id end}
     end
-    p.GetCities=function() return {GetCapitalCity=function() return CITIES[id][id*10+1] end} end
+    p.GetCities=function() return {GetCapitalCity=function() return CITIES[id][id*10+1] end,
+        Members=function() return members(CITIES[id]) end} end
     p.GetGovernors=function() return {
         GetGovernor=function(_,hash) return NATIVE_GOVS[id][hash] end,
         HasGovernor=function(_,hash) return NATIVE_GOVS[id][hash]~=nil end,
@@ -88,6 +89,13 @@ for i,row in ipairs(ROWS) do
     } end
     Players[id]=p
 end
+PlayerManager={GetAliveMajorIDs=function() return {0,1,2} end}
+PLOTS={}
+Map={GetPlot=function(x,y)
+    local key=x..'_'..y
+    if not PLOTS[key] then local p={};p.GetProperty,p.SetProperty=store();PLOTS[key]=p end
+    return PLOTS[key]
+end,GetPlotDistance=function(x,y,ox,oy) return math.max(math.abs(x-ox),math.abs(y-oy)) end}
 CityManager={GetCity=function(owner,id) return CITIES[owner] and CITIES[owner][id] end}
 local nextUnit=0
 Game.GetGreatPeople=function() return { CreatePerson=function(_,owner,individual,x,y)
@@ -102,9 +110,11 @@ Game.GetGreatPeople=function() return { CreatePerson=function(_,owner,individual
 end } end
 function NEWGOV(owner,leader)
     local row=GameInfo.JAC_LeaderPersonas[leader]; local def=GameInfo.Governors[row.GovernorType]
-    local g={promotions={}}
+    local g={promotions={},established=true,neutralized=0}
     g.promotions[GameInfo.GovernorPromotions[row.BasePromotionType].Hash]=true
     g.GetType=function() return def.Index end
+    g.IsEstablished=function() return g.established end
+    g.GetNeutralizedTurns=function() return g.neutralized end
     g.GetAssignedCity=function() return g.city end
     g.HasPromotion=function(_,hash) return g.promotions[hash]==true end
     NATIVE_GOVS[owner][def.Hash]=g; return g
@@ -113,37 +123,56 @@ ExposedMembers={}
 function events()
     local handlers={}
     local bus=setmetatable({}, {__index=function(t,k)
-        local ev={Add=function(f) handlers[k]=handlers[k] or {}; table.insert(handlers[k],f) end}
+        local ev=setmetatable({Add=function(f) handlers[k]=handlers[k] or {}; table.insert(handlers[k],f) end},
+            {__call=function(_,...) for _,f in ipairs(handlers[k] or {}) do f(...) end end})
         rawset(t,k,ev); return ev
     end})
     return bus,function(name,...) for _,f in ipairs(handlers[name] or {}) do f(...) end end
 end
-GameEvents,FIRE=events(); Events,FIREUI=events()
-function RESET_CONTEXTS() GameEvents,FIRE=events(); Events,FIREUI=events() end
+GameEvents,FIRE=events(); Events,FIREUI=events(); LuaEvents=events()
+function RESET_CONTEXTS() GameEvents,FIRE=events(); Events,FIREUI=events(); LuaEvents=events() end
 function print() end
 function include() end
 Mouse={eLClick=1}
 Locale={Lookup=function(s) return s end, ToUpper=function(s) return s end}
+
 function control()
-    return {SetText=function(_,v) end, SetIcon=function(_,v,size) end,
-        SetHide=function(_,v) end, SetDisabled=function(_,v) end,
-        RegisterCallback=function(_,event,f) end, CalculateSize=function() end,
-        DoAutoSize=function() end, IsHidden=function() return true end, SetToolTipString=function() end}
+    local c={hidden=true,disabled=false,text='',callbacks={}}
+    c.SetText=function(_,v) c.text=v end; c.GetText=function() return c.text end
+    c.SetIcon=function(_,v,size) c.icon=v;c.size=size end
+    c.SetHide=function(_,v) c.hidden=v end; c.SetDisabled=function(_,v) c.disabled=v end
+    c.RegisterCallback=function(_,event,f) c.callbacks[event]=f end
+    c.CalculateSize=function() end; c.CalculateInternalSize=function() end
+    c.DoAutoSize=function() end; c.IsHidden=function() return c.hidden end
+    c.SetToolTipString=function(_,v) c.tooltip=v end
+    c.SetScrollValue=function(_,v) c.scroll=v end
+    return c
 end
-Controls={Rows=control(),PersonaPanel=control(),PersonaToggle=control(),Governors=control()}
-VIEWS={}
-InstanceManager={new=function() return {
-    ResetInstances=function() VIEWS={} end,
-    GetInstance=function()
-        local v={Portrait=control(),Name=control(),Status=control(),Evolve=control()}
+Controls={}
+for _,name in ipairs({'Rows','PersonaPanel','PersonaToggle','Governors','Categories','Nodes','NodesScroll',
+    'Name','Portrait','Merit','Commitment','Selection','Effect','Result','Confirmation','ConfirmText','Locks',
+    'Confirm','Cancel','Close','NextPerson'}) do Controls[name]=control() end
+ContextPtr=control(); ContextPtr.SetInputHandler=function(_,f) INPUT=f end
+Keys={VK_F8=119,VK_TAB=9,VK_UP=38,VK_DOWN=40,VK_LEFT=37,VK_RIGHT=39,VK_RETURN=13,VK_ESCAPE=27}
+KeyEvents={KeyUp=1}
+function INPUT_KEY(key) return {GetKey=function() return key end,GetMessageType=function() return 1 end} end
+VIEWS,CATEGORY_VIEWS,TREE_VIEWS={},{},{}
+InstanceManager={new=function(_,kind)
+    local function list()
+        if kind=='PersonaRow' then return VIEWS elseif kind=='PersonaCategory' then return CATEGORY_VIEWS else return TREE_VIEWS end
+    end
+    return {ResetInstances=function()
+        if kind=='PersonaRow' then VIEWS={} elseif kind=='PersonaCategory' then CATEGORY_VIEWS={} else TREE_VIEWS={} end
+    end,GetInstance=function()
+        local v={}
+        for _,n in ipairs({'Root','Portrait','Name','Status','Evolve','Merit','Tree','Route','Node','Effect'}) do v[n]=control() end
         v.Portrait.SetIcon=function(_,icon) v.icon=icon end
         v.Name.SetText=function(_,name) v.name=name end
         v.Evolve.SetDisabled=function(_,disabled) v.disabled=disabled end
         v.Status.SetText=function(_,status) v.status=status end
-        VIEWS[#VIEWS+1]=v; return v
-    end
-} end}
-LuaEvents={GovernorPanel_Open=function() end}
+        local items=list();items[#items+1]=v;return v
+    end}
+end}
 PlayerOperations={EXECUTE_SCRIPT=1,APPOINT_GOVERNOR=2,ASSIGN_GOVERNOR=3,PROMOTE_GOVERNOR=4,
     PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='cityowner',PARAM_CITY_DEST='city',
     PARAM_GOVERNOR_PROMOTION_TYPE='promotion'}
@@ -174,15 +203,36 @@ function DRAIN() for i=1,20 do if not STEP() then return end end; error('request
 
 
 class LeaderPersonaLuaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        persona_test_support.LeaderPersonaDatabaseTests.setUpClass()
+        cls.db = persona_test_support.LeaderPersonaDatabaseTests.db
+
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute(STUBS)
         self.g = self.lua.globals()
+        self.inject_database()
         self.load_contexts()
 
+    def inject_database(self):
+        for table,key in [("JAC_PersonaTreeNodes","NodeType"),("JAC_PersonaTreePeople","LeaderType"),
+                          ("JAC_PersonaCategories","CategoryType"),("JAC_PersonaCategoryAccess","AccessType"),
+                          ("JAC_PersonaRouteTemplates","RouteType"),("JAC_PersonaTreeParameters","Name"),
+                          ("JAC_PersonaMeritRules","Profile"),("Buildings","BuildingType")]:
+            cursor = self.db.execute(f"SELECT rowid, * FROM {table}")
+            columns = [d[0] for d in cursor.description]
+            rows = []
+            for values in cursor:
+                row = dict(zip(columns, values)); row["Index"] = row.pop("rowid") - 1
+                rows.append(self.lua.table_from({k:v for k,v in row.items() if v is not None}))
+            self.g.GameInfo[table] = self.g.collection(self.lua.table_from(rows),key)
+
     def load_contexts(self):
+        self.lua.execute((MOD / "Shared/JAC_PersonaTreeRules.lua").read_text(encoding="utf-8"))
         self.lua.execute((MOD / "Scripts/JAC_LeaderPersona_Gameplay.lua").read_text(encoding="utf-8"))
         self.lua.execute((MOD / "UI/JAC_LeaderPersona_View.lua").read_text(encoding="utf-8"))
+        self.lua.execute((MOD / "UI/JAC_LeaderPersona_Tree.lua").read_text(encoding="utf-8"))
         self.api = self.g.ExposedMembers.JAC_LeaderPersona
 
     def prop(self, field, leader=DATE):
@@ -193,10 +243,311 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def evolve(self):
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.g.JAC_EvolveLeader(DATE)
         self.g.DRAIN()
         self.assertEqual(self.prop("STATE"), "GOVERNOR")
+
+    def settled(self, leader=DATE, city=1):
+        if leader == DATE:
+            self.evolve()
+        else:
+            source = {ODA:0, HOJO:2}[leader]
+            self.assertEqual(self.api.Join(0, source), "JOINED")
+            self.grant_titles(0, leader)
+            self.g.JAC_EvolveLeader(leader); self.g.DRAIN()
+        governor = self.g.NATIVE_GOVS[0][self.g.GameInfo.Governors[self.g.GameInfo.JAC_LeaderPersonas[leader].GovernorType].Hash]
+        governor.city = self.g.CITIES[0][city]
+        return governor
+
+    def grant_titles(self, owner, leader):
+        # Native balance fixture belongs to this test harness, never to the shipped MOD.
+        self.g.Players[owner].GetGovernors().ChangeGovernorPoints(None,self.api.EvolutionCost(leader))
+
+    def set_merit(self, amount, leader=DATE):
+        self.g.Game.SetProperty(None, f"JAC_PERSONA_{leader}_MERIT", amount)
+
+    def purchase(self, route, depth=1, leader=DATE):
+        node = f"{leader}_{route}_{depth}"
+        definition = self.g.GameInfo.JAC_PersonaTreeNodes[node]
+        return self.api.Purchase(0, leader, node, definition.CategoryType, definition.RouteType)
+
+    def test_only_established_unneutralized_city_governance_earns_once_across_reload(self):
+        governor = self.settled()
+        governor.established = False
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 0)
+        governor.established = True; governor.neutralized = 2
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 0)
+        governor.neutralized = 0
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual((self.prop("MERIT"), self.prop("GOVERN_LAST_TURN")), (2, 1))
+        self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 2)
+        self.g.TURN = 2; self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 4)
+        governor.city = None
+        self.g.TURN = 3; self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 4)
+
+    def test_personal_profiles_pay_different_amounts_and_never_share_balances(self):
+        self.settled(DATE, 1); self.settled(HOJO, 2)
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual((self.prop("MERIT"), self.prop("MERIT", HOJO)), (2, 3))
+        self.g.FIRE("BuildingConstructed", 0, 2, 0, 100, True)
+        self.assertEqual((self.prop("MERIT"), self.prop("MERIT", HOJO)), (2, 9))
+        self.set_merit(10, HOJO)
+        self.assertEqual(self.purchase("TAX", leader=HOJO), "PURCHASED")
+        self.assertEqual((self.prop("MERIT"), self.prop("MERIT", HOJO)), (2, 2))
+        self.assertIsNone(self.prop("CATEGORY"))
+
+    def test_building_deeds_reject_repairs_wrong_city_duplicates_and_enforce_cap(self):
+        self.settled()
+        self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, False)
+        self.g.FIRE("BuildingConstructed", 0, 2, 0, 101, True)
+        self.g.FIRE("BuildingConstructed", 0, 1, 99999, 100, True)
+        self.assertEqual(self.prop("MERIT"), 0)
+        for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
+        self.assertEqual(self.prop("MERIT"), 6)  # envoy profile: 2 deeds * 3
+        self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.TURN = 2
+        for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
+        self.assertEqual(self.prop("MERIT"), 6)  # capped third event was remembered too
+        self.g.FIRE("BuildingConstructed", 0, 1, 3, 100, True)
+        self.assertEqual(self.prop("MERIT"), 9)
+
+    def combat(self, loser_id=900, x=3, dead=True, owner=1, attacker=0):
+        self.lua.execute(f"""
+            function warunit(owner,id,x,dead)
+                return {{GetID=function() return id end,GetOwner=function() return owner end,
+                    GetX=function() return x end,GetY=function() return 0 end,
+                    IsDead=function() return dead end,IsDelayedDeath=function() return false end}}
+            end
+            NATIVE_UNITS[{attacker}][800]=warunit({attacker},800,1,false)
+            NATIVE_UNITS[{owner}][{loser_id}]=warunit({owner},{loser_id},{x},{str(dead).lower()})
+        """)
+        self.g.FIRE("OnCombatOccurred", attacker, 800, owner, loser_id)
+
+    def test_nearby_victories_pay_personal_merit_and_ignore_nonlethal_or_distant_battles(self):
+        self.settled()
+        self.combat(dead=False)
+        self.combat(x=10)
+        self.assertEqual(self.prop("MERIT"), 0)
+        self.combat(x=3)
+        self.assertEqual(self.prop("MERIT"), 2)
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.combat(x=3)
+        self.assertEqual(self.prop("MERIT"), 2)
+        self.combat(loser_id=901)
+        self.combat(loser_id=902)
+        self.assertEqual(self.prop("MERIT"), 4)
+
+    def test_initial_alliances_and_repeated_renewals_do_not_pay_merit(self):
+        self.g.Players[0].allies[1] = True
+        self.settled()
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 2)
+        self.g.Players[0].allies[2] = True
+        self.g.TURN = 2; self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 12)  # governance 2 + new alliance 8
+        self.g.Players[0].allies[2] = False; self.g.TURN = 3; self.g.FIRE("PlayerTurnStarted", 0)
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.g.Players[0].allies[2] = True; self.g.TURN = 4; self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 16)  # two governance turns only
+
+    def test_skill_purchase_requires_own_person_prerequisite_merit_and_confirmation(self):
+        self.settled()
+        first, second = DATE+"_ENVOYS_1", DATE+"_ENVOYS_2"
+        self.assertEqual(self.api.Purchase(2, DATE, first, "CONTACT", "ENVOYS"), "NOT_OWNED")
+        self.assertEqual(self.api.Purchase(0, DATE, ODA+"_EXCHANGE_1", "CONTACT", "EXCHANGE"), "INVALID_NODE")
+        self.assertEqual(self.purchase("ENVOYS", 2), "PREREQ_LOCKED")
+        self.assertEqual(self.purchase("ENVOYS"), "NO_MERIT")
+        self.set_merit(8)
+        self.assertEqual(self.api.Purchase(0, DATE, first), "CONFIRM_REQUIRED")
+        self.assertEqual(self.api.Purchase(0, DATE, first, "ADMIN", "ENVOYS"), "CONFIRM_REQUIRED")
+        self.assertIsNone(self.prop("CATEGORY"))
+        self.assertEqual(self.prop("MERIT"), 8)
+        titles = (self.g.Players[0].points, self.g.Players[0].spent, len(self.g.GRANTS[0]))
+        self.assertEqual(self.purchase("ENVOYS"), "PURCHASED")
+        self.assertEqual(self.prop("MERIT"), 0)
+
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent, len(self.g.GRANTS[0])), titles)
+        self.assertEqual(self.prop("CATEGORY"), "CONTACT")
+        self.assertEqual(self.prop("BRANCH_CONTACT_RELATIONS"), "ENVOYS")
+        self.assertEqual(self.prop("NODE_"+first), 1)
+        self.assertEqual(self.purchase("ENVOYS"), "OWNED")
+        self.assertEqual(self.prop("MERIT"), 0)
+
+    def test_malformed_gameplay_requests_do_not_reach_native_lookups_or_change_state(self):
+        self.settled(); self.set_merit(8)
+        for leader in (None, 0, self.lua.table()):
+            self.assertEqual(self.api.Purchase(0,leader,DATE+"_ENVOYS_1","CONTACT","ENVOYS"),"NOT_OWNED")
+            self.assertFalse(self.g.JAC_TreeOpen(leader))
+        for node in (None,0,self.lua.table(),"unknown"):
+            self.assertEqual(self.api.Purchase(0,DATE,node,"CONTACT","ENVOYS"),"INVALID_NODE")
+        self.assertEqual(self.prop("MERIT"),8)
+        self.assertIsNone(self.prop("CATEGORY"))
+    def test_irreversible_category_and_exclusive_sibling_locks_survive_load(self):
+        self.settled(); self.set_merit(100)
+        self.assertEqual(self.purchase("ENVOYS"), "PURCHASED")
+        self.assertEqual(self.purchase("WORKS"), "CATEGORY_LOCKED")
+        self.assertEqual(self.purchase("EXCHANGE"), "BRANCH_LOCKED")
+        self.assertEqual(self.purchase("ENVOYS", 3), "PREREQ_LOCKED")
+        self.assertEqual(self.purchase("ENVOYS", 2), "PURCHASED")
+        self.assertEqual(self.purchase("ENVOYS", 3), "PURCHASED")
+        self.assertEqual(self.purchase("HOSTING"), "PURCHASED")
+        self.assertEqual(self.purchase("MARKET"), "BRANCH_LOCKED")
+        self.assertEqual(self.purchase("SIGNATURE"), "PURCHASED")
+        balance = self.prop("MERIT")
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.assertEqual(self.prop("MERIT"), balance)
+        self.assertEqual(self.purchase("ENVOYS"), "OWNED")
+        self.assertEqual(self.purchase("EXCHANGE"), "BRANCH_LOCKED")
+        self.assertEqual(self.purchase("WORKS"), "CATEGORY_LOCKED")
+        self.assertEqual(self.purchase("MARKET"), "BRANCH_LOCKED")
+        self.assertEqual(self.prop("MERIT"), balance)
+
+    def test_all_six_shared_promotions_and_three_signature_nodes_can_be_acquired(self):
+        self.settled(); self.set_merit(200)
+        for route in ("ENVOYS", "HOSTING", "SIGNATURE"):
+            for depth in (1,2,3): self.assertEqual(self.purchase(route, depth), "PURCHASED")
+        self.assertEqual(self.prop("MERIT"), 200-38-47-38)
+        self.assertIsNone(self.api.Refund)
+        self.assertIsNone(self.api.Respec)
+
+    def test_owned_node_flags_follow_native_assignment_and_new_city_centres(self):
+        governor = self.settled(); self.set_merit(8); self.purchase("ENVOYS")
+        modifier = self.g.GameInfo.JAC_PersonaTreeNodes[DATE+"_ENVOYS_1"].ModifierId
+        for x in (1,2): self.assertEqual(self.g.Map.GetPlot(x,0).GetProperty(None,modifier),1)
+        self.g.JAC_AssignLeader(DATE,2); self.g.DRAIN()
+        self.assertEqual(governor.city.GetID(),2)
+        self.assertEqual(list(governor.promotions.values()),[True])  # no native promotion or title added
+        self.lua.execute("CITIES[0][3]={GetID=function() return 3 end,GetOwner=function() return 0 end,GetX=function() return 3 end,GetY=function() return 0 end}")
+        self.g.FIRE("CityBuilt",0,3,3,0)
+        self.assertEqual(self.g.Map.GetPlot(3,0).GetProperty(None,modifier),1)
+
+    def test_ai_uses_personality_role_preference_and_only_one_purchase_each_turn(self):
+        self.settled(); self.set_merit(100)
+        self.g.Players[0].human = False
+        self.g.FIRE("PlayerTurnStarted",0)
+        self.assertEqual((self.prop("CATEGORY"),self.prop("BRANCH_CONTACT_RELATIONS")),("CONTACT","ENVOYS"))
+        self.assertEqual(self.prop("MERIT"),94)  # +2 governing -8 strong route
+        self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.FIRE("PlayerTurnStarted",0)
+        self.assertEqual(self.prop("MERIT"),94)
+        self.assertIsNone(self.prop("NODE_"+DATE+"_ENVOYS_2"))
+        self.g.TURN=2; self.g.FIRE("PlayerTurnStarted",0)
+        self.assertEqual(self.prop("NODE_"+DATE+"_ENVOYS_2"),1)
+        self.assertEqual(self.prop("MERIT"),84)
+
+    def test_tree_confirmation_lists_losses_and_cancel_changes_nothing(self):
+        self.settled(); self.set_merit(8)
+        self.assertTrue(self.g.JAC_TreeOpen(DATE))
+        self.assertTrue(self.g.JAC_TreeReview(DATE+"_ENVOYS_1"))
+        self.assertFalse(self.g.Controls.Confirmation.hidden)
+        self.assertIsNone(self.prop("CATEGORY"))
+        self.assertEqual(self.prop("MERIT"),8)
+        # Locale stub returns the key; capture values separately to prove loss lists.
+        categories,routes=self.g.JAC_PersonaTreeRules.Locks(DATE,self.g.GameInfo.JAC_PersonaTreeNodes[DATE+"_ENVOYS_1"])
+        self.assertEqual({r.CategoryType for r in categories.values()},{"MILITARY","ADMIN"})
+        self.assertEqual([r.RouteType for r in routes.values()],["EXCHANGE"])
+        self.g.JAC_TreeCancel()
+        self.assertTrue(self.g.Controls.Confirmation.hidden)
+        self.assertFalse(self.g.JAC_TreeConfirm())
+        self.assertEqual((self.prop("MERIT"),len(self.g.REQUESTS)),(8,0))
+
+    def test_tree_spends_only_via_gameplay_request_and_rechecks_queued_duplicates(self):
+        self.settled(); self.set_merit(30); self.g.JAC_TreeOpen(DATE)
+        node=DATE+"_ENVOYS_1"
+        for _ in range(2):
+            self.assertTrue(self.g.JAC_TreeReview(node)); self.assertTrue(self.g.JAC_TreeConfirm())
+        self.assertEqual(len(self.g.REQUESTS),2)
+        self.assertTrue(all(r.op==1 and r.params.OnStart=="JAC_LeaderPersonaPurchase" for r in self.g.REQUESTS.values()))
+        self.assertEqual(self.prop("MERIT"),30)
+        self.g.DRAIN()
+        self.assertEqual(self.prop("MERIT"),22)
+        self.assertEqual(self.prop("NODE_"+node),1)
+        self.assertEqual((self.g.Players[0].points,self.g.Players[0].spent),(1,1))
+
+    def test_queued_conflicting_confirmations_cannot_buy_sibling_or_other_category(self):
+        self.settled(); self.set_merit(40)
+        # All three screens are reviewed before the first gameplay request is processed.
+        for route in ("ENVOYS", "EXCHANGE", "WORKS"):
+            node=DATE+"_"+route+"_1"
+            self.assertTrue(self.g.JAC_TreeOpen(DATE,node))
+            self.assertTrue(self.g.JAC_TreeConfirm())
+        self.g.DRAIN()
+        self.assertEqual(self.prop("MERIT"),32)
+        self.assertEqual(self.prop("NODE_"+DATE+"_ENVOYS_1"),1)
+        self.assertIsNone(self.prop("NODE_"+DATE+"_EXCHANGE_1"))
+        self.assertIsNone(self.prop("NODE_"+DATE+"_WORKS_1"))
+        self.assertEqual((self.prop("CATEGORY"),self.prop("BRANCH_CONTACT_RELATIONS")),("CONTACT","ENVOYS"))
+
+    def test_tree_rechecks_stale_balance_at_confirmation_and_respects_inactive_turn(self):
+        self.settled(); self.set_merit(8); self.g.JAC_TreeOpen(DATE)
+        self.g.JAC_TreeReview(DATE+"_ENVOYS_1"); self.set_merit(0)
+        self.assertFalse(self.g.JAC_TreeConfirm())
+        self.assertEqual(len(self.g.REQUESTS),0)
+        self.set_merit(8); self.g.Players[0].active=False
+        self.assertFalse(self.g.JAC_TreeReview(DATE+"_ENVOYS_1"))
+        self.assertFalse(self.g.JAC_TreeConfirm())
+        self.assertIsNone(self.prop("CATEGORY"))
+
+    def test_tree_only_shows_matching_new_purchase_receipts_and_never_replays_old_results(self):
+        self.settled(); self.set_merit(30)
+        p=self.g.Players[0]
+        p.SetProperty(None,"JAC_PERSONA_RESULT","PURCHASED")
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_SERIAL",5)
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_LEADER",DATE)
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_NODE",DATE+"_ENVOYS_1")
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_RESULT","PURCHASED")
+        self.g.JAC_TreeOpen(DATE); self.g.FIREUI("GameCoreEventPublishComplete")
+        self.assertEqual(self.g.Controls.Result.text,"")
+        self.g.JAC_TreeReview(DATE+"_ENVOYS_1"); self.g.JAC_TreeConfirm()
+        self.assertEqual(self.g.REQUESTS[1].params.RequestSerial,6)
+        self.g.FIREUI("GameCoreEventPublishComplete")
+        self.assertEqual(self.g.Controls.Result.text,"")
+        self.g.DRAIN()
+        self.assertEqual(self.g.Controls.Result.text,"LOC_JAC_PERSONA_NODE_STATUS_PURCHASED")
+        self.g.JAC_TreeOpen(DATE); self.g.FIREUI("GameCoreEventPublishComplete")
+        self.assertEqual(self.g.Controls.Result.text,"")
+        self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.JAC_TreeOpen(DATE)
+        self.g.JAC_TreeReview(DATE+"_ENVOYS_2"); self.g.JAC_TreeConfirm()
+        self.assertEqual(self.g.REQUESTS[1].params.RequestSerial,7)
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_SERIAL",7)
+        p.SetProperty(None,"JAC_PERSONA_PURCHASE_NODE",DATE+"_HOSTING_1")
+        self.g.FIREUI("GameCoreEventPublishComplete")
+        self.assertEqual(self.g.Controls.Result.text,"")
+        self.g.DRAIN()
+        self.assertEqual(self.g.Controls.Result.text,"LOC_JAC_PERSONA_NODE_STATUS_PURCHASED")
+
+    def test_keyboard_can_review_cancel_commit_switch_categories_and_cycle_governors(self):
+        self.settled(); self.set_merit(20); self.g.JAC_TreeOpen(DATE)
+        self.assertTrue(self.g.JAC_TreeInput(self.g.INPUT_KEY(13)))  # Enter reviews first preferred route
+        self.assertFalse(self.g.Controls.Confirmation.hidden)
+        self.g.JAC_TreeInput(self.g.INPUT_KEY(27))  # Esc cancels
+        self.assertTrue(self.g.Controls.Confirmation.hidden)
+        self.g.JAC_TreeInput(self.g.INPUT_KEY(13)); self.g.JAC_TreeInput(self.g.INPUT_KEY(13)); self.g.DRAIN()
+        self.assertEqual(self.prop("NODE_"+DATE+"_ENVOYS_1"),1)
+        self.g.JAC_TreeInput(self.g.INPUT_KEY(40)); self.g.JAC_TreeInput(self.g.INPUT_KEY(39))
+        self.assertTrue(0 <= self.g.Controls.NodesScroll.scroll <= 1)
+        self.g.JAC_TreeInput(self.g.INPUT_KEY(9))
+        self.g.JAC_TreeInput(self.g.INPUT_KEY(27))
+        self.assertTrue(self.g.ContextPtr.hidden)
+
+    def test_promotion_titles_fixture_is_removed_and_official_candidates_are_hidden(self):
+        self.join()
+        self.assertIsNone(self.api.GrantTestTitle)
+        self.assertEqual(self.g.Players[0].points,0)
+        self.lua.execute("""
+            CANDIDATES,APPOINTED={},{}
+            AddGovernorCandidate=function(def) CANDIDATES[#CANDIDATES+1]=def.GovernorType end
+            AddGovernorShared=function(def) return {GovernorPortrait=control(),GovernorTitle=control()} end
+            OnAppointGovernor=function(id) APPOINTED[#APPOINTED+1]=id end
+            GameInfo.Governors[99]={GovernorType='GOVERNOR_THE_EDUCATOR',Index=99,Hash=999}
+        """)
+        self.lua.execute((MOD/"UI/JAC_LeaderPersona_GovernorPanel.lua").read_text(encoding="utf-8"))
+        self.g.AddGovernorCandidate(self.g.GameInfo.Governors[99],True); self.g.OnAppointGovernor(99)
+        self.assertEqual((len(self.g.CANDIDATES),len(self.g.APPOINTED)),(0,0))
 
     def test_void_creation_keeps_named_individual_and_metadata(self):
         self.join()
@@ -293,14 +644,14 @@ class LeaderPersonaLuaTests(unittest.TestCase):
     def test_upper_cost_consumes_two_extra_titles_and_one_native_once(self):
         self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
         self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_COST"), self.prop("EVOLUTION_SURCHARGE")),
                          ("GOVERNOR", 3, 2))
         self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (1, 1))
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "ALREADY_EVOLVED")
-        self.assertEqual(self.api.GrantTestTitle(0, DATE, "APPOINT"), "TITLE_ALREADY_GRANTED")
+        self.assertIsNone(self.api.GrantTestTitle)
         self.assertEqual(list(self.g.GRANTS[0].values()), [3, -2])
         self.assertEqual((self.g.DESTROYS, self.g.Players[0].points, self.g.Players[0].spent), (1, 1, 1))
 
@@ -308,25 +659,6 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.join()
         self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
         self.assertEqual(self.api.EvolutionCost(DATE), 2)
-
-    def test_oda_uses_one_title_and_both_of_its_own_skill_branches(self):
-        self.g.LOCAL = 1
-        self.assertEqual(self.api.Join(1, 0), "JOINED")
-        self.assertEqual(self.api.GrantTestTitle(1, ODA, "APPOINT"), "TITLE_GRANTED")
-        self.g.JAC_EvolveLeader(ODA); self.g.DRAIN()
-        self.assertEqual((self.prop("STATE", ODA), self.g.Players[1].points, self.g.Players[1].spent),
-                         ("GOVERNOR", 1, 1))
-        governor = self.g.NATIVE_GOVS[1][1001]
-        self.assertTrue(governor.HasPromotion(None, 2001))
-        for phase, field, index, native in [("PROMOTE", "PromotionType", 41, 3001),
-                                           ("PROMOTE2", "SecondPromotionType", 51, 4001)]:
-            self.api.GrantTestTitle(1, ODA, phase)
-            self.g.JAC_PromoteLeader(ODA, self.g.GameInfo.JAC_LeaderPersonas[ODA][field])
-            self.assertEqual(self.g.REQUESTS[1].params.promotion, index)
-            self.g.DRAIN()
-            self.assertTrue(governor.HasPromotion(None, native))
-        self.assertFalse(governor.HasPromotion(None, 3002))
-        self.assertEqual((self.g.Players[1].points, self.g.Players[1].spent), (3, 3))
 
     def test_native_individual_identity_is_resolved_through_gameinfo(self):
         self.join()
@@ -336,7 +668,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             GameInfo.GreatPersonIndividuals[9002]=GameInfo.GreatPersonIndividuals[12]
             NATIVE_UNITS[0][1].individual=9002
         ''')
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
         self.g.NEWGOV(0, DATE)
         self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
@@ -376,13 +708,13 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "NO_TITLE")
         self.assertEqual(self.prop("STATE"), "GREAT_PERSON")
         self.g.NATIVE_UNITS[0][1] = None
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "PERSON_MISSING")
         self.assertEqual(self.g.DESTROYS, 0)
 
     def test_pending_appointment_keeps_unit_until_native_success(self):
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
         self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
         self.assertEqual(self.g.DESTROYS, 0)
@@ -395,7 +727,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def test_delayed_removal_does_not_mark_evolution_complete(self):
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.api.PrepareEvolution(0, DATE)
         self.g.NEWGOV(0, DATE)
         self.g.FAIL_DESTROY = True
@@ -407,7 +739,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def test_native_candidate_object_without_appointment_does_not_remove_the_person(self):
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.api.PrepareEvolution(0, DATE)
         self.g.NEWGOV(0, DATE)
         self.lua.execute('''
@@ -424,7 +756,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.g.FIRE("OnGameTurnStarted")
         self.assertEqual((self.prop("STATE"), self.g.SPAWNS), ("GREAT_PERSON", 1))
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.api.PrepareEvolution(0, DATE)
         self.g.NEWGOV(0, DATE)
         self.g.RESET_CONTEXTS(); self.load_contexts()
@@ -433,21 +765,9 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.FIRE("OnGameTurnStarted")
         self.assertEqual((self.prop("PERSONALITY"), self.prop("TRAIT"), self.g.DESTROYS), ("CALM", "ASTUTE", 1))
 
-    def test_test_titles_are_explicit_once_per_phase_across_reload(self):
-        self.join()
-        self.assertEqual(self.g.Players[0].points, 0)
-        self.assertEqual(self.api.GrantTestTitle(2, DATE, "APPOINT"), "INVALID")
-        self.assertEqual(self.api.GrantTestTitle(0, DATE, "OTHER"), "INVALID")
-        self.assertEqual(self.api.GrantTestTitle(0, DATE, "APPOINT"), "TITLE_GRANTED")
-        self.g.RESET_CONTEXTS(); self.load_contexts()
-        self.assertEqual(self.api.GrantTestTitle(0, DATE, "APPOINT"), "TITLE_ALREADY_GRANTED")
-        self.assertEqual(self.api.GrantTestTitle(0, DATE, "PROMOTE"), "TITLE_GRANTED")
-        self.assertEqual(list(self.g.GRANTS[0].values()), [2, 1])
-        self.assertEqual(self.g.Players[0].points, 3)
-
     def test_ui_uses_native_operation_indices_and_engine_requester(self):
         self.join()
-        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.grant_titles(0, DATE)
         self.g.JAC_EvolveLeader(DATE)
         self.assertEqual(self.g.REQUESTS[1].params.OnStart, "JAC_LeaderPersonaEvolve")
         self.g.STEP()  # gameplay prepares, UI queues appointment
@@ -471,37 +791,11 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         with self.assertRaisesRegex(LuaError, "governor not owned"):
             self.g.JAC_AssignLeader(DATE, 1)
 
-    def test_ui_native_assignment_reassignment_promotion_and_portrait(self):
-        self.evolve()
-        governor = self.g.NATIVE_GOVS[0][1002]
-        self.g.JAC_AssignLeader(DATE, 1); self.g.DRAIN()
-        self.assertEqual(governor.GetAssignedCity().GetID(), 1)
-        self.g.JAC_AssignLeader(DATE, 2); self.g.DRAIN()
-        self.assertEqual(governor.GetAssignedCity().GetID(), 2)
-        with self.assertRaisesRegex(LuaError, "city not assignable"):
-            self.g.JAC_AssignLeader(DATE, 11)
-        self.api.GrantTestTitle(0, DATE, "PROMOTE")
-        self.g.JAC_PromoteLeader(DATE)
-        self.assertEqual(self.g.REQUESTS[1].params.promotion, 42)
-        self.g.DRAIN()
-        self.assertTrue(governor.HasPromotion(None, 3002))
-        self.assertEqual(self.g.Players[0].spent, 2)
-        self.api.GrantTestTitle(0, DATE, "PROMOTE2")
-        self.g.JAC_PromoteLeader(DATE, self.g.GameInfo.JAC_LeaderPersonas[DATE].SecondPromotionType)
-        self.assertEqual(self.g.REQUESTS[1].params.promotion, 52)
-        self.g.DRAIN()
-        self.assertTrue(governor.HasPromotion(None, 4002))
-        self.assertEqual((self.g.Players[0].spent, self.g.Players[0].points), (3, 3))
-        with self.assertRaisesRegex(LuaError, "not in person's tree"):
-            self.g.JAC_PromoteLeader(DATE, self.g.GameInfo.JAC_LeaderPersonas[ODA].PromotionType)
-        self.g.JAC_RefreshPersonas()
-        self.assertEqual((len(self.g.VIEWS), self.g.VIEWS[1].name, self.g.VIEWS[1].icon), (1, f"LOC_{DATE}_NAME", f"ICON_{DATE}"))
-
     def test_official_governor_panel_hides_unjoined_candidates_and_keeps_native_buttons(self):
         self.lua.execute('''
             CANDIDATES, APPOINTED = {}, {}
             AddGovernorCandidate=function(def,available) CANDIDATES[#CANDIDATES+1]=def.GovernorType end
-            AddGovernorShared=function(def) return {GovernorPortrait={SetIcon=function(_,icon,size) ICON,ICON_SIZE=icon,size end}} end
+            AddGovernorShared=function(def) return {GovernorPortrait={SetIcon=function(_,icon,size) ICON,ICON_SIZE=icon,size end}, GovernorTitle=control()} end
             OnAppointGovernor=function(id) APPOINTED[#APPOINTED+1]=id end
         ''')
         self.lua.execute((MOD / "UI/JAC_LeaderPersona_GovernorPanel.lua").read_text(encoding="utf-8"))
@@ -511,7 +805,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.join()
         self.g.AddGovernorCandidate(gov, True)
         self.assertEqual(len(self.g.CANDIDATES), 0)
-        self.api.GrantTestTitle(0, DATE, "APPOINT"); self.api.PrepareEvolution(0, DATE)
+        self.grant_titles(0, DATE); self.api.PrepareEvolution(0, DATE)
         self.g.AddGovernorCandidate(gov, True); self.g.OnAppointGovernor(22)
         self.g.AddGovernorShared(gov)
         self.assertEqual(list(self.g.CANDIDATES.values()), ["GOVERNOR_JAC_PERSONA_DATE_TANEMUNE"])
@@ -529,7 +823,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.lua.execute(f'''
             REFRESHES=0
             Refresh=function() REFRESHES=REFRESHES+1 end
-            Controls.GovernorNameLabel={{GetText=function() return 'LOC_{DATE}_NAME' end}}
+            Controls.GovernorNameLabel=control(); Controls.GovernorNameLabel.GetText=function() return 'LOC_{DATE}_NAME' end
             Controls.GovernorPortrait={{SetIcon=function(_,icon,size) ICON,ICON_SIZE=icon,size end}}
         ''')
         self.lua.execute((MOD / "UI/JAC_LeaderPersona_GovernorDetails.lua").read_text(encoding="utf-8"))

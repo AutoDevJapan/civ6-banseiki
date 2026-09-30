@@ -1,5 +1,6 @@
--- This UI shows persistent identities. Appointment, assignment and promotion use native operations.
+-- Native appointment/assignment; custom merit purchases are reviewed in the tree screen.
 include("InstanceManager");
+include("JAC_PersonaTreeRules");
 local m_Rows = InstanceManager:new("PersonaRow", "Root", Controls.Rows);
 local m_Attempts, m_Finalize = {}, {};
 local function Get(leader, field) return Game:GetProperty("JAC_PERSONA_" .. leader .. "_" .. field); end
@@ -57,12 +58,11 @@ function JAC_PromoteLeader(leader, promotionType)
     if not Active() or not row or Get(leader, "OWNER") ~= owner or Get(leader, "STATE") ~= "GOVERNOR" then
         error("governor not owned or turn inactive");
     end
-    local def = GameInfo.Governors[row.GovernorType];
-    promotionType = promotionType or row.PromotionType;
-    if promotionType ~= row.PromotionType and promotionType ~= row.SecondPromotionType then error("promotion not in person's tree"); end
-    UI.RequestPlayerOperation(owner, PlayerOperations.PROMOTE_GOVERNOR,
-        { [PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,
-          [PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=GameInfo.GovernorPromotions[promotionType].Index });
+    if promotionType then
+        local node = GameInfo.JAC_PersonaTreeNodes[promotionType];
+        if not node or node.LeaderType ~= leader then error("promotion not in person's tree"); end
+    end
+    LuaEvents.JAC_PersonaTree_Open(leader, promotionType);
 end
 
 function JAC_RefreshPersonas()
@@ -88,6 +88,11 @@ function JAC_RefreshPersonas()
             view.Name:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_PERSONALITY_" .. Get(leader, "PERSONALITY")) ..
                 " / " .. Locale.Lookup("LOC_JAC_PERSONA_TRAIT_" .. Get(leader, "TRAIT")));
             view.Evolve:RegisterCallback(Mouse.eLClick, function() JAC_EvolveLeader(leader); end);
+            view.Merit:SetText(Locale.Lookup("LOC_JAC_PERSONA_MERIT", JAC_PersonaTreeRules.Merit(leader)));
+            view.Merit:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_MERIT_HELP"));
+            view.Tree:SetHide(state ~= "GOVERNOR");
+            view.Tree:SetText(Locale.Lookup("LOC_JAC_PERSONA_TREE"));
+            view.Tree:RegisterCallback(Mouse.eLClick, function() JAC_PromoteLeader(leader); end);
         end
     end
     Controls.Rows:CalculateSize();
@@ -117,7 +122,20 @@ Controls.PersonaToggle:RegisterCallback(Mouse.eLClick, function()
     Controls.PersonaPanel:SetHide(not Controls.PersonaPanel:IsHidden()); JAC_RefreshPersonas();
 end);
 Controls.Governors:RegisterCallback(Mouse.eLClick, function() LuaEvents.GovernorPanel_Open(); end);
+Controls.PersonaToggle:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_KEYBOARD_OPEN"));
 Events.GameCoreEventPublishComplete.Add(Update);
 Events.GovernorChanged.Add(Update);
 Events.LocalPlayerTurnBegin.Add(Update);
 Events.LoadScreenClose.Add(Update);
+-- F8 opens the first owned Governor; Tab in that screen cycles owned Governors.
+-- Input contract: Expansion2/UI/Additions/GovernorPanel.lua:661-671,739.
+ContextPtr:SetInputHandler(function(input)
+    if input:GetMessageType() == KeyEvents.KeyUp and input:GetKey() == Keys.VK_F8 then
+        for row in GameInfo.JAC_LeaderPersonas() do
+            if Get(row.LeaderType, "OWNER") == Game.GetLocalPlayer() and Get(row.LeaderType, "STATE") == "GOVERNOR" then
+                JAC_PromoteLeader(row.LeaderType); return true;
+            end
+        end
+    end
+    return false;
+end, true);

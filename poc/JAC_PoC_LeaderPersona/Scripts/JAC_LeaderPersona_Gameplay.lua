@@ -1,5 +1,8 @@
 -- Gameplay only. Engine evidence and PoC limits: documents/poc/leader-persona.md.
 -- Joining is an explicit integration seam; diplomacy/alliance/territory alone never calls it.
+include("JAC_PersonaTreeRules");
+local Rules = JAC_PersonaTreeRules;
+local SnapshotAlliances;
 local PREFIX = "JAC_PERSONA_";
 local RESULT = "JAC_PERSONA_RESULT";
 local PERSONALITIES = { BRAVE=true, CALM=true, CAREFUL=true, JOLLY=true, GENTLE=true, BOLD=true, FICKLE=true, LOYAL=true };
@@ -85,6 +88,7 @@ local function Join(owner, source, personality, trait)
     Set(leader, "UNIT", unit:GetID());
     Set(leader, "OWNER", owner);
     Set(leader, "STATE", "GREAT_PERSON");
+    Set(leader, "MERIT", 0);
     return Finish(owner, "JOINED");
 end
 
@@ -139,6 +143,7 @@ local function CompleteEvolution(owner, leader)
     if FindPerson(owner, row) then return Finish(owner, "REMOVAL_PENDING"); end
     Set(leader, "UNIT", nil);
     Set(leader, "STATE", "GOVERNOR");
+    SnapshotAlliances(owner, leader);
     return Finish(owner, "EVOLVED");
 end
 
@@ -151,17 +156,174 @@ local function Reconcile()
     end
 end
 
--- Development fixture only, never a production title source. Appointment grants its data cost;
--- either promotion grants one native title. Grants are recorded once across save/reload.
-local function GrantTestTitle(owner, leader, phase)
-    local p, row = Player(owner, true), Definition(leader);
-    if not p or not row or Get(leader, "OWNER") ~= owner or
-       (phase ~= "APPOINT" and phase ~= "PROMOTE" and phase ~= "PROMOTE2") then return Finish(owner, "INVALID"); end
-    local field = "TEST_TITLE_" .. phase;
-    if Get(leader, field) then return Finish(owner, "TITLE_ALREADY_GRANTED"); end
-    p:GetGovernors():ChangeGovernorPoints(phase == "APPOINT" and EvolutionCost(leader) or 1);
-    Set(leader, field, true);
-    return Finish(owner, "TITLE_GRANTED");
+local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
+local function SettledCity(owner, row)
+    if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil; end
+    local governor = NativeGovernor(owner, row);
+    if not governor or not governor:IsEstablished() or governor:GetNeutralizedTurns() > 0 then return nil; end
+    local city = governor:GetAssignedCity();
+    if city and city:GetOwner() == owner then return city; end
+end
+
+-- Flag all owned city centres, so native reassignment immediately carries purchased skills.
+-- The native base's COLLECTION_OWNER selects ONLY its established city; Lua never adds yields.
+-- Plot properties: CivRoyaleScenario_Civilizations.xml:392-405 / CivRoyaleScenario_StartScript.lua:1287.
+local function SyncEffects()
+    for node in GameInfo.JAC_PersonaTreeNodes() do
+        if Rules.Owned(node) then
+            local p = Player(Get(node.LeaderType, "OWNER"), true);
+            if p then
+                for _,city in p:GetCities():Members() do
+                    local plot = Map.GetPlot(city:GetX(), city:GetY());
+                    if plot and plot:GetProperty(node.ModifierId) ~= 1 then plot:SetProperty(node.ModifierId, 1); end
+                end
+            end
+        end
+    end
+end
+
+local function Purchase(owner, leader, nodeType, confirmCategory, confirmRoute)
+    local p = Player(owner, true);
+    if not p then return Finish(owner, "NOT_OWNED"); end
+    local status = Rules.Status(owner, leader, nodeType);
+    if status ~= "AVAILABLE" then return Finish(owner, status); end
+    local node = GameInfo.JAC_PersonaTreeNodes[nodeType];
+    if (not Get(leader, "CATEGORY") and confirmCategory ~= node.CategoryType) or
+       (node.ExclusiveGroup and not Get(leader, "BRANCH_" .. node.CategoryType .. "_" .. node.ExclusiveGroup) and
+        confirmRoute ~= node.RouteType) then return Finish(owner, "CONFIRM_REQUIRED"); end
+    -- No refund/respec entry point. Serial gameplay request rechecks balance/locks before writing.
+    Set(leader, "MERIT", Rules.Merit(leader) - node.Cost);
+    Set(leader, "CATEGORY", node.CategoryType);
+    if node.ExclusiveGroup then Set(leader, "BRANCH_" .. node.CategoryType .. "_" .. node.ExclusiveGroup, node.RouteType); end
+    Set(leader, "NODE_" .. nodeType, 1);
+    SyncEffects();
+    return Finish(owner, "PURCHASED");
+end
+
+local function Award(row, deed, identity)
+    local leader = row.LeaderType;
+    local owner = Get(leader, "OWNER");
+    if not Player(owner, true) or not SettledCity(owner, row) then return false; end
+    local design = GameInfo.JAC_PersonaTreePeople[leader];
+    local rule = GameInfo.JAC_PersonaMeritRules[design.MeritProfile];
+    local turn = Game.GetCurrentGameTurn();
+    local seen = "DEED_" .. deed .. "_" .. identity;
+    if Get(leader, seen) ~= nil then return false; end
+    local cap = deed == "GOVERN_TURN" and 1 or Parameter(deed .. "_DEEDS_PER_TURN");
+    local count = Get(leader, deed .. "_COUNT_TURN") == turn and (Get(leader, deed .. "_COUNT") or 0) or 0;
+    -- Remember identities even at the cap; queued duplicate notifications cannot pay next turn.
+    Set(leader, seen, turn);
+    if count >= cap then return false; end
+    Set(leader, deed .. "_COUNT_TURN", turn);
+    Set(leader, deed .. "_COUNT", count + 1);
+    Set(leader, "MERIT", Rules.Merit(leader) + rule[deed]);
+    return true;
+end
+
+local function MajorIDs()
+    local ids = PlayerManager.GetAliveMajorIDs(); -- BlackDeathScenario.lua:461.
+    table.sort(ids);
+    return ids;
+end
+SnapshotAlliances = function(owner, leader)
+    if Get(leader, "ALLIANCES_BASELINED") then return; end
+    local diplomacy = Players[owner]:GetDiplomacy();
+    for _,other in ipairs(MajorIDs()) do
+        if other ~= owner and diplomacy:HasAllied(other) then Set(leader, "ALLY_SEEN_" .. other, 1); end
+    end
+    Set(leader, "ALLIANCES_BASELINED", 1);
+end
+
+local function ChooseAI(owner, row)
+    local leader = row.LeaderType;
+    local preferred = GameInfo.JAC_PersonaTreePeople[leader];
+    local category = Get(leader, "CATEGORY") or preferred.PreferredCategory;
+    local candidates = {};
+    for _,node in ipairs(Rules.Nodes(leader, category)) do
+        if Rules.Status(owner, leader, node.NodeType) == "AVAILABLE" then table.insert(candidates, node); end
+    end
+    local function Rank(node)
+        if node.RouteType == preferred.PreferredRoute then return 0; end
+        if node.Signature == 1 then return 1; end
+        return 2;
+    end
+    table.sort(candidates, function(a,b)
+        if Rank(a) ~= Rank(b) then return Rank(a) < Rank(b); end
+        if a.Depth ~= b.Depth then return a.Depth < b.Depth; end
+        return a.NodeType < b.NodeType;
+    end);
+    local budget = Parameter("AI_PURCHASES_PER_TURN");
+    local spent = 0;
+    for _,node in ipairs(candidates) do
+        if spent >= budget then break; end
+        if Purchase(owner, leader, node.NodeType, node.CategoryType, node.RouteType) == "PURCHASED" then spent = spent + 1; end
+    end
+end
+
+local function OnPlayerTurnStarted(owner)
+    Reconcile(); SyncEffects();
+    local p = Player(owner, true);
+    if not p then return; end
+    local turn = Game.GetCurrentGameTurn();
+    for row in GameInfo.JAC_LeaderPersonas() do
+        local leader = row.LeaderType;
+        if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
+            SnapshotAlliances(owner, leader);
+            local settled = SettledCity(owner, row);
+            if settled and Get(leader, "GOVERN_LAST_TURN") ~= turn then
+                Set(leader, "GOVERN_LAST_TURN", turn);
+                Award(row, "GOVERN_TURN", tostring(turn));
+            end
+            for _,other in ipairs(MajorIDs()) do
+                if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
+                    -- Count each partner once ever; renewal and save/load cannot farm merit.
+                    Set(leader, "ALLY_SEEN_" .. other, 1);
+                    if settled then Award(row, "ALLIANCE", tostring(other)); end
+                end
+            end
+            if not p:IsHuman() and Get(leader, "AI_LAST_TURN") ~= turn then
+                Set(leader, "AI_LAST_TURN", turn);
+                ChooseAI(owner, row);
+            end
+        end
+    end
+end
+
+-- Original construction only. Repairs and duplicate building events earn nothing.
+-- Signature: DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:362.
+local function OnBuildingConstructed(owner, cityID, buildingIndex, plotIndex, original)
+    if original ~= true or not GameInfo.Buildings[buildingIndex] then return; end
+    for row in GameInfo.JAC_LeaderPersonas() do
+        if Get(row.LeaderType, "OWNER") == owner then
+            local city = SettledCity(owner, row);
+            if city and city:GetID() == cityID then
+                Award(row, "BUILDING", tostring(plotIndex) .. "_" .. tostring(buildingIndex));
+            end
+        end
+    end
+end
+
+-- Resolve the dying loser while the engine still exposes it, exactly as the official Pirates
+-- scenario does (PiratesScenario_StartScript.lua:1240-1265,1617). District battles earn no kill.
+local function OnCombatOccurred(attacker, attackerUnit, defender, defenderUnit)
+    local a, d = Players[attacker], Players[defender];
+    if not a or not d or attacker == defender then return; end
+    local au, du = a:GetUnits():FindID(attackerUnit), d:GetUnits():FindID(defenderUnit);
+    if not au or not du then return; end
+    local function Dead(unit) return unit:IsDead() or unit:IsDelayedDeath(); end
+    local winner, loser;
+    if Dead(du) and not Dead(au) then winner, loser = attacker, du;
+    elseif Dead(au) and not Dead(du) then winner, loser = defender, au;
+    else return; end
+    local radius = Parameter("VICTORY_RADIUS");
+    for row in GameInfo.JAC_LeaderPersonas() do
+        if Get(row.LeaderType, "OWNER") == winner then
+            local city = SettledCity(winner, row);
+            if city and Map.GetPlotDistance(city:GetX(), city:GetY(), loser:GetX(), loser:GetY()) <= radius then
+                Award(row, "VICTORY", tostring(loser:GetOwner()) .. "_" .. tostring(loser:GetID()) .. "_" .. Game.GetCurrentGameTurn());
+            end
+        end
+    end
 end
 
 GameEvents.JAC_LeaderPersonaEvolve.Add(function(owner, params)
@@ -171,8 +333,29 @@ GameEvents.JAC_LeaderPersonaFinalize.Add(function(owner, params)
     CompleteEvolution(owner, type(params) == "table" and params.Leader or nil);
 end);
 GameEvents.OnGameTurnStarted.Add(Reconcile);
+GameEvents.OnGameTurnStarted.Add(SyncEffects);
+GameEvents.PlayerTurnStarted.Add(OnPlayerTurnStarted);
+GameEvents.BuildingConstructed.Add(OnBuildingConstructed);
+GameEvents.OnCombatOccurred.Add(OnCombatOccurred);
+GameEvents.CityBuilt.Add(SyncEffects); -- AustraliaScenario.lua:1465.
+GameEvents.CityConquered.Add(SyncEffects); -- AlexanderScenario.lua:248.
+GameEvents.JAC_LeaderPersonaPurchase.Add(function(owner, params)
+    if type(params) ~= "table" then return; end
+    local result = Purchase(owner, params.Leader, params.Node, params.ConfirmCategory, params.ConfirmRoute);
+    local p = Player(owner, false);
+    if p then
+        -- A receipt only for this purchase, independent of evolution/assignment results.
+        -- Never persist empty strings; malformed request metadata uses nil.
+        p:SetProperty("JAC_PERSONA_PURCHASE_RESULT", result);
+        p:SetProperty("JAC_PERSONA_PURCHASE_LEADER", type(params.Leader) == "string" and #params.Leader > 0 and params.Leader or nil);
+        p:SetProperty("JAC_PERSONA_PURCHASE_NODE", type(params.Node) == "string" and #params.Node > 0 and params.Node or nil);
+        local serial = params.RequestSerial;
+        p:SetProperty("JAC_PERSONA_PURCHASE_SERIAL", type(serial) == "number" and serial > 0 and serial % 1 == 0 and serial or nil);
+    end
+end);
 ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
-    GrantTestTitle = GrantTestTitle, Reconcile = Reconcile, EvolutionCost = EvolutionCost
+    Reconcile = Reconcile, EvolutionCost = EvolutionCost,
+    Purchase = Purchase, OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
 };
 print("JAC_LeaderPersona_Gameplay: ready");
