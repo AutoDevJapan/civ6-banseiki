@@ -986,6 +986,25 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.g.HERO_UI_TICK()
         self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
 
+    def test_hero_timeout_does_not_expire_another_players_inactive_reservation(self):
+        self.found()
+        self.lost()
+        self.discovery(player=0)
+        self.found(R2)
+        self.lost(R2)
+        self.discovery(religion=R2, player=1, item="book2", discovery="d2")
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options(player=0))
+        self.rp.ResolveDiscovery(R2, "d2", "HERO", self.options(player=1))
+        before = self.g.ENGINE["1"].faith
+        self.g.ENGINE["1"].active = False
+        self.g.ENGINE["0"].heroClaims["10"] = -1
+        self.g.HERO_UI_TICK(31)
+        self.assertEqual(plain(self.rp.Export())["heroes"]["1"]["verification"], "PENDING")
+        self.g.ENGINE["1"].active = True
+        self.g.HERO_UI_TICK(0)
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+        self.assertEqual(plain(self.rp.Export())["heroes"]["1"]["verification"], "APPLIED")
+
     def test_interrupted_hero_reward_cannot_replay_after_load(self):
         self.found()
         self.lost()

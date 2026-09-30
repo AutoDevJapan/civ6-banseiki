@@ -697,7 +697,7 @@ local function perform(state, id, plan)
     h.unit, h.heroClass, h.heroUnit = result, plan.heroClass, plan.heroUnit
     h.rewardFaith, h.verification = plan.faith, "PENDING"
     commit(state)
-    ExposedMembers.JAC_RP_HeroUI.Schedule()
+    ExposedMembers.JAC_RP_HeroUI.Schedule(plan.player)
     return -- UI's next frame verifies claim, class and lifespan before payment.
   end
   use.effects = "APPLIED"
