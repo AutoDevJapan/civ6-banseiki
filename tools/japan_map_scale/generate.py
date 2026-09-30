@@ -1112,13 +1112,17 @@ def custom_content_inventory(draft: dict, resource_records: list[dict]) -> list[
     return result
 
 
+def trade_access_status(item: dict) -> str:
+    # SSOT 3.2 (owner decision 2026-09-30): trade access opens by research (unlock_civic), not by year;
+    # available_from_year is the year of the historical record.
+    if item.get("unlock_civic"):
+        return "unlocked_by_research"
+    year = item.get("available_from_year")
+    return "deferred_until_year" if year and year > START_YEAR else "undated_trade_access_not_placed"
+
+
 def deferred_trade_access(draft: dict) -> list[dict]:
-    results = []
-    for item in draft["trade_access"]:
-        year = item.get("available_from_year")
-        results.append({**item, "start_status": "deferred_until_year" if year and year > START_YEAR
-                        else "undated_trade_access_not_placed"})
-    return results
+    return [{**item, "start_status": trade_access_status(item)} for item in draft["trade_access"]]
 
 
 def generate_map(km: int, land: list[Ring], japan: list[Ring], dem, official: Path,

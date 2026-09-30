@@ -37,8 +37,8 @@
 - 技術との対応（暫定。年と技術の**早い方**で現れる）: 生野・鶴子は T09 灰吹法、足尾は T06 鉱脈採掘、土肥・宝達・西三川・相川・延沢は T14 金銀山経営。会津漆器は年のみ。`generate.py` の `REVEAL_TECH`。
 - `Scripts/JAC_Resources.lua`（`JAC_PoC_JapanMapScale` の `AddGameplayScripts`。日本マップ4種を選んだときだけ読み込む。条件は他の地図用アクションと同じ `JAC_Japan_{20,15}km_{Historical,Settlers}`）:
   - `ExposedMembers.JAC_Resources.RevealSite(siteId)` 記録済みタイルに資源を置く。置いたら true。再呼び出し・未知の ID・タイルに既存資源ありは false（ログに理由）。置いた ID はゲームプロパティ `JAC_RESOURCE_SITES_REVEALED` に保存（セーブ・ロードで再配置しない）。
-  - `RevealDue(year)`、`RevealForTech(techType)`、`GetSites()`、`IsRevealed(siteId)`。イベント枠組みは `RevealSite` を史実イベントから呼べばよい。
-  - 枠組みができるまで `Events.TurnBegin` で、暦の年と、いずれかの主要勢力の研究完了を見て自動で置く。
+  - `RevealDue(year)`、`RevealForTech(techType)`、`GetSites()`、`IsRevealed(siteId)`。史実イベントはこれらを呼ばない。資源を伴う出来事は資源を置かず、地点の研究へのひらめきを与える（オーナー判断 2026-09-30、SSOT 3.2。[historical-events.md](historical-events.md)「資源を伴う出来事」）。
+  - `Events.TurnBegin` で、暦の年と、いずれかの主要勢力の研究完了を見て自動で置く。
   - 暦の年（`CurrentYear()`、API にも公開）は、エンジンが日付に使うデータから計算する: 開始時代の `StartEras.Year`（`Civ6/Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:2545-2560`。戦国パックでは `JAC_Sengoku_Calendar.xml` が1534にする）＋経過ターンの月数（`GameSpeed_Turns` を行順に。同 `:1403-1408`、行順は `:3337`）÷12。経過ターンは `Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn()`。1534年開始ではエンジンのターン番号が約16603から始まるため（`sengoku-calendar.md`）、公式の表示も同じ引き算をしている（`Civ6/DLC/Expansion2/UI/Replacements/TopPanel.lua:387-389`）。標準速度は4か月/ターンなので、1534年から24ターンで1542年。
   - 公式 Lua に「ターン→年」を返す関数の使用例はない（`Calendar.MakeYearStr` は表示文字列だけ）。そのため数値はデータから計算し、実機シナリオで `Calendar.MakeYearStr` の文字列と一致するかを確かめる。以前の試験用フック `JAC_RESOURCES_TEST_YEAR` は削除した。
   - ゲーム開始時点で既に持っている技術（初期知識）は解禁の対象にしない。ターン1に各勢力の所持技術を記録し、以後に増えた分だけを見る。

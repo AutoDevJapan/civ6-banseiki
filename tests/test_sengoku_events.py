@@ -20,7 +20,7 @@ import generate  # noqa: E402  REVEAL_TECH / START_YEAR of the merged resource p
 
 class SengokuEventTests(unittest.TestCase):
     def test_count_and_unique_ids(self):
-        self.assertTrue(30 <= len(EVENTS) <= 60, len(EVENTS))
+        self.assertTrue(30 <= len(EVENTS) <= 70, len(EVENTS))
         ids = [e["id"] for e in EVENTS]
         self.assertEqual(len(ids), len(set(ids)))
 
@@ -92,6 +92,48 @@ class SengokuEventTests(unittest.TestCase):
             chains[f] = [s[0][1]] + [x[2] for x in s]
         self.assertEqual(chains, {"NAGAO": ["長尾", "上杉"], "MATSUDAIRA": ["松平", "徳川"], "ODA": ["織田", "羽柴", "豊臣"]})
 
+    def test_every_house_renames_by_research_only(self):
+        # Owner decisions 2026-09-30 (SSOT 3.2; Q 1a supersedes 2a): every stage switches when the house researches
+        # its succession civic; the year only boosts it.
+        by = {e["id"]: e["rename"].get("by") for e in EVENTS if e.get("rename")}
+        self.assertEqual({k: v and v["short"] for k, v in by.items()}, {
+            "EV_NAGAO_TO_UESUGI": "C16", "EV_MATSUDAIRA_TOKUGAWA": "C16", "EV_HONNOJI": "C16", "EV_TOYOTOMI_SURNAME": "C24"})
+        for e in EVENTS:
+            if e.get("rename"):
+                self.assertEqual(e["rename"]["by"], e["boost"], e["id"])
+                self.assertIn(f"'{e['boost']['id']}'", TREES_SQL, e["id"])
+        # C24 (Toyotomi) needs C16 (Hashiba), so research cannot skip the Hashiba stage.
+        self.assertRegex(TREES_SQL, r"\('CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION', 'CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS'\)")
+
+    def test_rakuichi_is_two_events(self):
+        # Owner decision 2026-09-30: Rokkaku's Ishidera new market (1549) and Oda's Kanō (1567) are separate events,
+        # each for its own house; the name stays generic (SSOT 3.2).
+        got = {e["id"]: (e["year"], e["month"], e["affected_factions"], e["house_specific"], e["boost"]["short"])
+               for e in EVENTS if e["id"] in ("EV_RAKUICHI", "EV_ROKKAKU_RAKUICHI")}
+        self.assertEqual(got, {"EV_RAKUICHI": (1567, 11, ["ODA"], False, "C17"),
+                               "EV_ROKKAKU_RAKUICHI": (1549, 12, ["ROKKAKU"], False, "C15")})
+
+    def test_catholicism_spreads_by_research_not_a_fixed_order(self):
+        # Owner decision 2026-09-30: from the houses that researched C19/C13; no fixed geographic order.
+        e = next(e for e in EVENTS if e["id"] == "EV_CHRISTIAN")
+        self.assertEqual({r["short"] for r in e["earlier_by"]}, {"C19", "C13"})
+        self.assertEqual(e["affected_factions"], ["ALL"])
+        self.assertNotIn("→", e["gameplay_effect"])
+
+    def test_former_domains_are_ai_targets_only(self):
+        # Owner decision 2026-09-30: former domains are AI conquest targets; ownership never moves by itself.
+        targeted = {}
+        for e in EVENTS:
+            for f, provinces in e.get("ai_targets", {}).items():
+                self.assertIn(f, e["affected_factions"], e["id"])
+                self.assertTrue(provinces and set(provinces) <= set(e["regions"]), e["id"])
+                targeted.setdefault(e["id"], set()).add(f)
+            r = e.get("resource") or {}
+            if r.get("action") == "ownership":
+                self.assertIn(r["owner_to"], targeted.get(e["id"], set()), e["id"])
+        self.assertTrue({"EV_TAKEDA_FALL", "EV_MATSUDAIRA_KANTO", "EV_KANTO_KANREI"} <= set(targeted))
+        self.assertNotIn("所有移転の候補", json.dumps(EVENTS, ensure_ascii=False))
+
     def test_house_specific_has_generic_name(self):
         for e in EVENTS:
             if e["house_specific"]:
@@ -151,6 +193,9 @@ class SengokuEventTests(unittest.TestCase):
             if r["action"] == "trade_access":
                 self.assertTrue(key in trades, (e["id"], key))
                 self.assertEqual(r["start_year"], trades[key]["available_from_year"], e["id"])
+                # Owner decision 2026-09-30: trade access opens by research; the event boosts that research.
+                self.assertEqual(e["boost"]["id"], trades[key]["unlock_civic"], e["id"])
+                self.assertEqual(generate.trade_access_status(trades[key]), "unlocked_by_research", e["id"])
                 continue
             self.assertTrue(key in points, (e["id"], key))
             p = points[key]
@@ -161,6 +206,8 @@ class SengokuEventTests(unittest.TestCase):
                 tech = generate.REVEAL_TECH.get(p["id"])
                 if tech:
                     self.assertIn(tech, {x["id"] for x in e["earlier_by"]}, e["id"])
+                    # SSOT 3.2: the event does not reveal the site; its boost is the research that does.
+                    self.assertEqual((e["boost"] or {}).get("id"), tech, e["id"])
             else:
                 self.assertEqual(r["action"], "ownership", e["id"])
                 self.assertFalse(deferred, e["id"])  # ownership means the resource is on the map from 1534

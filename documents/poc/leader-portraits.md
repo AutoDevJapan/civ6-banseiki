@@ -41,7 +41,7 @@
 2. 設定画面の登録は `Players:Expansion2_Players` ドメインで行い、公式 GS と万世紀が `RulesetDomainOverrides` でこのドメインを選ぶ（同 modinfo の FrontEndActions の注記、[PoC 記録](README.md#jac_poc_customcivsカスタム勢力)）。標準ルールセットでは候補0件、GS では JAC の指導者が候補に入ることを実機で確かめている（同記録の「ルールセット境界の再確認」）
 3. CustomCivs の実機検証（`clans-notebooks.json`・`clans-both-ai.json`・旧[画像の実機表示](README.md#新しい画像の実機表示)）は公式 GS で公式指導者と並べて行っており、GS での比較実行は意図した使い方である
 
-22勢力が必要な日本マップだけは万世紀専用で、素の GS の地図候補には出ない（[PoC 記録](README.md#jac_poc_japanmapscale1534年開始状態現行)）。画像の適用範囲を万世紀だけに絞るかは CustomCivs 全体の範囲の問題として扱い、この差し替えでは変えない。
+22勢力が必要な日本マップだけは万世紀専用で、素の GS の地図候補には出ない（[PoC 記録](README.md#jac_poc_japanmapscale1534年開始状態現行)）。22家の肖像・家紋・CustomCivs を公式 GS でも使える今の範囲は、オーナー判断で確定した（SSOT 2.2「ゲームモードと指導者プール」）。
 
 ## 生成と組み込み
 

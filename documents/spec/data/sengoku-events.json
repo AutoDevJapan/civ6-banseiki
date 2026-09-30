@@ -18,8 +18,9 @@
    ],
    "note": "発火するのは万世紀ルールセットの戦国パックで、採用の15 km日本マップ（SSOT 3.4。20 kmは比較用）を使うゲームだけ。実装ではこの3つをガードする"
   },
-  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない。action が ownership のときは owner_to（移転先の勢力ID）を必ず持つ",
-  "rename": "家名の表示切替（SSOT 3.2）。faction の表示名を from から to へ、このイベントの year／month で切り替える。同じ勢力の段階は年月順に from→to がつながる（織田→羽柴→豊臣）"
+  "resource": "location は (緯度, 経度)。地点・開始年は documents/spec/data/japan-map-resources.json の同じ資源に合わせる（tests/test_sengoku_events.py で照合）。開始時に地図にある資源は reveal にしない。action が ownership のときは owner_to（史実の移転先の勢力ID）を必ず持つ。所有は自動では移さず記録だけ（旧領は ai_targets で AI の攻略目標にする。オーナー判断 2026-09-30）。trade_access は資源配置の unlock_civic の研究で解放し、start_year は記録の年（オーナー判断 2026-09-30）。reveal の地点は出来事では開示しない：資源 MOD が地点の年か、資源配置の REVEAL_TECH（tools/japan_map_scale/generate.py）の研究完了で開示する。出来事は史実の年に、その研究へのひらめき（boost）を与える（SSOT 3.2。オーナー判断 2026-09-30）。REVEAL_TECH のある reveal 地点の boost はその研究にする",
+  "rename": "家名の表示切替（SSOT 3.2）。faction の表示名を from から to へ切り替える。同じ勢力の段階は年月順に from→to がつながる（織田→羽柴→豊臣）。by の無い段階（長尾→上杉、松平→徳川）は、このイベントがその家に起きたとき（研究で早く、または year／month）に切り替える。by のある段階（織田→羽柴→豊臣）は、その家が by の研究（襲名）を終えたときだけ切り替え、year／month では切り替えない。史実の年はその研究へのひらめき（boost と同じ）だけを与える（オーナー判断 2026-09-30）",
+  "ai_targets": "旧領の攻略目標（オーナー判断 2026-09-30）。faction → その家の AI が攻略目標にする国（regions のうち）。城・資源の所有はイベントで自動では移さない（resource の ownership も記録だけ）。Civ6 の AI データには特定の城を攻略目標に選ばせる公式の仕組みが無いため、今は記録だけ（documents/poc/historical-events.md）"
  },
  "events": [
   {
@@ -233,8 +234,8 @@
    "note": "但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。",
    "boost": {
     "type": "tech",
-    "id": "TECH_JAC_SENGOKU_ORE_PROSPECTING",
-    "short": "T06"
+    "id": "TECH_JAC_SENGOKU_CUPELLATION",
+    "short": "T09"
    },
    "advisor_popup": null
   },
@@ -470,7 +471,7 @@
    ],
    "house_specific": false,
    "effect_category": "war",
-   "gameplay_effect": "三好長慶が細川晴元・三好政長を破り、将軍家を追って京都・摂津・山城を掌握する（1553年に義輝を京都から追う）。畿内の城の所有移転候補と、足利将軍家の求心力低下。",
+   "gameplay_effect": "三好長慶が細川晴元・三好政長を破り、将軍家を追って京都・摂津・山城を掌握する（1553年に義輝を京都から追う）。畿内の城のAI の攻略目標（ai_targets）と、足利将軍家の求心力低下。",
    "sources": [
     {
      "title": "コトバンク『三好長慶』"
@@ -489,6 +490,12 @@
     "ja": "将軍家へ使節を送り、畿内の情勢を見極めましょう。",
     "en": "Send envoys to the shogunate and read the situation in the Kinai.",
     "ru": "Отправьте послов к сёгунату и оцените положение в Кинай."
+   },
+   "ai_targets": {
+    "MIYOSHI": [
+     "摂津",
+     "山城"
+    ]
    }
   },
   {
@@ -529,7 +536,7 @@
    ],
    "house_specific": false,
    "effect_category": "religion",
-   "gameplay_effect": "ザビエルが鹿児島に上陸。宗教『カトリック』（SSOT 9.2）が伝来年に登場し、島津→大内（山口）→大友（府内）→畿内の順で布教の窓が開く。C19／C13を先に研究した勢力は年より早く宣教師と接触。信徒・地下化・抵抗の規則は9章に従う。",
+   "gameplay_effect": "ザビエルが鹿児島に上陸。宗教『カトリック』（SSOT 9.2）は、関係する社会制度（C19 南蛮使節／C13 港町会合）を研究した家から広がる（地域の固定順では広げない。オーナー判断 2026-09-30）。研究した家には年より早く起き、1549年8月に未研究の家には C19 への着想だけを与える。信徒・地下化・抵抗の規則は9章に従う。",
    "sources": [
     {
      "title": "コトバンク『キリスト教伝来』"
@@ -544,6 +551,55 @@
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
     "short": "C19"
+   },
+   "advisor_popup": null
+  },
+  {
+   "id": "EV_ROKKAKU_RAKUICHI",
+   "name": {
+    "ja": "楽市令（近江・石寺新市）",
+    "en": "Rakuichi Edict (Ishidera New Market, Ōmi)",
+    "ru": "Указ о свободном рынке (новый рынок Исидэра, Оми)"
+   },
+   "year": 1549,
+   "month": 12,
+   "date_text": "天文18年12月11日（六角氏の奉行人奉書に『石寺新市の儀は楽市』とある。西暦1549年12月末で、月の境目に近い）",
+   "regions": [
+    "近江"
+   ],
+   "affected_factions": [
+    "ROKKAKU"
+   ],
+   "primary_factions": [
+    "ROKKAKU"
+   ],
+   "earlier_by": [
+    {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
+     "short": "C15"
+    }
+   ],
+   "house_specific": false,
+   "effect_category": "institution",
+   "gameplay_effect": "六角定頼が観音寺城の城下・石寺新市を楽市とする（史料上の楽市の初見）。城下の市に商人が集まり金が増える（暫定）。C15（城下町の集住）を研究した六角は年より早く起きる。",
+   "sources": [
+    {
+     "title": "コトバンク『楽市楽座』"
+    },
+    {
+     "title": "Wikipedia日本語版『楽市・楽座』"
+    },
+    {
+     "title": "Wikipedia日本語版『観音寺城』"
+    }
+   ],
+   "confidence": "medium",
+   "note": "織田の加納（1567年）は EV_RAKUICHI。楽市楽座の本体 C17 は第III期のため、1549年の六角の前提と着想は城下町の C15 にした（オーナー判断 2026-09-30：両方を別の出来事にする）。",
+   "boost": {
+    "type": "civic",
+    "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
+    "short": "C15"
    },
    "advisor_popup": null
   },
@@ -729,7 +785,7 @@
    ],
    "house_specific": false,
    "effect_category": "trade",
-   "gameplay_effect": "肥前・平戸が南蛮貿易の港になる（1550年は通知と Boost だけ）。硝石（RESOURCE_NITER）の交易アクセスは、資源配置の開始年（1586年）から平戸の港タイルで有効になる。先にC13／C19を研究した勢力は他の港（薩摩・豊後）でも交易可。",
+   "gameplay_effect": "肥前・平戸が南蛮貿易の港になる（通知と着想だけ）。硝石（RESOURCE_NITER）の交易アクセスは年ではなく研究で解放する：社会制度 C19（南蛮使節）を研究した家が、平戸の港で硝石を交易できる（資源配置の unlock_civic。交易アクセスの仕組みは未実装）。1550年の来航は C19 への着想を与える。",
    "resource": {
     "resource_id": "RESOURCE_NITER",
     "location": "平戸・肥前 (33.368, 129.553)",
@@ -748,11 +804,11 @@
     }
    ],
    "confidence": "medium",
-   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。平戸での開始年は、同資料が確認した1586年の島津家久の玉薬購入記録に合わせた。1550年のポルトガル船来航から有効にするかは Q55。",
+   "note": "japan-map-resources.md: 硝石は鉱床ではなく港の交易アクセス。resource.start_year（1586年）は平戸で確認できた最も古い記録（島津家久の玉薬購入）で、解放の条件ではない（オーナー判断 2026-09-30：研究で解放する）。",
    "boost": {
     "type": "civic",
-    "id": "CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS",
-    "short": "C13"
+    "id": "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS",
+    "short": "C19"
    },
    "advisor_popup": null
   },
@@ -830,7 +886,7 @@
    ],
    "house_specific": false,
    "effect_category": "succession",
-   "gameplay_effect": "山内上杉が北条氏康に追われ、長尾景虎を頼る（関東管領職の継承が条件）。後の長尾→上杉継承イベントの前提。山内上杉の上野の城は北条・武田・長尾のいずれかの取得候補。",
+   "gameplay_effect": "山内上杉が北条氏康に追われ、長尾景虎を頼る（関東管領職の継承が条件）。後の長尾→上杉継承イベントの前提。山内上杉の上野の城は、北条・長尾の AI の攻略目標（ai_targets）。",
    "sources": [
     {
      "title": "コトバンク『上杉憲政』"
@@ -849,6 +905,14 @@
     "ja": "上杉憲政を保護し、関東管領職の継承を目指しましょう。",
     "en": "Shelter Uesugi Norimasa and aim to inherit the Kantō Kanrei office.",
     "ru": "Приютите Уэсуги Норимасу и добивайтесь должности канто-канрэй."
+   },
+   "ai_targets": {
+    "HOJO": [
+     "上野"
+    ],
+    "NAGAO": [
+     "上野"
+    ]
    }
   },
   {
@@ -1171,7 +1235,7 @@
    ],
    "house_specific": false,
    "effect_category": "rename",
-   "gameplay_effect": "長尾景虎が上杉憲政から上杉家の名跡と関東管領職を譲られる。条件を満たすと家名を『長尾』から『上杉』へ表示切替（Civilization IDは変えない）。条件案：山内上杉の庇護（EV_KANTO_KANREI）＋C16（朝廷・将軍への取次）を研究。C16を先に研究すれば1561年より前に切替可能。",
+   "gameplay_effect": "長尾景虎が上杉憲政から上杉家の名跡と関東管領職を譲られる。家名は、社会制度 C16（朝廷・将軍への取次）を研究したとき（襲名）に『長尾』から『上杉』へ表示切替（Civilization IDは変えない。SSOT 3.2）。史実の年（1561年）は切り替えず、C16 への着想だけを与える。",
    "sources": [
     {
      "title": "コトバンク『上杉謙信』"
@@ -1181,7 +1245,7 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 3.1の記述に対応。表示切替の実装方式はSSOT 3.1（共有状態＋UI上書き）に従う。",
+   "note": "SSOT 3.1の記述に対応。表示切替の実装方式はSSOT 3.1（共有状態＋UI上書き）に従う。切替は研究（襲名）で行う（オーナー判断 2026-09-30。以前の「1561年またはC16で切替」を置き換え）。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
@@ -1191,7 +1255,12 @@
    "rename": {
     "faction": "NAGAO",
     "from": "長尾",
-    "to": "上杉"
+    "to": "上杉",
+    "by": {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+     "short": "C16"
+    }
    }
   },
   {
@@ -1234,7 +1303,7 @@
    ],
    "house_specific": false,
    "effect_category": "resource",
-   "gameplay_effect": "石見銀山が毛利領となる。灰吹法（T09）により銀の産出が増え、鉄奉行と併せて資金源にする。1534年の石見は大内領のため、所有移転の候補。",
+   "gameplay_effect": "石見銀山が毛利領となる。灰吹法（T09）により銀の産出が増え、鉄奉行と併せて資金源にする。1534年の石見は大内領のため、AI の攻略目標（ai_targets）。",
    "resource": {
     "resource_id": "RESOURCE_SILVER",
     "location": "石見銀山・石見 (35.103, 132.437)",
@@ -1261,7 +1330,12 @@
     "id": "TECH_JAC_SENGOKU_CUPELLATION",
     "short": "T09"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "MORI": [
+     "石見"
+    ]
+   }
   },
   {
    "id": "EV_MIKAWA_IKKI",
@@ -1384,7 +1458,13 @@
     "id": "TECH_JAC_SENGOKU_SUPPLY_ROADS",
     "short": "T19"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "MORI": [
+     "出雲",
+     "伯耆"
+    ]
+   }
   },
   {
    "id": "EV_MATSUDAIRA_TOKUGAWA",
@@ -1414,7 +1494,7 @@
    ],
    "house_specific": false,
    "effect_category": "rename",
-   "gameplay_effect": "松平元康（家康）が朝廷から徳川の姓を認められ、三河守に任官。長尾→上杉と同じ仕組みで、条件を満たすと家名を『松平』から『徳川』へ表示切替（Civilization IDは維持。SSOT 3.2）。条件案：C16を研究。",
+   "gameplay_effect": "松平元康（家康）が朝廷から徳川の姓を認められ、三河守に任官。家名は、社会制度 C16（朝廷・将軍への取次）を研究したとき（襲名）に『松平』から『徳川』へ表示切替（Civilization IDは維持。SSOT 3.2）。史実の年（1567年）は切り替えず、C16 への着想だけを与える。",
    "sources": [
     {
      "title": "コトバンク『徳川家康』"
@@ -1424,7 +1504,7 @@
     }
    ],
    "confidence": "high",
-   "note": "SSOT 3.2 で、長尾→上杉と同じ仕組みで松平→徳川を切り替えると決まっている。",
+   "note": "SSOT 3.2 で、長尾→上杉と同じ仕組みで松平→徳川を切り替えると決まっている。切替は研究（襲名）で行う（オーナー判断 2026-09-30）。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
@@ -1434,27 +1514,29 @@
    "rename": {
     "faction": "MATSUDAIRA",
     "from": "松平",
-    "to": "徳川"
+    "to": "徳川",
+    "by": {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+     "short": "C16"
+    }
    }
   },
   {
    "id": "EV_RAKUICHI",
    "name": {
-    "ja": "楽市楽座（加納・安土）",
-    "en": "Rakuichi-Rakuza Free Markets (Kanō, Azuchi)",
-    "ru": "Свободные рынки Ракуити-ракудза (Кано, Адзути)"
+    "ja": "楽市令（美濃・加納）",
+    "en": "Rakuichi Edict (Kanō, Mino)",
+    "ru": "Указ о свободном рынке (Кано, Мино)"
    },
    "year": 1567,
    "month": 11,
-   "date_text": "永禄10年10月（美濃・加納）、天正5年（1577）安土山下町",
+   "date_text": "永禄10年10月（美濃・加納の楽市場制札）。天正5年（1577）の安土山下町中掟書も織田",
    "regions": [
-    "美濃",
-    "近江"
+    "美濃"
    ],
    "affected_factions": [
-    "ODA",
-    "ROKKAKU",
-    "ASHIKAGA"
+    "ODA"
    ],
    "primary_factions": [
     "ODA"
@@ -1468,7 +1550,7 @@
    ],
    "house_specific": false,
    "effect_category": "institution",
-   "gameplay_effect": "城下町の市場を開放し、座の特権を制限する。商人が集まり金・生産が増え、忠誠が下がる場合もある（暫定）。C17を研究した勢力は他家でも施行可能。",
+   "gameplay_effect": "織田信長が美濃・加納の市を楽市とし、座の特権を制限する。商人が集まり金・生産が増え、忠誠が下がる場合もある（暫定）。C17（楽市楽座）を研究した織田は年より早く起きる。ほかの家は C17 の研究で楽市を使う（出来事は織田だけ）。",
    "sources": [
     {
      "title": "コトバンク『楽市楽座』"
@@ -1478,7 +1560,7 @@
     }
    ],
    "confidence": "high",
-   "note": "『楽市楽座』は織田だけの名ではなく、そのまま一般名にできる。1549年の六角氏・石寺新市の楽市令（確度中）が先例で、六角は本イベントの年より早く施行できる。",
+   "note": "『楽市楽座』は織田だけの名ではなく一般名にする（SSOT 3.2）。六角の石寺新市（1549年）は別の出来事 EV_ROKKAKU_RAKUICHI（オーナー判断 2026-09-30）。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_FREE_MARKETS",
@@ -1525,7 +1607,7 @@
    ],
    "house_specific": false,
    "effect_category": "war",
-   "gameplay_effect": "織田が六角氏を観音寺城から追い、三好勢を破って義昭を将軍に擁立する。足利将軍家の当主が交代し、織田が畿内へ進出。近江・山城・摂津の城の所有移転の候補。",
+   "gameplay_effect": "織田が六角氏を観音寺城から追い、三好勢を破って義昭を将軍に擁立する。足利将軍家の当主が交代し、織田が畿内へ進出。近江・山城・摂津の城のAI の攻略目標（ai_targets）。",
    "sources": [
     {
      "title": "コトバンク『足利義昭』"
@@ -1540,7 +1622,14 @@
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
     "short": "C16"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "ODA": [
+     "近江",
+     "山城",
+     "摂津"
+    ]
+   }
   },
   {
    "id": "EV_IMAGAWA_FALL",
@@ -1688,7 +1777,7 @@
    ],
    "house_specific": false,
    "effect_category": "trade",
-   "gameplay_effect": "肥前・長崎がポルトガル貿易の港になり、大友・島津の影響下で交易量が増す。長崎の硝石・生糸の交易アクセスは資源配置に無いため付けない（Q55）。",
+   "gameplay_effect": "肥前・長崎がポルトガル貿易の港になり、大友・島津の影響下で交易量が増す。硝石の交易アクセスは研究（C19）で解放する（EV_HIRADO_PORTUGUESE）。長崎は資源配置に交易地点が無いため付けない。",
    "sources": [
     {
      "title": "コトバンク『長崎』"
@@ -1776,7 +1865,7 @@
    "earlier_by": [],
    "house_specific": false,
    "effect_category": "war",
-   "gameplay_effect": "織田が越前に侵攻し、朝倉義景が自害する。一乗谷が焼かれ、越前が織田の領土になる候補。",
+   "gameplay_effect": "織田が越前に侵攻し、朝倉義景が自害する。一乗谷が焼かれ、越前は織田の AI の攻略目標（ai_targets）。",
    "sources": [
     {
      "title": "コトバンク『朝倉義景』"
@@ -1787,7 +1876,12 @@
    ],
    "confidence": "high",
    "boost": null,
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "ODA": [
+     "越前"
+    ]
+   }
   },
   {
    "id": "EV_NAGASHINO",
@@ -2024,7 +2118,8 @@
    "date_text": "天正10年3月11日",
    "regions": [
     "甲斐",
-    "信濃"
+    "信濃",
+    "駿河"
    ],
    "affected_factions": [
     "TAKEDA",
@@ -2040,7 +2135,7 @@
    "earlier_by": [],
    "house_specific": false,
    "effect_category": "war",
-   "gameplay_effect": "織田・徳川・北条の甲州征伐で武田勝頼が自害。武田領（甲斐・信濃・駿河）が分割される。武田の金山（EV_KOSHU_GOLD）の所有移転。",
+   "gameplay_effect": "織田・徳川・北条の甲州征伐で武田勝頼が自害。武田領（甲斐・信濃・駿河）の分割は、織田（甲斐・信濃）・松平（駿河）の AI の攻略目標（ai_targets）にする。城と武田の金山（EV_KOSHU_GOLD）の所有は自動では移さない。",
    "sources": [
     {
      "title": "コトバンク『武田勝頼』"
@@ -2051,7 +2146,16 @@
    ],
    "confidence": "high",
    "boost": null,
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "ODA": [
+     "甲斐",
+     "信濃"
+    ],
+    "MATSUDAIRA": [
+     "駿河"
+    ]
+   }
   },
   {
    "id": "EV_HONNOJI",
@@ -2090,7 +2194,7 @@
    ],
    "house_specific": false,
    "effect_category": "succession",
-   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の当主が替わり、表示名を織田→羽柴へ切り替える（長尾→上杉と同じ仕組み。SSOT 3.2）。羽柴→豊臣は EV_TOYOTOMI_SURNAME（1586年）で切り替える。",
+   "gameplay_effect": "織田信長が明智光秀に討たれる。山崎の戦い、清洲会議を経て羽柴秀吉が主導権を握る。織田の家名は、社会制度 C16（朝廷・将軍への取次）を研究したとき（襲名）に織田→羽柴へ切り替わる（SSOT 3.2）。本能寺の変の年は切り替えず、C16 への着想だけを与える。羽柴→豊臣は EV_TOYOTOMI_SURNAME の C24 で切り替える。",
    "sources": [
     {
      "title": "コトバンク『本能寺の変』"
@@ -2100,7 +2204,7 @@
     }
    ],
    "confidence": "high",
-   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれず、織田家の表示名の切り替えで表す（SSOT 3.2）。 切替の段階と時期は Q56。",
+   "note": "豊臣秀吉はSSOTで『成長やイベントで登場』する人物（5章）。勢力としては22勢力に含まれず、織田家の表示名の切り替えで表す（SSOT 3.2）。切替は研究（襲名）で行う（オーナー判断 2026-09-30）。",
    "boost": {
     "type": "civic",
     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
@@ -2114,7 +2218,12 @@
    "rename": {
     "faction": "ODA",
     "from": "織田",
-    "to": "羽柴"
+    "to": "羽柴",
+    "by": {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
+     "short": "C16"
+    }
    }
   },
   {
@@ -2228,7 +2337,7 @@
     "ru": "Строительство великого замка"
    },
    "effect_category": "construction",
-   "gameplay_effect": "石山本願寺の跡地に巨大な城郭が築かれる。石垣・本丸・惣構（T21／T29／T32）を持つ勢力は、大都市防衛を強化する。羽柴（1586年から豊臣）の拠点化。",
+   "gameplay_effect": "石山本願寺の跡地に巨大な城郭が築かれる。石垣・本丸・惣構（T21／T29／T32）を持つ勢力は、大都市防衛を強化する。織田家（羽柴・豊臣）の拠点化。",
    "sources": [
     {
      "title": "コトバンク『大坂城』"
@@ -2392,13 +2501,13 @@
    "earlier_by": [
     {
      "type": "civic",
-     "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
-     "short": "C16"
+     "id": "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION",
+     "short": "C24"
     }
    ],
    "house_specific": false,
    "effect_category": "rename",
-   "gameplay_effect": "羽柴秀吉が朝廷から豊臣の姓を賜る。長尾→上杉と同じ仕組みで、家名を『羽柴』から『豊臣』へ表示切替（Civilization IDは維持。SSOT 3.2）。条件案：EV_HONNOJI で羽柴に切り替えた後、C16を研究。",
+   "gameplay_effect": "羽柴秀吉が朝廷から豊臣の姓を賜る。織田の家名は、社会制度 C24（停戦裁定。関白としての惣無事）を研究したとき（襲名）に羽柴→豊臣へ切り替わる（Civilization IDは維持。SSOT 3.2）。C24 は C16 を前提に持つので、羽柴を飛ばさない。史実の年は切り替えず、C24 への着想だけを与える。",
    "sources": [
     {
      "title": "コトバンク『豊臣秀吉』"
@@ -2408,17 +2517,22 @@
     }
    ],
    "confidence": "medium",
-   "note": "SSOT 3.2 は本能寺の変の後の織田→羽柴→豊臣を決めているが、各段階の時期は決めていない。羽柴は本能寺の変、豊臣は姓の下賜の年月とする案で、Q56 でオーナーに確認する。",
+   "note": "豊臣姓の下賜は天正14年とする説と天正13年とする説がある。家名の切替は年ではなく研究で行う（オーナー判断 2026-09-30）ので、年月は着想を与える時期にだけ効く。",
    "boost": {
     "type": "civic",
-    "id": "CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS",
-    "short": "C16"
+    "id": "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION",
+    "short": "C24"
    },
    "advisor_popup": null,
    "rename": {
     "faction": "ODA",
     "from": "羽柴",
-    "to": "豊臣"
+    "to": "豊臣",
+    "by": {
+     "type": "civic",
+     "id": "CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION",
+     "short": "C24"
+    }
    }
   },
   {
@@ -2926,7 +3040,13 @@
     "id": "CIVIC_JAC_SENGOKU_CASTLE_TOWN_ORDINANCES",
     "short": "C15"
    },
-   "advisor_popup": null
+   "advisor_popup": null,
+   "ai_targets": {
+    "MATSUDAIRA": [
+     "武蔵",
+     "相模"
+    ]
+   }
   },
   {
    "id": "EV_AIZU_LACQUER",
@@ -3225,8 +3345,8 @@
    "note": "資源配置の gold-sado-aikawa（38.032, 138.235）。鶴子銀山（silver-sado-tsurushi、37.927, 138.351）とは別地点。",
    "boost": {
     "type": "tech",
-    "id": "TECH_JAC_SENGOKU_CUPELLATION",
-    "short": "T09"
+    "id": "TECH_JAC_SENGOKU_MINE_MANAGEMENT",
+    "short": "T14"
    },
    "advisor_popup": null
   },

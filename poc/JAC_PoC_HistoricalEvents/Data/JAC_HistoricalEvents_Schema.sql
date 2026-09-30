@@ -58,18 +58,23 @@ CREATE TABLE JAC_HistoricalEventModifiers (
 );
 
 -- Display-name switch (SSOT 3.1). The civilization ID never changes; UI reads the shared name.
+-- The name switches only once the house has CivicType (succession by research, every house); the year gives only
+-- the event's boost toward it (SSOT 3.2, owner decisions 2026-09-30).
 CREATE TABLE JAC_HistoricalEventRenames (
 	EventType TEXT NOT NULL REFERENCES JAC_HistoricalEvents(EventType) ON DELETE CASCADE,
 	CivilizationType TEXT NOT NULL,
 	Name TEXT NOT NULL,
+	CivicType TEXT NOT NULL REFERENCES Civics(CivicType),
 	PRIMARY KEY (EventType, CivilizationType)
 );
 
 -- Resources of an event. SiteId is a site of the Japan maps' resources mod (JAC_PoC_JapanMapScale
 -- Scripts/JAC_ResourceSites.lua) or of documents/spec/data/japan-map-resources.json.
--- reveal: the reserved site is revealed the first time the event happens for anyone (one row serves every map).
--- trade_access / ownership: recorded only (Q43: ownership is not transferred automatically); OwnerTo is the
--- civilization the ownership would go to.
+-- Records only; the event script does not read this table (SSOT 3.2).
+-- reveal: the reserved site the resources mod reveals in its own year or on its research; the event boosts that
+-- research instead of revealing it. trade_access: opens by research (the resource placement's unlock_civic), not
+-- implemented yet. ownership: never transferred automatically (SSOT 3.2: former domains are AI conquest targets
+-- only); OwnerTo is the civilization it went to historically.
 CREATE TABLE JAC_HistoricalEventResources (
 	EventType TEXT NOT NULL REFERENCES JAC_HistoricalEvents(EventType) ON DELETE CASCADE,
 	SiteId TEXT NOT NULL,
