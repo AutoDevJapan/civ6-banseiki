@@ -175,13 +175,12 @@ local function AddPoints(l, id, part, points, key)
 	if key then l.keys[key] = true end
 	house.score = house.score + points
 	house.parts[part] = (house.parts[part] or 0) + points
-	if part == "home" or part == "regain" or part == "castle" then
-		JAC_Oaths_Record(house, "CAPTURE", 1)
-	elseif part == "ally" then
+	if part == "ally" then
 		JAC_Oaths_Record(house, "RELATION", 1)
 	end
 	Log(string.format("points player=%d part=%s +%d score=%d key=%s turn=%d", id, part, points, house.score,
 		tostring(key), ElapsedTurn()))
+	return true
 end
 
 -- A new castle: its first owner is the owner now (no points, §5.2). A house without a home takes the first
@@ -211,7 +210,10 @@ local function RecordCapture(l, key, capturer, loser, loserCities)
 		part = "regain"
 	end
 	local plotKey = string.sub(key, 5)
-	AddPoints(l, capturer, part, POINTS[part], "cap:" .. plotKey .. ":" .. record.n)
+	local scored = AddPoints(l, capturer, part, POINTS[part], "cap:" .. plotKey .. ":" .. record.n)
+	-- Oath wording is "another house's castle". City-states/free cities still earn base merit,
+	-- but only a registered major house as the previous owner qualifies for the oath quest.
+	if scored and House(l, loser) then JAC_Oaths_Record(House(l, capturer), "CAPTURE", 1) end
 	if House(l, loser) and loserCities == 0 then
 		AddPoints(l, capturer, "ko", POINTS.ko, "ko:" .. tostring(loser))
 	end

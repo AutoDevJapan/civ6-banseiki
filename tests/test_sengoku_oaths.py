@@ -212,6 +212,24 @@ class OathLedgerTests(unittest.TestCase):
         self.assertEqual(self.house(0).score,6)
         self.assertIsNone(self.house(0).parts.oath)
 
+    def test_capture_from_free_city_or_city_state_earns_base_points_without_oath(self):
+        for transfer_diff in (False, True):
+            self.setUp()
+            self.judge('NORMAL')
+            self.choose()
+            self.g.TRANSFER(62, 5, 5)
+            self.turns(67)  # reconcile the non-house owner before Oda takes the castle
+            before = self.house(0).score
+            if transfer_diff:
+                self.g.TRANSFER(0, 5, 5)
+                self.turns(68)
+            else:
+                self.g.CAPTURE(0, 5, 5)
+            self.assertGreater(self.house(0).score, before)
+            self.assertIsNone(self.house(0).parts.oath)
+            self.turns(69)
+            self.assertIsNone(self.house(0).parts.oath)
+
     def test_research_quests_only_for_matching_completions_after_choice(self):
         for oath,kind,other in ((ODA[2],'techs','civics'),(ODA[1],'civics','techs')):
             with self.subTest(oath=oath):
