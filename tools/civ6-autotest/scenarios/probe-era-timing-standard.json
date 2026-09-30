@@ -1,0 +1,317 @@
+{
+  "name": "Probe: engine era timing with Eras_XP1 min=max (3,5,1,2 turns, then 2/4) and NEXT_ERA_TURN_COUNTDOWN 1 at GAMESPEED_STANDARD, 16 single-turn autoplays logging [JAC_ERA_PROBE] from GameCore and InGame (unification test map, Oda human)",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
+      "map_size": "MAPSIZE_DUEL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620960,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "JAC_ERP={ctx='GameCore'}; local P=JAC_ERP\nfunction P.q(f) local ok,v=pcall(f); if ok then return tostring(v) end; return 'ERR('..tostring(v)..')' end\nfunction P.call(obj,name) if obj==nil then return 'noobj' end; local okf,f=pcall(function() return obj[name] end); if not okf or type(f)~='function' then return 'absent' end; local ok,v=pcall(f,obj); if ok then return tostring(v) end; return 'ERR('..tostring(v)..')' end\nfunction P.eraName(i) local n=tonumber(i); local r=n and GameInfo.Eras[n]; return r and r.EraType or '?' end\nfunction P.count(list,has) local n=0; for row in list do if has(row.Index) then n=n+1 end end; return n end\nfunction P.Log(tag)\n  local turn=Game.GetCurrentGameTurn(); local start=GameConfiguration.GetStartTurn()\n  local okE,eras=pcall(Game.GetEras); if not okE then eras=nil end\n  local era=P.call(eras,'GetCurrentEra')\n  local t={'ctx='..P.ctx,'tag='..tag,'turn='..turn,'elapsed='..(turn-start+1),'date='..P.q(function() return Calendar.MakeYearStr(turn) end),'era='..era..':'..P.eraName(era),'eraStart='..P.call(eras,'GetCurrentEraStartTurn'),'countdown='..P.call(eras,'GetNextEraCountdown'),'minEnd='..P.call(eras,'GetCurrentEraMinimumEndTurn'),'maxEnd='..P.call(eras,'GetCurrentEraMaximumEndTurn'),'final='..P.call(eras,'GetFinalEra')}\n  if P.last~=nil and P.last~=era then t[#t+1]='CHANGED from='..P.eraName(P.last)..' eraLenObserved='..tostring(turn-(P.lastStart or turn)) end\n  if P.last~=era then P.lastStart=turn end\n  P.last=era\n  t[#t+1]='players='..P.q(function() local s={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); s[#s+1]='p'..id..':era='..P.call(p,'GetEra')..':'..P.eraName(P.call(p,'GetEra'))..'/techs='..P.q(function() local x=p:GetTechs(); return P.count(GameInfo.Technologies(),function(i) return x:HasTech(i) end) end)..'/civics='..P.q(function() local x=p:GetCulture(); return P.count(GameInfo.Civics(),function(i) return x:HasCivic(i) end) end) end; return table.concat(s,',') end)\n  local line='[JAC_ERA_PROBE] '..table.concat(t,' ')\n  print(line); return line\nend\nreturn JAC_ERP.Log('setup')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "JAC_ERP={ctx='InGame'}; local P=JAC_ERP\nfunction P.q(f) local ok,v=pcall(f); if ok then return tostring(v) end; return 'ERR('..tostring(v)..')' end\nfunction P.call(obj,name) if obj==nil then return 'noobj' end; local okf,f=pcall(function() return obj[name] end); if not okf or type(f)~='function' then return 'absent' end; local ok,v=pcall(f,obj); if ok then return tostring(v) end; return 'ERR('..tostring(v)..')' end\nfunction P.eraName(i) local n=tonumber(i); local r=n and GameInfo.Eras[n]; return r and r.EraType or '?' end\nfunction P.count(list,has) local n=0; for row in list do if has(row.Index) then n=n+1 end end; return n end\nfunction P.Log(tag)\n  local turn=Game.GetCurrentGameTurn(); local start=GameConfiguration.GetStartTurn()\n  local okE,eras=pcall(Game.GetEras); if not okE then eras=nil end\n  local era=P.call(eras,'GetCurrentEra')\n  local t={'ctx='..P.ctx,'tag='..tag,'turn='..turn,'elapsed='..(turn-start+1),'date='..P.q(function() return Calendar.MakeYearStr(turn) end),'era='..era..':'..P.eraName(era),'eraStart='..P.call(eras,'GetCurrentEraStartTurn'),'countdown='..P.call(eras,'GetNextEraCountdown'),'minEnd='..P.call(eras,'GetCurrentEraMinimumEndTurn'),'maxEnd='..P.call(eras,'GetCurrentEraMaximumEndTurn'),'final='..P.call(eras,'GetFinalEra')}\n  if P.last~=nil and P.last~=era then t[#t+1]='CHANGED from='..P.eraName(P.last)..' eraLenObserved='..tostring(turn-(P.lastStart or turn)) end\n  if P.last~=era then P.lastStart=turn end\n  P.last=era\n  t[#t+1]='players='..P.q(function() local s={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local id=p:GetID(); s[#s+1]='p'..id..':era='..P.call(p,'GetEra')..':'..P.eraName(P.call(p,'GetEra'))..'/techs='..P.q(function() local x=p:GetTechs(); return P.count(GameInfo.Technologies(),function(i) return x:HasTech(i) end) end)..'/civics='..P.q(function() local x=p:GetCulture(); return P.count(GameInfo.Civics(),function(i) return x:HasCivic(i) end) end) end; return table.concat(s,',') end)\n  local line='[JAC_ERA_PROBE] '..table.concat(t,' ')\n  print(line); return line\nend\nif GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset: '..tostring(GameConfiguration.GetRuleSet())) end\nlocal want={ERA_ANCIENT='3/3',ERA_CLASSICAL='5/5',ERA_MEDIEVAL='1/1',ERA_RENAISSANCE='2/2',ERA_INDUSTRIAL='2/4'}\nlocal rows={}; for r in GameInfo.Eras_XP1() do rows[#rows+1]=r.EraType..':'..tostring(r.GameEraMinimumTurns)..'/'..tostring(r.GameEraMaximumTurns); if want[r.EraType] and want[r.EraType]~=tostring(r.GameEraMinimumTurns)..'/'..tostring(r.GameEraMaximumTurns) then error('JAC_Test_EraTiming not applied: '..r.EraType..' '..rows[#rows]) end end\nlocal cd=GameInfo.GlobalParameters['NEXT_ERA_TURN_COUNTDOWN']; if not cd or tostring(cd.Value)~='1' then error('NEXT_ERA_TURN_COUNTDOWN is '..tostring(cd and cd.Value)) end\nlocal sp=GameConfiguration.GetGameSpeedType(); if sp~='GAMESPEED_STANDARD' and sp~=DB.MakeHash('GAMESPEED_STANDARD') then error('wrong game speed: '..tostring(sp)) end\nlocal date=Calendar.MakeYearStr(Game.GetCurrentGameTurn()); if not string.find(date,'1534',1,true) then error('Sengoku calendar not active: '..tostring(date)) end\nlocal speedRow=GameInfo.GameSpeeds['GAMESPEED_STANDARD']\nlocal head='[JAC_ERA_PROBE] ctx=InGame tag=config speed='..'GAMESPEED_STANDARD'..' costMultiplier='..tostring(speedRow and speedRow.CostMultiplier)..' countdownParam='..tostring(cd.Value)..' eras_xp1='..table.concat(rows,',')\nprint(head)\nreturn head..'\\n'..JAC_ERP.Log('setup')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after1') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after1') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after2') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after2') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after3') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after3') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after4') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after4') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after5') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after5') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after6') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after6') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after7') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after7') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after8') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after8') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after9') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after9') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after10') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after10') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after11') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after11') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after12') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after12') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after13') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after13') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after14') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after14') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after15') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after15') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "allow_human_elimination": true,
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return JAC_ERP and JAC_ERP.Log('after16') or 'JAC_ERP missing (context reloaded?)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_ERP and JAC_ERP.Log('after16') or 'JAC_ERP missing (context reloaded?)'"
+    }
+  ]
+}
