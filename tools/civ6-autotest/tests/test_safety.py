@@ -16,6 +16,11 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def setUp(self):
+        process = patch("scenario.single_civ_process", return_value=(123, 0.0))
+        process.start()
+        self.addCleanup(process.stop)
+
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -661,6 +666,11 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 
 class InputSafetyTests(unittest.TestCase):
+    def setUp(self):
+        process = patch("scenario.single_civ_process", return_value=(123, 0.0))
+        process.start()
+        self.addCleanup(process.stop)
+
     def test_deadline_expiring_during_focus_sends_no_key(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1
@@ -827,7 +837,7 @@ class InputSafetyTests(unittest.TestCase):
                 (logs / name).write_text("", encoding="utf-8")
             runner = Runner({"name": "input failure", "steps": [{"action": "start_game"}]},
                             base / "output", logs, base, 4318, auto_restart=False)
-            with redirect_stdout(StringIO()), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
+            with redirect_stdout(StringIO()), patch("scenario.single_civ_process", return_value=(123, 0.0)), patch("scenario.require_single_civ_process"), patch.object(runner, "_wait"), patch.object(
                 runner, "_run_step", side_effect=civ_click.InputError("foreground lost")
             ):
                 self.assertEqual(runner.run(), 1)
