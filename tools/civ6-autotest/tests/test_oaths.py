@@ -70,5 +70,6 @@ class OathScenarioTests(unittest.TestCase):
         # GameCore really lacks IsAnyMultiplayer: the jump must not call a UI-only API.
         lua.globals().RULE = 'RULESET_JAC_BANSEIKI'
         lua.execute('GameConfiguration.IsAnyMultiplayer=nil')
+        lua.execute('GameConfiguration.GetRuleSet=nil')
         lua.execute(code)
         self.assertEqual(lua.globals().TURN, 125)

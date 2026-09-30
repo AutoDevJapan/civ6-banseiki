@@ -1220,7 +1220,6 @@ def fast_forward_scenario(data: dict) -> dict:
                     "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\n"
                     "return 'TEST MODE: single-player ruleset verified before engine jump'"})
                 steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
-                    "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
                     "local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\n"
                     "if not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\n"
                     f"local target = Game.GetCurrentGameTurn() + {jump}\n"
