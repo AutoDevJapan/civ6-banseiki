@@ -9,7 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import (enabled_mod_folders, newest_mod_file, restart_reason, single_civ_process,
+from restart import (enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
                      wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
@@ -58,6 +58,44 @@ class FreshnessTests(unittest.TestCase):
                 (folder / "mod.modinfo").write_text(f'<Mod id="{MOD_ID}"/>', encoding="utf-8")
             with self.assertRaisesRegex(InputError, "Duplicate"):
                 enabled_mod_folders(scenario, mods)
+
+
+    def test_atlas_images_missing_from_the_mod_packages_are_reported(self):
+        # ages-screens-01: the crest atlas rows loaded but the installed BLP predated the crests, so every crest was "?".
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root) / "MyMod"
+            (folder / "Data").mkdir(parents=True)
+            (folder / "Data" / "Icons.xml").write_text(
+                '<GameInfo><IconTextureAtlases><Row Name="A" IconSize="36" Filename="JAC_Old36.dds"/>'
+                '<Row Name="B" IconSize="36" Filename="JAC_Crests36.dds"/><Row Name="C" IconSize="36" '
+                'Filename="JAC_Loose36.dds"/></IconTextureAtlases></GameInfo>', encoding="utf-8")
+            (folder / "Data" / "Text.xml").write_text("<GameInfo><LocalizedText/></GameInfo>", encoding="utf-8")
+            (folder / "Textures").mkdir()
+            (folder / "Textures" / "JAC_Loose36.dds").write_bytes(b"dds")
+            blps = folder / "Platforms" / "Windows" / "BLPs"
+            blps.mkdir(parents=True)
+            (blps / "Icons.blp").write_bytes(b"header JAC_Old36 pixels")
+            self.assertEqual(missing_atlas_textures([folder]), ["MyMod: JAC_Crests36"])
+            (blps / "Icons.blp").write_bytes(b"JAC_Old36 JAC_Crests36")
+            self.assertEqual(missing_atlas_textures([folder]), [])
+
+    def test_stale_art_stops_before_restart(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            for name in ("Lua.log", "Database.log", "Modding.log"):
+                (base / name).write_text("", encoding="utf-8")
+            runner = Runner({"name": "stale art", "steps": [{"action": "pause", "seconds": 0.1}]},
+                            base / "output", base, base, 4318)
+            with patch("scenario.enabled_mod_folders", return_value=[base]), patch(
+                "scenario.missing_atlas_textures", return_value=["MyMod: JAC_Crests36"]
+            ), patch.object(runner, "_restart_game") as restart, patch.object(runner, "_run_step") as step:
+                self.assertEqual(runner.run(), 1)
+            restart.assert_not_called()
+            step.assert_not_called()
+            records = [json.loads(line) for line in (runner.output / "steps.jsonl").read_text(
+                encoding="utf-8").splitlines()]
+            self.assertIn("build_art.py", records[-1]["detail"])
+            self.assertIn("JAC_Crests36", records[-1]["detail"])
 
 
 class RestartActionTests(unittest.TestCase):

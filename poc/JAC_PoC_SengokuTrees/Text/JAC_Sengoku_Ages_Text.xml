@@ -26,30 +26,30 @@
     <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="ja_JP"><Text>寛永</Text></Row>
     <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="en_US"><Text>Kan'ei</Text></Row>
     <Row Tag="LOC_JAC_REIGN_KAN_EI_NAME" Language="ru_RU"><Text>Канъэй</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：天文から弘治へ（1555年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Tenbun to Kōji (1555)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Тэмбун на Кодзи (1555)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元：弘治から永禄へ（1558年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Kōji to Eiroku (1558)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Кодзи на Эйроку (1558)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：永禄から元亀へ（1570年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Eiroku to Genki (1570)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Эйроку на Гэнки (1570)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元：元亀から天正へ（1573年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Genki to Tenshō (1573)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Гэнки на Тэнсё (1573)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元：天正から文禄へ（1593年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Tenshō to Bunroku (1593)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Тэнсё на Бунроку (1593)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元：文禄から慶長へ（1596年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Bunroku to Keichō (1596)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Бунроку на Кэйтё (1596)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ja_JP"><Text>改元：慶長から元和へ（1615年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Keichō to Genna (1615)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Кэйтё на Гэнна (1615)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ja_JP"><Text>改元：元和から寛永へ（1624年）</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="en_US"><Text>New era name: from Genna to Kan'ei (1624)</Text></Row>
-    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления: с Гэнна на Канъэй (1624)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]天文から弘治へ（1555年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Tenbun to Kōji (1555)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KOJI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Тэмбун на Кодзи (1555)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]弘治から永禄へ（1558年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Kōji to Eiroku (1558)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Кодзи на Эйроку (1558)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]永禄から元亀へ（1570年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Eiroku to Genki (1570)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENKI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Эйроку на Гэнки (1570)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]元亀から天正へ（1573年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Genki to Tenshō (1573)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENSHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Гэнки на Тэнсё (1573)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]天正から文禄へ（1593年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Tenshō to Bunroku (1593)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_BUNROKU_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Тэнсё на Бунроку (1593)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]文禄から慶長へ（1596年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Bunroku to Keichō (1596)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KEICHO_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Бунроку на Кэйтё (1596)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]慶長から元和へ（1615年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Keichō to Genna (1615)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_GENNA_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Кэйтё на Гэнна (1615)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ja_JP"><Text>改元[NEWLINE]元和から寛永へ（1624年）</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="en_US"><Text>New era name:[NEWLINE]from Genna to Kan'ei (1624)</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_KAN_EI_ANNOUNCEMENT" Language="ru_RU"><Text>Смена девиза правления:[NEWLINE]с Гэнна на Канъэй (1624)</Text></Row>
     <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="ja_JP"><Text>当家は黄金期に入った。全都市の生産力と金 +10%。</Text></Row>
     <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="en_US"><Text>Your house enters a Golden Age: +10% Production and Gold in all cities.</Text></Row>
     <Row Tag="LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT" Language="ru_RU"><Text>Ваш дом вступает в золотой век: +10% производства и золота во всех городах.</Text></Row>
@@ -107,5 +107,83 @@
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_LATER" Language="ja_JP"><Text>あとで</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_LATER" Language="en_US"><Text>Later</Text></Row>
     <Row Tag="LOC_JAC_AGE_DARK_CHOICE_LATER" Language="ru_RU"><Text>Позже</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENBUN_NAME" Language="ja_JP"><Text>天文</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENBUN_NAME" Language="en_US"><Text>Tenbun</Text></Row>
+    <Row Tag="LOC_JAC_REIGN_TENBUN_NAME" Language="ru_RU"><Text>Тэмбун</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_NOTIFICATION" Language="ja_JP"><Text>改元</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_NOTIFICATION" Language="en_US"><Text>A new era name</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_NOTIFICATION" Language="ru_RU"><Text>Смена девиза правления</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_GOLDEN" Language="ja_JP"><Text>黄金期</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_GOLDEN" Language="en_US"><Text>Golden Age</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_GOLDEN" Language="ru_RU"><Text>Золотой век</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_HEROIC" Language="ja_JP"><Text>英雄期</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_HEROIC" Language="en_US"><Text>Heroic Age</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_HEROIC" Language="ru_RU"><Text>Героический век</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NORMAL" Language="ja_JP"><Text>通常期</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NORMAL" Language="en_US"><Text>Normal Age</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NORMAL" Language="ru_RU"><Text>Обычный век</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_DARK" Language="ja_JP"><Text>暗黒期</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_DARK" Language="en_US"><Text>Dark Age</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_DARK" Language="ru_RU"><Text>Тёмный век</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NONE" Language="ja_JP"><Text>判定前</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NONE" Language="en_US"><Text>Not yet judged</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NAME_NONE" Language="ru_RU"><Text>Ещё не определён</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NONE_EFFECT" Language="ja_JP"><Text>当家の年齢は最初の改元（弘治）で決まる。それまで年齢の効果は無い。</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NONE_EFFECT" Language="en_US"><Text>Your house's age is decided at the first new era name (Kōji); until then no age effect applies.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_NONE_EFFECT" Language="ru_RU"><Text>Век вашего дома определится при первой смене девиза (Кодзи); до тех пор эффектов века нет.</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_HOUSE_AGE" Language="ja_JP"><Text>当家の年齢:</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_HOUSE_AGE" Language="en_US"><Text>YOUR HOUSE:</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_HOUSE_AGE" Language="ru_RU"><Text>ВАШ ДОМ:</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_SCORE" Language="ja_JP"><Text>{1_Reign}の期の武功：{2_Score}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_SCORE" Language="en_US"><Text>Merit in the {1_Reign} era: {2_Score}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_SCORE" Language="ru_RU"><Text>Заслуги за период {1_Reign}: {2_Score}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_THRESHOLDS" Language="ja_JP"><Text>（黄金期は{1_Golden}点以上、暗黒期は{2_Dark}点未満）</Text></Row>
+    <Row Tag="LOC_JAC_AGE_THRESHOLDS" Language="en_US"><Text>(Golden Age at {1_Golden} or more, Dark Age below {2_Dark})</Text></Row>
+    <Row Tag="LOC_JAC_AGE_THRESHOLDS" Language="ru_RU"><Text>(золотой век от {1_Golden}, тёмный век ниже {2_Dark})</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_CHOOSE_POLICY" Language="ja_JP"><Text>暗黒期の政策を選ぶ</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_CHOOSE_POLICY" Language="en_US"><Text>Choose Dark Age Policy</Text></Row>
+    <Row Tag="LOC_JAC_AGE_REIGN_CHOOSE_POLICY" Language="ru_RU"><Text>Выбрать политику тёмного века</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_TITLE" Language="ja_JP"><Text>武功と改元</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_TITLE" Language="en_US"><Text>Merit and Eras</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_TITLE" Language="ru_RU"><Text>Заслуги и эпохи</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PERIOD" Language="ja_JP"><Text>{1_Reign}の期（{2_Year}年〜）</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PERIOD" Language="en_US"><Text>The {1_Reign} era (from {2_Year})</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PERIOD" Language="ru_RU"><Text>Период {1_Reign} (с {2_Year})</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_LEDGER_HEADER" Language="ja_JP"><Text>年齢の効果と武功の台帳</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_LEDGER_HEADER" Language="en_US"><Text>Age Effects and Merit Ledger</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_LEDGER_HEADER" Language="ru_RU"><Text>Эффекты века и книга заслуг</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PARTS" Language="ja_JP"><Text>{1_Reign}の期の武功（次の改元で判定）：</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PARTS" Language="en_US"><Text>Merit in the {1_Reign} era (judged at the next era name):</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_PARTS" Language="ru_RU"><Text>Заслуги за период {1_Reign} (оцениваются при следующей смене девиза):</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_HOME" Language="ja_JP"><Text>他家の本拠の奪取：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_HOME" Language="en_US"><Text>Rival seats taken: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_HOME" Language="ru_RU"><Text>Захват ставок других домов: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_REGAIN" Language="ja_JP"><Text>旧領の奪還：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_REGAIN" Language="en_US"><Text>Former castles regained: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_REGAIN" Language="ru_RU"><Text>Возврат прежних замков: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_CASTLE" Language="ja_JP"><Text>城の奪取：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_CASTLE" Language="en_US"><Text>Castles taken: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_CASTLE" Language="ru_RU"><Text>Захват замков: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_KO" Language="ja_JP"><Text>家を滅ぼす：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_KO" Language="en_US"><Text>Houses destroyed: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_KO" Language="ru_RU"><Text>Уничтожение домов: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_ALLY" Language="ja_JP"><Text>同盟：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_ALLY" Language="en_US"><Text>Alliances: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_ALLY" Language="ru_RU"><Text>Союзы: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_RESEARCH" Language="ja_JP"><Text>技術・社会制度：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_RESEARCH" Language="en_US"><Text>Technologies and civics: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_RESEARCH" Language="ru_RU"><Text>Технологии и институты: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_EVENT" Language="ja_JP"><Text>史実の出来事：{1_Points}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_EVENT" Language="en_US"><Text>Historical events: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PART_EVENT" Language="ru_RU"><Text>Исторические события: {1_Points}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY" Language="ja_JP"><Text>これまでの改元：</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY" Language="en_US"><Text>Past era names:</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY" Language="ru_RU"><Text>Прошлые смены девиза:</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_NONE" Language="ja_JP"><Text>まだ改元していない</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_NONE" Language="en_US"><Text>No new era name yet</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_NONE" Language="ru_RU"><Text>Девиз ещё не менялся</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_ROW" Language="ja_JP"><Text>{1_Reign}（{2_Year}年）：{3_Age}、武功 {4_Score}点</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_ROW" Language="en_US"><Text>{1_Reign} ({2_Year}): {3_Age}, merit {4_Score}</Text></Row>
+    <Row Tag="LOC_JAC_AGE_PANEL_HISTORY_ROW" Language="ru_RU"><Text>{1_Reign} ({2_Year}): {3_Age}, заслуги {4_Score}</Text></Row>
   </LocalizedText>
 </GameData>

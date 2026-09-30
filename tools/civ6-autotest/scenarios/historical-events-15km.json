@@ -1,5 +1,5 @@
 {
-  "name": "Historical event list on the 15 km Japan map: early firing by research with the advisor popup for the human only, a rename, no re-fire after load, boosts in the year for factions without the research",
+  "name": "Historical event list on the 15 km Japan map: early firing by research with the advisor popup for the human only, a rename by the succession civic (every house's stages by research only), no re-fire after load, boosts in the year for factions without the research",
   "judge_profile": "generic",
   "steps": [
     {
@@ -147,7 +147,7 @@
       "condition": {
         "type": "log_line",
         "log": "Lua.log",
-        "contains": "[JAC_EVENTS] loaded events=60 startYear=1534 speed=GAMESPEED_STANDARD"
+        "contains": "[JAC_EVENTS] loaded events=61 startYear=1534 speed=GAMESPEED_STANDARD"
       },
       "timeout": 60
     },
@@ -164,7 +164,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=0; for row in GameInfo.JAC_HistoricalEvents() do for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetProperty('JAC_EVENT_FIRED_'..row.EventType)~=nil then n=n+1 end end end; if n~=Game:GetProperty('JAC_EVENTS_FIRE_COUNT') then error('fire count '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))..' ~= flags '..n) end; local oda,nagao,shimazu=pid('CIVILIZATION_JAC_ODA'),pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); if oda~=0 then error('Oda is not player 0') end; if f(oda,'TENBUN_FAMINE')~=2 then error('famine not fired early for Oda on turn 2: '..tostring(f(oda,'TENBUN_FAMINE'))) end; if f(nagao,'NAGAO_TO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; if f(shimazu,'SHIMAZU_UNIFY_1')~=2 then error('Shimazu event not fired on turn 2') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_ODA')~=nil then error('Oda renamed early') end; return 'elapsed='..el()..' fires='..Game:GetProperty('JAC_EVENTS_FIRE_COUNT')"
+      "code": "local function pid(c) for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==c then return p:GetID() end end error(c..' absent') end; local function el() return Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1 end; local function f(id,e) return Players[id]:GetProperty('JAC_EVENT_FIRED_JAC_EVENT_'..e) end; local n=0; for row in GameInfo.JAC_HistoricalEvents() do for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetProperty('JAC_EVENT_FIRED_'..row.EventType)~=nil then n=n+1 end end end; if n~=Game:GetProperty('JAC_EVENTS_FIRE_COUNT') then error('fire count '..tostring(Game:GetProperty('JAC_EVENTS_FIRE_COUNT'))..' ~= flags '..n) end; local oda,nagao,shimazu=pid('CIVILIZATION_JAC_ODA'),pid('CIVILIZATION_JAC_NAGAO'),pid('CIVILIZATION_JAC_SHIMAZU'); if oda~=0 then error('Oda is not player 0') end; if f(oda,'TENBUN_FAMINE')~=2 then error('famine not fired early for Oda on turn 2: '..tostring(f(oda,'TENBUN_FAMINE'))) end; if f(nagao,'NAGAO_TO_UESUGI')~=2 then error('Nagao rename not fired on turn 2') end; if f(shimazu,'SHIMAZU_UNIFY_1')~=2 then error('Shimazu event not fired on turn 2') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO')~='LOC_JAC_EVENT_UESUGI_CIV_NAME' then error('rename property missing') end; if Game:GetProperty('JAC_CIV_NAME_CIVILIZATION_JAC_ODA')~=nil then error('Oda renamed early') end; local stages=0; for r in GameInfo.JAC_HistoricalEventRenames() do if r.CivicType==nil then error('rename follows the year: '..r.EventType) end; stages=stages+1 end; if stages~=4 then error('rename stages: '..stages) end; return 'elapsed='..el()..' fires='..Game:GetProperty('JAC_EVENTS_FIRE_COUNT')"
     },
     {
       "action": "wait_for",

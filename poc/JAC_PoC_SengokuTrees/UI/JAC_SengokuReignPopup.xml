@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 改元の画面（documents/research/sengoku-ages.md §8）。組み立てと絵は公式の時代の振り返り
+     DLC/Expansion2/UI/Additions/EraReviewPopup.xml（羊皮紙・帯・枠・英雄期の光、指導者の肖像）をそのまま使う。
+     年齢ごとの絵は UI/JAC_SengokuReignPopup.lua が差し替える。 -->
+<Context>
+	<Container Style="FullScreenVignetteConsumer" />
+
+	<Image ID="Background" Anchor="C,C" Size="518,600" Texture="Ages_ParchmentNormal" StretchMode="Tile" ConsumeMouse="1">
+
+		<Container Offset="0,-42" Size="530,500" Anchor="C,C">
+			<Image ID="EraImage" Anchor="C,C" Offset="0,12" Size="456,332" Texture="Moment_EraEntry_Medieval" Color="255,255,255,40"/>
+		</Container>
+
+		<Stack Anchor="C,T" Offset="0,82" StackGrowth="Down" StackPadding="6">
+			<Container Anchor="C,T" Size="520,64">
+				<Image ID="EraRibbon" Anchor="C,B" Offset="0,-4" Size="488,48" Texture="Ages_BannerLongNormal">
+					<Label ID="EraRibbonText" String="LOC_JAC_AGE_REIGN_HOUSE_AGE" Anchor="L,B" Offset="116,12" Style="FontFlair14" SmallCaps="18" SmallCapsType="EveryWord" FontStyle="Shadow" ColorSet="White_Black"/>
+					<Label ID="EraRibbonValue" Anchor="R,B" Offset="38,12" Style="FontFlair16" Align="right" FontStyle="shadow" Color0="225,225,225,255" Color1="36,36,36,255"/>
+				</Image>
+
+				<Container ID="PlayerLeader" Anchor="L,B" Size="64,64" Offset="53,0">
+					<Image Anchor="C,C" Texture="CircleBacking64" Color="80,80,80"/>
+					<Image Anchor="C,C" Texture="Diplomacy_YouIndicatorLarge"/>
+					<Image ID="LeaderPortrait" Anchor="C,C" Size="64,64" Texture="Leaders55"/>
+					<Image ID="CivIndicator" Anchor="R,T" Texture="CircleBacking22" Size="22,22" Offset="-5,-2">
+						<Image ID="CivIcon" Anchor="C,C" Texture="CivSymbols22" Size="22,22"/>
+					</Image>
+				</Container>
+			</Container>
+
+			<Stack ID="MainStack" Anchor="C,T" StackGrowth="Down" StackPadding="0">
+				<Container Size="475,8"/>
+				<Line Color="0,0,0,60" Anchor="C,B" Start="0,0" End="475,0" Width="2"/>
+				<Container Size="475,8"/>
+				<Label ID="Score" Anchor="C,T" Style="ParchmentHeader"/>
+				<Container Size="475,4"/>
+				<Label ID="Thresholds" Anchor="C,T" Style="ParchmentBody" WrapWidth="470"/>
+				<Container Size="475,8"/>
+				<Line Color="0,0,0,60" Anchor="C,B" Start="0,0" End="475,0" Width="2"/>
+				<Container Size="475,8"/>
+				<Label Anchor="C,T" String="LOC_ERAS_EFFECTS_ACTIVE_THIS_AGE" Style="ParchmentHeader"/>
+				<Container Size="475,8"/>
+				<Line Color="0,0,0,60" Anchor="C,B" Start="0,0" End="475,0" Width="2"/>
+				<Container Size="475,8"/>
+				<Label ID="EraEffects" Anchor="L,T" Align="left" Style="ParchmentBody" WrapWidth="470"/>
+			</Stack>
+		</Stack>
+
+		<!-- Window Frame -->
+		<Grid ID="WindowFrame" Size="parent+10,parent+10" Anchor="C,C" Texture="Ages_FrameNormal" SliceTextureSize="134,134" SliceCorner="60,74" SliceSize="14,2"/>
+
+		<Label ID="Title" Style="EventPopupTitle" Anchor="C,T" Align="center" FontStyle="Shadow" ColorSet="White_Black" Offset="0,16"/>
+
+		<Image ID="HeroicFlare" Anchor="C,T" Offset="0,-23" Texture="Ages_FrameGlow" Size="305,58"/>
+
+		<Button ID="Close" Anchor="R,T" Offset="-8,-5" Style="CloseButtonLarge"/>
+
+		<GridButton ID="Continue" Style="MainButton" Anchor="C,B" Size="280,41" Offset="0,5" String="LOC_CONTINUE"/>
+	</Image>
+</Context>

@@ -107,6 +107,8 @@ class SengokuTreeTests(unittest.TestCase):
             "Scripts/JAC_Sengoku_StartingKnowledge.lua", "Scripts/JAC_Sengoku_RebuiltCastles.lua",
             "Scripts/JAC_Sengoku_UnificationPact.lua", "UI/JAC_UnificationPact.xml", "UI/JAC_UnificationPact.lua",
             "UI/JAC_SengokuDarkPolicy.xml", "UI/JAC_SengokuDarkPolicy.lua",
+            "UI/JAC_SengokuReignPopup.xml", "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuAgesView.lua",
+            "UI/JAC_EraProgressPanel_Sengoku.lua",
             "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
             "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",
