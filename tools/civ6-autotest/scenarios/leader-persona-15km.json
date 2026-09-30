@@ -730,6 +730,11 @@
     {
       "action": "screenshot",
       "path": "leader-persona-tree-after-save-load.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS'); if pending and next(pending) then error('native deed notifications remain unprocessed') end; if Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY') then error('native initialization crossed a deed turn; history needs verification') end; local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then count=count+1; local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do if gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then error('AI appointed an unjoined persona: '..p:GetID()..'/'..row.LeaderType) end end end end; if count~=21 then error('all 21 AI houses required') end; return 'no pending notifications or unjoined AI Governors'"
     }
   ]
 }

@@ -3,6 +3,8 @@
 include("JAC_PersonaTreeRules");
 local Rules = JAC_PersonaTreeRules;
 local SnapshotAlliances;
+local OnPlayerTurnStarted;
+local PENDING = "JAC_PERSONA_PENDING_DEEDS";
 local PREFIX = "JAC_PERSONA_";
 local RESULT = "JAC_PERSONA_RESULT";
 local PERSONALITIES = { BRAVE=true, CALM=true, CAREFUL=true, JOLLY=true, GENTLE=true, BOLD=true, FICKLE=true, LOYAL=true };
@@ -165,12 +167,14 @@ end
 
 local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
 local function SettledCity(owner, row)
-    if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil; end
+    if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil, true; end
     local governor = NativeGovernor(owner, row);
-    if not governor or not governor.appointed or not governor.base or
-       not governor.established or governor.neutralized > 0 or governor.cityOwner ~= owner then return nil; end
+    if not governor then return nil, false; end
+    if not governor.appointed or not governor.base or
+       not governor.established or governor.neutralized > 0 or governor.cityOwner ~= owner then return nil, true; end
     local city = governor.cityID and CityManager.GetCity(owner, governor.cityID);
-    if city and city:GetOwner() == owner then return city; end
+    if city and city:GetOwner() == owner then return city, true; end
+    return nil, true;
 end
 
 -- Flag all owned city centres, so native reassignment immediately carries purchased skills.
@@ -228,6 +232,56 @@ local function Award(row, deed, identity)
     return true;
 end
 
+-- Pending notifications are immutable gameplay identities, not UI-provided eligibility.
+-- Keep them through save/load; never mark a deed/ally/AI turn done before a native read.
+local function Defer(row, deed, identity, cityID, x, y)
+    local pending = Game:GetProperty(PENDING) or {};
+    local key = row.LeaderType .. "_" .. deed .. "_" .. identity;
+    if not pending[key] then
+        local sequence = (Game:GetProperty("JAC_PERSONA_PENDING_SEQUENCE") or 0) + 1;
+        Game:SetProperty("JAC_PERSONA_PENDING_SEQUENCE", sequence);
+        pending[key] = {sequence=sequence, leader=row.LeaderType, owner=Get(row.LeaderType, "OWNER"),
+            deed=deed, identity=identity, turn=Game.GetCurrentGameTurn(), cityID=cityID, x=x, y=y};
+        Game:SetProperty(PENDING, pending);
+    end
+end
+local function HandleDeed(row, deed, identity, cityID, x, y)
+    local owner = Get(row.LeaderType, "OWNER");
+    if Get(row.LeaderType, "STATE") ~= "GOVERNOR" or not Player(owner, true) then return; end
+    local city, ready = SettledCity(owner, row);
+    if not ready then Defer(row, deed, identity, cityID, x, y); return; end
+    if not city then return; end
+    if deed == "BUILDING" and city:GetID() ~= cityID then return; end
+    if deed == "VICTORY" and Map.GetPlotDistance(city:GetX(), city:GetY(), x, y) > Parameter("VICTORY_RADIUS") then return; end
+    Award(row, deed, identity);
+end
+local function FlushPending()
+    local pending = Game:GetProperty(PENDING) or {};
+    local keys = {}; for key in pairs(pending) do keys[#keys+1] = key; end
+    table.sort(keys, function(a,b)
+        local first, second = pending[a].sequence or 0, pending[b].sequence or 0;
+        if first ~= second then return first < second; end
+        return a < b;
+    end);
+    for _,key in ipairs(keys) do
+        local event = pending[key];
+        local row = Definition(event.leader);
+        if row and Get(event.leader, "OWNER") == event.owner and NativeGovernor(event.owner, row) then
+            if event.turn == Game.GetCurrentGameTurn() then
+                if event.deed == "TURN" then OnPlayerTurnStarted(event.owner);
+                else HandleDeed(row, event.deed, event.identity, event.cityID, event.x, event.y); end
+                -- Reload after processing, so another person's deferred event is not overwritten.
+                local remaining = Game:GetProperty(PENDING) or {};
+                remaining[key] = nil;
+                Game:SetProperty(PENDING, next(remaining) and remaining or nil);
+            else
+                -- Current assignment cannot prove historical eligibility. Preserve evidence.
+                Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
+            end
+        end
+    end
+end
+
 local function MajorIDs()
     local ids = PlayerManager.GetAliveMajorIDs(); -- BlackDeathScenario.lua:461.
     table.sort(ids);
@@ -268,7 +322,7 @@ local function ChooseAI(owner, row)
     end
 end
 
-local function OnPlayerTurnStarted(owner)
+OnPlayerTurnStarted = function(owner)
     Reconcile(); SyncEffects();
     local p = Player(owner, true);
     if not p then return; end
@@ -276,22 +330,26 @@ local function OnPlayerTurnStarted(owner)
     for row in GameInfo.JAC_LeaderPersonas() do
         local leader = row.LeaderType;
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
-            SnapshotAlliances(owner, leader);
-            local settled = SettledCity(owner, row);
-            if settled and Get(leader, "GOVERN_LAST_TURN") ~= turn then
-                Set(leader, "GOVERN_LAST_TURN", turn);
-                Award(row, "GOVERN_TURN", tostring(turn));
-            end
-            for _,other in ipairs(MajorIDs()) do
-                if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
-                    -- Count each partner once ever; renewal and save/load cannot farm merit.
-                    Set(leader, "ALLY_SEEN_" .. other, 1);
-                    if settled then Award(row, "ALLIANCE", tostring(other)); end
+            if not NativeGovernor(owner, row) then
+                Defer(row, "TURN", tostring(turn));
+            else
+                SnapshotAlliances(owner, leader);
+                local settled = SettledCity(owner, row);
+                if settled and Get(leader, "GOVERN_LAST_TURN") ~= turn then
+                    Set(leader, "GOVERN_LAST_TURN", turn);
+                    Award(row, "GOVERN_TURN", tostring(turn));
                 end
-            end
-            if not p:IsHuman() and Get(leader, "AI_LAST_TURN") ~= turn then
-                Set(leader, "AI_LAST_TURN", turn);
-                ChooseAI(owner, row);
+                for _,other in ipairs(MajorIDs()) do
+                    if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
+                        -- Count each partner once ever; renewal and save/load cannot farm merit.
+                        Set(leader, "ALLY_SEEN_" .. other, 1);
+                        if settled then Award(row, "ALLIANCE", tostring(other)); end
+                    end
+                end
+                if not p:IsHuman() and Get(leader, "AI_LAST_TURN") ~= turn then
+                    Set(leader, "AI_LAST_TURN", turn);
+                    ChooseAI(owner, row);
+                end
             end
         end
     end
@@ -303,10 +361,7 @@ local function OnBuildingConstructed(owner, cityID, buildingIndex, plotIndex, or
     if original ~= true or not GameInfo.Buildings[buildingIndex] then return; end
     for row in GameInfo.JAC_LeaderPersonas() do
         if Get(row.LeaderType, "OWNER") == owner then
-            local city = SettledCity(owner, row);
-            if city and city:GetID() == cityID then
-                Award(row, "BUILDING", tostring(plotIndex) .. "_" .. tostring(buildingIndex));
-            end
+            HandleDeed(row, "BUILDING", tostring(plotIndex) .. "_" .. tostring(buildingIndex), cityID);
         end
     end
 end
@@ -323,13 +378,10 @@ local function OnCombatOccurred(attacker, attackerUnit, defender, defenderUnit)
     if Dead(du) and not Dead(au) then winner, loser = attacker, du;
     elseif Dead(au) and not Dead(du) then winner, loser = defender, au;
     else return; end
-    local radius = Parameter("VICTORY_RADIUS");
     for row in GameInfo.JAC_LeaderPersonas() do
         if Get(row.LeaderType, "OWNER") == winner then
-            local city = SettledCity(winner, row);
-            if city and Map.GetPlotDistance(city:GetX(), city:GetY(), loser:GetX(), loser:GetY()) <= radius then
-                Award(row, "VICTORY", tostring(loser:GetOwner()) .. "_" .. tostring(loser:GetID()) .. "_" .. Game.GetCurrentGameTurn());
-            end
+            HandleDeed(row, "VICTORY", tostring(loser:GetOwner()) .. "_" .. tostring(loser:GetID()) .. "_" .. Game.GetCurrentGameTurn(),
+                nil, loser:GetX(), loser:GetY());
         end
     end
 end
@@ -339,6 +391,9 @@ GameEvents.JAC_LeaderPersonaEvolve.Add(function(owner, params)
 end);
 GameEvents.JAC_LeaderPersonaFinalize.Add(function(owner, params)
     CompleteEvolution(owner, type(params) == "table" and params.Leader or nil);
+end);
+GameEvents.JAC_LeaderPersonaNativeReady.Add(function(owner)
+    if Player(owner, true) then Reconcile(); FlushPending(); end
 end);
 GameEvents.OnGameTurnStarted.Add(Reconcile);
 GameEvents.OnGameTurnStarted.Add(SyncEffects);
