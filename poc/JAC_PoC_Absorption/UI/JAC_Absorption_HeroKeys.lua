@@ -17,8 +17,34 @@ local function PublishHeroKeys()
         return id and { player = id.player, id = id.id } or nil
       end
     end
+    local observed = {}
+    reads.GetObservation = function(token) return observed[token] end
+    reads.Observe = function(token, class)
+      local origin = reads.GetHeroOriginCityID(class)
+      observed[token] = { Claim = reads.GetHeroClaimPlayer(class), Origin = origin }
+    end
     ExposedMembers.JAC_HeroReadAPI = reads
   end
 end
 PublishHeroKeys()
 Events.LoadScreenClose.Add(PublishHeroKeys)
+
+-- UI caches update after the game-core chunk returns. Observe only at the engine's
+-- publish-complete boundary (or after loading), never during the mutation itself.
+local function ObservePendingHeroes()
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  if not reads or not reads.Observe then return end
+  local state = Game:GetProperty("JAC_ABSORPTION_STATE_V1")
+  for _, tx in pairs(state and state.Transactions or {}) do
+    for _, snap in ipairs(tx.Units or {}) do
+      local intent = snap.HeroSpawnIntent
+      if intent and intent.AwaitingUI then
+        reads.Observe(snap.Token .. ":created:" .. intent.CreatedID, snap.Hero.Class)
+      end
+    end
+  end
+  local fixture = Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")
+  if fixture and fixture.Kind == "FIXTURE" then reads.Observe(fixture.Token, fixture.Class) end
+end
+Events.GameCoreEventPublishComplete.Add(ObservePendingHeroes)
+Events.LoadScreenClose.Add(ObservePendingHeroes)

@@ -409,7 +409,7 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()  # The original request still identifies the completed operation.
         self.assertEqual(self.snapshot(), before)
 
-    def test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes(self):
+    def split_hero_contexts(self):
         self.add_native_hero(second=True)
         self.run_lua("""local full=Game.GetHeroesManager()
           UI_HERO_MANAGER={GetHeroClaimPlayer=full.GetHeroClaimPlayer,
@@ -418,12 +418,25 @@ class AbsorptionTests(unittest.TestCase):
           CORE_HERO_MANAGER={CreateHero=full.CreateHero,SetHeroDiscovered=full.SetHeroDiscovered,
             IsHeroDiscovered=full.IsHeroDiscovered}
           Game.GetHeroesManager=function() return UI_HERO_MANAGER end
-          Events={LoadScreenClose={Add=function() end}}""")
+          Events={LoadScreenClose={Add=function() end},GameCoreEventPublishComplete={Add=function(f) PUBLISH_HERO_UI=f end}}""")
         self.run_lua((MOD / "UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8"))
         self.run_lua("""Game.GetHeroesManager=function() return CORE_HERO_MANAGER end
           assert(ExposedMembers.JAC_HeroReadAPI.CreateHero==nil)
           assert(ExposedMembers.JAC_HeroReadAPI.SetHeroDiscovered==nil)""")
-        self.apply()
+    def test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes(self):
+        self.split_hero_contexts()
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        spawns = self.g.SPAWNS
+        with self.assertRaisesRegex(Exception, "did not complete"):
+            self.a.Verify("test-absorption", True)
+        self.load_scripts()
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual(self.g.SPAWNS, spawns)
+        for _ in range(2):
+            self.run_lua("PUBLISH_HERO_UI()")
+            tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "COMPLETE")
         self.load_scripts()
         self.assertTrue(self.a.Verify("test-absorption", True))
         self.run_lua("""local a=ExposedMembers.JAC_Absorption
@@ -431,6 +444,20 @@ class AbsorptionTests(unittest.TestCase):
           local h=a.SnapshotUnit(u).Hero
           assert(h.ClaimOwner==2 and h.Origin.Owner==2 and h.Lifespan==17 and h.ActionCharges==2)
           assert(a.GetState().Transactions['test-absorption'].HeroResults.native.Outcome~='SUICIDE')""")
+
+    def test_fresh_published_hero_mismatch_is_archived_without_accepting_stale_ui_as_success(self):
+        self.split_hero_contexts()
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.run_lua("HERO_CLAIMS[0]=1;PUBLISH_HERO_UI()")
+        tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.run_lua("PUBLISH_HERO_UI()")
+        tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(tx.HeroResults.native.Outcome, "SUICIDE")
+        self.assertEqual(tx.HeroResults.native.Cause, "HERO_MANAGER_MISMATCH")
+        self.assertTrue(self.a.Verify("test-absorption", True))
 
     def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
         self.add_native_hero(second=True)
@@ -757,7 +784,7 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('''
           NATIVE_TEST_LIFE_KEY=UnitPropertyKeys.LifespanRemaining
           UnitPropertyKeys={LifespanRemaining=-1318296071}
-          Events={LoadScreenClose={Add=function(f) HERO_KEYS_ON_LOAD=f end}}
+          Events={LoadScreenClose={Add=function(f) HERO_KEYS_ON_LOAD=f end},GameCoreEventPublishComplete={Add=function() end}}
         ''')
         self.run_lua(ui)
         self.assertEqual(self.g.ExposedMembers.JAC_HeroLifespanKey, -1318296071)
@@ -1053,7 +1080,7 @@ class AbsorptionTests(unittest.TestCase):
 
     def live_scenario_fixture(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json").read_text(encoding="utf-8"))
-        steps = [step for step in data["steps"] if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner"]
+        steps = [step for step in data["steps"] if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner" and not step.get("capture_as", "").startswith("JAC_ABSORPTION_SYNC_")]
         self.run_lua('''
           ExposedMembers.JAC_HeroLifespanKey=UnitPropertyKeys.LifespanRemaining
           local majors={};for id=0,21 do
@@ -1173,6 +1200,8 @@ class AbsorptionTests(unittest.TestCase):
         self.live_scenario_fixture()
         steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                            .read_text(encoding='utf-8'))['steps']
+        steps = [step for step in steps if not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
+                 and 'JAC_ABSORPTION_FIXTURE_UI_WAIT' not in step.get('condition', {}).get('code', '')]
         self.run_lua('''
           Game.GetLocalPlayer=function() return 0 end
           for id=4,21 do
@@ -1336,7 +1365,7 @@ class AbsorptionPackageTests(unittest.TestCase):
                 self.assertIsNone(compile_error(step["code"]))
             if step["action"] == "wait_for":
                 self.assertIsNone(compile_error(step["condition"]["code"]))
-        captures = {step["capture_as"] for step in steps if "capture_as" in step}
+        captures = {step["capture_as"] for step in steps if "capture_as" in step and not step["capture_as"].startswith("JAC_ABSORPTION_SYNC_")}
         self.assertEqual(captures, {"ABSORPTION_IMMEDIATE", "ABSORPTION_AFTER_AI_TURN"})
         self.assertEqual({step["equals_capture"] for step in steps if "equals_capture" in step}, captures)
         self.assertEqual(sum(step["action"] == "save" for step in steps), 2)

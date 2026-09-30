@@ -742,11 +742,24 @@ local function StageHero(state, tx, snap)
       end
     end
     assert(not intent.CreatedID or intent.CreatedID == unit:GetID(), "native Hero candidate identity changed")
-    intent.CreatedID = unit:GetID()
+    if intent.CreatedID == nil then
+      intent.CreatedID = unit:GetID()
+      local native = Game.GetHeroesManager()
+      intent.AwaitingUI = native.GetHeroClaimPlayer == nil or nil
+    end
     Save(state)
   else
     assert(intent and not intent.Before[unit:GetID()] and
       (not intent.CreatedID or intent.CreatedID == unit:GetID()), "native Hero token/candidate collision")
+  end
+  if intent.AwaitingUI then
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    local token = snap.Token .. ":created:" .. intent.CreatedID
+    if not reads or not reads.GetObservation or not reads.GetObservation(token) then
+      error("JAC_ABSORPTION_WAITING_UI", 0)
+    end
+    intent.AwaitingUI = nil
+    Save(state)
   end
   local ok = pcall(VerifyHero, unit, snap, false)
   if not ok then
@@ -1124,6 +1137,11 @@ function A.Resume(id)
   for name in pairs(tx.Adapters) do assert(adapters[name], "missing absorption adapter: " .. name) end
   local ok, result = pcall(Execute, state, tx)
   if not ok then
+    if tostring(result) == "JAC_ABSORPTION_WAITING_UI" then
+      tx.Status, tx.Error = "WAITING_UI", nil
+      Save(state)
+      return R.Copy(tx)
+    end
     tx.Status, tx.Error = "BLOCKED", tostring(result)
     Save(state)
     Log("blocked id=" .. id .. " reason=" .. tx.Error)

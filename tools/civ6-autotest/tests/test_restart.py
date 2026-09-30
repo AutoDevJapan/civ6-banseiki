@@ -416,8 +416,6 @@ class RestartActionTests(unittest.TestCase):
             wait.assert_not_called()  # the restart already proved FrontEnd answers
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class OrphanReporterTests(unittest.TestCase):
@@ -464,3 +462,7 @@ class OrphanReporterTests(unittest.TestCase):
         with patch("restart._civ_process_ids", return_value={41}), patch("restart._process_rows") as rows:
             self.assertEqual(close_orphaned_civ_reporters(), [])
         rows.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
