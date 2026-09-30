@@ -202,11 +202,11 @@ class HistoricalEventTests(unittest.TestCase):
         scenario = (ROOT / "tools/civ6-autotest/scenarios/historical-events-15km.json").read_text(encoding="utf-8")
         self.assertNotIn("Game.GetCurrentGameTurn()~=", scenario)  # raw turn compares break at start turn 16603
 
-    def test_resource_events_use_the_reserved_sites_of_the_resources_mod(self):
+    def test_resource_events_boost_the_research_of_the_reserved_sites(self):
         lua = (MOD / "Scripts/JAC_HistoricalEvents.lua").read_text(encoding="utf-8")
-        self.assertIn("ExposedMembers.JAC_Resources", lua)
-        self.assertIn("api.RevealSite(row.SiteId)", lua)
-        self.assertIn('resource.Action == "reveal"', lua)  # trade access and ownership are records only (Q43)
+        # SSOT 3.2: the resources mod alone reveals a site (its year or research); the resource rows are records only.
+        self.assertNotIn("RevealSite", lua)
+        self.assertNotIn("JAC_HistoricalEventResources", lua)
         self.assertNotIn("ResourceBuilder", lua)  # the resources mod is the only writer of reserved sites
         self.assertNotIn("TransferCity", lua)
         sites: dict[str, list[dict[str, str]]] = {}
@@ -229,11 +229,15 @@ class HistoricalEventTests(unittest.TestCase):
             if action == "reveal":
                 with self.subTest(site=site_id):
                     self.assertIn(site_id, sites)  # a reserved site of the resources mod
-                    # The site's own research reveals it too; that research is one of the event's prerequisites.
+                    # The site's research reveals it; the event boosts that research and has it as a prerequisite.
                     techs = {s.get("tech") for s in sites[site_id]} - {None}
                     prereqs = {t for (t,) in db.execute("SELECT TechnologyType FROM JAC_HistoricalEventPrereqTechs "
                                                         "WHERE EventType = ?", (event,))}
                     self.assertLessEqual(techs, prereqs)
+                    boost = db.execute("SELECT BoostTech FROM JAC_HistoricalEvents WHERE EventType = ?",
+                                       (event,)).fetchone()[0]
+                    if techs:
+                        self.assertEqual(techs, {boost})
         # Nishimikawa is reserved on the adopted 15 km map only (SSOT 3.2; 20 km is for comparison).
         self.assertEqual(len(sites["gold-sado-nishimikawa"]), 1)
 
@@ -291,7 +295,7 @@ class HistoricalEventTests(unittest.TestCase):
         schema = (MOD / "Data/JAC_HistoricalEvents_Schema.sql").read_text(encoding="utf-8")
         tables = set(re.findall(r"CREATE TABLE (\w+)", schema))
         referenced = {a or b for a, b in re.findall(r'"(JAC_HistoricalEvent\w*)"|GameInfo\.(JAC_\w+)', lua)}
-        self.assertEqual(referenced, tables)
+        self.assertEqual(referenced, tables - {"JAC_HistoricalEventResources"})  # records only (SSOT 3.2)
         # The UI name override reads the same Game property the gameplay script writes.
         ui = (ROOT / "poc/JAC_PoC_CustomCivs/UI/JAC_CivNameOverride.lua").read_text(encoding="utf-8")
         self.assertIn('local CIV_NAME_PREFIX = "JAC_CIV_NAME_"', lua)

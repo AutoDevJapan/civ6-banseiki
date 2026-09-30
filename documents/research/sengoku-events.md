@@ -18,7 +18,7 @@
 2. **研究による早期解放**：`earlier_by` のいずれかを先に研究した勢力は、史実年より前にそのイベントの効果を使える。鉄砲伝来は `T12`、キリスト教の伝来は `C19`／`C13`、検地は `C20`／`T31` など。史実年になったら、未研究の影響勢力には `boost` の研究へのひらめき／着想だけを与える（SSOT 3.2）。
 3. **家名を伴うイベント**：`house_specific: true` のものは、`house` の勢力では固有名で、他の勢力では `generic_name` で表示する。豊臣は勢力に無く、織田家が羽柴→豊臣に切り替わるため、豊臣期の固有名は `ODA` に置く（SSOT 3.2）。太閤検地・刀狩・身分統制令のような一般的な制度名は家固有にしない（太閤検地はすべての家に『太閤検地』と表示。SSOT 3.2）。
 4. **家名の切替（rename）**：長尾→上杉、松平→徳川、本能寺の変の後の織田→羽柴→豊臣を同じ仕組みで行う（SSOT 3.1・3.2）。Civilization ID は変えず、表示名を共有状態から切り替える。切替の段階はイベントの `rename`（`faction`・`from`・`to`）で表し、そのイベントの年月で1段ずつ切り替える。織田は本能寺の変（`EV_HONNOJI`、1582年6月）で羽柴、豊臣姓の下賜（`EV_TOYOTOMI_SURNAME`、1586年10月）で豊臣にする案（SSOT は各段階の時期を決めていないため Q56）。
-5. **資源開発**：`resource` を持つイベントは、`start_year` まで地図に現れない／交易アクセスが無効の資源を有効にする（SSOT 3.2『1534年にまだ開発されていない資源』）。`action` は `reveal`（タイルに出現）、`trade_access`（港の交易アクセス。硝石）、`ownership`（所有移転。資源自体は初期から存在。移転先の勢力を `owner_to` に持つ。所有を自動で移すかは Q43）。
+5. **資源開発**：`resource` を持つイベントは、`start_year` まで地図に現れない／交易アクセスが無効の資源に対応する（SSOT 3.2『1534年にまだ開発されていない資源』）。`reveal` の資源は出来事では置かず、資源配置が地点の年か地点の研究で置く。出来事は史実の年月に、その研究へのひらめき（`boost`）を与える（オーナー判断 2026-09-30、SSOT 3.2。§6）。`action` は `reveal`（タイルに出現）、`trade_access`（港の交易アクセス。硝石）、`ownership`（所有移転。資源自体は初期から存在。移転先の勢力を `owner_to` に持つ。所有を自動で移すかは Q43）。
 6. **助言ポップアップと Boost**（オーナー判断：和睦などを、ひらめきを与える形で助言役のポップアップから薦める。SSOT 3.1「因縁は…和睦を促すイベント（ひらめきを与え、助言役のポップアップで知らせる）で解消へ導く」）：
    - `boost`：史実の年に、影響勢力（`ALL` は全勢力）のうち、その研究を終えておらず Boost も済んでいない勢力に与えるひらめき（技術）／着想（社会制度）。`earlier_by` のうち1つを選んだ。表示は公式の Boost 画面（`BoostUnlockedPopup.lua` の技術 `ShowTechBoost`、進み具合の表示は122行目。社会制度は140行目の `ShowCivicBoost`）に任せる。済んでいるかは公式パネルと同じ `HasBoostBeenTriggered`／`CanTriggerBoost`（`TechBoostsPanel.lua:91`）で見る。Boost の量は公式の `Boosts.Boost`（`Technologies.xml:457` 以下）と同じ考え方で、閃き40%（ツリー設計案）の暫定値。
    - `advisor_popup`：助言役のポップアップ（公式の `AdvisorPopup.lua:94` `ShowAdvisorPopup`。`LuaEvents.TutorialUIRoot_AdvisorRaise` で開く、521行目）で薦める行動（日英露）。null のイベントは通常の通知と Boost の表示だけ。画面に出すのは人間の勢力だけで、AI には出さない。
@@ -31,7 +31,7 @@
 | `EV_JINKAISHU` | C05 | — |
 | `EV_SHIMAZU_UNIFY_1` | C10 | 分家と和睦し、薩摩の国人と盟約を結びましょう。 |
 | `EV_TENBUN_FAMINE` | T07 | 兵糧蔵を建てて、飢饉に備えましょう。 |
-| `EV_IKUNO_SILVER` | T06 | — |
+| `EV_IKUNO_SILVER` | T09 | — |
 | `EV_TENBUN_DATE` | — | 父子の争いを和睦で収め、蘆名との仲を立て直しましょう。 |
 | `EV_TEPPO` | T12 | — |
 | `EV_KUNITOMO_GUN` | T13 | — |
@@ -85,7 +85,7 @@
 | `EV_SHINBUN_SEIDO` | C28 | — |
 | `EV_BUNROKU` | T24 | — |
 | `EV_EZO_MATSUMAE` | C11 | 蠣崎氏との交易の取り決めを結び直しましょう。 |
-| `EV_AIKAWA` | T09 | — |
+| `EV_AIKAWA` | T14 | — |
 | `EV_SAN_FELIPE` | C18 | — |
 | `EV_CHOSOKABE_HYAKKAJO` | C05 | — |
 
@@ -195,8 +195,8 @@
 - 史実：1542（天文11年（山名祐豊の開発と伝わる））。地域：但馬
 - 影響勢力：足利将軍家、尼子（中心：足利将軍家）
 - 早期解放の研究：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T09（`TECH_JAC_SENGOKU_CUPELLATION`）
-- 史実の年のBoost：T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）。助言ポップアップ：なし
-- 案（暫定）：但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルを地図に追加し、鉱山の建設を解放。T09（灰吹法）を最初に研究した勢力が出れば、年より早く地図に現れる（資源配置と同じ）。
+- 史実の年のBoost：T09（`TECH_JAC_SENGOKU_CUPELLATION`。地点の研究）。助言ポップアップ：なし
+- 案（暫定）：但馬・生野に銀山が出現。銀（RESOURCE_SILVER）のタイルは資源配置が1542年に地図に置く。T09（灰吹法）を最初に研究した勢力が出れば、年より早く地図に現れる（資源配置と同じ）。出来事はタイルを置かない（§6）。
 - 資源：`RESOURCE_SILVER`、生野・但馬 (35.167, 134.790)、`reveal`、1542年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『生野銀山』（確度：medium）
 - 補足：但馬は1534年配分で足利将軍家領。取得先の勢力が変わっていれば現所有者が利益を得る。
@@ -681,7 +681,7 @@
 - 影響勢力：長尾（中心：長尾）
 - 早期解放の研究：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）
 - 史実の年のBoost：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）。助言ポップアップ：なし
-- 案（暫定）：上杉が佐渡の本間氏を平定。西三川の砂金（金）が採れる。金（RESOURCE_JAC_GOLD案）を佐渡に追加。相川金銀山の発見（1596）と本格開発（1601）の前提。
+- 案（暫定）：上杉が佐渡の本間氏を平定。西三川の砂金（金）が採れるようになる。出来事は砂金を置かず、砂金が現れる研究 T14 へのひらめきを与える。砂金（RESOURCE_JAC_GOLD案）は T14 を最初の勢力が終えたときか1593年に現れる（オーナー判断 2026-09-30、SSOT 3.2）。相川金銀山の発見（1596）と本格開発（1601）の前提。
 - 資源：`RESOURCE_JAC_GOLD`、西三川・佐渡 (37.819, 138.273)、`reveal`、1593年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『西三川砂金山』（確度：medium）
 
@@ -752,7 +752,7 @@
 - 史実：1596（慶長元年（1596）発見、慶長6年（1601）本格開発）。地域：佐渡
 - 影響勢力：長尾（中心：長尾）
 - 早期解放の研究：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`）、T06（`TECH_JAC_SENGOKU_ORE_PROSPECTING`）、T09（`TECH_JAC_SENGOKU_CUPELLATION`）
-- 史実の年のBoost：T09（`TECH_JAC_SENGOKU_CUPELLATION`）。助言ポップアップ：なし
+- 史実の年のBoost：T14（`TECH_JAC_SENGOKU_MINE_MANAGEMENT`。地点の研究）。助言ポップアップ：なし
 - 案（暫定）：佐渡の相川に金銀山が発見される（1601年に本格開発）。佐渡の鉱業の最終段階で、金銀のタイルを追加し、T14で産出が大きく増える。鶴子銀山（1542年、銀）は別の資源で、採用の15 kmの地図では隣のタイルに置く。
 - 資源：`RESOURCE_JAC_GOLD`、相川・佐渡 (38.032, 138.235)、`reveal`、1596年〜
 - 出典：documents/research/japan-map-resources.md（資源の代表地点と年代）；Wikipedia日本語版『佐渡金山』（確度：medium）
@@ -826,7 +826,7 @@
 - 黒川・中山の金は開始時から地図にあるため、`EV_KOSHU_GOLD` はタイルを追加しない。
 - 会津の漆は1590年に現れる（資源配置では開始時に非表示）。1589年の `EV_SURIAGEHARA` の時点では地図に無いので、漆の所有移転は扱わない。
 - 硝石の平戸での交易アクセスは、資源配置と同じく1586年から。1550年の `EV_HIRADO_PORTUGUESE` は来航の通知と Boost だけ。長崎（`EV_NAGASAKI`）は資源配置に無いため交易アクセスを付けない。どちらを早めるかは Q55。
-- `reveal` の早期出現は、資源配置の `REVEAL_TECH`（`tools/japan_map_scale/generate.py`）の研究を最初の勢力が終えた時点。`earlier_by` はこの研究を含む。それ以外の `earlier_by` は Boost の候補で、資源を早く出さない。
+- `reveal` の資源は出来事では置かない。現れるのは、資源配置の `REVEAL_TECH`（`tools/japan_map_scale/generate.py`）の研究を最初の勢力が終えた時点か、地点の年（オーナー判断 2026-09-30、SSOT 3.2）。`earlier_by` はこの研究を含み、`boost` はこの研究にする（研究の無い会津の漆は C15 のまま）。それ以外の `earlier_by` で出来事が早く起きても、資源は早く出ない。
 - 鶴子銀山（佐渡・1542年ごろ）と相川（1596年発見）は別の資源で、採用の15 kmの地図では隣り合う別タイル。西三川砂金（1593ごろ）は `EV_SADO_SUBJUGATION`。
 - 足尾銅山（1550年発見説）、土肥・宝達金山（1577／1586年）、伊勢湾の捕鯨（16世紀後半）、延沢銀山（1596〜1615）は、年代・確度が低く、イベントとしては採用しなかった。地図側で `start_year` を持たせる扱いに任せる（japan-map-resources.md 参照）。
 - 塩・茶・絹・米・馬・魚は、特定の年に『開発』されたと言える出来事が乏しく、イベントにしなかった。茶は北野大茶湯（`EV_KITANO_TEA`）で価値の上昇として扱う。

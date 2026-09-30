@@ -1,6 +1,6 @@
 # 史実の出来事の仕組み（JAC_PoC_HistoricalEvents）
 
-SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究を終えた勢力はその年より早く使える」「史実の年が来たとき、関係する研究を終えていない勢力には、その研究へのひらめき（ブースト）だけを与える」「史実イベントは、暦の月までできるだけ合わせて起こす」「家名の切り替えは、長尾→上杉、松平→徳川、本能寺の変の後の織田→羽柴→豊臣を同じ仕組みで行う」と、3.1「因縁は和睦を促すイベント（ひらめきを与え、助言役のポップアップで知らせる）で解消へ導く」を、データ駆動で実装した PoC。`RULESET_JAC_BANSEIKI` のときだけ有効になる。地図では絞らない：史実の出来事は戦国パックの機能（SSOT 3.2）で、戦国パック（ツリー・暦。`JAC_PoC_SengokuTrees`）も万世紀ルールセットだけを条件にどの地図でも動くため、それに合わせる。日本マップ限定なのは資源の予約地点だけで、それは下の「資源を置く出来事」のとおり資源 MOD が無ければ何もしない。
+SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究を終えた勢力はその年より早く使える」「史実の年が来たとき、関係する研究を終えていない勢力には、その研究へのひらめき（ブースト）だけを与える」「史実イベントは、暦の月までできるだけ合わせて起こす」「家名の切り替えは、長尾→上杉、松平→徳川、本能寺の変の後の織田→羽柴→豊臣を同じ仕組みで行う」と、3.1「因縁は和睦を促すイベント（ひらめきを与え、助言役のポップアップで知らせる）で解消へ導く」を、データ駆動で実装した PoC。`RULESET_JAC_BANSEIKI` のときだけ有効になる。地図では絞らない：史実の出来事は戦国パックの機能（SSOT 3.2）で、戦国パック（ツリー・暦。`JAC_PoC_SengokuTrees`）も万世紀ルールセットだけを条件にどの地図でも動くため、それに合わせる。日本マップ限定なのは資源の予約地点だけで、それは下の「資源を伴う出来事」のとおり資源 MOD が置き、出来事は置かない。
 
 出来事の一覧は [`spec/data/sengoku-events.json`](../spec/data/sengoku-events.json)（60件。設計は [research/sengoku-events.md](../research/sengoku-events.md)）が正本で、`tools/generate_sengoku_events.py` がそこから SQL と文言を生成する（手で編集しない）。
 
@@ -25,7 +25,7 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
    - 発動できた（`boosted`／`already`／`no_boost`）ときだけ、プロパティ `JAC_EVENT_BOOSTED_<EventType>` に年が来たターンを書く（効果のフラグは書かない）。`error` のときは書かず、次のターンにもう一度試す。通知も発動できたターンに1回だけ送る
 5. どちらの場合も行うこと（出来事そのものは史実の年に起きるため）
    - 家名：下の「家名の段階」
-   - 資源：`JAC_HistoricalEventResources` のうち `Action='reveal'` の予約地点を、その出来事が誰かに初めて起きたときに1回だけ開示する（下の「資源を置く出来事」）
+   - 資源：置かない。資源 MOD が地点の年か地点の研究で置き、出来事はその研究へのひらめきを与える（下の「資源を伴う出来事」）
    - 通知：`NotificationTypes.USER_DEFINED_1` で本人に送る（`NotifyAll=1` なら全主要勢力。生成した60件はすべて0）。見出しは出来事名、本文は助言の文（助言の無い出来事は共通の「史実の出来事が起きた。」）。家固有の出来事（`House`。一覧の `house_specific`）は、その家には固有名、ほかの家には一般名（`GenericName`）を出す（SSOT 3.2）。ひらめきの後に研究して効果を受けたときは、同じ通知を2度は送らない。文面は LOC キーのまま渡し、各端末の言語で表示する
    - 助言ポップアップ：下の「助言ポップアップ」
 6. `Lua.log` に `[JAC_EVENTS] fired event=… reason=prereq|due …`（効果）か `[JAC_EVENTS] boosted event=… reason=year … boost=…`（ひらめきだけ）を出す
@@ -41,7 +41,7 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
 | `JAC_HistoricalEventTargets` | `EventType`、`CivilizationType` | 対象勢力。行が無ければ全主要勢力 |
 | `JAC_HistoricalEventModifiers` | `EventType`、`ModifierId` | 起きた勢力に付けるプレイヤーのモディファイア（今は行なし） |
 | `JAC_HistoricalEventRenames` | `EventType`、`CivilizationType`、`Name` | 文明の表示名の切替。文明 ID は変えない |
-| `JAC_HistoricalEventResources` | `EventType`、`SiteId`、`Action`、`OwnerTo` | `reveal`：開示する資源の予約地点（資源 MOD の地点 ID）。`trade_access`（平戸の硝石）と `ownership`（石見銀山・奥出雲の鉄を毛利へ）は**記録だけ**で、Lua は使わない（交易アクセスは未実装。所有の自動移転はしない：Q43） |
+| `JAC_HistoricalEventResources` | `EventType`、`SiteId`、`Action`、`OwnerTo` | すべて**記録だけ**で、Lua は使わない。`reveal`：資源 MOD が開示する予約地点（資源 MOD の地点 ID。出来事は開示しない：SSOT 3.2）。`trade_access`（平戸の硝石）は交易アクセスが未実装、`ownership`（石見銀山・奥出雲の鉄を毛利へ）は所有の自動移転をしない（Q43） |
 
 生成の対応：`affected_factions` → 対象、`earlier_by` → 前提、`boost` → `Boost*`、`house_specific`・`house`・`generic_name` → `House`・`GenericName`、`advisor_popup` → `Description`・`Advisor=1`、`rename` → 家名、`resource` → 資源（地点 ID は `japan-map-resources.json` の座標で引き、`reveal` は資源 MOD の予約地点に無ければ生成を止める）。`gameplay_effect`・`year_end`・`regions`・`sources` などは生成に使わない。
 
@@ -79,7 +79,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 - 出来事がその家に起きたとき（効果でも、ひらめきだけの年でも）、Game プロパティ `JAC_CIV_NAME_<CivilizationType>` に表示名の LOC キーを書く。CustomCivs の `UI/JAC_CivNameOverride.lua` がこれを読み、外交リボン・外交画面・ワールドランキング・都市バナーの文明名を差し替える（既存の仕組み。[house-names.md](house-names.md)）
 - 段階は研究で早まるため、順番どおりに来るとは限らない（例：年で羽柴・豊臣になった後、織田が本能寺の変の別の前提を研究して `reason=prereq` でもう一度起きる）。そこで Game プロパティ `JAC_CIV_NAME_STAGE_<CivilizationType>` に表示中の段階の予定ターンを残し、それより前の段階では上書きしない。最後の段階が残る
 - 家名は日英露：上杉 Uesugi Уэсуги、徳川 Tokugawa Токугава、羽柴 Hashiba Хасиба、豊臣 Toyotomi Тоётоми（一覧は日本語だけなので、生成スクリプトに対応表を置く）
-- 松平・織田の改名も長尾と同じく前提の社会制度（C16 など）で早まる。C16 を早く得た織田は本能寺の変より前に豊臣になりうる（Q66）
+- 松平・織田の改名も長尾と同じく前提の社会制度（C16 など）で早まる。C16 を早く得た織田は本能寺の変より前に豊臣になりうる（オーナー判断 2026-09-30、SSOT 3.2）
 
 ## 助言ポップアップ
 
@@ -93,20 +93,21 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 - ひらめきは、年が来たときに未研究の勢力へ `reason=year` で与える（上の「動き」）。先に研究していた勢力には、ひらめきは無く、ポップアップと通知だけが出る
 - 和睦を薦める10件を1534年の因縁に対応づけて因縁を解消する処理は、因縁の実装側で行う（設計 §2.6）。この PoC は知らせるだけ
 
-## 資源を置く出来事
+## 資源を伴う出来事
 
-資源は、main の資源 MOD（[resources.md](resources.md)、`poc/JAC_PoC_JapanMapScale/Scripts/JAC_Resources.lua`）が生成器で予約した地点に置く。出来事の行は地点 ID だけを持ち、発生時に `ExposedMembers.JAC_Resources.RevealSite(SiteId)` を呼ぶ。置いたタイルは Game プロパティ `JAC_EVENT_RESOURCES_<EventType>` に残す。ログは `resource event=… site=… plot=<タイル>`。
+オーナー判断（2026-09-30、SSOT 3.2）：出来事は資源を置かない。出来事の年月が来たら、その資源が現れる研究へのひらめきを与え、資源は研究の完了か指導者の能力などで現れる。資源は main の資源 MOD（[resources.md](resources.md)、`poc/JAC_PoC_JapanMapScale/Scripts/JAC_Resources.lua`）だけが、予約した地点に、地点の年か、いずれかの勢力の地点の研究（資源配置の `REVEAL_TECH`）の完了（初期知識を除く）で置く。出来事のスクリプトは `RevealSite` を呼ばず、`JAC_HistoricalEventResources` も読まない（記録だけ）。
 
-| 出来事 | 地点 | 年 |
-|---|---|---|
-| 生野銀山 `JAC_EVENT_IKUNO_SILVER` | `silver-ikuno` | 1542 |
-| 佐渡平定 `JAC_EVENT_SADO_SUBJUGATION` | `gold-sado-nishimikawa`（15 km のみ。SSOT 3.2） | 出来事1589、地点1593（Q67） |
-| 会津の漆 `JAC_EVENT_AIZU_LACQUER` | `lacquer-aizu` | 1590 |
-| 相川金銀山 `JAC_EVENT_AIKAWA` | `gold-sado-aikawa` | 1596 |
+| 出来事 | 地点 | 年（出来事／地点） | ひらめき（地点の研究） |
+|---|---|---|---|
+| 生野銀山 `JAC_EVENT_IKUNO_SILVER` | `silver-ikuno` | 1542／1542 | T09 灰吹法（以前は T06） |
+| 佐渡平定 `JAC_EVENT_SADO_SUBJUGATION` | `gold-sado-nishimikawa`（15 km のみ。SSOT 3.2） | 1589年8月／1593 | T14 鉱山経営（変更なし） |
+| 会津の漆 `JAC_EVENT_AIZU_LACQUER` | `lacquer-aizu` | 1590年9月／1590 | 地点に研究が無いので C15 のまま。漆は1590年に現れる |
+| 相川金銀山 `JAC_EVENT_AIKAWA` | `gold-sado-aikawa` | 1596／1596 | T14 鉱山経営（以前は T09） |
 
-- 資源 MOD は自分でも、地点の年か、いずれかの勢力の研究完了（初期知識を除く）で同じ地点を開示する。`RevealSite` は開示済みなら何もしないので、どちらが先でも同じタイルに1つだけ置かれる。地点の研究は出来事の前提のどれかに入っている（テストで照合）
-- 資源 MOD は日本マップ4種でだけ読み込まれる。ほかの地図ではログに `resource event=… skipped=resources_mod_not_loaded` を出し、何も置かず、`JAC_EVENT_RESOURCES_<EventType>` も書かない。20 km 地図には西三川の地点が無いので、資源 MOD が `unknown site` を出し、出来事は `plot=not_placed` と記録する
-- 石見銀山（1526年）は開始時から地図に置く（SSOT 3.2、資源 MOD）ので、出来事では開示しない（毛利への所有は記録だけ）
+- 読み方の選択：オーナーの答えは佐渡平定についてだが、「砂金が現れる研究にひらめき、研究の完了か指導者の能力などで現れる」は資源の出し方の決まりとして読み、資源を伴う4件すべてに当てた。出来事の年と地点の年が同じ3件でも、出来事は前提（`earlier_by`）のどれかを先に研究した勢力に早く起きるため、以前は地点の研究より前に資源を置けた（例：T06 だけを得た家の生野銀山）。これは[史実イベント一覧](../research/sengoku-events.md)の「`earlier_by` のうち地点の研究以外は資源を早く出さない」とも食い違っていた。すべてを「ひらめきだけ」にすると、どの資源も地点の年か地点の研究より早くは現れない
+- 地点の研究がある地点では、出来事のひらめきをその研究にする（テストで照合）。そのため生野銀山と相川金銀山のひらめきを替えた。地点の研究はどれも出来事の前提にも入っている
+- 資源 MOD は日本マップ4種でだけ読み込まれる。ほかの地図でも出来事の動きは変わらない（ひらめきと通知だけ）
+- 石見銀山（1526年）は開始時から地図に置く（SSOT 3.2、資源 MOD）ので、開示の対象ではない（毛利への所有は記録だけ）
 - 以前のサンプルの足尾銅山の出来事は一覧に無いので無くなった。足尾の銅は資源 MOD が1550年か鉱脈採掘の研究で置く
 
 ## ひらめきの公式 API の根拠
@@ -123,6 +124,8 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 | 1a | 年が来たとき、前提の技術・社会制度を未研究の勢力には、それ自体ではなくひらめき**だけ**を与える（SSOT 3.2）。研究済みの勢力は影響なし | 実装済み（一覧の `boost`） |
 | 2a | 長尾→上杉は「1561年、または関連する社会制度を先に研究」の条件を維持する | 実装済み（テストで固定） |
 | 6a | 松平→徳川の改名も、長尾→上杉と同じ仕組みの出来事にする | 実装済み（1567年1月） |
+| 2026-09-30 | 松平・織田の改名も長尾と同じく研究で早まる（SSOT 3.2） | 実装どおり（上の「家名の段階」） |
+| 2026-09-30 | 資源を伴う出来事は資源を置かず、資源が現れる研究へのひらめきを与える（SSOT 3.2） | 実装済み（上の「資源を伴う出来事」） |
 | 7a | 本能寺の変の後、織田家の家名表示を羽柴から豊臣へ切り替える（同じ仕組み） | 実装済み（時期は Q56 の推奨①で暫定） |
 | 8a | 室町幕府が終わる1573年、足利家の勢力は残り、将軍として裁定する権能だけを失う | 出来事 `JAC_EVENT_MUROMACHI_END` は通知とひらめきだけ。勢力は消さない。裁定の権能は停戦裁定の MOD 側（[court-arbitration.md](court-arbitration.md)）が扱う |
 | 10a | 関ヶ原の戦いの出来事は置かない | 一覧に無い（テストで固定） |
@@ -152,7 +155,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 | 自然には発動しないひらめきの種類 | `Base/Assets/Gameplay/Data/Technologies.xml:440`（`BOOST_TRIGGER_NONE_LATE_GAME_CRITICAL_TECH`）、`:505`（使用例） |
 | 助言ポップアップ | `Base/Assets/UI/Popups/AdvisorPopup.lua:25-38`（`AdvisorItem`）、`:94`（`ShowAdvisorPopup`）、`:521`（`TutorialUIRoot_AdvisorRaise`）、`Base/Assets/UI/TutorialUIRoot.lua:216-229`（`hmake AdvisorItem`）、`:1565`（発火）、`Base/Assets/UI/TutorialUIRoot.xml:21`（コンテキスト） |
 | ローカルのターン開始・プレイヤー切替の UI イベント | `Base/Assets/UI/ActionPanel.lua:1333-1334` |
-| ゲーム中の資源配置 | 資源 MOD の `RevealSite` に任せる（根拠は [resources.md](resources.md)） |
+| ゲーム中の資源配置 | 資源 MOD だけが置く（根拠は [resources.md](resources.md)）。出来事は地点の研究へのひらめきだけ |
 | 研究済みの判定 | `DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:670`（`HasTech`）、`:555`（`HasCivic`） |
 | ゲームプレイ側の文明 ID | `DLC/WarMachineScenario/Scripts/WarMachineScenario.lua:27`（`GetCivilizationTypeName`） |
 | 独自テーブルの追加 | `DLC/Expansion2/Data/Expansion2_Schema.sql:2`（`CREATE TABLE` を UpdateDatabase で読む） |
