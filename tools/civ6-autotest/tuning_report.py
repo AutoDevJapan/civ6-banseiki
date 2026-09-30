@@ -16,9 +16,16 @@ ARB = re.compile(r'\[JAC_ARB\] (.*)')
 EXPECTED_CHECKPOINTS = {1, 51, 101, 151, 201}
 EXPECTED_REIGNS = [('REIGN_KOJI',66), ('REIGN_EIROKU',73), ('REIGN_GENKI',110),
                    ('REIGN_TENSHO',119), ('REIGN_BUNROKU',178), ('REIGN_KEICHO',189)]
+HOUSE_ROW = re.compile(r'house player=(\d+) civ=CIVILIZATION_JAC_\w+ alive=(true|false)'
+                       r' cities=\d+ castles=\d+ legitimacy=(?:\d+|nil)'
+                       r' age=(?:NONE|GOLDEN|HEROIC|NORMAL|DARK|nil)'
+                       r' policy=(?:JAC_AGE_POLICY_\w+|nil) pact-lead=(?:\d+|nil)')
+ERA_ROW = re.compile(r'era-values grievances=-?\d+(?:\.\d+)? tensions=-?\d+(?:\.\d+)?'
+                     r' trade-minimum-change=-?\d+(?:\.\d+)?')
 
 
-def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | None = None) -> tuple[list[str], int]:
+def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | None = None,
+             checkpoint_positions: dict[int,int] | None = None) -> tuple[list[str], int]:
     """Cross-check saved history, initial players, elimination events and checkpoints.
 
     If a revival or a defeat without a merit event breaks this chain, report partial
@@ -26,6 +33,13 @@ def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | 
     """
     issues, seen, rosters, alive = [], set(), {}, {}
     falls = falls or []
+    def fell_before(fall, turn, position):
+        if fall['turn']!=turn:
+            return fall['turn']<turn
+        if position is None or fall.get('log_position') is None:
+            issues.append(f'cannot order elimination within T+{turn}')
+            return False
+        return fall['log_position']<position
     for checkpoint in checkpoints:
         parts = checkpoint.split(' ; ')
         header = re.fullmatch(r'checkpoint turn=(\d+) era=\S+ targets=\d+', parts[0])
@@ -36,13 +50,17 @@ def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | 
         if turn in seen:
             issues.append(f'duplicate checkpoint: T+{turn}')
         seen.add(turn)
-        houses = [int(m[1]) for part in parts for m in [re.match(r'house player=(\d+) ',part)] if m]
+        house_rows = [part for part in parts if part.startswith('house ')]
+        houses = [int(m[1]) for part in house_rows for m in [HOUSE_ROW.fullmatch(part)] if m]
         if len(houses)!=22 or set(houses)!=set(range(22)):
             issues.append(f'incomplete house observations: T+{turn}')
-        statuses = [m.groups() for part in parts for m in [re.match(r'house player=(\d+) .*?\balive=(true|false)\b',part)] if m]
+        statuses = [m.groups() for part in house_rows for m in [HOUSE_ROW.fullmatch(part)] if m]
         if len(statuses)!=22 or {int(i) for i,_ in statuses}!=set(range(22)):
             issues.append(f'incomplete survivor observations: T+{turn}')
         alive[turn] = {int(i) for i,status in statuses if status=='true'}
+        era_rows = [part for part in parts if part.startswith('era-values ')]
+        if len(era_rows)!=1 or not ERA_ROW.fullmatch(era_rows[0]):
+            issues.append(f'incomplete era observations: T+{turn}')
         local_rosters = set()
         for part in parts:
             if not part.startswith('judgment-roster '):
@@ -67,7 +85,8 @@ def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | 
     if initial!=set(range(22)):
         issues.append('initial roster is not the configured 22 houses')
     for turn,ids in alive.items():
-        expected = initial - {f['player'] for f in falls if f['turn']<=turn}
+        position = (checkpoint_positions or {}).get(turn)
+        expected = initial - {f['player'] for f in falls if fell_before(f,turn,position)}
         if ids!=expected:
             issues.append(f'cannot reconcile survivors with elimination events: T+{turn}')
     actual_reigns = {row['reign'] for row in judgments}
@@ -82,7 +101,9 @@ def coverage(checkpoints: list[str], judgments: list[dict], falls: list[dict] | 
             continue
         if expected[0]!=turn or any(row['turn']!=turn for row in rows):
             issues.append(f'judgment turn mismatch: {name}')
-        survivors = initial - {f['player'] for f in falls if f['turn']<=turn}
+        positions = [row['log_position'] for row in rows if row.get('log_position') is not None]
+        position = min(positions) if len(positions)==len(rows) and positions else None
+        survivors = initial - {f['player'] for f in falls if fell_before(f,turn,position)}
         if set(expected[1])!=survivors:
             issues.append(f'saved roster survivor coverage mismatch: {name}')
         if {row['player'] for row in rows}!=set(expected[1]) or len(rows)!=len(expected[1]):
@@ -108,7 +129,8 @@ def summarize(artifact: Path) -> dict:
             raise ValueError(f'duplicate age judgment: {key}; inspect run/reload boundaries')
         seen.add(key)
         row = dict(reign=reign, turn=int(turn), length=int(length), era=int(era) if era else None, player=int(player),
-                   age=age, score=int(score), golden=int(golden), dark=int(dark), policy=policy or None)
+                   age=age, score=int(score), golden=int(golden), dark=int(dark), policy=policy or None,
+                   log_position=m.start())
         judgments.append(row)
         g = grouped.setdefault(reign, dict(turn=int(turn), length=int(length), ages=Counter(), policies=Counter()))
         if (g['turn'], g['length']) != (int(turn), int(length)):
@@ -126,14 +148,21 @@ def summarize(artifact: Path) -> dict:
     counts['safety_net'] = sum('SAFETY NET' in line for line in arb_lines)
     counts['refused_cases'] = len({m.groups() for line in arb_lines if line.startswith('refused ')
                                   for m in [re.search(r'pair=(\d+)-(\d+) turn=(\d+)', line)] if m})
-    falls = [dict(capturer=int(m[1]), player=int(m[2]), turn=int(m[3]))
+    falls = [dict(capturer=int(m[1]), player=int(m[2]), turn=int(m[3]), log_position=m.start())
              for m in re.finditer(r'\[JAC_AGES\] points player=(\d+) part=ko .*?key=ko:(\d+) turn=(\d+)', lua)]
     failures = [s for s in steps if s['status'] == 'FAIL']
     judge = [s for s in steps if s['action'] == 'judge']
     full = (len(completed) == 4 and all('autoplay completed 50 turns' in s for s in completed)
             and any('return=T+201 surviving majors=' in s['detail'] for s in steps if s['status'] == 'OK')
             and bool(judge) and judge[-1]['status'] == 'OK' and not failures)
-    issues, checkpoint_count = coverage(checkpoints, judgments, falls)
+    checkpoint_positions = {}
+    for checkpoint in checkpoints:
+        header = checkpoint.split(' ; ')[0]
+        m = re.match(r'checkpoint turn=(\d+) ',header)
+        position = lua.find(header)
+        if m and position>=0:
+            checkpoint_positions[int(m[1])] = position
+    issues, checkpoint_count = coverage(checkpoints, judgments, falls, checkpoint_positions)
     return dict(artifact=artifact.name, lua_sha256=hashlib.sha256(lua_bytes).hexdigest(),
                 complete_200_turns=full, autoplay=completed, overview=overview, checkpoints=checkpoints,
                 reigns=grouped, judgments=judgments, arbitration=counts, elimination_point_events=falls,
@@ -159,7 +188,9 @@ def markdown(data: dict) -> str:
     lines += ['- ' + line for line in data['overview']]
     if not data['age_data_present']:
         lines += ['', '年齢判定の記録が無い。年齢の割合は評価できない。']
-    lines += ['', f"追加の計測が完了した回数: {data['checkpoint_count']}/5。"]
+    lines += ['', f"記録した観測地点: {data['checkpoint_count']}/5。計測の完全性は別に判定する。"]
+    if data['coverage_issues']:
+        lines += ['', '計測が不完全な理由：'] + ['- ' + issue for issue in data['coverage_issues']]
     return '\n'.join(lines)+'\n'
 
 

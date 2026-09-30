@@ -38,7 +38,7 @@ class TuningReportTests(unittest.TestCase):
         self.assertEqual(data['arbitration']['refused'], 1)
         self.assertEqual(data['arbitration']['refused_cases'], 1)
         self.assertEqual(data['arbitration']['request_intervals'], [20])
-        self.assertEqual(data['elimination_point_events'], [{'capturer':3,'player':1,'turn':101}])
+        self.assertEqual([{k:r[k] for k in ('capturer','player','turn')} for r in data['elimination_point_events']], [{'capturer':3,'player':1,'turn':101}])
         self.assertFalse(data['complete_200_turns'])
 
     def test_duplicate_judgment_is_rejected(self):
@@ -110,8 +110,9 @@ Game.GetProperty=function(self,key) if key=='JAC_AGES_LEDGER' then return {reign
         ids = ','.join(str(i) for i in range(22))
         snapshots = []
         for turn in (1,51,101,151,201):
-            parts = [f'checkpoint turn={turn} era=ERA_ANCIENT targets=56']
-            parts += [f'house player={i} alive=true' for i in range(22)]
+            parts = [f'checkpoint turn={turn} era=ERA_ANCIENT targets=56',
+                     'era-values grievances=10 tensions=10 trade-minimum-change=0']
+            parts += [f'house player={i} civ=CIVILIZATION_JAC_TEST alive=true cities=2 castles=2 legitimacy=100 age=NORMAL policy=nil pact-lead=nil' for i in range(22)]
             parts += [f'judgment-roster reign-index={index} turn={due} players={ids}'
                       for index,(_,due) in enumerate(report.EXPECTED_REIGNS,1) if due<=turn]
             snapshots.append(' ; '.join(parts))
@@ -151,7 +152,7 @@ Game.GetProperty=function(self,key) if key=='JAC_AGES_LEDGER' then return {reign
     def test_survivors_are_reconciled_with_dated_elimination_events(self):
         snapshots,rows = self.full_coverage_fixture()
         for index in (3,4):
-            snapshots[index] = snapshots[index].replace('house player=13 alive=true','house player=13 alive=false')
+            snapshots[index] = snapshots[index].replace('house player=13 civ=CIVILIZATION_JAC_TEST alive=true','house player=13 civ=CIVILIZATION_JAC_TEST alive=false')
         for index in (3,4):
             parts = snapshots[index].split(' ; ')
             for n,part in enumerate(parts):
@@ -163,6 +164,27 @@ Game.GetProperty=function(self,key) if key=='JAC_AGES_LEDGER' then return {reign
         self.assertEqual(report.coverage(snapshots,rows,falls),([],5))
         issues,_ = report.coverage(snapshots,rows)
         self.assertIn('cannot reconcile survivors with elimination events: T+151',issues)
+        for row in rows:
+            row['log_position']=1000+row['player'] if row['turn']==110 else row['turn']*100
+        same_turn_fall = [{'capturer':10,'player':13,'turn':110,'log_position':2000}]
+        self.assertEqual(report.coverage(snapshots,rows,same_turn_fall),([],5))
+        same_turn_fall[0]['log_position']=900
+        issues,_ = report.coverage(snapshots,rows,same_turn_fall)
+        self.assertIn('saved roster survivor coverage mismatch: REIGN_GENKI',issues)
+
+    def test_missing_house_fields_and_era_fields_are_not_complete(self):
+        snapshots,rows = self.full_coverage_fixture()
+        for missing in ('civ=CIVILIZATION_JAC_TEST ', 'cities=2 ', 'castles=2 ', 'legitimacy=100 ',
+                        'age=NORMAL ', 'policy=nil ', 'pact-lead=nil'):
+            with self.subTest(missing=missing):
+                broken = list(snapshots)
+                broken[0] = broken[0].replace(missing,'',1)
+                issues,_ = report.coverage(broken,rows)
+                self.assertIn('incomplete house observations: T+1',issues)
+        broken = list(snapshots)
+        broken[0] = broken[0].replace('tensions=10 ','',1)
+        issues,_ = report.coverage(broken,rows)
+        self.assertIn('incomplete era observations: T+1',issues)
 
 
 if __name__ == '__main__':
