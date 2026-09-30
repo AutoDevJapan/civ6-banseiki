@@ -138,3 +138,62 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 - 起動直後だけは Steam のランチャーとの一時的なプロセス重複を入力せず待つ。重複が解消せず、単一の Civ6 ウィンドウを確認できなければ期限で失敗する。実機試行中に DX12 実行ファイルが AMD の `amdxc64.dll` で一度クラッシュした（Windows Application Error 1000）。このクラッシュはドライバから防げず、その実行は手順開始前に停止した。次の実行で上記の成功結果を得た。
 - `PrintWindow` と `BitBlt` は同期呼び出し。撮影期限は呼び出しから戻った後に確認するため、ゲームウィンドウが応答しない場合は期限を超えてもドライバが戻らない可能性がある。
 - 再起動アクションをシナリオの途中に置くと、ログ判定の対象はその再起動後に発生したログだけになる。再起動前の確認は `steps.jsonl` に残る。
+
+## 計測の成果物
+
+`autoplay` の `metrics: true` は、JSONLに加えて `autoplay-metrics-N.csv` を作る。実行番号は研究計測と共通。CSVの列は次のとおり。
+
+| 列 | 意味 |
+|---|---|
+| `phase`, `at`, `turn` | 開始／ターン境界、UTC記録時刻、到達したエンジンのターン番号 |
+| `observed` | その境界を観測できたか |
+| `duration_seconds` | 前の境界からこの境界までの実時間。最初だけ自動進行の要求直前から測る |
+| `elapsed_seconds` | 自動進行の要求からの経過時間 |
+| `working_set_bytes`, `private_bytes` | Civ6の作業セットとプライベート使用量（バイト） |
+
+初期メモリは自動進行の前に採る。研究計測を併用した場合は、研究の読み取り時間もターン時間に含む。新しい20／300ターン計測は併用しない。以後は境界を観測するたびに採り、途中でPIDが変わったら失敗する。時間にはFireTunerの通信、ポーリング、画面を閉じる時間も含む。エンジン内部だけの処理時間ではない。飛ばしたターンの行は observed が false、時間とメモリが空欄になる。到達した境界のメモリは採るが、複数ターン分の時間は空欄にする。補間しない。
+
+`save` と `load` にも `metrics: true` を指定できる。`save-load-metrics.csv` に、時刻・操作・実際のセーブ名・ターン・ファイルのバイト数・秒数を残す。保存は要求直前から、保存完了イベントと非空のファイルを確認するまで。ロードは要求直前から、完了ログ、開始操作、人間プレイヤー、操作を妨げる画面の閉鎖を確認するまで。純粋なディスク読込時間ではない。失敗を0秒の測定値にはしない。実行別のセーブ名と上書き拒否は従来どおり。
+
+`result.json` は、成功／失敗、完了ステップ数、失敗理由、ログ判定を持つ。`metrics.autoplay` に各区間のPID・要求数・到達ターン・完了の有無・CSV名を残す。`metrics.turn_summary` に観測数／欠測数、時間の件数・最小・中央値・95パーセンタイル・最大、メモリの初回／最終／増加量を残す。95パーセンタイルは昇順の ceil(件数×0.95) 番目。時間が測れた件数は観測した境界数より少ないことがある。測定値がない集計は null。`metrics.save_load` は各チェックポイント、保存容量の増加、ロード時間の集計。途中で失敗しても採取済みのCSVと集計を残す。
+
+300ターン版は、最初の6区間で連続300ターン、最後の1区間でロード後の次ターンを確認する。連続300ターンの集計は metrics.groups.CONTINUOUS、ロード後は metrics.groups.POST_LOAD に分ける。各区間の metrics_group で指定し、省略すると AUTOPLAY にまとめる。全体の集計にはロード後の1ターンも含む。保存7回／ロード2回を測る。20ターン版は保存2回／ロード2回。
+
+追加パッケージは使わず、ctypesでWindowsのメモリAPIを呼ぶ。列は [Microsoftの構造体の説明](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex) の WorkingSetSize と PrivateUsage に対応する。
+
+## 今回追加した実機シナリオ
+
+全ファイルは `tools/civ6-autotest/scenarios/` にある。20ターン版、追加時代の短縮試験、300ターン版の順に実行する。
+
+| シナリオ | 確認すること |
+|---|---|
+| `japan-15km-20turn-full-metrics.json` | 22勢力・全7 MODで20ターン。CSV、保存容量、開始時／終了時のロードと保存状態の一致、次ターン |
+| `japan-15km-300turn-full-metrics.json` | 同構成で連続300ターン。50ターンごとの保存容量、ターン時間、メモリ、開始時／終了時のロード |
+| `sengoku-era-reigns-epic.json` | 弘治98・永禄108・元亀163で、エンジンの時代と台帳が変わる |
+| `sengoku-era-reigns-marathon.json` | 弘治196・永禄217・元亀328で同じ検査 |
+| `sengoku-era-reigns-beyond-nine.json` | 任意の短縮データで正保19・慶安21。台帳と改元画面が一致し、公式ポップアップが出ない |
+| `great-people-zero-musicians.json` | 音楽家0人／偉人75人で画面を開き、現在・履歴・現在を描き直し、画像を残して閉じる |
+| `resources-calendar-epic.json` | 資源の実際の年計算が、叙事詩の1／25／41ターンで1534／1540／1543をログに出す。UIの暦とも一致する |
+
+`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/<ファイル名> --check` で静的検査し、実機では末尾の --check を外す。保存先を指定するなら --output に新しいディレクトリを渡す。
+
+追加7本は `strict_lua_errors: true` を指定し、実行中の全ての Runtime Error・UI.DataError・公式時代画面の欠損画像エラーを失敗にする。JACの名前がない公式の偉人画面のエラーも検出する。この指定がない従来シナリオの判定は維持する。
+
+追加時代の試験は既存の `JAC_Test_EraTiming` のジャンクションが必要。非表示の短縮モードをこのシナリオだけがtrueにする。標準／迅速の通常プローブはfalseを明示する。適用を開始直後に検査し、適用されていなければ失敗する。対象は万世紀と天下統一の検証地図だけ。終了後はメニューでfalseに戻す。
+
+全タイルの所有者は同じ値が連続する個数で記録し、情報を保ったまま短くする。セーブ前後の一致を確認する。長い試験は人間の滅亡や勝利の確定で終わる可能性がある。途中終了は到達成功にせず失敗を残す。速度の試験は3勢力の地図でこの点も要実機確認。
+
+**実機未実行**。Luaの構文、正しい状態での通過、誤ったターン・時代・台帳・年での失敗をオフラインで検査した。実測値や許容範囲、実機のUI動作はまだ未確認。
+
+保存状態の読み取りに使う公式APIの根拠（ゲームの先頭パスは下の「根拠と注意」と同じ）：
+
+| 前提 | 公式ファイル:行 |
+|---|---|
+| 保存完了イベントとロード要求 | `Base/Assets/UI/Automation/Automation_StandardTests.lua:16-37,298` |
+| 都市の列挙と人口 | `Base/Assets/UI/Screens/ReportScreen.lua:227`、`Base/Assets/UI/CitySupport.lua:427` |
+| 都市座標 | `Base/Assets/UI/WorldView/CityBannerManager.lua:207-208` |
+| 地図の列挙 | `Base/Assets/UI/Popups/MapSearchPanel.lua:700` |
+| タイルの所有者 | `Base/Assets/UI/WorldBuilderPlacement.lua:683` |
+| 研究完了の照会 | `Base/Assets/UI/Choosers/ResearchChooser.lua:53,66`、`Base/Assets/UI/Choosers/CivicsChooser.lua:50,63` |
+| ターンと生死 | `Base/Assets/UI/TopPanel.lua:387`、`Base/Assets/UI/ARXManager.lua:40` |
+| Gameプロパティの保存 | 本PoC READMEの束0／束1の実機結果。テーブルの復元はシングルプレイで確認済み |

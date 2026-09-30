@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_TEST_ERA_TIMING_TAIL_NAME" Language="en_US"><Text>Test only: compressed reign eras</Text></Row>
+    <Row Tag="LOC_JAC_TEST_ERA_TIMING_TAIL_NAME" Language="ja_JP"><Text>検証用：短縮した元号の時代</Text></Row>
+    <Row Tag="LOC_JAC_TEST_ERA_TIMING_TAIL_NAME" Language="ru_RU"><Text>Тест: сокращённые эпохи правлений</Text></Row>
+  </LocalizedText>
+</GameInfo>

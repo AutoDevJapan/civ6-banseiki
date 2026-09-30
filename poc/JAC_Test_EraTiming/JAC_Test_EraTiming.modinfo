@@ -34,15 +34,43 @@
         <Value>{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map</Value>
       </ConfigurationValueMatches>
     </Criteria>
+    <Criteria id="JAC_Test_EraTiming_Tail">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map</Value>
+      </ConfigurationValueMatches>
+      <ConfigurationValueMatches>
+        <Group>Game</Group>
+        <ConfigurationId>JAC_ERA_TIMING_TAIL</ConfigurationId>
+        <Value>1</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
   </ActionCriteria>
+  <FrontEndActions>
+    <UpdateDatabase id="JAC_Test_EraTiming_Config">
+      <File>Config/JAC_Test_EraTiming_Config.xml</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Test_EraTiming_ConfigText">
+      <File>Config/JAC_Test_EraTiming_Text.xml</File>
+    </UpdateText>
+  </FrontEndActions>
   <InGameActions>
     <!-- After JAC_Sengoku_Trees (LoadOrder 200), which sets ERA_RENAISSANCE max to 10000. -->
     <UpdateDatabase id="JAC_Test_EraTiming_Data" criteria="JAC_Test_EraTiming_InUse">
       <Properties><LoadOrder>400</LoadOrder></Properties>
       <File>Data/JAC_Test_EraTiming.sql</File>
     </UpdateDatabase>
+    <UpdateDatabase id="JAC_Test_EraTiming_TailData" criteria="JAC_Test_EraTiming_Tail">
+      <Properties><LoadOrder>401</LoadOrder></Properties>
+      <File>Data/JAC_Test_EraTiming_Tail.sql</File>
+    </UpdateDatabase>
   </InGameActions>
   <Files>
+    <File>Config/JAC_Test_EraTiming_Text.xml</File>
+    <File>Config/JAC_Test_EraTiming_Config.xml</File>
+    <File>Data/JAC_Test_EraTiming_Tail.sql</File>
     <File>Data/JAC_Test_EraTiming.sql</File>
   </Files>
 </Mod>
