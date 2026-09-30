@@ -54,7 +54,7 @@
 1. 頭肩肖像：正方形・1024px 以上。1534年時点の年齢と役職で、顔を中央に、円形切り抜き用の余白を取る。背景は暖色の無地
 2. 立ち姿：縦長・1024×1536 以上。手足まで入る全身に近い姿で、後で透過するため背景は一様なマゼンタ（#FF00FF）。顔・衣装・配色は頭肩肖像とそろえる
 3. 背景：横長 3:2 以上・1536×1024 以上。本拠の地域に合わせた無人の室内で、中央を人物の重ね用に空ける
-4. 共通条件：後年の姿や時代に合わない甲冑を避け、現存肖像で顔を確定できると仮定せず独自の顔を作る。Civ6 風の厚塗りで暖色の方向光。公式画像の人物や画素を写さない。文字・ロゴ・透かしを入れない
+4. 共通条件：後年の姿や時代に合わない甲冑を避け、現存肖像で顔を確定できると仮定せず独自の顔を作る。Civ6 風の厚塗りで暖色の方向光。公式画像の人物や画素を写さない。文字・ロゴ・透かしを入れない。家紋や家紋に似た丸紋を、衣服・襖・幕などどこにも描かない
 
 再生成：`python tools/jac_art/generate_portraits.py` は人物ごとに SSOT 15.2.1 の生成手段で3点の生成を要求し、PNGを検証してローカルログに追記する。続けて `python tools/jac_art/build_art.py` で DDS・XLP・BLP を作り、Git 除外の `tools/jac_art/build/previews/portrait-sheet.png` に22人の顔を並べる。生成途中で止まった人物の画像は調査し、欠けた出力を揃えてから再実行する。失敗時に別サービスへ切り替えない。
 
@@ -68,6 +68,14 @@
 4. 22家の主色はすべて別の公式標準色にし、RGB の距離で40以上離す（`test_house_primary_colours_are_distinct`）。以前は武田と伊達がともに `COLOR_STANDARD_RED_DK` だったため、伊達を、どの家も使っていない `COLOR_STANDARD_WHITE_MD`（濃い灰色、黒漆の具足にちなむ）に変えた。割り当ては `tools/japan_map_scale/write_custom_civs.py` が生成する。公式の濃い色どうしはもともと46〜69しか離れていない
 
 比較画像は Git 除外の `tools/jac_art/build/previews/leader-icons-before-after.png`（22人の旧・新を 45px と 64px で並べたもの）。`tools/jac_art/tests` の `test_leader_icons_are_face_crops_framed_in_house_colour` が、22人分の顔の値と家の色がそろい、64px アトラスの各円の縁が家の色であることを検査する。実機での見え方は下記シナリオの `leader-portraits-ribbon-closeup.png` で確認する（未実施）。
+
+### 衣服と室内の家紋の除去（2026-09-30）
+
+オーナーから、人物の服に家と関係のない家紋が描かれており、日本の一般的な知識があれば違和感を持つとの指摘を受けた。生成画像は家紋を正しく描き分けられないため、人物画像には家紋を描かない方針にした。家紋は文明アイコン（[家紋 PoC](house-crests.md)）だけで示す。
+
+1. 22人の頭肩肖像・立ち姿・背景を調べ、家紋か家紋に似た丸紋がある32枚（立ち姿13・肖像10・背景9）を、Git 外の `civ6-art-local/JAC_PoC_CustomCivs/crest-removal-manifest.json` に場所とともに記録した
+2. 32枚は、SSOT 15.2.1 の生成手段による画像編集で、紋のある部分を無地か紋でない織り柄に描き直した。顔・姿勢・配色・構図は変えていない。元画像は同じ場所に `*.orig.png` として残した。編集前後の比較画像は同じローカルストアの `crest-removal-before-after.png` と `crest-removal-before-after-retry.png`
+3. 再生成でも家紋が入らないよう、`tools/jac_art/generate_portraits.py` の共通プロンプトに家紋を描かない条件を加えた
 
 ## 画像台帳
 
