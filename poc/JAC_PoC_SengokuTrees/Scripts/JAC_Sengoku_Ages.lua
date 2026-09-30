@@ -307,12 +307,17 @@ local function Notify(id, reign, age, policy)
 end
 
 -- §5.3: thresholds scale with the period's length L; shift = cities + 5 x past golden - 5 x past dark.
--- Golden stays above dark, so a short period keeps a normal age between them.
+-- Dark is rounded down and may be 0: a house is dark only when it misses a whole expected point. In a short
+-- period the expectation is under one point (live 2026-09-30, health-200-01: 7-11 turns scored 0-1 points),
+-- and the old minimum of 1 made 10-14 of 22 houses dark, nearly all on a score of 0. Golden needs at least
+-- MIN_GOLDEN points, so one tech in a short period stays normal. Golden stays above dark
+-- (ceil(golden expectation) > floor(dark expectation)), so a normal age is always between them.
+local MIN_GOLDEN = 2
 local function Thresholds(house, cities, length)
 	local shift = cities + PAST_AGE_SHIFT * house.golden - PAST_AGE_SHIFT * house.dark
 	local per = STANDARD_LENGTH * OFFICIAL_PER_POINT
-	local dark = math.max(1, math.ceil((DARK_BASE + shift) * length / per))
-	return math.max(dark + 1, math.ceil((GOLDEN_BASE + shift) * length / per)), dark
+	local dark = math.max(0, math.floor((DARK_BASE + shift) * length / per))
+	return math.max(MIN_GOLDEN, math.ceil((GOLDEN_BASE + shift) * length / per)), dark
 end
 
 local function Judge(l, index)
