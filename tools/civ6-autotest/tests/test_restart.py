@@ -4,12 +4,12 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import (enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
+from restart import (close_orphaned_civ_reporters, enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
                      wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
@@ -100,6 +100,9 @@ class FreshnessTests(unittest.TestCase):
 
 class RestartActionTests(unittest.TestCase):
     def setUp(self):
+        helpers = patch("scenario.close_orphaned_civ_reporters", return_value=[])
+        helpers.start()
+        self.addCleanup(helpers.stop)
         # Runner tests default to a simulated running game. Individual lifecycle
         # tests override this patch when testing absence or multiple processes.
         active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
@@ -415,3 +418,49 @@ class RestartActionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrphanReporterTests(unittest.TestCase):
+    def close(self, rows, image, processes=None):
+        def query(handle, flags, buffer, length):
+            buffer.value = image
+            return True
+        kernel = Mock()
+        kernel.OpenProcess.return_value = 200
+        kernel.QueryFullProcessImageNameW.side_effect = query
+        with patch("restart._civ_process_ids", side_effect=processes or [set(), set()]), patch(
+            "restart._process_rows", return_value=rows
+        ), patch("restart.kernel32", kernel):
+            closed = close_orphaned_civ_reporters()
+        return closed, kernel
+
+    def test_only_verified_orphan_helper_is_closed(self):
+        image = "C:/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, image)
+        self.assertEqual(closed, [42])
+        kernel.TerminateProcess.assert_called_once_with(200, 1)
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_live_game_parent_preserves_reporter(self):
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41), 41: ("civilizationvi_dx12.exe", 1)}, "unused")
+        self.assertEqual(closed, [])
+        kernel.OpenProcess.assert_not_called()
+        kernel.TerminateProcess.assert_not_called()
+
+    def test_same_named_other_program_is_preserved(self):
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, "C:/OtherApp/FiraxisBugReporter.exe")
+        self.assertEqual(closed, [])
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_game_appearing_during_inspection_preserves_reporter(self):
+        image = "C:/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, image, [set(), {41}])
+        self.assertEqual(closed, [])
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_running_game_prevents_all_cleanup(self):
+        with patch("restart._civ_process_ids", return_value={41}), patch("restart._process_rows") as rows:
+            self.assertEqual(close_orphaned_civ_reporters(), [])
+        rows.assert_not_called()

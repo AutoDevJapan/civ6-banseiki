@@ -11,7 +11,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids,
-                   find_civ_window, kernel32)
+                   find_civ_window, kernel32, PROCESSENTRY32W, TH32CS_SNAPPROCESS, ERROR_NO_MORE_FILES)
 
 
 DEFAULT_MODS_DIR = (Path.home() / "Documents" / "My Games" /
@@ -172,6 +172,59 @@ def terminate_civ_process(pid: int, expected_start: float) -> None:
             raise InputError(f"Could not terminate Civ VI process {pid}")
     finally:
         kernel32.CloseHandle(process)
+
+
+def _process_rows() -> dict[int, tuple[str, int]]:
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot is None or snapshot == wintypes.HANDLE(-1).value:
+        raise InputError("Could not enumerate Civ VI helper processes")
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(entry)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            raise InputError("Could not read Civ VI helper process list")
+        rows = {}
+        while True:
+            rows[entry.th32ProcessID] = (entry.szExeFile.casefold(), entry.th32ParentProcessID)
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                if kernel32.GetLastError() != ERROR_NO_MORE_FILES:
+                    raise InputError("Civ VI helper process list became unavailable")
+                return rows
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+
+def close_orphaned_civ_reporters() -> list[int]:
+    """Steam keeps Civ6 running while its orphaned Firaxis helper remains alive."""
+    if _civ_process_ids():
+        return []
+    rows = _process_rows()
+    closed = []
+    for pid, (name, parent) in rows.items():
+        if name != "firaxisbugreporter.exe" or parent in rows:
+            continue
+        # Pin the process handle, then validate its full image before terminating.
+        process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, False, pid)
+        if not process:
+            continue  # It may already have exited; never act on another PID.
+        try:
+            image = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(image))
+            if not kernel32.QueryFullProcessImageNameW(process, 0, image, ctypes.byref(length)):
+                raise InputError(f"Cannot verify Civ VI helper process {pid}")
+            path = Path(image.value)
+            if tuple(part.casefold() for part in path.parts[-5:]) != (
+                "sid meier's civilization vi", "base", "binaries", "win64steam", "firaxisbugreporter.exe"
+            ):
+                continue
+            if _civ_process_ids():
+                return closed  # A manual launch appeared; leave all remaining helpers alone.
+            if not kernel32.TerminateProcess(process, 1):
+                raise InputError(f"Could not close orphan Civ VI helper {pid}")
+            closed.append(pid)
+        finally:
+            kernel32.CloseHandle(process)
+    return closed
 
 
 def launch_via_steam() -> None:
