@@ -275,26 +275,58 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.assertEqual(list(self.g.REVEALED.values()), [])
         self.assertFalse([line for line in self.log() if "resource event=" in line])
 
-    def test_rename_stages_keep_the_latest_even_when_an_earlier_stage_fires_later(self):
-        # Oda has no research: Honnoji (1582/6) at turn 147 -> Hashiba, Toyotomi (1586/10) at turn 160.
-        self.run_turns(1, 147)
-        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_HASHIBA_CIV_NAME")
-        self.run_turns(148, 160)
-        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME")
-        # Researching Honnoji's other prerequisite later fires it (reason=prereq), but the name stays Toyotomi.
+    def test_houses_rename_only_by_the_succession_civics(self):
+        # Owner decision 2026-09-30 (SSOT 3.2): Oda -> Hashiba on C16, -> Toyotomi on C24 (succession by research).
+        # Honnoji (1582/6, turn 147) and the Toyotomi surname (1586/10, turn 160) only boost those civics.
+        envoys, truce = self.civic("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS"), self.civic("CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION")
+        self.run_turns(1, 160)
+        self.assertIsNone(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"))
+        self.assertEqual(self.prop(0, "JAC_EVENT_BOOSTED_JAC_EVENT_HONNOJI"), 147)
+        self.assertEqual(self.prop(0, "JAC_EVENT_BOOSTED_JAC_EVENT_TOYOTOMI_SURNAME"), 160)
+        self.assertIn((0, "civic", truce, 1, 160), self.boosts("civic", truce))
+        # Honnoji's other prerequisite fires the event (reason=prereq) but does not rename.
         self.g.Players[0].civics[self.civic("CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES")] = True
         self.run_turns(161, 161)
         self.assertEqual(self.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_HONNOJI"), 161)
+        self.assertIsNone(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"))
+        self.g.Players[0].civics[envoys] = True
+        self.run_turns(162, 162)
+        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_HASHIBA_CIV_NAME")
+        self.g.Players[0].civics[truce] = True
+        self.run_turns(163, 164)
         self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME")
-        # Nagao -> Uesugi (1561/4) followed the year without the civic (owner decision 2a); Nagao only.
-        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO"), "LOC_JAC_EVENT_UESUGI_CIV_NAME")
+        self.assertEqual(self.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TOYOTOMI_SURNAME"), 163)
+        self.assertEqual([line for line in self.log() if "renamed" in line], [
+            "[JAC_EVENTS] renamed civ=CIVILIZATION_JAC_ODA name=LOC_JAC_EVENT_HASHIBA_CIV_NAME player=0 "
+            "civic=CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS turn=162",
+            "[JAC_EVENTS] renamed civ=CIVILIZATION_JAC_ODA name=LOC_JAC_EVENT_TOYOTOMI_CIV_NAME player=0 "
+            "civic=CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION turn=163"])
+        # Nagao -> Uesugi (1561/4, turn 83) no longer follows the year either (owner decision Q 1a): boost only.
+        self.assertEqual(self.prop(1, "JAC_EVENT_BOOSTED_JAC_EVENT_NAGAO_TO_UESUGI"), 83)
+        self.assertIsNone(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO"))
         self.assertIsNone(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_DATE"))
 
-    def test_nagao_becomes_uesugi_early_with_the_civic(self):
-        self.g.Players[1].civics[self.civic("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS")] = True
+    def test_oda_rename_stages_keep_the_latest(self):
+        # Researching the Hashiba civic after the Toyotomi one never brings Hashiba back (latest stage wins).
+        self.g.Players[0].civics[self.civic("CIVIC_JAC_SENGOKU_TRUCE_ARBITRATION")] = True
+        self.run_turns(1, 1)
+        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME")
+        self.g.Players[0].civics[self.civic("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS")] = True
+        self.run_turns(2, 3)
+        self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_ODA"), "LOC_JAC_EVENT_TOYOTOMI_CIV_NAME")
+
+    def test_nagao_becomes_uesugi_only_with_the_succession_civic(self):
+        # Another prerequisite (C11) fires the event but does not rename; C16 does, and the name never reverts.
+        self.g.Players[1].civics[self.civic("CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES")] = True
         self.run_turns(1, 2)
         self.assertEqual(self.prop(1, "JAC_EVENT_FIRED_JAC_EVENT_NAGAO_TO_UESUGI"), 1)
+        self.assertIsNone(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO"))
+        self.g.Players[1].civics[self.civic("CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS")] = True
+        self.run_turns(3, 90)
         self.assertEqual(self.game("JAC_CIV_NAME_CIVILIZATION_JAC_NAGAO"), "LOC_JAC_EVENT_UESUGI_CIV_NAME")
+        self.assertEqual([line for line in self.log() if "renamed" in line and "NAGAO" in line], [
+            "[JAC_EVENTS] renamed civ=CIVILIZATION_JAC_NAGAO name=LOC_JAC_EVENT_UESUGI_CIV_NAME player=1 "
+            "civic=CIVIC_JAC_SENGOKU_COURT_AND_SHOGUNATE_ENVOYS turn=3"])
 
     def test_house_specific_name_only_for_its_house(self):
         # Kitano tea gathering (every faction, house Oda): Oda sees 北野大茶湯, the others 大茶会 (SSOT 3.2).

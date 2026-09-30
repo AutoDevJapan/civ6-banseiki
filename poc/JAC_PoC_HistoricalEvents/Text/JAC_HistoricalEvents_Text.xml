@@ -194,9 +194,12 @@
 		<Row Tag="LOC_JAC_EVENT_OUCHI_DAINEIJI_NAME" Language="ja_JP"><Text>大寧寺の変</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_OUCHI_DAINEIJI_NAME" Language="en_US"><Text>Daineiji Incident</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_OUCHI_DAINEIJI_NAME" Language="ru_RU"><Text>Инцидент Дайнэйдзи</Text></Row>
-		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="ja_JP"><Text>楽市楽座（加納・安土）</Text></Row>
-		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="en_US"><Text>Rakuichi-Rakuza Free Markets (Kanō, Azuchi)</Text></Row>
-		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="ru_RU"><Text>Свободные рынки Ракуити-ракудза (Кано, Адзути)</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="ja_JP"><Text>楽市令（美濃・加納）</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="en_US"><Text>Rakuichi Edict (Kanō, Mino)</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_RAKUICHI_NAME" Language="ru_RU"><Text>Указ о свободном рынке (Кано, Мино)</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ROKKAKU_RAKUICHI_NAME" Language="ja_JP"><Text>楽市令（近江・石寺新市）</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ROKKAKU_RAKUICHI_NAME" Language="en_US"><Text>Rakuichi Edict (Ishidera New Market, Ōmi)</Text></Row>
+		<Row Tag="LOC_JAC_EVENT_ROKKAKU_RAKUICHI_NAME" Language="ru_RU"><Text>Указ о свободном рынке (новый рынок Исидэра, Оми)</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_RYUKYU_SHIMAZU_DEMAND_ADVISOR" Language="ja_JP"><Text>島津を通じて使節を送り、和睦を保ちましょう。</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_RYUKYU_SHIMAZU_DEMAND_ADVISOR" Language="en_US"><Text>Send envoys through the Shimazu and keep the peace.</Text></Row>
 		<Row Tag="LOC_JAC_EVENT_RYUKYU_SHIMAZU_DEMAND_ADVISOR" Language="ru_RU"><Text>Отправьте послов через Симадзу и сохраните мир.</Text></Row>
