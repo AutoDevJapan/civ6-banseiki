@@ -44,6 +44,11 @@
       ]
     },
     {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('JAC_ERA_TIMING_TAIL', false)\nif GameConfiguration.GetValue('JAC_ERA_TIMING_TAIL')~=false then error('tail fixture flag not cleared') end\nreturn true"
+    },
+    {
       "action": "start_game",
       "timeout": 240
     },

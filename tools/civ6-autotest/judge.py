@@ -380,7 +380,8 @@ def _growth_next(level: int, xp: int) -> tuple[int, int]:
     return level, xp
 
 
-def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int | None = None) -> list[Check]:
+def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int | None = None,
+          strict_lua_errors: bool = False) -> list[Check]:
     for name in LOG_NAMES:
         if name not in logs:
             raise ValueError(f"Missing log: {name}")
@@ -394,6 +395,10 @@ def judge(logs: dict[str, str], profile: str = "bundle0", *, expected_units: int
         Check("Generic: JAC Runtime Error", not runtime_errors, f"{len(runtime_errors)} matching stack traces"),
         Check("Generic: JAC missing texture", not missing, f"{len(missing)} matching lines"),
     ]
+    if strict_lua_errors:
+        errors = [line for line in logs["Lua.log"].splitlines()
+                  if any(marker in line for marker in ("Runtime Error", "UI.DataError", "EraComplete cannot show"))]
+        checks.append(Check("Scenario: all Lua errors", not errors, f"{len(errors)} error lines (including official UI)"))
     if profile == "bundle0":
         checks.extend(_bundle0_checks(logs))
     elif profile == "growth":

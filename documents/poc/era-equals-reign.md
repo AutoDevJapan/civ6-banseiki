@@ -120,7 +120,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 台帳・史実イベント・資源の年（`JAC_HistoricalEvents.lua`・`JAC_CourtArbitration_Rules.lua`・`JAC_Resources.lua`）は、速度の行をエンジンと同じ行の順に読む。以前は `MonthIncrement` の大きい順に並べ替えていたが、新しい暦では増減が交互になり並べ替えで順を戻せないため、ナビゲーションプロパティ `GameInfo.GameSpeeds[速度].GameSpeedTurnCollection`（`ORDER BY rowid`、`01_GameplaySchema.sql:3337`。公式の Lua も `leader.TraitCollection` の形で使う：`Base/Assets/UI/MapTacks.lua:172`）を読む。
 
-**要実機確認**：叙事詩・マラソンの倍率（150・300）での時代の長さ、`GameSpeedTurnCollection` がゲームプレイの Lua から読めること、叙事詩・マラソン・迅速・オンラインで改元の画面とトップパネルの年が合うこと。
+叙事詩・マラソンの倍率（150・300）での最初の3時代の長さは `perf-14`・`perf-15` で確認済み。`GameSpeedTurnCollection` をゲームプレイのLuaから読み、叙事詩の資源の年がUIの暦と合うことは `perf-17` で確認済み。迅速・オンラインを含む全ての改元の日付と画面の一致は引き続き要実機確認。
 
 ### ツリーの時代
 
@@ -144,4 +144,41 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。再実行の `era-equals-reign-07`（2026-09-30）で全手順が通り、弘治・永禄の改元の画面の元号・年齢・点が台帳と一致した。同じ日に `sengoku-house-names-oda`・`-takeda`・`sengoku-ages`（読み込み直後の黄金の生産効果を含む）・`sengoku-ages-screens`・`historical-events-15km`・`court-arbitration`・`sengoku-trees` も通った（`era-equals-reign-10`〜`-16`）。
 
-**要実機確認**：48 の時代の読み込み・保存・AI の動き。叙事詩・マラソンの倍率。10番目以降の時代での公式 UI（時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写した）。
+叙事詩・マラソンの倍率は最初の3時代で確認済み。10番目・11番目の時代は短縮データで切り替わりと改元画面、公式ポップアップの抑止を確認済み。**要実機確認**：48時代全体の読み込み・保存・AIの動きと、追加時代の他の公式UI。時代スコアの画面・ツリーの背景画像は `ERA_FUTURE` の絵を写している。
+
+## PR #79 の追加確認シナリオ
+
+以下の5項目は**実機確認に成功**（2026-10-01）。偉人画面は `perf-08`、叙事詩は `perf-14`、マラソンは `perf-15`、追加時代は `perf-16`、資源の暦は `perf-17`。速度と資源の長い待ちは早送りし、時代の境界は通常進行させた。既存の標準・迅速プローブも `perf-10`・`perf-11` で再確認した。追加したシナリオは、状態が違えばLuaで失敗し、公式UIのエラーもログ判定で失敗にする。
+
+| ファイル | 期待するターンと検査 |
+|---|---|
+| `sengoku-era-reigns-epic.json` | 弘治98・永禄108・元亀163 |
+| `sengoku-era-reigns-marathon.json` | 弘治196・永禄217・元亀328 |
+| `sengoku-era-reigns-beyond-nine.json` | 2ターンずつのデータで、寛永（公式の最終時代）から正保（10番目）へ19、慶安へ21 |
+| `great-people-zero-musicians.json` | 音楽家0人の偉人画面が開き、描画と閉鎖まで通る |
+| `resources-calendar-epic.json` | 資源の年計算が叙事詩の1／25／41ターンで1534／1540／1543を返し、ログとUIの暦で一致する |
+
+速度の試験は3勢力の天下統一検証地図を使い、時代の長さを変更するテストMODを無効にする。天文65・弘治7・永禄37に、150%と300%を掛けて切り捨てる。叙事詩の長さは97・10・55、マラソンは195・21・111。開始ターン1に順に足した値を検査する。各境界の直前と直後で、GameCoreとUIの時代、UIの時代開始ターン、台帳の元号を確認する。判定記録はturn・due・length・fromと人間の結果を照合する。判定時のengineEraは診断用にログへ出し、イベントの順序で前の時代が残る場合を合否条件にしない。改元画面の年齢と点も台帳に一致することを確認する。
+
+追加時代には既存の `poc/JAC_Test_EraTiming` を使う。非表示の真偽値パラメーター `JAC_ERA_TIMING_TAIL` を登録し、万世紀・天下統一の検証地図・trueの3条件がそろったときだけ、LoadOrder 401で前の47時代を2/2にする。遅代はNULL/NULLを保つ。標準／迅速の通常プローブは開始前にfalseを明示するので、元の3/5/1/2/2–4を維持する。追加シナリオは48時代、47時代の2/2、遅代のNULL、適用の印を検査する。18・19・20・21・22で早い切替や二重判定も検査する。この短縮データで暦の整合を判定することはしない。
+
+公式ポップアップは、非表示を確認した上でStartEraShowを呼び、なお非表示であることを確認する。画像がない公式時代は非表示のままエラーを出す経路もあるため、画面が見えないだけでは成功にしない。改元画面はドライバーが閉じることがあるので、最後に自動表示した記録を台帳と照合してから出し直す。
+
+偉人の試験は音楽家のクラスが存在し、音楽家の個人が0、残る個人が75であることを開始時に確認する。起動バーの公式イベントで画面を開き、表示状態と開いたイベントの回数を確認する。現在・履歴・現在を描き、画面画像を残す。公式UIのLuaエラーを含めて実行全体を判定する。
+
+資源の試験は15 km地図で実際の `ExposedMembers.JAC_Resources.CurrentYear()` を呼ぶ。Gameplayのログは `[JAC_RESOURCES_YEAR] ctx=GameCore`、UIのログはctx=UI。99行の叙事詩のGameSpeedTurnCollectionが両側から読めることを確認する。25ターンは24×3＝72か月なので1540。41ターンは34×3＋6×2＝114か月なので1543。古い月増分の降順では25ターンが1542になるため、順の誤りも検出する。GameCoreではCalendarを呼ばず、UIだけで暦の表示を追加照合する。
+
+今回使うエンジンの根拠（共通の先頭は `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/`）：
+
+| 前提 | 公式ファイル:行 |
+|---|---|
+| 叙事詩150・マラソン300 | `Base/Assets/Gameplay/Data/GameSpeeds.xml:31,22`。最短2と切り捨ては本書の実機結果 |
+| 時代の順と終わらない長さ | `Base/Assets/Gameplay/Data/Eras.xml:16`、`DLC/Expansion2/Data/Expansion2_Schema.sql:293-299`。48時代は本MODのデータ |
+| 非表示パラメーターと真偽値条件 | `Base/Assets/Configuration/Data/Schema/SetupParameters.sql:75-99`、`DLC/Babylon/Babylon.modinfo:38-43`。独自フラグの実機適用は `perf-16` で確認済み |
+| 公式ポップアップと欠損画像 | `DLC/Expansion2/UI/Additions/EraCompletePopup.lua:64,68-113,75-78` |
+| 偉人画面の起動・閉鎖・描画 | `Base/Assets/UI/Popups/GreatPeoplePopup.lua:828-858,880-883,1000-1024,1220-1222` |
+| 偉人と削除時の連鎖 | `Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1519,1566,1573,1579,1598`。75人／音楽家0人は本実装とSQL検査 |
+| 暦の行の順と月増分 | `Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1403-1408,3337`。1534開始・99行と上記の年は本MODの暦データから求めた値 |
+| エンジンの暦の表示 | `Base/Assets/UI/TopPanel.lua:387-399` |
+
+実行方法は [autotest.md](autotest.md#今回追加した実機シナリオ)。追加7本の実機実行は、長い待ちに早送りを使って成功した。未確認なのは48時代全体のAI・保存・長時間の挙動、追加時代の他の公式画面、通常進行300ターンの性能・長期安定性である。300ターン版の早送りは保存・復元を検証したもので、通常進行300ターンの性能評価には使わない。

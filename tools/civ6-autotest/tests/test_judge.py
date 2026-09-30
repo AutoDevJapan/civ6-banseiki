@@ -241,6 +241,10 @@ class JudgeTests(unittest.TestCase):
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
             "sengoku-oaths-oda.json",
+            "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
+            "sengoku-era-reigns-epic.json", "sengoku-era-reigns-marathon.json",
+            "sengoku-era-reigns-beyond-nine.json", "great-people-zero-musicians.json",
+            "resources-calendar-epic.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

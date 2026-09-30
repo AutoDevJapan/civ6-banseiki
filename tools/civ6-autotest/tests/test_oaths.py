@@ -1,11 +1,13 @@
 from pathlib import Path
 import json
 import sys
+import time
 import unittest
+from unittest.mock import patch
 import lupa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scenario import validate_scenario, fast_forward_scenario
+from scenario import Runner, validate_scenario, fast_forward_scenario
 
 
 class OathScenarioTests(unittest.TestCase):
@@ -52,24 +54,48 @@ class OathScenarioTests(unittest.TestCase):
         source = {'name': 'test', 'steps': [{'action': 'autoplay', 'turns': 64, 'timeout': 14400}]}
         result = fast_forward_scenario(source)
         self.assertEqual(source['steps'][0]['turns'], 64)
-        self.assertEqual(result['steps'][2]['turns'], 2)
-        self.assertEqual([s.get('state_name') for s in result['steps'][:2]], ['InGame', 'GameCore_Tuner'])
-        self.assertEqual(result['test_mode'], {'skipped_turns': 62, 'continuous_performance_valid': False})
+        self.assertEqual(result['steps'], [{'action': 'autoplay', 'turns': 64,
+                                          'timeout': 14400, 'fast_forward': True}])
+        self.assertEqual(result['test_mode'], {'skipped_turns': 0, 'continuous_performance_valid': False})
         lua = lupa.LuaRuntime()
-        lua.execute("TURN=1; RULE='RULESET_JAC_BANSEIKI'; MULTI=false; Game={GetCurrentGameTurn=function() return TURN end,SetCurrentGameTurn=function(t) TURN=t end}; GameConfiguration={GetRuleSet=function() return RULE end,IsAnyMultiplayer=function() return MULTI end}")
-        lua.execute(result['steps'][0]['code'])
-        code = result['steps'][1]['code']
-        lua.execute(code)
-        self.assertEqual(lua.globals().TURN, 63)
-        for rule, multi, message in (('RULESET_STANDARD', False, 'test ruleset required'),
-                                     ('RULESET_JAC_BANSEIKI', True, 'single-player test required')):
-            lua.globals().RULE, lua.globals().MULTI = rule, multi
-            with self.assertRaisesRegex(lupa.LuaError, message):
-                lua.execute(result['steps'][0]['code'])
-            self.assertEqual(lua.globals().TURN, 63)
-        # GameCore really lacks IsAnyMultiplayer: the jump must not call a UI-only API.
-        lua.globals().RULE = 'RULESET_JAC_BANSEIKI'
-        lua.execute('GameConfiguration.IsAnyMultiplayer=nil')
-        lua.execute('GameConfiguration.GetRuleSet=nil')
-        lua.execute(code)
-        self.assertEqual(lua.globals().TURN, 125)
+        lua.execute("""
+            TURN=1; RULE='RULESET_JAC_BANSEIKI'; MULTI=false
+            Game={GetCurrentGameTurn=function() return TURN end,
+                  SetCurrentGameTurn=function(t) TURN=t end,
+                  GetEras=function() return {
+                      GetCurrentEraMinimumEndTurn=function() return 66 end,
+                      GetCurrentEraMaximumEndTurn=function() return 66 end,
+                      GetNextEraCountdown=function() return -1 end} end}
+            GameConfiguration={GetRuleSet=function() return RULE end,
+                               IsAnyMultiplayer=function() return MULTI end}
+        """)
+        runner = Runner(result, Path('unused'), Path('unused'), Path('unused'), 4318)
+
+        def run_lua(state, code, timeout):
+            config = lua.globals().GameConfiguration
+            # GameCore has no UI-only configuration APIs.
+            if state == 'GameCore_Tuner':
+                lua.globals().GameConfiguration = None
+            try:
+                return str(lua.execute(code))
+            finally:
+                lua.globals().GameConfiguration = config
+
+        def autoplay(turns, timeout, **flags):
+            self.assertLessEqual(turns, 2)
+            lua.globals().TURN += turns
+            return 'done'
+
+        with patch.object(runner, '_lua', side_effect=run_lua), \
+                patch.object(runner, '_autoplay', side_effect=autoplay) as play:
+            runner._fast_forward_autoplay(64, 10, deadline=time.monotonic()+10)
+            self.assertEqual(lua.globals().TURN, 65)
+            self.assertEqual(result['test_mode']['skipped_turns'], 62)
+            self.assertEqual(play.call_count, 1)
+            for rule, multi, message in (('RULESET_STANDARD', False, 'test ruleset required'),
+                                         ('RULESET_JAC_BANSEIKI', True, 'single-player test required')):
+                lua.globals().RULE, lua.globals().MULTI = rule, multi
+                with self.assertRaisesRegex(lupa.LuaError, message):
+                    runner._fast_forward_autoplay(64, 10, deadline=time.monotonic()+10)
+                self.assertEqual(lua.globals().TURN, 65)
+            self.assertEqual(play.call_count, 1)
