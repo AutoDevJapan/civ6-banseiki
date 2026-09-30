@@ -1,0 +1,275 @@
+{
+  "name": "Bundle 2 religion persistence: native custom-slot founding fixture plus independent PoC ledger; founder defeat input, last world follower, scriptures, six exact save/load comparisons, discovery and revival",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620940,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_DEFERRED'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 then error('wrong local founder') end; local p=Players[0]; local settler=nil; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units.UNIT_SETTLER.Index then settler=u; break end end; if not settler then error('missing founding settler') end; UnitManager.RequestOperation(settler,UnitOperationTypes.FOUND_CITY); return 'capital requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetCities():GetCapitalCity()~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); if not c then error('native holy city missing') end; local custom=GameInfo.Religions.RELIGION_CUSTOM_1; if not custom then error('native custom religion slot missing') end; p:GetReligion():SetHolyCity(c); Game.GetReligion():FoundReligion(0,custom.Index); Game.GetReligion():AddBelief(0,GameInfo.Beliefs.BELIEF_CATHEDRAL.Index); local found=false; for _,r in ipairs(Game.GetReligion():GetReligions()) do if r.Religion==custom.Index then found=true end end; if not found then error('native placeholder not founded') end; return 'native placeholder religion founded'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; if Game:GetProperty(R.PROPERTY_KEY)~=nil then error('fresh game inherited a ledger') end; R.Found(id,0,'origin',5,1,'PLAYER_0'); R.SetCommunity(id,'diaspora',1,0,'PLAYER_1'); R.Found('JAC_RP_PLACEHOLDER_02',1,'origin',2,1,'PLAYER_1'); for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do R.PreserveAsset(id,asset,kind,asset=='exile_original' and 'EXILE_1' or (asset=='book_original' and 'CAVE' or 'RUINS')) end; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=6 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=false or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_PUBLIC"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-PUBLIC",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-PUBLIC",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=6 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=false or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_PUBLIC"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.NotifyFounderDefeated(0); R.SetCommunity(id,'origin',0,0,'PLAYER_0'); local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_UNDERGROUND"
+    },
+    {
+      "action": "autoplay",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_UNDERGROUND"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-UNDERGROUND",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-UNDERGROUND",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_UNDERGROUND"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.SetCommunity(id,'diaspora',0,0,'PLAYER_1'); local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_LOST"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-LOST",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-LOST",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_LOST"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.Discover(id,'discovery_book','book_original','SCRIPTURE','TRAVELER_7','TRAVELER','CAVE'); R.Discover(id,'discovery_sale','relic_discovered','RELIC','MONK_7','MONK','SHIPWRECK'); R.ResolveDiscovery(id,'discovery_sale','SELL'); local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; if s.discoveries.discovery_book.outcome~=nil then error('pending discovery resolved') end; return R.Snapshot()",
+      "capture_as": "RP_DISCOVERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-DISCOVERED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-DISCOVERED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; if s.discoveries.discovery_book.outcome~=nil then error('pending discovery resolved') end; return R.Snapshot()",
+      "equals_capture": "RP_DISCOVERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.ResolveDiscovery(id,'discovery_book','REVIVE','revival_1','revived',2,0,'PLAYER_1'); local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=2 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=2 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "capture_as": "RP_REVIVED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-REVIVED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-REVIVED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=2 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=2 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "equals_capture": "RP_REVIVED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.SetCommunity(id,'revived',2,1,'PLAYER_1'); local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=2 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=2 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "capture_as": "RP_RESTORED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-RESTORED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-RESTORED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=2 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='DEFERRED' or s.assets.relic_discovered.kind~='RELIC' then error('deferred branch facts') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=2 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "equals_capture": "RP_RESTORED"
+    }
+  ]
+}

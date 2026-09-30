@@ -1,0 +1,491 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_RP_PUBLIC" Language="ja_JP">
+      <Text>公的に存続</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PUBLIC" Language="en_US">
+      <Text>Publicly active</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PUBLIC" Language="ru_RU">
+      <Text>Открытое существование</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_UNDERGROUND" Language="ja_JP">
+      <Text>地下で存続</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_UNDERGROUND" Language="en_US">
+      <Text>Underground continuity</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_UNDERGROUND" Language="ru_RU">
+      <Text>Существование в подполье</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_LOST" Language="ja_JP">
+      <Text>失われた宗教</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_LOST" Language="en_US">
+      <Text>Lost religion</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_LOST" Language="ru_RU">
+      <Text>Утраченная религия</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOLLOWERS" Language="ja_JP">
+      <Text>信徒</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOLLOWERS" Language="en_US">
+      <Text>Followers</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOLLOWERS" Language="ru_RU">
+      <Text>Последователи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FACILITIES" Language="ja_JP">
+      <Text>公的施設</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FACILITIES" Language="en_US">
+      <Text>Public facilities</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FACILITIES" Language="ru_RU">
+      <Text>Общественные учреждения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOUNDER_DEFEATED" Language="ja_JP">
+      <Text>発祥勢力は滅亡</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOUNDER_DEFEATED" Language="en_US">
+      <Text>Founding faction defeated</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_FOUNDER_DEFEATED" Language="ru_RU">
+      <Text>Основавшая держава уничтожена</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAN_REVIVE" Language="ja_JP">
+      <Text>再興の資料あり</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAN_REVIVE" Language="en_US">
+      <Text>Revival source survives</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAN_REVIVE" Language="ru_RU">
+      <Text>Источник для возрождения сохранился</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DEFERRED" Language="ja_JP">
+      <Text>分岐を記録（効果は未決）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DEFERRED" Language="en_US">
+      <Text>Branch recorded (effects undecided)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DEFERRED" Language="ru_RU">
+      <Text>Ветка записана (эффекты не определены)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCRIPTURE" Language="ja_JP">
+      <Text>教典</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCRIPTURE" Language="en_US">
+      <Text>Scripture</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCRIPTURE" Language="ru_RU">
+      <Text>Священное писание</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RELIC" Language="ja_JP">
+      <Text>遺物</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RELIC" Language="en_US">
+      <Text>Relic</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RELIC" Language="ru_RU">
+      <Text>Реликвия</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RECORD" Language="ja_JP">
+      <Text>記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RECORD" Language="en_US">
+      <Text>Record</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RECORD" Language="ru_RU">
+      <Text>Запись</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERSON" Language="ja_JP">
+      <Text>人物（亡命者を含む）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERSON" Language="en_US">
+      <Text>Person (including an exile)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERSON" Language="ru_RU">
+      <Text>Человек (в том числе изгнанник)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HOLY_SITE" Language="ja_JP">
+      <Text>聖地</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HOLY_SITE" Language="en_US">
+      <Text>Holy site</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HOLY_SITE" Language="ru_RU">
+      <Text>Священное место</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_KABUKIMONO" Language="ja_JP">
+      <Text>傾奇者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_KABUKIMONO" Language="en_US">
+      <Text>Kabukimono</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_KABUKIMONO" Language="ru_RU">
+      <Text>Кабукимоно</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_TRAVELER" Language="ja_JP">
+      <Text>旅人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_TRAVELER" Language="en_US">
+      <Text>Traveler</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_TRAVELER" Language="ru_RU">
+      <Text>Путешественник</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCHOLAR" Language="ja_JP">
+      <Text>学者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCHOLAR" Language="en_US">
+      <Text>Scholar</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SCHOLAR" Language="ru_RU">
+      <Text>Учёный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERFORMER" Language="ja_JP">
+      <Text>芸人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERFORMER" Language="en_US">
+      <Text>Performer</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PERFORMER" Language="ru_RU">
+      <Text>Артист</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_EXPLORER" Language="ja_JP">
+      <Text>探検家</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_EXPLORER" Language="en_US">
+      <Text>Explorer</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_EXPLORER" Language="ru_RU">
+      <Text>Исследователь</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_THIEF" Language="ja_JP">
+      <Text>盗賊</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_THIEF" Language="en_US">
+      <Text>Thief</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_THIEF" Language="ru_RU">
+      <Text>Разбойник</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_MONK" Language="ja_JP">
+      <Text>僧侶</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_MONK" Language="en_US">
+      <Text>Monk</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_MONK" Language="ru_RU">
+      <Text>Монах</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RUINS" Language="ja_JP">
+      <Text>遺跡</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RUINS" Language="en_US">
+      <Text>Ruins</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RUINS" Language="ru_RU">
+      <Text>Руины</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABANDONED_CASTLE" Language="ja_JP">
+      <Text>廃城</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABANDONED_CASTLE" Language="en_US">
+      <Text>Abandoned castle</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABANDONED_CASTLE" Language="ru_RU">
+      <Text>Заброшенный замок</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAVE" Language="ja_JP">
+      <Text>洞窟</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAVE" Language="en_US">
+      <Text>Cave</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CAVE" Language="ru_RU">
+      <Text>Пещера</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SHIPWRECK" Language="ja_JP">
+      <Text>沈没船</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SHIPWRECK" Language="en_US">
+      <Text>Shipwreck</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SHIPWRECK" Language="ru_RU">
+      <Text>Затонувший корабль</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SPACE_RUINS" Language="ja_JP">
+      <Text>宇宙遺跡</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SPACE_RUINS" Language="en_US">
+      <Text>Space ruins</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SPACE_RUINS" Language="ru_RU">
+      <Text>Космические руины</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_REVIVE" Language="ja_JP">
+      <Text>再興</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_REVIVE" Language="en_US">
+      <Text>Revival</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_REVIVE" Language="ru_RU">
+      <Text>Возрождение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SELL" Language="ja_JP">
+      <Text>売却</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SELL" Language="en_US">
+      <Text>Sale</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_SELL" Language="ru_RU">
+      <Text>Продажа</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CONCEAL" Language="ja_JP">
+      <Text>秘匿</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CONCEAL" Language="en_US">
+      <Text>Concealment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_CONCEAL" Language="ru_RU">
+      <Text>Сокрытие</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RESEARCH" Language="ja_JP">
+      <Text>研究</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RESEARCH" Language="en_US">
+      <Text>Research</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_RESEARCH" Language="ru_RU">
+      <Text>Изучение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERESY" Language="ja_JP">
+      <Text>異端化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERESY" Language="en_US">
+      <Text>Heresy</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERESY" Language="ru_RU">
+      <Text>Ересь</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABSORB" Language="ja_JP">
+      <Text>他宗教への吸収</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABSORB" Language="en_US">
+      <Text>Absorption into another religion</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ABSORB" Language="ru_RU">
+      <Text>Поглощение другой религией</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ARTIFACT" Language="ja_JP">
+      <Text>Artifact獲得</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ARTIFACT" Language="en_US">
+      <Text>Artifact acquisition</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_ARTIFACT" Language="ru_RU">
+      <Text>Получение артефакта</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DIPLOMATIC_INCIDENT" Language="ja_JP">
+      <Text>外交事件</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DIPLOMATIC_INCIDENT" Language="en_US">
+      <Text>Diplomatic incident</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_DIPLOMATIC_INCIDENT" Language="ru_RU">
+      <Text>Дипломатический инцидент</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERO" Language="ja_JP">
+      <Text>英雄加入</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERO" Language="en_US">
+      <Text>Hero recruitment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_HERO" Language="ru_RU">
+      <Text>Присоединение героя</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_01" Language="ja_JP">
+      <Text>検証用仮宗教 01</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_01" Language="en_US">
+      <Text>Placeholder religion 01</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_01" Language="ru_RU">
+      <Text>Условная религия 01</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_02" Language="ja_JP">
+      <Text>検証用仮宗教 02</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_02" Language="en_US">
+      <Text>Placeholder religion 02</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_02" Language="ru_RU">
+      <Text>Условная религия 02</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_03" Language="ja_JP">
+      <Text>検証用仮宗教 03</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_03" Language="en_US">
+      <Text>Placeholder religion 03</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_03" Language="ru_RU">
+      <Text>Условная религия 03</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_04" Language="ja_JP">
+      <Text>検証用仮宗教 04</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_04" Language="en_US">
+      <Text>Placeholder religion 04</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_04" Language="ru_RU">
+      <Text>Условная религия 04</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_05" Language="ja_JP">
+      <Text>検証用仮宗教 05</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_05" Language="en_US">
+      <Text>Placeholder religion 05</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_05" Language="ru_RU">
+      <Text>Условная религия 05</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_06" Language="ja_JP">
+      <Text>検証用仮宗教 06</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_06" Language="en_US">
+      <Text>Placeholder religion 06</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_06" Language="ru_RU">
+      <Text>Условная религия 06</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_07" Language="ja_JP">
+      <Text>検証用仮宗教 07</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_07" Language="en_US">
+      <Text>Placeholder religion 07</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_07" Language="ru_RU">
+      <Text>Условная религия 07</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_08" Language="ja_JP">
+      <Text>検証用仮宗教 08</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_08" Language="en_US">
+      <Text>Placeholder religion 08</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_08" Language="ru_RU">
+      <Text>Условная религия 08</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_09" Language="ja_JP">
+      <Text>検証用仮宗教 09</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_09" Language="en_US">
+      <Text>Placeholder religion 09</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_09" Language="ru_RU">
+      <Text>Условная религия 09</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_10" Language="ja_JP">
+      <Text>検証用仮宗教 10</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_10" Language="en_US">
+      <Text>Placeholder religion 10</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_10" Language="ru_RU">
+      <Text>Условная религия 10</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_11" Language="ja_JP">
+      <Text>検証用仮宗教 11</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_11" Language="en_US">
+      <Text>Placeholder religion 11</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_11" Language="ru_RU">
+      <Text>Условная религия 11</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_12" Language="ja_JP">
+      <Text>検証用仮宗教 12</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_12" Language="en_US">
+      <Text>Placeholder religion 12</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_12" Language="ru_RU">
+      <Text>Условная религия 12</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_13" Language="ja_JP">
+      <Text>検証用仮宗教 13</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_13" Language="en_US">
+      <Text>Placeholder religion 13</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_13" Language="ru_RU">
+      <Text>Условная религия 13</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_14" Language="ja_JP">
+      <Text>検証用仮宗教 14</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_14" Language="en_US">
+      <Text>Placeholder religion 14</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_14" Language="ru_RU">
+      <Text>Условная религия 14</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_15" Language="ja_JP">
+      <Text>検証用仮宗教 15</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_15" Language="en_US">
+      <Text>Placeholder religion 15</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_15" Language="ru_RU">
+      <Text>Условная религия 15</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_16" Language="ja_JP">
+      <Text>検証用仮宗教 16</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_16" Language="en_US">
+      <Text>Placeholder religion 16</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_16" Language="ru_RU">
+      <Text>Условная религия 16</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_17" Language="ja_JP">
+      <Text>検証用仮宗教 17</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_17" Language="en_US">
+      <Text>Placeholder religion 17</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_17" Language="ru_RU">
+      <Text>Условная религия 17</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_18" Language="ja_JP">
+      <Text>検証用仮宗教 18</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_18" Language="en_US">
+      <Text>Placeholder religion 18</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_18" Language="ru_RU">
+      <Text>Условная религия 18</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_19" Language="ja_JP">
+      <Text>検証用仮宗教 19</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_19" Language="en_US">
+      <Text>Placeholder religion 19</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_19" Language="ru_RU">
+      <Text>Условная религия 19</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_20" Language="ja_JP">
+      <Text>検証用仮宗教 20</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_20" Language="en_US">
+      <Text>Placeholder religion 20</Text>
+    </Row>
+    <Row Tag="LOC_JAC_RP_PLACEHOLDER_20" Language="ru_RU">
+      <Text>Условная религия 20</Text>
+    </Row>
+  </LocalizedText>
+</GameData>
