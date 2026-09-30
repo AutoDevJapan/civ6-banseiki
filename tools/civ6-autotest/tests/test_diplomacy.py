@@ -138,5 +138,70 @@ class DiplomacyDuringAutoplayTests(unittest.TestCase):
         self.assertEqual(len(game.closed), 26)  # cap 20 + 5 * turns, then the step stops
 
 
+class StarvedInGameStepTests(unittest.TestCase):
+    """An AI statement opened while a step polls InGame stops InGame answering (live owner-o-03/05)."""
+
+    WAIT = {"action": "wait_for", "timeout": 600, "condition": {
+        "type": "lua", "state_name": "InGame", "code": "return Players[0]:IsTurnActive()"}}
+
+    def run_step(self, step, lua):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_states", return_value=["InGame", "DiplomacyActionView"]), patch.object(
+                runner, "_lua", side_effect=lua
+            ), patch("scenario.time.sleep"), patch("builtins.print"):
+                log = Path(folder) / "steps.jsonl"
+                try:
+                    return runner._run_step(step), log.read_text(encoding="utf-8")
+                finally:
+                    self.log = log.read_text(encoding="utf-8") if log.exists() else ""
+
+    def test_wait_closes_statement_and_polls_again(self):
+        view = {"open": True}
+
+        def lua(state, code, _timeout=5.0):
+            if state == "DiplomacyActionView":
+                was, view["open"] = view["open"], False
+                return str(was).lower()
+            if view["open"]:
+                raise LuaResponseUnknown("FireTuner response timed out after 0/8 bytes")
+            return "true"
+
+        detail, steps = self.run_step(self.WAIT, lua)
+        self.assertIn("condition met", detail)
+        self.assertIn("closed AI diplomacy statement after an InGame timeout; retry 1/3", steps)
+
+    def test_wait_still_fails_when_nothing_was_open_or_retries_run_out(self):
+        def nothing_open(state, code, _timeout=5.0):
+            if state == "DiplomacyActionView":
+                return "false"
+            raise LuaResponseUnknown("timed out")
+
+        with self.assertRaises(LuaResponseUnknown):
+            self.run_step(self.WAIT, nothing_open)
+
+        def reopens(state, code, _timeout=5.0):
+            if state == "DiplomacyActionView":
+                return "true"
+            raise LuaResponseUnknown("timed out")
+
+        with self.assertRaises(LuaResponseUnknown):
+            self.run_step(self.WAIT, reopens)
+        self.assertEqual(self.log.count("ingame_unblock"), 3)
+
+    def test_ui_lua_is_never_replayed_after_it_may_have_run(self):
+        sent = []
+
+        def lua(state, code, _timeout=5.0):
+            sent.append(state)
+            if state == "DiplomacyActionView":
+                return "true"
+            raise LuaResponseUnknown("timed out")
+
+        with self.assertRaises(LuaResponseUnknown):
+            self.run_step({"action": "ui_lua", "state_name": "InGame", "code": "return 1"}, lua)
+        self.assertEqual(sent, ["InGame"])
+
+
 if __name__ == "__main__":
     unittest.main()

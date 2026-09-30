@@ -370,6 +370,7 @@ class Runner:
         end = time.monotonic() + timeout
         last = "not ready"
         log_baseline = None
+        unblocked = 0
         if condition["type"] == "log_line":
             # Include output from the action that triggered this wait, but not older steps.
             log_baseline = self.log_step_baseline or snapshot_logs(self.logs)
@@ -399,13 +400,39 @@ class Runner:
                     if kind == "log_line":
                         self.log_matches_consumed[key] = self.log_matches_consumed.get(key, 0) + 1
                     return
-            except (LuaResponseUnknown, LuaExecutionError):
-                # This predicate may have executed; never poll it again.
+            except LuaExecutionError:
                 raise
+            except LuaResponseUnknown:
+                # Wait conditions are read-only predicates, so re-polling one is safe once an AI
+                # statement that starved InGame is closed; otherwise it may have run, never poll again.
+                if not self._unblock_ingame(condition.get("state_name", ""), end, unblocked):
+                    raise
+                unblocked += 1
+                continue
             except (TunerError, OSError) as exc:
                 last = str(exc)
             time.sleep(min(0.5, max(0.0, end - time.monotonic())))
         raise ScenarioError(f"Timed out after {timeout}s waiting for {condition}; last: {last}")
+
+    # An AI statement to the human (DiplomacyActionView + LeaderScene) can stop InGame answering
+    # FireTuner until it is closed, while the diplomacy contexts still answer (live owner-o-03/05,
+    # court-arbitration step 24; sengoku-events-list-02 recovered the same way inside autoplay).
+    INGAME_UNBLOCK_RETRIES = 3
+
+    def _unblock_ingame(self, state: str, deadline: float, attempts: int) -> bool:
+        """After an InGame FireTuner timeout, close AI diplomacy screens; True means retry."""
+        if state.casefold() != "ingame" or attempts >= self.INGAME_UNBLOCK_RETRIES:
+            return False
+        self._disconnect()  # A late reply to the timed-out command must not reach the next one.
+        try:
+            # One pass: the diplomacy contexts keep answering while InGame is starved.
+            closed = self._close_diplomacy_once(min(deadline, time.monotonic() + 10))
+        except (TunerError, OSError, InputError, ScenarioError):
+            return False  # The caller re-raises the original InGame timeout.
+        if closed:
+            self._log("ingame_unblock", "OK", f"closed {', '.join(closed)} after an InGame timeout; "
+                      f"retry {attempts + 1}/{self.INGAME_UNBLOCK_RETRIES}")
+        return bool(closed)
 
     def _wait_frontend_ready(self, timeout: float, *, skip_opening: bool = False) -> None:
         """Retry only this read-only startup probe after a lost Tuner reply."""
@@ -983,7 +1010,18 @@ class Runner:
         if action == "end_turn":
             return self._end_turn(timeout, deadline=deadline)
         if action == "ui_lua":
-            value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
+            attempts = 0
+            while True:
+                try:
+                    value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
+                    break
+                except (LuaResponseUnknown, LuaExecutionError):
+                    raise  # The command may have run: never replay it.
+                except (TunerError, OSError):
+                    # Not sent yet (no reply to the state listing), so a retry cannot run it twice.
+                    if not self._unblock_ingame(step["state_name"], deadline, attempts):
+                        raise
+                    attempts += 1
             if "equals_capture" in step:
                 key = step["equals_capture"]
                 if key not in self.lua_captures or value != self.lua_captures[key]:

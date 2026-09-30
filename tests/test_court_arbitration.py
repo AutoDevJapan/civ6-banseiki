@@ -686,6 +686,9 @@ class SubjugationOrderTests(unittest.TestCase):
         self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 32)
 
 
+UI_ONLY_STATES = {"InGame", "DiplomacyActionView", "DiplomacyDealView"}
+
+
 @unittest.skipIf(lupa is None, "lupa is not installed")
 class LiveScenarioOnStubsTests(unittest.TestCase):
     """Plays the gameplay steps of scenarios/court-arbitration.json against the stubs, so a slip in the
@@ -719,7 +722,8 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
         for step in steps:
             if step["action"] == "autoplay":
                 self.next_turn(self.turn + step["turns"])
-            elif step["action"] == "ui_lua" and "Controls." not in step["code"] and step["state_name"] != "InGame":
+            elif (step["action"] == "ui_lua" and step["state_name"] not in UI_ONLY_STATES
+                  and "Controls." not in step["code"]):
                 results.append(self.lua.execute(step["code"]))
             elif step["action"] == "wait_for" and step["condition"]["state_name"] == "GameCore_Tuner":
                 self.assertIs(self.lua.execute(step["condition"]["code"]), True)

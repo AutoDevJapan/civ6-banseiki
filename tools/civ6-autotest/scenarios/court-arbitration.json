@@ -261,6 +261,16 @@
     },
     {
       "action": "ui_lua",
+      "state_name": "DiplomacyDealView",
+      "code": "if ContextPtr:IsHidden() then return 'no deal' end; OnLocalPlayerTurnEnd(); return 'AI deal refused'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "if ContextPtr:IsHidden() then return 'no statement' end; OnClose(); return 'AI statement closed'"
+    },
+    {
+      "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
       "code": "if Controls.OpenButton:IsHidden() then error('court button hidden with an order to subdue') end; Controls.OpenButton:DoLeftClick(); if Controls.Panel:IsHidden() then error('panel did not open') end; return 'panel open'"
     },
