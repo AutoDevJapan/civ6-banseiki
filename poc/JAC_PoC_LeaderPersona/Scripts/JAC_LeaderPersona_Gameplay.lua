@@ -356,6 +356,6 @@ end);
 ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
     Reconcile = Reconcile, EvolutionCost = EvolutionCost,
-    Purchase = Purchase, OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
+    OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
 };
 print("JAC_LeaderPersona_Gameplay: ready");

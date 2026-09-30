@@ -272,7 +272,17 @@ class LeaderPersonaLuaTests(unittest.TestCase):
     def purchase(self, route, depth=1, leader=DATE):
         node = f"{leader}_{route}_{depth}"
         definition = self.g.GameInfo.JAC_PersonaTreeNodes[node]
-        return self.api.Purchase(0, leader, node, definition.CategoryType, definition.RouteType)
+        return self.request_purchase(0, leader, node, definition.CategoryType, definition.RouteType)
+
+    def request_purchase(self, owner, leader, node, category=None, route=None):
+        params = self.lua.table_from({k: v for k, v in {
+            "Leader": leader, "Node": node, "ConfirmCategory": category, "ConfirmRoute": route
+        }.items() if v is not None})
+        self.g.FIRE("JAC_LeaderPersonaPurchase", owner, params)
+        return self.g.Players[owner].GetProperty(None, "JAC_PERSONA_PURCHASE_RESULT")
+
+    def test_purchase_is_only_available_through_the_gameplay_event(self):
+        self.assertIsNone(self.api.Purchase)
 
     def test_only_established_unneutralized_city_governance_earns_once_across_reload(self):
         governor = self.settled()
@@ -360,13 +370,13 @@ class LeaderPersonaLuaTests(unittest.TestCase):
     def test_skill_purchase_requires_own_person_prerequisite_merit_and_confirmation(self):
         self.settled()
         first, second = DATE+"_ENVOYS_1", DATE+"_ENVOYS_2"
-        self.assertEqual(self.api.Purchase(2, DATE, first, "CONTACT", "ENVOYS"), "NOT_OWNED")
-        self.assertEqual(self.api.Purchase(0, DATE, ODA+"_EXCHANGE_1", "CONTACT", "EXCHANGE"), "INVALID_NODE")
+        self.assertEqual(self.request_purchase(2, DATE, first, "CONTACT", "ENVOYS"), "NOT_OWNED")
+        self.assertEqual(self.request_purchase(0, DATE, ODA+"_EXCHANGE_1", "CONTACT", "EXCHANGE"), "INVALID_NODE")
         self.assertEqual(self.purchase("ENVOYS", 2), "PREREQ_LOCKED")
         self.assertEqual(self.purchase("ENVOYS"), "NO_MERIT")
         self.set_merit(8)
-        self.assertEqual(self.api.Purchase(0, DATE, first), "CONFIRM_REQUIRED")
-        self.assertEqual(self.api.Purchase(0, DATE, first, "ADMIN", "ENVOYS"), "CONFIRM_REQUIRED")
+        self.assertEqual(self.request_purchase(0, DATE, first), "CONFIRM_REQUIRED")
+        self.assertEqual(self.request_purchase(0, DATE, first, "ADMIN", "ENVOYS"), "CONFIRM_REQUIRED")
         self.assertIsNone(self.prop("CATEGORY"))
         self.assertEqual(self.prop("MERIT"), 8)
         titles = (self.g.Players[0].points, self.g.Players[0].spent, len(self.g.GRANTS[0]))
@@ -383,10 +393,10 @@ class LeaderPersonaLuaTests(unittest.TestCase):
     def test_malformed_gameplay_requests_do_not_reach_native_lookups_or_change_state(self):
         self.settled(); self.set_merit(8)
         for leader in (None, 0, self.lua.table()):
-            self.assertEqual(self.api.Purchase(0,leader,DATE+"_ENVOYS_1","CONTACT","ENVOYS"),"NOT_OWNED")
+            self.assertEqual(self.request_purchase(0,leader,DATE+"_ENVOYS_1","CONTACT","ENVOYS"),"NOT_OWNED")
             self.assertFalse(self.g.JAC_TreeOpen(leader))
         for node in (None,0,self.lua.table(),"unknown"):
-            self.assertEqual(self.api.Purchase(0,DATE,node,"CONTACT","ENVOYS"),"INVALID_NODE")
+            self.assertEqual(self.request_purchase(0,DATE,node,"CONTACT","ENVOYS"),"INVALID_NODE")
         self.assertEqual(self.prop("MERIT"),8)
         self.assertIsNone(self.prop("CATEGORY"))
     def test_irreversible_category_and_exclusive_sibling_locks_survive_load(self):

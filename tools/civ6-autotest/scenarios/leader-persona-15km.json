@@ -442,7 +442,21 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local g=Players[0]:GetGovernors();\nif Game:GetProperty(prefix..'MERIT')~=Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE')-8 then error('wrong merit spend') end;\nif g:GetGovernorPoints()~=Game:GetProperty('JAC_PERSONA_SCENARIO_TITLES_PRE_PURCHASE') or g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PERSONA_SCENARIO_SPENT_PRE_PURCHASE') then error('custom promotion spent Governor Titles') end;\nif Players[0]:GetProperty('JAC_PERSONA_PURCHASE_RESULT')~='PURCHASED' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_LEADER')~='LEADER_JAC_DATE_TANEMUNE' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_NODE')~='LEADER_JAC_DATE_TANEMUNE_ENVOYS_1' then error('purchase receipt differs from submitted node') end;\nif ExposedMembers.JAC_LeaderPersona.Purchase(0,'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_DATE_TANEMUNE_ENVOYS_1','CONTACT','ENVOYS')~='OWNED' then error('duplicate purchase accepted') end;\nreturn 'merit spent once; official titles unchanged' "
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local g=Players[0]:GetGovernors();\nif Game:GetProperty(prefix..'MERIT')~=Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE')-8 then error('wrong merit spend') end;\nif g:GetGovernorPoints()~=Game:GetProperty('JAC_PERSONA_SCENARIO_TITLES_PRE_PURCHASE') or g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PERSONA_SCENARIO_SPENT_PRE_PURCHASE') then error('custom promotion spent Governor Titles') end;\nif Players[0]:GetProperty('JAC_PERSONA_PURCHASE_RESULT')~='PURCHASED' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_LEADER')~='LEADER_JAC_DATE_TANEMUNE' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_NODE')~='LEADER_JAC_DATE_TANEMUNE_ENVOYS_1' then error('purchase receipt differs from submitted node') end;\nif ExposedMembers.JAC_LeaderPersona.Purchase~=nil then error('purchase function exposed outside gameplay operation') end;\nreturn 'merit spent once; official titles unchanged' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaPurchase',Leader='LEADER_JAC_DATE_TANEMUNE',Node='LEADER_JAC_DATE_TANEMUNE_ENVOYS_1',ConfirmCategory='CONTACT',ConfirmRoute='ENVOYS'}); return 'duplicate request submitted through gameplay operation'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetProperty('JAC_PERSONA_PURCHASE_RESULT')=='OWNED' and Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')==Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE')-8"
+      },
+      "timeout": 30
     },
     {
       "action": "ui_lua",
