@@ -15,6 +15,7 @@
 | [`spec/data/japan-1534-start.json`](spec/data/japan-1534-start.json) | 史料上の留保を含む開始データ。53拠点・勢力割当を日本地図の生成器が参照 |
 | [`research/japan-1534-relations.md`](research/japan-1534-relations.md) | 1534年の22勢力間の同盟・婚姻・主従・敵対の出典付き調査草案 |
 | [`spec/data/japan-1534-relations.json`](spec/data/japan-1534-relations.json) | 上記の機械可読データ。開始時に反映する関係の元データ |
+| [`spec/data/japan-city-name-pools.json`](spec/data/japan-city-name-pools.json) | 22勢力の都市名の一覧（漢字・読み・旧国・種別・出典）。生成は `tools/japan_map_scale/write_city_names.py` |
 | [`research/japan-map-resources.md`](research/japan-map-resources.md) | 日本マップの資源・河川・湖沼・植生・火山の調査と出典 |
 | [`spec/data/japan-map-resources.json`](spec/data/japan-map-resources.json) | 上記調査の機械可読な候補・配置規則 |
 | [`research/japan-1534-prosperity.md`](research/japan-1534-prosperity.md) | 1534年開始時の各家の規模（石高・動員力の推定）と、Civ6 の開始状態（人口・建物・区域・部隊）への写像。#48 の実装の元になった調査で、決定は SSOT 3.1 |
@@ -22,15 +23,16 @@
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
 | [`research/sengoku-ages.md`](research/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）設計。公式の時代システム調査、改元ごとの判定、Lua の武功の台帳（点・判定・保存・マルチプレイ同期）、家ごとの誓約と暗黒期の専用政策、画面の見せ方、現状を測る実機シナリオ |
-| [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント60件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
+| [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント61件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
-| [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、Q36〜Q39 の暫定の既定、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q71・Q72） |
-| [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと60件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階・助言ポップアップ・実機確認項目 |
+| [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、Q36〜Q39 の暫定の既定、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
+| [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと61件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階（織田は研究による襲名）・旧領と AI の攻略目標・助言ポップアップ・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
 | [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チーム・1534年の開始時の同盟・天下統一同盟）：同盟の申し込み・脱退の画面、交戦での解消、AI からの申し込み、登録城のない地図での本拠の合算、主体だけが勝つ仕組み、公式根拠、実機確認項目 |
+| [`poc/city-names.md`](poc/city-names.md) | 日本マップの22勢力が新しく建てる都市の名前。家ごとの史実の地名一覧・共通の予備・公式の都市名の借用（BALTIMORE）の原因と対策・実機確認項目 |
 | [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
 | [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/court-arbitration.md`](poc/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定（請求・費用・拒否の不利益・将軍家の3倍と1573年・正当性・討伐の勅命）の実装、公式の根拠、実機確認 |

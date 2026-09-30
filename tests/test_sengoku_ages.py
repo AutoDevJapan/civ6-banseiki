@@ -165,6 +165,15 @@ class AgesDataTests(unittest.TestCase):
         self.assertEqual(ui_keys, {"LOC_JAC_AGE_DARK_CHOICE_TITLE", "LOC_JAC_AGE_DARK_CHOICE_BODY",
                                    "LOC_JAC_AGE_DARK_CHOICE_CHOOSE", "LOC_JAC_AGE_DARK_CHOICE_LATER"})
         keys |= ui_keys
+        # The 改元 screen, the era score screen and their shared view (UI/JAC_SengokuReignPopup.lua / .xml,
+        # UI/JAC_EraProgressPanel_Sengoku.lua, UI/JAC_SengokuAgesView.lua) and the notification heading.
+        screens = "".join((MOD / name).read_text(encoding="utf-8") for name in (
+            "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuReignPopup.xml", "UI/JAC_EraProgressPanel_Sengoku.lua",
+            "UI/JAC_SengokuAgesView.lua", "Scripts/JAC_Sengoku_Ages.lua"))
+        screen_keys = {k for k in re.findall(r"LOC_JAC_[A-Z0-9_]+", screens) if not k.endswith("_")}
+        screen_keys |= {f"LOC_JAC_AGE_PART_{part}" for part in ("HOME", "REGAIN", "CASTLE", "KO", "ALLY", "RESEARCH", "EVENT")}
+        self.assertIn("LOC_JAC_AGE_REIGN_NOTIFICATION", screen_keys)
+        keys |= screen_keys
         text = {}
         for row in ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row"):
             text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
@@ -478,26 +487,24 @@ class LedgerTests(unittest.TestCase):
 
     def relations(self, before_ledger: bool):
         """Start alliances Hojo-Imagawa and Oda-Takeda as JAC_Japan_1534Relations.lua: allied and a number property
-        at NewGameInitialized; the engine lapses them on turn 32 and the script re-makes them that turn."""
+        at NewGameInitialized; the engine lapses them on turn 32 and the script marks them false (not re-made)."""
         self.g.ALLIED["2-3"] = True
         self.g.ALLIED["0-1"] = True
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_HOJO-IMAGAWA", START_TURN)
         self.g.Game.SetProperty(None, "JAC_1534_ALLIANCE_ODA-TAKEDA", START_TURN)
-        remake = self.lua.eval("""function()
-          if CURRENT_TURN - GameConfiguration.GetStartTurn() + 1 == 32 then
-            for _, pair in ipairs({{"2-3", "HOJO-IMAGAWA"}, {"0-1", "ODA-TAKEDA"}}) do
-              if type(Game:GetProperty("JAC_1534_ALLIANCE_" .. pair[2])) == "number" then
-                ALLIED[pair[1]] = true; Game:SetProperty("JAC_1534_ALLIANCE_" .. pair[2], CURRENT_TURN)
-              end
+        track = self.lua.eval("""function()
+          for _, pair in ipairs({{"2-3", "HOJO-IMAGAWA"}, {"0-1", "ODA-TAKEDA"}}) do
+            if type(Game:GetProperty("JAC_1534_ALLIANCE_" .. pair[2])) == "number" and not ALLIED[pair[1]] then
+              Game:SetProperty("JAC_1534_ALLIANCE_" .. pair[2], false)
             end
           end
         end""")
         if before_ledger:
             self.g.RESET_HANDLERS()
-            self.g.GameEvents.OnGameTurnStarted.Add(remake)
+            self.g.GameEvents.OnGameTurnStarted.Add(track)
             self.load_script()
         else:
-            self.g.GameEvents.OnGameTurnStarted.Add(remake)
+            self.g.GameEvents.OnGameTurnStarted.Add(track)
 
     def lapse_at_32(self):
         self.turns(1, 31)
@@ -505,16 +512,32 @@ class LedgerTests(unittest.TestCase):
         self.g.ALLIED["0-1"] = False
         self.turns(32, 34)
 
-    def test_start_alliance_lapse_and_remake_score_nothing_with_the_ledger_first(self):
+    def test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first(self):
         self.relations(before_ledger=False)
+        self.turns(1, 31)
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "start")
         self.lapse_at_32()
         self.assertEqual([self.score(p) for p in range(4)], [0, 0, 0, 0])
-        self.assertEqual(self.g.LEDGER().allies["2-3"], "start")
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "none")
+        self.assertIs(self.g.Game.GetProperty(None, "JAC_1534_ALLIANCE_HOJO-IMAGAWA"), False)
 
-    def test_start_alliance_lapse_and_remake_score_nothing_with_the_ledger_last(self):
+    def test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_last(self):
         self.relations(before_ledger=True)
         self.lapse_at_32()
         self.assertEqual([self.score(p) for p in range(4)], [0, 0, 0, 0])
+        self.assertEqual(self.g.LEDGER().allies["2-3"], "none")
+
+    def test_a_pair_that_re_forms_on_the_lapse_turn_scores_in_either_order(self):
+        for before_ledger in (False, True):
+            with self.subTest(before_ledger=before_ledger):
+                self.setUp()
+                self.relations(before_ledger=before_ledger)
+                self.turns(1, 31)
+                self.g.ALLIED["2-3"] = False  # the engine lapse
+                self.turns(32)
+                self.g.ALLIED["2-3"] = True  # re-formed through diplomacy during turn 32
+                self.turns(33)
+                self.assertEqual((self.parts(2), self.parts(3)), ({"ally": 2}, {"ally": 2}))
 
     def test_ended_start_alliance_lingers_without_points_then_a_new_alliance_scores(self):
         self.relations(before_ledger=False)
@@ -585,7 +608,23 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.g.LEDGER().reign, 6)
         notes = [tuple(n.values()) for n in self.g.NOTES.values()]
         self.assertEqual(len(notes), 6 * 4)
-        self.assertIn((0, 2, "LOC_JAC_REIGN_KOJI_ANNOUNCEMENT", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
+        # Q36 ①: the era name is only on the 改元 and era score screens, so the heading is the generic one.
+        self.assertIn((0, 2, "LOC_JAC_AGE_REIGN_NOTIFICATION", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
+        self.assertEqual({n[2] for n in notes}, {"LOC_JAC_AGE_REIGN_NOTIFICATION"})
+
+    def test_projection_for_the_era_score_screen_matches_the_next_judgement(self):
+        self.turns(1, 40)
+        l = self.g.LEDGER()
+        self.assertEqual(l.nextDue, 66)
+        projected = {pid: (self.house(pid).next.golden, self.house(pid).next.dark) for pid in range(4)}
+        self.turns(41, 66)  # no city changes: the 弘治 judgement uses the same thresholds
+        r1 = self.g.LEDGER().history["r1"]
+        self.assertEqual(projected, {pid: (r1[f"p{pid}"].golden, r1[f"p{pid}"].dark) for pid in range(4)})
+        self.assertEqual(self.g.LEDGER().nextDue, 73)  # 永禄
+        self.turns(67, 400)  # past 寛永, the last 改元: nothing to project
+        self.assertEqual(self.g.LEDGER().reign, 8)
+        self.assertIsNone(self.g.LEDGER().nextDue)
+        self.assertIsNone(self.house(0).next)
 
     def plot_properties(self) -> dict:
         names = ["JAC_AGE_GOLDEN"] + [f"JAC_AGE_{kind}_{p}" for kind in ("POLICY", "ANCHOR")
@@ -722,16 +761,27 @@ UI_STUBS = r"""
 -- gameplay handler as the engine does for EXECUTE_SCRIPT (requesting player, parameter table).
 LOCAL_PLAYER, TURN_ACTIVE, REQUESTS = 1, true, {}
 local function control()
-  local c = { hidden = false, disabled = false }
+  -- Unlisted control methods (SetColor, SetIcon, ...) are no-ops.
+  local c = setmetatable({ hidden = false, disabled = false }, { __index = function() return function() end end })
   function c:SetText(t) self.text = t end
+  function c:GetText() return self.text end
   function c:SetHide(h) self.hidden = h end
   function c:IsHidden() return self.hidden end
   function c:SetDisabled(d) self.disabled = d end
   function c:RegisterCallback(_, f) self.click = f end
-  function c:CalculateSize() end
-  function c:DoAutoSize() end
+  function c:SetTexture(t) self.texture = t end
+  function c:SetToolTipString(t) self.tooltip = t end
   return c
 end
+CONTROL = control
+-- LuaEvents: every name is an event; calling it runs its handlers (they are shared by all contexts, as live).
+LuaEvents = setmetatable({}, { __index = function(t, name)
+  local handlers = {}
+  local event = setmetatable({ Add = function(f) table.insert(handlers, f) end },
+    { __call = function(_, ...) for _, f in ipairs(handlers) do f(...) end end })
+  rawset(t, name, event)
+  return event
+end })
 Controls = setmetatable({}, { __index = function(t, k) local c = control(); rawset(t, k, c); return c end })
 ContextPtr = control()
 ROWS = {}

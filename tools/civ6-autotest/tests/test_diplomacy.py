@@ -131,6 +131,22 @@ class DiplomacyDuringAutoplayTests(unittest.TestCase):
         self.assertGreater(self.sent(game, "JAC_SengokuDarkPolicy", "OnClose()"), 0)
         self.assertIn("closed dark-age policy choice", steps)
 
+    def test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens(self):
+        class ReignGame(FakeGame):
+            def lua(self, state, code, _timeout=5.0):
+                result = super().lua(state, code, _timeout)
+                if state == "JAC_SengokuReignPopup" and result == "true":
+                    self.visible["JAC_SengokuDarkPolicy"] = True  # UI/JAC_SengokuDarkPolicy.lua on ..._Closed
+                return result
+
+        game = ReignGame(set())
+        game.visible["JAC_SengokuReignPopup"] = True  # shown at the 改元 turn; it holds no AI turn
+        game.visible["JAC_SengokuDarkPolicy"] = False
+        detail, steps = self.run_autoplay(game, 2)
+        self.assertIn("(1->3", detail)
+        self.assertClosed(game, ["JAC_SengokuReignPopup", "JAC_SengokuDarkPolicy"])
+        self.assertIn("closed era-name change screen, dark-age policy choice", steps)
+
     def test_screen_that_keeps_reopening_is_bounded(self):
         game = FakeGame(set(), reopen=True)
         with self.assertRaisesRegex(Exception, "keeps reopening"):

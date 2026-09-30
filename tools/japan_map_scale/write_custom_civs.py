@@ -53,9 +53,6 @@ def gameplay() -> None:
               ",\n".join(f"    ('{leader_id(s.slug)}', 'TRAIT_JAC_1534_LEADER')" for s in EXTRA) + ";",
               "INSERT INTO CityNames (CivilizationType, CityName, SortIndex) VALUES",
               ",\n".join(f"    ('{civ_id(s.slug)}', 'LOC_JAC_1534_CAPITAL_{s.slug}', -1)" for s in EXTRA) + ";",
-              "INSERT INTO CityNames (CivilizationType, CityName, SortIndex)\n"
-              "SELECT c.CivilizationType, n.CityName, n.SortIndex FROM Civilizations c JOIN CityNames n ON n.CivilizationType='CIVILIZATION_JAPAN'\n"
-              "WHERE c.CivilizationType LIKE 'CIVILIZATION_JAC_%' AND c.CivilizationType NOT IN ('CIVILIZATION_JAC_ODA','CIVILIZATION_JAC_TAKEDA');",
               "INSERT INTO LoadingInfo (LeaderType, ForegroundImage, BackgroundImage, LeaderText, PlayDawnOfManAudio) VALUES",
               ",\n".join(f"    ('{leader_id(s.slug)}', '{leader_id(s.slug)}_NEUTRAL', '{leader_id(s.slug)}_BACKGROUND', 'LOC_JAC_1534_LOADING', 0)" for s in EXTRA) + ";",
               "INSERT INTO DiplomacyInfo (Type, BackgroundImage) VALUES",
