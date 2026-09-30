@@ -181,4 +181,6 @@ AI からの請求はまだ実装されていないため、ゲームプレイ�
 
 形式検査、全60個の Lua の構文検査、実際の UI コールバックを使ったスタブ上の手順確認は通った。スタブの保存と読込はメモリ内のコピーであり、Civ6 の保存・読込を検証した結果ではない。都市の旗は検査するが、金・文化の実際の産出や戦争疲弊の効果はこのシナリオでは測定しない。
 
-**実機の結果は未取得。上の未確認事項1・2はまだ解消していない。** 実行時はブランチを push してから `python D:/CC/Tools/civ6-live/live_chain.py feat/arbitration-ui-live:court-arbitration-human.json` を使う。結果と残作業は [再開用記録](court-arbitration-human-progress.md) にまとめる。
+実機 `arbitration-ui-live-01` は、ゲーム開始・請求の準備・回答ボタンの表示まで成功したが、保存前の状態記録で停止した。Civ6 の未設定プロパティが戻り値を返さないため、直接の文字列化が失敗した。値を引数に束縛してから変換するよう、12個の記録処理を修正した。回帰テストは修正前に36ケースで失敗し、修正後に成功した。両回答と保存復元6回の実機確認はまだ解消していない。
+
+実行時はブランチを push してから `python D:/CC/Tools/civ6-live/live_chain.py feat/arbitration-ui-live:court-arbitration-human.json --test-mode` を使う。実行ごとの結果と残作業は [再開用記録](court-arbitration-human-progress.md) にまとめる。
