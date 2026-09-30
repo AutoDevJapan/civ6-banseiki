@@ -65,7 +65,7 @@
 1. 顔の位置は、22人の肖像を 0.05 刻みの格子で目視して `tools/jac_art/leader_icon_faces.json` に記録した。値は画像幅・高さに対する割合で、左右は頬、上は烏帽子の縁か生え際、下は顎（ひげを除く）。自動の顔検出は使わない
 2. `build_art.leader_icon_master` は、顔の高さが肖像の円の直径の60%になり、顔の上端が円の上から28%の位置に来る正方形を切り出す。上の余白に烏帽子・髷・冠の下部が入り、髪型と冠り物の違いが残る。烏帽子の先端は切れる。切り出しが元画像の外に出る値はビルドで失敗させる
 3. 肖像の円の外側に、直径の7.5%（45px で約3px）の縁を家の色で塗り、縁の内外に細い暗線を引く。家の色は `Data/JAC_CustomCivs_Colors.xml`・`Data/JAC_Japan1534_Colors.xml` の `PrimaryColor` を、ゲームの `Base/Assets/UI/Colors/PlayerStandardColors.xml` で RGB に直したもの。プレイヤー色の主色と同じになる。肖像の背景を家の色に置き換える案は、金地と肌の色が近く切り抜きが不安定なため採らなかった
-4. 武田（`COLOR_STANDARD_RED_DK`）と伊達（同）は同じ色になる。これはプレイヤー色の割り当てそのものの重複で、アイコン側では解消していない
+4. 22家の主色はすべて別の公式標準色にし、RGB の距離で40以上離す（`test_house_primary_colours_are_distinct`）。以前は武田と伊達がともに `COLOR_STANDARD_RED_DK` だったため、伊達を、どの家も使っていない `COLOR_STANDARD_WHITE_MD`（濃い灰色、黒漆の具足にちなむ）に変えた。割り当ては `tools/japan_map_scale/write_custom_civs.py` が生成する。公式の濃い色どうしはもともと46〜69しか離れていない
 
 比較画像は Git 除外の `tools/jac_art/build/previews/leader-icons-before-after.png`（22人の旧・新を 45px と 64px で並べたもの）。`tools/jac_art/tests` の `test_leader_icons_are_face_crops_framed_in_house_colour` が、22人分の顔の値と家の色がそろい、64px アトラスの各円の縁が家の色であることを検査する。実機での見え方は下記シナリオの `leader-portraits-ribbon-closeup.png` で確認する（未実施）。
 

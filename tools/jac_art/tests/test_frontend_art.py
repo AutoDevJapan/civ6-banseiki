@@ -4,6 +4,8 @@ Run after ``python tools/jac_art/build_art.py``.  CIV6_INSTALL_DIR may point to
 another local Civilization VI installation; the game is never started.
 """
 
+import itertools
+import math
 import mmap
 import os
 from pathlib import Path
@@ -331,6 +333,18 @@ class IconReadabilityTests(unittest.TestCase):
             # Middle of the ring, 1.5px inside the outer edge at the top of the circle.
             ring = atlas.getpixel((x + 32, y + 2))[:3]
             self.assertLess(max(abs(a - b) for a, b in zip(ring, colors[key])), 40, (key, ring))
+
+    def test_house_primary_colours_are_distinct(self):
+        names = {}
+        for name in ("JAC_CustomCivs_Colors.xml", "JAC_Japan1534_Colors.xml"):
+            for row in ET.parse(build_art.MOD / "Data" / name).findall("./PlayerColors/Row"):
+                names[row.findtext("Type")] = row.findtext("PrimaryColor")
+        self.assertEqual(len(names), 22)
+        self.assertEqual(len(set(names.values())), 22, names)
+        # Official DK shades sit 46+ apart, so 40 flags only real look-alikes.
+        colors = build_art.house_colors()
+        for a, b in itertools.combinations(sorted(colors), 2):
+            self.assertGreaterEqual(math.dist(colors[a], colors[b]), 40, (a, b))
 
 
 if __name__ == "__main__":
