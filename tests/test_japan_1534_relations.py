@@ -338,6 +338,34 @@ class Japan1534RelationsTests(unittest.TestCase):
         self.assertEqual(sum("RemakeIfLapsed('ASAKURA','ROKKAKU')" in c for c in codes), 8)  # V4 every turn 27-34
         self.assertEqual(sum("RequestSession(a,b,'RENEW_ALLIANCE')" in c for c in codes), 1)  # V5b
 
+    def test_end_alliance_probe_tries_one_variant_per_pair_and_never_wars_and_makes_peace_on_one_turn(self):
+        # Owner question K: find an immediate way to end a start alliance (SetHasAllied(false) does nothing, diplo-17)
+        path = ROOT / "tools/civ6-autotest/scenarios/probe-end-alliance.json"
+        steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+        seats = next(s["players"] for s in steps if s["action"] == "configure")
+        self.assertEqual([p["civ"] for p in seats if p["human"]], ["CIVILIZATION_JAC_OUCHI"])
+        setup = [s for s in steps if s["action"] == "ui_lua"][:2]
+        self.assertEqual([s["state_name"] for s in setup], ["GameCore_Tuner", "InGame"])
+        self.assertIn("Game:SetProperty('JAC_1534_KEEP_ALLIANCES_DISABLED', true)", setup[0]["code"])
+        for step in setup:
+            self.assertIn("pcall(f)", step["code"])
+            self.assertIn("'[\\r\\n]+'", step["code"])  # errors stay on one line so the returned value is not cut
+            self.assertIn("[JAC_END_ALLIANCE_PROBE] ", step["code"])
+        self.assertIn("IsVisible(", setup[1]["code"])
+        for step in steps:
+            self.assertNotIn("error(", step.get("code", ""))
+        # the 8 start-alliance pairs each get exactly one variant (E0 is the control)
+        pairs = re.findall(r"\{'(R\d\d)','(E\d)','\w+','\w+'\}", setup[0]["code"])
+        self.assertEqual(sorted(r for r, _ in pairs), ["R02", "R03", "R04", "R05", "R06", "R07", "R08", "R19"])
+        self.assertEqual(sorted(e for _, e in pairs), [f"E{i}" for i in range(8)])
+        # wars on turn 2 (Run), peace only after an autoplay (RunPeace) and guarded against the war turn
+        actions = [s["action"] if s["action"] != "ui_lua" else s["code"] for s in steps]
+        run, peace = actions.index("return JAC_EAP and JAC_EAP.Run() or 'JAC_EAP missing (context reloaded?)'"), \
+            actions.index("return JAC_EAP and JAC_EAP.RunPeace() or 'JAC_EAP missing (context reloaded?)'")
+        self.assertIn("autoplay", actions[run:peace])
+        self.assertIn("P.war[tag]>=P.rel()", setup[0]["code"])
+        self.assertEqual([s["turns"] for s in steps if s["action"] == "autoplay"], [1, 1, 1, 1])
+
     def test_start_alliances_outlast_the_alliance_limit_until_an_event_ends_them(self):
         # Owner decision H (2026-09-30, "b" + Shimazu-Ryukyu): no time limit; only an event (or a war between the pair) ends a start alliance.
         lua = LUA.read_text(encoding="utf-8")

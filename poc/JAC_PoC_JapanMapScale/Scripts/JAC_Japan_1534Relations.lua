@@ -65,21 +65,64 @@ local function IsStartAllianceActive(factionA, factionB)
 	return type(Game:GetProperty(AllianceKey(factionA, factionB))) == "number"
 end
 
+-- 同盟を解くために宣戦した組の Game プロパティ。数値 = 宣戦したターン（次のターンの初めに講和する）、false = 講和を済ませた
+local PEACE_KEY_PREFIX = "JAC_1534_END_PEACE_"
+
+local function PeaceKey(factionA, factionB)
+	if factionA > factionB then factionA, factionB = factionB, factionA end
+	return PEACE_KEY_PREFIX .. factionA .. "-" .. factionB
+end
+
 -- 開始時の同盟を終わらせる。将来のイベント（裏切りなど）がゲームプレイのスクリプトから呼ぶ。
 -- 以後は結び直さない。終わらせたら true、続いていなかったら false。
--- 同盟中の SetHasAllied(相手, false) はエンジンが受け付けず、同盟のまま残った（実機 diplo-17）。その場合、同盟はエンジンの期限切れ（最長で期限 + 1 ターン）で終わる
+-- 同盟中の SetHasAllied(相手, false) はエンジンが受け付けず、同盟のまま残った（実機 diplo-17）。
+-- そこで factionA から factionB へ強制の宣戦をして同盟を解き、次のターンの初めに強制の講和をする（MakePeaceAfterEnd）。
+-- 同じターンに講和と宣戦を往復させるとエンジンが止まった（court-arbitration-08）ので、講和は必ず次のターンにする。
+-- 宣戦しても同盟が残る場合は、エンジンの期限切れ（最長で期限 + 1 ターン）で終わる（要実機確認：probe-end-alliance.json の E1）
 local function EndStartAlliance(factionA, factionB)
 	if not IsStartAllianceActive(factionA, factionB) then return false end
 	Game:SetProperty(AllianceKey(factionA, factionB), false)
 	local players = MajorPlayersByFaction()
 	local a, b = players[factionA], players[factionB]
 	if a ~= nil and b ~= nil and Players[a]:GetDiplomacy():HasAllied(b) then
-		Players[a]:GetDiplomacy():SetHasAllied(b, false)
-		Players[a]:GetDiplomacy():RecheckVisibilityOnAll()
+		local diplo = Players[a]:GetDiplomacy()
+		diplo:SetHasAllied(b, false)
+		if diplo:HasAllied(b) and not diplo:IsAtWarWith(b) then
+			local ok, err = pcall(function() diplo:DeclareWarOn(b, WarTypes.FORMAL_WAR, true) end)
+			if ok and diplo:IsAtWarWith(b) then
+				Game:SetProperty(PeaceKey(factionA, factionB), Game.GetCurrentGameTurn())
+			else
+				Log(string.format("FAILED war to end alliance %s-%s: %s", factionA, factionB, tostring(err)))
+			end
+			if diplo:HasAllied(b) then
+				Log(string.format("still allied after war %s-%s (ends at the engine lapse)", factionA, factionB))
+			end
+		end
+		diplo:RecheckVisibilityOnAll()
 		Players[b]:GetDiplomacy():RecheckVisibilityOnAll()
 	end
 	Log(string.format("ended start alliance %s-%s", factionA, factionB))
 	return true
+end
+
+-- 毎ターンの初めに、前のターンまでに同盟を解くため宣戦した組を講和させる（強制。最短の戦争期間の中でも講和できる。court-arbitration.md）
+local function MakePeaceAfterEnd()
+	local players = MajorPlayersByFaction()
+	local turn = Game.GetCurrentGameTurn()
+	for _, relation in ipairs(RELATIONS) do
+		local factionA, factionB = relation[1], relation[2]
+		local key = PeaceKey(factionA, factionB)
+		local warTurn = Game:GetProperty(key)
+		if type(warTurn) == "number" and warTurn < turn then
+			Game:SetProperty(key, false)
+			local a, b = players[factionA], players[factionB]
+			if a ~= nil and b ~= nil and Players[a]:GetDiplomacy():IsAtWarWith(b) then
+				local ok, err = pcall(function() Players[a]:GetDiplomacy():MakePeaceWith(b, true) end)
+				Log(string.format("%s peace after ended alliance %s-%s on turn %d%s", ok and "made" or "FAILED",
+					factionA, factionB, turn, ok and "" or (": " .. tostring(err))))
+			end
+		end
+	end
 end
 
 -- 毎ターンの初めに、続いている開始時の同盟を保つ。RELATIONS の順に処理する（全員で同じ順になる）。
@@ -176,10 +219,11 @@ end
 
 -- 同盟を保つ。公式：DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246（GameEvents.OnGameTurnStarted）
 GameEvents.OnGameTurnStarted.Add(KeepStartAlliances)
+GameEvents.OnGameTurnStarted.Add(MakePeaceAfterEnd)
 
 -- 将来のイベントの仕組みから呼ぶ入口（ゲームプレイのスクリプトから呼ぶ。UI から呼ぶとマルチプレイで同期しない）。
--- 勢力は CIVILIZATION_JAC_<名前> の <名前>（例 "HOJO"）。組の順は問わない。
---   ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")        開始時の同盟を終わらせる
+-- 勢力は CIVILIZATION_JAC_<名前> の <名前>（例 "HOJO"）。組の引き当ては順を問わないが、EndStartAlliance は1つ目の家が宣戦する。
+--   ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")        開始時の同盟を終わらせる（北条が宣戦し、次のターンに講和）
 --   ExposedMembers.JAC_Japan1534Relations.IsStartAllianceActive("HOJO", "IMAGAWA")   開始時の同盟が続いているか
 ExposedMembers.JAC_Japan1534Relations = {
 	EndStartAlliance = EndStartAlliance,
