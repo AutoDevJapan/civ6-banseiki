@@ -260,27 +260,19 @@ local function finite(value, label)
 end
 
 local function cityFollowers(city)
-  local rows, followers, pressure = city:GetReligion():GetReligionsInCity(), {}, {}
-  -- Official counted citizens, NOT majority cities: ReligionScreen.lua:1074-1092.
-  -- Pressure field: Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242.
-  local total, unaffiliated = 0, 0
-  for _, row in pairs(rows) do
-    count(row.Followers, "native followers")
-    if row.Religion <= 0 then
-      -- CitySupport.lua:504: negative IDs represent unaffiliated citizens,
-      -- never a religion accepted by AddReligiousPressure.
-      unaffiliated = unaffiliated + row.Followers
-    else
-      local key = tostring(row.Religion)
-      followers[key], pressure[key] = row.Followers, finite(row.Pressure, "religious pressure")
+  local followers, total = {}, 0
+  -- GetReligionsInCity is UI-only. The live Gameplay method is GetNumFollowers.
+  for row in GameInfo.Religions() do
+    if row.Index > 0 then
+      local n = city:GetReligion():GetNumFollowers(row.Index)
+      count(n, "native followers")
+      followers[tostring(row.Index)] = n
+      total = total + n
     end
-    total = total + row.Followers
   end
   check(total <= city:GetPopulation(), "native follower counts exceed population")
-  -- Some contexts omit the unaffiliated row. Infer only the citizen count;
-  -- never invent an unaffiliated pressure value or mutate its engine ID.
-  followers["-1"] = unaffiliated + city:GetPopulation() - total
-  return followers, pressure
+  followers["-1"] = city:GetPopulation() - total
+  return followers
 end
 
 local function nativeCities()
@@ -320,13 +312,13 @@ local function absorptionPlan(source, target, p)
   check(source.engineReligion ~= own, "native source and target must differ")
   local entries, total = {}, 0
   for _, entry in ipairs(nativeCities()) do
-    local followers, pressure = cityFollowers(entry.object)
+    local followers = cityFollowers(entry.object)
     local n = followers[tostring(source.engineReligion)] or 0
     if n > 0 then
       check(entry.object:GetReligion().AddReligiousPressure ~= nil, "native pressure mutation unavailable")
       total = total + n
       entries[#entries + 1] = { player = entry.player, city = entry.city,
-        before = followers, pressure = pressure, available = n }
+        before = followers, available = n }
     end
   end
   count(total, "world native followers")
@@ -358,20 +350,19 @@ local function convertCitizens(entry)
   -- Find an integer scale that preserves its counted citizens as well as all
   -- unrelated religions, rather than passing a negative religion ID to the API.
   local cr = city:GetReligion()
-  local union = copy(entry.pressure)
-  for key in pairs(entry.after) do union[key] = union[key] or 0 end
+  local union = copy(entry.after)
   union["-1"] = nil
   local low, high, scale = 0, nil, 1024
   local ceiling = math.floor(2147483647 / city:GetPopulation())
   for _ = 1, 64 do
-    local _, actualPressure = cityFollowers(city)
+    -- Gameplay exposes clearing one religion's pressure, not pressure reads.
+    -- Never clear the engine-owned unaffiliated/pantheon pressure.
     for _, key in ipairs(keys(union)) do
-      local delta = (entry.after[key] or 0) * scale - (actualPressure[key] or 0)
-      if delta < 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+      cr:RemovePressureOneReligion(tonumber(key))
     end
     for _, key in ipairs(keys(union)) do
-      local delta = (entry.after[key] or 0) * scale - (actualPressure[key] or 0)
-      if delta > 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+      local amount = (entry.after[key] or 0) * scale
+      if amount > 0 then cr:AddReligiousPressure(0, tonumber(key), amount, -1) end
     end
     local after, exact = cityFollowers(city), true
     for key, n in pairs(entry.after) do exact = exact and (after[key] or 0) == n end
@@ -447,13 +438,13 @@ end
 local function heroPlan(p, city)
   check(GameConfiguration.GetValue("GAMEMODE_HEROES") == true
     or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1, "official Heroes & Legends mode required")
-  local manager = Game.GetHeroesManager()
-  check(manager ~= nil and GameInfo.HeroClasses ~= nil, "official Heroes data unavailable")
-  local originBuilding = manager:GetPlayerHeroOriginBuildingType(p:GetID())
+  local bridge = ExposedMembers.JAC_RP_HeroUI
+  check(bridge ~= nil and GameInfo.HeroClasses ~= nil, "official Heroes UI bridge unavailable")
+  local originBuilding = bridge.OriginBuilding(p:GetID())
   check(city:GetBuildings():HasBuilding(originBuilding), "hero city requires the official origin building")
   local candidates = {}
   for row in GameInfo.HeroClasses() do
-    if manager:GetHeroClaimPlayer(row.Index) == -1 then candidates[#candidates + 1] = row end
+    if bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates + 1] = row end
   end
   table.sort(candidates, function(a, b) return a.HeroClassType < b.HeroClassType end)
   check(#candidates > 0, "no unclaimed official hero")
@@ -525,7 +516,7 @@ local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID
   check(p:GetReligion():GetFaithBalance() >= RULES.REVIVAL_FAITH_COST, "insufficient revival faith")
   local conversion
   if religion.engineReligion ~= nil then
-    local before, pressure = cityFollowers(city)
+    local before = cityFollowers(city)
     local donor = before["-1"] > 0 and "-1" or nil
     if donor == nil then
       for _, key in ipairs(keys(before)) do if before[key] > 0 then donor = key; break end end
@@ -535,7 +526,7 @@ local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID
     after[donor] = after[donor] - RULES.REVIVAL_FOLLOWERS
     local target = tostring(religion.engineReligion)
     after[target] = (after[target] or 0) + RULES.REVIVAL_FOLLOWERS
-    conversion = { player = playerID, city = cityID, before = before, after = after, pressure = pressure }
+    conversion = { player = playerID, city = cityID, before = before, after = after }
   end
   communityID = freeCommunityID(religion, communityID)
   religion.revivals[revivalID] = { source = sourceID, community = communityID,
@@ -687,14 +678,10 @@ local function perform(state, id, plan)
       for _, u in p:GetUnits():Members() do
         if not before[u:GetID()] and u:GetType() == GameInfo.Units[plan.heroUnit].Index then
           check(created == nil, "multiple hero units created")
-          check(u:IsHero() and u:GetHeroClassType() == plan.heroClass and u:GetLifespan() > 0,
-            "unit is not a living official hero")
           created = u:GetID()
         end
       end
-      check(created ~= nil and Game.GetHeroesManager():GetHeroClaimPlayer(plan.heroClass) == plan.player,
-        "official hero not recruited; effect pending")
-      p:GetReligion():ChangeFaithBalance(plan.faith)
+      check(created ~= nil, "official hero not created; effect pending")
       return created
     end
   end)
@@ -703,6 +690,14 @@ local function perform(state, id, plan)
   local religion = get(state, id)
   local use = religion.materialUses[plan.asset]
   check(use ~= nil and use.effects == "PENDING", "effect reservation changed")
+  if plan.outcome == "HERO" then
+    local h = state.heroes[tostring(plan.player)]
+    h.unit, h.heroClass, h.heroUnit = result, plan.heroClass, plan.heroUnit
+    h.rewardFaith, h.verification = plan.faith, "PENDING"
+    commit(state)
+    ExposedMembers.JAC_RP_HeroUI.Schedule()
+    return -- UI's next frame verifies claim, class and lifespan before payment.
+  end
   use.effects = "APPLIED"
   local asset = religion.assets[plan.asset]
   if plan.revival then
@@ -735,10 +730,6 @@ local function perform(state, id, plan)
     asset.holder, asset.owner = "PLAYER_" .. plan.targetPlayer, plan.targetPlayer
     state.religiousAlliances[plan.alliance] = { player = plan.player, origin = plan.targetPlayer,
       religion = id, active = true, startedTurn = Game.GetCurrentGameTurn(), discovery = plan.discovery }
-  elseif plan.outcome == "HERO" then
-    asset.holder = "HERO_PLAYER_" .. plan.player
-    state.heroes[tostring(plan.player)].unit = result
-    state.heroes[tostring(plan.player)].heroClass = plan.heroClass
   end
   if plan.discovery then religion.discoveries[plan.discovery].effects = "APPLIED" end
   commit(state)
@@ -755,6 +746,36 @@ end
 function RP.ResolveDiscovery(id, discoveryID, outcome, options)
   local state, plan = discoveryPlan(id, discoveryID, outcome, options)
   perform(state, id, plan)
+end
+
+function RP.CompleteHero(playerID)
+  local state = read()
+  local h = state.heroes[tostring(playerID)]
+  check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
+  local info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
+  if info == nil then return false end -- UI has not received the new unit yet.
+  if not (info.hero and info.class == h.heroClass and info.lifespan > 0 and info.claim == playerID) then
+    return false -- independently replicated UI fields may arrive in different frames.
+  end
+  local p = player(playerID)
+  local unit = p:GetUnits():FindID(h.unit)
+  check(unit ~= nil and unit:GetType() == GameInfo.Units[h.heroUnit].Index, "native hero unit changed")
+  local religion = get(state, h.religion)
+  local d = religion.discoveries[h.discovery]
+  check(d ~= nil and d.outcome == "HERO" and d.effects == "PENDING", "hero receipt changed")
+  local use = religion.materialUses[d.asset]
+  check(use ~= nil and use.effects == "PENDING", "hero material reservation changed")
+  h.verification = "APPLYING"
+  commit(state) -- a interrupted reward cannot replay on the next frame/load.
+  p:GetReligion():ChangeFaithBalance(h.rewardFaith)
+  state = read()
+  h = state.heroes[tostring(playerID)]
+  religion = get(state, h.religion)
+  d = religion.discoveries[h.discovery]
+  religion.materialUses[d.asset].effects, d.effects, h.verification = "APPLIED", "APPLIED", "APPLIED"
+  religion.assets[d.asset].holder = "HERO_PLAYER_" .. playerID
+  commit(state)
+  return true
 end
 
 -- All jobs have a preferred branch, then use the first legal fallback. No RNG,

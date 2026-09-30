@@ -15,6 +15,7 @@ from lupa import LuaError, LuaRuntime
 ROOT = Path(__file__).resolve().parents[1]
 MOD = ROOT / "poc/JAC_PoC_ReligionPersistence"
 SCRIPT = (MOD / "Scripts/JAC_ReligionPersistence.lua").read_text(encoding="utf-8")
+UI_SCRIPT = (MOD / "UI/JAC_ReligionPersistence_HeroUI.lua").read_text(encoding="utf-8")
 KEY = "JAC_RP_STATE_V1"
 R1, R2 = "JAC_RP_PLACEHOLDER_01", "JAC_RP_PLACEHOLDER_02"
 TABLES = ("Religions", "AssetKinds", "Jobs", "Sites", "Outcomes", "Rules")
@@ -110,6 +111,8 @@ local function nativeRows(c)
   end
   return rows
 end
+NativeRows = nativeRows
+ContextPtr = { SetUpdate = function(_, fn) HERO_UI_TICK = fn end }
 -- Native founding is a scenario fixture only. These stubs check its call path;
 -- whether the actual engine permits it remains a live-scenario assertion.
 NATIVE_RELIGION = 42
@@ -133,7 +136,15 @@ for id = 0, 1 do
       GetBuildQueue = function() return { CreateIncompleteBuilding = function(_, index, percentage)
         assert(index == 1 and percentage == 100); c.monument = true end } end,
       GetReligion = function() return {
-        GetReligionsInCity = function() return nativeRows(c) end,
+        GetNumFollowers = function(_, r)
+          for _, row in ipairs(nativeRows(c)) do if row.Religion == r then return row.Followers end end
+          return 0
+        end,
+        RemovePressureOneReligion = function(_, r)
+          assert(r > 0)
+          if FAIL_EFFECT then error('conversion refused') end
+          if not BAD_CONVERSION then c.pressure[tostring(r)] = 0 end
+        end,
         AddReligiousPressure = function(_, source, r, delta, unit)
           assert(source == 0 and unit == -1)
           assert(r > 0, 'unaffiliated pressure must remain engine-owned')
@@ -272,6 +283,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                          self.lua.table_from(engine, recursive=True) if engine is not None else None,
                          self.lua.table_from(data["modifiers"], recursive=True))
         self.lua.execute(SCRIPT)
+        self.lua.execute(UI_SCRIPT)
         self.g = self.lua.globals()
         self.rp = self.g.ExposedMembers.JAC_ReligionPersistence
 
@@ -317,7 +329,8 @@ class ReligionPersistenceTests(unittest.TestCase):
                                  if p.is_file() and p.suffix != ".modinfo"})
         self.assertEqual(manifest.findtext("./InGameActions/AddGameplayScripts/File"),
                          "Scripts/JAC_ReligionPersistence.lua")
-        self.assertIsNone(manifest.find("./InGameActions/AddUserInterfaces"))
+        self.assertEqual(manifest.findtext("./InGameActions/AddUserInterfaces/File"),
+                         "UI/JAC_ReligionPersistence_HeroUI.lua")
         self.assertLess(int(manifest.findtext("./InGameActions/UpdateDatabase/Properties/LoadOrder")),
                         int(manifest.findtext("./InGameActions/AddGameplayScripts/Properties/LoadOrder")))
 
@@ -325,7 +338,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         manifest = ET.parse(MOD / "JAC_PoC_ReligionPersistence.modinfo").getroot()
         criteria = {c.get("id"): c for c in manifest.findall("./ActionCriteria/Criteria")}
         actions = list(manifest.find("InGameActions"))
-        self.assertEqual({a.tag for a in actions}, {"UpdateDatabase", "UpdateText", "AddGameplayScripts"})
+        self.assertEqual({a.tag for a in actions}, {"UpdateDatabase", "UpdateText", "AddGameplayScripts", "AddUserInterfaces"})
         for action in actions:
             with self.subTest(action=action.get("id")):
                 self.assertIn(action.get("criteria"), criteria)
@@ -613,6 +626,8 @@ class ReligionPersistenceTests(unittest.TestCase):
                     self.bind_absorption()
                 before = plain(self.g.ENGINE["1"])
                 self.rp.ResolveDiscovery(R1, "d", outcome, self.options())
+                if outcome == "HERO":
+                    self.g.HERO_UI_TICK()
                 d = self.state()["discoveries"]["d"]
                 self.assertEqual(d["outcome"], outcome)
                 self.assertEqual(d["effects"], "APPLIED")
@@ -733,7 +748,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual((effect["sourceFollowers"], effect["convertedFollowers"]), (5, 2))
         self.assertEqual([(c["player"], c["city"], c["moved"]) for c in effect["conversions"]], [(0, 0, 1), (1, 0, 1)])
         self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (3, 3))
-        rows = plain(self.g.Players[0].GetCities().GetCapitalCity().GetReligion().GetReligionsInCity())
+        rows = plain(self.g.NativeRows(self.g.ENGINE["0"].cities["0"]))
         self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1})
         self.assertEqual(self.g.ENGINE["1"].faith, 0)
         self.reload()
@@ -773,7 +788,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (3, 3))
                 self.assertEqual(self.g.ENGINE["0"].cities["0"].pressure[str(sentinel)], 256)
                 self.g.OMIT_UNAFFILIATED_ROWS = False
-                rows = plain(self.g.Players[0].GetCities().GetCapitalCity().GetReligion().GetReligionsInCity())
+                rows = plain(self.g.NativeRows(self.g.ENGINE["0"].cities["0"]))
                 self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1, sentinel: 1})
                 self.assertEqual(self.g.ENGINE["1"].faith, 0)
 
@@ -886,6 +901,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.g.ENGINE["0"].heroClaims["11"] = None
         self.g.ENGINE["1"].faith = 0
         self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.g.HERO_UI_TICK()
         self.assertEqual(self.g.ENGINE["1"].faith, 32.5)
         receipt = plain(self.rp.Export())["heroes"]["1"]
         units = self.g.Players[1].GetUnits()
@@ -893,6 +909,50 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual((unit.GetType(), unit.GetHeroClassType(), unit.GetLifespan()), (101, 11, 30))
         self.assertEqual(self.g.ENGINE["0"].heroClaims["11"], 1)
         self.reload()
+
+    def test_hero_reward_waits_for_ui_verification_and_survives_pending_save(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        before = self.g.ENGINE["1"].faith
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.assertEqual(self.state()["discoveries"]["d"]["effects"], "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, before)
+        self.reload()
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.state()["discoveries"]["d"]["effects"], "APPLIED")
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+
+    def test_unverified_hero_claim_never_pays_faith(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        before = self.g.ENGINE["1"].faith
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.g.ENGINE["0"].heroClaims["10"] = 0
+        self.assertFalse(self.rp.CompleteHero(1))
+        self.assertEqual(self.g.ENGINE["1"].faith, before)
+        self.assertEqual(self.state()["discoveries"]["d"]["effects"], "PENDING")
+        self.g.ENGINE["0"].heroClaims["10"] = 1
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+
+    def test_interrupted_hero_reward_cannot_replay_after_load(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        before = self.g.ENGINE["1"].faith
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.g.FAIL_EFFECT = True
+        with self.assertRaises(LuaError):
+            self.rp.CompleteHero(1)
+        self.assertEqual(plain(self.rp.Export())["heroes"]["1"]["verification"], "APPLYING")
+        self.reload()
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.g.ENGINE["1"].faith, before)
+        self.rejected(self.rp.CompleteHero, 1)
 
     def test_invalid_inputs_and_world_overflow_do_not_mutate_saved_state(self):
         self.found()
@@ -1164,6 +1224,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         for step in scenario["steps"]:
             if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner":
                 value = self.lua.execute(step["code"])
+                self.g.HERO_UI_TICK()
                 if value == "native placeholder religion founded":
                     native_founded += 1
                     self.assertEqual(self.g.NATIVE_RELIGION, 42)
@@ -1197,7 +1258,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 57)
+        self.assertEqual(len(chunks), 59)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 

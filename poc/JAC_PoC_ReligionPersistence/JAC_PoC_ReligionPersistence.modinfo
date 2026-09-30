@@ -53,11 +53,16 @@
       <Properties><LoadOrder>200</LoadOrder></Properties>
       <File>Scripts/JAC_ReligionPersistence.lua</File>
     </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_RP_HeroUI" criteria="JAC_RP_BanseikiOnly">
+      <Properties><Context>InGame</Context></Properties>
+      <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
+    </AddUserInterfaces>
   </InGameActions>
   <Files>
     <File>Data/JAC_ReligionPersistence.sql</File>
     <File>Data/JAC_ReligionPersistence_Test.sql</File>
     <File>Text/JAC_ReligionPersistence_Text.xml</File>
     <File>Scripts/JAC_ReligionPersistence.lua</File>
+    <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
   </Files>
 </Mod>
