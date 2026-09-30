@@ -665,6 +665,24 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options())
         self.assertNotIn("outcome", self.state()["discoveries"]["d"])
 
+    def test_direct_revival_cannot_strand_an_unresolved_discovery(self):
+        for kind in ("SCRIPTURE", "RELIC"):
+            with self.subTest(kind=kind):
+                self.load()
+                self.found()
+                self.lost()
+                self.rp.Discover(R1, "d", "book", kind, "MONK_1", "MONK", "CAVE", 1)
+                self.reload()
+                before = plain(self.g.ENGINE)
+                self.rejected(self.rp.Revive, R1, "direct", "book", "new", 1, 0)
+                self.assertEqual(plain(self.g.ENGINE), before)
+                self.assertNotIn("outcome", self.state()["discoveries"]["d"])
+                self.rp.ResolveDiscovery(R1, "d", "REVIVE", self.options())
+                discovery = self.state()["discoveries"]["d"]
+                self.assertEqual((discovery["outcome"], discovery["effects"]), ("REVIVE", "APPLIED"))
+                self.assertEqual(self.g.ENGINE["1"].faith, 480)
+                self.reload()
+
     def test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material(self):
         self.found()
         self.lost()
@@ -1324,7 +1342,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 59)
+        self.assertEqual(len(chunks), 60)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 

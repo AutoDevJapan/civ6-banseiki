@@ -739,6 +739,10 @@ end
 
 function RP.Revive(id, revivalID, sourceID, communityID, playerID, cityID)
   local state = read()
+  for _, discovery in pairs(get(state, id).discoveries) do
+    check(discovery.asset ~= sourceID or discovery.outcome ~= nil,
+      "unresolved discovery must use its revival choice")
+  end
   local plan = revivalPlan(state, id, revivalID, sourceID, communityID, playerID, cityID)
   plan.asset, plan.outcome = sourceID, "REVIVE"
   reserveMaterial(get(state, id), sourceID, "REVIVE", playerID, nil, revivalID)
