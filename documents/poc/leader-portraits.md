@@ -58,6 +58,17 @@
 
 再生成：`python tools/jac_art/generate_portraits.py` は人物ごとに SSOT 15.2.1 の生成手段で3点の生成を要求し、PNGを検証してローカルログに追記する。続けて `python tools/jac_art/build_art.py` で DDS・XLP・BLP を作り、Git 除外の `tools/jac_art/build/previews/portrait-sheet.png` に22人の顔を並べる。生成途中で止まった人物の画像は調査し、欠けた出力を揃えてから再実行する。失敗時に別サービスへ切り替えない。
 
+### 円形アイコンの顔の切り出しと家の色（2026-09-30）
+
+オーナーから、46ターン目の右上の指導者リボンで「誰がどの人物か見分けがつかない」との指摘を受けた。旧方式は頭肩肖像の正方形全体を円で切り抜いており、45px では顔が約10px になり、同じ装束・同じ金地の背景の22人がほぼ同じに見えた。画像は再生成せず、アイコンの作り方だけを変えた。
+
+1. 顔の位置は、22人の肖像を 0.05 刻みの格子で目視して `tools/jac_art/leader_icon_faces.json` に記録した。値は画像幅・高さに対する割合で、左右は頬、上は烏帽子の縁か生え際、下は顎（ひげを除く）。自動の顔検出は使わない
+2. `build_art.leader_icon_master` は、顔の高さが肖像の円の直径の60%になり、顔の上端が円の上から28%の位置に来る正方形を切り出す。上の余白に烏帽子・髷・冠の下部が入り、髪型と冠り物の違いが残る。烏帽子の先端は切れる。切り出しが元画像の外に出る値はビルドで失敗させる
+3. 肖像の円の外側に、直径の7.5%（45px で約3px）の縁を家の色で塗り、縁の内外に細い暗線を引く。家の色は `Data/JAC_CustomCivs_Colors.xml`・`Data/JAC_Japan1534_Colors.xml` の `PrimaryColor` を、ゲームの `Base/Assets/UI/Colors/PlayerStandardColors.xml` で RGB に直したもの。プレイヤー色の主色と同じになる。肖像の背景を家の色に置き換える案は、金地と肌の色が近く切り抜きが不安定なため採らなかった
+4. 武田（`COLOR_STANDARD_RED_DK`）と伊達（同）は同じ色になる。これはプレイヤー色の割り当てそのものの重複で、アイコン側では解消していない
+
+比較画像は Git 除外の `tools/jac_art/build/previews/leader-icons-before-after.png`（22人の旧・新を 45px と 64px で並べたもの）。`tools/jac_art/tests` の `test_leader_icons_are_face_crops_framed_in_house_colour` が、22人分の顔の値と家の色がそろい、64px アトラスの各円の縁が家の色であることを検査する。実機での見え方は下記シナリオの `leader-portraits-ribbon-closeup.png` で確認する（未実施）。
+
 ## 画像台帳
 
 表の「所蔵と出典」は生成物の保管場所であり、顔の史料上の同定を意味しない。「ライセンス」は公開条件を確定していないため全件 D11 待ち。元ファイルは `civ6-art-local/JAC_PoC_CustomCivs/Originals/` からの相対パス。
@@ -135,7 +146,7 @@
 
 2026-09-29 の静的結果：元 PNG は **22人×3点＝66点**、生成ログも66件で各 SHA-256 が一致し、66点相互に同一ハッシュはない。Civ6 SDK Asset Cooker は `JAC_CustomCivs_Icons.blp`（34テクスチャ、7,530,496 B）、`JAC_CustomCivs_Leaders.blp`（66テクスチャ、343,945,216 B）、`JAC_CustomCivs_Fallback.blp`（22テクスチャ、51,407,872 B）を生成した。BLP と `portrait-sheet.png` は Git 除外。`python -m unittest discover -s tests -t .` は10件、`python -m unittest discover -s tools/civ6-autotest/tests` は98件、`python -m unittest discover -s tools/japan_map_scale/tests` は25件（2件スキップ）、`python -m unittest discover -s tools/jac_art/tests -v` は2件成功した。下記シナリオの `--check` も6手順で成功。これはゲーム内表示の証拠ではない。
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/leader-portraits.json --check` はシナリオJSONの形式を検査する。実行時には万世紀ルールセットと15 km史実領土地図で22人を開始し、全員のロード前景・ロード背景・外交背景が各自のテクスチャ名を参照すること、22人が重複なく存在することを Lua で調べ、指導者リボンのスクリーンショットを保存する。続けて織田と松平を接触済みにし、松平の外交画面を開いて `LeaderScene` の背景レイヤーがテクスチャを持つこと、上下のレターボックスが隠れていることを調べ、スクリーンショットを保存する。初期画面だけを対象とし、AI 自動進行はしない。一般判定（`generic`）は、公式 `Base/Assets/UI/FrontEnd/LoadScreen.lua:218,248` の `Failed to load background image texture: …`・`We are lacking a texture for …` のうち `JAC_` を含むテクスチャ名の行があれば失敗にする。外交画面の手順（`LeaderScene` コンテキストへの Lua 実行を含む）は実機で未確認。`HostGame` の設定組み立ては公式 `Base/Assets/UI/FrontEnd/GameSetupLogic.lua:689-725` と `Base/Assets/UI/FrontEnd/MainMenu.lua:455-463` の手順に合わせた。画像の**画素や見た目そのもの**はこの Lua 判定では検査できない。
+`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/leader-portraits.json --check` はシナリオJSONの形式を検査する。実行時には万世紀ルールセットと15 km史実領土地図で22人を開始し、全員のロード前景・ロード背景・外交背景が各自のテクスチャ名を参照すること、22人が重複なく存在することを Lua で調べ、指導者リボンのスクリーンショットと、リボン（`leader-portraits-ribbon-closeup.png`）・右上の手帳ボタンのあるフックバー（`notebooks-hook-bar-closeup.png`）の拡大を保存する。続けて織田と松平を接触済みにし、松平の外交画面を開いて `LeaderScene` の背景レイヤーがテクスチャを持つこと、上下のレターボックスが隠れていることを調べ、スクリーンショットを保存する。初期画面だけを対象とし、AI 自動進行はしない。一般判定（`generic`）は、公式 `Base/Assets/UI/FrontEnd/LoadScreen.lua:218,248` の `Failed to load background image texture: …`・`We are lacking a texture for …` のうち `JAC_` を含むテクスチャ名の行があれば失敗にする。外交画面の手順（`LeaderScene` コンテキストへの Lua 実行を含む）は実機で未確認。`HostGame` の設定組み立ては公式 `Base/Assets/UI/FrontEnd/GameSetupLogic.lua:689-725` と `Base/Assets/UI/FrontEnd/MainMenu.lua:455-463` の手順に合わせた。画像の**画素や見た目そのもの**はこの Lua 判定では検査できない。
 
 メインセッションの目視確認：ロード時に若年の上杉憲政・三好長慶、老年の尼子経久、琉球王・アイヌ代表の容貌と装束を見て、各指導者のアイコンに頭部欠け・他人の顔・色抜き縁・背景の欠損がないか確かめる。外交画面を開ける各相手について2D人物と固有背景、黒帯や `We are lacking a texture` エラーの有無を確認する。ゲームと Steam はこの作業ツリーでは起動していない。
 

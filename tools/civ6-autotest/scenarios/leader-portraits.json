@@ -155,6 +155,16 @@
       "path": "leader-portraits-ribbon.png"
     },
     {
+      "action": "screenshot",
+      "path": "leader-portraits-ribbon-closeup.png",
+      "crop": [0.3, 0.03, 1.0, 0.2]
+    },
+    {
+      "action": "screenshot",
+      "path": "notebooks-hook-bar-closeup.png",
+      "crop": [0.84, 0.04, 1.0, 0.14]
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local id,oda; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local l=PlayerConfigurations[p:GetID()]:GetLeaderTypeName(); if l=='LEADER_JAC_MATSUDAIRA_KIYOYASU' then id=p:GetID() elseif l=='LEADER_JAC_ODA_NOBUHIDE' then oda=p:GetID() end end; if id==nil or oda==nil then error('Oda or Matsudaira missing') end; Players[oda]:GetDiplomacy():SetHasMet(id); Players[id]:GetDiplomacy():SetHasMet(oda); return 'met Matsudaira '..id"
