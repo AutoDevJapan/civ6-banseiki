@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -11,6 +12,7 @@ import math
 import os
 from pathlib import Path, PureWindowsPath
 import re
+import sys
 import time
 
 from capture import CaptureError, capture_civ_window
@@ -18,8 +20,8 @@ from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ
                    require_single_civ_process)
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
-from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, TurnMetrics, process_memory,
-                     research_sample_code)
+from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, SaveLoadMetrics, TurnMetrics,
+                     process_memory, research_sample_code, summarize_turns)
 from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
                      newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
@@ -36,6 +38,12 @@ MAP_FILE = re.compile(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$")
 
 class ScenarioError(RuntimeError):
     pass
+
+
+def _validate_test_mode(mode) -> None:
+    if (not isinstance(mode, dict) or type(mode.get("skipped_turns")) is not int
+            or mode["skipped_turns"] < 0 or mode.get("continuous_performance_valid") is not False):
+        raise ScenarioError("test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false")
 
 
 def _remaining(deadline: float) -> float:
@@ -83,11 +91,15 @@ def _safe_relative_path(value: str) -> Path:
 def validate_scenario(data: dict) -> None:
     if not isinstance(data, dict) or not isinstance(data.get("name"), str):
         raise ScenarioError("Scenario needs a name")
+    if "test_mode" in data:
+        _validate_test_mode(data["test_mode"])
     if data.get("judge_profile", "generic") not in ("bundle0", "generic", "growth", "japan_map"):
         raise ScenarioError("judge_profile must be bundle0, generic, growth or japan_map")
     if data.get("judge_profile") == "growth":
         if type(data.get("expected_units")) is not int or data["expected_units"] < 1:
             raise ScenarioError("growth scenario needs a positive expected_units count")
+    if "strict_lua_errors" in data and type(data["strict_lua_errors"]) is not bool:
+        raise ScenarioError("strict_lua_errors must be boolean")
     steps = data.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ScenarioError("Scenario needs a nonempty steps array")
@@ -134,9 +146,17 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: turns must be positive")
             if "metrics" in step and type(step["metrics"]) is not bool:
                 raise ScenarioError(f"Step {number}: metrics must be boolean")
+            if "metrics_group" in step and (not isinstance(step["metrics_group"], str)
+                                            or not TYPE_ID.fullmatch(step["metrics_group"])
+                                            or not step.get("metrics", False)):
+                raise ScenarioError(f"Step {number}: metrics_group needs a type ID and metrics: true")
             for key in ("research_metrics", "allow_human_elimination"):
                 if key in step and type(step[key]) is not bool:
                     raise ScenarioError(f"Step {number}: {key} must be boolean")
+            if "fast_forward" in step and type(step["fast_forward"]) is not bool:
+                raise ScenarioError(f"Step {number}: fast_forward must be boolean")
+            if step.get("fast_forward") and not isinstance(data.get("test_mode"), dict):
+                raise ScenarioError(f"Step {number}: fast_forward requires test mode")
         elif action == "end_turn":
             if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
@@ -164,6 +184,8 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: invalid save name")
             if "exact_name" in step and type(step["exact_name"]) is not bool:
                 raise ScenarioError(f"Step {number}: exact_name must be boolean")
+            if "metrics" in step and type(step["metrics"]) is not bool:
+                raise ScenarioError(f"Step {number}: metrics must be boolean")
         elif action == "wait_for":
             condition = step.get("condition")
             if not isinstance(condition, dict) or condition.get("type") not in ("lua", "log_line", "state"):
@@ -349,10 +371,19 @@ class Runner:
         self.log_step_baseline: dict | None = None
         self.log_matches_consumed: dict[tuple[str, str], int] = {}
         self.metrics_runs = 0
+        self.turn_metrics: list[dict] = []
+        self.save_load_metrics = SaveLoadMetrics(output / "save-load-metrics.csv",
+                                                test_mode=bool(scenario.get("test_mode")))
+        self.result_passed = False
+        self.completed_steps = 0
+        self.result_checks: list[dict] = []
+        self.failure: str | None = None
         self.lua_captures: dict[str, str] = {}
         self.ruleset: str | None = None
 
     def _log(self, action: str, status: str, detail: str) -> None:
+        if status == "FAIL":
+            self.failure = f"{action}: {detail}"
         record = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
                   "status": status, "detail": detail}
         print(f"[{status}] {action}: {detail}", flush=True)
@@ -720,7 +751,8 @@ class Runner:
 
     def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
                   record_metrics: bool = False, research_metrics: bool = False,
-                  allow_human_elimination: bool = False) -> str:
+                  allow_human_elimination: bool = False, metrics_group: str = "AUTOPLAY",
+                  start_turn_override: int | None = None) -> str:
         deadline = deadline if deadline is not None else time.monotonic() + timeout
         # An open partial screen and the base game's advisor can both hold input.
         self._lua("InGame", "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true",
@@ -728,8 +760,9 @@ class Runner:
         self._close_options_menu(deadline)
         self._dismiss_advisor(deadline)
         start_code = (
-            "if AutoplayManager.IsActive() then error('autoplay already active') end\n"
-            "local startTurn = Game.GetCurrentGameTurn()\n"
+            "if AutoplayManager.IsActive() then error('autoplay already active') end\n" +
+            (f"local startTurn = {start_turn_override}\n" if start_turn_override is not None
+             else "local startTurn = Game.GetCurrentGameTurn()\n") +
             "local human = Game.GetLocalPlayer()\n"
             "if human < 0 then error('no local human player to return to') end\n"
             "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
@@ -745,6 +778,13 @@ class Runner:
             "return tostring(startTurn) .. '|' .. tostring(human)"
         )
         try:
+            if record_metrics:
+                process = single_civ_process()
+                if process is None:
+                    raise ScenarioError("Civ VI process disappeared before metrics sampling")
+                metrics_pid = process[0]
+                initial_memory = process_memory(metrics_pid)
+                metrics_started_at = time.monotonic()
             start_value = self._lua("InGame", start_code, min(5, _remaining(deadline)))
             try:
                 start_turn, human = (int(part) for part in start_value.split("|"))
@@ -756,12 +796,11 @@ class Runner:
             if record_metrics or research_metrics:
                 self.metrics_runs += 1
             if record_metrics:
-                process = single_civ_process()
-                if process is None:
-                    raise ScenarioError("Civ VI process disappeared before metrics sampling")
-                metrics_pid = process[0]
-                recorder = TurnMetrics(self.output / f"autoplay-metrics-{self.metrics_runs}.jsonl", start_turn)
-                recorder.start(process_memory(metrics_pid))
+                recorder = TurnMetrics(self.output / f"autoplay-metrics-{self.metrics_runs}.jsonl", start_turn,
+                                       started_at=metrics_started_at, test_mode=bool(self.scenario.get("test_mode")))
+                self.turn_metrics.append({"recorder": recorder, "pid": metrics_pid, "requested_turns": turns,
+                                          "group": metrics_group})
+                recorder.start(initial_memory)
             if research_metrics:
                 research_recorder = ResearchMetrics(self.output / f"autoplay-research-{self.metrics_runs}.jsonl")
                 research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline))
@@ -797,6 +836,11 @@ class Runner:
                     # The read-only query may be starved by an open diplomacy screen: close it at the top
                     # of the loop and ask again. If nothing was open, the failure stops the step as before.
                     status_failure = exc
+                    continue
+                if start_turn_override is not None and status.turn < start_turn:
+                    # GameCore writes are visible to UI only after its next update.
+                    # Do not interpret the cached UI clock as an early stop or a measurement.
+                    time.sleep(min(0.1, _remaining(deadline)))
                     continue
                 if recorder and status.turn != recorder.turn:
                     process = single_civ_process()
@@ -891,10 +935,64 @@ class Runner:
             detail += f"; human_elimination_first_observed_turn={elimination_turn}"
         if recorder:
             detail += (f"; metrics=autoplay-metrics-{self.metrics_runs}.jsonl"
+                       f",autoplay-metrics-{self.metrics_runs}.csv"
                        f" observed={recorder.observed_turns} missed={recorder.missed_turns}")
         if research_recorder:
             detail += f"; research=autoplay-research-{self.metrics_runs}.jsonl"
         return detail
+
+    def _fast_forward_autoplay(self, turns: int, timeout: float, *, deadline: float, **metrics_flags) -> str:
+        """Skip inside an era, processing its boundary normally before skipping again."""
+        _validate_test_mode(self.scenario.get("test_mode"))
+        self._lua("InGame",
+                  "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
+                  "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true",
+                  min(5, _remaining(deadline)))
+        state_code = (
+            "local eras = Game.GetEras()\n"
+            "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. '|' .. "
+            "tostring(eras:GetCurrentEraMaximumEndTurn()) .. '|' .. tostring(eras:GetNextEraCountdown())"
+        )
+        def state():
+            values = self._lua("InGame", state_code, min(5, _remaining(deadline))).split("|")
+            try:
+                return tuple(int(v) for v in values)
+            except ValueError as exc:
+                raise ScenarioError(f"Invalid fast-forward era state: {values}") from exc
+        current, minimum, maximum, countdown = state()
+        target = current + turns
+        skipped = 0
+        while current < target:
+            boundary = current + countdown if countdown > 0 else minimum
+            # The terminal era does not end. Otherwise preserve even the earliest possible change.
+            limit = target - 2 if maximum < 0 else min(target - 2, boundary - 2)
+            if limit > current:
+                code = (
+                    "local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\n"
+                    "if not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\n"
+                    f"if Game.GetCurrentGameTurn() ~= {current} then error('turn changed before fast-forward') end\n"
+                    f"local target = {limit}\nGame.SetCurrentGameTurn(target)\n"
+                    "if Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\n"
+                    "return tostring(target)"
+                )
+                try:
+                    self._lua("GameCore_Tuner", code, min(5, _remaining(deadline)))
+                except LuaResponseUnknown:
+                    mode = self.scenario["test_mode"]
+                    mode["acknowledged_skipped_turns"] = mode["skipped_turns"]
+                    mode["skipped_turns"] = None
+                    mode["unconfirmed_jump"] = {"from": current, "to": limit}
+                    raise  # Never replay a mutation whose acknowledgment was lost.
+                skipped += limit - current
+                self.scenario["test_mode"]["skipped_turns"] += limit - current
+                current = limit
+            before = current
+            self._autoplay(min(2, target - current), timeout, deadline=deadline,
+                           start_turn_override=current, **metrics_flags)
+            current, minimum, maximum, countdown = state()
+            if current <= before or current > target:
+                raise ScenarioError(f"Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}")
+        return f"TEST MODE: reached turn {target}; skipped {skipped} turns; era boundaries processed normally"
 
     def _choose_dedication(self, human: int, deadline: float) -> str | None:
         """Pick the human's pending era dedication (Gathering Storm), which autoplay never chooses.
@@ -1061,10 +1159,12 @@ class Runner:
             self._check_start_turn(deadline)
             return "single-player game reached InGame"
         if action == "autoplay":
-            return self._autoplay(step["turns"], timeout, deadline=deadline,
+            autoplay = self._fast_forward_autoplay if step.get("fast_forward") else self._autoplay
+            return autoplay(step["turns"], timeout, deadline=deadline,
                                   record_metrics=step.get("metrics", False),
                                   research_metrics=step.get("research_metrics", False),
-                                  allow_human_elimination=step.get("allow_human_elimination", False))
+                                  allow_human_elimination=step.get("allow_human_elimination", False),
+                                  metrics_group=step.get("metrics_group", "AUTOPLAY"))
         if action == "end_turn":
             results = []
             turns = step.get("test_turns", step.get("turns", 1)) if self.test_mode else step.get("turns", 1)
@@ -1123,6 +1223,10 @@ class Runner:
                 "Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false})\n"
                 "if result == false then error('Network.SaveGame returned false') end\nreturn true"
             )
+            if step.get("metrics", False):
+                saved_turn = int(self._lua("InGame", "return tostring(Game.GetCurrentGameTurn())",
+                                          min(5, _remaining(deadline))))
+                started_at = time.monotonic()
             self._lua("InGame", code, min(30, _remaining(deadline)))
             self._wait({"type": "lua", "state_name": "InGame", "code": "return JAC_AUTOTEST_SAVE_DONE == true"},
                        _remaining(deadline))
@@ -1134,6 +1238,10 @@ class Runner:
             if not target.is_file() or target.stat().st_size == 0:
                 raise ScenarioError(f"SaveComplete fired but save not found at {target}; check --saves")
             _remaining(deadline)
+            if step.get("metrics", False):
+                row = self.save_load_metrics.record("save", name, saved_turn, target.stat().st_size,
+                                                    time.monotonic() - started_at)
+                return f"{target}; save_bytes={row['save_bytes']} save_seconds={row['duration_seconds']}"
             return str(target)
         if action == "exit_to_menu":
             self._lua("InGame", "Events.ExitToMainMenu()\nreturn true", min(5, _remaining(deadline)))
@@ -1158,6 +1266,7 @@ class Runner:
             )
             before = self._loadscreen_count()
             response_unknown = False
+            started_at = time.monotonic()
             try:
                 self._lua("FrontEnd", code, min(5, _remaining(deadline)))
             except LuaResponseUnknown as exc:
@@ -1165,6 +1274,13 @@ class Runner:
                 response_unknown = True
             self._enter_game_after_loadscreen(before, timeout, deadline=deadline,
                                               response_unknown=response_unknown)
+            if step.get("metrics", False):
+                seconds = time.monotonic() - started_at
+                loaded_turn = int(self._lua("InGame", "return tostring(Game.GetCurrentGameTurn())",
+                                           min(5, _remaining(deadline))))
+                row = self.save_load_metrics.record("load", name, loaded_turn, self._save_path(name).stat().st_size,
+                                                    seconds)
+                return f"loaded {name}; save_bytes={row['save_bytes']} load_seconds={row['duration_seconds']}"
             return f"loaded {name}"
         if action == "wait_for":
             self._wait(step["condition"], _remaining(deadline))
@@ -1177,6 +1293,7 @@ class Runner:
         raise AssertionError(action)
 
     def run(self) -> int:
+        validate_scenario(self.scenario)
         self.output.mkdir(parents=True, exist_ok=False)
         self._log("start", "OK", self.scenario["name"])
         try:
@@ -1234,17 +1351,28 @@ class Runner:
                     self._log(action, "FAIL", str(exc))
                     return 1
                 self._log(action, "OK", detail)
+                self.completed_steps += 1
             assert self.baseline is not None
             checks = judge(read_since(self.logs, self.baseline), self.scenario.get("judge_profile", "generic"),
-                           expected_units=self.scenario.get("expected_units"))
+                           expected_units=self.scenario.get("expected_units"),
+                           strict_lua_errors=self.scenario.get("strict_lua_errors", False))
             print_table(checks)
             result = all(check.passed for check in checks)
+            self.result_passed = result
+            self.result_checks = [{"name": check.name, "passed": check.passed, "detail": check.detail}
+                                  for check in checks]
             self._log("judge", "OK" if result else "FAIL", f"{sum(c.passed for c in checks)}/{len(checks)} checks passed")
             return 0 if result else 1
         except (ScenarioError, TunerError, InputError, OSError, ValueError) as exc:
             self._log("run", "FAIL", str(exc))
             return 1
         finally:
+            pending_error = sys.exception()
+            if pending_error is not None:
+                self.result_passed = False
+            if not self.result_passed and self.failure is None:
+                self.failure = (f"{type(pending_error).__name__}: {pending_error}" if pending_error is not None
+                                else "Run did not finish")
             if self.baseline is not None:
                 try:
                     for name, content in read_since(self.logs, self.baseline).items():
@@ -1253,12 +1381,51 @@ class Runner:
                     print(f"Could not save run log slices: {exc}", flush=True)
             if self.client:
                 self.client.close()
+            try:
+                self._write_result()
+            except OSError as exc:
+                print(f"Could not save result summary: {exc}", flush=True)
+                if pending_error is None and self.result_passed:
+                    raise  # A successful run must produce its promised result artifact.
+
+    def _write_result(self) -> None:
+        runs = [{"pid": item["pid"], "requested_turns": item["requested_turns"], "group": item["group"],
+                 "completed": item["recorder"].turn == item["recorder"].start_turn + item["requested_turns"],
+                 **item["recorder"].summary()} for item in self.turn_metrics]
+        rows = [row for item in self.turn_metrics for row in item["recorder"].rows]
+        groups = {}
+        for item in self.turn_metrics:
+            groups.setdefault(item["group"], []).extend(item["recorder"].rows)
+        result = {"scenario": self.scenario.get("name"), "passed": self.result_passed,
+                  "test_mode": self.scenario.get("test_mode"),
+                  "completed_steps": self.completed_steps, "failure": self.failure,
+                  "checks": self.result_checks,
+                  "metrics": {"autoplay": runs, "turn_summary": summarize_turns(rows),
+                              "groups": {name: summarize_turns(samples) for name, samples in groups.items()},
+                              "save_load": self.save_load_metrics.summary()}}
+        (self.output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+                                                 encoding="utf-8")
+
+
+def fast_forward_scenario(data: dict) -> dict:
+    """Opt into synthetic checkpoints without changing the original scenario."""
+    data = copy.deepcopy(data)
+    for step in data["steps"]:
+        if step["action"] == "autoplay":
+            if step["turns"] > 2:
+                step["fast_forward"] = True
+            if step.get("metrics"):
+                step["metrics_group"] = "TEST_MODE_" + step.get("metrics_group", "AUTOPLAY")
+    data["test_mode"] = {"skipped_turns": 0, "continuous_performance_valid": False}
+    return data
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a Civ VI PoC scenario with automatic mod freshness checks")
     parser.add_argument("scenario", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate JSON only; do not connect to the game")
+    parser.add_argument("--test-mode", action="store_true",
+                        help="Fast-forward long autoplay waits and shorten test deadlines; not continuous-play performance")
     parser.add_argument("--output", type=Path, help="New directory for baseline, trace and screenshots")
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--saves", type=Path)
@@ -1267,11 +1434,13 @@ def main() -> int:
     parser.add_argument("--no-auto-restart", action="store_true", help="Skip startup freshness check (debugging only)")
     parser.add_argument("--owner-start", action="store_true",
                         help="Open the configured Create Game screen and wait for the owner to press Start Game")
-    parser.add_argument("--test-mode", action="store_true", help="Enable test-only shortened deadlines")
     args = parser.parse_args()
     try:
         data = json.loads(args.scenario.read_text(encoding="utf-8"))
         validate_scenario(data)
+        if args.test_mode:
+            data = fast_forward_scenario(data)
+            validate_scenario(data)
         if args.check:
             print(f"VALID: {data['name']} ({len(data['steps'])} steps)")
             return 0
