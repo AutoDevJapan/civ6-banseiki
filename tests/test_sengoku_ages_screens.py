@@ -14,7 +14,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from tests.test_sengoku_ages import MOD, UI_STUBS, LedgerTests, lupa
+from tests.test_sengoku_ages import MOD, REIGNS_JSON, UI_STUBS, LedgerTests, lupa
 
 ROOT = Path(__file__).resolve().parents[1]
 RULESET_UI = ROOT / "poc/JAC_PoC_BanseikiRuleset/UI"
@@ -80,6 +80,18 @@ end
 """
 
 
+# The official ActionPanel functions the era indicator extension wraps (DLC/Expansion2/UI/Replacements/
+# ActionPanel_Expansion1.lua:187-216 RealizeEraIndicator, reached through ActionPanel_Expansion2.lua:6).
+ACTION_PANEL_STUBS = r"""
+BASE_ERA_CALLS = 0
+function RealizeEraIndicator()
+  BASE_ERA_CALLS = BASE_ERA_CALLS + 1
+  Controls.EraToolTipArea1:SetToolTipString("LOC_GAME_ERA_DESC")
+  Controls.EraToolTipArea2:SetToolTipString("LOC_GAME_ERA_DESC")
+end
+"""
+
+
 def _files():
     names = {"JAC_HouseNames": RULESET_UI / "JAC_HouseNames.lua",
              "JAC_HouseNamesData_Sengoku": MOD / "UI/JAC_HouseNamesData_Sengoku.lua",
@@ -135,7 +147,7 @@ class ReignPopupTests(ScreenTestBase):
         r1 = self.g.LEDGER().history["r1"].p1
         self.assertEqual(r1.age, "GOLDEN")
         c = self.controls
-        self.assertEqual(c.Title.text, "UP:LOC_JAC_REIGN_KOJI_ANNOUNCEMENT")  # 元号 and year (Q36 ①)
+        self.assertEqual(c.Title.text, "UP:LOC_JAC_REIGN_KOJI_ANNOUNCEMENT")  # 元号 and year
         self.assertEqual(c.EraRibbonValue.text, "LOC_JAC_AGE_NAME_GOLDEN [ICON_GLORY_GOLDEN_AGE]")
         self.assertEqual((c.EraRibbon.texture, c.Background.texture, c.WindowFrame.texture),
                          ("Ages_BannerLongGolden", "Ages_ParchmentGolden", "Ages_FrameGolden"))
@@ -209,6 +221,16 @@ class ReignPopupTests(ScreenTestBase):
         self.g.LOCAL_TURN_BEGIN()
         self.assertFalse(self.shown())
 
+    def test_merged_period_names_the_era_it_judged(self):
+        # Two 改元 on one turn are judged once (Scripts/JAC_Sengoku_Ages.lua NextJudged); the judgement records the
+        # period it closed ("from"), and the screen names that era, not the skipped one.
+        self.turns(1, 73)
+        l = self.g.LEDGER()
+        l.history["r2"]["from"] = 0
+        self.g.Game.SetProperty(self.g.Game, "JAC_AGES_LEDGER", l)
+        self.assertTrue(self.popup.JAC_ShowReignPopup(True))
+        self.assertEqual(self.controls.Score.text.split(",")[0], "LOC_JAC_AGE_REIGN_SCORE(LOC_JAC_REIGN_TENBUN_NAME")
+
     def test_the_screen_writes_nothing(self):
         self.turns(1, 66)
         before = self.snapshot()
@@ -239,7 +261,7 @@ class EraPanelTests(ScreenTestBase):
         c, h = self.controls, self.house(1)
         self.assertEqual(self.panel.BASE_CALLS, 1)
         self.assertEqual(c.Title.text, "UP:LOC_JAC_AGE_PANEL_TITLE")
-        self.assertEqual(c.EraName.text, "LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_TENBUN_NAME,1534)")  # 元号 (Q36 ①)
+        self.assertEqual(c.EraName.text, "LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_TENBUN_NAME,1534)")  # the era is the 元号 (owner decision L-1)
         self.assertEqual(c.TimeToNextEra.text, "60")  # 弘治 at turn 66
         self.assertFalse(c.TimeToNextEraContainer.hidden)
         self.assertEqual(c.EraScoreValue.text, "3")
@@ -291,20 +313,77 @@ class EraPanelTests(ScreenTestBase):
                                     f"LOC_JAC_AGE_NAME_DARK [ICON_GLORY_DARK_AGE],{r1.p1.score}) "
                                     f"LOC_JAC_AGE_THRESHOLDS({r1.p1.golden},{r1.p1.dark})")
 
+    def test_before_chidai_the_projection_is_dark_whatever_the_score(self):
+        self.turns(1, 5)
+        self.turns(1457)  # 令和: the next 改元 is 遅代, where every house is dark (SSOT 3.2)
+        self.house(1).score = 1000
+        self.g.Game.SetProperty(self.g.Game, "JAC_AGES_LEDGER", self.g.LEDGER())
+        self.panel.Refresh()
+        self.assertEqual(self.panel.JAC_AGES_PANEL_VIEW.projected, "DARK")
+        self.assertFalse(self.controls.DarkCheckmark.hidden)
+        self.assertTrue(self.controls.GoldenCheckmark.hidden)
+        self.assertEqual(self.controls.EraName.text, "LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_REIWA_NAME,2019)")
+        self.assertEqual(self.controls.TimeToNextEra.text, "300")
+
     def test_after_the_last_era_name_no_countdown_or_thresholds(self):
-        self.turns(1, 400)
+        self.turns(1, 5)
+        self.turns(1757)  # 遅代, the last 改元 (jumping judges every 改元 on the way)
         self.panel.Refresh()
         c = self.controls
-        self.assertEqual(self.g.LEDGER().reign, 8)
+        count = len(REIGNS_JSON["reigns"])
+        self.assertEqual(self.g.LEDGER().reign, count)
         self.assertTrue(c.TimeToNextEraContainer.hidden)
         self.assertTrue(c.ThresholdStack.hidden)
-        self.assertEqual(c.EraName.text, "LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_KAN_EI_NAME,1624)")
-        self.assertEqual(len([x for x in c.EraEffects.text.split("[NEWLINE]") if "HISTORY_ROW" in x]), 8)
+        self.assertEqual(c.EraName.text, "LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_CHIDAI_NAME,2119)")
+        self.assertEqual(len([x for x in c.EraEffects.text.split("[NEWLINE]") if "HISTORY_ROW" in x]), count)
 
     def test_the_panel_writes_nothing(self):
         self.turns(1, 66)
         before = self.snapshot()
         self.panel.Refresh()
+        self.assertEqual(self.snapshot(), before)
+
+
+class EraIndicatorTests(ScreenTestBase):
+    """UI/JAC_ActionPanel_Sengoku.lua: the era indicator's tooltip names the current 元号 (owner decision L-1)."""
+
+    def setUp(self):
+        super().setUp()
+        files = dict(_files(), ActionPanel_Expansion2=ACTION_PANEL_STUBS)
+        self.lua.execute(SCREEN_STUBS, self.lua.table_from(files))
+        self.panel = self.g.NEW_CONTEXT("ActionPanel", (MOD / "UI/JAC_ActionPanel_Sengoku.lua").read_text(encoding="utf-8"))
+        self.controls = self.panel.Controls
+
+    def tooltips(self):
+        return (self.controls.EraToolTipArea1.tooltip, self.controls.EraToolTipArea2.tooltip)
+
+    def test_before_the_ledger_the_official_tooltip_stays(self):
+        self.panel.RealizeEraIndicator()
+        self.assertEqual(self.panel.BASE_ERA_CALLS, 1)
+        self.assertEqual(self.tooltips(), ("LOC_GAME_ERA_DESC",) * 2)
+        self.assertIsNone(self.panel.JAC_ERA_INDICATOR_TEXT)
+
+    def test_tenbun_then_koji_with_the_turns_to_the_next_era_name(self):
+        self.turns(1, 6)
+        self.panel.RealizeEraIndicator()
+        want = "LOC_JAC_AGE_ERA_NAME(LOC_JAC_REIGN_TENBUN_NAME)[NEWLINE][NEWLINE]LOC_JAC_AGE_ERA_ENDS_IN(60)"
+        self.assertEqual(self.tooltips(), (want, want))
+        self.turns(7, 66)
+        self.g.LOCAL_TURN_BEGIN()  # the turn begin refreshes it
+        self.assertEqual(self.panel.JAC_ERA_INDICATOR_TEXT,
+                         "LOC_JAC_AGE_ERA_NAME(LOC_JAC_REIGN_KOJI_NAME)[NEWLINE][NEWLINE]LOC_JAC_AGE_ERA_ENDS_IN(7)")
+        self.assertEqual(self.tooltips()[0], self.panel.JAC_ERA_INDICATOR_TEXT)
+
+    def test_chidai_has_no_countdown(self):
+        self.turns(1, 5)
+        self.turns(1757)
+        self.panel.RealizeEraIndicator()
+        self.assertEqual(self.panel.JAC_ERA_INDICATOR_TEXT, "LOC_JAC_AGE_ERA_NAME(LOC_JAC_REIGN_CHIDAI_NAME)")
+
+    def test_the_indicator_writes_nothing(self):
+        self.turns(1, 66)
+        before = self.snapshot()
+        self.panel.RealizeEraIndicator()
         self.assertEqual(self.snapshot(), before)
 
 
@@ -315,10 +394,18 @@ class WiringTests(unittest.TestCase):
         modinfo = (MOD / "JAC_PoC_SengokuTrees.modinfo").read_text(encoding="utf-8")
         imports = modinfo.split('<ImportFiles id="JAC_Sengoku_HouseNames"')[1].split("</ImportFiles>")[0]
         for name in ("JAC_EraProgressPanel_Sengoku.lua", "JAC_SengokuAgesView.lua", "JAC_SengokuReignPopup.lua",
-                     "JAC_SengokuReignPopup.xml"):
+                     "JAC_SengokuReignPopup.xml", "JAC_ActionPanel_Sengoku.lua"):
             self.assertIn(f"<File>UI/{name}</File>", imports)
             self.assertEqual(modinfo.count(f"<File>UI/{name}</File>"), 3 if name.endswith(".xml") else 2, name)
         self.assertIn("<File>UI/JAC_SengokuReignPopup.xml</File>\n\t\t</AddUserInterfaces>", modinfo)
+        # The era indicator replaces Gathering Storm's ActionPanel script (Expansion2.modinfo:366-371, no LoadOrder)
+        # and loads it first.
+        replace = modinfo.split('<ReplaceUIScript id="JAC_Sengoku_ActionPanel"')[1].split("</ReplaceUIScript>")[0]
+        for part in ("<LoadOrder>100</LoadOrder>", "<LuaContext>ActionPanel</LuaContext>",
+                     "<LuaReplace>UI/JAC_ActionPanel_Sengoku.lua</LuaReplace>"):
+            self.assertIn(part, replace)
+        source = (MOD / "UI/JAC_ActionPanel_Sengoku.lua").read_text(encoding="utf-8")
+        self.assertLess(source.index('include("ActionPanel_Expansion2")'), source.index("BASE_RealizeEraIndicator ="))
 
 
 class TitleLengthTests(unittest.TestCase):
@@ -330,7 +417,8 @@ class TitleLengthTests(unittest.TestCase):
         return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
 
     def texts(self, prefix: str, suffix: str) -> dict[tuple[str, str], str]:
-        rows = ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row")
+        rows = [row for name in ("Text/JAC_Sengoku_Ages_Text.xml", "Text/JAC_Sengoku_Reigns_Text.xml")
+                for row in ET.parse(MOD / name).getroot().findall("./LocalizedText/Row")]
         return {(r.get("Tag"), r.get("Language")): r.findtext("Text") for r in rows
                 if r.get("Tag").startswith(prefix) and r.get("Tag").endswith(suffix)}
 
@@ -338,7 +426,7 @@ class TitleLengthTests(unittest.TestCase):
         # One line was cut at 38 cells ("NEW ERA NAME: FROM TENBUN TO KŌJI (155"). The official era popup splits its
         # title the same way (LOC_ERA_REVIEW_POPUP_TITLE, DLC/Expansion1/Text/en_US/Expansion1_Eras_Text.xml:103-104).
         titles = self.texts("LOC_JAC_REIGN_", "_ANNOUNCEMENT")
-        self.assertEqual(len(titles), 8 * 3)
+        self.assertEqual(len(titles), len(REIGNS_JSON["reigns"]) * 3)
         for key, text in titles.items():
             lines = text.split("[NEWLINE]")
             self.assertEqual(len(lines), 2, key)

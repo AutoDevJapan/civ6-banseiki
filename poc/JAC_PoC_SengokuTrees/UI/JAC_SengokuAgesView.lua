@@ -1,6 +1,7 @@
--- 改元の画面（UI/JAC_SengokuReignPopup.lua）と時代スコアの画面（UI/JAC_EraProgressPanel_Sengoku.lua）が共有する、
--- 武功の台帳（Game プロパティ JAC_AGES_LEDGER。Scripts/JAC_Sengoku_Ages.lua が書く）の読み方と文の組み立て。
--- 読むだけで書かない。元号を出すのはこの2つの画面だけ（Q36 ①、暫定）。
+-- 改元の画面（UI/JAC_SengokuReignPopup.lua）、時代スコアの画面（UI/JAC_EraProgressPanel_Sengoku.lua）、右下の時代の
+-- 目盛りの説明（UI/JAC_ActionPanel_Sengoku.lua）が共有する、武功の台帳（Game プロパティ JAC_AGES_LEDGER。
+-- Scripts/JAC_Sengoku_Ages.lua が書く）の読み方と文の組み立て。読むだけで書かない。
+-- 時代の名前は今の元号（「弘治の世」「Kōji Era」。オーナー判断 L-1、2026-09-30）。
 -- ゲームプレイ側と同じ名前のファイルにしない（tests/test_lua_file_names.py）。
 
 JAC_AGES_VIEW_PARTS = { "home", "regain", "castle", "ko", "ally", "research", "event" }
@@ -49,6 +50,24 @@ function JAC_AgesView_Reigns()
 	return list
 end
 
+-- 元号の行 → 時代の名前（「弘治の世」「Kōji Era」「Эпоха Кодзи」）。
+function JAC_AgesView_EraName(reign)
+	return Locale.Lookup("LOC_JAC_AGE_ERA_NAME", reign.Name)
+end
+
+-- 右下の時代の目盛りの説明（公式 ActionPanel_Expansion1.lua:205-209 の「時代の名前」と「時代の終わりまでのターン」）を、
+-- 今の元号と次の改元までのターンにする。台帳が無ければ nil（公式のまま）。
+function JAC_AgesView_EraIndicatorText(l, elapsed)
+	if l == nil then return nil end
+	local reign = JAC_AgesView_Reigns()[type(l.reign) == "number" and l.reign or 0]
+	if reign == nil then return nil end
+	local text = JAC_AgesView_EraName(reign)
+	if type(l.nextDue) == "number" then
+		text = text .. "[NEWLINE][NEWLINE]" .. Locale.Lookup("LOC_JAC_AGE_ERA_ENDS_IN", math.max(0, l.nextDue - elapsed))
+	end
+	return text
+end
+
 local function PolicyRow(policyType)
 	for row in GameInfo.JAC_SengokuDarkAgePolicies() do
 		if row.PolicyType == policyType then return row end
@@ -66,8 +85,10 @@ function JAC_AgesView_Reign(l, playerID, elapsed)
 	if type(result) ~= "table" or type(house) ~= "table" then return nil end
 	local reigns = JAC_AgesView_Reigns()
 	local dark = result.age == "DARK"
+	-- 判定した期（from。同じターンの改元をまとめたときは直前の番号ではない。古い台帳には無い）。
+	local from = type(judged.from) == "number" and judged.from or l.reign - 1
 	return {
-		index = l.reign, reign = reigns[l.reign], previous = reigns[l.reign - 1], turn = judged.turn,
+		index = l.reign, reign = reigns[l.reign], previous = reigns[from], turn = judged.turn,
 		age = result.age, score = result.score, golden = result.golden, dark = result.dark,
 		policy = dark and house.policy or nil,
 		pendingChoice = dark and house.age == "DARK" and house.chosen ~= l.reign,
@@ -91,8 +112,10 @@ function JAC_AgesView_Panel(l, playerID, elapsed)
 	for _, part in ipairs(JAC_AGES_VIEW_PARTS) do table.insert(view.parts, { part = part, points = parts[part] or 0 }) end
 	if type(house.next) == "table" then
 		view.golden, view.dark = house.next.golden, house.next.dark
-		-- ゲームプレイ側の Judge と同じ判定（英雄期は暗黒期の家が黄金期の閾値に届いたとき）。
-		if view.score >= view.golden then
+		-- ゲームプレイ側の Judge と同じ判定（英雄期は暗黒期の家が黄金期の閾値に届いたとき。遅代は点によらず暗黒期）。
+		if house.next.forced then
+			view.projected = house.next.forced
+		elseif view.score >= view.golden then
 			view.projected = view.age == "DARK" and "HEROIC" or "GOLDEN"
 		elseif view.score >= view.dark then
 			view.projected = "NORMAL"
