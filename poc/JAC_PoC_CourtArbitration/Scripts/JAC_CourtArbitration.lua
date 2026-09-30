@@ -1,14 +1,19 @@
 -- 朝廷・将軍の停戦裁定（SSOT 3.2）。日本マップ4種でだけ読み込まれる（modinfo）。
 -- 1. 戦争中の当事者は相手との停戦裁定を請求できる。足利将軍家は、人間・AI を問わず、室町幕府の終わり（1573年）
---    までは他家どうしの停戦も発議でき、その裁定の力（停戦の再宣戦制限のターン数）は3倍になる。
--- 2. 請求者は外交的支持・金・正当性を払う。請求は UI から EXECUTE_SCRIPT で届き、次のターンの初めに裁く。
+--    までは他家どうしの停戦も発議でき、その裁定の力は3倍になる（停戦のターン数と拒否の不利益が3倍、費用は3分の1）。
+-- 2. 請求者は金と正当性を払う（日本マップでは正当性が外交的支持の代わり：オーナー判断 R-1）。請求は UI から
+--    EXECUTE_SCRIPT で届き、次のターンの初めに裁く。
 -- 3. 答える側：人間は画面で応否を送る（届かなければ拒否）。AI は Rules の暫定規則で決める。
 -- 4. 全員が応じればその場で講和し（最短の戦争期間を越える MakePeaceWith(相手, true)）、停戦中に戦争になって
---    いれば毎ターンの初めに講和し直す。拒んだ勢力は正当性を失い、
---    ほかの家に「討伐の大義」が立つ（記録と通知のみ。エンジンに特定の相手への開戦事由を足す API が無い：Q58）。
+--    いれば毎ターンの初めに講和し直す。応じた家は正当性が上がり、拒んだ家は正当性を失い、その家を対象に
+--    討伐の勅命が出る（オーナー判断 R-2）。
+-- 5. 正当性は毎ターンの初めに収入（Rules の LegitimacyIncome）で増え、高低で全都市の金と文化が変わる
+--    （都市のプロットの旗 → Data/JAC_CourtArbitration_Legitimacy.sql の修正値）。
+-- 6. 討伐の勅命：期間中、どの家も参加できる（人間は画面のボタン、AI は対象と戦争中か隣接していれば自動）。
+--    参加者は戦争疲弊が減り（代表の都市の旗 → 修正値）、期間中に対象の都市を攻め取れば金と正当性を得る。
 --
--- マルチプレイ：状態はすべて Game / Player プロパティ（セーブに残り、全員で共有）。変更は GameEvents
--- （EXECUTE_SCRIPT と OnGameTurnStarted）の中だけで、乱数もローカルプレイヤーの判定も使わない。
+-- マルチプレイ：状態はすべて Game / Player / プロットのプロパティ（セーブに残り、全員で共有）。変更は GameEvents
+-- （EXECUTE_SCRIPT・OnGameTurnStarted・CityConquered）の中だけで、乱数もローカルプレイヤーの判定も使わない。
 include "JAC_CourtArbitration_Rules"
 local R = JAC_ARB
 
@@ -36,6 +41,139 @@ local function Notify(ids, nameKey, summaryKey, ...)
 	end
 end
 
+local function ChangeLegitimacy(id, delta)
+	local value = R.ClampLegitimacy(R.Legitimacy(id) + delta)
+	Players[id]:SetProperty(R.LEGITIMACY_KEY, value)
+	return value
+end
+
+-- 本拠：各家の最初の首都（JAC_Sengoku_UnificationPact.lua の RecordHomes と同じ決め方。
+-- GetCapitalCity は DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1103）
+local function RecordHomes()
+	for _, id in ipairs(SortedMajorIDs()) do
+		if Players[id]:GetProperty(R.HOME_KEY) == nil then
+			local capital = Players[id]:GetCities():GetCapitalCity()
+			if capital then Players[id]:SetProperty(R.HOME_KEY, Map.GetPlot(capital:GetX(), capital:GetY()):GetIndex()) end
+		end
+	end
+end
+
+-- 都市の中心のプロットに旗を書く（冪等。JAC_Sengoku_Ages.lua の WriteProperties と同じ形。プロットの
+-- SetProperty は DLC/CivRoyaleScenario/Scripts/CivRoyaleScenario_StartScript.lua:496-519）。値は 0/1 の数
+-- （空文字はセーブで戻らない）。勅命の旗は、家ごとにプロット番号が最小の都市（代表）だけに立てる
+local function WriteCityFlags(turn)
+	local ids = SortedMajorIDs()
+	for _, id in ipairs(ids) do
+		local legitimacy = R.Legitimacy(id)
+		local joined = false
+		for _, target in ipairs(ids) do
+			if R.HasJoined(id, target, turn) then joined = true end
+		end
+		local plots = {}
+		for _, city in Players[id]:GetCities():Members() do -- BlackDeathScenario.lua:136
+			table.insert(plots, Map.GetPlot(city:GetX(), city:GetY()))
+		end
+		table.sort(plots, function(p, q) return p:GetIndex() < q:GetIndex() end)
+		for i, plot in ipairs(plots) do
+			plot:SetProperty(R.FLAG_HIGH, legitimacy >= R.LEGITIMACY_HIGH and 1 or 0)
+			plot:SetProperty(R.FLAG_LOW, legitimacy < R.LEGITIMACY_LOW and 1 or 0)
+			plot:SetProperty(R.FLAG_SUBJUGATION, (joined and i == 1) and 1 or 0)
+		end
+	end
+end
+
+local function ApplyIncome(turn)
+	for _, id in ipairs(SortedMajorIDs()) do
+		local income = R.LegitimacyIncome(id, turn)
+		Log(string.format("legitimacy player=%d +%d = %d turn=%d", id, income, ChangeLegitimacy(id, income), turn))
+	end
+end
+
+-- 自分の都市と対象の都市の最短の距離が SUBJUGATION_NEIGHBOR_DISTANCE 以下なら隣接とみなす（暫定）。
+-- 公式：Map.GetPlotDistance（DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:132）
+local function Neighbors(a, b)
+	for _, mine in Players[a]:GetCities():Members() do
+		for _, theirs in Players[b]:GetCities():Members() do
+			if Map.GetPlotDistance(mine:GetX(), mine:GetY(), theirs:GetX(), theirs:GetY()) <= R.SUBJUGATION_NEIGHBOR_DISTANCE then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function Join(id, target, turn, how)
+	Players[id]:SetProperty(R.JoinedKey(target), 1)
+	Log(string.format("joined player=%d target=%d turn=%d until=%d by=%s", id, target, turn,
+		Players[target]:GetProperty(R.OUTLAW_KEY), how))
+	Notify({ id, target }, "LOC_JAC_ARB_NOTIFY_JOINED_NAME", "LOC_JAC_ARB_NOTIFY_JOINED_SUMMARY", R.NameKey(id), R.NameKey(target))
+end
+
+-- AI は、勅命の対象と戦争中か隣接していれば自分から参加する。人間は画面のボタンで参加する
+local function AutoJoin(turn)
+	local ids = SortedMajorIDs()
+	for _, target in ipairs(ids) do
+		if R.IsTarget(target, turn) then
+			for _, id in ipairs(ids) do
+				if not Players[id]:IsHuman() and R.CheckJoin(id, target, turn)
+					and (Players[id]:GetDiplomacy():IsAtWarWith(target) or Neighbors(id, target)) then
+					Join(id, target, turn, "ai")
+				end
+			end
+		end
+	end
+end
+
+-- 期限を過ぎた勅命を終える。参加の記録も消し、戦争疲弊の旗は続く WriteCityFlags で消える
+local function ExpireOrders(turn)
+	local ids = SortedMajorIDs()
+	for _, target in ipairs(ids) do
+		local untilTurn = Players[target]:GetProperty(R.OUTLAW_KEY)
+		if untilTurn ~= nil and turn > untilTurn then
+			Players[target]:SetProperty(R.OUTLAW_KEY, nil)
+			local notified = { target }
+			for _, id in ipairs(ids) do
+				if Players[id]:GetProperty(R.JoinedKey(target)) ~= nil then
+					Players[id]:SetProperty(R.JoinedKey(target), nil)
+					table.insert(notified, id)
+				end
+			end
+			Log(string.format("subjugation ended target=%d turn=%d", target, turn))
+			Notify(notified, "LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME", "LOC_JAC_ARB_NOTIFY_ORDER_ENDED_SUMMARY", R.NameKey(target))
+		end
+	end
+end
+
+-- 討伐の勅命への参加（UI の EXECUTE_SCRIPT。params.Target = 対象）
+local function OnJoin(playerID, params)
+	local turn = R.GameTurn()
+	Game:SetProperty(R.LAST_EVENT_KEY, string.format("join player=%d turn=%d", playerID, turn))
+	local target = tonumber(params.Target)
+	local ok, reason = R.CheckJoin(playerID, target, turn)
+	if not ok then
+		Log(string.format("rejected join player=%d target=%s reason=%s", playerID, tostring(target), reason))
+		return
+	end
+	Join(playerID, target, turn, "request")
+	WriteCityFlags(turn)
+end
+
+-- 都市の攻略（公式：DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:174,248 の GameEvents.CityConquered。
+-- 引数は 攻略者・元の所有者・都市 ID・座標）。勅命の期間中に参加者が対象の都市を攻め取れば褒賞を与える
+local function OnCityConquered(capturerID, ownerID, cityID, x, y)
+	local turn = R.GameTurn()
+	if ownerID ~= nil and Players[ownerID] ~= nil and Players[capturerID] ~= nil and R.HasJoined(capturerID, ownerID, turn) then
+		Players[capturerID]:GetTreasury():ChangeGoldBalance(R.SUBJUGATION_GOLD)
+		local gained = ChangeLegitimacy(capturerID, R.SUBJUGATION_LEGITIMACY)
+		local lost = ChangeLegitimacy(ownerID, -R.SUBJUGATION_LEGITIMACY)
+		Log(string.format("subjugation capture player=%d target=%d city=%s turn=%d gold=+%d legitimacy=%d target_legitimacy=%d",
+			capturerID, ownerID, tostring(cityID), turn, R.SUBJUGATION_GOLD, gained, lost))
+		Notify(SortedMajorIDs(), "LOC_JAC_ARB_NOTIFY_CAPTURE_NAME", "LOC_JAC_ARB_NOTIFY_CAPTURE_SUMMARY",
+			R.NameKey(capturerID), R.NameKey(ownerID), R.SUBJUGATION_GOLD, R.SUBJUGATION_LEGITIMACY)
+	end
+	WriteCityFlags(turn)
+end
+
 -- 請求（UI/JAC_CourtArbitrationPanel.lua → UI.RequestPlayerOperation(EXECUTE_SCRIPT)、OnStart = この名前。
 -- 公式：BlackDeathScenario_PopupHandler.lua:22-28 → BlackDeathScenario.lua:66 の GameEvents.EventPopupChoice）
 local function OnRequest(requester, params)
@@ -48,17 +186,11 @@ local function OnRequest(requester, params)
 	end
 	if requester == b then a, b = b, a end -- 当事者の請求では A を請求者にそろえる
 	local player = Players[requester]
-	-- ゲームプレイ側の Favor は Player:GetDiplomacy():ChangeFavor（R.Favor の注記）。公式 Lua に使用例が無いので、
-	-- 失敗したら何も払わせずに断る
-	local paid, err = pcall(function() player:GetDiplomacy():ChangeFavor(-R.COST_FAVOR) end)
-	if not paid then
-		Log(string.format("FAILED favor payment player=%d: %s", requester, tostring(err)))
-		return
-	end
-	player:GetTreasury():ChangeGoldBalance(-R.COST_GOLD) -- AustraliaScenario.lua:847
-	player:SetProperty(R.LEGITIMACY_KEY, R.Legitimacy(requester) - R.COST_LEGITIMACY)
 	local turn = R.GameTurn()
-	local power = R.IsEmpoweredShogun(requester, turn) and R.SHOGUN_POWER or 1
+	local power = R.Power(requester, turn)
+	local gold, legitimacy = R.Costs(power) -- 将軍家の請求は3分の1（オーナー判断 O-3・R-3）
+	player:GetTreasury():ChangeGoldBalance(-gold) -- AustraliaScenario.lua:847
+	ChangeLegitimacy(requester, -legitimacy)
 	local pending = { Requester = requester, A = a, B = b, Turn = turn, Power = power }
 	Game:SetProperty(R.PENDING_KEY, pending)
 	Game:SetProperty(R.LAST_REQUEST_KEY, turn)
@@ -160,7 +292,7 @@ local function Resolve(turn)
 		Log(string.format("void request pair=%d-%d turn=%d (no longer at war)", a, b, turn))
 		return
 	end
-	local refusers = {}
+	local refusers, accepters = {}, {}
 	for _, r in ipairs({ { a, b }, { b, a } }) do
 		local id, opponent = r[1], r[2]
 		local key = R.AnswerKey(pending, id)
@@ -175,8 +307,12 @@ local function Resolve(turn)
 				end
 			end
 			Log(string.format("decision player=%d accept=%s by=%s", id, tostring(accept), how))
-			if not accept then table.insert(refusers, id) end
+			table.insert(accept and accepters or refusers, id)
 		end
+	end
+	-- 応じた家は正当性が上がる（R-1。力は掛けない）。相手が拒んで裁定が成らなくても上がる
+	for _, id in ipairs(accepters) do
+		Log(string.format("accept bonus player=%d legitimacy=%d", id, ChangeLegitimacy(id, R.ACCEPT_LEGITIMACY)))
 	end
 	local everyone = SortedMajorIDs()
 	if #refusers == 0 then
@@ -195,13 +331,16 @@ local function Resolve(turn)
 			a, b, turn, truceTurns, pending.Power, peace and "true" or "deferred reason=" .. reason))
 		Notify(everyone, "LOC_JAC_ARB_NOTIFY_ACCEPTED_NAME", summary, R.NameKey(a), R.NameKey(b), truceTurns)
 	else
+		-- 将軍家の裁定を拒めば不利益も3倍（オーナー判断 O-3・R-3）。勅命が続いている家は、長い方の期限にする
+		local loss, outlawTurns = R.RefusalPenalty(pending.Power)
 		for _, id in ipairs(refusers) do
-			local legitimacy = R.Legitimacy(id) - R.REFUSAL_LEGITIMACY
-			Players[id]:SetProperty(R.LEGITIMACY_KEY, legitimacy)
-			Players[id]:SetProperty(R.OUTLAW_KEY, turn + R.OUTLAW_TURNS)
-			Log(string.format("refused player=%d pair=%d-%d turn=%d legitimacy=%d outlaw_until=%d", id, a, b, turn,
-				legitimacy, turn + R.OUTLAW_TURNS))
-			Notify(everyone, "LOC_JAC_ARB_NOTIFY_REFUSED_NAME", "LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY", R.NameKey(id), R.NameKey(a), R.NameKey(b))
+			local legitimacy = ChangeLegitimacy(id, -loss)
+			local untilTurn = math.max(turn + outlawTurns, Players[id]:GetProperty(R.OUTLAW_KEY) or 0)
+			Players[id]:SetProperty(R.OUTLAW_KEY, untilTurn)
+			Log(string.format("refused player=%d pair=%d-%d turn=%d legitimacy=%d outlaw_until=%d power=%d", id, a, b, turn,
+				legitimacy, untilTurn, pending.Power))
+			Notify(everyone, "LOC_JAC_ARB_NOTIFY_REFUSED_NAME", "LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY", R.NameKey(id), R.NameKey(a),
+				R.NameKey(b), untilTurn)
 		end
 	end
 end
@@ -209,11 +348,18 @@ end
 -- 公式：DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:246（GameEvents.OnGameTurnStarted）
 GameEvents.OnGameTurnStarted.Add(function()
 	local turn = R.GameTurn()
+	RecordHomes()
+	ExpireOrders(turn)
+	ApplyIncome(turn)
 	EnforceTruces(turn)
 	Resolve(turn)
+	AutoJoin(turn)
+	WriteCityFlags(turn)
 end)
 GameEvents.JAC_CourtArbitrationRequest.Add(OnRequest)
 GameEvents.JAC_CourtArbitrationRespond.Add(OnRespond)
+GameEvents.JAC_CourtArbitrationJoin.Add(OnJoin)
+GameEvents.CityConquered.Add(OnCityConquered)
 
 -- 検証用の読み取り口（シナリオの GameCore_Tuner から読む。状態の変更には使わない）
 ExposedMembers.JAC_CourtArbitration = R

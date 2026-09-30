@@ -30,7 +30,7 @@ class ScopeAndTextTests(unittest.TestCase):
     def test_every_action_loads_only_on_the_four_banseiki_japan_maps(self):
         mod = ET.parse(MOD / "JAC_PoC_CourtArbitration.modinfo").getroot()
         criteria = {row.attrib["id"]: row for row in mod.findall("./ActionCriteria/Criteria")}
-        for kind in ("UpdateText", "AddGameplayScripts", "AddUserInterfaces"):
+        for kind in ("UpdateDatabase", "UpdateText", "AddGameplayScripts", "AddUserInterfaces"):
             selected = set()
             for action in mod.findall(f"./InGameActions/{kind}"):
                 criterion = criteria[action.attrib["criteria"]]
@@ -57,6 +57,30 @@ class ScopeAndTextTests(unittest.TestCase):
         used |= {f"LOC_JAC_ARB_REASON_{r}" for r in re.findall(r'return false, "([A-Z_]+)"', rules)}
         self.assertEqual(used - set(languages), set())
 
+    def test_the_modifiers_read_the_flags_the_script_writes(self):
+        # Owner decisions R-1 / R-2 / S: +10% / -10% gold and culture per city and the participants' war weariness, gated by 0/1 plot flags.
+        sql = (MOD / "Data/JAC_CourtArbitration_Legitimacy.sql").read_text(encoding="utf-8")
+        rules = (MOD / "Scripts/JAC_CourtArbitration_Rules.lua").read_text(encoding="utf-8")
+        flags = dict(re.findall(r'R\.(FLAG_[A-Z]+) = "([A-Z_]+)"', rules))
+        self.assertEqual(set(flags), {"FLAG_HIGH", "FLAG_LOW", "FLAG_SUBJUGATION"})
+        for name in flags.values():
+            self.assertIn(f"'PropertyName', '{name}'", sql)
+        rows = dict(re.findall(r"\('(JAC_ARB_[A-Z_]+)', '(MODIFIER_[A-Z_]+)'", sql))
+        self.assertNotIn("IDENTITY", sql)  # loyalty is pinned by the Japan maps' +100 stabilization (question S)
+        yields = [f"JAC_ARB_{hl}_{y}" for hl in ("HIGH", "LOW") for y in ("GOLD", "CULTURE")]
+        for modifier in yields:
+            self.assertEqual(rows[modifier], "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER")
+            hl, y = modifier.split("_")[2:]
+            self.assertIn(f"'MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER', NULL, 'JAC_ARB_CITY_LEGITIMACY_{hl}')", sql)
+            self.assertIn(f"('{modifier}', 'YieldType', 'YIELD_{y}')", sql)
+            self.assertIn(f"('{modifier}', 'Amount', '{'10' if hl == 'HIGH' else '-10'}')", sql)
+        self.assertEqual(rows["JAC_ARB_WAR_WEARINESS"], "MODIFIER_PLAYER_ADJUST_WAR_WEARINESS")
+        self.assertIn("('JAC_ARB_WAR_WEARINESS', 'MODIFIER_PLAYER_ADJUST_WAR_WEARINESS', 'JAC_ARB_CITY_SUBJUGATION_ANCHOR', NULL)", sql)
+        for modifier in yields + ["JAC_ARB_ATTACH_WAR_WEARINESS"]:
+            self.assertIn(f"('TRAIT_LEADER_MAJOR_CIV', '{modifier}')", sql)
+        script = (MOD / "Scripts/JAC_CourtArbitration.lua").read_text(encoding="utf-8")
+        self.assertNotRegex(rules + script, r"GetFavor|ChangeFavor")  # legitimacy replaces Favor on the Japan maps
+
     @unittest.skipIf(lupa is None, "lupa is not installed")
     def test_ui_script_compiles(self):
         source = (MOD / "UI/JAC_CourtArbitrationPanel.lua").read_text(encoding="utf-8")
@@ -76,6 +100,7 @@ GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
   GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD" } },
   GameSpeed_Turns = rowsTable(tables.GameSpeed_Turns),
+  Yields = { YIELD_GOLD = { Index = 2 }, YIELD_CULTURE = { Index = 4 } },
 }
 CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
@@ -94,10 +119,33 @@ MIN_WAR, FORCE_IGNORED = 0, false
 local function pair(a, b) return math.min(a, b) .. "_" .. math.max(a, b) end
 function SET_WAR(a, b, v) WAR[pair(a, b)] = v; WAR_CHANGED[pair(a, b)] = CURRENT_TURN end
 local function canPeace(a, b) return CURRENT_TURN - (WAR_CHANGED[pair(a, b)] or 0) >= MIN_WAR end
-Players, PlayerConfigurations, MAJORS, PEACE_FAILS = {}, {}, {}, {}
+-- Plots are keyed by x (y is always 0). A house's k-th city stands at x = 100 * id + k, so the plot's default
+-- owner is floor(x / 100); PLOT_OWNER overrides it (a lost home). Houses are 99 tiles apart unless NEAR["a_b"].
+PLOTS, PLOT_OWNER, NEAR = {}, {}, {}
+local function plot(x)
+  local p = PLOTS[x]
+  if p == nil then
+    p = {}
+    p.GetIndex = function() return x end
+    p.GetOwner = function() return PLOT_OWNER[x] or math.floor(x / 100) end
+    p.GetProperty, p.SetProperty = properties()
+    PLOTS[x] = p
+  end
+  return p
+end
+Map = {
+  GetPlot = function(x, y) return plot(x) end,
+  GetPlotByIndex = function(i) return plot(i) end,
+  GetPlotDistance = function(x1, y1, x2, y2)
+    local a, b = math.floor(x1 / 100), math.floor(x2 / 100)
+    return NEAR[math.min(a, b) .. "_" .. math.max(a, b)] and 1 or 99
+  end,
+}
+function FLAG(x, key) return plot(x):GetProperty(key) end
+Players, PlayerConfigurations, MAJORS = {}, {}, {}
 for i, civ in ipairs(civs) do
   local id = i - 1
-  local p = { favor = 100, gold = 500, cities = 2, human = false, favorFails = false }
+  local p = { gold = 500, cities = 2, human = false }
   p.GetID = function() return id end
   p.IsMajor = function() return true end
   p.IsAlive = function() return true end
@@ -106,7 +154,23 @@ for i, civ in ipairs(civs) do
     GetGoldBalance = function() return p.gold end,
     ChangeGoldBalance = function(_, n) p.gold = p.gold + n end,
   } end
-  p.GetCities = function() return { GetCount = function() return p.cities end } end
+  local function cityList()
+    local list = {}
+    for k = 1, p.cities do
+      local x = 100 * id + k
+      -- Every yield is 10, +10% / -10% while the city's high / low flag is set (Data/JAC_CourtArbitration_Legitimacy.sql).
+      local function yield()
+        return 10 * (1 + 0.1 * ((plot(x):GetProperty("JAC_ARB_LEGITIMACY_HIGH") or 0) - (plot(x):GetProperty("JAC_ARB_LEGITIMACY_LOW") or 0)))
+      end
+      list[k] = { GetX = function() return x end, GetY = function() return 0 end, GetYield = yield }
+    end
+    return list
+  end
+  p.GetCities = function() return {
+    GetCount = function() return p.cities end,
+    Members = function() return ipairs(cityList()) end,
+    GetCapitalCity = function() return cityList()[1] end,
+  } end
   p.GetDiplomacy = function() return {
     IsAtWarWith = function(_, o) return WAR[math.min(id, o) .. "_" .. math.max(id, o)] == true end,
     DeclareWarOn = function(_, o) SET_WAR(id, o, true) end,
@@ -114,9 +178,6 @@ for i, civ in ipairs(civs) do
       if (force == true and not FORCE_IGNORED) or canPeace(id, o) then SET_WAR(id, o, false) end
     end,
     CanMakePeaceWith = function(_, o) return canPeace(id, o) end,
-    -- Gameplay favor lives on the diplomacy object (XP2_Lua_IPlayerDiplomacy.cpp); the gameplay Player has no GetFavor.
-    GetFavor = function() return p.favor end,
-    ChangeFavor = function(_, n) if p.favorFails then error("no ChangeFavor") end; p.favor = p.favor + n end,
   } end
   p.GetProperty, p.SetProperty = properties()
   Players[id] = p
@@ -151,6 +212,14 @@ function START_TURN(turn)
 end
 function REQUEST(player, a, b) GameEvents.JAC_CourtArbitrationRequest.Call(player, { Target = a, Other = b, OnStart = "x" }) end
 function RESPOND(player, accept) GameEvents.JAC_CourtArbitrationRespond.Call(player, { Accept = accept }) end
+function JOIN(player, target) GameEvents.JAC_CourtArbitrationJoin.Call(player, { Target = target, OnStart = "x" }) end
+-- The engine moves the city, then raises CityConquered(capturer, previous owner, city, x, y) (AlexanderScenario.lua:174).
+function CONQUER(capturer, owner, x)
+  PLOT_OWNER[x] = capturer
+  Players[owner].cities = Players[owner].cities - 1
+  Players[capturer].cities = Players[capturer].cities + 1
+  GameEvents.CityConquered.Call(capturer, owner, 7, x, 0)
+end
 """
 
 
@@ -205,23 +274,31 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertFalse(R.IsEmpoweredShogun(self.OUCHI, 1))
         self.assertIn("[JAC_ARB] loaded shogunate_end_turn=120", self.log())
 
+    def legitimacy(self, pid) -> int:
+        return self.g.JAC_ARB.Legitimacy(pid)
+
     def test_party_request_charges_the_cost_and_an_even_ai_accepts_next_turn(self):
+        # Turn 1 income: +1 base, +1 home castle held, +1 at peace with the Shogunate = 53.
+        self.assertEqual(self.legitimacy(self.OUCHI), 53)
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
         ouchi = self.g.Players[self.OUCHI]
-        self.assertEqual((ouchi.favor, ouchi.gold, self.player(self.OUCHI, "JAC_LEGITIMACY")), (80, 400, 45))
+        self.assertEqual((ouchi.gold, self.legitimacy(self.OUCHI)), (400, 53 - 5))
         pending = self.game("JAC_ARB_PENDING")
         self.assertEqual((pending.Requester, pending.A, pending.B, pending.Power), (0, 0, 1, 1))
         self.assertEqual(list(self.g.NOTES[1].values())[:2], [self.OTOMO, "LOC_JAC_ARB_NOTIFY_REQUEST_NAME"])
         self.assertEqual(len(self.g.NOTES), 1)  # only the respondent
         # One ruling per turn: a second request (even the other way round) is refused and not charged.
         self.g.REQUEST(self.OTOMO, self.OTOMO, self.OUCHI)
-        self.assertEqual(self.g.Players[self.OTOMO].favor, 100)
+        self.assertEqual(self.g.Players[self.OTOMO].gold, 500)
         self.assertIn("[JAC_ARB] rejected request player=1 pair=1-0 reason=ONE_PER_TURN", self.log())
         self.next_turn()
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 2 + 10)
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
         self.assertIn("[JAC_ARB] decision player=1 accept=true by=ai", self.log())
+        # Accepting raises the respondent's legitimacy by 5 (R-1); the requester only has its income.
+        self.assertEqual(self.legitimacy(self.OTOMO), 53 + 3 + 5)
+        self.assertEqual(self.legitimacy(self.OUCHI), 48 + 3)
 
     def test_every_execute_script_is_recorded_at_entry_even_when_rejected(self):
         # The live scenario reports this when a request never reaches the gameplay side (court-arbitration-03).
@@ -241,20 +318,48 @@ class ArbitrationTurnTests(unittest.TestCase):
         pending = self.game("JAC_ARB_PENDING")
         self.assertEqual((pending.Requester, pending.A, pending.B, pending.Power), (2, 0, 1, 3))
         self.assertEqual(sorted(n[1] for n in self.g.NOTES.values()), [0, 1])  # both parties answer
+        # Owner decisions O-3 / R-3: the shogun's 3x also divides the cost (rounded up) ...
+        ashikaga = self.g.Players[self.ASHIKAGA]
+        self.assertEqual((ashikaga.gold, self.legitimacy(self.ASHIKAGA)), (500 - 34, 70 + 3 - 2))
         self.next_turn()
         self.assertFalse(self.at_war(self.OUCHI, self.OTOMO))
         self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 2 + 30)
+
+    def test_refusing_a_shogun_ruling_costs_three_times_as_much(self):
+        # ... and multiplies the refusal penalty (O-3 / R-3): Legitimacy -45, a 30-turn order to subdue.
+        self.g.Players[self.OTOMO].cities = 4  # 4 > 1.5 * 2
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
+        self.assertEqual(self.legitimacy(self.OTOMO), 53 + 3 - 45)
+        self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 2 + 30)
+        self.assertIn("[JAC_ARB] refused player=1 pair=0-1 turn=2 legitimacy=11 outlaw_until=32 power=3", self.log())
+        self.assertEqual(self.legitimacy(self.OUCHI), 53 + 3 + 5)  # Ouchi accepted
+
+    def test_the_shogun_can_afford_a_ruling_at_a_third_of_the_cost(self):
+        ashikaga = self.g.Players[self.ASHIKAGA]
+        ashikaga.gold = 34
+        ashikaga.SetProperty(None, "JAC_LEGITIMACY", 30)  # the lowest legitimacy that may petition
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.assertEqual((ashikaga.gold, self.legitimacy(self.ASHIKAGA)), (0, 28))
+        self.assertEqual(self.game("JAC_ARB_PENDING").Power, 3)
+        R = self.g.JAC_ARB
+        self.assertEqual(tuple(R.Costs(1)), (100, 5))
+        self.assertEqual(tuple(R.Costs(3)), (34, 2))
+        self.assertEqual(tuple(R.RefusalPenalty(1)), (15, 10))
+        self.assertEqual(tuple(R.RefusalPenalty(3)), (45, 30))
 
     def test_after_1573_ashikaga_survives_but_cannot_call_rulings_for_others(self):
         self.next_turn(120)
         self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
         self.assertIn("[JAC_ARB] rejected request player=2 pair=0-1 reason=NOT_PARTY", self.log())
-        self.assertEqual(self.g.Players[self.ASHIKAGA].favor, 100)
+        self.assertEqual(self.g.Players[self.ASHIKAGA].gold, 500)
         # As a party it petitions like any house, at normal power.
         self.g.SET_WAR(self.ASHIKAGA, self.MORI, True)
         self.g.REQUEST(self.ASHIKAGA, self.ASHIKAGA, self.MORI)
         self.assertEqual(self.game("JAC_ARB_PENDING").Power, 1)
+        self.assertEqual(self.g.Players[self.ASHIKAGA].gold, 500 - 100)  # full cost at normal power
         self.next_turn()
         self.assertEqual(self.game("JAC_ARB_TRUCE_2_3"), 121 + 10)
 
@@ -266,38 +371,73 @@ class ArbitrationTurnTests(unittest.TestCase):
         self.assertIn("[JAC_ARB] rejected request player=3 pair=0-1 reason=NOT_PARTY", log)
         self.assertIn("[JAC_ARB] rejected request player=0 pair=0-3 reason=NOT_AT_WAR", log)
 
-    def test_cost_shortfalls_reject_without_charging(self):
+    def test_short_gold_or_legitimacy_below_30_rejects_without_charging(self):
         ouchi = self.g.Players[self.OUCHI]
-        for field, value, reason in (("favor", 19, "FAVOR"), ("gold", 99, "GOLD")):
-            ouchi.favor, ouchi.gold = 100, 500
-            ouchi[field] = value
-            self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
-            self.assertIn(f"[JAC_ARB] rejected request player=0 pair=0-1 reason={reason}", self.log())
-            self.assertEqual(ouchi[field], value)
-        ouchi.favor, ouchi.gold = 100, 500
-        ouchi.SetProperty(None, "JAC_LEGITIMACY", 4)
+        ouchi.gold = 99
+        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
+        self.assertIn("[JAC_ARB] rejected request player=0 pair=0-1 reason=GOLD", self.log())
+        ouchi.gold = 500
+        ouchi.SetProperty(None, "JAC_LEGITIMACY", 29)  # R-1: below 30 a house cannot petition
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
         self.assertIn("[JAC_ARB] rejected request player=0 pair=0-1 reason=LEGITIMACY", self.log())
-        # ChangeFavor missing in the engine: nothing is charged and no request is made.
-        ouchi.SetProperty(None, "JAC_LEGITIMACY", 50)
-        ouchi.favorFails = True
-        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
-        self.assertEqual((ouchi.gold, self.player(self.OUCHI, "JAC_LEGITIMACY")), (500, 50))
+        self.assertEqual((ouchi.gold, self.legitimacy(self.OUCHI)), (500, 29))
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
 
-    def test_favor_is_read_from_the_ui_player_or_the_gameplay_diplomacy(self):
-        R, ouchi = self.g.JAC_ARB, self.g.Players[self.OUCHI]
-        self.assertIsNone(ouchi.GetFavor)  # like GameCore_Tuner in court-arbitration-02
-        self.assertEqual(R.Favor(self.OUCHI), 100)
-        ouchi.GetFavor = self.lua.eval("function() return 7 end")  # UI Player (XP2_Cache_Lua_IPlayer.cpp)
-        self.assertEqual(R.Favor(self.OUCHI), 7)
+    def test_legitimacy_starts_at_50_or_70_and_earns_one_to_three_per_turn(self):
+        self.assertEqual([self.legitimacy(i) for i in range(4)], [53, 53, 73, 53])
+        R = self.g.JAC_ARB
+        self.assertEqual(self.player(self.OUCHI, "JAC_ARB_HOME"), 1)  # first capital's plot
+        # At war with the Shogunate: no court income.
+        self.g.SET_WAR(self.OUCHI, self.ASHIKAGA, True)
+        self.assertEqual(R.LegitimacyIncome(self.OUCHI, 2), 2)
+        self.assertEqual(R.LegitimacyIncome(self.ASHIKAGA, 2), 3)  # the Shogunate itself
+        # Home castle lost: no home income.
+        self.g.PLOT_OWNER[1] = self.OTOMO
+        self.assertEqual(R.LegitimacyIncome(self.OUCHI, 2), 1)
+        # After 1573 the court income is gone for everyone.
+        self.assertEqual(R.LegitimacyIncome(self.MORI, 120), 2)
+        self.assertEqual(R.LegitimacyIncome(self.ASHIKAGA, 120), 2)
+        self.next_turn()
+        self.assertEqual(self.legitimacy(self.OUCHI), 53 + 1)
+        self.assertIn("[JAC_ARB] legitimacy player=0 +1 = 54 turn=2", self.log())
+        # Clamped to 0..100.
+        self.g.Players[self.MORI].SetProperty(None, "JAC_LEGITIMACY", 99)
+        self.next_turn()
+        self.assertEqual(self.legitimacy(self.MORI), 100)
+        self.g.Players[self.OTOMO].SetProperty(None, "JAC_LEGITIMACY", 1)
+        self.g.Players[self.OTOMO].cities = 4
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()  # income 3 then -45
+        self.assertEqual(self.legitimacy(self.OTOMO), 0)
+
+    def test_high_and_low_legitimacy_flag_every_city(self):
+        FLAG = self.g.FLAG
+        # Ashikaga (73) >= 70: +10% gold and culture in both its cities; Ouchi (53): neither flag.
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_HIGH") for x in (201, 202)], [1, 1])
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (201, 202)], [0, 0])
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_HIGH") for x in (1, 2)], [0, 0])
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (1, 2)], [0, 0])
+        self.g.Players[self.OUCHI].SetProperty(None, "JAC_LEGITIMACY", 20)
+        self.next_turn()  # 23 < 30: -10% gold and culture
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (1, 2)], [1, 1])
+        self.g.Players[self.OUCHI].SetProperty(None, "JAC_LEGITIMACY", 27)
+        self.next_turn()  # 30: back to neither
+        self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (1, 2)], [0, 0])
+
+    def test_an_ai_below_30_legitimacy_refuses_when_merely_ahead(self):
+        self.g.Players[self.OTOMO].cities = 3  # exactly 1.5x: accepted normally
+        self.g.Players[self.OTOMO].SetProperty(None, "JAC_LEGITIMACY", 20)
+        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
+        self.next_turn()
+        self.assertIn("[JAC_ARB] decision player=1 accept=false by=ai", self.log())
+        self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
 
     def test_a_clearly_winning_ai_refuses_and_is_penalized(self):
         self.g.Players[self.OTOMO].cities = 4  # 4 > 1.5 * 2
         self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
         self.next_turn()
         self.assertTrue(self.at_war(self.OUCHI, self.OTOMO))
-        self.assertEqual(self.player(self.OTOMO, "JAC_LEGITIMACY"), 50 - 15)
+        self.assertEqual(self.legitimacy(self.OTOMO), 53 + 3 - 15)
         self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 2 + 10)
         self.assertIsNone(self.player(self.OUCHI, "JAC_ARB_OUTLAW_UNTIL"))
         self.assertIsNone(self.game("JAC_ARB_TRUCE_0_1"))
@@ -447,6 +587,109 @@ class ArbitrationTurnTests(unittest.TestCase):
 
 
 @unittest.skipIf(lupa is None, "lupa is not installed")
+class SubjugationOrderTests(unittest.TestCase):
+    """Owner decision R-2 (2026-09-30): a house that refuses a ruling becomes the target of an order to subdue."""
+
+    OUCHI, OTOMO, ASHIKAGA, MORI = 0, 1, 2, 3
+    setUp, next_turn, at_war, game, player, log, legitimacy = (
+        ArbitrationTurnTests.setUp, ArbitrationTurnTests.next_turn, ArbitrationTurnTests.at_war, ArbitrationTurnTests.game,
+        ArbitrationTurnTests.player, ArbitrationTurnTests.log, ArbitrationTurnTests.legitimacy)
+
+    def refuse_on_turn_2(self):
+        """Otomo (4 cities) refuses Ouchi's petition: the order runs turns 2..12."""
+        self.g.Players[self.OTOMO].cities = 4
+        self.g.Players[self.ASHIKAGA].human = True
+        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
+        self.next_turn()
+
+    def joined(self, pid, target=1, turn=None) -> bool:
+        return self.g.JAC_ARB.HasJoined(pid, target, turn or self.turn)
+
+    def test_the_refuser_is_the_target_and_an_ai_at_war_with_it_joins_at_once(self):
+        self.refuse_on_turn_2()
+        self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 12)
+        self.assertIn("[JAC_ARB] joined player=0 target=1 turn=2 until=12 by=ai", self.log())
+        self.assertTrue(self.joined(self.OUCHI))
+        self.assertFalse(self.joined(self.MORI))  # neither at war with Otomo nor near it
+        self.assertFalse(self.joined(self.ASHIKAGA))  # a human joins only through the panel
+        refused = [n for n in self.g.NOTES.values() if n[2] == "LOC_JAC_ARB_NOTIFY_REFUSED_NAME"]
+        self.assertEqual(len(refused), 4)  # every house hears of the order
+        # A neighbouring AI joins at the next turn start.
+        self.g.NEAR["1_3"] = True
+        self.next_turn()
+        self.assertTrue(self.joined(self.MORI))
+        self.assertIn("[JAC_ARB] joined player=3 target=1 turn=3 until=12 by=ai", self.log())
+
+    def test_a_human_joins_through_execute_script_once(self):
+        self.refuse_on_turn_2()
+        self.g.JOIN(self.ASHIKAGA, self.OTOMO)
+        self.assertTrue(self.joined(self.ASHIKAGA))
+        self.assertEqual(self.game("JAC_ARB_LAST_EVENT"), "join player=2 turn=2")
+        self.g.JOIN(self.ASHIKAGA, self.OTOMO)
+        self.g.JOIN(self.OTOMO, self.OTOMO)
+        self.g.JOIN(self.ASHIKAGA, self.MORI)  # Mori is no target
+        log = self.log()
+        self.assertIn("[JAC_ARB] rejected join player=2 target=1 reason=ALREADY", log)
+        self.assertIn("[JAC_ARB] rejected join player=1 target=1 reason=INVALID", log)
+        self.assertIn("[JAC_ARB] rejected join player=2 target=3 reason=NO_ORDER", log)
+
+    def test_war_weariness_flag_is_on_the_participants_anchor_city_only_during_the_order(self):
+        FLAG = self.g.FLAG
+        self.refuse_on_turn_2()
+        # Ouchi joined: only its anchor city (smallest plot index) carries the flag, so the house-wide modifier applies once.
+        self.assertEqual([FLAG(x, "JAC_ARB_SUBJUGATION_ANCHOR") for x in (1, 2)], [1, 0])
+        self.assertEqual([FLAG(x, "JAC_ARB_SUBJUGATION_ANCHOR") for x in (201, 202)], [0, 0])
+        self.g.JOIN(self.ASHIKAGA, self.OTOMO)
+        self.assertEqual([FLAG(x, "JAC_ARB_SUBJUGATION_ANCHOR") for x in (201, 202)], [1, 0])  # at once
+        self.assertEqual([FLAG(x, "JAC_ARB_SUBJUGATION_ANCHOR") for x in (101, 102, 103, 104)], [0, 0, 0, 0])
+        self.next_turn(12)  # last turn of the order
+        self.assertEqual(FLAG(1, "JAC_ARB_SUBJUGATION_ANCHOR"), 1)
+        self.next_turn(13)
+        self.assertEqual([FLAG(x, "JAC_ARB_SUBJUGATION_ANCHOR") for x in (1, 201)], [0, 0])
+        self.assertIsNone(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"))
+        self.assertIsNone(self.player(self.OUCHI, "JAC_ARB_JOINED_1"))
+        self.assertIsNone(self.player(self.ASHIKAGA, "JAC_ARB_JOINED_1"))
+        self.assertIn("[JAC_ARB] subjugation ended target=1 turn=13", self.log())
+        ended = sorted(n[1] for n in self.g.NOTES.values() if n[2] == "LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME")
+        self.assertEqual(ended, [0, 1, 2])  # the target and its participants
+        self.g.JOIN(self.ASHIKAGA, self.OTOMO)
+        self.assertIn("[JAC_ARB] rejected join player=2 target=1 reason=NO_ORDER", self.log())
+
+    def test_a_participant_that_takes_a_target_city_is_rewarded(self):
+        self.refuse_on_turn_2()
+        ouchi_before, otomo_before = self.legitimacy(self.OUCHI), self.legitimacy(self.OTOMO)
+        self.g.CONQUER(self.OUCHI, self.OTOMO, 104)
+        self.assertEqual(self.g.Players[self.OUCHI].gold, 400 + 200)
+        self.assertEqual(self.legitimacy(self.OUCHI), ouchi_before + 10)
+        self.assertEqual(self.legitimacy(self.OTOMO), otomo_before - 10)
+        self.assertIn(f"[JAC_ARB] subjugation capture player=0 target=1 city=7 turn=2 gold=+200 legitimacy={ouchi_before + 10} "
+                      f"target_legitimacy={otomo_before - 10}", self.log())
+        capture = [n for n in self.g.NOTES.values() if n[2] == "LOC_JAC_ARB_NOTIFY_CAPTURE_NAME"]
+        self.assertEqual(len(capture), 4)
+        # Not rewarded: a house that has not joined, and a capture after the order.
+        mori_gold = self.g.Players[self.MORI].gold
+        self.g.CONQUER(self.MORI, self.OTOMO, 103)
+        self.assertEqual((self.g.Players[self.MORI].gold, self.legitimacy(self.OTOMO)), (mori_gold, otomo_before - 10))
+        self.next_turn(13)
+        gold = self.g.Players[self.OUCHI].gold
+        self.g.CONQUER(self.OUCHI, self.OTOMO, 102)
+        self.assertEqual(self.g.Players[self.OUCHI].gold, gold)
+
+    def test_refusing_a_shogun_ruling_orders_30_turns_and_a_new_refusal_never_shortens_it(self):
+        self.g.Players[self.OTOMO].cities = 4
+        self.g.REQUEST(self.ASHIKAGA, self.OUCHI, self.OTOMO)
+        self.next_turn()
+        self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 32)
+        self.g.Players[self.OTOMO].SetProperty(None, "JAC_LEGITIMACY", 50)
+        self.g.REQUEST(self.OUCHI, self.OUCHI, self.OTOMO)
+        self.next_turn()  # refused again, 10 turns: 13 < 32
+        self.assertEqual(self.player(self.OTOMO, "JAC_ARB_OUTLAW_UNTIL"), 32)
+
+
+UI_ONLY_STATES = {"InGame", "DiplomacyActionView", "DiplomacyDealView"}
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
 class LiveScenarioOnStubsTests(unittest.TestCase):
     """Plays the gameplay steps of scenarios/court-arbitration.json against the stubs, so a slip in the
     scenario's Lua shows here instead of after a long live run. UI-only steps (panel buttons, the human's
@@ -467,26 +710,40 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
         self.g.MIN_WAR = 10
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)
         self.g.Players[self.OUCHI].cities = 4  # Ouchi refuses Otomo (4 > 1.5 * 2), as live (court-arbitration-07)
+        self.g.Players[2].human = True  # the Ashikaga, as live: joins the order only through the panel
         self.turn = 1
         self.g.START_TURN(1)
 
     def test_scenario_steps_pass_on_the_stubs(self):
         self.lua.execute("function JAC_RequestArbitration(a, b) REQUEST(2, a, b); return true end")
+        self.lua.execute("function JAC_JoinSubjugation(target) JOIN(2, target); return true end")
         steps = json.loads((ROOT / "tools/civ6-autotest/scenarios/court-arbitration.json").read_text(encoding="utf-8"))["steps"]
         results = []
         for step in steps:
             if step["action"] == "autoplay":
                 self.next_turn(self.turn + step["turns"])
-            elif step["action"] == "ui_lua" and "Controls." not in step["code"] and step["state_name"] != "InGame":
+            elif (step["action"] == "ui_lua" and step["state_name"] not in UI_ONLY_STATES
+                  and "Controls." not in step["code"]):
                 results.append(self.lua.execute(step["code"]))
             elif step["action"] == "wait_for" and step["condition"]["state_name"] == "GameCore_Tuner":
                 self.assertIs(self.lua.execute(step["condition"]["code"]), True)
-        self.assertIn("accepted-path pair CIVILIZATION_JAC_MORI 3 - CIVILIZATION_JAC_ODA 4", results[1])
-        self.assertIn("accepted ruling: 3-4 made peace on turn 2", results[3])
-        self.assertEqual(results[-3], "refused by Ouchi (legitimacy 35, outlaw until 13); accepted pair 3-4 still at peace")
+        self.assertIn("legitimacy ashikaga=73 (+3/turn) ouchi=53 otomo=53", results[0])
+        self.assertIn("accepted-path pair CIVILIZATION_JAC_MORI 3 - CIVILIZATION_JAC_ODA 4", results[0])
+        self.assertIn("accepted ruling: 3-4 made peace on turn 2", results[2])
+        self.assertIn("legitimacy 3=61 4=61 (+5 for accepting)", results[2])
+        self.assertEqual(results[4], "refused by Ouchi (legitimacy 56 -> 14: -45 with this turn income; order to subdue until 33 "
+                                     "= 3+10x3); joined by 1; accepted pair 3-4 still at peace")
+        self.assertEqual(results[5], "legitimacy yield modifiers live (flag on/off, high +10% / low -10%): "
+                                     + ", ".join(f"p{p} {y} {on}/10.0" for p, on, n in ((2, "11.0", 2), (0, "9.0", 4))
+                                                 for _ in range(n) for y in ("GOLD", "CULTURE")))
+        self.assertEqual(results[6], "join sent via EXECUTE_SCRIPT")
         # The breach is forced only past the minimum peace length (court-arbitration-08 hung when forced on turn 2).
-        self.assertEqual(results[-2], "forced war inside the truce between 3 and 4 on turn 13")
-        self.assertEqual(results[-1], "truce breach 3-4 forced on turn 13 undone on turn 14, truce still until 32")
+        self.assertEqual(results[7], "forced war inside the truce between 3 and 4 on turn 13")
+        self.assertEqual(results[8], "order to subdue Ouchi shortened to end after turn 14 (test only); "
+                                     "truce breach 3-4 forced on turn 13 undone on turn 14, truce still until 32")
+        self.assertEqual(results[9], "order to subdue Ouchi ended on turn 15; war-weariness anchor flags of Ashikaga and Otomo off")
+        self.assertEqual(len(results), 10)
+        self.assertIn("[JAC_ARB] joined player=2 target=0 turn=3 until=33 by=request", self.log())
         self.assertFalse(any("deferred" in line for line in self.log()))
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 

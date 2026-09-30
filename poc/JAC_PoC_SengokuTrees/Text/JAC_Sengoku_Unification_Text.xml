@@ -19,18 +19,18 @@
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ja_JP"><Text>城跡に再建した都市</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="en_US"><Text>City Rebuilt on a Razed Castle</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_REBUILT_ON_CASTLE_NAME" Language="ru_RU"><Text>Город, отстроенный на месте разрушенного замка</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ja_JP"><Text>天下統一同盟の主体として、同盟で登録城をすべて支配する</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="en_US"><Text>As the lead of a unification pact, hold every registered castle together with the pact</Text></Row>
-    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ru_RU"><Text>Как глава союза объединения, контролировать вместе с союзом все зарегистрированные замки</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ja_JP"><Text>天下統一同盟または1534年の開始時の同盟の主体として、同盟で登録城（登録城のない地図では全勢力の本拠）をすべて支配する</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="en_US"><Text>As the lead of a unification pact or a 1534 start alliance, hold every registered castle (on maps without them, every original capital) together with your allies</Text></Row>
+    <Row Tag="LOC_VICTORY_JAC_UNIFICATION_PACT_PROGRESS" Language="ru_RU"><Text>Как глава союза объединения или союза 1534 года, контролировать вместе с союзниками все зарегистрированные замки (на картах без них — все исходные столицы)</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="ja_JP"><Text>天下統一同盟の達成</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="en_US"><Text>Unification Pact Achieved</Text></Row>
     <Row Tag="LOC_BUILDING_JAC_PACT_UNIFIED_NAME" Language="ru_RU"><Text>Союз объединения достиг цели</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="ja_JP"><Text>天下統一同盟</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="en_US"><Text>Unification Pact</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_TITLE" Language="ru_RU"><Text>Союз объединения</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ja_JP"><Text>同盟の城を合算し、主体（申し込んだ家）だけが天下統一で勝利する。同盟は勝利まで続き、抜けられない。AI の家には、同盟を結んでいるときだけ申し込める。</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="en_US"><Text>Pact members pool their castles; only the lead (the house that proposed) wins the unification. A pact lasts until victory and cannot be left. An AI house can be asked only while allied with you.</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ru_RU"><Text>Участники союза объединяют свои замки; победу получает только глава (предложивший дом). Союз действует до победы, выйти из него нельзя. Дому ИИ можно предложить союз только при действующем альянсе.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ja_JP"><Text>同盟の城（登録城のない地図では全勢力の本拠）を合算し、主体（申し込んだ家）だけが天下統一で勝利する。いつでも抜けられ、同盟の家どうしが戦争になると抜ける。1家だけになった同盟は解ける。AI の家には、同盟を結んでいるときだけ申し込める。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="en_US"><Text>Pact members pool their castles (on maps without registered castles, every faction's original capital); only the lead (the house that proposed) wins the unification. You may leave at any time; a house at war with another member leaves. A pact left with one house is dissolved. An AI house can be asked only while allied with you.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RULES" Language="ru_RU"><Text>Участники союза объединяют свои замки (на картах без зарегистрированных замков — исходные столицы всех держав); победу получает только глава (предложивший дом). Выйти можно в любой момент; дом, воюющий с другим участником, выходит из союза. Союз из одного дома распадается. Дому ИИ можно предложить союз только при действующем альянсе.</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="ja_JP"><Text>天下統一同盟には加わっていない。</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="en_US"><Text>You are not in a unification pact.</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_NONE" Language="ru_RU"><Text>Вы не состоите в союзе объединения.</Text></Row>
@@ -58,8 +58,17 @@
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ja_JP"><Text>この相手とは組めない（どちらかが別の同盟にいる、または同じチーム）。</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="en_US"><Text>Not possible with this house (one of you is in another pact, or you share a team).</Text></Row>
     <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_INVALID" Language="ru_RU"><Text>С этим домом невозможно (кто-то уже в другом союзе или вы в одной команде).</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="ja_JP"><Text>この地図には登録された城がないため、天下統一同盟は組めない。</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="en_US"><Text>This map has no registered castles, so no unification pact can be formed.</Text></Row>
-    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_NO_CASTLES" Language="ru_RU"><Text>На этой карте нет зарегистрированных замков, поэтому союз объединения заключить нельзя.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_LEAVE" Language="ja_JP"><Text>同盟から抜ける</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_LEAVE" Language="en_US"><Text>Leave the pact</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_LEAVE" Language="ru_RU"><Text>Выйти из союза</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_LEFT" Language="ja_JP"><Text>天下統一同盟から抜けた。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_LEFT" Language="en_US"><Text>You left the unification pact.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_LEFT" Language="ru_RU"><Text>Вы вышли из союза объединения.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_AT_WAR" Language="ja_JP"><Text>同盟の家と戦争になったため、天下統一同盟から抜けた。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_AT_WAR" Language="en_US"><Text>You left the unification pact because you are at war with a member.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_AT_WAR" Language="ru_RU"><Text>Вы вышли из союза объединения, так как воюете с его участником.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_DISSOLVED" Language="ja_JP"><Text>ほかの家がいなくなったため、天下統一同盟は解けた。</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_DISSOLVED" Language="en_US"><Text>The unification pact is dissolved: no other house is left in it.</Text></Row>
+    <Row Tag="LOC_JAC_UNIFICATION_PACT_RESULT_DISSOLVED" Language="ru_RU"><Text>Союз объединения распался: в нём не осталось других домов.</Text></Row>
   </LocalizedText>
 </GameData>

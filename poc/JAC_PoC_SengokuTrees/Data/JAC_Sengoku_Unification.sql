@@ -8,9 +8,10 @@
 -- the never-matching (-1,-1) entry keeps the set defined when no castle file is loaded.
 -- A city rebuilt on a razed castle's plot holds BUILDING_JAC_REBUILT_ON_CASTLE (placed by
 -- Scripts/JAC_Sengoku_RebuiltCastles.lua) and is not counted (owner decision 3a).
--- Pact branch (天下統一同盟, SSOT 3.1): the team owns a city holding BUILDING_JAC_PACT_UNIFIED, which
--- Scripts/JAC_Sengoku_UnificationPact.lua puts in the pact lead's capital once the pact's teams
--- together hold every counted castle. Partners do not own that city, so only the lead wins.
+-- Pact branch (天下統一同盟 and 1534 start alliances, SSOT 3.1): the team owns a city holding BUILDING_JAC_PACT_UNIFIED,
+-- which Scripts/JAC_Sengoku_UnificationPact.lua puts in the lead's capital once the group's teams
+-- together hold every counted castle, or with none counted every home capital (owner decision O-8).
+-- Partners do not own that city, so only the lead wins, on either kind of map.
 INSERT INTO Types (Type, Kind) VALUES ('VICTORY_JAC_SENGOKU_UNIFICATION', 'KIND_VICTORY'), ('BUILDING_JAC_REBUILT_ON_CASTLE', 'KIND_BUILDING'),
     ('BUILDING_JAC_PACT_UNIFIED', 'KIND_BUILDING');
 INSERT INTO Buildings (BuildingType, Name, PrereqDistrict, Cost, InternalOnly) VALUES
