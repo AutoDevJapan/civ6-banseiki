@@ -52,16 +52,23 @@ class OathScenarioTests(unittest.TestCase):
         source = {'name': 'test', 'steps': [{'action': 'autoplay', 'turns': 64, 'timeout': 14400}]}
         result = fast_forward_scenario(source)
         self.assertEqual(source['steps'][0]['turns'], 64)
-        self.assertEqual(result['steps'][1]['turns'], 2)
+        self.assertEqual(result['steps'][2]['turns'], 2)
+        self.assertEqual([s.get('state_name') for s in result['steps'][:2]], ['InGame', 'GameCore_Tuner'])
         self.assertEqual(result['test_mode'], {'skipped_turns': 62, 'continuous_performance_valid': False})
         lua = lupa.LuaRuntime()
         lua.execute("TURN=1; RULE='RULESET_JAC_BANSEIKI'; MULTI=false; Game={GetCurrentGameTurn=function() return TURN end,SetCurrentGameTurn=function(t) TURN=t end}; GameConfiguration={GetRuleSet=function() return RULE end,IsAnyMultiplayer=function() return MULTI end}")
-        code = result['steps'][0]['code']
+        lua.execute(result['steps'][0]['code'])
+        code = result['steps'][1]['code']
         lua.execute(code)
         self.assertEqual(lua.globals().TURN, 63)
         for rule, multi, message in (('RULESET_STANDARD', False, 'test ruleset required'),
                                      ('RULESET_JAC_BANSEIKI', True, 'single-player test required')):
             lua.globals().RULE, lua.globals().MULTI = rule, multi
             with self.assertRaisesRegex(lupa.LuaError, message):
-                lua.execute(code)
+                lua.execute(result['steps'][0]['code'])
             self.assertEqual(lua.globals().TURN, 63)
+        # GameCore really lacks IsAnyMultiplayer: the jump must not call a UI-only API.
+        lua.globals().RULE = 'RULESET_JAC_BANSEIKI'
+        lua.execute('GameConfiguration.IsAnyMultiplayer=nil')
+        lua.execute(code)
+        self.assertEqual(lua.globals().TURN, 125)

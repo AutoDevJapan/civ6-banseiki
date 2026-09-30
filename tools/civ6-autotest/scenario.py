@@ -1207,9 +1207,14 @@ def fast_forward_scenario(data: dict) -> dict:
         if step["action"] == "autoplay":
             jump = max(0, step["turns"] - 2)
             if jump:
-                steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
+                # Multiplayer configuration APIs belong to the UI context, not GameCore_Tuner.
+                # Official DLC/Expansion2/UI/Replacements/InGame.lua:115.
+                steps.append({"action": "ui_lua", "state_name": "InGame", "code":
                     "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
                     "if GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\n"
+                    "return 'TEST MODE: single-player ruleset verified before engine jump'"})
+                steps.append({"action": "ui_lua", "state_name": "GameCore_Tuner", "code":
+                    "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\n"
                     "if type(Game.SetCurrentGameTurn) ~= 'function' then error('engine fast-forward unavailable') end\n"
                     f"local target = Game.GetCurrentGameTurn() + {jump}\n"
                     "Game.SetCurrentGameTurn(target)\n"
