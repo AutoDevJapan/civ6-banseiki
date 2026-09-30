@@ -744,6 +744,57 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
         self.assertFalse(any("deferred" in line for line in self.log()))
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 
+    def test_human_snapshots_preserve_missing_properties_and_boolean_answers(self):
+        # Civ6 GetProperty returns no values for an unset property, unlike the
+        # Lua table stub's explicit nil. tostring(GetProperty(...)) then fails.
+        self.lua.execute("""
+            local R = ExposedMembers.JAC_CourtArbitration
+            Game:SetProperty('JAC_ARB_HUMAN_TEST', {case='accept', human=2, other=0})
+            Game:SetProperty(R.LAST_REQUEST_KEY, 1)
+            Players[2]:SetProperty(R.LEGITIMACY_KEY, 65)
+            Players[0]:SetProperty(R.LEGITIMACY_KEY, 45)
+            Players[0].cities = 2
+            SET_WAR(0, 2, true)
+            local function engineProperties(object)
+                local get = object.GetProperty
+                object.GetProperty = function(self, key)
+                    local value = get(self, key)
+                    if value ~= nil then return value end
+                end
+            end
+            engineProperties(Game)
+            for _, id in ipairs({0, 2}) do
+                engineProperties(Players[id])
+                for _, city in Players[id]:GetCities():Members() do
+                    local plot = Map.GetPlot(city:GetX(), city:GetY())
+                    for _, key in ipairs({R.FLAG_HIGH, R.FLAG_LOW, R.FLAG_SUBJUGATION}) do
+                        plot:SetProperty(key, nil)
+                    end
+                    engineProperties(plot)
+                end
+            end
+        """)
+        steps = json.loads((ROOT / "tools/civ6-autotest/scenarios/court-arbitration-human.json")
+                           .read_text(encoding="utf-8"))["steps"]
+        snapshots = [step for step in steps if "capture_as" in step or "equals_capture" in step]
+        self.assertEqual(len(snapshots), 12)
+        prefix = "accept|1|65|45|500|500|1|nil|nil|nil|nil|nil|nil|true|true|"
+        cities = "0:1:nil:nil:nil,0:2:nil:nil:nil,2:201:nil:nil:nil,2:202:nil:nil:nil"
+        for answer in (False, True, None):
+            if answer is None:
+                self.lua.execute("Game:SetProperty(ExposedMembers.JAC_CourtArbitration.PENDING_KEY, nil)")
+                pending = "no pending"
+            else:
+                self.lua.execute("""
+                    Game:SetProperty(ExposedMembers.JAC_CourtArbitration.PENDING_KEY,
+                        {Requester=0, A=0, B=2, Turn=1, Power=1, AnswerB=...})
+                """, answer)
+                pending = ("Requester=0|A=0|B=2|Turn=1|Power=1|AnswerA=nil|AnswerB="
+                           + str(answer).lower())
+            for step in snapshots:
+                with self.subTest(answer=answer, capture=step.get("capture_as", step.get("equals_capture"))):
+                    self.assertEqual(self.lua.execute(step["code"]), prefix + pending + "|" + cities)
+
 
 if __name__ == "__main__":
     unittest.main()
