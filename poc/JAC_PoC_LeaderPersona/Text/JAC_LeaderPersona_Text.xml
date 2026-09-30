@@ -37,42 +37,6 @@
     <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ru_RU">
       <Text>Комендант</Text>
     </Row>
-    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ja_JP">
-      <Text>加入した指導者。都市への配置と昇進は総督の操作を使う。</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="en_US">
-      <Text>A joined leader. Assign and promote through the Governor screen.</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ru_RU">
-      <Text>Присоединившийся лидер. Назначение и повышение доступны на экране губернаторов.</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_BASE" Language="ja_JP">
-      <Text>就任</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_BASE" Language="en_US">
-      <Text>Appointment</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_BASE" Language="ru_RU">
-      <Text>Назначение</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="ja_JP">
-      <Text>昇進の検証</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="en_US">
-      <Text>Promotion test</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_PROMOTION" Language="ru_RU">
-      <Text>Проверка повышения</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="ja_JP">
-      <Text>検証用の技能。追加の効果はない。</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="en_US">
-      <Text>Test skill with no additional effect.</Text>
-    </Row>
-    <Row Tag="LOC_JAC_PERSONA_SKILL_DESCRIPTION" Language="ru_RU">
-      <Text>Проверочный навык без дополнительного эффекта.</Text>
-    </Row>
     <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ja_JP">
       <Text>仲間の指導者</Text>
     </Row>
@@ -126,6 +90,1563 @@
     </Row>
     <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="ru_RU">
       <Text>Губернатор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ja_JP">
+      <Text>人物固有の技能を持つ総督。都市への定着後に技能が働く。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="en_US">
+      <Text>A governor with personal skills, active after establishment in a city.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ru_RU">
+      <Text>Губернатор с личными навыками, действующими после освоения в городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="ja_JP">
+      <Text>総督へ（称号{1}）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="en_US">
+      <Text>Evolve ({1} titles)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="ru_RU">
+      <Text>Назначить ({1})</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="ja_JP">
+      <Text>必要な称号：{1}。使える称号：{2}。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="en_US">
+      <Text>Titles required: {1}. Available: {2}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="ru_RU">
+      <Text>Нужно титулов: {1}. Доступно: {2}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="ja_JP">
+      <Text>勇敢</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="en_US">
+      <Text>Brave</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="ru_RU">
+      <Text>Храбрый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="ja_JP">
+      <Text>冷静</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="en_US">
+      <Text>Calm</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="ru_RU">
+      <Text>Хладнокровный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="ja_JP">
+      <Text>慎重</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="en_US">
+      <Text>Careful</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="ru_RU">
+      <Text>Осторожный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="ja_JP">
+      <Text>陽気</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="en_US">
+      <Text>Jolly</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="ru_RU">
+      <Text>Жизнерадостный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="ja_JP">
+      <Text>温厚</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="en_US">
+      <Text>Gentle</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="ru_RU">
+      <Text>Мягкий</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="ja_JP">
+      <Text>強気</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="en_US">
+      <Text>Bold</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="ru_RU">
+      <Text>Напористый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="ja_JP">
+      <Text>自由</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="en_US">
+      <Text>Fickle</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="ru_RU">
+      <Text>Переменчивый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="ja_JP">
+      <Text>忠実</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="en_US">
+      <Text>Loyal</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="ru_RU">
+      <Text>Верный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="ja_JP">
+      <Text>武人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="en_US">
+      <Text>Valiant</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="ru_RU">
+      <Text>Доблестный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="ja_JP">
+      <Text>鬼神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="en_US">
+      <Text>Fierce</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="ru_RU">
+      <Text>Грозный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="ja_JP">
+      <Text>策士</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="en_US">
+      <Text>Astute</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="ru_RU">
+      <Text>Хитроумный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="ja_JP">
+      <Text>魔神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="en_US">
+      <Text>Shrewd</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="ru_RU">
+      <Text>Сверхъестественный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="ja_JP">
+      <Text>教者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="en_US">
+      <Text>Devout</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="ru_RU">
+      <Text>Просветитель</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="ja_JP">
+      <Text>霊神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="en_US">
+      <Text>Ascetic</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="ru_RU">
+      <Text>Духовный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="ja_JP">
+      <Text>凡人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="en_US">
+      <Text>Mundane</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="ru_RU">
+      <Text>Обычный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="ja_JP">
+      <Text>天才</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="en_US">
+      <Text>Adept</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="ru_RU">
+      <Text>Гений</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：策士。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Astute. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Хитроумный. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="ja_JP">
+      <Text>南奥の秩序</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="en_US">
+      <Text>Order in Southern Oshu</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="ru_RU">
+      <Text>Порядок в Южном Осю</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>和親の政</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_NAME" Language="en_US">
+      <Text>Kinship Diplomacy</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Родственные связи</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>所領の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_NAME" Language="en_US">
+      <Text>Estate Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Учёт владений</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：凡人。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Mundane. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Обычный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="ja_JP">
+      <Text>会津の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="en_US">
+      <Text>Aizu Provisions</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="ru_RU">
+      <Text>Запасы Айдзу</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>黒川の整備</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_NAME" Language="en_US">
+      <Text>Kurokawa Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Обустройство Курокавы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>家中の安定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_NAME" Language="en_US">
+      <Text>Household Stability</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Согласие в клане</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="ja_JP">
+      <Text>小田原の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="en_US">
+      <Text>Odawara Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="ru_RU">
+      <Text>Учёт Одавары</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>城下の整備</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Castle Town Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Обустройство призамкового города</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>家名の継承</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Household Legacy</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Наследие клана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：忠実。特性：凡人。進化には総督の称号3個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Loyal. Trait: Mundane. Evolution costs 3 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Верный. Черта: Обычный. Назначение стоит 3 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="ja_JP">
+      <Text>管領家の継承</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="en_US">
+      <Text>Kanrei Heritage</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="ru_RU">
+      <Text>Наследие канрэя</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>家臣の補佐</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Retainer Support</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Поддержка вассалов</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>上野の備蓄</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Kozuke Stores</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Запасы Кодзукэ</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：武人。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Valiant. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Доблестный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="ja_JP">
+      <Text>甲斐の動員</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="en_US">
+      <Text>Kai Mobilization</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="ru_RU">
+      <Text>Мобилизация Каи</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>府中の整備</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Fuchu Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Обустройство Футю</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>盆地の兵糧</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Basin Provisions</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Провиант котловины</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：武人。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Valiant. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Доблестный. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="ja_JP">
+      <Text>越後の統率</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="en_US">
+      <Text>Echigo Command</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="ru_RU">
+      <Text>Командование Этиго</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>春日山の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_NAME" Language="en_US">
+      <Text>Kasugayama Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Учёт Касугаямы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>城下の再建</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_NAME" Language="en_US">
+      <Text>Castle Town Renewal</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Обновление призамкового города</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="ja_JP">
+      <Text>駿府の礼法</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="en_US">
+      <Text>Sunpu Etiquette</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="ru_RU">
+      <Text>Этикет Сумпу</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>駿河の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_NAME" Language="en_US">
+      <Text>Suruga Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Учёт Суруги</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>補佐の政</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_NAME" Language="en_US">
+      <Text>Supported Rule</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Правление с поддержкой</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：策士。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Astute. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Хитроумный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="ja_JP">
+      <Text>津島の商い</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="en_US">
+      <Text>Tsushima Commerce</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="ru_RU">
+      <Text>Торговля Цусимы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>尾張の普請</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_NAME" Language="en_US">
+      <Text>Owari Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Строительство Овари</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>勝幡の動員</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_NAME" Language="en_US">
+      <Text>Shobata Mobilization</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Мобилизация Сёбаты</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：武人。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Valiant. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Доблестный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="ja_JP">
+      <Text>三河の動員</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="en_US">
+      <Text>Mikawa Mobilization</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="ru_RU">
+      <Text>Мобилизация Микавы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>岡崎の整備</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_NAME" Language="en_US">
+      <Text>Okazaki Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Обустройство Окадзаки</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>西三河の兵糧</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_NAME" Language="en_US">
+      <Text>Western Mikawa Stores</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Запасы Западной Микавы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="ja_JP">
+      <Text>一乗谷の学芸</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="en_US">
+      <Text>Ichijodani Learning</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="ru_RU">
+      <Text>Учёность Итидзёдани</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>越前の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_NAME" Language="en_US">
+      <Text>Echizen Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Учёт Этидзэна</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>家中の和</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_NAME" Language="en_US">
+      <Text>Household Concord</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Согласие в доме</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：忠実。特性：教者。進化には総督の称号3個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Loyal. Trait: Devout. Evolution costs 3 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Верный. Черта: Просветитель. Назначение стоит 3 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="ja_JP">
+      <Text>将軍家の儀礼</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="en_US">
+      <Text>Shogunal Ceremony</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="ru_RU">
+      <Text>Церемонии сёгуна</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>幕臣の結束</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_NAME" Language="en_US">
+      <Text>Retainer Cohesion</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Единство вассалов</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>御料所の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_NAME" Language="en_US">
+      <Text>Shogunal Estate Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Учёт владений сёгуна</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：策士。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Astute. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Хитроумный. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="ja_JP">
+      <Text>若き家の再建</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="en_US">
+      <Text>Young Household Renewal</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="ru_RU">
+      <Text>Восстановление молодого клана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>家臣からの学び</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_NAME" Language="en_US">
+      <Text>Learning from Retainers</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Учёба у вассалов</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>阿波の支え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_NAME" Language="en_US">
+      <Text>Awa Support</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Поддержка Авы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="ja_JP">
+      <Text>近江の流通</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="en_US">
+      <Text>Omi Circulation</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="ru_RU">
+      <Text>Торговля Оми</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>観音寺の普請</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_NAME" Language="en_US">
+      <Text>Kannonji Works</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Строительство Каннондзи</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>和議の作法</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_NAME" Language="en_US">
+      <Text>Peace Negotiation</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Искусство переговоров</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：温厚。特性：霊神。進化には総督の称号3個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Gentle. Trait: Ascetic. Evolution costs 3 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Мягкий. Черта: Духовный. Назначение стоит 3 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="ja_JP">
+      <Text>門徒の結集</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="en_US">
+      <Text>Community of Believers</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="ru_RU">
+      <Text>Единство верующих</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の信仰力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Faith in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% веры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>門徒の相扶</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_NAME" Language="en_US">
+      <Text>Mutual Aid</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Взаимопомощь верующих</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>教えの継承</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_NAME" Language="en_US">
+      <Text>Transmission of Teaching</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Передача учения</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：陽気。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Jolly. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Жизнерадостный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="ja_JP">
+      <Text>山口の学芸</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="en_US">
+      <Text>Yamaguchi Learning</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="ru_RU">
+      <Text>Учёность Ямагути</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>西国の商い</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Western Commerce</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Торговля западных земель</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>典籍の保護</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Care of Learned Texts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Сохранение учёных книг</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の科学力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Science in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% науки в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：策士。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Astute. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Хитроумный. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="ja_JP">
+      <Text>月山の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="en_US">
+      <Text>Gassan Readiness</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="ru_RU">
+      <Text>Готовность Гассана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>国人の統率</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Local Lord Command</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Командование местными господами</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>出雲の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Izumo Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Учёт Идзумо</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：策士。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Astute. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Хитроумный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="ja_JP">
+      <Text>郡山の備蓄</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="en_US">
+      <Text>Koriyama Stores</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="ru_RU">
+      <Text>Запасы Кориямы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>国人との和</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_NAME" Language="en_US">
+      <Text>Local Lord Concord</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Согласие с местными господами</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>小領の結束</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_NAME" Language="en_US">
+      <Text>Small Estate Cohesion</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Сплочённость малого владения</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：凡人。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Mundane. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Обычный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="ja_JP">
+      <Text>岡豊の再興</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="en_US">
+      <Text>Oko Recovery</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="ru_RU">
+      <Text>Возрождение Око</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>旧領の整備</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Estate Restoration</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Восстановление владения</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>家臣の再集結</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Retainer Muster</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Сбор вассалов</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="ja_JP">
+      <Text>府内の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="en_US">
+      <Text>Funai Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="ru_RU">
+      <Text>Учёт Фуная</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>守護の政</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_NAME" Language="en_US">
+      <Text>Shugo Administration</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Управление сюго</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>豊後の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_NAME" Language="en_US">
+      <Text>Bungo Readiness</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Готовность Бунго</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：武人。進化には総督の称号1個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Valiant. Evolution costs 1 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Доблестный. Назначение стоит 1 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="ja_JP">
+      <Text>伊作の結束</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="en_US">
+      <Text>Izaku Cohesion</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="ru_RU">
+      <Text>Единство Идзаку</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>相州家の備蓄</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Soshu Stores</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Запасы дома Сосю</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>家の再建</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Household Renewal</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Восстановление клана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：温厚。特性：教者。進化には総督の称号3個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Gentle. Trait: Devout. Evolution costs 3 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Мягкий. Черта: Просветитель. Назначение стоит 3 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="ja_JP">
+      <Text>海路の交易</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="en_US">
+      <Text>Maritime Commerce</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="ru_RU">
+      <Text>Морская торговля</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>冊封の儀礼</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_NAME" Language="en_US">
+      <Text>Investiture Ceremony</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Церемония инвеституры</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>王府の調和</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_NAME" Language="en_US">
+      <Text>Royal Court Concord</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Согласие при дворе</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：凡人。進化には総督の称号2個が必要。基礎技能から2つの昇進を選べる。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Mundane. Evolution costs 2 Governor title(s). Two promotions branch from the base skill. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Обычный. Назначение стоит 2 титул(а). Два повышения отходят от базового навыка. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="ja_JP">
+      <Text>集落の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="en_US">
+      <Text>Community Provisions</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="ru_RU">
+      <Text>Запасы общины</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_NAME" Language="ja_JP">
+      <Text>地域の交換</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_NAME" Language="en_US">
+      <Text>Regional Exchange</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_NAME" Language="ru_RU">
+      <Text>Региональный обмен</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_1_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_NAME" Language="ja_JP">
+      <Text>共同の支え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_NAME" Language="en_US">
+      <Text>Community Support</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_NAME" Language="ru_RU">
+      <Text>Поддержка общины</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の快適性+1。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_DESCRIPTION" Language="en_US">
+      <Text>+1 Amenity in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_PROMOTION_2_DESCRIPTION" Language="ru_RU">
+      <Text>+1 к довольству в освоенном городе.</Text>
     </Row>
   </LocalizedText>
 </GameData>

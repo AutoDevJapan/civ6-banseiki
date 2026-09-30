@@ -29,6 +29,7 @@ function JAC_AppointLeader(leader)
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT,
                                   { OnStart="JAC_LeaderPersonaFinalize", Leader=leader });
     else
+        if not governors:CanAppoint() then return false; end
         UI.RequestPlayerOperation(owner, PlayerOperations.APPOINT_GOVERNOR,
                                   { [PlayerOperations.PARAM_GOVERNOR_TYPE]=governor.Index });
     end
@@ -50,16 +51,18 @@ function JAC_AssignLeader(leader, cityID)
           [PlayerOperations.PARAM_PLAYER_ONE]=owner, [PlayerOperations.PARAM_CITY_DEST]=cityID });
 end
 
-function JAC_PromoteLeader(leader)
+function JAC_PromoteLeader(leader, promotionType)
     local owner = Game.GetLocalPlayer();
     local row = GameInfo.JAC_LeaderPersonas[leader];
     if not Active() or not row or Get(leader, "OWNER") ~= owner or Get(leader, "STATE") ~= "GOVERNOR" then
         error("governor not owned or turn inactive");
     end
     local def = GameInfo.Governors[row.GovernorType];
+    promotionType = promotionType or row.PromotionType;
+    if promotionType ~= row.PromotionType and promotionType ~= row.SecondPromotionType then error("promotion not in person's tree"); end
     UI.RequestPlayerOperation(owner, PlayerOperations.PROMOTE_GOVERNOR,
         { [PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,
-          [PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=GameInfo.GovernorPromotions[row.PromotionType].Index });
+          [PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=GameInfo.GovernorPromotions[promotionType].Index });
 end
 
 function JAC_RefreshPersonas()
@@ -75,9 +78,15 @@ function JAC_RefreshPersonas()
             view.Name:SetText(Locale.Lookup(Get(leader, "NAME")));
             view.Status:SetText(Locale.Lookup("LOC_JAC_PERSONA_STATE_" .. state));
             view.Evolve:SetHide(state == "GOVERNOR");
-            local noTitle = state == "GREAT_PERSON" and not Players[owner]:GetGovernors():CanAppoint();
+            local cost = Get(leader, "EVOLUTION_COST") or row.EvolutionCost;
+            local governors = Players[owner]:GetGovernors();
+            local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
+            local noTitle = state == "GREAT_PERSON" and (available < cost or not governors:CanAppoint());
+            view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost));
             view.Evolve:SetDisabled(not Active() or noTitle);
-            view.Evolve:SetToolTipString(noTitle and Locale.Lookup("LOC_NO_GOVERNORS_TITLE_AVAILABLE") or "");
+            view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost, available));
+            view.Name:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_PERSONALITY_" .. Get(leader, "PERSONALITY")) ..
+                " / " .. Locale.Lookup("LOC_JAC_PERSONA_TRAIT_" .. Get(leader, "TRAIT")));
             view.Evolve:RegisterCallback(Mouse.eLClick, function() JAC_EvolveLeader(leader); end);
         end
     end

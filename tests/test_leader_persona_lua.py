@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MOD = ROOT / "poc/JAC_PoC_LeaderPersona"
 DATE = "LEADER_JAC_DATE_TANEMUNE"
 HOJO = "LEADER_JAC_HOJO_UJITSUNA"
+ODA = "LEADER_JAC_ODA_NOBUHIDE"
 
 STUBS = r'''
 function store()
@@ -36,12 +37,16 @@ for i,n in ipairs(names) do
         Name='LOC_'..leader..'_NAME', PortraitIcon='ICON_'..leader,
         PersonType='GREAT_PERSON_INDIVIDUAL_JAC_PERSONA_'..n, GovernorType='GOVERNOR_JAC_PERSONA_'..n,
         BasePromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_BASE',
-        PromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_TEST'}
+        PromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_PROMOTION_1',
+        SecondPromotionType='GOVERNOR_PROMOTION_JAC_PERSONA_'..n..'_PROMOTION_2',
+        Personality=i==1 and 'BOLD' or 'CALM', Trait=i==3 and 'DEVOUT' or 'ASTUTE',
+        EvolutionCost=i==1 and 1 or 2}
     ROWS[i]=row
     INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, Index=i+10, Name=row.Name}
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.PromotionType, Index=i+40, Hash=3000+i}
+    PROMOS[#PROMOS+1]={GovernorPromotionType=row.SecondPromotionType, Index=i+50, Hash=4000+i}
 end
 GameInfo={ JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
@@ -133,6 +138,7 @@ InstanceManager={new=function() return {
         local v={Portrait=control(),Name=control(),Status=control(),Evolve=control()}
         v.Portrait.SetIcon=function(_,icon) v.icon=icon end
         v.Name.SetText=function(_,name) v.name=name end
+        v.Evolve.SetDisabled=function(_,disabled) v.disabled=disabled end
         v.Status.SetText=function(_,status) v.status=status end
         VIEWS[#VIEWS+1]=v; return v
     end
@@ -201,10 +207,102 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.g.NATIVE_UNITS[0][1].individual, 12)
         self.assertEqual(self.g.Players[1].alive, True)
 
-    def test_unassigned_personality_and_trait_remain_nil(self):
+    def test_designed_personality_trait_and_cost_are_join_defaults(self):
         self.assertEqual(self.api.Join(0, 1), "JOINED")
-        self.assertIsNone(self.prop("PERSONALITY"))
-        self.assertIsNone(self.prop("TRAIT"))
+        self.assertEqual((self.prop("PERSONALITY"), self.prop("TRAIT"), self.prop("EVOLUTION_COST")),
+                         ("CALM", "ASTUTE", 2))
+        self.assertEqual(self.api.Join(1, 0), "JOINED")
+        self.assertEqual((self.prop("PERSONALITY", ODA), self.prop("TRAIT", ODA), self.prop("EVOLUTION_COST", ODA)),
+                         ("BOLD", "ASTUTE", 1))
+
+    def test_fixed_trait_cannot_be_replaced_at_join(self):
+        self.assertEqual(self.api.Join(0, 1, "CALM", "VALIANT"), "INVALID_METADATA")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.assertEqual(self.api.Join(0, 1, "CAREFUL"), "JOINED")
+        self.assertEqual((self.prop("PERSONALITY"), self.prop("TRAIT")), ("CAREFUL", "ASTUTE"))
+
+    def test_partial_titles_refuse_costlier_date_but_suffice_for_oda(self):
+        self.join()
+        self.g.Players[0].points = 1
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "NO_TITLE")
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.DESTROYS), ("GREAT_PERSON", 1, 0))
+        self.g.JAC_RefreshPersonas()
+        self.assertTrue(self.g.VIEWS[1].disabled)
+        self.assertEqual(self.api.Join(1, 0), "JOINED")
+        self.g.Players[1].points = 1
+        self.assertEqual(self.api.PrepareEvolution(1, ODA), "EVOLVING")
+        self.assertEqual((self.g.Players[1].points, self.prop("EVOLUTION_SURCHARGE", ODA)), (1, 0))
+
+    def test_pending_surcharge_survives_reload_and_spending_without_double_charge(self):
+        self.join()
+        self.g.Players[0].points = 2
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
+        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (1, 1))
+        self.g.Players[0].spent = 1  # another native operation took the remaining title
+        self.assertFalse(self.g.JAC_AppointLeader(DATE))
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
+        self.assertEqual((self.g.Players[0].points, self.g.DESTROYS), (1, 0))
+        self.g.Players[0].points = 2  # replenished with one new earned title
+        self.g.JAC_AppointLeader(DATE); self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.Players[0].spent), ("GOVERNOR", 2, 2))
+        self.assertEqual(list(self.g.GRANTS[0].values()), [-1])
+
+    def test_native_rejection_of_negative_delta_never_allows_cheaper_evolution(self):
+        self.join()
+        self.g.Players[0].points = 2
+        self.lua.execute("""
+            local original=Players[0].GetGovernors
+            Players[0].GetGovernors=function()
+                local g=original()
+                g.ChangeGovernorPoints=function() end
+                return g
+            end
+        """)
+        self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
+        self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "TITLE_PAYMENT_FAILED")
+        self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"), self.g.DESTROYS),
+                         ("GREAT_PERSON", None, 0))
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 0))
+
+    def test_upper_cost_consumes_two_extra_titles_and_one_native_once(self):
+        self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
+        self.join()
+        self.api.GrantTestTitle(0, DATE, "APPOINT")
+        self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_COST"), self.prop("EVOLUTION_SURCHARGE")),
+                         ("GOVERNOR", 3, 2))
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (1, 1))
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "ALREADY_EVOLVED")
+        self.assertEqual(self.api.GrantTestTitle(0, DATE, "APPOINT"), "TITLE_ALREADY_GRANTED")
+        self.assertEqual(list(self.g.GRANTS[0].values()), [3, -2])
+        self.assertEqual((self.g.DESTROYS, self.g.Players[0].points, self.g.Players[0].spent), (1, 1, 1))
+
+    def test_joined_cost_is_fixed_even_if_balance_data_changes(self):
+        self.join()
+        self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
+        self.assertEqual(self.api.EvolutionCost(DATE), 2)
+
+    def test_oda_uses_one_title_and_both_of_its_own_skill_branches(self):
+        self.g.LOCAL = 1
+        self.assertEqual(self.api.Join(1, 0), "JOINED")
+        self.assertEqual(self.api.GrantTestTitle(1, ODA, "APPOINT"), "TITLE_GRANTED")
+        self.g.JAC_EvolveLeader(ODA); self.g.DRAIN()
+        self.assertEqual((self.prop("STATE", ODA), self.g.Players[1].points, self.g.Players[1].spent),
+                         ("GOVERNOR", 1, 1))
+        governor = self.g.NATIVE_GOVS[1][1001]
+        self.assertTrue(governor.HasPromotion(None, 2001))
+        for phase, field, index, native in [("PROMOTE", "PromotionType", 41, 3001),
+                                           ("PROMOTE2", "SecondPromotionType", 51, 4001)]:
+            self.api.GrantTestTitle(1, ODA, phase)
+            self.g.JAC_PromoteLeader(ODA, self.g.GameInfo.JAC_LeaderPersonas[ODA][field])
+            self.assertEqual(self.g.REQUESTS[1].params.promotion, index)
+            self.g.DRAIN()
+            self.assertTrue(governor.HasPromotion(None, native))
+        self.assertFalse(governor.HasPromotion(None, 3002))
+        self.assertEqual((self.g.Players[1].points, self.g.Players[1].spent), (3, 3))
 
     def test_native_individual_identity_is_resolved_through_gameinfo(self):
         self.join()
@@ -320,8 +418,8 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.assertEqual(self.api.GrantTestTitle(0, DATE, "APPOINT"), "TITLE_ALREADY_GRANTED")
         self.assertEqual(self.api.GrantTestTitle(0, DATE, "PROMOTE"), "TITLE_GRANTED")
-        self.assertEqual(list(self.g.GRANTS[0].values()), [1, 1])
-        self.assertEqual(self.g.Players[0].points, 2)
+        self.assertEqual(list(self.g.GRANTS[0].values()), [2, 1])
+        self.assertEqual(self.g.Players[0].points, 3)
 
     def test_ui_uses_native_operation_indices_and_engine_requester(self):
         self.join()
@@ -333,6 +431,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.g.DESTROYS, 0)
         self.g.DRAIN()
         self.assertEqual((self.prop("STATE"), self.g.Players[0].spent), ("GOVERNOR", 1))
+        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (1, 1))
         self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
         self.assertEqual((self.g.DESTROYS, self.g.Players[0].spent), (1, 1))
 
@@ -363,6 +462,14 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.DRAIN()
         self.assertTrue(governor.HasPromotion(None, 3002))
         self.assertEqual(self.g.Players[0].spent, 2)
+        self.api.GrantTestTitle(0, DATE, "PROMOTE2")
+        self.g.JAC_PromoteLeader(DATE, self.g.GameInfo.JAC_LeaderPersonas[DATE].SecondPromotionType)
+        self.assertEqual(self.g.REQUESTS[1].params.promotion, 52)
+        self.g.DRAIN()
+        self.assertTrue(governor.HasPromotion(None, 4002))
+        self.assertEqual((self.g.Players[0].spent, self.g.Players[0].points), (3, 3))
+        with self.assertRaisesRegex(LuaError, "not in person's tree"):
+            self.g.JAC_PromoteLeader(DATE, self.g.GameInfo.JAC_LeaderPersonas[ODA].PromotionType)
         self.g.JAC_RefreshPersonas()
         self.assertEqual((len(self.g.VIEWS), self.g.VIEWS[1].name, self.g.VIEWS[1].icon), (1, f"LOC_{DATE}_NAME", f"ICON_{DATE}"))
 

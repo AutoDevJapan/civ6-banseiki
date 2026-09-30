@@ -46,7 +46,8 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
         self.assertEqual(set(self.db.execute("PRAGMA foreign_key_check")) - self.before_fk, set())
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO JAC_LeaderPersonas SELECT 'LEADER_MISSING','CIVILIZATION_MISSING',"
-                            "'PERSON_MISSING','GOVERNOR_MISSING','LOC_MISSING','ICON_MISSING','BASE_MISSING','PROMOTION_MISSING'")
+                            "'PERSON_MISSING','GOVERNOR_MISSING','LOC_MISSING','ICON_MISSING','BASE_MISSING','PROMOTION_MISSING',"
+                            "'PROMOTION2_MISSING','CALM','MUNDANE',NULL,0,'HEAD',1")
 
     def test_no_recruitment_or_retirement_effects(self):
         self.assertEqual(self.db.execute("SELECT UnitType,AvailableInTimeline,PseudoYieldType FROM GreatPersonClasses "
@@ -56,24 +57,64 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE GreatPersonIndividualType IN "
                                              "(SELECT PersonType FROM JAC_LeaderPersonas)").fetchone()[0], 0)
 
-    def test_each_governor_has_its_own_promotable_test_tree(self):
-        rows = self.db.execute("SELECT GovernorType,BasePromotionType,PromotionType FROM JAC_LeaderPersonas").fetchall()
+    def test_each_governor_has_three_effectful_nodes_with_two_branches(self):
+        rows = self.db.execute("SELECT GovernorType,BasePromotionType,PromotionType,SecondPromotionType FROM JAC_LeaderPersonas").fetchall()
         self.assertEqual(len(rows), 22)
-        for gov, base, promoted in rows:
+        for gov, base, first, second in rows:
             with self.subTest(gov=gov):
                 self.assertEqual(set(self.db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE "
-                                                     "GovernorType=?", (gov,))), {(base,), (promoted,)})
+                                                     "GovernorType=?", (gov,))), {(base,), (first,), (second,)})
                 self.assertEqual(self.db.execute("SELECT BaseAbility,Level FROM GovernorPromotions WHERE "
                                                  "GovernorPromotionType=?", (base,)).fetchone(), (1, 0))
-                self.assertEqual(self.db.execute("SELECT BaseAbility,Level FROM GovernorPromotions WHERE "
-                                                 "GovernorPromotionType=?", (promoted,)).fetchone(), (0, 1))
-                self.assertEqual(self.db.execute("SELECT PrereqGovernorPromotion FROM GovernorPromotionPrereqs "
-                                                 "WHERE GovernorPromotionType=?", (promoted,)).fetchall(), [(base,)])
+                for promoted in (first, second):
+                    self.assertEqual(self.db.execute("SELECT BaseAbility,Level FROM GovernorPromotions WHERE "
+                                                     "GovernorPromotionType=?", (promoted,)).fetchone(), (0, 1))
+                    self.assertEqual(self.db.execute("SELECT PrereqGovernorPromotion FROM GovernorPromotionPrereqs "
+                                                     "WHERE GovernorPromotionType=?", (promoted,)).fetchall(), [(base,)])
+                for node in (base, first, second):
+                    self.assertEqual(self.db.execute("SELECT COUNT(*) FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?", (node,)).fetchone()[0], 1)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM GovernorPromotionModifiers WHERE GovernorPromotionType "
-                                         "LIKE 'GOVERNOR_PROMOTION_JAC_PERSONA_%'").fetchone()[0], 0)
+                                         "LIKE 'GOVERNOR_PROMOTION_JAC_PERSONA_%'").fetchone()[0], 66)
+
+    def test_cost_defaults_and_all_22_designs_match_named_provisional_formula(self):
+        expected = {"ODA_NOBUHIDE":1, "TAKEDA_NOBUTORA":1, "DATE_TANEMUNE":2, "ASHINA_MORIKIYO":1,
+                    "HOJO_UJITSUNA":2, "YAMANOUCHI_UESUGI_NORIMASA":3, "NAGAO_TAMEKAGE":2,
+                    "IMAGAWA_UJITERU":2, "MATSUDAIRA_KIYOYASU":1, "ASAKURA_TAKAKAGE":2,
+                    "ASHIKAGA_YOSHIHARU":3, "MIYOSHI_NAGAYOSHI":2, "ROKKAKU_SADAYORI":2,
+                    "HONGANJI_SHONYO":3, "OUCHI_YOSHITAKA":2, "AMAGO_TSUNEHISA":2,
+                    "MORI_MOTONARI":1, "CHOSOKABE_KUNICHIKA":1, "OTOMO_YOSHIAKI":2,
+                    "SHIMAZU_TAKAHISA":1, "RYUKYU_SHO_SEI":3, "AINU_TARIKONA":2}
+        rows = self.db.execute("SELECT LeaderType,EvolutionCost,Personality,Trait,Age1534 FROM JAC_LeaderPersonas").fetchall()
+        self.assertEqual({r[0][11:]:r[1] for r in rows}, expected)
+        self.assertTrue(all(r[2] and r[3] for r in rows))
+        self.assertEqual({r[0][11:] for r in rows if r[4] is None}, {"NAGAO_TAMEKAGE", "AINU_TARIKONA"})
+        self.assertEqual(dict(self.db.execute("SELECT Name,Value FROM JAC_PersonaCostParameters")),
+                         {"BASE_TITLES":1,"FAME_TITLE_WEIGHT":1,"YOUTH_AGE_LIMIT":16,"YOUTH_TITLE_SURCHARGE":1,
+                          "REPRESENTATIVE_TITLE_SURCHARGE":1,"MIN_TITLES":1,"MAX_TITLES":3})
+
+    def test_date_and_oda_modifiers_use_real_city_effects_and_conservative_magnitudes(self):
+        expected = {
+            "DATE_TANEMUNE":[("YIELD_CULTURE",10),(None,1),("YIELD_GOLD",10)],
+            "ODA_NOBUHIDE":[("YIELD_GOLD",10),("YIELD_PRODUCTION",10),(None,20)]}
+        for person, effects in expected.items():
+            rows = self.db.execute("SELECT s.YieldType,s.Amount,m.ModifierType,d.CollectionType,d.EffectType "
+                                   "FROM JAC_PersonaSkills s JOIN Modifiers m USING(ModifierId) JOIN DynamicModifiers d "
+                                   "ON d.ModifierType=m.ModifierType WHERE s.LeaderType=? ORDER BY s.Slot", ("LEADER_JAC_"+person,)).fetchall()
+            self.assertEqual([(r[0],r[1]) for r in rows], effects)
+            self.assertEqual([r[3] for r in rows], ["COLLECTION_OWNER"]*3)
+            self.assertEqual([r[4] for r in rows], ["EFFECT_ADJUST_CITY_YIELD_MODIFIER",
+                             "EFFECT_ADJUST_CITY_AMENITIES_FROM_GOVERNORS" if person.startswith("DATE") else "EFFECT_ADJUST_CITY_YIELD_MODIFIER",
+                             "EFFECT_ADJUST_CITY_YIELD_MODIFIER" if person.startswith("DATE") else "EFFECT_ADJUST_CITY_ALL_MILITARY_UNITS_PRODUCTION"])
+        for modifier, amount in [("LIBRARIAN_CULTURE_YIELD_BONUS",15), ("PASHA_BONUS_UNIT_PRODUCTION",20)]:
+            self.assertEqual(int(self.db.execute("SELECT Value FROM ModifierArguments WHERE ModifierId=? AND Name='Amount'", (modifier,)).fetchone()[0]), amount)
+        # GS deletes Amani's old local amenity promotion; compare its XP1 source magnitude.
+        args = ET.parse(AUDIT.GAME / "DLC/Expansion1/Data/Expansion1_Governors.xml").findall("./ModifierArguments/Row")
+        amounts = [int(r.findtext("Value")) for r in args if r.findtext("ModifierId")=="PROMOTER_ADDITIONAL_CITY_AMENITIES" and r.findtext("Name")=="Amount"]
+        self.assertEqual(amounts, [4])
 
     def test_no_new_sources_of_titles_are_added(self):
-        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Modifiers WHERE ModifierId LIKE 'JAC_PERSONA_%'").fetchone()[0], 0)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM Modifiers m JOIN DynamicModifiers d USING(ModifierType) "
+                                         "WHERE m.ModifierId LIKE 'JAC_PERSONA_%' AND d.EffectType='EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS'").fetchone()[0], 0)
         for table in ["GameModifiers", "CivicModifiers", "TraitModifiers", "BuildingModifiers", "GovernorModifiers"]:
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE ModifierId LIKE 'JAC_PERSONA_TEST_%'").fetchone()[0], 0)
         self.assertEqual(int(self.db.execute("SELECT Value FROM GlobalParameters WHERE Name='MAX_GOVERNOR_APPOINTMENTS'").fetchone()[0]), 30)
@@ -103,7 +144,7 @@ class LeaderPersonaStaticTests(unittest.TestCase):
             self.assertNotIn(lang, translations.setdefault(tag, set()))
             translations[tag].add(lang)
             self.assertTrue(row.findtext("Text"))
-        self.assertEqual(len(translations), 14)
+        self.assertEqual(len(translations), 183)
         self.assertTrue(all(langs == {"ja_JP", "en_US", "ru_RU"} for langs in translations.values()))
 
     def test_governor_icons_reference_the_correct_existing_leader_and_unique_pk(self):
@@ -133,9 +174,13 @@ class LeaderPersonaStaticTests(unittest.TestCase):
         steps = scenario["steps"]
         saves = [s["name"] for s in steps if s["action"] == "save"]
         self.assertEqual(saves, ["JAC-Persona-GreatPerson", "JAC-Persona-Governor", "JAC-Persona-Establishing",
-                                 "JAC-Persona-Reassigned", "JAC-Persona-Promoted"])
+                                 "JAC-Persona-Reassigned", "JAC-Persona-Promoted", "JAC-Persona-Two-Skilled-Governors",
+                                 "JAC-Persona-Three-Title-Cost"])
         self.assertEqual([s["name"] for s in steps if s["action"] == "load"], saves)
-        self.assertEqual(sum(s.get("turns", 0) for s in steps if s["action"] == "end_turn"), 11)
+        self.assertEqual(sum(s.get("turns", 0) for s in steps if s["action"] == "end_turn"), 16)
+        self.assertEqual(len(steps), 134)
+        human = [p for p in steps[1]["players"] if p["human"]]
+        self.assertEqual([p["leader"] for p in human], ["LEADER_JAC_HOJO_UJITSUNA"])
         lua = LuaRuntime(unpack_returned_tuples=True)
         codes = [s["code"] for s in steps if s["action"] == "ui_lua"]
         codes += [s["condition"]["code"] for s in steps if s["action"] == "wait_for"]
@@ -147,7 +192,10 @@ class LeaderPersonaStaticTests(unittest.TestCase):
         assertions = "\n".join(codes)
         for api in ["GetIndividual", "GetName", "GetActionCharges", "GetUnitPortraitIconNames", "GetGovernorList",
                     "GetAssignedGovernor", "GetAssignedCity", "IsEstablished", "GetTurnsOnSite", "HasPromotion",
-                    "NO_TITLE", "ALREADY_JOINED", "ALREADY_EVOLVED", "TITLE_ALREADY_GRANTED"]:
+                    "NO_TITLE", "ALREADY_JOINED", "ALREADY_EVOLVED", "TITLE_ALREADY_GRANTED",
+                    "EvolutionCost", "EVOLUTION_SURCHARGE", "LEADER_JAC_ODA_NOBUHIDE",
+                    "SecondPromotionType", "GameEffects.GetModifierActive", "GameEffects.GetModifierSubjects",
+                    "duplicate owned city display name", "upper-cost title accounting differs"]:
             self.assertIn(api, assertions)
 
 

@@ -63,6 +63,7 @@ local function Join(owner, source, personality, trait)
     if Get(leader, "OWNER") ~= nil then
         return Finish(owner, Get(leader, "OWNER") == owner and "ALREADY_JOINED" or "OTHER_OWNER");
     end
+    if trait ~= nil and trait ~= row.Trait then return Finish(owner, "INVALID_METADATA"); end
     if NativeGovernor(owner, row) then return Finish(owner, "GOVERNOR_EXISTS"); end
     local city = p:GetCities():GetCapitalCity();
     if not city then return Finish(owner, "NO_CITY"); end
@@ -77,13 +78,24 @@ local function Join(owner, source, personality, trait)
     Set(leader, "SOURCE", source);
     Set(leader, "NAME", row.Name);
     Set(leader, "PORTRAIT", row.PortraitIcon);
-    -- Nil is deliberately unassigned. Never guess a historical person's personality/trait.
-    Set(leader, "PERSONALITY", personality);
-    Set(leader, "TRAIT", trait);
+    -- Designed defaults are data, not a claim that historical psychology is known.
+    Set(leader, "PERSONALITY", personality or row.Personality);
+    Set(leader, "TRAIT", row.Trait);
+    Set(leader, "EVOLUTION_COST", row.EvolutionCost);
     Set(leader, "UNIT", unit:GetID());
     Set(leader, "OWNER", owner);
     Set(leader, "STATE", "GREAT_PERSON");
     return Finish(owner, "JOINED");
+end
+
+local function EvolutionCost(leader)
+    local row = Definition(leader);
+    return row and (Get(leader, "EVOLUTION_COST") or row.EvolutionCost);
+end
+
+local function AvailableTitles(p)
+    local governors = p:GetGovernors();
+    return governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
 end
 
 local function PrepareEvolution(owner, leader)
@@ -94,7 +106,18 @@ local function PrepareEvolution(owner, leader)
     if state == "EVOLVING" then return Finish(owner, "EVOLVING"); end
     if state ~= "GREAT_PERSON" or not FindPerson(owner, row) then return Finish(owner, "PERSON_MISSING"); end
     if NativeGovernor(owner, row) then return Finish(owner, "GOVERNOR_EXISTS"); end
-    if not p:GetGovernors():CanAppoint() then return Finish(owner, "NO_TITLE"); end
+    local cost = EvolutionCost(leader);
+    if AvailableTitles(p) < cost or not p:GetGovernors():CanAppoint() then return Finish(owner, "NO_TITLE"); end
+    -- Reserve the surcharge. Native APPOINT_GOVERNOR spends the remaining ONE title.
+    -- Debug/Player.ltp:295,654,676; Expansion2/UI/Additions/GovernorPanel.lua:547-562.
+    local surcharge = cost - 1;
+    if surcharge > 0 then
+        local before = AvailableTitles(p);
+        p:GetGovernors():ChangeGovernorPoints(-surcharge);
+        -- Negative deltas have no official example: never appoint for a cheaper price if rejected.
+        if AvailableTitles(p) ~= before - surcharge then return Finish(owner, "TITLE_PAYMENT_FAILED"); end
+    end
+    Set(leader, "EVOLUTION_SURCHARGE", surcharge);
     Set(leader, "STATE", "EVOLVING");
     return Finish(owner, "EVOLVING");
 end
@@ -123,15 +146,15 @@ local function Reconcile()
     end
 end
 
--- Development fixture only, not bound to a button or to a turn event. Gives exactly one native title
--- per owner/person/phase and records that grant in the save. Production title acquisition is undecided.
+-- Development fixture only, never a production title source. Appointment grants its data cost;
+-- either promotion grants one native title. Grants are recorded once across save/reload.
 local function GrantTestTitle(owner, leader, phase)
     local p, row = Player(owner, true), Definition(leader);
     if not p or not row or Get(leader, "OWNER") ~= owner or
-       (phase ~= "APPOINT" and phase ~= "PROMOTE") then return Finish(owner, "INVALID"); end
+       (phase ~= "APPOINT" and phase ~= "PROMOTE" and phase ~= "PROMOTE2") then return Finish(owner, "INVALID"); end
     local field = "TEST_TITLE_" .. phase;
     if Get(leader, field) then return Finish(owner, "TITLE_ALREADY_GRANTED"); end
-    p:GetGovernors():ChangeGovernorPoints(1); -- Official FireTuner: Debug/Player.ltp:289-295.
+    p:GetGovernors():ChangeGovernorPoints(phase == "APPOINT" and EvolutionCost(leader) or 1);
     Set(leader, field, true);
     return Finish(owner, "TITLE_GRANTED");
 end
@@ -145,6 +168,6 @@ end);
 GameEvents.OnGameTurnStarted.Add(Reconcile);
 ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
-    GrantTestTitle = GrantTestTitle, Reconcile = Reconcile
+    GrantTestTitle = GrantTestTitle, Reconcile = Reconcile, EvolutionCost = EvolutionCost
 };
 print("JAC_LeaderPersona_Gameplay: ready");
