@@ -178,7 +178,16 @@ function R.Tick()
       local city=alive and Players[id]:GetCities():FindID(p.City) or nil
       if not city then s.Production=nil; Log("production city lost player="..id)
       elseif turn>=p.Due then
-        local unit=UnitManager.InitUnitValidAdjacentHex(id,R.UnitForPlayer(id),city:GetX(),city:GetY(),1)
+        -- InitUnitValidAdjacentHex returns no Unit object (verified live, assassin-01/02; the official
+        -- DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:193 ignores its result), so find the new unit.
+        local had={}
+        for _,u in Players[id]:GetUnits():Members() do had[u:GetID()]=true end
+        UnitManager.InitUnitValidAdjacentHex(id,R.UnitForPlayer(id),city:GetX(),city:GetY(),1)
+        local unit
+        local want=GameInfo.Units[R.UnitForPlayer(id)]
+        for _,u in Players[id]:GetUnits():Members() do
+          if not had[u:GetID()] and want and u:GetType()==want.Index then unit=u end
+        end
         if unit then
           s.LastCompletion=turn; s.ProductionUnlock=turn+R.Scale(R.PRODUCTION_LOCK)
           s.LastProducedUnit=unit:GetID(); s.Production=nil

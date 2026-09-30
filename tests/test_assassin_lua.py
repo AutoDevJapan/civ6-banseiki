@@ -100,7 +100,7 @@ function GRANT(owner,unitType,x,y)
 end
 UnitManager={InitUnitValidAdjacentHex=function(id,kind,x,y)
   if SPAWN_BLOCKED then return nil end
-  return GRANT(id,GameInfo.Units[kind].Index,x,y)
+  GRANT(id,GameInfo.Units[kind].Index,x,y)  -- like the engine: creates the unit, returns no Unit object (live assassin-01)
 end, Kill=function(u)
   KILLS[#KILLS+1]={Owner=u:GetOwner(),ID=u:GetID()}; DATA[u:GetOwner()].Units[u:GetID()]=nil
 end}
