@@ -42,9 +42,9 @@
 
 ## 暗黒期の政策の選択（後続1、[設計](../research/sengoku-ages.md) §6.2・§7.2）
 
-オーナー確認事項 Q70〜Q72（[`questions.md`](../questions.md)）の推奨案を暫定の既定にした。
+家ごとの既定の政策はオーナー判断（2026-09-30、SSOT 3.2）で今の割り当てに決まった。約200ターンの自動進行で偏りを見て調整する。選べる期間と画面の出し方は、オーナー確認事項 Q71・Q72（[`questions.md`](../questions.md)）の推奨案を暫定の既定にした。
 
-1. **既定の政策**：改元で暗黒期になった家は、すぐに既定の政策を持つ。既定は `JAC_SengokuDarkAgePolicyDefaults`（家ごとに1行、22家。設計の「家ごとの順位表」の1位）で、表に無い文明（Gathering Storm の地図の文明）は `Priority` が最小の政策（背水の陣）。AI の家と、答えない人間の家はこのまま。割り当ては家の史実の性格による暫定（Q70）
+1. **既定の政策**：改元で暗黒期になった家は、すぐに既定の政策を持つ。既定は `JAC_SengokuDarkAgePolicyDefaults`（家ごとに1行、22家。設計の「家ごとの順位表」の1位）で、表に無い文明（Gathering Storm の地図の文明）は `Priority` が最小の政策（背水の陣）。AI の家と、答えない人間の家はこのまま。割り当ては家の史実の性格による（SSOT 3.2。約200ターンの自動進行で調整する）
 2. **選択の画面**：人間の家が暗黒期で、今の期にまだ選んでいなければ、自分の手番の始まり（`Events.LocalPlayerTurnBegin`）と読み込み（`Events.LoadScreenClose`）のたびに画面を出す。4つの政策の名前・効果（`Description`）と「選ぶ」、今の政策の名前、「あとで」（次の手番まで閉じる。Q72）。選ばずに手番を終えたとき（`Events.LocalPlayerTurnEnd`。公式 `Base/Assets/UI/ActionPanel.lua:1335`）も閉じる。手番の外では送れないためで、選べる間は次の手番の始まりにまた出る。入力は奪わない（公式の `DisloyalCityChooser.lua` と同じ `ContextPtr:SetHide` の出し入れで、入力ハンドラは置かない）
 3. **送信**：「選ぶ」で `UI.RequestPlayerOperation(自分, PlayerOperations.EXECUTE_SCRIPT, {OnStart = "JAC_SengokuDarkPolicyChoose", PolicyType, Reign})`。自分の手番が始まる前（読み込み直後など）は送らず、画面を開いたままにする（手番の前に送った要求は届かない。実機 court-arbitration-03）
 4. **受け付け**（ゲームプレイ側 `GameEvents.JAC_SengokuDarkPolicyChoose`）：送った家（エンジンが渡すプレイヤー。引数は使わない）が台帳にあり、`age` が `DARK`、`Reign` が今の期、今の期にまだ選んでいない（`chosen` が今の期でない）、表にある政策、のすべてを満たすときだけ、`policy` と `chosen` を書き、タイルのプロパティを書き直す（§7.1 の関数。冪等）。合わないものは捨てて Lua.log に `[JAC_AGES] choice dropped player=… : <理由>` を出す。選べるのは期の間に1回（Q71）

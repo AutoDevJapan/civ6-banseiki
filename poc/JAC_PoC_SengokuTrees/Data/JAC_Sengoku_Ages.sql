@@ -121,7 +121,7 @@ INSERT INTO JAC_SengokuDarkAgePolicies (PolicyType, Priority, Name, Description,
 
 -- §6.2 / §7.2: each house's dark-age policy when it has not chosen (AI houses always; humans until they choose).
 -- The design's per-house ranking reduced to its first place: every policy can always be taken, so a lower place
--- is never used. Provisional (owner question Q70), after the house's historical profile: Takeda / Oda / Nagao /
+-- is never used. Owner decision (2026-09-30): keep this assignment and tune it after ~200 turns. After the house's historical profile: Takeda / Oda / Nagao /
 -- Shimazu famed armies -> ELITE; sea powers (Mori's Murakami, Chosokabe, Otomo, Ryukyu) -> PIRATE; temple and
 -- court culture (Honganji, Ashikaga, Imagawa, Asakura, Ouchi) -> TEMPLE; the rest -> VALOR.
 -- CivilizationType has no foreign key: the houses come from JAC_PoC_CustomCivs, and other maps' civilizations

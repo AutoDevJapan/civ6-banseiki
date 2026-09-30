@@ -161,6 +161,8 @@ class SengokuEventTests(unittest.TestCase):
                 tech = generate.REVEAL_TECH.get(p["id"])
                 if tech:
                     self.assertIn(tech, {x["id"] for x in e["earlier_by"]}, e["id"])
+                    # SSOT 3.2: the event does not reveal the site; its boost is the research that does.
+                    self.assertEqual((e["boost"] or {}).get("id"), tech, e["id"])
             else:
                 self.assertEqual(r["action"], "ownership", e["id"])
                 self.assertFalse(deferred, e["id"])  # ownership means the resource is on the map from 1534

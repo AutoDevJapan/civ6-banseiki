@@ -9,7 +9,8 @@
 --   ExposedMembers.JAC_Resources.GetSites()           the sites of this map (array of {id, resource, plot, year, tech})
 --   ExposedMembers.JAC_Resources.IsRevealed(siteId)
 --   ExposedMembers.JAC_Resources.CurrentYear()        calendar year of the current turn
--- Until the events framework calls these, OnTurnBegin reveals sites by calendar year and by tech.
+-- OnTurnBegin reveals sites by calendar year and by tech. Historical events do not reveal sites (SSOT 3.2):
+-- they boost the site's tech instead.
 
 local REVEALED_KEY = "JAC_RESOURCE_SITES_REVEALED"
 local BASELINE_KEY = "JAC_RESOURCE_TECH_BASELINE"

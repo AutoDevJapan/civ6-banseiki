@@ -145,8 +145,9 @@ def build() -> tuple[str, str]:
         "\nINSERT INTO JAC_HistoricalEventPrereqCivics (EventType, CivicType) VALUES\n", values(prereq_civics),
         "\nINSERT INTO JAC_HistoricalEventTargets (EventType, CivilizationType) VALUES\n", values(targets),
         "\nINSERT INTO JAC_HistoricalEventRenames (EventType, CivilizationType, Name) VALUES\n", values(renames),
-        "\n-- reveal: the reserved site of the resources mod. trade_access and ownership are recorded only\n"
-        "-- (trade access is not implemented; Q43: ownership is not transferred automatically).\n",
+        "\n-- Records only. reveal: the reserved site of the resources mod, which reveals it in its own year or on its\n"
+        "-- research (SSOT 3.2: the event boosts that research instead); trade access is not implemented; Q43: ownership\n"
+        "-- is not transferred automatically.\n",
         "INSERT INTO JAC_HistoricalEventResources (EventType, SiteId, Action, OwnerTo) VALUES\n", values(resources),
         "\n-- TriggerBoost needs a Boosts row. Placeholder rows (暫定) for the event boosts the tree does not define;\n"
         "-- the class never triggers by itself (official: Base/Assets/Gameplay/Data/Technologies.xml:440,505).\n",
