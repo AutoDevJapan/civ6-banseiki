@@ -385,7 +385,10 @@ class ScenarioSafetyTests(unittest.TestCase):
         ) as sleep:
             with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
                 runner._wait(condition, 30)
-        run_lua.assert_called_once()
+        # The wait itself runs once; #75 may then try the popup closers in other contexts (they also fail here)
+        # before giving up, but it never re-sends the InGame condition when nothing was closed.
+        ingame_calls = [c for c in run_lua.call_args_list if c.args[0] == "InGame"]
+        self.assertEqual(len(ingame_calls), 1)
         sleep.assert_not_called()
 
     def test_lua_wait_confirmed_error_fails_without_reexecution(self):
