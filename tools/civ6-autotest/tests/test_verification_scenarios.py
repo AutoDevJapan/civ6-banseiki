@@ -209,7 +209,8 @@ class VerificationScenarioTests(unittest.TestCase):
                     if s.get("capture_as") == "PERF_INITIAL_STATE")
         lua = lupa.LuaRuntime()
         lua.execute("""
-            state={population=3,owner=0,unitX=2,damage=4,unitPresent=true,warlord={XP=20},ledger={reign=0,history={}}}
+            state={population=3,owner=0,unitX=2,damage=4,unitPresent=true,initialized=true,
+                   warlord={Level=1,XP=20},ledger={reign=0,history={}}}
             local city={GetID=function() return 7 end,GetX=function() return 2 end,
                         GetY=function() return 3 end,GetPopulation=function() return state.population end}
             local cities={Members=function() local done=false; return function()
@@ -229,8 +230,10 @@ class VerificationScenarioTests(unittest.TestCase):
                           GetTechs=function() return research end,GetCulture=function() return culture end}
             Players={};for i=0,21 do Players[i]=player end
             Game={GetCurrentGameTurn=function() return 1 end,
+                  GetLocalPlayer=function() return 0 end,
                   GetEras=function() return {GetCurrentEra=function() return 0 end} end,
-                  GetProperty=function(_,key) if key=='JAC_AGES_LEDGER' then return state.ledger end end}
+                  GetProperty=function(_,key) if key=='JAC_AGES_LEDGER' then return state.ledger
+                    elseif key=='JAC_POC_GROWTHUI_INITIALIZED' then return state.initialized end end}
             local function rows(row) return function() local done=false; return function()
                 if done then return nil end; done=true;return row
             end end end
@@ -257,9 +260,18 @@ class VerificationScenarioTests(unittest.TestCase):
         self.assertNotEqual(before, lua.execute(code))
         lua.globals().state.warlord.XP = 20
         lua.globals().state.unitPresent = False
-        self.assertNotEqual(before, lua.execute(code))
+        with self.assertRaisesRegex(lupa.LuaError, "human growth record missing"):
+            lua.execute(code)
         lua.globals().state.unitPresent = True
         self.assertEqual(before, lua.execute(code))
+        lua.globals().state.initialized = False
+        with self.assertRaisesRegex(lupa.LuaError, "growth initialization missing"):
+            lua.execute(code)
+        lua.globals().state.initialized = True
+        lua.execute("state.warlord=nil")
+        with self.assertRaisesRegex(lupa.LuaError, "human growth record missing"):
+            lua.execute(code)
+        lua.execute("state.warlord={Level=1,XP=20}")
         lua.globals().state.owner = 1
         self.assertNotEqual(before, lua.execute(code))
 
