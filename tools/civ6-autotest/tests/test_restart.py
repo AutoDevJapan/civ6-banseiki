@@ -9,13 +9,61 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import (enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
+from restart import (close_orphan_crash_reporters, enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
                      wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
 
 
 MOD_ID = "ba3a1c58-9287-4654-a22f-85f9e6841e9b"
+
+
+class CrashReporterTests(unittest.TestCase):
+    def test_closes_only_a_civ6_reporter_from_the_verified_process_handle(self):
+        with patch("restart._civ_process_ids", return_value=set()), patch(
+            "restart._process_ids", return_value={81}
+        ), patch("restart.kernel32") as kernel:
+            kernel.OpenProcess.return_value = 701
+
+            def image(_handle, _flags, buffer, _length):
+                buffer.value = "C:/Steam/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+                return True
+
+            kernel.QueryFullProcessImageNameW.side_effect = image
+            self.assertEqual(close_orphan_crash_reporters(), 1)
+            kernel.TerminateProcess.assert_called_once_with(701, 1)
+            kernel.CloseHandle.assert_called_once_with(701)
+
+    def test_other_firaxis_game_reporter_is_preserved(self):
+        with patch("restart._civ_process_ids", return_value=set()), patch(
+            "restart._process_ids", return_value={81}
+        ), patch("restart.kernel32") as kernel:
+            def image(_handle, _flags, buffer, _length):
+                buffer.value = "C:/Steam/OtherGame/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+                return True
+
+            kernel.QueryFullProcessImageNameW.side_effect = image
+            self.assertEqual(close_orphan_crash_reporters(), 0)
+            kernel.TerminateProcess.assert_not_called()
+            kernel.CloseHandle.assert_called_once()
+
+    def test_running_civ6_preserves_reporters(self):
+        with patch("restart._civ_process_ids", return_value={22}), patch("restart._process_ids") as scan:
+            self.assertEqual(close_orphan_crash_reporters(), 0)
+            scan.assert_not_called()
+
+    def test_new_game_appearing_during_identity_check_preserves_reporter(self):
+        with patch("restart._civ_process_ids", side_effect=[set(), {22}]), patch(
+            "restart._process_ids", return_value={81}
+        ), patch("restart.kernel32") as kernel:
+            def image(_handle, _flags, buffer, _length):
+                buffer.value = "C:/Steam/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+                return True
+
+            kernel.QueryFullProcessImageNameW.side_effect = image
+            self.assertEqual(close_orphan_crash_reporters(), 0)
+            kernel.TerminateProcess.assert_not_called()
+            kernel.CloseHandle.assert_called_once()
 
 
 class FreshnessTests(unittest.TestCase):

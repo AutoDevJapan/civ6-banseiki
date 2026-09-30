@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
-from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids,
+from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids, _process_ids,
                    find_civ_window, kernel32)
 
 
@@ -174,7 +174,39 @@ def terminate_civ_process(pid: int, expected_start: float) -> None:
         kernel32.CloseHandle(process)
 
 
+def close_orphan_crash_reporters() -> int:
+    """A Civ6 crash reporter can keep Steam's game session alive after the game exits."""
+    if _civ_process_ids():
+        return 0
+    closed = 0
+    for pid in sorted(_process_ids({"firaxisbugreporter.exe"})):
+        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not process:
+            continue  # It may have exited since enumeration.
+        try:
+            executable = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(executable))
+            if not kernel32.QueryFullProcessImageNameW(process, 0, executable, ctypes.byref(length)):
+                raise InputError(f"Cannot identify crash reporter {pid}")
+            path = Path(executable.value)
+            expected = ("sid meier's civilization vi", "base", "binaries", "win64steam", "firaxisbugreporter.exe")
+            if tuple(part.casefold() for part in path.parts[-5:]) != expected:
+                continue  # Other Firaxis games use the same executable name.
+            if _civ_process_ids():
+                return closed  # A new game appeared; do not touch its reporter.
+            # Verify and terminate the same handle, so PID reuse cannot target another process.
+            if not kernel32.TerminateProcess(process, 1):
+                raise InputError(f"Could not close Civ VI crash reporter {pid}")
+            closed += 1
+        finally:
+            kernel32.CloseHandle(process)
+    return closed
+
+
 def launch_via_steam() -> None:
+    closed = close_orphan_crash_reporters()
+    if closed:
+        print(f"Closed {closed} orphan Civ VI crash reporter(s)", flush=True)
     os.startfile(STEAM_URI)
 
 
