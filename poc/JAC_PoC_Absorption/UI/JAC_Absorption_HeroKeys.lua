@@ -19,6 +19,19 @@ local function PublishHeroKeys()
     end
     local observed = {}
     reads.GetObservation = function(token) return observed[token] end
+    reads.MarkPublished = function(token) observed[token] = { Published = true } end
+    reads.ReadCity = function(owner, id, method, building, slot)
+      local city = assert(Players[owner]:GetCities():FindID(id), "UI city cache is not ready")
+      if method == "RELIGIONS" then
+        local rows = {}
+        for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
+          rows[#rows + 1] = { Religion = row.Religion, Followers = row.Followers }
+        end
+        return rows
+      elseif method == "SLOTS" then return city:GetBuildings():GetNumGreatWorkSlots(building)
+      elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot) end
+      error("unsupported UI city read")
+    end
     reads.Observe = function(token, class)
       local origin = reads.GetHeroOriginCityID(class)
       observed[token] = { Claim = reads.GetHeroClaimPlayer(class), Origin = origin }
@@ -34,8 +47,10 @@ Events.LoadScreenClose.Add(PublishHeroKeys)
 local function ObservePendingHeroes()
   local reads = ExposedMembers.JAC_HeroReadAPI
   if not reads or not reads.Observe then return end
-  local state = Game:GetProperty("JAC_ABSORPTION_STATE_V1")
+  local api = ExposedMembers.JAC_Absorption
+  local state = api and api.GetState() or Game:GetProperty("JAC_ABSORPTION_STATE_V1")
   for _, tx in pairs(state and state.Transactions or {}) do
+    if tx.AwaitingFinalUI then reads.MarkPublished(tx.ID .. ":final") end
     for _, snap in ipairs(tx.Units or {}) do
       local intent = snap.HeroSpawnIntent
       if intent and intent.AwaitingUI then
@@ -43,8 +58,9 @@ local function ObservePendingHeroes()
       end
     end
   end
-  local fixture = Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")
-  if fixture and fixture.Kind == "FIXTURE" then reads.Observe(fixture.Token, fixture.Class) end
+  local fixture = api and api.GetUIPhase() or Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")
+  if fixture and fixture.Kind == "FIXTURE" then reads.Observe(fixture.Token, fixture.Class)
+  elseif fixture and fixture.Kind == "CITY" then reads.MarkPublished(fixture.Token) end
 end
 Events.GameCoreEventPublishComplete.Add(ObservePendingHeroes)
 Events.LoadScreenClose.Add(ObservePendingHeroes)

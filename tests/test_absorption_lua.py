@@ -459,6 +459,35 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.HeroResults.native.Cause, "HERO_MANAGER_MISMATCH")
         self.assertTrue(self.a.Verify("test-absorption", True))
 
+    def test_ui_only_city_citizens_and_work_slots_wait_for_final_publication(self):
+        self.split_hero_contexts()
+        self.run_lua("""local full={}
+          for x,c in pairs(CITIES) do
+            full[x]={Religion=c.GetReligion,Buildings=c.GetBuildings}
+            local r,b=c.GetReligion,c.GetBuildings
+            c.GetReligion=function(self) local v=r(self);v.GetReligionsInCity=nil;return v end
+            c.GetBuildings=function(self) local v=b(self);v.GetNumGreatWorkSlots=nil;v.GetGreatWorkInSlot=nil;return v end
+          end
+          UI_CITY_READS=0
+          ExposedMembers.JAC_HeroReadAPI.ReadCity=function(owner,id,method,building,slot)
+            UI_CITY_READS=UI_CITY_READS+1
+            local c=assert(Players[owner]:GetCities():FindID(id));local f=full[c.x]
+            if method=='RELIGIONS' then return f.Religion(c):GetReligionsInCity()
+            elseif method=='SLOTS' then return f.Buildings(c):GetNumGreatWorkSlots(building)
+            elseif method=='WORK' then return f.Buildings(c):GetGreatWorkInSlot(building,slot) end
+            error('invalid test city query')
+          end""")
+        before = self.run_lua("return ExposedMembers.JAC_Absorption.Canonical(ExposedMembers.JAC_Absorption.CityReligion(CITIES[4]))")
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        for _ in range(3):
+            self.run_lua("PUBLISH_HERO_UI()")
+            tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(self.run_lua("return ExposedMembers.JAC_Absorption.Canonical(ExposedMembers.JAC_Absorption.CityReligion(CITIES[4]))"), before)
+        self.assertGreater(self.g.UI_CITY_READS, 0)
+        self.assertTrue(self.a.Verify("test-absorption", True))
+
     def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
         self.add_native_hero(second=True)
         self.apply()
@@ -1201,7 +1230,7 @@ class AbsorptionTests(unittest.TestCase):
         steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                            .read_text(encoding='utf-8'))['steps']
         steps = [step for step in steps if not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
-                 and 'JAC_ABSORPTION_FIXTURE_UI_WAIT' not in step.get('condition', {}).get('code', '')]
+                 and not any(key in step.get('condition', {}).get('code', '') for key in ('JAC_ABSORPTION_FIXTURE_UI_WAIT', 'GetUIPhase'))]
         self.run_lua('''
           Game.GetLocalPlayer=function() return 0 end
           for id=4,21 do

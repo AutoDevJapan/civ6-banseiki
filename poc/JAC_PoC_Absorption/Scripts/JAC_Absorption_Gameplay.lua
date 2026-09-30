@@ -32,6 +32,22 @@ local function GetRoster(owner) return R.Copy(Players[owner]:GetProperty(R.ROSTE
 A.GetRoster = GetRoster
 A.Canonical = R.Canonical
 A.GetState = State
+A.GetUIPhase = function() return R.Copy(Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")) end
+local function CityRead(city, method, ...)
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  assert(reads and reads.ReadCity, "UI city read API unavailable")
+  return reads.ReadCity(city:GetOwner(), city:GetID(), method, ...)
+end
+local function WorkSlots(city, building)
+  local b = city:GetBuildings()
+  if b.GetNumGreatWorkSlots then return b:GetNumGreatWorkSlots(building) end
+  return CityRead(city, "SLOTS", building)
+end
+local function WorkInSlot(city, building, slot)
+  local b = city:GetBuildings()
+  if b.GetGreatWorkInSlot then return b:GetGreatWorkInSlot(building, slot) end
+  return CityRead(city, "WORK", building, slot)
+end
 local function RegisterProperty(keys, rebinders, key, rebind)
   assert(type(key) == "string" and key ~= "", "property key required")
   assert(rebind == nil or type(rebind) == "function", "property rebind must be a pure function")
@@ -59,7 +75,9 @@ end
 
 local function Religion(city)
   local result = {}
-  for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
+  local religion = city:GetReligion()
+  local rows = religion.GetReligionsInCity and religion:GetReligionsInCity() or CityRead(city, "RELIGIONS")
+  for _, row in pairs(rows) do
     result[tostring(row.Religion)] = row.Followers
   end
   return result
@@ -72,8 +90,8 @@ local function CityAssets(city)
     -- The engine controls capital palaces; historical belongings are separate roster/Great Work records.
     if info.BuildingType ~= "BUILDING_PALACE" and buildings:HasBuilding(info.Index) then
       local works = {}
-      for slot = 0, buildings:GetNumGreatWorkSlots(info.Index) - 1 do
-        works[slot] = buildings:GetGreatWorkInSlot(info.Index, slot)
+      for slot = 0, WorkSlots(city, info.Index) - 1 do
+        works[slot] = WorkInSlot(city, info.Index, slot)
       end
       result[info.BuildingType] = { Pillaged = buildings:IsPillaged(info.Index), Works = works }
     end
@@ -87,8 +105,8 @@ local function PalaceWorks(city)
   local result, buildings = {}, city:GetBuildings()
   local palace = GameInfo.Buildings["BUILDING_PALACE"]
   if palace and buildings:HasBuilding(palace.Index) then
-    for slot = 0, buildings:GetNumGreatWorkSlots(palace.Index) - 1 do
-      local work = buildings:GetGreatWorkInSlot(palace.Index, slot)
+    for slot = 0, WorkSlots(city, palace.Index) - 1 do
+      local work = WorkInSlot(city, palace.Index, slot)
       if work and work >= 0 then result[#result + 1] = work end
     end
   end
@@ -103,8 +121,8 @@ local function OwnedGreatWorks(owner)
     local buildings = city:GetBuildings()
     for info in GameInfo.Buildings() do
       if buildings:HasBuilding(info.Index) then
-        for slot = 0, buildings:GetNumGreatWorkSlots(info.Index) - 1 do
-          local work = buildings:GetGreatWorkInSlot(info.Index, slot)
+        for slot = 0, WorkSlots(city, info.Index) - 1 do
+          local work = WorkInSlot(city, info.Index, slot)
           if work and work >= 0 then works[work] = true end
         end
       end
@@ -1009,6 +1027,19 @@ local function Execute(state, tx)
       RestoreUnit(unit, snap)
       VerifyUnit(unit, snap)
       Save(state)
+    end
+  end
+  -- Finish all city mutations, then let UI-only citizen/work caches catch up.
+  if tx.Cities[1] then
+    local first = CityManager.GetCityAt(tx.Cities[1].X, tx.Cities[1].Y)
+    if not first:GetReligion().GetReligionsInCity or not first:GetBuildings().GetNumGreatWorkSlots then
+      local reads = ExposedMembers.JAC_HeroReadAPI
+      if not reads or not reads.GetObservation or not reads.GetObservation(tx.ID .. ":final") then
+        tx.AwaitingFinalUI = true
+        Save(state)
+        error("JAC_ABSORPTION_WAITING_UI", 0)
+      end
+      tx.AwaitingFinalUI = nil
     end
   end
   local rosters, archive = MovedAssets(tx)
