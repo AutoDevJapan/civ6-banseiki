@@ -1,0 +1,6098 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+	<LocalizedText>
+		<Row Tag="LOC_JAC_CITYNAME_OMORI" Language="ja_JP">
+			<Text>大森</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMORI" Language="en_US">
+			<Text>Omori</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMORI" Language="ru_RU">
+			<Text>Омори</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKAHATA" Language="ja_JP">
+			<Text>高畠</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKAHATA" Language="en_US">
+			<Text>Takahata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKAHATA" Language="ru_RU">
+			<Text>Такахата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGAI" Language="ja_JP">
+			<Text>長井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGAI" Language="en_US">
+			<Text>Nagai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGAI" Language="ru_RU">
+			<Text>Нагаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYUKAI" Language="ja_JP">
+			<Text>鮎貝</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYUKAI" Language="en_US">
+			<Text>Ayukai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYUKAI" Language="ru_RU">
+			<Text>Аюкаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WATARI" Language="ja_JP">
+			<Text>亘理</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WATARI" Language="en_US">
+			<Text>Watari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WATARI" Language="ru_RU">
+			<Text>Ватари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NATORI" Language="ja_JP">
+			<Text>名取</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NATORI" Language="en_US">
+			<Text>Natori</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NATORI" Language="ru_RU">
+			<Text>Натори</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANUMA" Language="ja_JP">
+			<Text>岩沼</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANUMA" Language="en_US">
+			<Text>Iwanuma</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANUMA" Language="ru_RU">
+			<Text>Иванума</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGAJO" Language="ja_JP">
+			<Text>多賀城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGAJO" Language="en_US">
+			<Text>Tagajo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGAJO" Language="ru_RU">
+			<Text>Тагадзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOGAMA" Language="ja_JP">
+			<Text>塩竈</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOGAMA" Language="en_US">
+			<Text>Shiogama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOGAMA" Language="ru_RU">
+			<Text>Сиогама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUSHIMA" Language="ja_JP">
+			<Text>松島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUSHIMA" Language="en_US">
+			<Text>Matsushima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUSHIMA" Language="ru_RU">
+			<Text>Мацусима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHINOMAKI" Language="ja_JP">
+			<Text>石巻</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHINOMAKI" Language="en_US">
+			<Text>Ishinomaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHINOMAKI" Language="ru_RU">
+			<Text>Исиномаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOME" Language="ja_JP">
+			<Text>登米</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOME" Language="en_US">
+			<Text>Tome</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOME" Language="ru_RU">
+			<Text>Томэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRAIZUMI" Language="ja_JP">
+			<Text>平泉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRAIZUMI" Language="en_US">
+			<Text>Hiraizumi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRAIZUMI" Language="ru_RU">
+			<Text>Хирайдзуми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISAWA" Language="ja_JP">
+			<Text>胆沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISAWA" Language="en_US">
+			<Text>Isawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISAWA" Language="ru_RU">
+			<Text>Исава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ESASHI" Language="ja_JP">
+			<Text>江刺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ESASHI" Language="en_US">
+			<Text>Esashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ESASHI" Language="ru_RU">
+			<Text>Эсаси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIWA" Language="ja_JP">
+			<Text>紫波</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIWA" Language="en_US">
+			<Text>Shiwa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIWA" Language="ru_RU">
+			<Text>Сива</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANNOHE" Language="ja_JP">
+			<Text>三戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANNOHE" Language="en_US">
+			<Text>Sannohe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANNOHE" Language="ru_RU">
+			<Text>Саннохэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHINOHE" Language="ja_JP">
+			<Text>八戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHINOHE" Language="en_US">
+			<Text>Hachinohe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHINOHE" Language="ru_RU">
+			<Text>Хатинохэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNOHE" Language="ja_JP">
+			<Text>九戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNOHE" Language="en_US">
+			<Text>Kunohe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNOHE" Language="ru_RU">
+			<Text>Кунохэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABU" Language="ja_JP">
+			<Text>田名部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABU" Language="en_US">
+			<Text>Tanabu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABU" Language="ru_RU">
+			<Text>Танабу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMIOKA" Language="ja_JP">
+			<Text>浪岡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMIOKA" Language="en_US">
+			<Text>Namioka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMIOKA" Language="ru_RU">
+			<Text>Намиока</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSAMINATO" Language="ja_JP">
+			<Text>十三湊</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSAMINATO" Language="en_US">
+			<Text>Tosaminato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSAMINATO" Language="ru_RU">
+			<Text>Тосаминато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ORA" Language="ja_JP">
+			<Text>大浦</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ORA" Language="en_US">
+			<Text>Ora</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ORA" Language="ru_RU">
+			<Text>Ора</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODAKA" Language="ja_JP">
+			<Text>小高</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODAKA" Language="en_US">
+			<Text>Odaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODAKA" Language="ru_RU">
+			<Text>Одака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROISHI" Language="ja_JP">
+			<Text>白石</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROISHI" Language="en_US">
+			<Text>Shiroishi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROISHI" Language="ru_RU">
+			<Text>Сиройси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUDA" Language="ja_JP">
+			<Text>角田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUDA" Language="en_US">
+			<Text>Kakuda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUDA" Language="ru_RU">
+			<Text>Какуда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIHONMATSU" Language="ja_JP">
+			<Text>二本松</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIHONMATSU" Language="en_US">
+			<Text>Nihonmatsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIHONMATSU" Language="ru_RU">
+			<Text>Нихоммацу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOYAMA" Language="ja_JP">
+			<Text>上山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOYAMA" Language="en_US">
+			<Text>Kaminoyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOYAMA" Language="ru_RU">
+			<Text>Каминояма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENDO" Language="ja_JP">
+			<Text>天童</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENDO" Language="en_US">
+			<Text>Tendo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENDO" Language="ru_RU">
+			<Text>Тэндо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAE" Language="ja_JP">
+			<Text>寒河江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAE" Language="en_US">
+			<Text>Sagae</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAE" Language="ru_RU">
+			<Text>Сагаэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKENOBE" Language="ja_JP">
+			<Text>鮭延</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKENOBE" Language="en_US">
+			<Text>Sakenobe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKENOBE" Language="ru_RU">
+			<Text>Сакэнобэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHAGUROYAMA" Language="ja_JP">
+			<Text>向羽黒山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHAGUROYAMA" Language="en_US">
+			<Text>Mukaihaguroyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHAGUROYAMA" Language="ru_RU">
+			<Text>Мукайхагурояма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOKAWA" Language="ja_JP">
+			<Text>塩川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOKAWA" Language="en_US">
+			<Text>Shiokawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOKAWA" Language="ru_RU">
+			<Text>Сиокава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAIZU" Language="ja_JP">
+			<Text>柳津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAIZU" Language="en_US">
+			<Text>Yanaizu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAIZU" Language="ru_RU">
+			<Text>Янайдзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIGIYAMA" Language="ja_JP">
+			<Text>鴫山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIGIYAMA" Language="en_US">
+			<Text>Shigiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIGIYAMA" Language="ru_RU">
+			<Text>Сигияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGANUMA" Language="ja_JP">
+			<Text>長沼</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGANUMA" Language="en_US">
+			<Text>Naganuma</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGANUMA" Language="ru_RU">
+			<Text>Наганума</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAKAWA" Language="ja_JP">
+			<Text>白河</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAKAWA" Language="en_US">
+			<Text>Shirakawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAKAWA" Language="ru_RU">
+			<Text>Сиракава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKAGAWA" Language="ja_JP">
+			<Text>須賀川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKAGAWA" Language="en_US">
+			<Text>Sukagawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKAGAWA" Language="ru_RU">
+			<Text>Сукагава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARU" Language="ja_JP">
+			<Text>三春</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARU" Language="en_US">
+			<Text>Miharu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARU" Language="ru_RU">
+			<Text>Михару</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKAWA" Language="ja_JP">
+			<Text>石川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKAWA" Language="en_US">
+			<Text>Ishikawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKAWA" Language="ru_RU">
+			<Text>Исикава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANAGURA" Language="ja_JP">
+			<Text>棚倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANAGURA" Language="en_US">
+			<Text>Tanagura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANAGURA" Language="ru_RU">
+			<Text>Танагура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASAKA" Language="ja_JP">
+			<Text>安積</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASAKA" Language="en_US">
+			<Text>Asaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASAKA" Language="ru_RU">
+			<Text>Асака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIHOJI" Language="ja_JP">
+			<Text>大宝寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIHOJI" Language="en_US">
+			<Text>Daihoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIHOJI" Language="ru_RU">
+			<Text>Дайходзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKATA" Language="ja_JP">
+			<Text>酒田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKATA" Language="en_US">
+			<Text>Sakata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKATA" Language="ru_RU">
+			<Text>Саката</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGURO" Language="ja_JP">
+			<Text>羽黒</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGURO" Language="en_US">
+			<Text>Haguro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGURO" Language="ru_RU">
+			<Text>Хагуро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONJO" Language="ja_JP">
+			<Text>本荘</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONJO" Language="en_US">
+			<Text>Honjo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONJO" Language="ru_RU">
+			<Text>Хондзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTE" Language="ja_JP">
+			<Text>横手</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTE" Language="en_US">
+			<Text>Yokote</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTE" Language="ru_RU">
+			<Text>Ёкотэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUZAWA" Language="ja_JP">
+			<Text>湯沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUZAWA" Language="en_US">
+			<Text>Yuzawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUZAWA" Language="ru_RU">
+			<Text>Юдзава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUNODATE" Language="ja_JP">
+			<Text>角館</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUNODATE" Language="en_US">
+			<Text>Kakunodate</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAKUNODATE" Language="ru_RU">
+			<Text>Какунодатэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMAGARI" Language="ja_JP">
+			<Text>大曲</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMAGARI" Language="en_US">
+			<Text>Omagari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMAGARI" Language="ru_RU">
+			<Text>Омагари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIZAKI" Language="ja_JP">
+			<Text>土崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIZAKI" Language="en_US">
+			<Text>Tsuchizaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIZAKI" Language="ru_RU">
+			<Text>Цутидзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIYAMA" Language="ja_JP">
+			<Text>檜山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIYAMA" Language="en_US">
+			<Text>Hiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIYAMA" Language="ru_RU">
+			<Text>Хияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSHIRO" Language="ja_JP">
+			<Text>能代</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSHIRO" Language="en_US">
+			<Text>Noshiro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSHIRO" Language="ru_RU">
+			<Text>Носиро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGA" Language="ja_JP">
+			<Text>男鹿</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGA" Language="en_US">
+			<Text>Oga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGA" Language="ru_RU">
+			<Text>Ога</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODATE" Language="ja_JP">
+			<Text>大館</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODATE" Language="en_US">
+			<Text>Odate</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODATE" Language="ru_RU">
+			<Text>Одатэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INANIWA" Language="ja_JP">
+			<Text>稲庭</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INANIWA" Language="en_US">
+			<Text>Inaniwa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INANIWA" Language="ru_RU">
+			<Text>Инанива</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIMONAI" Language="ja_JP">
+			<Text>西馬音内</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIMONAI" Language="en_US">
+			<Text>Nishimonai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIMONAI" Language="ru_RU">
+			<Text>Нисимонаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMANAWA" Language="ja_JP">
+			<Text>玉縄</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMANAWA" Language="en_US">
+			<Text>Tamanawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMANAWA" Language="ru_RU">
+			<Text>Таманава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMAKURA" Language="ja_JP">
+			<Text>鎌倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMAKURA" Language="en_US">
+			<Text>Kamakura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMAKURA" Language="ru_RU">
+			<Text>Камакура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISAKI" Language="ja_JP">
+			<Text>三崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISAKI" Language="en_US">
+			<Text>Misaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISAKI" Language="ru_RU">
+			<Text>Мисаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URAGA" Language="ja_JP">
+			<Text>浦賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URAGA" Language="en_US">
+			<Text>Uraga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URAGA" Language="ru_RU">
+			<Text>Урага</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKUE" Language="ja_JP">
+			<Text>小机</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKUE" Language="en_US">
+			<Text>Kozukue</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKUE" Language="ru_RU">
+			<Text>Кодзукуэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJISAWA" Language="ja_JP">
+			<Text>藤沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJISAWA" Language="en_US">
+			<Text>Fujisawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJISAWA" Language="ru_RU">
+			<Text>Фудзисава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OISO" Language="ja_JP">
+			<Text>大磯</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OISO" Language="en_US">
+			<Text>Oiso</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OISO" Language="ru_RU">
+			<Text>Ойсо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRAYAMA" Language="ja_JP">
+			<Text>韮山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRAYAMA" Language="en_US">
+			<Text>Nirayama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRAYAMA" Language="ru_RU">
+			<Text>Нираяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISHIMA" Language="ja_JP">
+			<Text>三島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISHIMA" Language="en_US">
+			<Text>Mishima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MISHIMA" Language="ru_RU">
+			<Text>Мисима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMODA" Language="ja_JP">
+			<Text>下田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMODA" Language="en_US">
+			<Text>Shimoda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMODA" Language="ru_RU">
+			<Text>Симода</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATAMI" Language="ja_JP">
+			<Text>熱海</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATAMI" Language="en_US">
+			<Text>Atami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATAMI" Language="ru_RU">
+			<Text>Атами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITO" Language="ja_JP">
+			<Text>伊東</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITO" Language="en_US">
+			<Text>Ito</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITO" Language="ru_RU">
+			<Text>Ито</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHUZENJI" Language="ja_JP">
+			<Text>修善寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHUZENJI" Language="en_US">
+			<Text>Shuzenji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHUZENJI" Language="ru_RU">
+			<Text>Сюдзэндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINAGAWA" Language="ja_JP">
+			<Text>品川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINAGAWA" Language="en_US">
+			<Text>Shinagawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINAGAWA" Language="ru_RU">
+			<Text>Синагава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAGAWA" Language="ja_JP">
+			<Text>神奈川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAGAWA" Language="en_US">
+			<Text>Kanagawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAGAWA" Language="ru_RU">
+			<Text>Канагава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETAGAYA" Language="ja_JP">
+			<Text>世田谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETAGAYA" Language="en_US">
+			<Text>Setagaya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETAGAYA" Language="ru_RU">
+			<Text>Сэтагая</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMURA" Language="ja_JP">
+			<Text>稲村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMURA" Language="en_US">
+			<Text>Inamura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMURA" Language="ru_RU">
+			<Text>Инамура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAHAMA" Language="ja_JP">
+			<Text>白浜</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAHAMA" Language="en_US">
+			<Text>Shirahama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAHAMA" Language="ru_RU">
+			<Text>Сирахама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SEKIYADO" Language="ja_JP">
+			<Text>関宿</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SEKIYADO" Language="en_US">
+			<Text>Sekiyado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SEKIYADO" Language="ru_RU">
+			<Text>Сэкиядо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURA" Language="ja_JP">
+			<Text>佐倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURA" Language="en_US">
+			<Text>Sakura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURA" Language="ru_RU">
+			<Text>Сакура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUI" Language="ja_JP">
+			<Text>臼井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUI" Language="en_US">
+			<Text>Usui</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUI" Language="ru_RU">
+			<Text>Усуи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATORI" Language="ja_JP">
+			<Text>香取</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATORI" Language="en_US">
+			<Text>Katori</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATORI" Language="ru_RU">
+			<Text>Катори</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWARA" Language="ja_JP">
+			<Text>佐原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWARA" Language="en_US">
+			<Text>Sawara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWARA" Language="ru_RU">
+			<Text>Савара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSHI" Language="ja_JP">
+			<Text>銚子</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSHI" Language="en_US">
+			<Text>Choshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSHI" Language="ru_RU">
+			<Text>Тёси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUKI" Language="ja_JP">
+			<Text>結城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUKI" Language="en_US">
+			<Text>Yuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUKI" Language="ru_RU">
+			<Text>Юки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYA" Language="ja_JP">
+			<Text>守谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYA" Language="en_US">
+			<Text>Moriya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYA" Language="ru_RU">
+			<Text>Мория</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOGANE" Language="ja_JP">
+			<Text>小金</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOGANE" Language="en_US">
+			<Text>Kogane</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOGANE" Language="ru_RU">
+			<Text>Коганэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONODAI" Language="ja_JP">
+			<Text>国府台</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONODAI" Language="en_US">
+			<Text>Konodai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONODAI" Language="ru_RU">
+			<Text>Конодаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GYOTOKU" Language="ja_JP">
+			<Text>行徳</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GYOTOKU" Language="en_US">
+			<Text>Gyotoku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GYOTOKU" Language="ru_RU">
+			<Text>Гётоку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAYABASHI" Language="ja_JP">
+			<Text>厩橋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAYABASHI" Language="en_US">
+			<Text>Umayabashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAYABASHI" Language="ru_RU">
+			<Text>Умаябаси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROI" Language="ja_JP">
+			<Text>白井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROI" Language="en_US">
+			<Text>Shiroi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIROI" Language="ru_RU">
+			<Text>Сирои</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUMATA" Language="ja_JP">
+			<Text>沼田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUMATA" Language="en_US">
+			<Text>Numata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUMATA" Language="ru_RU">
+			<Text>Нумата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWABITSU" Language="ja_JP">
+			<Text>岩櫃</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWABITSU" Language="en_US">
+			<Text>Iwabitsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWABITSU" Language="ru_RU">
+			<Text>Ивабицу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TATEBAYASHI" Language="ja_JP">
+			<Text>館林</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TATEBAYASHI" Language="en_US">
+			<Text>Tatebayashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TATEBAYASHI" Language="ru_RU">
+			<Text>Татэбаяси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRYU" Language="ja_JP">
+			<Text>桐生</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRYU" Language="en_US">
+			<Text>Kiryu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRYU" Language="ru_RU">
+			<Text>Кирю</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHIGATA" Language="ja_JP">
+			<Text>鉢形</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHIGATA" Language="en_US">
+			<Text>Hachigata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HACHIGATA" Language="ru_RU">
+			<Text>Хатигата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSHI" Language="ja_JP">
+			<Text>忍</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSHI" Language="en_US">
+			<Text>Oshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSHI" Language="ru_RU">
+			<Text>Оси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWATSUKI" Language="ja_JP">
+			<Text>岩付</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWATSUKI" Language="en_US">
+			<Text>Iwatsuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWATSUKI" Language="ru_RU">
+			<Text>Ивацуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKAYA" Language="ja_JP">
+			<Text>深谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKAYA" Language="en_US">
+			<Text>Fukaya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKAYA" Language="ru_RU">
+			<Text>Фукая</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIYAMA" Language="ja_JP">
+			<Text>滝山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIYAMA" Language="en_US">
+			<Text>Takiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIYAMA" Language="ru_RU">
+			<Text>Такияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHICHIBU" Language="ja_JP">
+			<Text>秩父</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHICHIBU" Language="en_US">
+			<Text>Chichibu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHICHIBU" Language="ru_RU">
+			<Text>Титибу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOMIYA" Language="ja_JP">
+			<Text>宇都宮</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOMIYA" Language="en_US">
+			<Text>Utsunomiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOMIYA" Language="ru_RU">
+			<Text>Уцуномия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OYAMA" Language="ja_JP">
+			<Text>小山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OYAMA" Language="en_US">
+			<Text>Oyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OYAMA" Language="ru_RU">
+			<Text>Ояма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANO" Language="ja_JP">
+			<Text>佐野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANO" Language="en_US">
+			<Text>Sano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANO" Language="ru_RU">
+			<Text>Сано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIKKO" Language="ja_JP">
+			<Text>日光</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIKKO" Language="en_US">
+			<Text>Nikko</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIKKO" Language="ru_RU">
+			<Text>Никко</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARASUYAMA" Language="ja_JP">
+			<Text>烏山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARASUYAMA" Language="en_US">
+			<Text>Karasuyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARASUYAMA" Language="ru_RU">
+			<Text>Карасуяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITO" Language="ja_JP">
+			<Text>水戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITO" Language="en_US">
+			<Text>Mito</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITO" Language="ru_RU">
+			<Text>Мито</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIMA" Language="ja_JP">
+			<Text>鹿島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIMA" Language="en_US">
+			<Text>Kashima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIMA" Language="ru_RU">
+			<Text>Касима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASAMA" Language="ja_JP">
+			<Text>笠間</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASAMA" Language="en_US">
+			<Text>Kasama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASAMA" Language="ru_RU">
+			<Text>Касама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAKABE" Language="ja_JP">
+			<Text>真壁</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAKABE" Language="en_US">
+			<Text>Makabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAKABE" Language="ru_RU">
+			<Text>Макабэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIURA" Language="ja_JP">
+			<Text>土浦</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIURA" Language="en_US">
+			<Text>Tsuchiura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUCHIURA" Language="ru_RU">
+			<Text>Цутиура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURURI" Language="ja_JP">
+			<Text>久留里</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURURI" Language="en_US">
+			<Text>Kururi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURURI" Language="ru_RU">
+			<Text>Курури</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTAKI" Language="ja_JP">
+			<Text>大多喜</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTAKI" Language="en_US">
+			<Text>Otaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTAKI" Language="ru_RU">
+			<Text>Отаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIYATSU" Language="ja_JP">
+			<Text>真里谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIYATSU" Language="en_US">
+			<Text>Mariyatsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIYATSU" Language="ru_RU">
+			<Text>Марияцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIBA" Language="ja_JP">
+			<Text>千葉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIBA" Language="en_US">
+			<Text>Chiba</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIBA" Language="ru_RU">
+			<Text>Тиба</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOFU" Language="ja_JP">
+			<Text>甲府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOFU" Language="en_US">
+			<Text>Kofu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOFU" Language="ru_RU">
+			<Text>Кофу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOGAISAN" Language="ja_JP">
+			<Text>要害山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOGAISAN" Language="en_US">
+			<Text>Yogaisan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOGAISAN" Language="ru_RU">
+			<Text>Ёгайсан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUNUMA" Language="ja_JP">
+			<Text>勝沼</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUNUMA" Language="en_US">
+			<Text>Katsunuma</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUNUMA" Language="ru_RU">
+			<Text>Кацунума</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENZAN" Language="ja_JP">
+			<Text>塩山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENZAN" Language="en_US">
+			<Text>Enzan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENZAN" Language="ru_RU">
+			<Text>Эндзан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ERINJI" Language="ja_JP">
+			<Text>恵林寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ERINJI" Language="en_US">
+			<Text>Erinji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ERINJI" Language="ru_RU">
+			<Text>Эриндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINOBU" Language="ja_JP">
+			<Text>身延</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINOBU" Language="en_US">
+			<Text>Minobu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINOBU" Language="ru_RU">
+			<Text>Минобу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMURA" Language="ja_JP">
+			<Text>谷村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMURA" Language="en_US">
+			<Text>Yamura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMURA" Language="ru_RU">
+			<Text>Ямура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWADONO" Language="ja_JP">
+			<Text>岩殿</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWADONO" Language="en_US">
+			<Text>Iwadono</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWADONO" Language="ru_RU">
+			<Text>Ивадоно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRASAKI" Language="ja_JP">
+			<Text>韮崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRASAKI" Language="en_US">
+			<Text>Nirasaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRASAKI" Language="ru_RU">
+			<Text>Нирасаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKAZAWA" Language="ja_JP">
+			<Text>鰍沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKAZAWA" Language="en_US">
+			<Text>Kajikazawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKAZAWA" Language="ru_RU">
+			<Text>Кадзикадзава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUO" Language="ja_JP">
+			<Text>松尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUO" Language="en_US">
+			<Text>Matsuo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSUO" Language="ru_RU">
+			<Text>Мацуо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATO" Language="ja_JP">
+			<Text>高遠</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATO" Language="en_US">
+			<Text>Takato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATO" Language="ru_RU">
+			<Text>Такато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIDA" Language="ja_JP">
+			<Text>飯田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIDA" Language="en_US">
+			<Text>Iida</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIDA" Language="ru_RU">
+			<Text>Иида</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUWA" Language="ja_JP">
+			<Text>諏訪</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUWA" Language="en_US">
+			<Text>Suwa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUWA" Language="ru_RU">
+			<Text>Сува</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOISHI" Language="ja_JP">
+			<Text>砥石</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOISHI" Language="en_US">
+			<Text>Toishi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOISHI" Language="ru_RU">
+			<Text>Тойси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMORO" Language="ja_JP">
+			<Text>小諸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMORO" Language="en_US">
+			<Text>Komoro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMORO" Language="ru_RU">
+			<Text>Коморо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURADA" Language="ja_JP">
+			<Text>岩村田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURADA" Language="en_US">
+			<Text>Iwamurada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURADA" Language="ru_RU">
+			<Text>Ивамурада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UNNO" Language="ja_JP">
+			<Text>海野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UNNO" Language="en_US">
+			<Text>Unno</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UNNO" Language="ru_RU">
+			<Text>Унно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSURAO" Language="ja_JP">
+			<Text>葛尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSURAO" Language="en_US">
+			<Text>Katsurao</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSURAO" Language="ru_RU">
+			<Text>Кацурао</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAKI" Language="ja_JP">
+			<Text>坂城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAKI" Language="en_US">
+			<Text>Sakaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAKI" Language="ru_RU">
+			<Text>Сакаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENKOJI" Language="ja_JP">
+			<Text>善光寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENKOJI" Language="en_US">
+			<Text>Zenkoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENKOJI" Language="ru_RU">
+			<Text>Дзэнкодзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZU" Language="ja_JP">
+			<Text>海津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZU" Language="en_US">
+			<Text>Kaizu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZU" Language="ru_RU">
+			<Text>Кайдзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISO" Language="ja_JP">
+			<Text>木曽</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISO" Language="en_US">
+			<Text>Kiso</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISO" Language="ru_RU">
+			<Text>Кисо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMACHI" Language="ja_JP">
+			<Text>大町</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMACHI" Language="en_US">
+			<Text>Omachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMACHI" Language="ru_RU">
+			<Text>Омати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOJIRI" Language="ja_JP">
+			<Text>塩尻</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOJIRI" Language="en_US">
+			<Text>Shiojiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIOJIRI" Language="ru_RU">
+			<Text>Сиодзири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKAMIKO" Language="ja_JP">
+			<Text>若神子</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKAMIKO" Language="en_US">
+			<Text>Wakamiko</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKAMIKO" Language="ru_RU">
+			<Text>Вакамико</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKUYO" Language="ja_JP">
+			<Text>福与</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKUYO" Language="en_US">
+			<Text>Fukuyo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKUYO" Language="ru_RU">
+			<Text>Фукуё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAOETSU" Language="ja_JP">
+			<Text>直江津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAOETSU" Language="en_US">
+			<Text>Naoetsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAOETSU" Language="ru_RU">
+			<Text>Наоэцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOCHIO" Language="ja_JP">
+			<Text>栃尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOCHIO" Language="en_US">
+			<Text>Tochio</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOCHIO" Language="ru_RU">
+			<Text>Тотио</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANJO" Language="ja_JP">
+			<Text>三条</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANJO" Language="en_US">
+			<Text>Sanjo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANJO" Language="ru_RU">
+			<Text>Сандзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAODO" Language="ja_JP">
+			<Text>蔵王堂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAODO" Language="en_US">
+			<Text>Zaodo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAODO" Language="ru_RU">
+			<Text>Дзаодо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOITA" Language="ja_JP">
+			<Text>与板</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOITA" Language="en_US">
+			<Text>Yoita</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOITA" Language="ru_RU">
+			<Text>Ёйта</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIWAJIMA" Language="ja_JP">
+			<Text>琵琶島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIWAJIMA" Language="en_US">
+			<Text>Biwajima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIWAJIMA" Language="ru_RU">
+			<Text>Бивадзима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIWAZAKI" Language="ja_JP">
+			<Text>柏崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIWAZAKI" Language="en_US">
+			<Text>Kashiwazaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASHIWAZAKI" Language="ru_RU">
+			<Text>Касивадзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKADO" Language="ja_JP">
+			<Text>坂戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKADO" Language="en_US">
+			<Text>Sakado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKADO" Language="ru_RU">
+			<Text>Сакадо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOMINE" Language="ja_JP">
+			<Text>直峰</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOMINE" Language="en_US">
+			<Text>Nomine</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOMINE" Language="ru_RU">
+			<Text>Номинэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOIGAWA" Language="ja_JP">
+			<Text>糸魚川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOIGAWA" Language="en_US">
+			<Text>Itoigawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOIGAWA" Language="ru_RU">
+			<Text>Итойгава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NECHI" Language="ja_JP">
+			<Text>根知</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NECHI" Language="en_US">
+			<Text>Nechi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NECHI" Language="ru_RU">
+			<Text>Нэти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUDA" Language="ja_JP">
+			<Text>安田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUDA" Language="en_US">
+			<Text>Yasuda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUDA" Language="ru_RU">
+			<Text>Ясуда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBATA" Language="ja_JP">
+			<Text>新発田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBATA" Language="en_US">
+			<Text>Shibata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBATA" Language="ru_RU">
+			<Text>Сибата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURAKAMI" Language="ja_JP">
+			<Text>村上</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURAKAMI" Language="en_US">
+			<Text>Murakami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURAKAMI" Language="ru_RU">
+			<Text>Мураками</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIGATA" Language="ja_JP">
+			<Text>新潟</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIGATA" Language="en_US">
+			<Text>Niigata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIGATA" Language="ru_RU">
+			<Text>Ниигата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUTTARI" Language="ja_JP">
+			<Text>沼垂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUTTARI" Language="en_US">
+			<Text>Nuttari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUTTARI" Language="ru_RU">
+			<Text>Нуттари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMOZAKI" Language="ja_JP">
+			<Text>出雲崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMOZAKI" Language="en_US">
+			<Text>Izumozaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMOZAKI" Language="ru_RU">
+			<Text>Идзумодзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TERADOMARI" Language="ja_JP">
+			<Text>寺泊</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TERADOMARI" Language="en_US">
+			<Text>Teradomari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TERADOMARI" Language="ru_RU">
+			<Text>Тэрадомари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAHIKO" Language="ja_JP">
+			<Text>弥彦</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAHIKO" Language="en_US">
+			<Text>Yahiko</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAHIKO" Language="ru_RU">
+			<Text>Яхико</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OJIYA" Language="ja_JP">
+			<Text>小千谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OJIYA" Language="en_US">
+			<Text>Ojiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OJIYA" Language="ru_RU">
+			<Text>Одзия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAHARADA" Language="ja_JP">
+			<Text>河原田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAHARADA" Language="en_US">
+			<Text>Kawaharada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAHARADA" Language="ru_RU">
+			<Text>Кавахарада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAMOCHI" Language="ja_JP">
+			<Text>羽茂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAMOCHI" Language="en_US">
+			<Text>Hamochi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAMOCHI" Language="ru_RU">
+			<Text>Хамоти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWATA" Language="ja_JP">
+			<Text>雑太</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWATA" Language="en_US">
+			<Text>Sawata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWATA" Language="ru_RU">
+			<Text>Савата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGI" Language="ja_JP">
+			<Text>小木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGI" Language="en_US">
+			<Text>Ogi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGI" Language="ru_RU">
+			<Text>Оги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIYAMA" Language="ja_JP">
+			<Text>飯山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIYAMA" Language="en_US">
+			<Text>Iiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IIYAMA" Language="ru_RU">
+			<Text>Иияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKANO" Language="ja_JP">
+			<Text>中野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKANO" Language="en_US">
+			<Text>Nakano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKANO" Language="ru_RU">
+			<Text>Накано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EJIRI" Language="ja_JP">
+			<Text>江尻</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EJIRI" Language="en_US">
+			<Text>Ejiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EJIRI" Language="ru_RU">
+			<Text>Эдзири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNO" Language="ja_JP">
+			<Text>久能</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNO" Language="en_US">
+			<Text>Kuno</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNO" Language="ru_RU">
+			<Text>Куно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIKO" Language="ja_JP">
+			<Text>丸子</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIKO" Language="en_US">
+			<Text>Mariko</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARIKO" Language="ru_RU">
+			<Text>Марико</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RINZAIJI" Language="ja_JP">
+			<Text>臨済寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RINZAIJI" Language="en_US">
+			<Text>Rinzaiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RINZAIJI" Language="ru_RU">
+			<Text>Риндзайдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANAKURA" Language="ja_JP">
+			<Text>花倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANAKURA" Language="en_US">
+			<Text>Hanakura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANAKURA" Language="ru_RU">
+			<Text>Ханакура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJIEDA" Language="ja_JP">
+			<Text>藤枝</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJIEDA" Language="en_US">
+			<Text>Fujieda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUJIEDA" Language="ru_RU">
+			<Text>Фудзиэда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMADA" Language="ja_JP">
+			<Text>島田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMADA" Language="en_US">
+			<Text>Shimada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMADA" Language="ru_RU">
+			<Text>Симада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAIZU" Language="ja_JP">
+			<Text>焼津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAIZU" Language="en_US">
+			<Text>Yaizu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAIZU" Language="ru_RU">
+			<Text>Яйдзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOYA" Language="ja_JP">
+			<Text>宇津谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOYA" Language="en_US">
+			<Text>Utsunoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUNOYA" Language="ru_RU">
+			<Text>Уцуноя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANBARA" Language="ja_JP">
+			<Text>蒲原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANBARA" Language="en_US">
+			<Text>Kanbara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANBARA" Language="ru_RU">
+			<Text>Камбара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKOKUJI" Language="ja_JP">
+			<Text>興国寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKOKUJI" Language="en_US">
+			<Text>Kokokuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKOKUJI" Language="ru_RU">
+			<Text>Кококудзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIWARA" Language="ja_JP">
+			<Text>吉原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIWARA" Language="en_US">
+			<Text>Yoshiwara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIWARA" Language="ru_RU">
+			<Text>Ёсивара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKASAWA" Language="ja_JP">
+			<Text>深沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKASAWA" Language="en_US">
+			<Text>Fukasawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKASAWA" Language="ru_RU">
+			<Text>Фукасава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZURAYAMA" Language="ja_JP">
+			<Text>葛山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZURAYAMA" Language="en_US">
+			<Text>Kazurayama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZURAYAMA" Language="ru_RU">
+			<Text>Кадзураяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKE" Language="ja_JP">
+			<Text>見付</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKE" Language="en_US">
+			<Text>Mitsuke</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKE" Language="ru_RU">
+			<Text>Мицукэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUTAMATA" Language="ja_JP">
+			<Text>二俣</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUTAMATA" Language="en_US">
+			<Text>Futamata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUTAMATA" Language="ru_RU">
+			<Text>Футамата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATENJIN" Language="ja_JP">
+			<Text>高天神</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATENJIN" Language="en_US">
+			<Text>Takatenjin</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKATENJIN" Language="ru_RU">
+			<Text>Такатэндзин</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORIE" Language="ja_JP">
+			<Text>堀江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORIE" Language="en_US">
+			<Text>Horie</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORIE" Language="ru_RU">
+			<Text>Хориэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINOYA" Language="ja_JP">
+			<Text>井伊谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINOYA" Language="en_US">
+			<Text>Iinoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINOYA" Language="ru_RU">
+			<Text>Ииноя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAISAKA" Language="ja_JP">
+			<Text>舞坂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAISAKA" Language="en_US">
+			<Text>Maisaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MAISAKA" Language="ru_RU">
+			<Text>Майсака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARAI" Language="ja_JP">
+			<Text>新居</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARAI" Language="en_US">
+			<Text>Arai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARAI" Language="ru_RU">
+			<Text>Араи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUI" Language="ja_JP">
+			<Text>犬居</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUI" Language="en_US">
+			<Text>Inui</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUI" Language="ru_RU">
+			<Text>Инуи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIHA" Language="ja_JP">
+			<Text>秋葉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIHA" Language="en_US">
+			<Text>Akiha</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIHA" Language="ru_RU">
+			<Text>Акиха</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGARA" Language="ja_JP">
+			<Text>相良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGARA" Language="en_US">
+			<Text>Sagara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGARA" Language="ru_RU">
+			<Text>Сагара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAYA" Language="ja_JP">
+			<Text>金谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAYA" Language="en_US">
+			<Text>Kanaya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAYA" Language="ru_RU">
+			<Text>Каная</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISSAKA" Language="ja_JP">
+			<Text>日坂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISSAKA" Language="en_US">
+			<Text>Nissaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISSAKA" Language="ru_RU">
+			<Text>Ниссака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUSHIMA" Language="ja_JP">
+			<Text>津島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUSHIMA" Language="en_US">
+			<Text>Tsushima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUSHIMA" Language="ru_RU">
+			<Text>Цусима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATSUTA" Language="ja_JP">
+			<Text>熱田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATSUTA" Language="en_US">
+			<Text>Atsuta</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ATSUTA" Language="ru_RU">
+			<Text>Ацута</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSU" Language="ja_JP">
+			<Text>清洲</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSU" Language="en_US">
+			<Text>Kiyosu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSU" Language="ru_RU">
+			<Text>Киёсу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKURA" Language="ja_JP">
+			<Text>岩倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKURA" Language="en_US">
+			<Text>Iwakura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKURA" Language="ru_RU">
+			<Text>Ивакура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUYAMA" Language="ja_JP">
+			<Text>犬山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUYAMA" Language="en_US">
+			<Text>Inuyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INUYAMA" Language="ru_RU">
+			<Text>Инуяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMAKI" Language="ja_JP">
+			<Text>小牧</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMAKI" Language="en_US">
+			<Text>Komaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMAKI" Language="ru_RU">
+			<Text>Комаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUEMORI" Language="ja_JP">
+			<Text>末森</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUEMORI" Language="en_US">
+			<Text>Suemori</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUEMORI" Language="ru_RU">
+			<Text>Суэмори</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYAMA" Language="ja_JP">
+			<Text>守山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYAMA" Language="en_US">
+			<Text>Moriyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MORIYAMA" Language="ru_RU">
+			<Text>Морияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARUMI" Language="ja_JP">
+			<Text>鳴海</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARUMI" Language="en_US">
+			<Text>Narumi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARUMI" Language="ru_RU">
+			<Text>Наруми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKAKE" Language="ja_JP">
+			<Text>沓掛</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKAKE" Language="en_US">
+			<Text>Kutsukake</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKAKE" Language="ru_RU">
+			<Text>Куцукакэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOSHIZAKI" Language="ja_JP">
+			<Text>星崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOSHIZAKI" Language="en_US">
+			<Text>Hoshizaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOSHIZAKI" Language="ru_RU">
+			<Text>Хосидзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKEHAZAMA" Language="ja_JP">
+			<Text>桶狭間</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKEHAZAMA" Language="en_US">
+			<Text>Okehazama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKEHAZAMA" Language="ru_RU">
+			<Text>Окэхадзама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKONAME" Language="ja_JP">
+			<Text>常滑</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKONAME" Language="en_US">
+			<Text>Tokoname</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKONAME" Language="ru_RU">
+			<Text>Токонамэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGAWA" Language="ja_JP">
+			<Text>緒川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGAWA" Language="en_US">
+			<Text>Ogawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGAWA" Language="ru_RU">
+			<Text>Огава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOROZAKI" Language="ja_JP">
+			<Text>師崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOROZAKI" Language="en_US">
+			<Text>Morozaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOROZAKI" Language="ru_RU">
+			<Text>Мородзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANIE" Language="ja_JP">
+			<Text>蟹江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANIE" Language="en_US">
+			<Text>Kanie</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANIE" Language="ru_RU">
+			<Text>Каниэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JIMOKUJI" Language="ja_JP">
+			<Text>甚目寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JIMOKUJI" Language="en_US">
+			<Text>Jimokuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JIMOKUJI" Language="ru_RU">
+			<Text>Дзимокудзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAYAZU" Language="ja_JP">
+			<Text>萱津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAYAZU" Language="en_US">
+			<Text>Kayazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAYAZU" Language="ru_RU">
+			<Text>Каядзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUDEN" Language="ja_JP">
+			<Text>楽田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUDEN" Language="en_US">
+			<Text>Gakuden</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUDEN" Language="ru_RU">
+			<Text>Гакудэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURODA" Language="ja_JP">
+			<Text>黒田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURODA" Language="en_US">
+			<Text>Kuroda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURODA" Language="ru_RU">
+			<Text>Курода</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHINOMIYA" Language="ja_JP">
+			<Text>一宮</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHINOMIYA" Language="en_US">
+			<Text>Ichinomiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHINOMIYA" Language="ru_RU">
+			<Text>Итиномия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMIYA" Language="ja_JP">
+			<Text>国府宮</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMIYA" Language="en_US">
+			<Text>Konomiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMIYA" Language="ru_RU">
+			<Text>Кономия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRA" Language="ja_JP">
+			<Text>比良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRA" Language="en_US">
+			<Text>Hira</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRA" Language="ru_RU">
+			<Text>Хира</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETO" Language="ja_JP">
+			<Text>瀬戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETO" Language="en_US">
+			<Text>Seto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETO" Language="ru_RU">
+			<Text>Сэто</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBATA" Language="ja_JP">
+			<Text>小幡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBATA" Language="en_US">
+			<Text>Obata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBATA" Language="ru_RU">
+			<Text>Обата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWASAKI" Language="ja_JP">
+			<Text>岩崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWASAKI" Language="en_US">
+			<Text>Iwasaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWASAKI" Language="ru_RU">
+			<Text>Ивасаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKOSHI" Language="ja_JP">
+			<Text>起</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKOSHI" Language="en_US">
+			<Text>Okoshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKOSHI" Language="ru_RU">
+			<Text>Окоси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANJO" Language="ja_JP">
+			<Text>安祥</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANJO" Language="en_US">
+			<Text>Anjo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANJO" Language="ru_RU">
+			<Text>Андзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAZU" Language="ja_JP">
+			<Text>岩津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAZU" Language="en_US">
+			<Text>Iwazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAZU" Language="ru_RU">
+			<Text>Ивадзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGYU" Language="ja_JP">
+			<Text>大給</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGYU" Language="en_US">
+			<Text>Ogyu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OGYU" Language="ru_RU">
+			<Text>Огю</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIJUJI" Language="ja_JP">
+			<Text>大樹寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIJUJI" Language="en_US">
+			<Text>Daijuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIJUJI" Language="ru_RU">
+			<Text>Дайдзюдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIO" Language="ja_JP">
+			<Text>西尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIO" Language="en_US">
+			<Text>Nishio</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIO" Language="ru_RU">
+			<Text>Нисио</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRA" Language="ja_JP">
+			<Text>吉良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRA" Language="en_US">
+			<Text>Kira</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRA" Language="ru_RU">
+			<Text>Кира</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOJO" Language="ja_JP">
+			<Text>東条</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOJO" Language="en_US">
+			<Text>Tojo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOJO" Language="ru_RU">
+			<Text>Тодзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARIYA" Language="ja_JP">
+			<Text>刈谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARIYA" Language="en_US">
+			<Text>Kariya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KARIYA" Language="ru_RU">
+			<Text>Кария</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOROMO" Language="ja_JP">
+			<Text>挙母</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOROMO" Language="en_US">
+			<Text>Koromo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOROMO" Language="ru_RU">
+			<Text>Коромо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUKE" Language="ja_JP">
+			<Text>足助</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUKE" Language="en_US">
+			<Text>Asuke</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUKE" Language="ru_RU">
+			<Text>Асукэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAZU" Language="ja_JP">
+			<Text>幡豆</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAZU" Language="en_US">
+			<Text>Hazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAZU" Language="ru_RU">
+			<Text>Хадзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATANOHARA" Language="ja_JP">
+			<Text>形原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATANOHARA" Language="en_US">
+			<Text>Katanohara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATANOHARA" Language="ru_RU">
+			<Text>Катанохара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKOZU" Language="ja_JP">
+			<Text>深溝</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKOZU" Language="en_US">
+			<Text>Fukozu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUKOZU" Language="ru_RU">
+			<Text>Фукодзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKENOYA" Language="ja_JP">
+			<Text>竹谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKENOYA" Language="en_US">
+			<Text>Takenoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKENOYA" Language="ru_RU">
+			<Text>Такэноя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOGO" Language="ja_JP">
+			<Text>上ノ郷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOGO" Language="en_US">
+			<Text>Kaminogo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOGO" Language="ru_RU">
+			<Text>Каминого</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUKUDE" Language="ja_JP">
+			<Text>作手</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUKUDE" Language="en_US">
+			<Text>Tsukude</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUKUDE" Language="ru_RU">
+			<Text>Цукудэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHINO" Language="ja_JP">
+			<Text>長篠</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHINO" Language="en_US">
+			<Text>Nagashino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHINO" Language="ru_RU">
+			<Text>Нагасино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NODA" Language="ja_JP">
+			<Text>野田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NODA" Language="en_US">
+			<Text>Noda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NODA" Language="ru_RU">
+			<Text>Нода</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAMINE" Language="ja_JP">
+			<Text>田峯</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAMINE" Language="en_US">
+			<Text>Damine</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAMINE" Language="ru_RU">
+			<Text>Даминэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORAIJI" Language="ja_JP">
+			<Text>鳳来寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORAIJI" Language="en_US">
+			<Text>Horaiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HORAIJI" Language="ru_RU">
+			<Text>Хорайдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOKAWA" Language="ja_JP">
+			<Text>豊川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOKAWA" Language="en_US">
+			<Text>Toyokawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOKAWA" Language="ru_RU">
+			<Text>Тоёкава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKUBO" Language="ja_JP">
+			<Text>牛久保</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKUBO" Language="en_US">
+			<Text>Ushikubo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKUBO" Language="ru_RU">
+			<Text>Усикубо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAHASHI" Language="ja_JP">
+			<Text>今橋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAHASHI" Language="en_US">
+			<Text>Imahashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAHASHI" Language="ru_RU">
+			<Text>Имахаси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRENGI" Language="ja_JP">
+			<Text>二連木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRENGI" Language="en_US">
+			<Text>Nirengi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIRENGI" Language="ru_RU">
+			<Text>Нирэнги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAHARA" Language="ja_JP">
+			<Text>田原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAHARA" Language="en_US">
+			<Text>Tahara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAHARA" Language="ru_RU">
+			<Text>Тахара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUWA" Language="ja_JP">
+			<Text>足羽</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUWA" Language="en_US">
+			<Text>Asuwa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUWA" Language="ru_RU">
+			<Text>Асува</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN_FUCHU" Language="ja_JP">
+			<Text>越前府中</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN_FUCHU" Language="en_US">
+			<Text>Echizen Fuchu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN_FUCHU" Language="ru_RU">
+			<Text>Этидзэн-Футю</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SABAE" Language="ja_JP">
+			<Text>鯖江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SABAE" Language="en_US">
+			<Text>Sabae</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SABAE" Language="ru_RU">
+			<Text>Сабаэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOGO" Language="ja_JP">
+			<Text>東郷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOGO" Language="en_US">
+			<Text>Togo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOGO" Language="ru_RU">
+			<Text>Того</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONO" Language="ja_JP">
+			<Text>大野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONO" Language="en_US">
+			<Text>Ono</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONO" Language="ru_RU">
+			<Text>Оно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEISENJI" Language="ja_JP">
+			<Text>平泉寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEISENJI" Language="en_US">
+			<Text>Heisenji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEISENJI" Language="ru_RU">
+			<Text>Хэйсэндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIHEIJI" Language="ja_JP">
+			<Text>永平寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIHEIJI" Language="en_US">
+			<Text>Eiheiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIHEIJI" Language="ru_RU">
+			<Text>Эйхэйдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIHI" Language="ja_JP">
+			<Text>志比</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIHI" Language="en_US">
+			<Text>Shihi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIHI" Language="ru_RU">
+			<Text>Сихи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOHARAJI" Language="ja_JP">
+			<Text>豊原寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOHARAJI" Language="en_US">
+			<Text>Toyoharaji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOYOHARAJI" Language="ru_RU">
+			<Text>Тоёхарадзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAGUCHI" Language="ja_JP">
+			<Text>河口</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAGUCHI" Language="en_US">
+			<Text>Kawaguchi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAGUCHI" Language="ru_RU">
+			<Text>Кавагути</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUBOE" Language="ja_JP">
+			<Text>坪江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUBOE" Language="en_US">
+			<Text>Tsuboe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUBOE" Language="ru_RU">
+			<Text>Цубоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZU" Language="ja_JP">
+			<Text>金津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZU" Language="en_US">
+			<Text>Kanazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZU" Language="ru_RU">
+			<Text>Канадзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUNI" Language="ja_JP">
+			<Text>三国</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUNI" Language="en_US">
+			<Text>Mikuni</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUNI" Language="ru_RU">
+			<Text>Микуни</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIDANJI" Language="ja_JP">
+			<Text>滝谷寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIDANJI" Language="en_US">
+			<Text>Takidanji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKIDANJI" Language="ru_RU">
+			<Text>Такидандзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOMAYAMA" Language="ja_JP">
+			<Text>杣山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOMAYAMA" Language="en_US">
+			<Text>Somayama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOMAYAMA" Language="ru_RU">
+			<Text>Сомаяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAJO" Language="ja_JP">
+			<Text>今庄</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAJO" Language="en_US">
+			<Text>Imajo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAJO" Language="ru_RU">
+			<Text>Имадзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OCHISAN" Language="ja_JP">
+			<Text>越知山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OCHISAN" Language="en_US">
+			<Text>Ochisan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OCHISAN" Language="ru_RU">
+			<Text>Отисан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGA" Language="ja_JP">
+			<Text>敦賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGA" Language="en_US">
+			<Text>Tsuruga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGA" Language="ru_RU">
+			<Text>Цуруга</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KEHI" Language="ja_JP">
+			<Text>気比</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KEHI" Language="en_US">
+			<Text>Kehi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KEHI" Language="ru_RU">
+			<Text>Кэхи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANEGASAKI" Language="ja_JP">
+			<Text>金ヶ崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANEGASAKI" Language="en_US">
+			<Text>Kanegasaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANEGASAKI" Language="ru_RU">
+			<Text>Канэгасаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKIDA" Language="ja_JP">
+			<Text>疋壇</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKIDA" Language="en_US">
+			<Text>Hikida</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKIDA" Language="ru_RU">
+			<Text>Хикида</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASU" Language="ja_JP">
+			<Text>鷹巣</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASU" Language="en_US">
+			<Text>Takasu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASU" Language="ru_RU">
+			<Text>Такасу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARUOKA" Language="ja_JP">
+			<Text>丸岡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARUOKA" Language="en_US">
+			<Text>Maruoka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MARUOKA" Language="ru_RU">
+			<Text>Маруока</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIFUKUJI" Language="ja_JP">
+			<Text>西福寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIFUKUJI" Language="en_US">
+			<Text>Saifukuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIFUKUJI" Language="ru_RU">
+			<Text>Сайфукудзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHONENJI" Language="ja_JP">
+			<Text>称念寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHONENJI" Language="en_US">
+			<Text>Shonenji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHONENJI" Language="ru_RU">
+			<Text>Сёнэндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIYOSHI" Language="ja_JP">
+			<Text>国吉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIYOSHI" Language="en_US">
+			<Text>Kuniyoshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIYOSHI" Language="ru_RU">
+			<Text>Куниёси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUSHIMI" Language="ja_JP">
+			<Text>伏見</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUSHIMI" Language="en_US">
+			<Text>Fushimi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FUSHIMI" Language="ru_RU">
+			<Text>Фусими</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UJI" Language="ja_JP">
+			<Text>宇治</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UJI" Language="en_US">
+			<Text>Uji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UJI" Language="ru_RU">
+			<Text>Удзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAZAKI" Language="ja_JP">
+			<Text>山崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAZAKI" Language="en_US">
+			<Text>Yamazaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAZAKI" Language="ru_RU">
+			<Text>Ямадзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODO" Language="ja_JP">
+			<Text>淀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODO" Language="en_US">
+			<Text>Yodo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODO" Language="ru_RU">
+			<Text>Ёдо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIGO" Language="ja_JP">
+			<Text>醍醐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIGO" Language="en_US">
+			<Text>Daigo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAIGO" Language="ru_RU">
+			<Text>Дайго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURAMA" Language="ja_JP">
+			<Text>鞍馬</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURAMA" Language="en_US">
+			<Text>Kurama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURAMA" Language="ru_RU">
+			<Text>Курама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OHARA" Language="ja_JP">
+			<Text>大原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OHARA" Language="en_US">
+			<Text>Ohara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OHARA" Language="ru_RU">
+			<Text>Охара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARA" Language="ja_JP">
+			<Text>奈良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARA" Language="en_US">
+			<Text>Nara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NARA" Language="ru_RU">
+			<Text>Нара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUTSUI" Language="ja_JP">
+			<Text>筒井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUTSUI" Language="en_US">
+			<Text>Tsutsui</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUTSUI" Language="ru_RU">
+			<Text>Цуцуи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHINO" Language="ja_JP">
+			<Text>吉野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHINO" Language="en_US">
+			<Text>Yoshino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHINO" Language="ru_RU">
+			<Text>Ёсино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAI" Language="ja_JP">
+			<Text>堺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAI" Language="en_US">
+			<Text>Sakai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAI" Language="ru_RU">
+			<Text>Сакаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHIWADA" Language="ja_JP">
+			<Text>岸和田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHIWADA" Language="en_US">
+			<Text>Kishiwada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHIWADA" Language="ru_RU">
+			<Text>Кисивада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEGORO" Language="ja_JP">
+			<Text>根来</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEGORO" Language="en_US">
+			<Text>Negoro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEGORO" Language="ru_RU">
+			<Text>Нэгоро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOYASAN" Language="ja_JP">
+			<Text>高野山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOYASAN" Language="en_US">
+			<Text>Koyasan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOYASAN" Language="ru_RU">
+			<Text>Коясан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKAWA" Language="ja_JP">
+			<Text>粉河</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKAWA" Language="en_US">
+			<Text>Kokawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKAWA" Language="ru_RU">
+			<Text>Кокава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKA" Language="ja_JP">
+			<Text>雑賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKA" Language="en_US">
+			<Text>Saika</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKA" Language="ru_RU">
+			<Text>Сайка</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINGU" Language="ja_JP">
+			<Text>新宮</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINGU" Language="en_US">
+			<Text>Shingu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINGU" Language="ru_RU">
+			<Text>Сингу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABE" Language="ja_JP">
+			<Text>田辺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABE" Language="en_US">
+			<Text>Tanabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANABE" Language="ru_RU">
+			<Text>Танабэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMADA" Language="ja_JP">
+			<Text>山田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMADA" Language="en_US">
+			<Text>Yamada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMADA" Language="ru_RU">
+			<Text>Ямада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANOTSU" Language="ja_JP">
+			<Text>安濃津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANOTSU" Language="en_US">
+			<Text>Anotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ANOTSU" Language="ru_RU">
+			<Text>Аноцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUWANA" Language="ja_JP">
+			<Text>桑名</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUWANA" Language="en_US">
+			<Text>Kuwana</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUWANA" Language="ru_RU">
+			<Text>Кувана</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMINATO" Language="ja_JP">
+			<Text>大湊</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMINATO" Language="en_US">
+			<Text>Ominato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMINATO" Language="ru_RU">
+			<Text>Оминато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOBA" Language="ja_JP">
+			<Text>鳥羽</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOBA" Language="en_US">
+			<Text>Toba</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOBA" Language="ru_RU">
+			<Text>Тоба</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWATE" Language="ja_JP">
+			<Text>革手</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWATE" Language="en_US">
+			<Text>Kawate</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWATE" Language="ru_RU">
+			<Text>Каватэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURA" Language="ja_JP">
+			<Text>岩村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURA" Language="en_US">
+			<Text>Iwamura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMURA" Language="ru_RU">
+			<Text>Ивамура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURUKAWA" Language="ja_JP">
+			<Text>古川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURUKAWA" Language="en_US">
+			<Text>Furukawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURUKAWA" Language="ru_RU">
+			<Text>Фурукава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBAMA" Language="ja_JP">
+			<Text>小浜</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBAMA" Language="en_US">
+			<Text>Obama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OBAMA" Language="ru_RU">
+			<Text>Обама</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAJIMA" Language="ja_JP">
+			<Text>輪島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAJIMA" Language="en_US">
+			<Text>Wajima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAJIMA" Language="ru_RU">
+			<Text>Вадзима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUYAMA" Language="ja_JP">
+			<Text>増山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUYAMA" Language="en_US">
+			<Text>Masuyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUYAMA" Language="ru_RU">
+			<Text>Масуяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZU" Language="ja_JP">
+			<Text>宮津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZU" Language="en_US">
+			<Text>Miyazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZU" Language="ru_RU">
+			<Text>Миядзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUSHI" Language="ja_JP">
+			<Text>出石</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUSHI" Language="en_US">
+			<Text>Izushi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUSHI" Language="ru_RU">
+			<Text>Идзуси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AGA" Language="ja_JP">
+			<Text>英賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AGA" Language="en_US">
+			<Text>Aga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AGA" Language="ru_RU">
+			<Text>Ага</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOSHAZAN" Language="ja_JP">
+			<Text>書写山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOSHAZAN" Language="en_US">
+			<Text>Shoshazan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOSHAZAN" Language="ru_RU">
+			<Text>Сёсядзан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTSU" Language="ja_JP">
+			<Text>室津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTSU" Language="en_US">
+			<Text>Murotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTSU" Language="ru_RU">
+			<Text>Муроцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSAFUNE" Language="ja_JP">
+			<Text>長船</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSAFUNE" Language="en_US">
+			<Text>Osafune</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSAFUNE" Language="ru_RU">
+			<Text>Осафунэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIMADO" Language="ja_JP">
+			<Text>牛窓</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIMADO" Language="en_US">
+			<Text>Ushimado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIMADO" Language="ru_RU">
+			<Text>Усимадо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSU" Language="ja_JP">
+			<Text>三津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSU" Language="en_US">
+			<Text>Mitsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSU" Language="ru_RU">
+			<Text>Мицу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKUTAGAWA" Language="ja_JP">
+			<Text>芥川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKUTAGAWA" Language="en_US">
+			<Text>Akutagawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKUTAGAWA" Language="ru_RU">
+			<Text>Акутагава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSHIMIZU" Language="ja_JP">
+			<Text>越水</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSHIMIZU" Language="en_US">
+			<Text>Koshimizu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSHIMIZU" Language="ru_RU">
+			<Text>Косимидзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKEDA" Language="ja_JP">
+			<Text>池田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKEDA" Language="en_US">
+			<Text>Ikeda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKEDA" Language="ru_RU">
+			<Text>Икэда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITAMI" Language="ja_JP">
+			<Text>伊丹</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITAMI" Language="en_US">
+			<Text>Itami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITAMI" Language="ru_RU">
+			<Text>Итами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBARAKI" Language="ja_JP">
+			<Text>茨木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBARAKI" Language="en_US">
+			<Text>Ibaraki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBARAKI" Language="ru_RU">
+			<Text>Ибараки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AMAGASAKI" Language="ja_JP">
+			<Text>尼崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AMAGASAKI" Language="en_US">
+			<Text>Amagasaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AMAGASAKI" Language="ru_RU">
+			<Text>Амагасаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYOGO" Language="ja_JP">
+			<Text>兵庫</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYOGO" Language="en_US">
+			<Text>Hyogo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYOGO" Language="ru_RU">
+			<Text>Хёго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHINOMIYA" Language="ja_JP">
+			<Text>西宮</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHINOMIYA" Language="en_US">
+			<Text>Nishinomiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHINOMIYA" Language="ru_RU">
+			<Text>Нисиномия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARIMA" Language="ja_JP">
+			<Text>有馬</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARIMA" Language="en_US">
+			<Text>Arima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARIMA" Language="ru_RU">
+			<Text>Арима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMIYOSHI" Language="ja_JP">
+			<Text>住吉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMIYOSHI" Language="en_US">
+			<Text>Sumiyoshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMIYOSHI" Language="ru_RU">
+			<Text>Сумиёси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSE" Language="ja_JP">
+			<Text>能勢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSE" Language="en_US">
+			<Text>Nose</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOSE" Language="ru_RU">
+			<Text>Носэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUYA" Language="ja_JP">
+			<Text>撫養</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUYA" Language="en_US">
+			<Text>Muya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUYA" Language="ru_RU">
+			<Text>Муя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKI" Language="ja_JP">
+			<Text>脇</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKI" Language="en_US">
+			<Text>Waki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKI" Language="ru_RU">
+			<Text>Ваки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIFU" Language="ja_JP">
+			<Text>海部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIFU" Language="en_US">
+			<Text>Kaifu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIFU" Language="ru_RU">
+			<Text>Кайфу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKI" Language="ja_JP">
+			<Text>牛岐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKI" Language="en_US">
+			<Text>Ushiki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIKI" Language="ru_RU">
+			<Text>Усики</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOGO" Language="ja_JP">
+			<Text>十河</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOGO" Language="en_US">
+			<Text>Sogo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOGO" Language="ru_RU">
+			<Text>Сого</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZAI" Language="ja_JP">
+			<Text>香西</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZAI" Language="en_US">
+			<Text>Kozai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZAI" Language="ru_RU">
+			<Text>Кодзаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTAZU" Language="ja_JP">
+			<Text>宇多津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTAZU" Language="en_US">
+			<Text>Utazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTAZU" Language="ru_RU">
+			<Text>Утадзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TADOTSU" Language="ja_JP">
+			<Text>多度津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TADOTSU" Language="en_US">
+			<Text>Tadotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TADOTSU" Language="ru_RU">
+			<Text>Тадоцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKETA" Language="ja_JP">
+			<Text>引田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKETA" Language="en_US">
+			<Text>Hiketa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKETA" Language="ru_RU">
+			<Text>Хикэта</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENTSUJI" Language="ja_JP">
+			<Text>善通寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENTSUJI" Language="en_US">
+			<Text>Zentsuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZENTSUJI" Language="ru_RU">
+			<Text>Дзэнцудзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIDO" Language="ja_JP">
+			<Text>志度</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIDO" Language="en_US">
+			<Text>Shido</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIDO" Language="ru_RU">
+			<Text>Сидо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASHIMA" Language="ja_JP">
+			<Text>屋島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASHIMA" Language="en_US">
+			<Text>Yashima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASHIMA" Language="ru_RU">
+			<Text>Ясима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMOTO" Language="ja_JP">
+			<Text>洲本</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMOTO" Language="en_US">
+			<Text>Sumoto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUMOTO" Language="ru_RU">
+			<Text>Сумото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAYA" Language="ja_JP">
+			<Text>岩屋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAYA" Language="en_US">
+			<Text>Iwaya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAYA" Language="ru_RU">
+			<Text>Ивая</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YURA" Language="ja_JP">
+			<Text>由良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YURA" Language="en_US">
+			<Text>Yura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YURA" Language="ru_RU">
+			<Text>Юра</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMEYAMA" Language="ja_JP">
+			<Text>亀山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMEYAMA" Language="en_US">
+			<Text>Kameyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMEYAMA" Language="ru_RU">
+			<Text>Камэяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROI" Language="ja_JP">
+			<Text>黒井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROI" Language="en_US">
+			<Text>Kuroi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROI" Language="ru_RU">
+			<Text>Курои</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAGI" Language="ja_JP">
+			<Text>八木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAGI" Language="en_US">
+			<Text>Yagi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAGI" Language="ru_RU">
+			<Text>Яги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYABE" Language="ja_JP">
+			<Text>綾部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYABE" Language="en_US">
+			<Text>Ayabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYABE" Language="ru_RU">
+			<Text>Аябэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOKOJI" Language="ja_JP">
+			<Text>長光寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOKOJI" Language="en_US">
+			<Text>Chokoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOKOJI" Language="ru_RU">
+			<Text>Тёкодзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINO" Language="ja_JP">
+			<Text>日野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINO" Language="en_US">
+			<Text>Hino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINO" Language="ru_RU">
+			<Text>Хино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUMO" Language="ja_JP">
+			<Text>三雲</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUMO" Language="en_US">
+			<Text>Mikumo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKUMO" Language="ru_RU">
+			<Text>Микумо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINAKUCHI" Language="ja_JP">
+			<Text>水口</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINAKUCHI" Language="en_US">
+			<Text>Minakuchi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINAKUCHI" Language="ru_RU">
+			<Text>Минакути</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKA" Language="ja_JP">
+			<Text>甲賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKA" Language="en_US">
+			<Text>Koka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKA" Language="ru_RU">
+			<Text>Кока</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASU" Language="ja_JP">
+			<Text>野洲</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASU" Language="en_US">
+			<Text>Yasu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASU" Language="ru_RU">
+			<Text>Ясу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSATSU" Language="ja_JP">
+			<Text>草津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSATSU" Language="en_US">
+			<Text>Kusatsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSATSU" Language="ru_RU">
+			<Text>Кусацу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETA" Language="ja_JP">
+			<Text>瀬田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETA" Language="en_US">
+			<Text>Seta</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETA" Language="ru_RU">
+			<Text>Сэта</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAMOTO" Language="ja_JP">
+			<Text>坂本</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAMOTO" Language="en_US">
+			<Text>Sakamoto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAMOTO" Language="ru_RU">
+			<Text>Сакамото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENRYAKUJI" Language="ja_JP">
+			<Text>延暦寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENRYAKUJI" Language="en_US">
+			<Text>Enryakuji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ENRYAKUJI" Language="ru_RU">
+			<Text>Энрякудзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATATA" Language="ja_JP">
+			<Text>堅田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATATA" Language="en_US">
+			<Text>Katata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATATA" Language="ru_RU">
+			<Text>Катата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKAICHI" Language="ja_JP">
+			<Text>八日市</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKAICHI" Language="en_US">
+			<Text>Yokaichi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKAICHI" Language="ru_RU">
+			<Text>Ёкайти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGAWA" Language="ja_JP">
+			<Text>愛知川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGAWA" Language="en_US">
+			<Text>Echigawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGAWA" Language="ru_RU">
+			<Text>Этигава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYAKUSAIJI" Language="ja_JP">
+			<Text>百済寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYAKUSAIJI" Language="en_US">
+			<Text>Hyakusaiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYAKUSAIJI" Language="ru_RU">
+			<Text>Хякусайдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIGENJI" Language="ja_JP">
+			<Text>永源寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIGENJI" Language="en_US">
+			<Text>Eigenji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EIGENJI" Language="ru_RU">
+			<Text>Эйгэндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AZUCHI" Language="ja_JP">
+			<Text>安土</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AZUCHI" Language="en_US">
+			<Text>Azuchi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AZUCHI" Language="ru_RU">
+			<Text>Адзути</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGA" Language="ja_JP">
+			<Text>多賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGA" Language="en_US">
+			<Text>Taga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAGA" Language="ru_RU">
+			<Text>Тага</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWAYAMA" Language="ja_JP">
+			<Text>佐和山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWAYAMA" Language="en_US">
+			<Text>Sawayama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAWAYAMA" Language="ru_RU">
+			<Text>Саваяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAMEGAI" Language="ja_JP">
+			<Text>醒井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAMEGAI" Language="en_US">
+			<Text>Samegai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAMEGAI" Language="ru_RU">
+			<Text>Самэгаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODANI" Language="ja_JP">
+			<Text>小谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODANI" Language="en_US">
+			<Text>Odani</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ODANI" Language="ru_RU">
+			<Text>Одани</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUBUSHIMA" Language="ja_JP">
+			<Text>竹生島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUBUSHIMA" Language="en_US">
+			<Text>Chikubushima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUBUSHIMA" Language="ru_RU">
+			<Text>Тикубусима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASHIMA" Language="ja_JP">
+			<Text>高島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASHIMA" Language="en_US">
+			<Text>Takashima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASHIMA" Language="ru_RU">
+			<Text>Такасима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKI" Language="ja_JP">
+			<Text>朽木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKI" Language="en_US">
+			<Text>Kutsuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUTSUKI" Language="ru_RU">
+			<Text>Куцуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKURI" Language="ja_JP">
+			<Text>箕作</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKURI" Language="en_US">
+			<Text>Mitsukuri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUKURI" Language="ru_RU">
+			<Text>Мицукури</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMAZUE" Language="ja_JP">
+			<Text>鯰江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMAZUE" Language="en_US">
+			<Text>Namazue</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAMAZUE" Language="ru_RU">
+			<Text>Намадзуэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENNOJI" Language="ja_JP">
+			<Text>天王寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENNOJI" Language="en_US">
+			<Text>Tennoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TENNOJI" Language="ru_RU">
+			<Text>Тэннодзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRANO" Language="ja_JP">
+			<Text>平野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRANO" Language="en_US">
+			<Text>Hirano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRANO" Language="ru_RU">
+			<Text>Хирано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYUHOJI" Language="ja_JP">
+			<Text>久宝寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYUHOJI" Language="en_US">
+			<Text>Kyuhoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYUHOJI" Language="ru_RU">
+			<Text>Кюходзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAO" Language="ja_JP">
+			<Text>八尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAO" Language="en_US">
+			<Text>Yao</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAO" Language="ru_RU">
+			<Text>Яо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TONDABAYASHI" Language="ja_JP">
+			<Text>富田林</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TONDABAYASHI" Language="en_US">
+			<Text>Tondabayashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TONDABAYASHI" Language="ru_RU">
+			<Text>Тондабаяси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHODAI" Language="ja_JP">
+			<Text>招提</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHODAI" Language="en_US">
+			<Text>Shodai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHODAI" Language="ru_RU">
+			<Text>Сёдаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEGUCHI" Language="ja_JP">
+			<Text>出口</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEGUCHI" Language="en_US">
+			<Text>Deguchi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEGUCHI" Language="ru_RU">
+			<Text>Дэгути</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZUKA" Language="ja_JP">
+			<Text>貝塚</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZUKA" Language="en_US">
+			<Text>Kaizuka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAIZUKA" Language="ru_RU">
+			<Text>Кайдзука</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHINA" Language="ja_JP">
+			<Text>山科</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHINA" Language="en_US">
+			<Text>Yamashina</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHINA" Language="ru_RU">
+			<Text>Ямасина</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGINOMORI" Language="ja_JP">
+			<Text>鷺森</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGINOMORI" Language="en_US">
+			<Text>Saginomori</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGINOMORI" Language="ru_RU">
+			<Text>Сагиномори</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHIMA" Language="ja_JP">
+			<Text>長島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHIMA" Language="en_US">
+			<Text>Nagashima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGASHIMA" Language="ru_RU">
+			<Text>Нагасима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIZAKI" Language="ja_JP">
+			<Text>吉崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIZAKI" Language="en_US">
+			<Text>Yoshizaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOSHIZAKI" Language="ru_RU">
+			<Text>Ёсидзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZAWA" Language="ja_JP">
+			<Text>金沢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZAWA" Language="en_US">
+			<Text>Kanazawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANAZAWA" Language="ru_RU">
+			<Text>Канадзава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONOICHI" Language="ja_JP">
+			<Text>野々市</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONOICHI" Language="en_US">
+			<Text>Nonoichi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONOICHI" Language="ru_RU">
+			<Text>Нонойти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATTO" Language="ja_JP">
+			<Text>松任</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATTO" Language="en_US">
+			<Text>Matto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATTO" Language="ru_RU">
+			<Text>Матто</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGI" Language="ja_JP">
+			<Text>鶴来</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGI" Language="en_US">
+			<Text>Tsurugi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUGI" Language="ru_RU">
+			<Text>Цуруги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKUSAN" Language="ja_JP">
+			<Text>白山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKUSAN" Language="en_US">
+			<Text>Hakusan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKUSAN" Language="ru_RU">
+			<Text>Хакусан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TORIGOE" Language="ja_JP">
+			<Text>鳥越</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TORIGOE" Language="en_US">
+			<Text>Torigoe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TORIGOE" Language="ru_RU">
+			<Text>Торигоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMATSU" Language="ja_JP">
+			<Text>小松</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMATSU" Language="en_US">
+			<Text>Komatsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOMATSU" Language="ru_RU">
+			<Text>Комацу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYANOKOSHI" Language="ja_JP">
+			<Text>宮腰</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYANOKOSHI" Language="en_US">
+			<Text>Miyanokoshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYANOKOSHI" Language="ru_RU">
+			<Text>Миянокоси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAISHOJI" Language="ja_JP">
+			<Text>大聖寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAISHOJI" Language="en_US">
+			<Text>Daishoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAISHOJI" Language="ru_RU">
+			<Text>Дайсёдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMI" Language="ja_JP">
+			<Text>井波</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMI" Language="en_US">
+			<Text>Inami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INAMI" Language="ru_RU">
+			<Text>Инами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOHANA" Language="ja_JP">
+			<Text>城端</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOHANA" Language="en_US">
+			<Text>Johana</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOHANA" Language="ru_RU">
+			<Text>Дзёхана</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOKOJI" Language="ja_JP">
+			<Text>勝興寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOKOJI" Language="en_US">
+			<Text>Shokoji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOKOJI" Language="ru_RU">
+			<Text>Сёкодзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAI" Language="ja_JP">
+			<Text>今井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAI" Language="en_US">
+			<Text>Imai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IMAI" Language="ru_RU">
+			<Text>Имаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITAJIRI" Language="ja_JP">
+			<Text>三田尻</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITAJIRI" Language="en_US">
+			<Text>Mitajiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITAJIRI" Language="ru_RU">
+			<Text>Митадзири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMINE" Language="ja_JP">
+			<Text>高嶺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMINE" Language="en_US">
+			<Text>Konomine</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONOMINE" Language="ru_RU">
+			<Text>Кономинэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKAMI" Language="ja_JP">
+			<Text>氷上</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKAMI" Language="en_US">
+			<Text>Hikami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIKAMI" Language="ru_RU">
+			<Text>Хиками</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKUNI" Language="ja_JP">
+			<Text>岩国</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKUNI" Language="en_US">
+			<Text>Iwakuni</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAKUNI" Language="ru_RU">
+			<Text>Ивакуни</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOSEKI" Language="ja_JP">
+			<Text>上関</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOSEKI" Language="en_US">
+			<Text>Kaminoseki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMINOSEKI" Language="ru_RU">
+			<Text>Каминосэки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAI" Language="ja_JP">
+			<Text>柳井</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAI" Language="en_US">
+			<Text>Yanai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YANAI" Language="ru_RU">
+			<Text>Янаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOFU" Language="ja_JP">
+			<Text>長府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOFU" Language="en_US">
+			<Text>Chofu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOFU" Language="ru_RU">
+			<Text>Тёфу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUYAMA" Language="ja_JP">
+			<Text>且山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUYAMA" Language="en_US">
+			<Text>Katsuyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUYAMA" Language="ru_RU">
+			<Text>Кацуяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAINEIJI" Language="ja_JP">
+			<Text>大寧寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAINEIJI" Language="en_US">
+			<Text>Taineiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAINEIJI" Language="ru_RU">
+			<Text>Тайнэйдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGI" Language="ja_JP">
+			<Text>萩</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGI" Language="en_US">
+			<Text>Hagi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAGI" Language="ru_RU">
+			<Text>Хаги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SENZAKI" Language="ja_JP">
+			<Text>仙崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SENZAKI" Language="en_US">
+			<Text>Senzaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SENZAKI" Language="ru_RU">
+			<Text>Сэндзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNOTSU" Language="ja_JP">
+			<Text>温泉津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNOTSU" Language="en_US">
+			<Text>Yunotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNOTSU" Language="ru_RU">
+			<Text>Юноцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUDA" Language="ja_JP">
+			<Text>益田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUDA" Language="en_US">
+			<Text>Masuda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASUDA" Language="ru_RU">
+			<Text>Масуда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITSUKUSHIMA" Language="ja_JP">
+			<Text>厳島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITSUKUSHIMA" Language="en_US">
+			<Text>Itsukushima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITSUKUSHIMA" Language="ru_RU">
+			<Text>Ицукусима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HATSUKAICHI" Language="ja_JP">
+			<Text>廿日市</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HATSUKAICHI" Language="en_US">
+			<Text>Hatsukaichi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HATSUKAICHI" Language="ru_RU">
+			<Text>Хацукайти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAO" Language="ja_JP">
+			<Text>桜尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAO" Language="en_US">
+			<Text>Sakurao</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAO" Language="ru_RU">
+			<Text>Сакурао</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGAMIYAMA" Language="ja_JP">
+			<Text>鏡山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGAMIYAMA" Language="en_US">
+			<Text>Kagamiyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGAMIYAMA" Language="ru_RU">
+			<Text>Кагамияма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONOMICHI" Language="ja_JP">
+			<Text>尾道</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONOMICHI" Language="en_US">
+			<Text>Onomichi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ONOMICHI" Language="ru_RU">
+			<Text>Ономити</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMO" Language="ja_JP">
+			<Text>鞆</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMO" Language="en_US">
+			<Text>Tomo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMO" Language="ru_RU">
+			<Text>Томо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNABE" Language="ja_JP">
+			<Text>神辺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNABE" Language="en_US">
+			<Text>Kannabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNABE" Language="ru_RU">
+			<Text>Каннабэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKATA" Language="ja_JP">
+			<Text>博多</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKATA" Language="en_US">
+			<Text>Hakata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAKATA" Language="ru_RU">
+			<Text>Хаката</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAZAIFU" Language="ja_JP">
+			<Text>太宰府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAZAIFU" Language="en_US">
+			<Text>Dazaifu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DAZAIFU" Language="ru_RU">
+			<Text>Дадзайфу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TACHIBANA" Language="ja_JP">
+			<Text>立花</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TACHIBANA" Language="en_US">
+			<Text>Tachibana</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TACHIBANA" Language="ru_RU">
+			<Text>Татибана</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIZUKI" Language="ja_JP">
+			<Text>秋月</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIZUKI" Language="en_US">
+			<Text>Akizuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKIZUKI" Language="ru_RU">
+			<Text>Акидзуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUNAKATA" Language="ja_JP">
+			<Text>宗像</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUNAKATA" Language="en_US">
+			<Text>Munakata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUNAKATA" Language="ru_RU">
+			<Text>Мунаката</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIYA" Language="ja_JP">
+			<Text>芦屋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIYA" Language="en_US">
+			<Text>Ashiya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIYA" Language="ru_RU">
+			<Text>Асия</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOJI" Language="ja_JP">
+			<Text>門司</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOJI" Language="en_US">
+			<Text>Moji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOJI" Language="ru_RU">
+			<Text>Модзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKURA" Language="ja_JP">
+			<Text>小倉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKURA" Language="en_US">
+			<Text>Kokura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOKURA" Language="ru_RU">
+			<Text>Кокура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USA" Language="ja_JP">
+			<Text>宇佐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USA" Language="en_US">
+			<Text>Usa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USA" Language="ru_RU">
+			<Text>Уса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAGADAKE" Language="ja_JP">
+			<Text>馬ヶ岳</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAGADAKE" Language="en_US">
+			<Text>Umagadake</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UMAGADAKE" Language="ru_RU">
+			<Text>Умагадакэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAIFU" Language="ja_JP">
+			<Text>隈府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAIFU" Language="en_US">
+			<Text>Waifu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAIFU" Language="ru_RU">
+			<Text>Вайфу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIZUKI" Language="ja_JP">
+			<Text>杵築</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIZUKI" Language="en_US">
+			<Text>Kizuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIZUKI" Language="ru_RU">
+			<Text>Кидзуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHONOSEKI" Language="ja_JP">
+			<Text>美保関</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHONOSEKI" Language="en_US">
+			<Text>Mihonoseki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHONOSEKI" Language="ru_RU">
+			<Text>Михоносэки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAGA" Language="ja_JP">
+			<Text>白鹿</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAGA" Language="en_US">
+			<Text>Shiraga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAGA" Language="ru_RU">
+			<Text>Сирага</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITOYA" Language="ja_JP">
+			<Text>三刀屋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITOYA" Language="en_US">
+			<Text>Mitoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITOYA" Language="ru_RU">
+			<Text>Митоя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKANA" Language="ja_JP">
+			<Text>赤穴</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKANA" Language="en_US">
+			<Text>Akana</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKANA" Language="ru_RU">
+			<Text>Акана</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASE" Language="ja_JP">
+			<Text>高瀬</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASE" Language="en_US">
+			<Text>Takase</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKASE" Language="ru_RU">
+			<Text>Такасэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EN_YA" Language="ja_JP">
+			<Text>塩冶</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EN_YA" Language="en_US">
+			<Text>En'ya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EN_YA" Language="ru_RU">
+			<Text>Энъя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRATA" Language="ja_JP">
+			<Text>平田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRATA" Language="en_US">
+			<Text>Hirata</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRATA" Language="ru_RU">
+			<Text>Хирата</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINJI" Language="ja_JP">
+			<Text>宍道</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINJI" Language="en_US">
+			<Text>Shinji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINJI" Language="ru_RU">
+			<Text>Синдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUENJI" Language="ja_JP">
+			<Text>鰐淵寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUENJI" Language="en_US">
+			<Text>Gakuenji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GAKUENJI" Language="ru_RU">
+			<Text>Гакуэндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTA" Language="ja_JP">
+			<Text>横田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTA" Language="en_US">
+			<Text>Yokota</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOKOTA" Language="ru_RU">
+			<Text>Ёкота</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIO" Language="ja_JP">
+			<Text>牛尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIO" Language="en_US">
+			<Text>Ushio</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIO" Language="ru_RU">
+			<Text>Усио</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMANO" Language="ja_JP">
+			<Text>熊野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMANO" Language="en_US">
+			<Text>Kumano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMANO" Language="ru_RU">
+			<Text>Кумано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOMISAKI" Language="ja_JP">
+			<Text>日御碕</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOMISAKI" Language="en_US">
+			<Text>Hinomisaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOMISAKI" Language="ru_RU">
+			<Text>Хиномисаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUGI" Language="ja_JP">
+			<Text>安来</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUGI" Language="en_US">
+			<Text>Yasugi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YASUGI" Language="ru_RU">
+			<Text>Ясуги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YONAGO" Language="ja_JP">
+			<Text>米子</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YONAGO" Language="en_US">
+			<Text>Yonago</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YONAGO" Language="ru_RU">
+			<Text>Ёнаго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UESHI" Language="ja_JP">
+			<Text>羽衣石</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UESHI" Language="en_US">
+			<Text>Ueshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UESHI" Language="ru_RU">
+			<Text>Уэси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YABASE" Language="ja_JP">
+			<Text>八橋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YABASE" Language="en_US">
+			<Text>Yabase</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YABASE" Language="ru_RU">
+			<Text>Ябасэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUBUKI" Language="ja_JP">
+			<Text>打吹</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUBUKI" Language="en_US">
+			<Text>Utsubuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTSUBUKI" Language="ru_RU">
+			<Text>Уцубуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EBI" Language="ja_JP">
+			<Text>江美</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EBI" Language="en_US">
+			<Text>Ebi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_EBI" Language="ru_RU">
+			<Text>Эби</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODOE" Language="ja_JP">
+			<Text>淀江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODOE" Language="en_US">
+			<Text>Yodoe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YODOE" Language="ru_RU">
+			<Text>Ёдоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKADA" Language="ja_JP">
+			<Text>高田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKADA" Language="en_US">
+			<Text>Takada</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKADA" Language="ru_RU">
+			<Text>Такада</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUBOSHI" Language="ja_JP">
+			<Text>三星</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUBOSHI" Language="en_US">
+			<Text>Mitsuboshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUBOSHI" Language="ru_RU">
+			<Text>Мицубоси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INNOSHO" Language="ja_JP">
+			<Text>院庄</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INNOSHO" Language="en_US">
+			<Text>Innosho</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INNOSHO" Language="ru_RU">
+			<Text>Инносё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSE" Language="ja_JP">
+			<Text>久世</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSE" Language="en_US">
+			<Text>Kuse</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSE" Language="ru_RU">
+			<Text>Кусэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOTACHI" Language="ja_JP">
+			<Text>甲立</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOTACHI" Language="en_US">
+			<Text>Kotachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOTACHI" Language="ru_RU">
+			<Text>Котати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHARA" Language="ja_JP">
+			<Text>向原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHARA" Language="en_US">
+			<Text>Mukaihara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAIHARA" Language="ru_RU">
+			<Text>Мукайхара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIBU" Language="ja_JP">
+			<Text>壬生</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIBU" Language="en_US">
+			<Text>Mibu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIBU" Language="ru_RU">
+			<Text>Мибу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OASA" Language="ja_JP">
+			<Text>大朝</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OASA" Language="en_US">
+			<Text>Oasa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OASA" Language="ru_RU">
+			<Text>Оаса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARITA" Language="ja_JP">
+			<Text>有田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARITA" Language="en_US">
+			<Text>Arita</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ARITA" Language="ru_RU">
+			<Text>Арита</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIIRI" Language="ja_JP">
+			<Text>三入</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIIRI" Language="en_US">
+			<Text>Miiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIIRI" Language="ru_RU">
+			<Text>Миири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KABE" Language="ja_JP">
+			<Text>可部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KABE" Language="en_US">
+			<Text>Kabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KABE" Language="ru_RU">
+			<Text>Кабэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKA" Language="ja_JP">
+			<Text>坂</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKA" Language="en_US">
+			<Text>Saka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKA" Language="ru_RU">
+			<Text>Сака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONGO" Language="ja_JP">
+			<Text>本郷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONGO" Language="en_US">
+			<Text>Hongo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONGO" Language="ru_RU">
+			<Text>Хонго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIITAKAYAMA" Language="ja_JP">
+			<Text>新高山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIITAKAYAMA" Language="en_US">
+			<Text>Niitakayama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIITAKAYAMA" Language="ru_RU">
+			<Text>Ниитакаяма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKEHARA" Language="ja_JP">
+			<Text>竹原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKEHARA" Language="en_US">
+			<Text>Takehara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKEHARA" Language="ru_RU">
+			<Text>Такэхара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIJO" Language="ja_JP">
+			<Text>西条</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIJO" Language="en_US">
+			<Text>Saijo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIJO" Language="ru_RU">
+			<Text>Сайдзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWANE" Language="ja_JP">
+			<Text>川根</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWANE" Language="en_US">
+			<Text>Kawane</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWANE" Language="ru_RU">
+			<Text>Каванэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARA" Language="ja_JP">
+			<Text>三原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARA" Language="en_US">
+			<Text>Mihara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIHARA" Language="ru_RU">
+			<Text>Михара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SERA" Language="ja_JP">
+			<Text>世羅</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SERA" Language="en_US">
+			<Text>Sera</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SERA" Language="ru_RU">
+			<Text>Сэра</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUGI" Language="ja_JP">
+			<Text>御調</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUGI" Language="en_US">
+			<Text>Mitsugi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MITSUGI" Language="ru_RU">
+			<Text>Мицуги</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOGE" Language="ja_JP">
+			<Text>上下</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOGE" Language="en_US">
+			<Text>Joge</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_JOGE" Language="ru_RU">
+			<Text>Дзёгэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISA" Language="ja_JP">
+			<Text>吉舎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISA" Language="en_US">
+			<Text>Kisa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISA" Language="ru_RU">
+			<Text>Киса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONU" Language="ja_JP">
+			<Text>甲奴</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONU" Language="en_US">
+			<Text>Konu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KONU" Language="ru_RU">
+			<Text>Кону</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOBARA" Language="ja_JP">
+			<Text>庄原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOBARA" Language="en_US">
+			<Text>Shobara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHOBARA" Language="ru_RU">
+			<Text>Сёбара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHIBA" Language="ja_JP">
+			<Text>口羽</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHIBA" Language="en_US">
+			<Text>Kuchiba</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHIBA" Language="ru_RU">
+			<Text>Кутиба</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUNA" Language="ja_JP">
+			<Text>阿須那</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUNA" Language="en_US">
+			<Text>Asuna</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASUNA" Language="ru_RU">
+			<Text>Асуна</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAMOTO" Language="ja_JP">
+			<Text>川本</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAMOTO" Language="en_US">
+			<Text>Kawamoto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWAMOTO" Language="ru_RU">
+			<Text>Кавамото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOYAMA" Language="ja_JP">
+			<Text>日野山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOYAMA" Language="en_US">
+			<Text>Hinoyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOYAMA" Language="ru_RU">
+			<Text>Хинояма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUZUO" Language="ja_JP">
+			<Text>鈴尾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUZUO" Language="en_US">
+			<Text>Suzuo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUZUO" Language="ru_RU">
+			<Text>Судзуо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARUKAKE" Language="ja_JP">
+			<Text>猿掛</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARUKAKE" Language="en_US">
+			<Text>Sarukake</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARUKAKE" Language="ru_RU">
+			<Text>Сарукакэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URADO" Language="ja_JP">
+			<Text>浦戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URADO" Language="en_US">
+			<Text>Urado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URADO" Language="ru_RU">
+			<Text>Урадо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMURA" Language="ja_JP">
+			<Text>田村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMURA" Language="en_US">
+			<Text>Tamura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMURA" Language="ru_RU">
+			<Text>Тамура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSO" Language="ja_JP">
+			<Text>香宗</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSO" Language="en_US">
+			<Text>Koso</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOSO" Language="ru_RU">
+			<Text>Косо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKAOKA" Language="ja_JP">
+			<Text>赤岡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKAOKA" Language="en_US">
+			<Text>Akaoka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKAOKA" Language="ru_RU">
+			<Text>Акаока</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOYAMA" Language="ja_JP">
+			<Text>本山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOYAMA" Language="en_US">
+			<Text>Motoyama</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOYAMA" Language="ru_RU">
+			<Text>Мотояма</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKURINJI" Language="ja_JP">
+			<Text>竹林寺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKURINJI" Language="en_US">
+			<Text>Chikurinji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKURINJI" Language="ru_RU">
+			<Text>Тикуриндзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HASUIKE" Language="ja_JP">
+			<Text>蓮池</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HASUIKE" Language="en_US">
+			<Text>Hasuike</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HASUIKE" Language="ru_RU">
+			<Text>Хасуйкэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATAOKA" Language="ja_JP">
+			<Text>片岡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATAOKA" Language="en_US">
+			<Text>Kataoka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATAOKA" Language="ru_RU">
+			<Text>Катаока</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAWA" Language="ja_JP">
+			<Text>佐川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAWA" Language="en_US">
+			<Text>Sakawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKAWA" Language="ru_RU">
+			<Text>Сакава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUNO" Language="ja_JP">
+			<Text>津野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUNO" Language="en_US">
+			<Text>Tsuno</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSUNO" Language="ru_RU">
+			<Text>Цуно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURE" Language="ja_JP">
+			<Text>久礼</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURE" Language="en_US">
+			<Text>Kure</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURE" Language="ru_RU">
+			<Text>Курэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUSAKI" Language="ja_JP">
+			<Text>須崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUSAKI" Language="en_US">
+			<Text>Susaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUSAKI" Language="ru_RU">
+			<Text>Сусаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUBOKAWA" Language="ja_JP">
+			<Text>窪川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUBOKAWA" Language="en_US">
+			<Text>Kubokawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUBOKAWA" Language="ru_RU">
+			<Text>Кубокава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIDA" Language="ja_JP">
+			<Text>仁井田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIDA" Language="en_US">
+			<Text>Niida</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NIIDA" Language="ru_RU">
+			<Text>Ниида</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKAMURA" Language="ja_JP">
+			<Text>中村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKAMURA" Language="en_US">
+			<Text>Nakamura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKAMURA" Language="ru_RU">
+			<Text>Накамура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIZURI" Language="ja_JP">
+			<Text>足摺</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIZURI" Language="en_US">
+			<Text>Ashizuri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASHIZURI" Language="ru_RU">
+			<Text>Асидзури</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKUMO" Language="ja_JP">
+			<Text>宿毛</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKUMO" Language="en_US">
+			<Text>Sukumo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKUMO" Language="ru_RU">
+			<Text>Сукумо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHARI" Language="ja_JP">
+			<Text>奈半利</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHARI" Language="en_US">
+			<Text>Nahari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHARI" Language="ru_RU">
+			<Text>Нахари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTO" Language="ja_JP">
+			<Text>室戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTO" Language="en_US">
+			<Text>Muroto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUROTO" Language="ru_RU">
+			<Text>Мурото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONE" Language="ja_JP">
+			<Text>野根</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONE" Language="en_US">
+			<Text>None</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NONE" Language="ru_RU">
+			<Text>Нонэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNORA" Language="ja_JP">
+			<Text>甲浦</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNORA" Language="en_US">
+			<Text>Kannora</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANNORA" Language="ru_RU">
+			<Text>Каннора</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROSE" Language="ja_JP">
+			<Text>黒瀬</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROSE" Language="en_US">
+			<Text>Kurose</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUROSE" Language="ru_RU">
+			<Text>Куросэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIMENONO" Language="ja_JP">
+			<Text>姫野々</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIMENONO" Language="en_US">
+			<Text>Himenono</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIMENONO" Language="ru_RU">
+			<Text>Химэноно</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KERA" Language="ja_JP">
+			<Text>介良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KERA" Language="en_US">
+			<Text>Kera</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KERA" Language="ru_RU">
+			<Text>Кэра</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEWA" Language="ja_JP">
+			<Text>戸波</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEWA" Language="en_US">
+			<Text>Hewa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HEWA" Language="ru_RU">
+			<Text>Хэва</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIOE" Language="ja_JP">
+			<Text>潮江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIOE" Language="en_US">
+			<Text>Ushioe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USHIOE" Language="ru_RU">
+			<Text>Усиоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUNOSHIDA" Language="ja_JP">
+			<Text>布師田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUNOSHIDA" Language="en_US">
+			<Text>Nunoshida</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NUNOSHIDA" Language="ru_RU">
+			<Text>Нуносида</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUKI" Language="ja_JP">
+			<Text>臼杵</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUKI" Language="en_US">
+			<Text>Usuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USUKI" Language="ru_RU">
+			<Text>Усуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KITSUKI" Language="ja_JP">
+			<Text>木付</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KITSUKI" Language="en_US">
+			<Text>Kitsuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KITSUKI" Language="ru_RU">
+			<Text>Кицуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUSAKI" Language="ja_JP">
+			<Text>鶴崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUSAKI" Language="en_US">
+			<Text>Tsurusaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TSURUSAKI" Language="ru_RU">
+			<Text>Цурусаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BEPPU" Language="ja_JP">
+			<Text>別府</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BEPPU" Language="en_US">
+			<Text>Beppu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BEPPU" Language="ru_RU">
+			<Text>Бэппу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIJI" Language="ja_JP">
+			<Text>日出</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIJI" Language="en_US">
+			<Text>Hiji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIJI" Language="ru_RU">
+			<Text>Хидзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFU" Language="ja_JP">
+			<Text>由布</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFU" Language="en_US">
+			<Text>Yufu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFU" Language="ru_RU">
+			<Text>Юфу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKI" Language="ja_JP">
+			<Text>佐伯</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKI" Language="en_US">
+			<Text>Saiki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAIKI" Language="ru_RU">
+			<Text>Сайки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSU" Language="ja_JP">
+			<Text>玖珠</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSU" Language="en_US">
+			<Text>Kusu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSU" Language="ru_RU">
+			<Text>Кусу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITA" Language="ja_JP">
+			<Text>日田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITA" Language="en_US">
+			<Text>Hita</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITA" Language="ru_RU">
+			<Text>Хита</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURUME" Language="ja_JP">
+			<Text>久留米</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURUME" Language="en_US">
+			<Text>Kurume</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KURUME" Language="ru_RU">
+			<Text>Курумэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KORASAN" Language="ja_JP">
+			<Text>高良山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KORASAN" Language="en_US">
+			<Text>Korasan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KORASAN" Language="ru_RU">
+			<Text>Корасан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMACHI" Language="ja_JP">
+			<Text>蒲池</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMACHI" Language="en_US">
+			<Text>Kamachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAMACHI" Language="ru_RU">
+			<Text>Камати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURANAKA" Language="ja_JP">
+			<Text>村中</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURANAKA" Language="en_US">
+			<Text>Muranaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MURANAKA" Language="ru_RU">
+			<Text>Муранака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKO" Language="ja_JP">
+			<Text>須古</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKO" Language="en_US">
+			<Text>Suko</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUKO" Language="ru_RU">
+			<Text>Суко</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKU" Language="ja_JP">
+			<Text>多久</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKU" Language="en_US">
+			<Text>Taku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKU" Language="ru_RU">
+			<Text>Таку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRADO" Language="ja_JP">
+			<Text>平戸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRADO" Language="en_US">
+			<Text>Hirado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRADO" Language="ru_RU">
+			<Text>Хирадо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSURA" Language="ja_JP">
+			<Text>松浦</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSURA" Language="en_US">
+			<Text>Matsura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MATSURA" Language="ru_RU">
+			<Text>Мацура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHITAKE" Language="ja_JP">
+			<Text>岸岳</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHITAKE" Language="en_US">
+			<Text>Kishitake</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KISHITAKE" Language="ru_RU">
+			<Text>Киситакэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMURA" Language="ja_JP">
+			<Text>大村</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMURA" Language="en_US">
+			<Text>Omura</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMURA" Language="ru_RU">
+			<Text>Омура</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOE" Language="ja_JP">
+			<Text>日野江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOE" Language="en_US">
+			<Text>Hinoe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HINOE" Language="ru_RU">
+			<Text>Хиноэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHINOTSU" Language="ja_JP">
+			<Text>口之津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHINOTSU" Language="en_US">
+			<Text>Kuchinotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUCHINOTSU" Language="ru_RU">
+			<Text>Кутиноцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMAMOTO" Language="ja_JP">
+			<Text>隈本</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMAMOTO" Language="en_US">
+			<Text>Kumamoto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMAMOTO" Language="ru_RU">
+			<Text>Кумамото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTO" Language="ja_JP">
+			<Text>宇土</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTO" Language="en_US">
+			<Text>Uto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_UTO" Language="ru_RU">
+			<Text>Уто</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIFUNE" Language="ja_JP">
+			<Text>御船</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIFUNE" Language="en_US">
+			<Text>Mifune</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIFUNE" Language="ru_RU">
+			<Text>Мифунэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASO" Language="ja_JP">
+			<Text>阿蘇</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASO" Language="en_US">
+			<Text>Aso</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ASO" Language="ru_RU">
+			<Text>Асо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YATSUSHIRO" Language="ja_JP">
+			<Text>八代</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YATSUSHIRO" Language="en_US">
+			<Text>Yatsushiro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YATSUSHIRO" Language="ru_RU">
+			<Text>Яцусиро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITOYOSHI" Language="ja_JP">
+			<Text>人吉</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITOYOSHI" Language="en_US">
+			<Text>Hitoyoshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITOYOSHI" Language="ru_RU">
+			<Text>Хитоёси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONDO" Language="ja_JP">
+			<Text>本渡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONDO" Language="en_US">
+			<Text>Hondo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HONDO" Language="ru_RU">
+			<Text>Хондо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUMOTO" Language="ja_JP">
+			<Text>勝本</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUMOTO" Language="en_US">
+			<Text>Katsumoto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUMOTO" Language="ru_RU">
+			<Text>Кацумото</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAKAWA" Language="ja_JP">
+			<Text>山川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAKAWA" Language="en_US">
+			<Text>Yamakawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMAKAWA" Language="ru_RU">
+			<Text>Ямакава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BONOTSU" Language="ja_JP">
+			<Text>坊津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BONOTSU" Language="en_US">
+			<Text>Bonotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BONOTSU" Language="ru_RU">
+			<Text>Боноцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBUSUKI" Language="ja_JP">
+			<Text>指宿</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBUSUKI" Language="en_US">
+			<Text>Ibusuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IBUSUKI" Language="ru_RU">
+			<Text>Ибусуки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIRAN" Language="ja_JP">
+			<Text>知覧</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIRAN" Language="en_US">
+			<Text>Chiran</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIRAN" Language="ru_RU">
+			<Text>Тиран</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASEDA" Language="ja_JP">
+			<Text>加世田</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASEDA" Language="en_US">
+			<Text>Kaseda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASEDA" Language="ru_RU">
+			<Text>Касэда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIKINO" Language="ja_JP">
+			<Text>串木野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIKINO" Language="en_US">
+			<Text>Kushikino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIKINO" Language="ru_RU">
+			<Text>Кусикино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHIKI" Language="ja_JP">
+			<Text>市来</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHIKI" Language="en_US">
+			<Text>Ichiki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ICHIKI" Language="ru_RU">
+			<Text>Итики</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSHIKI" Language="ja_JP">
+			<Text>清色</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSHIKI" Language="en_US">
+			<Text>Kiyoshiki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIYOSHIKI" Language="ru_RU">
+			<Text>Киёсики</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMI" Language="ja_JP">
+			<Text>出水</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMI" Language="en_US">
+			<Text>Izumi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMI" Language="ru_RU">
+			<Text>Идзуми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKUCHI" Language="ja_JP">
+			<Text>大口</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKUCHI" Language="en_US">
+			<Text>Okuchi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKUCHI" Language="ru_RU">
+			<Text>Окути</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSA" Language="ja_JP">
+			<Text>帖佐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSA" Language="en_US">
+			<Text>Chosa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHOSA" Language="ru_RU">
+			<Text>Тёса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKI" Language="ja_JP">
+			<Text>加治木</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKI" Language="en_US">
+			<Text>Kajiki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAJIKI" Language="ru_RU">
+			<Text>Кадзики</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRISHIMA" Language="ja_JP">
+			<Text>霧島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRISHIMA" Language="en_US">
+			<Text>Kirishima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIRISHIMA" Language="ru_RU">
+			<Text>Кирисима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAJIMA" Language="ja_JP">
+			<Text>桜島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAJIMA" Language="en_US">
+			<Text>Sakurajima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAKURAJIMA" Language="ru_RU">
+			<Text>Сакурадзима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TARUMIZU" Language="ja_JP">
+			<Text>垂水</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TARUMIZU" Language="en_US">
+			<Text>Tarumizu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TARUMIZU" Language="ru_RU">
+			<Text>Тарумидзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANOYA" Language="ja_JP">
+			<Text>鹿屋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANOYA" Language="en_US">
+			<Text>Kanoya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KANOYA" Language="ru_RU">
+			<Text>Каноя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIRA" Language="ja_JP">
+			<Text>串良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIRA" Language="en_US">
+			<Text>Kushira</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIRA" Language="ru_RU">
+			<Text>Кусира</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUSHI" Language="ja_JP">
+			<Text>志布志</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUSHI" Language="en_US">
+			<Text>Shibushi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUSHI" Language="ru_RU">
+			<Text>Сибуси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAKONOJO" Language="ja_JP">
+			<Text>都城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAKONOJO" Language="en_US">
+			<Text>Miyakonojo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAKONOJO" Language="ru_RU">
+			<Text>Мияконодзё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKARABE" Language="ja_JP">
+			<Text>財部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKARABE" Language="en_US">
+			<Text>Takarabe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAKARABE" Language="ru_RU">
+			<Text>Такарабэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKASA" Language="ja_JP">
+			<Text>穆佐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKASA" Language="en_US">
+			<Text>Mukasa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKASA" Language="ru_RU">
+			<Text>Мукаса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYA" Language="ja_JP">
+			<Text>綾</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYA" Language="en_US">
+			<Text>Aya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AYA" Language="ru_RU">
+			<Text>Ая</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZAKI" Language="ja_JP">
+			<Text>宮崎</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZAKI" Language="en_US">
+			<Text>Miyazaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIYAZAKI" Language="ru_RU">
+			<Text>Миядзаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADOWARA" Language="ja_JP">
+			<Text>佐土原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADOWARA" Language="en_US">
+			<Text>Sadowara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADOWARA" Language="ru_RU">
+			<Text>Садовара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINO" Language="ja_JP">
+			<Text>飯野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINO" Language="en_US">
+			<Text>Iino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IINO" Language="ru_RU">
+			<Text>Иино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIMA" Language="ja_JP">
+			<Text>櫛間</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIMA" Language="en_US">
+			<Text>Kushima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSHIMA" Language="ru_RU">
+			<Text>Кусима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHA" Language="ja_JP">
+			<Text>那覇</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHA" Language="en_US">
+			<Text>Naha</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAHA" Language="ru_RU">
+			<Text>Наха</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URASOE" Language="ja_JP">
+			<Text>浦添</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URASOE" Language="en_US">
+			<Text>Urasoe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_URASOE" Language="ru_RU">
+			<Text>Урасоэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMIGUSUKU" Language="ja_JP">
+			<Text>豊見城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMIGUSUKU" Language="en_US">
+			<Text>Tomigusuku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOMIGUSUKU" Language="ru_RU">
+			<Text>Томигусуку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OROKU" Language="ja_JP">
+			<Text>小禄</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OROKU" Language="en_US">
+			<Text>Oroku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OROKU" Language="ru_RU">
+			<Text>Ороку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAEBARU" Language="ja_JP">
+			<Text>南風原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAEBARU" Language="en_US">
+			<Text>Haebaru</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HAEBARU" Language="ru_RU">
+			<Text>Хаэбару</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIHARA" Language="ja_JP">
+			<Text>西原</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIHARA" Language="en_US">
+			<Text>Nishihara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NISHIHARA" Language="ru_RU">
+			<Text>Нисихара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OZATO" Language="ja_JP">
+			<Text>大里</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OZATO" Language="en_US">
+			<Text>Ozato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OZATO" Language="ru_RU">
+			<Text>Одзато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHINEN" Language="ja_JP">
+			<Text>知念</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHINEN" Language="en_US">
+			<Text>Chinen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHINEN" Language="ru_RU">
+			<Text>Тинэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMAGUSUKU" Language="ja_JP">
+			<Text>玉城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMAGUSUKU" Language="en_US">
+			<Text>Tamagusuku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAMAGUSUKU" Language="ru_RU">
+			<Text>Тамагусуку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOKAZU" Language="ja_JP">
+			<Text>糸数</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOKAZU" Language="en_US">
+			<Text>Itokazu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ITOKAZU" Language="ru_RU">
+			<Text>Итокадзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOCHINDA" Language="ja_JP">
+			<Text>東風平</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOCHINDA" Language="en_US">
+			<Text>Kochinda</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOCHINDA" Language="ru_RU">
+			<Text>Котинда</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MABUNI" Language="ja_JP">
+			<Text>摩文仁</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MABUNI" Language="en_US">
+			<Text>Mabuni</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MABUNI" Language="ru_RU">
+			<Text>Мабуни</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYAN" Language="ja_JP">
+			<Text>喜屋武</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYAN" Language="en_US">
+			<Text>Kyan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KYAN" Language="ru_RU">
+			<Text>Кян</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHATAN" Language="ja_JP">
+			<Text>北谷</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHATAN" Language="en_US">
+			<Text>Chatan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHATAN" Language="ru_RU">
+			<Text>Тятан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GOEKU" Language="ja_JP">
+			<Text>越来</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GOEKU" Language="en_US">
+			<Text>Goeku</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GOEKU" Language="ru_RU">
+			<Text>Гоэку</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUREN" Language="ja_JP">
+			<Text>勝連</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUREN" Language="en_US">
+			<Text>Katsuren</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KATSUREN" Language="ru_RU">
+			<Text>Кацурэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GUSHIKAWA" Language="ja_JP">
+			<Text>具志川</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GUSHIKAWA" Language="en_US">
+			<Text>Gushikawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_GUSHIKAWA" Language="ru_RU">
+			<Text>Гусикава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNTANZA" Language="ja_JP">
+			<Text>読谷山</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNTANZA" Language="en_US">
+			<Text>Yuntanza</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUNTANZA" Language="ru_RU">
+			<Text>Юнтандза</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAKIMI" Language="ja_JP">
+			<Text>座喜味</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAKIMI" Language="en_US">
+			<Text>Zakimi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ZAKIMI" Language="ru_RU">
+			<Text>Дзакими</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIN" Language="ja_JP">
+			<Text>金武</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIN" Language="en_US">
+			<Text>Kin</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIN" Language="ru_RU">
+			<Text>Кин</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGO" Language="ja_JP">
+			<Text>名護</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGO" Language="en_US">
+			<Text>Nago</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGO" Language="ru_RU">
+			<Text>Наго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOBU" Language="ja_JP">
+			<Text>本部</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOBU" Language="en_US">
+			<Text>Motobu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MOTOBU" Language="ru_RU">
+			<Text>Мотобу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKIJIN" Language="ja_JP">
+			<Text>今帰仁</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKIJIN" Language="en_US">
+			<Text>Nakijin</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAKIJIN" Language="ru_RU">
+			<Text>Накидзин</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANEJI" Language="ja_JP">
+			<Text>羽地</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANEJI" Language="en_US">
+			<Text>Haneji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HANEJI" Language="ru_RU">
+			<Text>Ханэдзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIGAMI" Language="ja_JP">
+			<Text>国頭</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIGAMI" Language="en_US">
+			<Text>Kunigami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNIGAMI" Language="ru_RU">
+			<Text>Кунигами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IHEYA" Language="ja_JP">
+			<Text>伊平屋</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IHEYA" Language="en_US">
+			<Text>Iheya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IHEYA" Language="ru_RU">
+			<Text>Ихэя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMEJIMA" Language="ja_JP">
+			<Text>久米島</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMEJIMA" Language="en_US">
+			<Text>Kumejima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUMEJIMA" Language="ru_RU">
+			<Text>Кумэдзима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRARA" Language="ja_JP">
+			<Text>平良</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRARA" Language="en_US">
+			<Text>Hirara</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIRARA" Language="ru_RU">
+			<Text>Хирара</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIGAKI" Language="ja_JP">
+			<Text>石垣</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIGAKI" Language="en_US">
+			<Text>Ishigaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIGAKI" Language="ru_RU">
+			<Text>Исигаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASARI" Language="ja_JP">
+			<Text>笠利</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASARI" Language="en_US">
+			<Text>Kasari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KASARI" Language="ru_RU">
+			<Text>Касари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIKAI" Language="ja_JP">
+			<Text>喜界</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIKAI" Language="en_US">
+			<Text>Kikai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KIKAI" Language="ru_RU">
+			<Text>Кикаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUCHARI" Language="ja_JP">
+			<Text>シブチャリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUCHARI" Language="en_US">
+			<Text>Shibuchari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIBUCHARI" Language="ru_RU">
+			<Text>Сибутяри</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNASHIRI" Language="ja_JP">
+			<Text>クナシリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNASHIRI" Language="en_US">
+			<Text>Kunashiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUNASHIRI" Language="ru_RU">
+			<Text>Кунасири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKKESHI" Language="ja_JP">
+			<Text>アッケシ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKKESHI" Language="en_US">
+			<Text>Akkeshi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKKESHI" Language="ru_RU">
+			<Text>Аккэси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEMORO" Language="ja_JP">
+			<Text>ネモロ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEMORO" Language="en_US">
+			<Text>Nemoro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NEMORO" Language="ru_RU">
+			<Text>Нэморо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSURI" Language="ja_JP">
+			<Text>クスリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSURI" Language="en_US">
+			<Text>Kusuri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KUSURI" Language="ru_RU">
+			<Text>Кусури</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKACHI" Language="ja_JP">
+			<Text>トカチ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKACHI" Language="en_US">
+			<Text>Tokachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOKACHI" Language="ru_RU">
+			<Text>Токати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFUTSU" Language="ja_JP">
+			<Text>ユウフツ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFUTSU" Language="en_US">
+			<Text>Yufutsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YUFUTSU" Language="ru_RU">
+			<Text>Юфуцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAOI" Language="ja_JP">
+			<Text>シラオイ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAOI" Language="en_US">
+			<Text>Shiraoi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIRAOI" Language="ru_RU">
+			<Text>Сираои</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARU" Language="ja_JP">
+			<Text>サル</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARU" Language="en_US">
+			<Text>Saru</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SARU" Language="ru_RU">
+			<Text>Сару</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIKOTSU" Language="ja_JP">
+			<Text>シコツ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIKOTSU" Language="en_US">
+			<Text>Shikotsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIKOTSU" Language="ru_RU">
+			<Text>Сикоцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKARI" Language="ja_JP">
+			<Text>イシカリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKARI" Language="en_US">
+			<Text>Ishikari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISHIKARI" Language="ru_RU">
+			<Text>Исикари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTARUNAI" Language="ja_JP">
+			<Text>オタルナイ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTARUNAI" Language="en_US">
+			<Text>Otarunai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OTARUNAI" Language="ru_RU">
+			<Text>Отарунаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOICHI" Language="ja_JP">
+			<Text>ヨイチ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOICHI" Language="en_US">
+			<Text>Yoichi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YOICHI" Language="ru_RU">
+			<Text>Ёйти</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURU" Language="ja_JP">
+			<Text>フルウ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURU" Language="en_US">
+			<Text>Furu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_FURU" Language="ru_RU">
+			<Text>Фуру</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHAKOTAN" Language="ja_JP">
+			<Text>シャコタン</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHAKOTAN" Language="en_US">
+			<Text>Shakotan</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHAKOTAN" Language="ru_RU">
+			<Text>Сякотан</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANAI" Language="ja_JP">
+			<Text>イワナイ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANAI" Language="en_US">
+			<Text>Iwanai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWANAI" Language="ru_RU">
+			<Text>Иванаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUTTSU" Language="ja_JP">
+			<Text>スッツ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUTTSU" Language="en_US">
+			<Text>Suttsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUTTSU" Language="ru_RU">
+			<Text>Суццу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMAKOMAKI" Language="ja_JP">
+			<Text>シマコマキ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMAKOMAKI" Language="en_US">
+			<Text>Shimakomaki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMAKOMAKI" Language="ru_RU">
+			<Text>Симакомаки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETANAI" Language="ja_JP">
+			<Text>セタナイ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETANAI" Language="en_US">
+			<Text>Setanai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETANAI" Language="ru_RU">
+			<Text>Сэтанаи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOYA" Language="ja_JP">
+			<Text>ソウヤ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOYA" Language="en_US">
+			<Text>Soya</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SOYA" Language="ru_RU">
+			<Text>Соя</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RIISHIRI" Language="ja_JP">
+			<Text>リイシリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RIISHIRI" Language="en_US">
+			<Text>Riishiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RIISHIRI" Language="ru_RU">
+			<Text>Риисири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MONBETSU" Language="ja_JP">
+			<Text>モンベツ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MONBETSU" Language="en_US">
+			<Text>Monbetsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MONBETSU" Language="ru_RU">
+			<Text>Момбэцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABASHIRI" Language="ja_JP">
+			<Text>アバシリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABASHIRI" Language="en_US">
+			<Text>Abashiri</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABASHIRI" Language="ru_RU">
+			<Text>Абасири</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHARI" Language="ja_JP">
+			<Text>シャリ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHARI" Language="en_US">
+			<Text>Shari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHARI" Language="ru_RU">
+			<Text>Сяри</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RURUMOPPE" Language="ja_JP">
+			<Text>ルルモッペ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RURUMOPPE" Language="en_US">
+			<Text>Rurumoppe</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_RURUMOPPE" Language="ru_RU">
+			<Text>Рурумоппэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASHIKE" Language="ja_JP">
+			<Text>マシケ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASHIKE" Language="en_US">
+			<Text>Mashike</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MASHIKE" Language="ru_RU">
+			<Text>Масикэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USU" Language="ja_JP">
+			<Text>ウス</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USU" Language="en_US">
+			<Text>Usu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_USU" Language="ru_RU">
+			<Text>Усу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABUTA" Language="ja_JP">
+			<Text>アブタ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABUTA" Language="en_US">
+			<Text>Abuta</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ABUTA" Language="ru_RU">
+			<Text>Абута</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOROBETSU" Language="ja_JP">
+			<Text>ホロベツ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOROBETSU" Language="en_US">
+			<Text>Horobetsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOROBETSU" Language="ru_RU">
+			<Text>Хоробэцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAWA" Language="ja_JP">
+			<Text>ムカワ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAWA" Language="en_US">
+			<Text>Mukawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUKAWA" Language="ru_RU">
+			<Text>Мукава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MENASHI" Language="ja_JP">
+			<Text>メナシ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MENASHI" Language="en_US">
+			<Text>Menashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MENASHI" Language="ru_RU">
+			<Text>Мэнаси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHIRO" Language="ja_JP">
+			<Text>山城</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHIRO" Language="en_US">
+			<Text>Yamashiro</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMASHIRO" Language="ru_RU">
+			<Text>Ямасиро</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMATO" Language="ja_JP">
+			<Text>大和</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMATO" Language="en_US">
+			<Text>Yamato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_YAMATO" Language="ru_RU">
+			<Text>Ямато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWACHI" Language="ja_JP">
+			<Text>河内</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWACHI" Language="en_US">
+			<Text>Kawachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAWACHI" Language="ru_RU">
+			<Text>Кавати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETTSU" Language="ja_JP">
+			<Text>摂津</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETTSU" Language="en_US">
+			<Text>Settsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SETTSU" Language="ru_RU">
+			<Text>Сэццу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IGA" Language="ja_JP">
+			<Text>伊賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IGA" Language="en_US">
+			<Text>Iga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IGA" Language="ru_RU">
+			<Text>Ига</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISE" Language="ja_JP">
+			<Text>伊勢</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISE" Language="en_US">
+			<Text>Ise</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ISE" Language="ru_RU">
+			<Text>Исэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMA" Language="ja_JP">
+			<Text>志摩</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMA" Language="en_US">
+			<Text>Shima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMA" Language="ru_RU">
+			<Text>Сима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OWARI" Language="ja_JP">
+			<Text>尾張</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OWARI" Language="en_US">
+			<Text>Owari</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OWARI" Language="ru_RU">
+			<Text>Овари</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKAWA" Language="ja_JP">
+			<Text>三河</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKAWA" Language="en_US">
+			<Text>Mikawa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIKAWA" Language="ru_RU">
+			<Text>Микава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOTOMI" Language="ja_JP">
+			<Text>遠江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOTOMI" Language="en_US">
+			<Text>Totomi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOTOMI" Language="ru_RU">
+			<Text>Тотоми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SURUGA" Language="ja_JP">
+			<Text>駿河</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SURUGA" Language="en_US">
+			<Text>Suruga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SURUGA" Language="ru_RU">
+			<Text>Суруга</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAI" Language="ja_JP">
+			<Text>甲斐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAI" Language="en_US">
+			<Text>Kai</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAI" Language="ru_RU">
+			<Text>Каи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZU" Language="ja_JP">
+			<Text>伊豆</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZU" Language="en_US">
+			<Text>Izu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZU" Language="ru_RU">
+			<Text>Идзу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAMI" Language="ja_JP">
+			<Text>相模</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAMI" Language="en_US">
+			<Text>Sagami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SAGAMI" Language="ru_RU">
+			<Text>Сагами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUSASHI" Language="ja_JP">
+			<Text>武蔵</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUSASHI" Language="en_US">
+			<Text>Musashi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUSASHI" Language="ru_RU">
+			<Text>Мусаси</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWA" Language="ja_JP">
+			<Text>安房</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWA" Language="en_US">
+			<Text>Awa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWA" Language="ru_RU">
+			<Text>Ава</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZUSA" Language="ja_JP">
+			<Text>上総</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZUSA" Language="en_US">
+			<Text>Kazusa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAZUSA" Language="ru_RU">
+			<Text>Кадзуса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOSA" Language="ja_JP">
+			<Text>下総</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOSA" Language="en_US">
+			<Text>Shimosa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOSA" Language="ru_RU">
+			<Text>Симоса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITACHI" Language="ja_JP">
+			<Text>常陸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITACHI" Language="en_US">
+			<Text>Hitachi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HITACHI" Language="ru_RU">
+			<Text>Хитати</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMI" Language="ja_JP">
+			<Text>近江</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMI" Language="en_US">
+			<Text>Omi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OMI" Language="ru_RU">
+			<Text>Оми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINO" Language="ja_JP">
+			<Text>美濃</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINO" Language="en_US">
+			<Text>Mino</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MINO" Language="ru_RU">
+			<Text>Мино</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIDA" Language="ja_JP">
+			<Text>飛騨</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIDA" Language="en_US">
+			<Text>Hida</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIDA" Language="ru_RU">
+			<Text>Хида</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINANO" Language="ja_JP">
+			<Text>信濃</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINANO" Language="en_US">
+			<Text>Shinano</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHINANO" Language="ru_RU">
+			<Text>Синано</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKE" Language="ja_JP">
+			<Text>上野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKE" Language="en_US">
+			<Text>Kozuke</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KOZUKE" Language="ru_RU">
+			<Text>Кодзукэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOTSUKE" Language="ja_JP">
+			<Text>下野</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOTSUKE" Language="en_US">
+			<Text>Shimotsuke</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SHIMOTSUKE" Language="ru_RU">
+			<Text>Симоцукэ</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUTSU" Language="ja_JP">
+			<Text>陸奥</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUTSU" Language="en_US">
+			<Text>Mutsu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MUTSU" Language="ru_RU">
+			<Text>Муцу</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEWA" Language="ja_JP">
+			<Text>出羽</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEWA" Language="en_US">
+			<Text>Dewa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_DEWA" Language="ru_RU">
+			<Text>Дэва</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKASA" Language="ja_JP">
+			<Text>若狭</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKASA" Language="en_US">
+			<Text>Wakasa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_WAKASA" Language="ru_RU">
+			<Text>Вакаса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN" Language="ja_JP">
+			<Text>越前</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN" Language="en_US">
+			<Text>Echizen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIZEN" Language="ru_RU">
+			<Text>Этидзэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGA" Language="ja_JP">
+			<Text>加賀</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGA" Language="en_US">
+			<Text>Kaga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KAGA" Language="ru_RU">
+			<Text>Кага</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOTO" Language="ja_JP">
+			<Text>能登</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOTO" Language="en_US">
+			<Text>Noto</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NOTO" Language="ru_RU">
+			<Text>Ното</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ETCHU" Language="ja_JP">
+			<Text>越中</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ETCHU" Language="en_US">
+			<Text>Etchu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ETCHU" Language="ru_RU">
+			<Text>Эттю</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGO" Language="ja_JP">
+			<Text>越後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGO" Language="en_US">
+			<Text>Echigo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_ECHIGO" Language="ru_RU">
+			<Text>Этиго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADO" Language="ja_JP">
+			<Text>佐渡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADO" Language="en_US">
+			<Text>Sado</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SADO" Language="ru_RU">
+			<Text>Садо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANBA" Language="ja_JP">
+			<Text>丹波</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANBA" Language="en_US">
+			<Text>Tanba</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANBA" Language="ru_RU">
+			<Text>Тамба</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANGO" Language="ja_JP">
+			<Text>丹後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANGO" Language="en_US">
+			<Text>Tango</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TANGO" Language="ru_RU">
+			<Text>Танго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAJIMA" Language="ja_JP">
+			<Text>但馬</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAJIMA" Language="en_US">
+			<Text>Tajima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TAJIMA" Language="ru_RU">
+			<Text>Тадзима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INABA" Language="ja_JP">
+			<Text>因幡</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INABA" Language="en_US">
+			<Text>Inaba</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_INABA" Language="ru_RU">
+			<Text>Инаба</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOKI" Language="ja_JP">
+			<Text>伯耆</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOKI" Language="en_US">
+			<Text>Hoki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HOKI" Language="ru_RU">
+			<Text>Хоки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMO" Language="ja_JP">
+			<Text>出雲</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMO" Language="en_US">
+			<Text>Izumo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IZUMO" Language="ru_RU">
+			<Text>Идзумо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMI" Language="ja_JP">
+			<Text>石見</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMI" Language="en_US">
+			<Text>Iwami</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IWAMI" Language="ru_RU">
+			<Text>Ивами</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKI" Language="ja_JP">
+			<Text>隠岐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKI" Language="en_US">
+			<Text>Oki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OKI" Language="ru_RU">
+			<Text>Оки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HARIMA" Language="ja_JP">
+			<Text>播磨</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HARIMA" Language="en_US">
+			<Text>Harima</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HARIMA" Language="ru_RU">
+			<Text>Харима</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIMASAKA" Language="ja_JP">
+			<Text>美作</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIMASAKA" Language="en_US">
+			<Text>Mimasaka</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_MIMASAKA" Language="ru_RU">
+			<Text>Мимасака</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIZEN" Language="ja_JP">
+			<Text>備前</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIZEN" Language="en_US">
+			<Text>Bizen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BIZEN" Language="ru_RU">
+			<Text>Бидзэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BITCHU" Language="ja_JP">
+			<Text>備中</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BITCHU" Language="en_US">
+			<Text>Bitchu</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BITCHU" Language="ru_RU">
+			<Text>Биттю</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BINGO" Language="ja_JP">
+			<Text>備後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BINGO" Language="en_US">
+			<Text>Bingo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BINGO" Language="ru_RU">
+			<Text>Бинго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKI" Language="ja_JP">
+			<Text>安芸</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKI" Language="en_US">
+			<Text>Aki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AKI" Language="ru_RU">
+			<Text>Аки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUO" Language="ja_JP">
+			<Text>周防</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUO" Language="en_US">
+			<Text>Suo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SUO" Language="ru_RU">
+			<Text>Суо</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGATO" Language="ja_JP">
+			<Text>長門</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGATO" Language="en_US">
+			<Text>Nagato</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_NAGATO" Language="ru_RU">
+			<Text>Нагато</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KII" Language="ja_JP">
+			<Text>紀伊</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KII" Language="en_US">
+			<Text>Kii</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_KII" Language="ru_RU">
+			<Text>Кии</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWAJI" Language="ja_JP">
+			<Text>淡路</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWAJI" Language="en_US">
+			<Text>Awaji</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_AWAJI" Language="ru_RU">
+			<Text>Авадзи</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANUKI" Language="ja_JP">
+			<Text>讃岐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANUKI" Language="en_US">
+			<Text>Sanuki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SANUKI" Language="ru_RU">
+			<Text>Сануки</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IYO" Language="ja_JP">
+			<Text>伊予</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IYO" Language="en_US">
+			<Text>Iyo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IYO" Language="ru_RU">
+			<Text>Иё</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSA" Language="ja_JP">
+			<Text>土佐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSA" Language="en_US">
+			<Text>Tosa</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_TOSA" Language="ru_RU">
+			<Text>Тоса</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUZEN" Language="ja_JP">
+			<Text>筑前</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUZEN" Language="en_US">
+			<Text>Chikuzen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUZEN" Language="ru_RU">
+			<Text>Тикудзэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUGO" Language="ja_JP">
+			<Text>筑後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUGO" Language="en_US">
+			<Text>Chikugo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_CHIKUGO" Language="ru_RU">
+			<Text>Тикуго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUZEN" Language="ja_JP">
+			<Text>豊前</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUZEN" Language="en_US">
+			<Text>Buzen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUZEN" Language="ru_RU">
+			<Text>Будзэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUNGO" Language="ja_JP">
+			<Text>豊後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUNGO" Language="en_US">
+			<Text>Bungo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_BUNGO" Language="ru_RU">
+			<Text>Бунго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIZEN" Language="ja_JP">
+			<Text>肥前</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIZEN" Language="en_US">
+			<Text>Hizen</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIZEN" Language="ru_RU">
+			<Text>Хидзэн</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIGO" Language="ja_JP">
+			<Text>肥後</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIGO" Language="en_US">
+			<Text>Higo</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HIGO" Language="ru_RU">
+			<Text>Хиго</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYUGA" Language="ja_JP">
+			<Text>日向</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYUGA" Language="en_US">
+			<Text>Hyuga</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_HYUGA" Language="ru_RU">
+			<Text>Хюга</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSUMI" Language="ja_JP">
+			<Text>大隅</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSUMI" Language="en_US">
+			<Text>Osumi</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_OSUMI" Language="ru_RU">
+			<Text>Осуми</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SATSUMA" Language="ja_JP">
+			<Text>薩摩</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SATSUMA" Language="en_US">
+			<Text>Satsuma</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_SATSUMA" Language="ru_RU">
+			<Text>Сацума</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKI" Language="ja_JP">
+			<Text>壱岐</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKI" Language="en_US">
+			<Text>Iki</Text>
+		</Row>
+		<Row Tag="LOC_JAC_CITYNAME_IKI" Language="ru_RU">
+			<Text>Ики</Text>
+		</Row>
+	</LocalizedText>
+</GameData>
