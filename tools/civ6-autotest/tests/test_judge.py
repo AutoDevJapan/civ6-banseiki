@@ -240,6 +240,7 @@ class JudgeTests(unittest.TestCase):
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
             "absorption-japan.json",
+            "absorption-hero-recall.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

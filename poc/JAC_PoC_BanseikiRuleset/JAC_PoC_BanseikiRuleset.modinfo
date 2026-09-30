@@ -9,6 +9,7 @@
 		<EnabledByDefault>1</EnabledByDefault>
 	</Properties>
 	<Dependencies>
+		<Mod id="8424840c-92ef-4426-a9b4-b4e0cb818049" title="LOC_BABYLON_MOD_TITLE"/>
 		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
 		<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
 	</Dependencies>
@@ -28,8 +29,18 @@
 		<Criteria id="JAC_Banseiki_Ruleset">
 			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
 		</Criteria>
+		<Criteria id="JAC_Banseiki_Heroes">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+			<ConfigurationValueMatches><Group>Game</Group><ConfigurationId>GAMEMODE_HEROES</ConfigurationId><Value>1</Value></ConfigurationValueMatches>
+		</Criteria>
 	</ActionCriteria>
 	<InGameActions>
+		<UpdateDatabase id="JAC_Banseiki_HeroesData" criteria="JAC_Banseiki_Heroes">
+			<Properties><LoadOrder>400</LoadOrder></Properties><File>Data/JAC_Banseiki_Heroes.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_Banseiki_HeroesText" criteria="JAC_Banseiki_Heroes"><File>Text/JAC_Banseiki_Heroes_Text.xml</File></UpdateText>
+		<UpdateIcons id="JAC_Banseiki_HeroesIcons" criteria="JAC_Banseiki_Heroes"><Properties><LoadOrder>400</LoadOrder></Properties><File>Data/JAC_Banseiki_Hero_Icons.sql</File></UpdateIcons>
+		<UpdateArt id="JAC_Banseiki_HeroesArt" criteria="JAC_Banseiki_Heroes"><File>JAC_Banseiki_Heroes.dep</File></UpdateArt>
 		<UpdateText id="JAC_Banseiki_InGameText" criteria="JAC_Banseiki_Ruleset">
 			<File>Text/JAC_Banseiki_Text.xml</File>
 		</UpdateText>
@@ -105,6 +116,11 @@
 		</UpdateText>
 	</FrontEndActions>
 	<Files>
+		<File>Data/JAC_Banseiki_Heroes.sql</File>
+		<File>Data/JAC_Banseiki_Hero_Icons.sql</File>
+		<File>Text/JAC_Banseiki_Heroes_Text.xml</File>
+		<File>JAC_Banseiki_Heroes.dep</File>
+		<File>ArtDefs/Units.artdef</File>
 		<File>Config/JAC_Banseiki_Config.xml</File>
 		<File>Text/JAC_Banseiki_Text.xml</File>
 		<File>UI/JAC_HouseNames.lua</File>

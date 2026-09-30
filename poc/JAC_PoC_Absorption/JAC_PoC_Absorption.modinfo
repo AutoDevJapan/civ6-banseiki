@@ -7,6 +7,7 @@
     <Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions>
   </Properties>
   <Dependencies>
+    <Mod id="8424840c-92ef-4426-a9b4-b4e0cb818049" title="LOC_BABYLON_MOD_TITLE"/>
     <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
     <Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
   </Dependencies>

@@ -19,13 +19,23 @@ GameInfo = {
   Buildings = setmetatable({BUILDING_PALACE={Index=0,BuildingType='BUILDING_PALACE'}},
     {__call=function() return rows({{Index=0,BuildingType='BUILDING_PALACE'},{Index=1,BuildingType='BUILDING_TEST'}}) end}),
   Units = {[0]={UnitType="UNIT_WARRIOR"},[1]={UnitType="UNIT_GREAT_GENERAL"},[2]={UnitType="UNIT_MISSIONARY"},
-           [3]={UnitType="UNIT_BUILDER"},[4]={UnitType="UNIT_HERO_HERCULES"}},
+           [3]={UnitType="UNIT_BUILDER"},[4]={UnitType="UNIT_HERO_JAC_WARLORD_A"},[5]={UnitType="UNIT_HERO_JAC_WARLORD_B"}},
+  HeroClasses = setmetatable({[0]={Index=0,HeroClassType='HEROCLASS_JAC_WARLORD_A',UnitType='UNIT_HERO_JAC_WARLORD_A'},
+    [1]={Index=1,HeroClassType='HEROCLASS_JAC_WARLORD_B',UnitType='UNIT_HERO_JAC_WARLORD_B'}},
+    {__call=function(t) return rows({t[0],t[1]}) end}),
   Religions = {[5]={ReligionType="RELIGION_TEST"}},
   Technologies = {TECH_TEST={Index=11}}, Civics = {CIVIC_TEST={Index=12}}
 }
-TYPE = {UNIT_WARRIOR=0,UNIT_GREAT_GENERAL=1,UNIT_MISSIONARY=2,UNIT_BUILDER=3,UNIT_HERO_HERCULES=4}
+UnitPropertyKeys={LifespanRemaining=4242}
+TYPE = {UNIT_WARRIOR=0,UNIT_GREAT_GENERAL=1,UNIT_MISSIONARY=2,UNIT_BUILDER=3,UNIT_HERO_JAC_WARLORD_A=4,UNIT_HERO_JAC_WARLORD_B=5}
+GameInfo.HeroClasses.HEROCLASS_JAC_WARLORD_A=GameInfo.HeroClasses[0]
+GameInfo.HeroClasses.HEROCLASS_JAC_WARLORD_B=GameInfo.HeroClasses[1]
+for name,id in pairs(TYPE) do GameInfo.Units[name]=GameInfo.Units[id];GameInfo.Units[id].Hash=100+id end
 CURRENT_TURN, NEXT_ID, SPAWNS, KILLS, TRANSFERS = 5, 100, 0, 0, 0
 FAIL_SPAWN, FAIL_CITY, FAIL_COPY, WIPE_ON_LAST_CITY = nil, false, false, true
+HERO_CLAIMS,HERO_ORIGINS,HERO_DISCOVERED,HERO_CREATIONS={},{},{},0
+HERO_CLAIM_ERAS,PLAYER_ERAS,FAITH={},{},{},{}
+HERO_NO_SPAWN,HERO_THROW_AFTER_SPAWN,HERO_WRONG_OWNER,HERO_WRONG_ORIGIN=false,false,false,false
 local function prop(obj)
   obj.props={}
   obj.GetProperty=function(self,key) return self.props[key] end
@@ -36,8 +46,11 @@ Game = prop({GetCurrentGameTurn=function() return CURRENT_TURN end})
 ExposedMembers={}
 Players, PlayerConfigurations, CITIES, PLOTS = {}, {}, {}, {}
 for owner=0,3 do
+  PLAYER_ERAS[owner]=0;FAITH[owner]=0
   local p=prop({owner=owner,units={},cities={},techs={},civics={}})
   p.GetID=function() return owner end
+  p.GetEras=function() return {GetEra=function() return PLAYER_ERAS[owner] end,
+    SetEra=function(_,id) PLAYER_ERAS[owner]=id end} end
   p.IsAlive=function() return next(p.cities) ~= nil end
   p.IsHuman=function() return owner==0 end
   p.GetUnits=function() return {
@@ -47,7 +60,8 @@ for owner=0,3 do
   p.GetCities=function() return {
     Members=function() return pairs(p.cities) end,
     GetCount=function() local n=0;for _ in pairs(p.cities) do n=n+1 end;return n end,
-    GetCapitalCity=function() local _,c=next(p.cities);return c end
+    GetCapitalCity=function() local _,c=next(p.cities);return c end,
+    FindID=function(_,id) for _,c in pairs(p.cities) do if c.id==id then return c end end end
   } end
   p.GetTechs=function() return {
     SetTech=function(_,id,v) p.techs[id]=v end,HasTech=function(_,id) return p.techs[id]==true end
@@ -60,10 +74,19 @@ for owner=0,3 do
 end
 function UNIT(owner,id,kind,x)
   local u=prop({owner=owner,id=id,kind=TYPE[kind],x=x or 4,y=0,damage=0,moves=2,xp=0,individual=-1,
-    promotions={},formation=0,gpcharges=2,build=kind=="UNIT_BUILDER" and 3 or 0,spread=kind=="UNIT_MISSIONARY" and 3 or 0,religion=-1})
+    promotions={},formation=0,gpcharges=2,build=kind=="UNIT_BUILDER" and 3 or 0,spread=kind=="UNIT_MISSIONARY" and 3 or 0,religion=-1,
+    heroClass=kind=='UNIT_HERO_JAC_WARLORD_A' and 0 or kind=='UNIT_HERO_JAC_WARLORD_B' and 1 or -1,lifespan=30,charges=6,renown=0})
   u.GetOwner=function(self) return self.owner end
   u.GetID=function(self) return self.id end
   u.GetType=function(self) return self.kind end
+  local get,set=u.GetProperty,u.SetProperty
+  u.GetProperty=function(self,key) if key==UnitPropertyKeys.LifespanRemaining then return self.lifespan end;return get(self,key) end
+  u.SetProperty=function(self,key,value) if key==UnitPropertyKeys.LifespanRemaining then self.lifespan=value else set(self,key,value) end end
+  u.IsHero=function(self) return self.heroClass>=0 end
+  u.GetHeroClassType=function(self) return self.heroClass end
+  -- Renown methods are optional legacy Debug-panel capabilities, not assumed present in the shipped build.
+  u.GetRenown=function(self) return self.renown end;u.SetRenown=function(self,n) self.renown=n end
+  u.GetActionCharges=function(self) return self.charges end;u.ChangeActionCharges=function(self,n) self.charges=self.charges+n end
   u.GetX=function(self) return self.x end;u.GetY=function(self) return self.y end
   u.GetDamage=function(self) return self.damage end
   u.SetDamage=function(self,n) if FAIL_COPY then error("copy failed") end;self.damage=n end
@@ -90,13 +113,14 @@ function UNIT(owner,id,kind,x)
   return u
 end
 function CITY(owner,x,pop,faith)
-  local city=prop({owner=owner,x=x,y=0,pop=pop or 6,faith=faith or {['5']=4},loyalty=87})
+  local city=prop({owner=owner,id=x,x=x,y=0,pop=pop or 6,faith=faith or {['5']=4},loyalty=87,monument=true})
+  city.GetID=function(self) return self.id end
   city.GetOwner=function(self) return self.owner end
   city.GetX=function(self) return self.x end;city.GetY=function(self) return self.y end
   city.GetPopulation=function(self) return self.pop end
   city.GetName=function(self) return "CITY_"..self.x end
   city.GetBuildings=function() return {
-    HasBuilding=function(_,id) return id==1 or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
+    HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
     GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007 end
   } end
   city.ChangeLoyalty=function(self,n) self.loyalty=self.loyalty+n end
@@ -118,13 +142,14 @@ CityManager={GetCityAt=function(x,y) return CITIES[x] end,
     if FAIL_CITY then error("city failed") end
     TRANSFERS=TRANSFERS+1
     local donor=city.owner
-    Players[donor].cities[city.x]=nil;Players[owner].cities[city.x]=city;city.owner=owner
+    Players[donor].cities[city.x]=nil;Players[owner].cities[city.x]=city;city.owner=owner;city.id=city.id+1000
     -- Deliberately replace properties and change engine IDs during transfer.
     city.props={}
     for _,plot in pairs(PLOTS) do if plot.city==city.x then plot.owner=owner end end
     if WIPE_ON_LAST_CITY and next(Players[donor].cities)==nil then Players[donor].units={} end
   end}
 UnitManager={GetUnit=function(owner,id) return Players[owner].units[id] end,
+  PlaceUnit=function(unit,x,y) unit.x=x;unit.y=y;unit.moves=0;unit.damage=0 end,
   Kill=function(unit) assert(Players[unit.owner].units[unit.id]);Players[unit.owner].units[unit.id]=nil;KILLS=KILLS+1 end,
   InitUnitValidAdjacentHex=function(owner,kind,x,y,radius)
     SPAWNS=SPAWNS+1
@@ -136,6 +161,25 @@ Game.GetGreatPeople=function() return {CreatePerson=function(_,owner,individual,
   SPAWNS=SPAWNS+1;if FAIL_SPAWN==SPAWNS then return end
   local unit=UNIT(owner,NEXT_ID,"UNIT_GREAT_GENERAL",x+2);unit.individual=individual;NEXT_ID=NEXT_ID+1
 end} end
+HERO_MANAGER={
+  GetHeroClaimPlayer=function(_,class) return HERO_CLAIMS[class] or -1 end,
+  GetHeroOriginCityID=function(_,class) return HERO_ORIGINS[class] end,
+  GetPlayerHeroOriginBuildingType=function(_,owner) return 1 end,
+  IsHeroDiscovered=function(_,owner,class) return HERO_DISCOVERED[owner..':'..class]==true end,
+  SetHeroDiscovered=function(_,owner,class,v) HERO_DISCOVERED[owner..':'..class]=v end,
+  CreateHero=function(_,owner,class,x,y)
+    assert(type(owner)=='number' and GameInfo.HeroClasses[class] and y==0,'CreateHero(player,class,x,y) signature')
+    local city=assert(CITIES[x]);assert(city.owner==owner and city.monument,'native Hero needs an owned origin building')
+    -- Native binding changes its claim before initialization, including failed initialization.
+    HERO_CREATIONS=HERO_CREATIONS+1;HERO_CLAIMS[class]=HERO_WRONG_OWNER and 3 or owner;HERO_CLAIM_ERAS[class]=PLAYER_ERAS[owner]
+    if HERO_NO_SPAWN then return end
+    local origin=HERO_WRONG_ORIGIN and CITIES[12] or city
+    HERO_ORIGINS[class]={player=origin.owner,id=origin.id}
+    UNIT(owner,NEXT_ID,GameInfo.HeroClasses[class].UnitType,x);NEXT_ID=NEXT_ID+1
+    if HERO_THROW_AFTER_SPAWN then error('hero init interrupted') end
+    -- NO RETURN VALUE; ownership/origin are verified independently of the unit list.
+  end}
+Game.GetHeroesManager=function() return HERO_MANAGER end
 CITY(0,0);CITY(1,4);CITY(1,8);CITY(2,12);CITY(3,16)
 local warrior=UNIT(1,3,"UNIT_WARRIOR");warrior.damage=23;warrior.moves=1;warrior.xp=31;warrior.promotions[7]=true;warrior.formation=2
 warrior:SetProperty("JAC_POC_GROWTHUI_WARLORD",{Level=4,XP=13,Personality="CALM",Equipment={"SWORD"},Artifact="RELIC"})
@@ -196,11 +240,13 @@ class AbsorptionTests(unittest.TestCase):
         return self.a.Apply(self.g.PLAN)
 
     def snapshot(self):
-        return self.run_lua('''local a=ExposedMembers.JAC_Absorption;local result={State=a.GetState(),Owners={},Cities={},Units={}}
+        return self.run_lua('''local a=ExposedMembers.JAC_Absorption;local result={State=a.GetState(),Owners={},Cities={},Units={},
+          HeroClaims=HERO_CLAIMS,HeroOrigins=HERO_ORIGINS,HeroDiscoveries=HERO_DISCOVERED}
           for owner=0,3 do result.Owners[owner]=a.GetRoster(owner);result.Units[owner]={}
             for id,u in Players[owner]:GetUnits():Members() do
               result.Units[owner][id]={Owner=u.owner,Type=u.kind,Individual=u.individual,Damage=u.damage,
-                Moves=u.moves,XP=u.xp,Promotions=u.promotions,Properties=u.props} end end
+                Moves=u.moves,XP=u.xp,Promotions=u.promotions,Properties=u.props,
+                HeroClass=u.heroClass,Lifespan=u.lifespan,ActionCharges=u.charges,Renown=u.renown} end end
           for x,c in pairs(CITIES) do result.Cities[x]={Owner=c:GetOwner(),Faith=a.CityReligion(c),Properties=c.props} end
           return a.Canonical(result)''')
 
@@ -271,7 +317,7 @@ class AbsorptionTests(unittest.TestCase):
         expected = {
             "UNIT": {"SURRENDER", "INCORPORATE", "DISSOLVE", "ESCAPE", "RESIST"},
             "PERSON": {"CAPTURE", "RECRUIT", "SUBMIT", "EXILE", "EXECUTE", "RETIRE", "DEFECT"},
-            "HERO": {"RECRUIT", "PROTECT", "RECONTRACT", "DEFECT", "HIDE"},
+            "HERO": {"RECRUIT", "PROTECT", "RECONTRACT", "DEFECT", "HIDE", "SUICIDE"},
             "GREAT_PERSON": {"RECRUIT", "RESEARCH", "FAITH", "CULTURE", "EXILE", "RETIRE"},
             "ITEM": {"TRANSFER", "LOOT", "SEIZE", "RETURN", "SCATTER"},
             "UNLOCK": {"INHERIT", "PRESERVE"}, "RELIGION": {"PRESERVE"},
@@ -306,8 +352,414 @@ class AbsorptionTests(unittest.TestCase):
     def test_invalid_return_is_rejected(self):
         self.assert_rejected_unchanged("PLAN.Assets.artifact={Outcome='RETURN',ReturnOwner=1}", "third-party")
 
-    def test_native_hero_is_rejected_without_loss(self):
-        self.assert_rejected_unchanged("UNIT(1,13,'UNIT_HERO_HERCULES');PLAN.Units['1:13']='PROTECT'", "native Hero")
+    def add_native_hero(self, *, second=False):
+        self.run_lua('''
+          local u=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A');u.lifespan=17;u.charges=2;u.renown=13;u.damage=7;u.moves=1
+          HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id};HERO_DISCOVERED['1:0']=true
+          local person={ID='native',Kind='HERO',Owner=1,Unit={Owner=1,ID=13},Contract='RECONTRACT',
+            Loyalty=71,Lifespan=17,Relations={friend=29},Equipment={'SPEAR'}}
+          u:SetProperty('JAC_ABSORPTION_PERSON_V1',person)
+          Players[1].props.JAC_ABSORPTION_ASSETS_V1.native=person
+          PLAN.Units['1:13']='RECONTRACT';PLAN.Assets.native='RECONTRACT'
+        ''')
+        if second:
+            self.run_lua('''
+              local u=UNIT(1,14,'UNIT_HERO_JAC_WARLORD_B');u.lifespan=21;u.charges=0;u.renown=9
+              HERO_CLAIMS[1]=1;HERO_ORIGINS[1]={player=1,id=CITIES[8].id};HERO_DISCOVERED['1:1']=true
+              PLAN.Units['1:14']='PROTECT'
+            ''')
+
+    def assert_native_suicide(self, cause, requested="RECONTRACT"):
+        tx = self.apply()
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.run_lua(f'''
+          local a=ExposedMembers.JAC_Absorption
+          local tx=a.GetState().Transactions['test-absorption']
+          assert(tx.HeroResults.native.Outcome=='SUICIDE' and tx.HeroResults.native.Cause=='{cause}')
+          assert(tx.HeroResults.native.RequestedOutcome=='{requested}')
+          assert(tx.HeroResults.native.NativeClaimAfter==HERO_CLAIMS[0] or tx.HeroResults.native.NativeClaimAfter==nil)
+          local snap
+          for _,value in ipairs(tx.Units) do if value.ID==13 then snap=value end end
+          assert(snap and snap.Outcome=='SUICIDE' and snap.RequestedOutcome=='{requested}')
+          assert(snap.SuicideCause=='{cause}' and not snap.KeepUnit)
+          local record=a.GetState().Archive.native
+          assert(record and record.Outcome=='SUICIDE' and record.RequestedOutcome=='{requested}')
+          assert(record.SuicideCause=='{cause}' and record.Unit==nil and record.FormerUnit.ID==13)
+          assert(record.NativeUnit.Hero.ClassType=='HEROCLASS_JAC_WARLORD_A')
+          assert(record.NativeUnit.Hero.Lifespan==17 and record.NativeUnit.Hero.ActionCharges==2)
+          assert(record.Contract=='RECONTRACT' and record.Loyalty==71 and record.Relations.friend==29)
+          assert(a.FindUnit(2,'test-absorption:unit:13')==nil)
+          assert(a.GetRoster(2).native==nil and next(a.GetRoster(1))==nil)
+          assert(a.Verify('test-absorption',true))
+        ''')
+        before = self.snapshot()
+        self.load_scripts()
+        self.apply()  # The original request still identifies the completed operation.
+        self.assertEqual(self.snapshot(), before)
+
+    def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
+        self.add_native_hero(second=True)
+        self.apply()
+        self.assertEqual(self.g.HERO_CREATIONS, 2)
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.run_lua('''
+          local a=ExposedMembers.JAC_Absorption;local u=a.FindUnit(2,'test-absorption:unit:13')
+          assert(u:IsHero() and u:GetHeroClassType()==0 and u:GetProperty(UnitPropertyKeys.LifespanRemaining)==17 and u:GetActionCharges()==2 and u:GetRenown()==13)
+          assert(u:GetDamage()==7 and u:GetMovesRemaining()==1)
+          assert(a.FindUnit(2,'test-absorption:unit:14'):GetActionCharges()==0)
+          assert(HERO_CLAIMS[0]==2 and HERO_CLAIMS[1]==2)
+          assert(HERO_ORIGINS[0].player==2 and HERO_ORIGINS[0].id==CITIES[4]:GetID())
+          assert(HERO_ORIGINS[1].player==2 and HERO_ORIGINS[1].id==CITIES[8]:GetID())
+          local r=a.GetRoster(2).native
+          assert(r.Unit.ID==u:GetID() and r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29)
+          assert(r.NativeHero.ClassType=='HEROCLASS_JAC_WARLORD_A' and r.NativeHero.ActionCharges==2 and r.NativeHero.Origin.Owner==1)
+          assert(a.GetRoster(2)['native-person:1:14'].Kind=='HERO')
+          assert(u:GetProperty('JAC_ABSORPTION_PERSON_V1').Owner==2)
+        ''')
+        before = self.snapshot()
+        self.load_scripts()
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.apply()
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.g.HERO_CREATIONS, 2)
+
+    def test_native_hero_absent_gameplay_manager_becomes_suicide_history(self):
+        self.add_native_hero()
+        self.run_lua('Game.GetHeroesManager=function() return nil end')
+        self.assert_native_suicide('NATIVE_MANAGER_UNAVAILABLE')
+
+    def test_dormant_native_claim_without_unit_is_archived_as_suicide(self):
+        self.run_lua("HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}")
+        tx = self.apply()
+        self.assertEqual(tx.Status, 'COMPLETE')
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          local r=a.GetState().Archive['native-hero:1:HEROCLASS_JAC_WARLORD_A']
+          assert(r and r.Outcome=='SUICIDE' and r.SuicideCause=='DORMANT_CLAIM')
+          assert(a.GetState().Transactions['test-absorption'].HeroResults[r.ID].Outcome=='SUICIDE')
+          assert(r.NativeHero.ClaimOwner==1 and r.NativeHero.Origin.X==4 and r.NativeUnit==nil)
+          assert(r.Unit==nil and a.GetRoster(2)[r.ID]==nil and a.Verify('test-absorption',true))
+        ''')
+
+    def test_dormant_claim_with_stale_person_reference_preserves_requested_outcome(self):
+        self.run_lua('''
+          HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
+          Players[1].props.JAC_ABSORPTION_ASSETS_V1.dormant={ID='dormant',Kind='HERO',Owner=1,
+            Unit={Owner=1,ID=777},NativeHero={Class=0,ClassType='HEROCLASS_JAC_WARLORD_A',Lifespan=9},
+            Contract='PROTECT',Loyalty=74,Relations={friend=31}}
+          PLAN.Assets.dormant='PROTECT'
+        ''')
+        self.apply()
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          local r=a.GetState().Archive.dormant
+          assert(r.Outcome=='SUICIDE' and r.RequestedOutcome=='PROTECT' and r.SuicideCause=='DORMANT_CLAIM')
+          assert(r.FormerUnit.ID==777 and not r.Unit and r.Contract=='PROTECT' and r.Relations.friend==31)
+          assert(r.NativeHero.ClaimOwner==1 and r.NativeHero.Origin.X==4)
+          assert(r.HistoricalNativeHero.Lifespan==9)
+        ''')
+
+    def test_native_hero_missing_origin_city_becomes_suicide(self):
+        self.add_native_hero()
+        self.run_lua('HERO_ORIGINS[0].id=9999')
+        self.assert_native_suicide('ORIGIN_UNAVAILABLE')
+
+    def test_native_hero_missing_origin_building_becomes_suicide(self):
+        self.add_native_hero()
+        self.run_lua('CITIES[4].monument=false')
+        self.assert_native_suicide('ORIGIN_BUILDING_UNAVAILABLE')
+
+    def test_native_heroes_sharing_origin_archive_the_second_claim(self):
+        self.add_native_hero(second=True)
+        self.run_lua('HERO_ORIGINS[1].id=CITIES[4].id')
+        self.apply()
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          assert(a.GetRoster(2).native.Unit and a.GetState().Archive['native-person:1:14'].SuicideCause=='HERO_ORIGIN_COLLISION')
+        ''')
+
+    def test_native_hero_no_spawn_after_claim_change_finishes_as_suicide(self):
+        self.add_native_hero()
+        self.g.HERO_NO_SPAWN = True
+        self.assert_native_suicide('HERO_CREATE_NO_UNIT')
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+        self.assertEqual(self.g.HERO_CLAIMS[0], 2)
+        self.assertEqual(self.a.GetState().Archive.native.NativeClaimAfter, 2)
+
+    def test_native_hero_init_throw_after_creation_adopts_candidate_without_recreating(self):
+        self.add_native_hero()
+        self.g.HERO_THROW_AFTER_SPAWN = True
+        self.apply()
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+
+    def test_native_hero_token_write_failure_kills_only_its_candidate(self):
+        self.add_native_hero()
+        self.run_lua('''
+          local create=HERO_MANAGER.CreateHero
+          HERO_MANAGER.CreateHero=function(...)
+            create(...)
+            local u=Players[2].units[NEXT_ID-1];local set=u.SetProperty
+            u.SetProperty=function(self,key,value)
+              if key=='JAC_ABSORPTION_UNIT_TOKEN_V1' and not TOKEN_FAILED then TOKEN_FAILED=true;error('token interrupted') end
+              set(self,key,value)
+            end
+          end
+        ''')
+        self.assert_native_suicide('HERO_TOKEN_ERROR')
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+        self.run_lua("assert(#(function() local a={};for _,u in Players[2]:GetUnits():Members() do if u:IsHero() then a[#a+1]=u end end;return a end)()==0)")
+
+    def test_native_hero_wrong_origin_is_suicide_without_duplicate(self):
+        self.add_native_hero()
+        self.g.HERO_WRONG_ORIGIN = True
+        self.assert_native_suicide('HERO_MANAGER_MISMATCH')
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+
+    def test_native_hero_city_failure_can_resume_from_escrow_without_second_kill(self):
+        self.add_native_hero()
+        self.g.FAIL_CITY = True
+        with self.assertRaisesRegex(Exception, 'city failed'):
+            self.apply()
+        self.assertEqual((self.g.KILLS, self.g.HERO_CREATIONS), (1, 0))
+        self.g.FAIL_CITY = False
+        self.load_scripts()
+        self.a.Resume('test-absorption')
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertEqual((self.g.KILLS, self.g.HERO_CREATIONS), (6, 1))
+
+    def test_native_hero_manager_mismatch_is_not_reported_as_inheritance(self):
+        self.add_native_hero()
+        self.g.HERO_WRONG_OWNER = True
+        self.assert_native_suicide('HERO_MANAGER_MISMATCH')
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+
+    def test_hero_creation_error_does_not_kill_a_third_party_unit(self):
+        self.add_native_hero()
+        self.run_lua('''HERO_MANAGER.CreateHero=function(_,owner,class,x,y)
+          HERO_CREATIONS=HERO_CREATIONS+1;HERO_CLAIMS[class]=3
+          UNIT(3,777,'UNIT_HERO_JAC_WARLORD_A')
+          error('third party candidate appeared')
+        end''')
+        self.assert_native_suicide('HERO_CREATE_ERROR')
+        self.run_lua("assert(Players[3].units[777] and Players[3].units[777]:IsHero())")
+
+    def test_reused_donor_id_blocks_without_killing_an_unrelated_unit(self):
+        self.add_native_hero()
+        self.run_lua('''local spawn=UnitManager.InitUnitValidAdjacentHex
+          UnitManager.InitUnitValidAdjacentHex=function(...)
+            if not DONOR_REPLACED then
+              DONOR_REPLACED=true
+              Players[1].units[13]=nil
+              UNIT(1,13,'UNIT_BUILDER')
+            end
+            return spawn(...)
+          end''')
+        with self.assertRaisesRegex(Exception, 'native Hero changed before escrow'):
+            self.apply()
+        self.run_lua("assert(Players[1].units[13] and not Players[1].units[13]:IsHero())")
+
+    def test_native_hero_restore_error_becomes_suicide_without_losing_other_assets(self):
+        self.add_native_hero()
+        self.run_lua('''
+          local create=HERO_MANAGER.CreateHero
+          HERO_MANAGER.CreateHero=function(...)
+            create(...)
+            local u=Players[2].units[NEXT_ID-1]
+            u.ChangeActionCharges=function() error('hero charges unavailable') end
+          end
+        ''')
+        self.assert_native_suicide('HERO_RESTORE_ERROR')
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          assert(a.GetRoster(2).equipment and a.GetRoster(2).artifact and a.GetRoster(2).person)
+        ''')
+
+    def test_native_hero_recall_binds_new_id_and_person_after_reload(self):
+        self.add_native_hero()
+        self.apply()
+        self.run_lua('''
+          local a=ExposedMembers.JAC_Absorption
+          local old=a.FindUnit(2,'test-absorption:unit:13')
+          OLD_HERO_ID=old:GetID();UnitManager.Kill(old)
+          assert(a.Verify('test-absorption',false))
+          a.BeginHeroRecall('recall:1','test-absorption','native')
+        ''')
+        self.load_scripts()
+        with self.assertRaisesRegex(Exception, 'exactly one recalled'):
+            self.a.CompleteHeroRecall('recall:1')
+        self.run_lua('HERO_MANAGER:CreateHero(2,0,4,0)')
+        record = self.a.CompleteHeroRecall('recall:1')
+        self.assertNotEqual(record.Unit.ID, self.g.OLD_HERO_ID)
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          local r=a.GetRoster(2).native;local u=a.FindUnit(2,'recall:1:unit')
+          assert(r.Unit.ID==u:GetID() and r.Unit.Token=='recall:1:unit' and r.FormerUnit.ID==OLD_HERO_ID)
+          assert(r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29)
+          assert(u:GetProperty('JAC_ABSORPTION_PERSON_V1').Unit.ID==u:GetID())
+          assert(#r.RecallHistory==1 and a.Verify('test-absorption',false))
+        ''')
+        self.load_scripts()
+        self.a.CompleteHeroRecall('recall:1')
+        self.assertTrue(self.a.Verify('test-absorption', False))
+        self.assertEqual(len(self.a.GetRoster(2).native.RecallHistory), 1)
+
+    def test_recall_rejects_candidate_and_token_collisions_without_killing_them(self):
+        self.add_native_hero()
+        self.apply()
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          UnitManager.Kill(a.FindUnit(2,'test-absorption:unit:13'))
+          a.BeginHeroRecall('recall:collision','test-absorption','native')
+          UNIT(3,777,'UNIT_HERO_JAC_WARLORD_A')
+          UNIT(2,778,'UNIT_HERO_JAC_WARLORD_A')
+          UNIT(2,779,'UNIT_HERO_JAC_WARLORD_A')
+        ''')
+        with self.assertRaisesRegex(Exception, 'exactly one recalled'):
+            self.a.CompleteHeroRecall('recall:collision')
+        self.run_lua('''
+          assert(Players[3].units[777] and Players[2].units[778] and Players[2].units[779])
+          Players[2].units[779]=nil
+          Players[2].units[778]:SetProperty('JAC_ABSORPTION_UNIT_TOKEN_V1','someone-else')
+        ''')
+        with self.assertRaisesRegex(Exception, 'another transaction'):
+            self.a.CompleteHeroRecall('recall:collision')
+        self.run_lua('''assert(Players[3].units[777] and Players[2].units[778])''')
+
+    def test_recall_resumes_after_token_write_and_does_not_duplicate_history(self):
+        self.add_native_hero()
+        self.apply()
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption
+          UnitManager.Kill(a.FindUnit(2,'test-absorption:unit:13'))
+          a.BeginHeroRecall('recall:retry','test-absorption','native')
+          HERO_MANAGER:CreateHero(2,0,4,0)
+          local u=Players[2].units[NEXT_ID-1];local set=u.SetProperty
+          u.SetProperty=function(self,key,value)
+            set(self,key,value)
+            if key=='JAC_ABSORPTION_UNIT_TOKEN_V1' and not RECALL_TOKEN_THROWN then
+              RECALL_TOKEN_THROWN=true;error('recall token interrupted')
+            end
+          end
+        ''')
+        with self.assertRaisesRegex(Exception, 'recall token interrupted'):
+            self.a.CompleteHeroRecall('recall:retry')
+        self.load_scripts()
+        record = self.a.CompleteHeroRecall('recall:retry')
+        self.assertEqual(len(record.RecallHistory), 1)
+        self.assertEqual(record.Unit.Token, 'recall:retry:unit')
+        self.assertEqual(len(self.a.CompleteHeroRecall('recall:retry').RecallHistory), 1)
+        self.assertEqual(self.g.HERO_CREATIONS, 2)
+
+    def test_native_hero_checks_detect_corruption_instead_of_only_testing_unit_count(self):
+        for corruption, message in (
+            ('u.lifespan=18', 'lifespan changed'), ('u.charges=6', 'action charges changed'),
+            ('u.renown=0', 'renown changed'), ('HERO_CLAIMS[0]=1', 'manager owner changed'),
+            ('HERO_ORIGINS[0]={player=2,id=CITIES[12].id}', 'recall origin changed'),
+            ("UNIT(2,999,'UNIT_HERO_JAC_WARLORD_A')", 'duplicate native Hero'),
+        ):
+            with self.subTest(corruption=corruption):
+                self.setUp()
+                self.add_native_hero()
+                self.apply()
+                self.run_lua("local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13');" + corruption)
+                with self.assertRaisesRegex(Exception, message):
+                    self.a.Verify('test-absorption', True)
+
+    def test_native_lifespan_changes_after_turn_but_owner_recall_identity_must_remain(self):
+        self.add_native_hero()
+        self.apply()
+        self.g.CURRENT_TURN = 6
+        self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13').lifespan=16")
+        self.load_scripts()
+        self.assertTrue(self.a.Verify('test-absorption', False))
+        with self.assertRaisesRegex(Exception, 'lifespan changed'):
+            self.a.Verify('test-absorption', True)
+        self.run_lua('HERO_CLAIMS[0]=1')
+        with self.assertRaisesRegex(Exception, 'manager owner changed'):
+            self.a.Verify('test-absorption', False)
+
+    def test_shipped_lifespan_property_is_used_without_legacy_lifespan_or_renown_methods(self):
+        self.add_native_hero()
+        self.run_lua('''
+          Players[1].units[13].GetRenown=nil;Players[1].units[13].SetRenown=nil
+          Players[1].props.JAC_ABSORPTION_ASSETS_V1.native.Renown=13
+          local create=HERO_MANAGER.CreateHero
+          HERO_MANAGER.CreateHero=function(...)
+            create(...);local u=Players[2].units[NEXT_ID-1];u.GetRenown=nil;u.SetRenown=nil
+          end
+        ''')
+        self.apply()
+        self.run_lua('''
+          local a=ExposedMembers.JAC_Absorption;local u=a.FindUnit(2,'test-absorption:unit:13')
+          assert(u:GetProperty(UnitPropertyKeys.LifespanRemaining)==17 and u:GetActionCharges()==2)
+          local r=a.GetRoster(2).native;assert(r.Renown==13 and r.NativeHero.RenownUnavailable and r.NativeHero.Renown==nil)
+          assert(u.GetLifespan==nil and u.SetLifespan==nil and u.GetRenown==nil and u.SetRenown==nil)
+        ''')
+        self.assertTrue(self.a.Verify('test-absorption', True))
+
+    def test_native_hero_archival_and_explicit_suicide_preserve_requested_outcome(self):
+        for outcome in ('HIDE', 'DEFECT', 'SUICIDE'):
+            with self.subTest(outcome=outcome):
+                self.setUp()
+                self.add_native_hero()
+                self.g.NATIVE_OUTCOME = outcome
+                self.run_lua("PLAN.Units['1:13']=NATIVE_OUTCOME;PLAN.Assets.native=NATIVE_OUTCOME")
+                self.assert_native_suicide('EXPLICIT_SUICIDE' if outcome == 'SUICIDE'
+                                           else 'REQUESTED_OUTCOME_UNTRANSFERABLE', outcome)
+
+    def test_native_hero_position_is_restored_separately_from_its_recall_origin(self):
+        self.add_native_hero()
+        self.run_lua('Players[1].units[13].x=10')
+        self.apply()
+        self.run_lua('''local a=ExposedMembers.JAC_Absorption;local u=a.FindUnit(2,'test-absorption:unit:13')
+          assert(u:GetX()==10 and u:GetY()==0 and u:GetDamage()==7 and u:GetMovesRemaining()==1)
+          assert(HERO_ORIGINS[0].id==CITIES[4].id and HERO_ORIGINS[0].player==2)
+        ''')
+        self.assertTrue(self.a.Verify('test-absorption', True))
+
+    def test_native_hero_unrestorable_exposed_renown_becomes_suicide(self):
+        self.add_native_hero()
+        self.run_lua('Players[1].units[13].SetRenown=nil')
+        self.assert_native_suicide('RENOWN_UNRESTORABLE')
+
+    def test_native_hero_is_not_escrowed_when_an_ordinary_unit_cannot_preserve_spent_charges(self):
+        self.add_native_hero()
+        self.run_lua("local u=UNIT(1,15,'UNIT_BUILDER');u.build=1;PLAN.Units['1:15']='INCORPORATE'")
+        with self.assertRaisesRegex(Exception, 'spent build charges'):
+            self.apply()
+        self.assertEqual((self.g.HERO_CREATIONS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.assertIsNotNone(self.g.Players[1].units[13])
+
+    def test_native_hero_duplicate_at_absorber_survives_suicide(self):
+        self.add_native_hero()
+        self.run_lua("UNIT(2,999,'UNIT_HERO_JAC_WARLORD_A')")
+        self.assert_native_suicide('HERO_CLASS_COLLISION')
+        self.run_lua("assert(Players[2].units[999] and Players[2].units[999]:IsHero())")
+
+    def test_native_hero_city_transfer_throw_after_mutation_resumes_with_the_new_city_id(self):
+        self.add_native_hero()
+        self.run_lua('''
+          local transfer=CityManager.TransferCity
+          CityManager.TransferCity=function(city,owner)
+            transfer(city,owner)
+            if not CITY_THROWN then CITY_THROWN=true;error('city transfer interrupted after mutation') end
+          end
+        ''')
+        with self.assertRaisesRegex(Exception, 'interrupted after mutation'):
+            self.apply()
+        self.load_scripts()
+        self.a.Resume('test-absorption')
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertEqual((self.g.TRANSFERS, self.g.HERO_CREATIONS), (2, 1))
+
+    def test_native_hero_token_set_then_throw_becomes_suicide(self):
+        self.add_native_hero()
+        self.run_lua('''
+          local create=HERO_MANAGER.CreateHero
+          HERO_MANAGER.CreateHero=function(...)
+            create(...);local u=Players[2].units[NEXT_ID-1];local set=u.SetProperty
+            u.SetProperty=function(self,key,value)
+              set(self,key,value)
+              if key=='JAC_ABSORPTION_UNIT_TOKEN_V1' and not TOKEN_THROWN then TOKEN_THROWN=true;error('after token write') end
+            end
+          end
+        ''')
+        self.assert_native_suicide('HERO_TOKEN_ERROR')
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
 
     def test_engine_spawn_failure_preserves_every_donor_unit_and_city_then_resume_is_idempotent(self):
         self.g.FAIL_SPAWN = 2
@@ -497,21 +949,29 @@ class AbsorptionTests(unittest.TestCase):
             self.a.Resume("test-absorption")
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), before)
 
-    def test_live_scenario_checks_execute_in_lua_and_detect_asset_corruption_after_reload(self):
+    def live_scenario_fixture(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json").read_text(encoding="utf-8"))
-        steps = [step for step in data["steps"] if step["action"] == "ui_lua"]
+        steps = [step for step in data["steps"] if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner"]
         self.run_lua('''
           local majors={};for id=0,21 do
             local n=id;majors[#majors+1]={GetID=function() return n end}
           end
           PlayerManager={GetAliveMajors=function() return majors end}
+          local makeUnit=UNIT
+          UNIT=function(...)
+            local u=makeUnit(...)
+            if u:IsHero() then u.GetRenown=nil;u.SetRenown=nil end
+            return u
+          end
           for id=0,21 do
             local n=id
             PlayerConfigurations[id]={GetLeaderTypeName=function() return 'LEADER_TEST_'..n end,
               GetCivilizationTypeName=function() return n==1 and 'CIVILIZATION_JAC_ASHINA' or n==2 and 'CIVILIZATION_JAC_DATE' or 'CIVILIZATION_JAC_ODA' end}
           end
           local founder={}
-          for id,p in pairs(Players) do local n=id;p.GetReligion=function() return {GetReligionTypeCreated=function() return founder[n] or -1 end} end end
+          for id,p in pairs(Players) do local n=id;p.GetReligion=function() return {
+            GetReligionTypeCreated=function() return founder[n] or -1 end,
+            ChangeFaithBalance=function(_,v) FAITH[n]=FAITH[n]+v end} end end
           Game.GetReligion=function() return {FoundReligion=function(_,owner,id) founder[owner]=id end,
             GetReligions=function() local list={};for owner,id in pairs(founder) do list[#list+1]={Religion=id,Founder=owner,Beliefs={3,7}} end;return list end} end
           GameInfo.Religions.RELIGION_CUSTOM_1={Index=5,ReligionType='RELIGION_TEST'}
@@ -522,12 +982,19 @@ class AbsorptionTests(unittest.TestCase):
             GetReligionsInCity=function() local list={};for id,count in pairs(self.faith) do list[#list+1]={Religion=tonumber(id),Followers=count} end;return list end,
             AddReligiousPressure=function(_,_,id,pressure,owner) self.faith[tostring(id)]=self.pop end} end end
         ''')
+        return steps
+
+    def test_live_scenario_checks_execute_in_lua_and_detect_asset_corruption_after_reload(self):
+        steps = self.live_scenario_fixture()
         self.run_lua(steps[0]["code"])
         self.run_lua(steps[1]["code"])
         before = self.run_lua(steps[2]["code"])
         self.load_scripts()
         self.assertEqual(self.run_lua(steps[3]["code"]), before)
         self.g.CURRENT_TURN = 6
+        self.run_lua('''for _,u in Players[2]:GetUnits():Members() do
+          if u:IsHero() then u:SetProperty(UnitPropertyKeys.LifespanRemaining,u:GetProperty(UnitPropertyKeys.LifespanRemaining)-1) end
+        end''')
         after = self.run_lua(steps[4]["code"])
         self.load_scripts()
         self.assertEqual(self.run_lua(steps[5]["code"]), after)
@@ -545,6 +1012,113 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua("local r=Players[2].props.JAC_ABSORPTION_ASSETS_V1['live:hero'];local u=ExposedMembers.JAC_Absorption.FindUnit(2,r.Unit.Token);u:GetProperty('JAC_ABSORPTION_PERSON_V1').Owner=1")
         with self.assertRaisesRegex(Exception, "transferred unit properties changed"):
             self.run_lua(steps[5]["code"])
+
+    def test_live_recall_probes_execute_native_eligibility_checks_and_detect_wrong_owner(self):
+        steps = self.live_scenario_fixture()
+        self.run_lua(steps[0]['code'])
+        self.run_lua(steps[1]['code'])
+        self.run_lua('''
+          CityCommandTypes={PURCHASE=1,PARAM_UNIT_TYPE=2,PARAM_YIELD_TYPE=3}
+          CityCommandResults={FAILURE_REASONS=4};MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+          GameInfo.Yields={YIELD_FAITH={Index=6}}
+          GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
+            {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
+          Game.GetEras=function() return {GetCurrentEra=function() return 0 end} end
+          for _,c in pairs(CITIES) do c.GetGold=function() return {GetPurchaseCost=function(_,yield,hash,formation)
+            assert(yield==6 and (hash==104 or hash==105) and formation==0);return 1000 end} end end
+          RECALL_QUERIES=0
+          CityManager.CanStartCommand=function(city,command,visible,parameters,results)
+            assert(command==1 and visible==false and parameters[3]==6 and results==true)
+            RECALL_QUERIES=RECALL_QUERIES+1
+            local class=parameters[2]==104 and 0 or parameters[2]==105 and 1 or error('not a native hero')
+            local origin=HERO_ORIGINS[class]
+            if HERO_CLAIMS[class]~=city.owner or not origin or origin.player~=city.owner or origin.id~=city.id then
+              return false,{[4]={'WRONG_OWNER_OR_ORIGIN'}} end
+            for _,u in pairs(Players[city.owner].units) do
+              if u:IsHero() and u:GetHeroClassType()==class then return false,{[4]={'HERO_ALIVE'}} end
+            end
+            if HERO_CLAIM_ERAS[class]>=PLAYER_ERAS[city.owner] then return false,{[4]={'APPEARANCE_ERA'}} end
+            if FAITH[city.owner]<1000 then return false,{[4]={'INSUFFICIENT_FAITH'}} end
+            return true,{}
+          end
+        ''')
+        data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json').read_text(encoding='utf-8'))
+        recall = data['steps'][-5:]
+        self.assertIn('duplicate recall denied', self.run_lua(recall[0]['code']))
+        self.run_lua('HERO_CLAIMS[0]=1')
+        with self.assertRaisesRegex(Exception, 'recall rights retained by donor'):
+            self.run_lua(recall[0]['code'])
+        self.run_lua('HERO_CLAIMS[0]=2')
+        queries = self.g.RECALL_QUERIES
+        for step in recall[1:]:
+            result = self.run_lua(step['code'])
+        self.assertEqual(self.g.RECALL_QUERIES - queries, 2)
+        self.assertIn('faith cost=1000', result)
+        self.run_lua('HERO_CLAIMS[0]=1')
+        with self.assertRaisesRegex(Exception, 'recall owner reverted'):
+            self.run_lua(recall[-1]['code'])
+
+    def test_human_receiver_scenario_executes_real_recall_and_rebinds_person_in_lua_vm(self):
+        self.live_scenario_fixture()
+        steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
+                           .read_text(encoding='utf-8'))['steps']
+        self.run_lua('''
+          Game.GetLocalPlayer=function() return 0 end
+          for id=4,21 do
+            local n=id
+            PlayerConfigurations[id].GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_OTHER_'..n end
+          end
+          PlayerConfigurations[3].GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_OTHER_3' end
+          GameInfo.Yields={YIELD_FAITH={Index=6}}
+          GameInfo.GreatWorks={[0]={GreatWorkObjectType='GREATWORKOBJECT_HERO'}}
+          Game.GetGreatWorkType=function(id) assert(id==1007);return 0 end
+          GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
+            {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
+          Game.GetEras=function() return {GetCurrentEra=function() return 0 end} end
+          CityCommandTypes={PURCHASE=1,PARAM_UNIT_TYPE=2,PARAM_MILITARY_FORMATION_TYPE=3,PARAM_YIELD_TYPE=4}
+          CityCommandResults={FAILURE_REASONS=5}
+          MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+          for owner,p in pairs(Players) do
+            local original=p.GetReligion
+            p.GetReligion=function()
+              local religion=original()
+              religion.GetFaithBalance=function() return FAITH[owner] end
+              return religion
+            end
+          end
+          for _,c in pairs(CITIES) do
+            c.GetGold=function() return {GetPurchaseCost=function() return 1000 end} end
+          end
+          CityManager.CanStartCommand=function(city,command,visible,parameters,results)
+            assert(command==1 and parameters[2]==104 and parameters[3]==0 and parameters[4]==6)
+            return HERO_CLAIMS[0]==city.owner and PLAYER_ERAS[city.owner]>HERO_CLAIM_ERAS[0]
+              and FAITH[city.owner]>=1000,{}
+          end
+          CityManager.RequestCommand=function(city,command,parameters)
+            assert(CityManager.CanStartCommand(city,command,false,parameters,true))
+            FAITH[city.owner]=FAITH[city.owner]-1000
+            HERO_MANAGER:CreateHero(city.owner,0,city.x,city.y)
+          end
+        ''')
+        self.run_lua(steps[5]['code'])
+        self.run_lua(steps[6]['code'])
+        self.load_scripts()
+        self.run_lua(steps[11]['code'])
+        self.g.CURRENT_TURN = 6
+        self.run_lua('''local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')
+          local a=ExposedMembers.JAC_Absorption;local r=a.GetRoster(e.To)[e.RecordID]
+          a.FindUnit(e.To,r.Unit.Token).lifespan=18''')
+        self.run_lua(steps[14]['code'])
+        self.load_scripts()
+        self.run_lua(steps[15]['code'])
+        self.run_lua(steps[17]['code'])
+        self.load_scripts()
+        self.run_lua(steps[22]['code'])
+        self.run_lua('''local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')
+          assert(e.RecallID~=e.TransferID and e.FaithAfter==999000 and e.CostAfter==1000)
+          assert(e.Before.HeroCountAvailable and e.Before.Hero==1 and e.AfterRecall.Hero==1)
+          assert(#ExposedMembers.JAC_Absorption.GetRoster(e.To)[e.RecordID].RecallHistory==1)
+        ''')
 
     def test_partial_expected_properties_freeze_references_to_every_staged_unit(self):
         self.run_lua('''
@@ -657,11 +1231,39 @@ class AbsorptionPackageTests(unittest.TestCase):
         self.assertEqual(sum(step["action"] == "save" for step in steps), 2)
         self.assertEqual(sum(step["action"] == "load" for step in steps), 2)
         configure = next(step for step in steps if step["action"] == "configure")
+        enabled = next(step for step in steps if step['action'] == 'enable_mods')
+        self.assertIn('8424840c-92ef-4426-a9b4-b4e0cb818049', enabled['ids'])
+        modes = [step for step in steps if step['action'] == 'ui_lua' and step['state_name'] == 'FrontEnd']
+        self.assertEqual(len(modes), 1)
+        self.assertIn("GameConfiguration.SetValue('GAMEMODE_HEROES',true)", modes[0]['code'])
         self.assertEqual(configure["map_file"], "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map")
         ai = {p["civ"] for p in configure["players"] if not p["human"]}
         self.assertTrue({"CIVILIZATION_JAC_ASHINA", "CIVILIZATION_JAC_DATE"} <= ai)
         end = next(step for step in steps if step["action"] == "end_turn")
         self.assertEqual(end["turns"], 1)
+
+    def test_human_recall_scenario_uses_custom_native_classes_and_real_purchase(self):
+        data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-hero-recall.json")
+                          .read_text(encoding="utf-8"))
+        steps = data["steps"]
+        compile_error = LuaRuntime().eval("function(code) local f,e=load(code);return e end")
+        for step in steps:
+            if step["action"] == "ui_lua":
+                self.assertIsNone(compile_error(step["code"]))
+            if step["action"] == "wait_for":
+                self.assertIsNone(compile_error(step["condition"]["code"]))
+        configure = next(step for step in steps if step["action"] == "configure")
+        self.assertEqual(len(configure["players"]), 22)
+        self.assertEqual([player["civ"] for player in configure["players"] if player["human"]],
+                         ["CIVILIZATION_JAC_ODA"])
+        self.assertEqual(sum(step["action"] == "end_turn" for step in steps), 1)
+        self.assertEqual(sum(step["action"] == "save" for step in steps), 2)
+        self.assertEqual(sum(step["action"] == "load" for step in steps), 2)
+        code = "\n".join(step["code"] for step in steps if step["action"] == "ui_lua")
+        self.assertIn("CityManager.RequestCommand(city,CityCommandTypes.PURCHASE,parameters)", code)
+        self.assertIn("A.BeginHeroRecall", code)
+        self.assertIn("A.CompleteHeroRecall", code)
+        self.assertIn("non-Banseiki Hero class enabled", code)
 
     def test_modinfo_references_exist_and_have_no_open_pr_dependencies(self):
         root = ET.parse(MOD / "JAC_PoC_Absorption.modinfo").getroot()
@@ -671,7 +1273,8 @@ class AbsorptionPackageTests(unittest.TestCase):
         for name in files:
             self.assertTrue((MOD / name).is_file(), name)
         self.assertEqual({n.get("id") for n in root.findall("./Dependencies/Mod")},
-                         {"4873eb62-8ccc-4574-b784-dda455e74e68", "bd7a82c5-6b38-4b69-a7f5-8dc9af534249"})
+                         {"4873eb62-8ccc-4574-b784-dda455e74e68", "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+                          "8424840c-92ef-4426-a9b4-b4e0cb818049"})
         self.assertEqual(root.findtext("./ActionCriteria/Criteria/RuleSetInUse"), "RULESET_JAC_BANSEIKI")
 
     def test_all_text_has_exactly_japanese_english_and_russian(self):
