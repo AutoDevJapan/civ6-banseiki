@@ -39,6 +39,13 @@ function Rules.Categories(leader)
     table.sort(result, function(a,b) return a.SortOrder < b.SortOrder; end);
     return result;
 end
+-- UI supplies a fresh read of engine state, never a cached property or operation parameter.
+-- Absence during UI initialization is unavailable, not evidence of a missing governor.
+function Rules.NativeGovernor(owner, leader)
+    local read = ExposedMembers.JAC_LeaderPersonaNativeRead;
+    if type(read) ~= "function" then return nil; end
+    return read(owner, leader);
+end
 function Rules.Status(owner, leader, nodeType)
     if type(leader) ~= "string" then return "NOT_OWNED"; end
     local person = GameInfo.JAC_LeaderPersonas[leader];
@@ -46,8 +53,9 @@ function Rules.Status(owner, leader, nodeType)
     local node = type(nodeType) == "string" and GameInfo.JAC_PersonaTreeNodes[nodeType];
     if not node or node.LeaderType ~= leader then return "INVALID_NODE"; end
     local p = Players[owner];
+    local native = Rules.NativeGovernor(owner, leader);
     if not p or Rules.Get(leader, "STATE") ~= "GOVERNOR" or
-       not p:GetGovernors():HasGovernor(GameInfo.Governors[person.GovernorType].Hash) then return "NOT_GOVERNOR"; end
+       not native or not native.appointed or not native.base then return "NOT_GOVERNOR"; end
     if Rules.Owned(node) then return "OWNED"; end
     local category = Rules.Get(leader, "CATEGORY");
     if category and category ~= node.CategoryType then return "CATEGORY_LOCKED"; end

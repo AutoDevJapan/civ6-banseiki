@@ -248,7 +248,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "InGame",
       "code": "local l='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=2 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=1 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
     },
     {
@@ -640,7 +640,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "InGame",
       "code": "local l='LEADER_JAC_ODA_NOBUHIDE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=1 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=0 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
     },
     {
@@ -659,7 +659,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "InGame",
       "code": "local l='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=3 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=2 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
     },
     {
@@ -704,12 +704,12 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "InGame",
       "code": "local l='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=3 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=2 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "InGame",
       "code": "local l='LEADER_JAC_ODA_NOBUHIDE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=1 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=0 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
     },
     {

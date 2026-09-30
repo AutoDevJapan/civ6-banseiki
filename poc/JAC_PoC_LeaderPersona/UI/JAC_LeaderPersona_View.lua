@@ -1,6 +1,28 @@
 -- Native appointment/assignment; custom merit purchases are reviewed in the tree screen.
 include("InstanceManager");
 include("JAC_PersonaTreeRules");
+-- Read native UI objects here; never pass userdata or client-supplied state to gameplay.
+-- leaderperson-04 verified that governor lookup/CanAppoint exist only in UI.
+-- Every invocation reads the current engine state for the requested owner (including AI).
+ExposedMembers.JAC_LeaderPersonaNativeRead = function(owner, leader)
+    local row = GameInfo.JAC_LeaderPersonas[leader];
+    local p = Players[owner];
+    local def = row and GameInfo.Governors[row.GovernorType];
+    if not p or not def then return nil; end
+    local governors = p:GetGovernors();
+    local result = { appointed=governors:HasGovernor(def.Hash), canAppoint=governors:CanAppoint() };
+    if result.appointed then
+        local governor = governors:GetGovernor(def.Hash);
+        if not governor then return nil; end
+        local city = governor:GetAssignedCity();
+        result.established = governor:IsEstablished();
+        result.neutralized = governor:GetNeutralizedTurns();
+        result.base = governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash);
+        if city then result.cityOwner, result.cityID = city:GetOwner(), city:GetID(); end
+    end
+    return result;
+end;
+
 local m_Rows = InstanceManager:new("PersonaRow", "Root", Controls.Rows);
 local m_Attempts, m_Finalize = {}, {};
 local function Get(leader, field) return Game:GetProperty("JAC_PERSONA_" .. leader .. "_" .. field); end

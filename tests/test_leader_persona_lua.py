@@ -282,6 +282,65 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.FIRE("JAC_LeaderPersonaPurchase", owner, params)
         return self.g.Players[owner].GetProperty(None, "JAC_PERSONA_PURCHASE_RESULT")
 
+    def test_gameplay_without_ui_governor_methods_uses_fresh_native_reads(self):
+        # leaderperson-04: GameCore has only the title APIs. The native reader
+        # executes in UI; it must not cache the initial unappointed state.
+        self.lua.execute("""
+            local original=Players[0].GetGovernors
+            local read=ExposedMembers.JAC_LeaderPersonaNativeRead
+            UI_NATIVE_READ=false
+            Players[0].GetGovernors=function()
+                local all=original()
+                if UI_NATIVE_READ then return all end
+                return {GetGovernorPoints=all.GetGovernorPoints,
+                    GetGovernorPointsSpent=all.GetGovernorPointsSpent,
+                    ChangeGovernorPoints=all.ChangeGovernorPoints}
+            end
+            ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
+                UI_NATIVE_READ=true
+                local ok,result=pcall(read,owner,leader)
+                UI_NATIVE_READ=false
+                if not ok then error(result) end
+                return result
+            end
+        """)
+        self.join()
+        self.grant_titles(0, DATE)
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
+        governor = self.g.NEWGOV(0, DATE)
+        governor.city = self.g.CITIES[0][1]
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
+        self.api.OnPlayerTurnStarted(0)
+        self.assertEqual(self.prop("MERIT"), 2)
+        self.set_merit(8)
+        self.assertEqual(self.purchase("ENVOYS"), "PURCHASED")
+        governor.established = False
+        self.g.TURN = 2
+        self.api.OnPlayerTurnStarted(0)
+        self.assertEqual(self.prop("MERIT"), 0)
+        governor.established = True
+        governor.city = self.g.CITIES[0][2]
+        self.g.TURN = 3
+        self.api.OnPlayerTurnStarted(0)
+        self.assertEqual(self.prop("MERIT"), 2)
+
+    def test_missing_native_reader_never_creates_or_removes_a_person(self):
+        read = self.g.ExposedMembers.JAC_LeaderPersonaNativeRead
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.assertEqual(self.api.Join(0, 1), "NATIVE_UNAVAILABLE")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = read
+        self.join()
+        self.grant_titles(0, DATE)
+        self.api.PrepareEvolution(0, DATE)
+        self.g.NEWGOV(0, DATE)
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
+        self.assertEqual((self.prop("STATE"), self.g.DESTROYS), ("EVOLVING", 0))
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = read
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
+
     def test_purchase_is_only_available_through_the_gameplay_event(self):
         self.assertIsNone(self.api.Purchase)
 

@@ -43,12 +43,7 @@ local function FindPerson(owner, row)
 end
 
 local function NativeGovernor(owner, row)
-    local p = Player(owner, false);
-    local def = GameInfo.Governors[row.GovernorType];
-    if not p or not def then return nil; end
-    local governors = p:GetGovernors();
-    if not governors:HasGovernor(def.Hash) then return nil; end
-    return governors:GetGovernor(def.Hash); -- Expansion1/UI/Additions/GovernorPanel.lua:528
+    return Rules.NativeGovernor(owner, row.LeaderType);
 end
 
 local function Join(owner, source, personality, trait)
@@ -67,7 +62,9 @@ local function Join(owner, source, personality, trait)
         return Finish(owner, Get(leader, "OWNER") == owner and "ALREADY_JOINED" or "OTHER_OWNER");
     end
     if trait ~= nil and trait ~= row.Trait then return Finish(owner, "INVALID_METADATA"); end
-    if NativeGovernor(owner, row) then return Finish(owner, "GOVERNOR_EXISTS"); end
+    local native = NativeGovernor(owner, row);
+    if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
+    if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
     local city = p:GetCities():GetCapitalCity();
     if not city then return Finish(owner, "NO_CITY"); end
     local unit = FindPerson(owner, row);
@@ -109,11 +106,13 @@ local function PrepareEvolution(owner, leader)
     if state == "GOVERNOR" then return Finish(owner, "ALREADY_EVOLVED"); end
     if state == "EVOLVING" then return Finish(owner, "EVOLVING"); end
     if state ~= "GREAT_PERSON" or not FindPerson(owner, row) then return Finish(owner, "PERSON_MISSING"); end
-    if NativeGovernor(owner, row) then return Finish(owner, "GOVERNOR_EXISTS"); end
+    local native = NativeGovernor(owner, row);
+    if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
+    if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
     local cost = EvolutionCost(leader);
     -- Each pending appointment still needs one native title. Its persisted state
     -- reserves that title until completion, so another person cannot count it again.
-    if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost or not p:GetGovernors():CanAppoint() then
+    if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost or not native.canAppoint then
         return Finish(owner, "NO_TITLE");
     end
     -- Reserve the surcharge. Native APPOINT_GOVERNOR spends the remaining ONE title.
@@ -140,7 +139,8 @@ local function CompleteEvolution(owner, leader)
     if not p or not row or Get(leader, "OWNER") ~= owner then return Finish(owner, "NOT_OWNED"); end
     if Get(leader, "STATE") == "GOVERNOR" then return Finish(owner, "ALREADY_EVOLVED"); end
     if Get(leader, "STATE") ~= "EVOLVING" then return Finish(owner, "NOT_EVOLVING"); end
-    if not NativeGovernor(owner, row) then return Finish(owner, "APPOINTMENT_PENDING"); end
+    local native = NativeGovernor(owner, row);
+    if not native or not native.appointed or not native.base then return Finish(owner, "APPOINTMENT_PENDING"); end
     -- Retain the Great Person until the engine has really appointed its Governor.
     local unit = FindPerson(owner, row);
     if unit then p:GetUnits():Destroy(unit); end -- TunerMapPanel.lua:199, also accepts no return value
@@ -164,8 +164,9 @@ local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].V
 local function SettledCity(owner, row)
     if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil; end
     local governor = NativeGovernor(owner, row);
-    if not governor or not governor:IsEstablished() or governor:GetNeutralizedTurns() > 0 then return nil; end
-    local city = governor:GetAssignedCity();
+    if not governor or not governor.appointed or not governor.base or
+       not governor.established or governor.neutralized > 0 or governor.cityOwner ~= owner then return nil; end
+    local city = governor.cityID and CityManager.GetCity(owner, governor.cityID);
     if city and city:GetOwner() == owner then return city; end
 end
 
