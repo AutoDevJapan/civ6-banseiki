@@ -29,6 +29,11 @@ UPDATE Eras_XP2 SET EraScoreThresholdShift = 0;
 -- Historic moments stay in the timeline without points (Expansion1_Moments.xml:191-321).
 UPDATE Moments SET EraScore = 0;
 
+-- The policy reopen entry must survive turn phases and save/load. Ordinary reign notices use USER_DEFINED_2.
+-- Official precedent: DLC/PiratesScenario/Data/PiratesScenario_Notifications.xml:7-10 makes USER notifications
+-- durable; Base/Assets/Gameplay/Data/Notifications.xml:166-167 otherwise expires both at turn end.
+UPDATE Notifications SET ExpiresEndOfTurn = 0 WHERE NotificationType = 'NOTIFICATION_USER_DEFINED_3';
+
 -- Every attachment of a modifier whose type adds era score (types: Expansion1_Modifiers.xml:15-32,184-186,
 -- Expansion2_Modifiers.xml:80). Official attachments: dedication quests (CommemorationModifiers), the Taj Mahal
 -- (DLC/Expansion1/Data/Expansion1_Buildings_Major.xml:78) and the Dramatic Ages GameModifiers

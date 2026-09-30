@@ -1,0 +1,94 @@
+{
+  "name": "Sengoku Great People screen: 75 individuals, zero musicians; open and refresh without any Lua/UI error",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85"
+      ],
+      "disable_ids": [
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map",
+      "map_size": "MAPSIZE_DUEL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620960,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end\nlocal class=GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_MUSICIAN']\nif not class then error('musician class missing') end\nlocal count,total=0,0\nfor row in GameInfo.GreatPersonIndividuals() do\n total=total+1\n if row.GreatPersonClassType=='GREAT_PERSON_CLASS_MUSICIAN' then count=count+1 end\nend\nif count~=0 or total~=75 then error('expected 0 musicians and 75 remaining great people, got '..count..'/'..total) end\nJAC_AUTOTEST_GP_OPENED=0\nJAC_AUTOTEST_GP_HANDLER=function() JAC_AUTOTEST_GP_OPENED=JAC_AUTOTEST_GP_OPENED+1 end\nLuaEvents.GreatPeople_OpenGreatPeople.Add(JAC_AUTOTEST_GP_HANDLER)\nLuaEvents.LaunchBar_OpenGreatPeoplePopup()\nreturn 'musicians=0 greatPeople=75; requested Great People screen'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "GreatPeoplePopup",
+        "code": "return not ContextPtr:IsHidden()"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GreatPeoplePopup",
+      "code": "if ContextPtr:IsHidden() then error('Great People screen did not open') end\nRefreshCurrentGreatPeople()\nRefreshPreviousGreatPeople()\nRefreshCurrentGreatPeople()\nif ContextPtr:IsHidden() then error('Great People screen closed during refresh') end\nprint('[JAC_GREAT_PEOPLE_ZERO_MUSICIANS] opened and refreshed current/history/current')\nreturn true"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "[JAC_GREAT_PEOPLE_ZERO_MUSICIANS] opened and refreshed"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "screenshot",
+      "path": "great-people-zero-musicians.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GreatPeoplePopup",
+      "code": "Close()\nif not ContextPtr:IsHidden() then error('Great People screen did not close') end\nreturn true"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if JAC_AUTOTEST_GP_OPENED~=1 then error('Great People open event count '..tostring(JAC_AUTOTEST_GP_OPENED)) end\nLuaEvents.GreatPeople_OpenGreatPeople.Remove(JAC_AUTOTEST_GP_HANDLER)\nJAC_AUTOTEST_GP_HANDLER=nil\nreturn 'Great People screen opened once with zero musicians'"
+    }
+  ]
+}

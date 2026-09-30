@@ -48,7 +48,11 @@ class EraTimingProbeTests(unittest.TestCase):
         # enable_mods never disables other mods, and the probe mod acts on the unification test map.
         for path in SCENARIOS.glob("*.json"):
             text = path.read_text(encoding="utf-8")
-            if "JAC_Unification_Test.Civ6Map" in text and not path.name.startswith("probe-era-timing"):
+            if path.name == "sengoku-era-reigns-beyond-nine.json":
+                data = json.loads(text)
+                self.assertIn(PROBE_MOD, data["steps"][0]["ids"])
+                self.assertIn("SetValue('JAC_ERA_TIMING_TAIL', true)", data["steps"][2]["code"])
+            elif "JAC_Unification_Test.Civ6Map" in text and not path.name.startswith("probe-era-timing"):
                 with self.subTest(path=path.name):
                     self.assertIn(PROBE_MOD, json.loads(text)["steps"][0]["disable_ids"])
 

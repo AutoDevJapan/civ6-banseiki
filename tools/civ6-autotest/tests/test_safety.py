@@ -25,6 +25,10 @@ class ScenarioSafetyTests(unittest.TestCase):
         launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted a real Steam launch"))
         self.steam_launch = launch.start()
         self.addCleanup(launch.stop)
+        restart = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
+        restart.start()
+        self.addCleanup(restart.stop)
+
 
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
@@ -572,8 +576,8 @@ class ScenarioSafetyTests(unittest.TestCase):
             condition = {"type": "log_line", "log": "Lua.log", "contains": "ready once"}
             trigger = {"action": "ui_lua", "state_name": "InGame", "code": "return true"}
             scenario = {"name": "log age", "steps": [
-                trigger, {"action": "wait_for", "condition": condition, "timeout": 0.02},
-                trigger, {"action": "wait_for", "condition": condition, "timeout": 0.02},
+                trigger, {"action": "wait_for", "condition": condition, "timeout": 1},
+                trigger, {"action": "wait_for", "condition": condition, "timeout": 1},
             ]}
             runner = Runner(scenario, base / "output", logs, base, 4318, auto_restart=False)
             original_wait = runner._wait
@@ -685,6 +689,14 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 
 class InputSafetyTests(unittest.TestCase):
+    def setUp(self):
+        process = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        self.addCleanup(process.stop)
+        process.start()
+        launch = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
+        self.addCleanup(launch.stop)
+        launch.start()
+
     def test_deadline_expiring_during_focus_sends_no_key(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <!-- Hidden test flag. Parameters schema: Base/Assets/Configuration/Data/Schema/SetupParameters.sql:75-99.
+       Boolean criteria: DLC/Babylon/Babylon.modinfo:38-43. No player-facing setting. -->
+  <Parameters>
+    <Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_EraTimingTail"
+         Name="LOC_JAC_TEST_ERA_TIMING_TAIL_NAME" Domain="bool" DefaultValue="0"
+         ConfigurationGroup="Game" ConfigurationId="JAC_ERA_TIMING_TAIL"
+         GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0"
+         SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/>
+  </Parameters>
+</GameInfo>
