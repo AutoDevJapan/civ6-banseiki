@@ -653,6 +653,44 @@ class ScenarioSafetyTests(unittest.TestCase):
                     self.assertEqual(sum("SetActive(true)" in code for code in commands), 1)
                     self.assertFalse(any("SetActive(false)" in code for code in commands))
 
+    def test_end_turn_closes_successive_ai_statements_without_repeating_action(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        commands = []
+        closed = []
+
+        def close_diplomacy(_deadline):
+            # One view opens after each false turn predicate; InGame still answers.
+            if len(closed) < 2 and any("== 8" in code for code in commands):
+                closed.append("AI diplomacy statement")
+                return [closed[-1]]
+            return []
+
+        def run_lua(_state, code, _timeout):
+            commands.append(code)
+            if code == "return Game.GetCurrentGameTurn()":
+                return "7"
+            if "== 8" in code:
+                return "true" if len(closed) == 2 else "false"
+            return "true"
+
+        with patch.object(runner, "_lua", side_effect=run_lua), patch.object(
+            runner, "_close_diplomacy", side_effect=close_diplomacy
+        ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_dismiss_advisor"), patch.object(
+            runner, "_log"
+        ), patch("scenario.time.sleep"):
+            self.assertEqual(runner._end_turn(10), "human turn 7->8")
+        self.assertEqual(closed, ["AI diplomacy statement", "AI diplomacy statement"])
+        self.assertEqual(sum("ACTION_ENDTURN" in code for code in commands), 1)
+
+    def test_end_turn_reopening_diplomacy_has_a_fixed_limit(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_close_diplomacy", return_value=["AI diplomacy statement"]), patch.object(
+            runner, "_lua", return_value="false"
+        ), patch.object(runner, "_log"), patch("scenario.time.sleep"):
+            with self.assertRaisesRegex(ScenarioError, "keep reopening"):
+                runner._wait({"type": "lua", "state_name": "InGame", "code": "return false"},
+                             10, close_diplomacy=True)
+
     def test_end_turn_honours_turns_and_rejects_invalid_values(self):
         # assassin-03: "turns" was silently ignored, so a 10-turn wait ended one turn and the check still passed.
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
