@@ -359,7 +359,8 @@ local function convertCitizens(entry)
   union["-1"] = nil
   local low, high, scale = 0, nil, 1024
   local ceiling = math.floor(2147483647 / city:GetPopulation())
-  for _ = 1, 64 do
+  local lastAfter
+  for attempt = 1, 64 do
     -- Gameplay exposes clearing one religion's pressure, not pressure reads.
     -- Never clear the engine-owned unaffiliated/pantheon pressure.
     for _, key in ipairs(keys(union)) do
@@ -370,6 +371,12 @@ local function convertCitizens(entry)
       if amount > 0 then cr:AddReligiousPressure(0, tonumber(key), amount, -1) end
     end
     local after, exact = cityFollowers(city), true
+    lastAfter = after
+    if GameConfiguration.GetValue("JAC_AUTOTEST") == 1 then
+      print("[JAC_RP] conversion player=" .. entry.player .. " city=" .. entry.city
+        .. " attempt=" .. attempt .. " scale=" .. scale .. " expected=" .. encode(entry.after)
+        .. " actual=" .. encode(after))
+    end
     for key, n in pairs(entry.after) do exact = exact and (after[key] or 0) == n end
     for key, n in pairs(after) do exact = exact and n == (entry.after[key] or 0) end
     if exact then return end
@@ -378,7 +385,8 @@ local function convertCitizens(entry)
     if nextScale < 1 or nextScale == scale or nextScale == low then break end
     scale = nextScale
   end
-  error("[JAC_RP] native conversion count mismatch; effect pending")
+  error("[JAC_RP] native conversion count mismatch; effect pending; expected="
+    .. encode(entry.after) .. " actual=" .. encode(lastAfter))
 end
 
 local function allianceActive(a)
