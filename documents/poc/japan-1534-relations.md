@@ -31,7 +31,7 @@
    - 同盟が切れていたら `SetHasAllied(相手, true)` で結び直し、プロパティを今のターンにして、Lua.log に `[JAC_1534_RELATIONS] re-made after lapse R02 HOJO-IMAGAWA on turn 32 (made on turn 1)` の形で出す。回数を Game プロパティ `JAC_1534_ALLIANCE_LAPSES` に数える（一度も切れていなければ nil）。結び直しはどの家の手番よりも前なので、手番の間に同盟と視界の共有が途切れることは無い。結び直した同盟は、また結んだターン + 期限 + 1 ターン目に切れ、同じように結び直す
    - 結び直したら両家の `RecheckVisibilityOnAll` を呼ぶ。失敗は `FAILED re-make`
    - 残る影響（ターンの切り替わりの中で起きる）：`AllianceEnded`・`DiplomacyRelationshipChanged` のイベントが出る。人間の家の同盟が切れると、その人間に「同盟の期限切れ」の通知 `NOTIFICATION_DIPLO_ALLIANCE_EXPIRED` が出る（翌ターンの終わりまで残る。`Base/Assets/Gameplay/Data/Notifications.xml:230`）。結び直した組は友好宣言が外れる（同盟中は影響しない）。未測定：同盟ポイント・レベルが0からになるか、切り替わりの間に相手の領土の自軍ユニットが押し出されるか、噂（ゴシップ）が出るか。通知などを出さずに済むのは期限そのものを上げる案だけで、オーナーに確認中（`questions.md` Q48）
-2. 終わらせる入口（将来のイベントの仕組みが呼ぶ。イベントの仕組みは別途設計）：`ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")`。組の引き当ては順を問わないが、1つ目の家が宣戦する。組のプロパティを `false` にし、以後は結び直さない。同盟中の `SetHasAllied(相手, false)` はエンジンが受け付けなかった（実機 `diplo-17`）ので、同盟が残っていれば1つ目の家から `DeclareWarOn(相手, WarTypes.FORMAL_WAR, true)` で強制の宣戦をして解き、組の Game プロパティ `JAC_1534_END_PEACE_<A>-<B>` に宣戦したターンを置く。次のターン以降の初め（`OnGameTurnStarted` の `MakePeaceAfterEnd`）に `MakePeaceWith(相手, true)` で講和させる（同じターンには講和しない。下記「すぐに解く方法の調査」）。宣戦しても同盟が残った場合は `still allied after war` を出し、同盟はエンジンの次の期限切れで終わる。**要実機確認**（`probe-end-alliance.json` の E1。オーナーの判断待ちのため未マージ）。終わらせたら `true`、続いていなかったら `false` を返す。`IsStartAllianceActive(勢力A, 勢力B)` で続いているかを読める。ゲームプレイのスクリプトから呼ぶ（UI から呼ぶとマルチプレイで同期しない）。`ExposedMembers` の公式の使い方は `Base/Assets/UI/MapTacks.lua:8`〜`:9`、同じ MOD の前例は `Scripts/JAC_Resources.lua:172`
+2. 終わらせる入口（将来のイベントの仕組みが呼ぶ。イベントの仕組みは別途設計）：`ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")`。組の順は問わない。組のプロパティを `false` にし、以後は結び直さない。同盟を `SetHasAllied(相手, false)` で解こうとするが、スクリプトから同盟をすぐに解く手段は無かった（実機 `diplo-17`・`end-alliance-01`。下記「すぐに解く方法の調査」）。そのため同盟と視界の共有は、エンジンの次の期限切れ（最長で期限 + 1 ターン後）まで残る。宣戦は挟まない。終わらせたら `true`、続いていなかったら `false` を返す。`IsStartAllianceActive(勢力A, 勢力B)` で続いているかを読める。ゲームプレイのスクリプトから呼ぶ（UI から呼ぶとマルチプレイで同期しない）。`ExposedMembers` の公式の使い方は `Base/Assets/UI/MapTacks.lua:8`〜`:9`、同じ MOD の前例は `Scripts/JAC_Resources.lua:172`
 3. 通常の外交での宣戦：同盟中の組は、通常の外交では互いに宣戦できない。`DIPLO_STATE_ALLIED` で選べる外交行動（`Base/Assets/Gameplay/Data/DiplomaticActions.xml:137`〜`:149`）に奇襲戦争も正式な戦争も無い（奇襲戦争は友好的・中立・非友好・非難中の `:168`・`:181`・`:193`・`:206`、正式な戦争は非難中の `:207` だけ）。Civilopedia も「同盟中は互いに正式な戦争を宣言できない」（`Base/Assets/Text/en_US/Civilopedia_Concepts_Text.xml:675`）。期限の切れ目はターンの切り替わりの中だけで、手番の前に結び直すので、味方どうしは（人間が味方の家を担当していても）イベントで同盟が終わるまで戦えない
 4. それでも交戦になった場合（別のスクリプトの `DeclareWarOn` など）は、次のターンの初めに `EndStartAlliance` を呼んで終わらせ、結び直さない
 5. 同盟が終わると、Civ6 の `LEAVE_ALLIANCE` で友好的（`DIPLO_STATE_FRIENDLY`）に戻る（`DiplomaticActions.xml:271`・`:284`）。以後は通常の外交
@@ -129,7 +129,7 @@
 
 | 変種 | 組 | 操作 | 期待 |
 |---|---|---|---|
-| E1 | R02 北条・今川 | ターン2に北条から `DeclareWarOn(今川, FORMAL_WAR, true)`、ターン3に `MakePeaceWith(今川, true)` | 本命。宣戦で同盟が解ければ、講和で非友好の平和になり、以後は結び直さない |
+| E1 | R02 北条・今川 | ターン2に北条から `DeclareWarOn(今川, FORMAL_WAR, true)`、ターン3に `MakePeaceWith(今川, true)` | 宣戦で同盟が解ければ、講和で非友好の平和になり、以後は結び直さない |
 | E2 | R04 伊達・蘆名 | ターン2に `DeclareWarOn(蘆名, SURPRISE_WAR, true)`、講和しない | 戦争の種類で違うか、戦争中のターンの切り替わりで同盟が戻らないか |
 | E3 | R19 島津・琉球 | ターン2に強制の引数なしで `DeclareWarOn(琉球, FORMAL_WAR)`、戦争になっていればターン3に講和 | 同盟中は拒まれる見込み（`CanDeclareWarOn` も読む） |
 | E4 | R05 足利・六角 | ターン2に双方の友好宣言を外し、続けて `SetHasAllied(六角, false)` | 友好宣言が前提で拒まれているなら解ける |
@@ -138,9 +138,24 @@
 | E7 | R03 大内・毛利 | ターン3の `OnGameTurnStarted` の中で毛利から `SetHasAllied(大内, false)` | ターンの処理の中なら受け付けるか |
 | E0 | R06 朝倉・六角 | なし（対照） | 同盟のまま |
 
-採る変種：E4・E5・E7 のどれかで解ければ、戦争を挟まないのでそれを採る（`EndStartAlliance` の `SetHasAllied(b, false)` の前に足すだけ）。どれも効かず E1 で解ければ、下書き済みの E1 の実装（上記「開始時の同盟を期限なしで保つ」の 2）を採る。副作用（宣戦した家への好戦度の不満・1ターンの戦争中の戦闘・講和後の最短期間 10 ターン）はオーナーに確認する。E1 でも解けなければ、すぐに解く方法は無く、期限切れを待つ（Q48 の①）か、期限を上げる（Q48 の②）かの判断に戻る
+### 実機の結果（2026-09-30、`artifacts/end-alliance-01`）
 
-E1 の下書きの模擬実行：`tests/test_japan_1534_relations_lua.py`（`uv run --no-project --with lupa python -m unittest tests.test_japan_1534_relations_lua`）。1つ目の家が強制の宣戦をする、宣戦したターンには講和せず次のターンに1回だけ講和する、終えた組は期限切れの後も結び直さない、別の理由で交戦中の組には宣戦も講和もしない、宣戦で同盟が残ればログを出す、を確かめる
+判定は 8/8 で通り、エンジンの停止も Lua のエラーも無かった（ゲームプレイ側の外交の状態の読み取り `GetDiplomaticAI()` だけは、ゲームプレイの Player に無く `ERR` になった。外交の状態は UI 側の値で見る）。`HasAllied` はゲームプレイ側、外交の状態・期限の残り・本拠の見え方は UI 側の値。ターンは開始からの通し番号（ターン1が開始）。
+
+| 変種 | 同盟は終わったか | 戦争 | 講和後 | 視界の共有（相手の本拠が見えるか） | 出たイベントと副作用 |
+|---|---|---|---|---|---|
+| E0 対照 R06 | 終わらない（ターン5まで `ALLIED`） | なし | - | 保たれる | なし |
+| E1 R02 強制の正式な戦争→翌ターン講和 | **終わらない**。ターン2〜5の間 `HasAllied`=true/true のまま、期限の残りも 29→26 と数え続けた。`AllianceEnded` は出ない | ターン2に交戦（`DiplomacyDeclareWar`、状態 `DIPLO_STATE_WAR`） | ターン3に講和（`DiplomacyMakePeace`）。状態は非友好→ターン4 中立→ターン5 友好と毎ターン上がり、ターン5まで平和のまま。非難が有効になり、宣戦は「友好か同盟の相手」で無効のまま | 戦争中（ターン3の初め）は双方見えない。講和後のターン4から双方また見える（同盟の視界の共有が戻ったと見られる） | 各ターン `DiplomacyRelationshipChanged`。好戦度・不満は未測定 |
+| E2 R04 強制の奇襲戦争（講和しない） | **終わらない**。交戦中も `HasAllied`=true/true、期限も数え続けた | ターン2〜5の間ずっと交戦（同盟のまま戦争） | - | ターン3から伊達→蘆名は見え、蘆名→伊達は見えない | `DiplomacyDeclareWar`。好戦度・不満は未測定 |
+| E3 R19 強制なしの正式な戦争 | 終わらない | 起きない（エラーも無し） | 講和は省略 | 保たれる | なし |
+| E4 R05 友好宣言を外す→`SetHasAllied(false)` | 終わらない | なし | - | 保たれる | 友好宣言は双方外れた（`DiplomacyRelationshipChanged` が false で出た）。同盟は残る |
+| E5 R07 両家から `SetHasAllied(false)` | 終わらない | なし | - | 保たれる | なし |
+| E6 R08 `SetPermanentAlliance`→`SetHasAllied(false)` | 終わらない | なし | - | 保たれる | `DiplomacyRelationshipChanged` が数回。永久同盟になり、解く関数が無いので使わない |
+| E7 R03 `OnGameTurnStarted` の中で `SetHasAllied(false)` | 終わらない | なし | - | 保たれる | なし |
+
+結論：スクリプトから同盟をすぐに解く手段は無い。強制の宣戦は戦争にはなるが、同盟（`HasAllied`・期限）はそのまま残り、講和すると視界の共有も戻る。戦争を挟む E1 は採らず、`EndStartAlliance` は宣戦しない形（組を結び直さなくなり、次の期限切れで解ける）に戻した。確認項目：E1 の講和後、ターン6以降に外交の状態が同盟へ戻るかは未測定。
+
+模擬実行：`tests/test_japan_1534_relations_lua.py`（`uv run --no-project --with lupa python -m unittest tests.test_japan_1534_relations_lua`）。終えた組は宣戦も講和もせず、期限切れの後も結び直さない（ほかの組は結び直す）、別の理由で交戦中の組は終わりとして扱い宣戦も講和もしない、を確かめる
 
 ## オーナー判断（2026-09-29 Discord・セットA）
 

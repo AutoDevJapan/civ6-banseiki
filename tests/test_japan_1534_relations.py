@@ -378,6 +378,7 @@ class Japan1534RelationsTests(unittest.TestCase):
         end = body("local function EndStartAlliance(factionA, factionB)")
         self.assertLess(end.index("Game:SetProperty(AllianceKey(factionA, factionB), false)"),
                         end.index("SetHasAllied(b, false)"))
+        self.assertNotIn("DeclareWarOn", end)  # a forced war keeps the alliance (live end-alliance-01)
         keep = body("local function KeepStartAlliances()")
         self.assertIn("IsStartAllianceActive(factionA, factionB)", keep)  # ended pairs are never re-made
         # live diplo-17: the engine ignores SetHasAllied(false) on an ally and no call restarts the clock, so the only

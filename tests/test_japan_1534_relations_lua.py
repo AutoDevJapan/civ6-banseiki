@@ -1,7 +1,8 @@
 """Runs Scripts/JAC_Japan_1534Relations.lua against stubbed gameplay objects: ending a start alliance.
 
-The engine ignores SetHasAllied(ally, false) (live diplo-17); EndStartAlliance breaks the alliance with a forced war
-and makes peace at the start of the next turn (never on the war turn: court-arbitration-08 hung the engine).
+No script call ends an alliance at once (live end-alliance-01: SetHasAllied(ally, false) is ignored, a forced war
+keeps HasAllied and vision returns after peace), so EndStartAlliance declares no war: it stops re-making the pair
+and the alliance ends at the engine's next lapse.
 Needs ``lupa``: ``uv run --no-project --with lupa python -m unittest tests.test_japan_1534_relations_lua``.
 """
 
@@ -20,7 +21,7 @@ LUA = Path(__file__).resolve().parents[1] / "poc/JAC_PoC_JapanMapScale/Scripts/J
 STUBS = r"""
 local FACTIONS = { "HOJO", "IMAGAWA", "SHIMAZU", "RYUKYU" }
 ID = {}
-TURN, WAR_ENDS_ALLIANCE = 1, true
+TURN = 1
 ALLIED, WAR, CALLS = {}, {}, {}  -- ALLIED/WAR keyed by the unordered pair "lo-hi"
 local function pair(a, b) if a > b then a, b = b, a end return a .. "-" .. b end
 local props = {}
@@ -45,8 +46,7 @@ for i, name in ipairs(FACTIONS) do
   end
   function d:DeclareWarOn(b, warType, force)
     table.insert(CALLS, "DeclareWarOn " .. id .. ">" .. b .. " " .. tostring(warType) .. " " .. tostring(force))
-    WAR[pair(id, b)] = true
-    if WAR_ENDS_ALLIANCE then ALLIED[pair(id, b)] = nil end
+    WAR[pair(id, b)] = true  -- the alliance stays (live end-alliance-01)
   end
   function d:MakePeaceWith(b, force)
     table.insert(CALLS, "MakePeaceWith " .. id .. ">" .. b .. " " .. tostring(force) .. " turn " .. TURN)
@@ -90,29 +90,20 @@ class EndStartAllianceTests(unittest.TestCase):
         self.g.TURN = number
         self.g.FIRE("OnGameTurnStarted", number)
 
-    def calls(self, prefix):
-        return [c for c in self.g.CALLS.values() if c.startswith(prefix)]
-
-    def test_end_breaks_the_alliance_with_a_war_and_makes_peace_on_the_next_turn(self):
+    def test_end_declares_no_war_and_the_pair_is_not_re_made_after_the_lapse(self):
         self.turn(5)
         self.assertTrue(self.api.EndStartAlliance("HOJO", "IMAGAWA"))
-        hojo, imagawa = self.g.ID["HOJO"], self.g.ID["IMAGAWA"]
-        self.assertEqual(self.calls("DeclareWarOn"), [f"DeclareWarOn {hojo}>{imagawa} 7 true"])  # the first house declares
+        self.assertFalse(self.api.IsStartAllianceActive("IMAGAWA", "HOJO"))
+        self.assertFalse(self.api.EndStartAlliance("IMAGAWA", "HOJO"))
+        self.assertTrue(self.g.ALLIED[self.hojo_imagawa])  # the engine ignores SetHasAllied(false)
+        self.assertIn("[JAC_1534_RELATIONS] ended start alliance HOJO-IMAGAWA", self.g.LOG.values())
+        self.g.ALLIED[self.hojo_imagawa] = None  # engine lapse of every start alliance (turn 1 + 30 + 1)
+        self.g.ALLIED[self.g.PAIR("SHIMAZU", "RYUKYU")] = None
+        self.turn(32)
         self.assertIsNone(self.g.ALLIED[self.hojo_imagawa])
-        self.assertFalse(self.api.IsStartAllianceActive("HOJO", "IMAGAWA"))
-        self.assertFalse(self.api.EndStartAlliance("HOJO", "IMAGAWA"))
-        self.assertEqual(self.g.COUNT("DeclareWarOn"), 1)
-        self.g.FIRE("OnGameTurnStarted", 5)  # never peace on the war turn
-        self.assertEqual(self.calls("MakePeaceWith"), [])
-        self.turn(6)
-        self.assertEqual(self.calls("MakePeaceWith"), [f"MakePeaceWith {hojo}>{imagawa} true turn 6"])
-        self.assertIsNone(self.g.WAR[self.hojo_imagawa])
-        self.assertIn("[JAC_1534_RELATIONS] made peace after ended alliance HOJO-IMAGAWA on turn 6", self.g.LOG.values())
-        for number in (7, 32, 33):  # no second peace, and the ended pair is never re-made (lapse turn 32)
-            self.turn(number)
-        self.assertEqual(self.g.COUNT("MakePeaceWith"), 1)
-        self.assertIsNone(self.g.ALLIED[self.hojo_imagawa])
-        self.assertTrue(self.g.ALLIED[self.g.PAIR("SHIMAZU", "RYUKYU")])  # other pairs are untouched
+        self.assertTrue(self.g.ALLIED[self.g.PAIR("SHIMAZU", "RYUKYU")])  # other pairs are re-made
+        self.assertEqual(self.g.COUNT("DeclareWarOn"), 0)
+        self.assertEqual(self.g.COUNT("MakePeaceWith"), 0)
 
     def test_a_war_started_elsewhere_ends_the_alliance_without_a_second_war_or_peace(self):
         self.g.WAR[self.hojo_imagawa] = True
@@ -122,21 +113,6 @@ class EndStartAllianceTests(unittest.TestCase):
         self.assertEqual(self.g.COUNT("DeclareWarOn"), 0)
         self.assertEqual(self.g.COUNT("MakePeaceWith"), 0)
         self.assertTrue(self.g.WAR[self.hojo_imagawa])
-
-    def test_if_the_war_leaves_the_alliance_it_is_logged_peace_follows_and_the_lapse_is_final(self):
-        self.g.WAR_ENDS_ALLIANCE = False
-        self.turn(5)
-        self.assertTrue(self.api.EndStartAlliance("IMAGAWA", "HOJO"))
-        hojo, imagawa = self.g.ID["HOJO"], self.g.ID["IMAGAWA"]
-        self.assertEqual(self.calls("DeclareWarOn"), [f"DeclareWarOn {imagawa}>{hojo} 7 true"])
-        self.assertIn("[JAC_1534_RELATIONS] still allied after war IMAGAWA-HOJO (ends at the engine lapse)",
-                      self.g.LOG.values())
-        self.turn(6)
-        self.assertEqual(self.g.COUNT("MakePeaceWith"), 1)
-        self.g.ALLIED[self.hojo_imagawa] = None  # the engine lapse (made on turn 1 + 30 + 1)
-        self.turn(32)
-        self.assertIsNone(self.g.ALLIED[self.hojo_imagawa])
-        self.assertEqual(self.g.COUNT("SetHasAllied 0>1 true"), 1)  # only the start alliance; never re-made
 
 
 if __name__ == "__main__":
