@@ -198,10 +198,13 @@ local function Faction(id)
 	return civ and string.match(civ, "^CIVILIZATION_JAC_(.+)$")
 end
 
--- §5.4: a pair's state is "none", "ally" or "start". Start alliances (and their re-making) carry the pair's
--- Game property as a number and never score; after the property turns false the lingering alliance keeps its
--- state, so only an alliance made from "none" scores, once per pair and period. Same-team pairs never score.
--- HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua:76,102); GetAllianceType is UI-only (nil here).
+-- §5.4: a pair's state is "none", "ally" or "start". A start alliance carries the pair's Game property as a
+-- number while allied and never scores; the property turns false when it lapses (not re-made, owner decision K)
+-- or an event ends it. A lingering alliance after false keeps its state, so only an alliance made from "none"
+-- scores, once per pair and period; a pair that re-forms after the lapse scores. Checking HasAllied with the
+-- number makes the lapse turn read "none" whether the ledger runs before or after JAC_Japan_1534Relations.lua.
+-- Same-team pairs never score. HasAllied is the gameplay-side call (JAC_Japan_1534Relations.lua
+-- TrackStartAlliances); GetAllianceType is UI-only (nil here).
 local function IntakeAlliances(l)
 	local ids = AliveMajorIDs()
 	for i = 1, #ids do
@@ -217,7 +220,7 @@ local function IntakeAlliances(l)
 			end
 			local previous = l.allies[key]
 			local state = allied and "ally" or "none"
-			if type(property) == "number" then
+			if type(property) == "number" and allied then
 				state = "start"
 			elseif allied and previous == "none" and Players[a]:GetTeam() ~= Players[b]:GetTeam() then
 				local pairKey = "ally:" .. tostring(a) .. ":" .. tostring(b) .. ":" .. tostring(l.reign)

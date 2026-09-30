@@ -228,6 +228,7 @@ class JudgeTests(unittest.TestCase):
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
             "japan-1534-relations.json", "probe-ally-vision.json", "probe-alliance-type.json", "probe-alliance-expiry.json",
+            "probe-end-alliance.json",
             "japan-1534-relations-settlers.json",
             "japan-1534-feud-ui.json",
             "japan-resources.json",
