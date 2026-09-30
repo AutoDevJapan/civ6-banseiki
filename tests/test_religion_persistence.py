@@ -339,6 +339,8 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(context.get("Name"), ui_file.stem)
         self.assertEqual(len(context), 0)  # No visible controls.
         self.assertEqual(ui_file.with_suffix(".lua").read_text(encoding="utf-8"), UI_SCRIPT)
+        self.assertEqual({f.text for f in manifest.findall("./InGameActions/ImportFiles/File")},
+                         {"UI/JAC_ReligionPersistence_HeroUI.xml", "UI/JAC_ReligionPersistence_HeroUI.lua"})
         self.assertLess(int(manifest.findtext("./InGameActions/UpdateDatabase/Properties/LoadOrder")),
                         int(manifest.findtext("./InGameActions/AddGameplayScripts/Properties/LoadOrder")))
 
@@ -346,7 +348,8 @@ class ReligionPersistenceTests(unittest.TestCase):
         manifest = ET.parse(MOD / "JAC_PoC_ReligionPersistence.modinfo").getroot()
         criteria = {c.get("id"): c for c in manifest.findall("./ActionCriteria/Criteria")}
         actions = list(manifest.find("InGameActions"))
-        self.assertEqual({a.tag for a in actions}, {"UpdateDatabase", "UpdateText", "AddGameplayScripts", "AddUserInterfaces"})
+        self.assertEqual({a.tag for a in actions},
+                         {"UpdateDatabase", "UpdateText", "AddGameplayScripts", "AddUserInterfaces", "ImportFiles"})
         for action in actions:
             with self.subTest(action=action.get("id")):
                 self.assertIn(action.get("criteria"), criteria)
@@ -1348,7 +1351,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 60)
+        self.assertEqual(len(chunks), 61)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 

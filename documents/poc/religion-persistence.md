@@ -112,7 +112,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
 ```
 
-万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。94ステップ、9回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
+万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。95ステップ、9回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
 
 | 段階 | 自己検査 |
 |---|---|
@@ -167,3 +167,5 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 religion-09のModding.logには「UserInterface components require only the .xml file to be specified.」があり、英雄確認のUI橋が読み込まれていなかった。AddUserInterfacesを同名Luaを読み込む空のXMLコンテキストへ変更した。既存のJAC_CustomCivs_Observe.xmlと同じ登録方式で、表示用の部品は置かない。他のPoCのUI登録も調べ、同じ誤りはなかった。Luaの単体テストに加えて、XMLの登録・コンテキスト・同名Luaの対応を検査する。修正後のエンジンでの読み込みと英雄加入は次の実機で確認する。
 
 残る実機はreligion-persistence.jsonの通し成功。吸収の消去・人数配分、科学と文化の実産出、Artifactと返還の効果、公式英雄の加入・信仰報酬、残る3段階の保存と読み込み、保有資料の再利用、対応付けた実宗教の再興、宗教同盟の自然終了、手動の新規ゲームでの検証フラグ解除を確認する。英雄が未完了の状態での保存・再開は追加の確認項目。無宗教・他宗教の市民数を変えて通すことや、検査を外して通すことはしない。マージは実機成功とMust解消の後とする。
+
+最終レビューの提案に従い、動作済みのJAC_CustomCivs_UIFilesと同じく、XMLと同名LuaをImportFilesにも登録した。ゲーム開始直後にUI橋の存在を待つ検査を追加し、吸収の不一致で止まる前にも読込を判定する。現行のシナリオは95ステップ・Lua61片。追加後の実機は上限のため次のShepherdで実行する。

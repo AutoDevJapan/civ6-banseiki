@@ -57,6 +57,10 @@
       <Properties><Context>InGame</Context></Properties>
       <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
     </AddUserInterfaces>
+    <ImportFiles id="JAC_RP_UIFiles" criteria="JAC_RP_BanseikiOnly">
+      <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
+      <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
+    </ImportFiles>
   </InGameActions>
   <Files>
     <File>Data/JAC_ReligionPersistence.sql</File>
