@@ -1,7 +1,7 @@
 import json
 import hashlib
 import sys
-import tempfile
+from tools.test_tempdirs import TemporaryDirectory
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -195,7 +195,7 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(slice_log_bytes(b"new file\n", mark, 8), "new file\n")
 
     def test_baseline_detects_same_inode_rewrite_past_old_offset(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             log_dir = Path(root)
             for name in LOG_NAMES:
                 (log_dir / name).write_bytes(b"")
@@ -239,6 +239,7 @@ class JudgeTests(unittest.TestCase):
             "court-arbitration.json", "probe-make-peace.json",
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
+            "sengoku-oaths-oda.json",
         })
         for path in folder.glob("*.json"):
             with self.subTest(path=path.name):

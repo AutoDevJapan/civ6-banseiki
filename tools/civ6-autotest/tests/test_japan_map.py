@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import sys
-import tempfile
+from tools.test_tempdirs import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -112,7 +112,7 @@ class JapanMapScenarioTests(unittest.TestCase):
             validate_scenario(data)
 
     def test_capture_and_compare_lua_results(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             with patch.object(runner, "_lua", side_effect=["22,56,7", "22,56,7", "21,55,8"]):
                 runner._run_step({"action": "ui_lua", "state_name": "InGame", "code": "return 'state'",
@@ -125,7 +125,7 @@ class JapanMapScenarioTests(unittest.TestCase):
 
     def test_turn_metrics_preserve_missing_samples(self):
         current = [10.0]
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             path = Path(folder) / "metrics.jsonl"
             metrics = TurnMetrics(path, 1, clock=lambda: current[0])
             metrics.start({"private_bytes": 100, "working_set_bytes": 80})
@@ -142,7 +142,7 @@ class JapanMapScenarioTests(unittest.TestCase):
             self.assertEqual((metrics.observed_turns, metrics.missed_turns), (2, 1))
 
     def test_autoplay_writes_turn_and_memory_samples(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             statuses = iter((AutoplayStatus(2, True, False, 1, 0),
                              AutoplayStatus(3, False, True, 0, 0)))
@@ -165,7 +165,7 @@ class JapanMapScenarioTests(unittest.TestCase):
             self.assertIn("observed=2 missed=0", detail)
 
     def test_autoplay_reports_eliminated_human_instead_of_overshoot(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
 
             def lua(_state, code, _timeout=5.0):

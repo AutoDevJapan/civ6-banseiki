@@ -1,0 +1,1729 @@
+{
+  "status": "provisional",
+  "languages": [
+    "ja_JP",
+    "en_US",
+    "ru_RU"
+  ],
+  "houses": [
+    {
+      "id": "ODA",
+      "name": "織田",
+      "oaths": [
+        {
+          "id": "TENKA_FUBU",
+          "names": [
+            "天下布武",
+            "Tenka Fubu",
+            "Тэнка фубу"
+          ],
+          "basis": "岐阜県歴史資料館の所蔵文書に、信長の「天下布武」印が現存する。統一志向を軍備と統治文化へ抽象化する。",
+          "sources": [
+            "https://www.pref.gifu.lg.jp/page/2557.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "TSUSHIMA",
+          "names": [
+            "津島の富",
+            "Wealth of Tsushima",
+            "Богатство Цусимы"
+          ],
+          "basis": "湊町津島の財力が信定・信秀・信長の三代を支えた。津島市計画書の歴史解説（5頁）を参照。",
+          "sources": [
+            "https://www.city.tsushima.lg.jp/shokai/kankouannai/rekishibunka/town/rekisibunkakekka.files/shakaisihonkeikaku.pdf"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "growth",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "AZUCHI",
+          "names": [
+            "安土の石垣",
+            "Stone Walls of Azuchi",
+            "Каменные стены Адзути"
+          ],
+          "basis": "安土築城で職人を動員し、高度な石垣技術を用いた。後継世代の城郭整備を家の営みとする。",
+          "sources": [
+            "https://www.pref.shiga.lg.jp/sd00/2591.html"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "TAKEDA",
+      "name": "武田",
+      "oaths": [
+        {
+          "id": "TSUTSUJIGASAKI",
+          "names": [
+            "躑躅ヶ崎の府",
+            "Seat of Tsutsujigasaki",
+            "Столица Цуцудзигасаки"
+          ],
+          "basis": "1519年に信虎が居館を移し、家臣集住と城下整備を進めた。",
+          "sources": [
+            "https://www.city.kofu.yamanashi.jp/rekishi_bunkazai/documents/takeda-omote.pdf"
+          ],
+          "focus": "WAR",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "KOSHU_LAW",
+          "names": [
+            "甲州の法",
+            "Laws of Koshu",
+            "Законы Косю"
+          ],
+          "basis": "晴信の分国法「甲州法度」による領国統治を着想源とする。",
+          "sources": [
+            "https://www.city.kofu.yamanashi.jp/shingenkou-no-machi/"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "RYUO",
+          "names": [
+            "竜王の川除",
+            "Ryuo Riverworks",
+            "Дамбы Рюо"
+          ],
+          "basis": "1560年の保坂家文書は、免税による移住募集、耕地化と堤防維持を伝える。",
+          "sources": [
+            "https://www.pref.yamanashi.jp/bunka/bunkazaihogo/bunkazai_data/yamanashinobunkazai_wc0017.html"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "food",
+              10
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DATE",
+      "name": "伊達",
+      "oaths": [
+        {
+          "id": "JINKAISHU",
+          "names": [
+            "塵芥の秩序",
+            "Order of Jinkaishu",
+            "Порядок Дзинкайсю"
+          ],
+          "basis": "稙宗が1536年に制定した塵芥集は、土地取引・境界などを詳細に規定した。",
+          "sources": [
+            "https://www.pref.miyagi.jp/soshiki/bunkazai/05jinkaishu.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "BLACK_LACQUER",
+          "names": [
+            "黒漆の備え",
+            "Black Lacquer Guard",
+            "Чернолаковая защита"
+          ],
+          "basis": "政宗所用として伝来する16世紀の五枚胴具足と、家中に継承された具足形式に基づく。",
+          "sources": [
+            "https://www.city.sendai.jp/museum/shuzohin/shuzohin/shuzohin-05.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "IWADEYAMA",
+          "names": [
+            "岩出山の再起",
+            "Revival at Iwadeyama",
+            "Возрождение в Ивадэяме"
+          ],
+          "basis": "1591年、政宗が岩出山を新たな居城とした領国再編。城の修復自体は家康によるものと区別する。",
+          "sources": [
+            "https://www.city.osaki.miyagi.jp/kanko/sizen/kouen/4294.html"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "food",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ASHINA",
+      "name": "蘆名",
+      "oaths": [
+        {
+          "id": "KUROKAWA",
+          "names": [
+            "黒川の政庁",
+            "Council of Kurokawa",
+            "Совет Курокавы"
+          ],
+          "basis": "黒川城が蘆名氏の公的な政治拠点として機能したという城郭研究に基づく。",
+          "sources": [
+            "https://mukaihaguro-yabou.jp/kikou"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "MUKAIHAGURO",
+          "names": [
+            "向羽黒の要害",
+            "Mukaihaguro Stronghold",
+            "Твердыня Мукайхагуро"
+          ],
+          "basis": "盛氏が築いた山城には、曲輪・虎口・九十九折の道が残る。",
+          "sources": [
+            "https://www.town.aizumisato.fukushima.jp/soshiki/1007/6/3/1219.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "AIZU_ALLIANCES",
+          "names": [
+            "会津の連衡",
+            "Alliances of Aizu",
+            "Союзы Айдзу"
+          ],
+          "basis": "蘆名家臣宛の北条氏照書状が、盛氏父子への共同出兵要請を伝える。",
+          "sources": [
+            "https://khirin.rekihaku.ac.jp/en/pid/nmjh_collection/H-1907-24.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "HOJO",
+      "name": "北条",
+      "oaths": [
+        {
+          "id": "REVENUE",
+          "names": [
+            "貫高の政",
+            "Assessed Revenue",
+            "Учёт земельных доходов"
+          ],
+          "basis": "検地・貫高による賦課と、1550年の税制改革を伝える現存文書に基づく。",
+          "sources": [
+            "https://odawara-digital-museum.jp/selection/definition/24/"
+          ],
+          "focus": "ECONOMY",
+          "quest": "TECH",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "food",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "SERVICE",
+          "names": [
+            "知行の軍役",
+            "Service by Fief",
+            "Воинская повинность уделов"
+          ],
+          "basis": "1581年の軍役文書は、知行高に応じた兵員数・装備を具体的に規定する。",
+          "sources": [
+            "https://www.city.odawara.kanagawa.jp/field/lifelong/property/cultural/komonjyo/k-houzyou3.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "ODAWARA",
+          "names": [
+            "小田原の総構",
+            "Odawara Enclosure",
+            "Внешние укрепления Одавары"
+          ],
+          "basis": "氏政・氏直期に城と町全体を囲む総構を築いた。",
+          "sources": [
+            "https://odawaracastle.com/history/hojo-godai/"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "YAMANOUCHI_UESUGI",
+      "name": "山内上杉",
+      "oaths": [
+        {
+          "id": "KANREI",
+          "names": [
+            "管領の責務",
+            "Duty of the Kanrei",
+            "Долг канрэя"
+          ],
+          "basis": "関東管領として公方を補佐し、関東の政治秩序を担った家の制度的役割に基づく。",
+          "sources": [
+            "https://www.city.fujioka.gunma.jp/soshiki/kyoikuiinkai/bunkazaihogo/2/5/uesugisi/1091.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "ASHIKAGA_SCHOOL",
+          "names": [
+            "足利の学灯",
+            "Light of Ashikaga School",
+            "Свет школы Асикага"
+          ],
+          "basis": "憲実が足利学校を再興し、庠主の任命と貴重な書籍の寄進を行った。",
+          "sources": [
+            "https://www.city.ashikaga.tochigi.jp/category/000000/p001343.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "TECH",
+          "effects": [
+            [
+              "science",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "HIRAI",
+          "names": [
+            "平井の城塁",
+            "Ramparts of Hirai",
+            "Валы Хираи"
+          ],
+          "basis": "山内上杉の拠点平井城では、内外の土塁・堀・石積補強が発掘されている。",
+          "sources": [
+            "https://www.city.fujioka.gunma.jp/soshiki/kyoikuiinkai/bunkazaihogo/2/3/siseki/1113.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NAGAO",
+      "name": "長尾（上杉へ継承）",
+      "oaths": [
+        {
+          "id": "KASUGAYAMA",
+          "names": [
+            "春日山の備え",
+            "Kasugayama Defenses",
+            "Оборона Касугаямы"
+          ],
+          "basis": "1513年には山城として確認でき、謙信・景勝期に拡張された。現存城域全体を為景の築造とはしない。",
+          "sources": [
+            "https://www.city.joetsu.niigata.jp/site/cultural-property/cultural-property-jpn002.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "growth",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "DISPATCHES",
+          "names": [
+            "小切紙の急報",
+            "Secret Dispatches",
+            "Тайные донесения"
+          ],
+          "basis": "1510年の為景書状は、敵の発見を避ける極小の料紙で軍事連絡を伝えた（米沢市上杉博物館学芸ノート、3頁）。",
+          "sources": [
+            "https://www.denkoku-no-mori.yonezawa.yamagata.jp/pdf/dayori/dayori39.pdf"
+          ],
+          "focus": "LEARNING",
+          "quest": "TECH",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "RINSENJI",
+          "names": [
+            "林泉寺の学び",
+            "Learning at Rinsenji",
+            "Учение в Ринсэндзи"
+          ],
+          "basis": "能景が1497年に創建した長尾家菩提寺で、景虎が教養を学んだ。",
+          "sources": [
+            "https://www.city.joetsu.niigata.jp/site/cultural-property/cultural-property-city010.html"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "IMAGAWA",
+      "name": "今川",
+      "oaths": [
+        {
+          "id": "KANA_LAW",
+          "names": [
+            "仮名の秩序",
+            "Order in Kana",
+            "Порядок, записанный каной"
+          ],
+          "basis": "氏親の1526年「今川仮名目録」と、寿桂尼・氏輝・義元への領国統治の継承に基づく。",
+          "sources": [
+            "https://scmh.jp/special_exhibition/20260425.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "RENGA",
+          "names": [
+            "駿河の連歌",
+            "Renga of Suruga",
+            "Рэнга Суруги"
+          ],
+          "basis": "連歌師宗長が今川氏に仕え、文化と外交に関わった。",
+          "sources": [
+            "https://scmh.jp/special_exhibition/20260425.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "SUNPU_CRAFT",
+          "names": [
+            "駿府の革工",
+            "Leatherworkers of Sunpu",
+            "Кожевники Сумпу"
+          ],
+          "basis": "1549年の義元文書は、革職人の商いを認め、今川御用を命じる職人保護を示す。",
+          "sources": [
+            "https://jmapps.ne.jp/shizuokalg/det.html?data_id=4019"
+          ],
+          "focus": "WAR",
+          "quest": "TECH",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MATSUDAIRA",
+      "name": "松平（徳川へ継承）",
+      "oaths": [
+        {
+          "id": "ANJO",
+          "names": [
+            "安城譜代",
+            "Anjo Retainers",
+            "Наследственные вассалы Андзё"
+          ],
+          "basis": "安城を拠点とした時期に形成された家臣団。恒常的に一枚岩だったとはせず、家臣組織を題材とする。",
+          "sources": [
+            "https://www.library.city.anjo.aichi.jp/book/shiryo/kyodo2/documents/21siro.pdf"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "OKAZAKI",
+          "names": [
+            "岡崎の礎",
+            "Foundations of Okazaki",
+            "Основание Окадзаки"
+          ],
+          "basis": "清康期に安城から岡崎へ本拠を移した拠点整備を着想源とする。",
+          "sources": [
+            "https://www.city.anjo.aichi.jp/shisei/shisetsu/kyoikushisetsu/maibun-sites-ansyoujou.html"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "food",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "DAIJUJI",
+          "names": [
+            "大樹の祈り",
+            "Prayers of Daijuji",
+            "Молитвы Дайдзюдзи"
+          ],
+          "basis": "親忠による1475年の大樹寺創建と、松平家の寺院保護に基づく。",
+          "sources": [
+            "https://www.city.okazaki.lg.jp/bunka/torikumi_bunka/1004568/1004592/1004595/1004622.html"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "faith",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ASAKURA",
+      "name": "朝倉",
+      "oaths": [
+        {
+          "id": "ICHIJODANI",
+          "names": [
+            "一乗谷の町割",
+            "Streets of Ichijodani",
+            "Улицы Итидзёдани"
+          ],
+          "basis": "発掘で確認された道路・屋敷配置と、100尺を基準とする計画的な城下に基づく。",
+          "sources": [
+            "https://asakura-museum.pref.fukui.lg.jp/site/index"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        },
+        {
+          "id": "ECHIZEN",
+          "names": [
+            "越前の工房",
+            "Workshops of Echizen",
+            "Мастерские Этидзэна"
+          ],
+          "basis": "刀装具・ガラス製品を製作した、朝倉直属と考えられる職人集団の工房跡に基づく。",
+          "sources": [
+            "https://asakura-museum.pref.fukui.lg.jp/site/walk"
+          ],
+          "focus": "WAR",
+          "quest": "TECH",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "SUWA_GARDEN",
+          "names": [
+            "諏訪館の庭",
+            "Garden of Suwa Manor",
+            "Сад усадьбы Сува"
+          ],
+          "basis": "諏訪館跡に残る大規模な庭園と室町末期の作庭文化。妻のために造ったという伝承は根拠に含めない。",
+          "sources": [
+            "https://asakura-museum.pref.fukui.lg.jp/site/index"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ASHIKAGA",
+      "name": "足利",
+      "oaths": [
+        {
+          "id": "MEDIATION",
+          "names": [
+            "公方の和議",
+            "Shogunal Mediation",
+            "Посредничество сёгуна"
+          ],
+          "basis": "1576年、義昭が北条氏規に北条・武田・上杉の和睦を勧めた現存文書に基づく。1573年後の裁定権を回復させる効果ではない。",
+          "sources": [
+            "https://ch.kanagawa-museum.jp/dm/gohojyo/collection/d_collection_12.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "HIGASHIYAMA",
+          "names": [
+            "東山の雅",
+            "Elegance of Higashiyama",
+            "Изящество Хигасиямы"
+          ],
+          "basis": "義政が1482年から造営した東山殿を中心に展開した文化。現在の庭園全体を当初の姿とは扱わない。",
+          "sources": [
+            "https://www2.city.kyoto.lg.jp/somu/rekishi/fm/nenpyou/htmlsheet/bunka10.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "TEMPLE_LANDS",
+          "names": [
+            "寺領の安堵",
+            "Protection of Temple Lands",
+            "Защита храмовых земель"
+          ],
+          "basis": "義晴の御内書は、天皇からの依頼を受けた醍醐寺理性院の所領安堵を伝える。",
+          "sources": [
+            "https://khirin.rekihaku.ac.jp/en/pid/nmjh_collection/H-743-421-11.html"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "faith",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MIYOSHI",
+      "name": "三好",
+      "oaths": [
+        {
+          "id": "IIMORI",
+          "names": [
+            "飯盛の石塁",
+            "Iimori Ramparts",
+            "Валы Иимори"
+          ],
+          "basis": "長慶が1560年に入城した飯盛城では、石垣・礎石建物・瓦の早期導入が発掘で確認される。",
+          "sources": [
+            "https://www.pref.osaka.lg.jp/o070080/toshimiryoku/osakathemuseum/miyoshinagayoshi.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "SAKAI",
+          "names": [
+            "堺の交誼",
+            "Bonds of Sakai",
+            "Связи с Сакаи"
+          ],
+          "basis": "長慶・実休らは堺の掌握を重視し、有力町人と茶の湯や連歌を通じて交流した。",
+          "sources": [
+            "https://www.city.sakai.lg.jp/kanko/hakubutsukan/exhibition/kikaku_tokubetsu/kako/74549120220902185140834.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "THOUSAND_VERSES",
+          "names": [
+            "千句の座",
+            "Circle of a Thousand Verses",
+            "Круг тысячи стихов"
+          ],
+          "basis": "1561年の連歌会「飯盛千句」など、三好一族の文化交流を着想源とする。",
+          "sources": [
+            "https://www.city.sakai.lg.jp/kanko/hakubutsukan/exhibition/kikaku_tokubetsu/kako/74549120220902185140834.files/tenzihin.pdf"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ROKKAKU",
+      "name": "六角",
+      "oaths": [
+        {
+          "id": "KANNONJI",
+          "names": [
+            "観音寺の堅城",
+            "Kannonji Stronghold",
+            "Твердыня Каннондзи"
+          ],
+          "basis": "六角氏の居城・観音寺城では、大石による石塁が主要な曲輪を囲む。",
+          "sources": [
+            "https://www.pref.shiga.lg.jp/sd00/2592.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "ISHIDERA",
+          "names": [
+            "石寺の賑わい",
+            "Ishidera Prosperity",
+            "Процветание Исидэры"
+          ],
+          "basis": "1549年の石寺新市に関する記録を着想源とする。市場政策全般を六角専有とはしない。",
+          "sources": [
+            "https://www.pref.shiga.lg.jp/sd00/2592.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "growth",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "OMI_COMPACT",
+          "names": [
+            "近江の盟約",
+            "Compact of Omi",
+            "Договор Оми"
+          ],
+          "basis": "1567年成立の六角氏式目と、家臣による当主権力の規制を含む主従間の法秩序に基づく。",
+          "sources": [
+            "https://www.u-tokyo.ac.jp/biblioplaza/ja/F_00231.html",
+            "https://syllabus.chs.nihon-u.ac.jp/2022/op/syllabus78454.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "HONGANJI",
+      "name": "本願寺",
+      "oaths": [
+        {
+          "id": "LETTERS",
+          "names": [
+            "御文の輪",
+            "Letters of Faith",
+            "Послания веры"
+          ],
+          "basis": "蓮如は御文などを用いて教義を分かりやすく伝え、本願寺教団を拡大した。",
+          "sources": [
+            "https://www.otani.ac.jp/kyo_kikan/museum/nab3mq0000043z6f.html"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "faith",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "TEMPLE_TOWN",
+          "names": [
+            "寺内の営み",
+            "Temple Town Life",
+            "Жизнь храмового города"
+          ],
+          "basis": "山科本願寺を中心に形成された寺内町と、その居住・都市活動を着想源とする。",
+          "sources": [
+            "https://www.city.kyoto.lg.jp/yamasina/page/0000012089.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "TECH",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "growth",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "OSAKA_DEFENSE",
+          "names": [
+            "大坂の守り",
+            "Defense of Osaka",
+            "Защита Осаки"
+          ],
+          "basis": "大坂本願寺期の防御性の高い区画施設・V字溝が発掘で確認される（大阪市保存活用計画、42頁）。",
+          "sources": [
+            "https://www.city.osaka.lg.jp/kyoiku/cmsfiles/contents/0000508/508299/04_p36-46.pdf"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "OUCHI",
+      "name": "大内",
+      "oaths": [
+        {
+          "id": "CERTIFIED_ROUTES",
+          "names": [
+            "勘合の航路",
+            "Certified Sea Routes",
+            "Заверенные морские пути"
+          ],
+          "basis": "大内氏の朝鮮・中国交易に関係する印が現存し、対外貿易を裏付ける。一般社会制度「朱印状」の名称は専有しない。",
+          "sources": [
+            "https://online.bunka.go.jp/db/heritages/detail/207120"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "WESTERN_CAPITAL",
+          "names": [
+            "西京の客人",
+            "Guests of the Western Capital",
+            "Гости западной столицы"
+          ],
+          "basis": "大内領には公家・禅僧・学者が来訪し、交易の経済力を背景に文化活動が栄えた。",
+          "sources": [
+            "https://library.pref.yamaguchi.lg.jp/hp/usr/siryou/kichosiryo.htm"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "PRINTING",
+          "names": [
+            "大内の版木",
+            "Ouchi Printing Blocks",
+            "Печатные доски Оути"
+          ],
+          "basis": "1493年刊の『聚分韻略』など、大内領内の出版事業を着想源とする。",
+          "sources": [
+            "https://library.pref.yamaguchi.lg.jp/hp/usr/siryou/kichosiryo.htm"
+          ],
+          "focus": "LEARNING",
+          "quest": "TECH",
+          "effects": [
+            [
+              "science",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AMAGO",
+      "name": "尼子",
+      "oaths": [
+        {
+          "id": "TODA",
+          "names": [
+            "富田の要害",
+            "Toda Stronghold",
+            "Твердыня Тода"
+          ],
+          "basis": "尼子氏の本拠・月山富田城は、月山と周辺丘陵に築かれた大規模な山城だった。",
+          "sources": [
+            "https://www.pref.shimane.lg.jp/life/bunka/bunkazai/shiseki/shisekidesu/shiseki02.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "DAISEN",
+          "names": [
+            "大山の造営",
+            "Temples of Daisen",
+            "Храмы Дайсэн"
+          ],
+          "basis": "晴久による大山寺造営には作事奉行が置かれ、一族・重臣が仏像制作の施主となった。",
+          "sources": [
+            "https://www.pref.tottori.lg.jp/item/1020156.htm"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "faith",
+              10
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "RESTORATION",
+          "names": [
+            "再興の旗",
+            "Banner of Restoration",
+            "Знамя возрождения"
+          ],
+          "basis": "尼子勝久を山中鹿之介らが擁立した再興運動を着想源とする。「七難八苦」の逸話には依拠しない。",
+          "sources": [
+            "https://bunkazai.pref.yamaguchi.lg.jp/sp/bunkazai/summary.asp?mid=40028"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MORI",
+      "name": "毛利",
+      "oaths": [
+        {
+          "id": "THREE_SONS",
+          "names": [
+            "三子の結束",
+            "Unity of the Three Sons",
+            "Единство трёх сыновей"
+          ],
+          "basis": "1557年の現存する三子教訓状は、隆元・元春・隆景の協力と家中の崩壊回避を求めた。「三本の矢」の後世の逸話は根拠にしない。",
+          "sources": [
+            "https://www.mogurin.or.jp/museum/hwm/details/tenzi04/6/t04_6_g3_dai01.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "SETO_FLEETS",
+          "names": [
+            "瀬戸の船手",
+            "Seto Fleets",
+            "Флотилии Сэто"
+          ],
+          "basis": "毛利一門を支えた小早川隆景の三原城は、船入りを備える水軍拠点だった。",
+          "sources": [
+            "https://www.city.mihara.hiroshima.jp/kankou/mihara.html"
+          ],
+          "focus": "NAVAL",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "naval",
+              20
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "OTA_TOWN",
+          "names": [
+            "太田川の城下",
+            "Ota River Town",
+            "Город на Оте"
+          ],
+          "basis": "輝元は1589年から広島城を築き、職人・商人を招いて城下町を建設した。",
+          "sources": [
+            "https://www.city.hiroshima.lg.jp/shisei/toukei/1006109/1027849/1027852/1017167.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "TECH",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "OTOMO",
+      "name": "大友",
+      "oaths": [
+        {
+          "id": "SOUTHERN_PORT",
+          "names": [
+            "南蛮の津",
+            "Southern Trade Port",
+            "Порт южной торговли"
+          ],
+          "basis": "宗麟期の府内では南蛮貿易が進み、海外産陶磁器や外国人の生活用品も出土する。",
+          "sources": [
+            "https://www.city.oita.oita.jp/o157/bunkasports/citypromotion/1369370791117.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "FUNAI_HEALING",
+          "names": [
+            "府内の救療",
+            "Healing in Funai",
+            "Лечение в Фунаи"
+          ],
+          "basis": "宗麟の支持の下、アルメイダが1555年に育児院、1557年に病院を設立した。",
+          "sources": [
+            "https://www.city.oita.oita.jp/o157/bunkasports/citypromotion/1369370791117.html"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "food",
+              10
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        },
+        {
+          "id": "FUNAI_LEARNING",
+          "names": [
+            "府内の学灯",
+            "Funai Learning",
+            "Учёность Фунаи"
+          ],
+          "basis": "1581年設立の府内コレジオでは、語学・天文学・哲学・古典などが教えられた。",
+          "sources": [
+            "https://www.city.oita.oita.jp/o157/bunkasports/citypromotion/1369370791117.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "TECH",
+          "effects": [
+            [
+              "science",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SHIMAZU",
+      "name": "島津",
+      "oaths": [
+        {
+          "id": "KUROKAWA_GUNS",
+          "names": [
+            "黒川の火筒",
+            "Kurokawa Matchlocks",
+            "Фитильные ружья Курокавы"
+          ],
+          "basis": "1549年の黒川崎合戦で島津側の鉄砲使用が記される。「日本初」とは断定しない。",
+          "sources": [
+            "https://www.city.aira.lg.jp/airaview/hakken/cape-kurokawa.html"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "military",
+              15
+            ],
+            [
+              "science",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "JISSHIN",
+          "names": [
+            "日新の学び",
+            "Teachings of Jisshin",
+            "Наставления Дзиссина"
+          ],
+          "basis": "島津忠良のいろは歌は、学びを実際の行動へ結び付ける倫理的教えを伝える。",
+          "sources": [
+            "https://www.city.tarumizu.lg.jp/bunka/kurashi/kosodate/roman/tarumzusimadubosyo.html"
+          ],
+          "focus": "LEARNING",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "UCHIJO",
+          "names": [
+            "内城の政庁",
+            "Uchijo Administration",
+            "Управление из Утидзё"
+          ],
+          "basis": "1550年に貴久が築いた内城は、交通に便利な恒久的城館として領国経営の拠点となった（調査報告44–45頁）。",
+          "sources": [
+            "https://www.city.kagoshima.lg.jp/kyoiku/kanri/bunkazai/documents/documents/06kagoshimashichuseijokanatoall.pdf"
+          ],
+          "focus": "ECONOMY",
+          "quest": "TECH",
+          "effects": [
+            [
+              "production",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CHOSOKABE",
+      "name": "長宗我部",
+      "oaths": [
+        {
+          "id": "TOSA_SURVEY",
+          "names": [
+            "土佐の地検",
+            "Tosa Land Survey",
+            "Межевание Тосы"
+          ],
+          "basis": "元親・盛親期の総検地は1587年から実施され、土佐七郡を記録した地検帳368冊が現存する。一般社会制度「太閤検地」は全家の名称のまま残す。",
+          "sources": [
+            "https://online.bunka.go.jp/heritages/detail/237391"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "food",
+              10
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "HUNDRED_ARTICLES",
+          "names": [
+            "百箇条の治め",
+            "Rule of the Hundred Articles",
+            "Правление по ста статьям"
+          ],
+          "basis": "1597年の法令と奉行・庄屋・刀祢などの行政体系を着想源とする。",
+          "sources": [
+            "https://www.city.sukumo.kochi.jp/sisi/017601.html"
+          ],
+          "focus": "ECONOMY",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "URADO",
+          "names": [
+            "浦戸の船路",
+            "Urado Sea Routes",
+            "Морские пути Урадо"
+          ],
+          "basis": "元親は1591年に浦戸へ移り、港を上方との連絡や水軍保有に利用できる本拠とした。",
+          "sources": [
+            "https://www.city.kochi.kochi.jp/site/kanko/uradojyou.html"
+          ],
+          "focus": "NAVAL",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "naval",
+              20
+            ],
+            [
+              "gold",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RYUKYU",
+      "name": "琉球",
+      "oaths": [
+        {
+          "id": "BRIDGE",
+          "names": [
+            "万国の架橋",
+            "Bridge Between Nations",
+            "Мост между народами"
+          ],
+          "basis": "1458年の万国津梁の鐘は、琉球の海上交易と諸国を結ぶ役割を伝える現存資料。",
+          "sources": [
+            "https://okimu.jp/special/bankoku/index.html"
+          ],
+          "focus": "NAVAL",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "naval",
+              20
+            ]
+          ]
+        },
+        {
+          "id": "KUME",
+          "names": [
+            "久米の文才",
+            "Kume Scholarship",
+            "Учёность Кумэ"
+          ],
+          "basis": "久米村の福建系住民は中国との外交を担い、王国の政治・経済・文化に寄与した。",
+          "sources": [
+            "https://www.city.naha.okinawa.jp/_res/projects/default_project/_page_/001/003/518/japanheritage_story.pdf"
+          ],
+          "focus": "LEARNING",
+          "quest": "TECH",
+          "effects": [
+            [
+              "science",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "OMORO",
+          "names": [
+            "おもろの響き",
+            "Echoes of Omoro",
+            "Отзвуки оморо"
+          ],
+          "basis": "首里王府による祈りの歌の採録・編纂に基づく。『おもろさうし』第1巻は1531年に編纂され、全巻が同年成立したわけではない。",
+          "sources": [
+            "https://okimu.jp/userfiles/files/page/museum/issue/bulletin/hakukiyou19/No19_05.pdf"
+          ],
+          "focus": "FAITH",
+          "quest": "CIVIC",
+          "effects": [
+            [
+              "culture",
+              10
+            ],
+            [
+              "faith",
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AINU",
+      "name": "アイヌ（地域共同体）",
+      "oaths": [
+        {
+          "id": "RIVER_MOUTH",
+          "names": [
+            "川口の暮らし",
+            "River-Mouth Life",
+            "Жизнь у речного устья"
+          ],
+          "basis": "小樽地域のアイヌ文化期の河口集落と狩猟・採集、中世のサケ・コンブの流通を着想源とする。資料68–69頁。タリコナによる全域統治や統一制度を意味しない。",
+          "sources": [
+            "https://www.city.otaru.lg.jp/docs/2020120801361/file_contents/soan-rekisibunka-kihonkousou.pdf",
+            "https://hokkaido-digital-museum.jp/hokkaido/kaitaku/k-01/"
+          ],
+          "focus": "GROWTH",
+          "quest": "TECH",
+          "effects": [
+            [
+              "food",
+              10
+            ],
+            [
+              "growth",
+              10
+            ]
+          ]
+        },
+        {
+          "id": "NORTHERN_TRADE",
+          "names": [
+            "北海の交易",
+            "Northern Seas Trade",
+            "Торговля северных морей"
+          ],
+          "basis": "中世には本州との物産交換が行われ、16世紀にはアイヌの人々が本州へ出向いて交易したことも説明される。複数の地域共同体の営みを表す。",
+          "sources": [
+            "https://hokkaido-digital-museum.jp/hokkaido/kaitaku/k-01/"
+          ],
+          "focus": "ECONOMY",
+          "quest": "RELATION",
+          "effects": [
+            [
+              "gold",
+              10
+            ],
+            [
+              "culture",
+              5
+            ]
+          ]
+        },
+        {
+          "id": "CHASHI",
+          "names": [
+            "チャシの備え",
+            "Chashi Defenses",
+            "Защита часи"
+          ],
+          "basis": "地域ごとの砦・柵囲いを着想源とする。小樽の例は「おそらく16世紀頃」という推定で、タリコナの築城とは結び付けない。資料69頁。",
+          "sources": [
+            "https://ainu-upopoy.go.jp/event/rekishi2023/",
+            "https://www.city.otaru.lg.jp/docs/2020120801361/file_contents/soan-rekisibunka-kihonkousou.pdf"
+          ],
+          "focus": "WAR",
+          "quest": "CAPTURE",
+          "effects": [
+            [
+              "walls",
+              20
+            ],
+            [
+              "production",
+              5
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

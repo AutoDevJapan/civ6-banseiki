@@ -121,6 +121,7 @@ class ReignPopupTests(ScreenTestBase):
         super().setUp()
         read = lambda name: (MOD / f"UI/{name}.lua").read_text(encoding="utf-8")
         self.dark = self.g.NEW_CONTEXT("JAC_SengokuDarkPolicy", read("JAC_SengokuDarkPolicy"))
+        self.oaths = self.g.NEW_CONTEXT("DedicationPopup", read("JAC_DedicationPopup_Sengoku"))
         self.popup = self.g.NEW_CONTEXT("JAC_SengokuReignPopup", read("JAC_SengokuReignPopup"))
         self.controls = self.popup.Controls
 
@@ -154,8 +155,8 @@ class ReignPopupTests(ScreenTestBase):
         self.assertTrue(c.HeroicFlare.hidden)
         self.assertEqual(c.Score.text, f"LOC_JAC_AGE_REIGN_SCORE(LOC_JAC_REIGN_TENBUN_NAME,{r1.score})")
         self.assertEqual(c.Thresholds.text, f"LOC_JAC_AGE_THRESHOLDS({r1.golden},{r1.dark})")
-        self.assertEqual(c.EraEffects.text, "LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT")
-        self.assertEqual(c.Continue.text, "LOC_CONTINUE")
+        self.assertEqual(c.EraEffects.text, "LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT[NEWLINE]LOC_JAC_OATH_PENDING")
+        self.assertEqual(c.Continue.text, "LOC_JAC_OATH_CHOOSE")
         last = self.popup.JAC_REIGN_POPUP_LAST
         self.assertEqual((last.reign, last.reignType, last.age, last.turn), (1, "REIGN_KOJI", "GOLDEN", 66))
         c.Continue.click()
@@ -186,12 +187,15 @@ class ReignPopupTests(ScreenTestBase):
         c = self.controls
         self.assertEqual(c.EraRibbonValue.text, "LOC_JAC_AGE_NAME_DARK [ICON_GLORY_DARK_AGE]")
         self.assertEqual(c.Background.texture, "Ages_ParchmentDark")
-        self.assertEqual(c.EraEffects.text, "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT")  # Takeda's default policy
-        self.assertEqual(c.Continue.text, "LOC_JAC_AGE_REIGN_CHOOSE_POLICY")
+        self.assertEqual(c.EraEffects.text, "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT[NEWLINE]LOC_JAC_OATH_PENDING")  # Takeda's default policy
+        self.assertEqual(c.Continue.text, "LOC_JAC_OATH_CHOOSE")
         self.assertTrue(self.popup.JAC_REIGN_POPUP_LAST.pendingChoice)
         c.Continue.click()
         self.assertFalse(self.shown())
-        self.assertTrue(self.dark_shown())  # the merged choice screen (UI/JAC_SengokuDarkPolicy.lua)
+        self.assertFalse(self.dark_shown())
+        self.assertFalse(self.oaths.ContextPtr.hidden)
+        self.assertTrue(self.oaths.JAC_ChooseOath("JAC_OATH_TAKEDA_TSUTSUJIGASAKI"))
+        self.assertTrue(self.dark_shown())  # policy choice follows the confirmed oath
 
     def test_turn_end_closes_without_opening_the_choice(self):
         self.make_dark(1)
@@ -283,7 +287,7 @@ class EraPanelTests(ScreenTestBase):
             "[ICON_BULLET]LOC_JAC_AGE_PART_HOME(0)", "[ICON_BULLET]LOC_JAC_AGE_PART_REGAIN(0)",
             "[ICON_BULLET]LOC_JAC_AGE_PART_CASTLE(2)", "[ICON_BULLET]LOC_JAC_AGE_PART_KO(0)",
             "[ICON_BULLET]LOC_JAC_AGE_PART_ALLY(0)", "[ICON_BULLET]LOC_JAC_AGE_PART_RESEARCH(1)",
-            "[ICON_BULLET]LOC_JAC_AGE_PART_EVENT(0)", "",
+            "[ICON_BULLET]LOC_JAC_AGE_PART_EVENT(0)", "[ICON_BULLET]LOC_JAC_OATH_SCORE(0)", "",
             "LOC_JAC_AGE_PANEL_HISTORY", "[ICON_BULLET]LOC_JAC_AGE_PANEL_HISTORY_NONE"])
         self.assertEqual(c.EraEffectsHeader.text, "LOC_JAC_AGE_PANEL_LEDGER_HEADER")
 
@@ -308,7 +312,8 @@ class EraPanelTests(ScreenTestBase):
         self.assertEqual(dict(self.panel.ICONS.items()), {pid: icons[ages[pid]] for pid in (0, 2, 3)})
         lines = c.EraEffects.text.split("[NEWLINE]")
         self.assertEqual(lines[0], "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT")
-        self.assertEqual(lines[2], "LOC_JAC_AGE_PANEL_PARTS(LOC_JAC_REIGN_KOJI_NAME)")
+        self.assertIn("LOC_JAC_AGE_PANEL_PARTS(LOC_JAC_REIGN_KOJI_NAME)", lines)
+        self.assertIn("LOC_JAC_OATH_ACTIVE", lines[1])
         self.assertEqual(lines[-1], "[ICON_BULLET]LOC_JAC_AGE_PANEL_HISTORY_ROW(LOC_JAC_REIGN_KOJI_NAME,1555,"
                                     f"LOC_JAC_AGE_NAME_DARK [ICON_GLORY_DARK_AGE],{r1.p1.score}) "
                                     f"LOC_JAC_AGE_THRESHOLDS({r1.p1.golden},{r1.p1.dark})")

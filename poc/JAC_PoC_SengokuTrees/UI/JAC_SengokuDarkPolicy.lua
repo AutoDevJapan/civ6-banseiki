@@ -55,10 +55,21 @@ end
 
 -- 改元の画面（UI/JAC_SengokuReignPopup.lua）が出ている間は出さず、閉じたら出す（下の LuaEvents）。
 local m_ReignPopupOpen = false
+local m_AfterOaths = false
+
+local function OathPending()
+	local l = Ledger()
+	local h = l and l.houses["p" .. tostring(Game.GetLocalPlayer())]
+	if h == nil or h.oathChosen == l.reign then return false end
+	for row in GameInfo.JAC_SengokuOaths() do
+		if row.CivilizationType == h.civ then return true end
+	end
+	return false
+end
 
 -- 選択待ちの間、自分の手番の始まり（と読み込み）ごとに出す。「あとで」と手番の終わりは次の手番まで閉じるだけ（Q72）
 local function Refresh()
-	if m_ReignPopupOpen then return end
+	if m_ReignPopupOpen or OathPending() then OnClose(); return end
 	local house = PendingHouse()
 	if house == nil then
 		OnClose()
@@ -76,6 +87,7 @@ local function Refresh()
 	Controls.Rows:CalculateSize()
 	Controls.Panel:DoAutoSize()
 	ContextPtr:SetHide(false)
+	m_AfterOaths = false
 end
 
 ContextPtr:SetHide(true)
@@ -86,6 +98,16 @@ Events.LoadScreenClose.Add(Refresh)      -- Base/Assets/UI/Popups/PlayerChange.l
 LuaEvents.JAC_SengokuReignPopup_Shown.Add(function()
 	m_ReignPopupOpen = true
 	OnClose()
+end)
+LuaEvents.JAC_SengokuOaths_Shown.Add(OnClose)
+LuaEvents.JAC_SengokuOaths_Closed.Add(function()
+	m_AfterOaths = true
+	if TurnActive() then Refresh() end
+end)
+-- Wait until the engine publishes the oath operation before showing the dark-policy choice.
+-- Base/Assets/UI/Choosers/ResearchChooser.lua:485.
+Events.GameCoreEventPublishComplete.Add(function()
+	if m_AfterOaths and TurnActive() then Refresh() end
 end)
 LuaEvents.JAC_SengokuReignPopup_Closed.Add(function(showChoice)
 	m_ReignPopupOpen = false

@@ -22,6 +22,8 @@
 -- Turns are game-relative: current - GameConfiguration.GetStartTurn() + 1 (the 1534 calendar starts the engine
 -- turn near 16603; same as poc/JAC_PoC_JapanMapScale/Scripts/JAC_Resources.lua:149).
 
+include("JAC_Sengoku_Oaths")
+
 local LEDGER_KEY = "JAC_AGES_LEDGER"
 local FIRED_PREFIX = "JAC_EVENT_FIRED_"            -- player property of JAC_PoC_HistoricalEvents (§5.1)
 local ALLIANCE_PREFIX = "JAC_1534_ALLIANCE_"       -- Game property of JAC_Japan_1534Relations.lua:37,59 (§5.4)
@@ -173,6 +175,11 @@ local function AddPoints(l, id, part, points, key)
 	if key then l.keys[key] = true end
 	house.score = house.score + points
 	house.parts[part] = (house.parts[part] or 0) + points
+	if part == "home" or part == "regain" or part == "castle" then
+		JAC_Oaths_Record(house, "CAPTURE", 1)
+	elseif part == "ally" then
+		JAC_Oaths_Record(house, "RELATION", 1)
+	end
 	Log(string.format("points player=%d part=%s +%d score=%d key=%s turn=%d", id, part, points, house.score,
 		tostring(key), ElapsedTurn()))
 end
@@ -340,6 +347,7 @@ local function WriteProperties(l)
 		local house = House(l, city.owner)
 		local age = house and house.age or "NONE"
 		local policy = house and house.policy
+		JAC_Oaths_WritePlot(house, city.plot)
 		city.plot:SetProperty(GOLDEN_FLAG, (age == "GOLDEN" or age == "HEROIC") and 1 or 0)
 		for _, row in ipairs(POLICIES) do
 			local on = policy == row.PolicyType
@@ -410,6 +418,10 @@ local function Judge(l, index, engineEra)
 	end
 	l.history["r" .. tostring(index)] = results
 	l.reign, l.reignStart = index, endTurn
+	for _, id in ipairs(AliveMajorIDs()) do
+		local house = House(l, id)
+		if house then JAC_Oaths_Reset(l, id, house, ElapsedTurn()) end
+	end
 end
 
 -- For the era score screen (UI only reads the ledger): the next 改元's turn and each house's thresholds for the
@@ -470,9 +482,11 @@ local function OnGameTurnStarted()
 		l = Initialize()
 	else
 		local turn = ElapsedTurn()
+		JAC_Oaths_Update(l, turn)
 		IntakeCities(l)
 		IntakeAlliances(l)
 		IntakeResearch(l)
+		JAC_Oaths_IntakeResearch(l)
 		local engineEra = EngineEra()
 		local index = NextJudged(l.reign)
 		while index and IsDue(REIGNS[index], turn, engineEra) do
@@ -540,9 +554,18 @@ local function OnChoosePolicy(playerID, params)
 	Game:SetProperty(LEDGER_KEY, l)
 end
 
+local function OnChooseOaths(playerID, params)
+	local l = Game:GetProperty(LEDGER_KEY)
+	if JAC_Oaths_Choose(l, playerID, params) then
+		WriteProperties(l)
+		Game:SetProperty(LEDGER_KEY, l)
+	end
+end
+
 Log(string.format("loaded reigns=%d first=%s@%d multiplier=%s", #REIGNS, REIGNS[1] and REIGNS[1].type or "none",
 	REIGNS[1] and REIGNS[1].due or -1, tostring(MULTIPLIER)))
 GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)
 GameEvents.CityConquered.Add(OnCityConquered)
 GameEvents.CityBuilt.Add(OnCityBuilt)
 GameEvents.JAC_SengokuDarkPolicyChoose.Add(OnChoosePolicy)
+GameEvents.JAC_SengokuOathsChoose.Add(OnChooseOaths)

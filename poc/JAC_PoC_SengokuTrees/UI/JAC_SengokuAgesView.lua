@@ -4,7 +4,27 @@
 -- 時代の名前は今の元号（「弘治の世」「Kōji Era」。オーナー判断 L-1、2026-09-30）。
 -- ゲームプレイ側と同じ名前のファイルにしない（tests/test_lua_file_names.py）。
 
-JAC_AGES_VIEW_PARTS = { "home", "regain", "castle", "ko", "ally", "research", "event" }
+JAC_AGES_VIEW_PARTS = { "home", "regain", "castle", "ko", "ally", "research", "event", "oath" }
+
+function JAC_AgesView_OathText(l, playerID)
+	local house = l and l.houses and l.houses["p" .. tostring(playerID)]
+	if house == nil or l.reign < 1 or house.oathReign ~= l.reign then return nil, false end
+	local rows = {}
+	for row in GameInfo.JAC_SengokuOaths() do
+		if row.CivilizationType == house.civ then rows[#rows + 1] = row end
+	end
+	if #rows == 0 then return nil, false end
+	if house.oathChosen ~= l.reign then return Locale.Lookup("LOC_JAC_OATH_PENDING"), true end
+	table.sort(rows, function(a, b) return a.Position < b.Position end)
+	local text = {}
+	for _, row in ipairs(rows) do
+		if house.oaths and house.oaths[row.OathType] then
+			text[#text + 1] = Locale.Lookup(row.Name) .. " — " .. Locale.Lookup(
+				(house.age == "GOLDEN" or house.age == "HEROIC") and row.GoldenDescription or row.QuestDescription)
+		end
+	end
+	return Locale.Lookup("LOC_JAC_OATH_ACTIVE", table.concat(text, "[NEWLINE]")), false
+end
 
 -- 年齢ごとの見せ方。絵は公式の時代の画面と同じもの（DLC/Expansion2/UI/Additions/EraReviewPopup.lua:70-106 の
 -- Ages_BannerLong*・Ages_Parchment*・Ages_Frame*、EraProgressPanel.lua:141-185 の Controls_AgesBanner_* とアイコン）。
@@ -87,11 +107,13 @@ function JAC_AgesView_Reign(l, playerID, elapsed)
 	local dark = result.age == "DARK"
 	-- 判定した期（from。同じターンの改元をまとめたときは直前の番号ではない。古い台帳には無い）。
 	local from = type(judged.from) == "number" and judged.from or l.reign - 1
+	local oathText, pendingOath = JAC_AgesView_OathText(l, playerID)
 	return {
 		index = l.reign, reign = reigns[l.reign], previous = reigns[from], turn = judged.turn,
 		age = result.age, score = result.score, golden = result.golden, dark = result.dark,
 		policy = dark and house.policy or nil,
 		pendingChoice = dark and house.age == "DARK" and house.chosen ~= l.reign,
+		oathText = oathText, pendingOath = pendingOath,
 	}
 end
 
@@ -108,6 +130,7 @@ function JAC_AgesView_Panel(l, playerID, elapsed)
 		score = house.score or 0, age = house.age or "NONE", policy = house.policy,
 		turnsLeft = l.nextDue and math.max(0, l.nextDue - elapsed) or nil,
 		parts = {}, history = {},
+		oathText = JAC_AgesView_OathText(l, playerID),
 	}
 	for _, part in ipairs(JAC_AGES_VIEW_PARTS) do table.insert(view.parts, { part = part, points = parts[part] or 0 }) end
 	if type(house.next) == "table" then
@@ -159,8 +182,10 @@ end
 function JAC_AgesView_LedgerText(view)
 	local lines = { JAC_AgesView_EffectText(view.age, view.policy), "",
 		Locale.Lookup("LOC_JAC_AGE_PANEL_PARTS", view.reign.Name) }
+	if view.oathText then table.insert(lines, 2, view.oathText) end
 	for _, part in ipairs(view.parts) do
-		table.insert(lines, "[ICON_BULLET]" .. Locale.Lookup("LOC_JAC_AGE_PART_" .. string.upper(part.part), part.points))
+		table.insert(lines, "[ICON_BULLET]" .. Locale.Lookup(part.part == "oath" and "LOC_JAC_OATH_SCORE"
+			or "LOC_JAC_AGE_PART_" .. string.upper(part.part), part.points))
 	end
 	table.insert(lines, "")
 	table.insert(lines, Locale.Lookup("LOC_JAC_AGE_PANEL_HISTORY"))

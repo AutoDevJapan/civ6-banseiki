@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 import sys
-import tempfile
+from tools.test_tempdirs import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -28,7 +28,7 @@ class FreshnessTests(unittest.TestCase):
         self.assertIsNone(restart_reason(None, 100.0))
 
     def test_mod_scan_resolves_folder_and_finds_newest_file(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             mods = base / "Mods"
             folder = mods / "MyMod"
@@ -47,7 +47,7 @@ class FreshnessTests(unittest.TestCase):
             self.assertIn("icon.dds", restart_reason(newest_mod_file(folders), 150.0))
 
     def test_missing_or_duplicate_enabled_mod_is_rejected(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             mods = Path(root)
             scenario = {"steps": [{"action": "enable_mods", "ids": [MOD_ID]}]}
             with self.assertRaisesRegex(InputError, "not installed"):
@@ -62,7 +62,7 @@ class FreshnessTests(unittest.TestCase):
 
     def test_atlas_images_missing_from_the_mod_packages_are_reported(self):
         # ages-screens-01: the crest atlas rows loaded but the installed BLP predated the crests, so every crest was "?".
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             folder = Path(root) / "MyMod"
             (folder / "Data").mkdir(parents=True)
             (folder / "Data" / "Icons.xml").write_text(
@@ -80,7 +80,7 @@ class FreshnessTests(unittest.TestCase):
             self.assertEqual(missing_atlas_textures([folder]), [])
 
     def test_stale_art_stops_before_restart(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (base / name).write_text("", encoding="utf-8")
@@ -109,7 +109,7 @@ class RestartActionTests(unittest.TestCase):
                 validate_scenario({"name": "restart", "steps": [step]})
 
     def test_auto_restart_precedes_first_step_and_log_baseline(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -147,7 +147,7 @@ class RestartActionTests(unittest.TestCase):
                              (logs / "Lua.log").stat().st_size)
 
     def test_no_auto_restart_skips_freshness_query(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (base / name).write_text("", encoding="utf-8")
@@ -163,7 +163,7 @@ class RestartActionTests(unittest.TestCase):
             restart.assert_not_called()
 
     def test_still_stale_after_restart_stops_before_first_step(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (base / name).write_text("", encoding="utf-8")
@@ -277,7 +277,7 @@ class RestartActionTests(unittest.TestCase):
         launch.assert_called_once_with()
 
     def test_first_restart_action_can_start_stopped_game_with_auto_disabled(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (base / name).write_text("", encoding="utf-8")
@@ -351,7 +351,7 @@ class RestartActionTests(unittest.TestCase):
         launch.assert_not_called()
 
     def test_run_launches_civ_when_not_running_and_first_step_needs_game(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (base / name).write_text("", encoding="utf-8")

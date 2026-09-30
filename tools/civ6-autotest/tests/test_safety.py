@@ -3,7 +3,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 import os
 import sys
-import tempfile
+from tools.test_tempdirs import TemporaryDirectory
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -16,6 +16,17 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def setUp(self):
+        # run() probes this independently of require_single_civ_process. Without a stub,
+        # an absent real game takes the Steam-launch path in tests which only mock require.
+        # Treat the preflight process as present; tests of require() still exercise their own stubs.
+        process = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        process.start()
+        self.addCleanup(process.stop)
+        launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted real Steam launch"))
+        launch.start()
+        self.addCleanup(launch.stop)
+
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -142,7 +153,7 @@ class ScenarioSafetyTests(unittest.TestCase):
 
     def test_transition_detects_lua_log_rotation_and_truncation_before_input(self):
         for change in ("rotation", "truncation"):
-            with self.subTest(change=change), tempfile.TemporaryDirectory() as root:
+            with self.subTest(change=change), TemporaryDirectory() as root:
                 logs = Path(root)
                 for name in ("Lua.log", "Database.log", "Modding.log"):
                     (logs / name).write_text("", encoding="utf-8")
@@ -169,7 +180,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 states.assert_not_called()
 
     def test_transition_detects_lua_log_rotation_after_escape(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             logs = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
@@ -194,7 +205,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             press.assert_called_once()
 
     def test_transition_rejects_same_inode_rewrite_even_if_log_grows(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             logs = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
@@ -212,7 +223,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             press.assert_not_called()
 
     def test_run_creates_missing_output_parents_but_rejects_existing_run(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -229,7 +240,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             self.assertTrue((output / "steps.jsonl").is_file())
 
     def test_multiple_civ_processes_stop_run_before_tuner_access(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -247,7 +258,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             self.assertEqual((records[-1]["action"], records[-1]["status"]), ("run", "FAIL"))
 
     def test_no_civ_process_reports_connection_failure_before_tuner_access(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -286,7 +297,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         self.assertEqual(_safe_relative_path("screens/shot.png"), Path("screens/shot.png"))
 
     def test_screenshot_rejects_resolved_path_outside_output(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             output = base / "output"
             output.mkdir()
@@ -305,7 +316,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 capture.assert_not_called()
 
     def test_screenshot_fails_if_capture_finishes_after_deadline(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             output = Path(root) / "output"
             output.mkdir()
             runner = Runner({}, output, Path(root), Path(root), 4318)
@@ -403,7 +414,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         sleep.assert_not_called()
 
     def test_pre_send_framing_error_is_logged_as_step_failure(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -436,7 +447,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                                      ("1/1 " + step["action"], "FAIL", "FireTuner command is too large"))
 
     def test_transition_pre_send_failure_is_logged_without_waiting(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -465,7 +476,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                                      ("FAIL", "pre-send connection failed"))
 
     def test_transition_waits_after_unknown_reply_without_resending(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             (base / "existing.Civ6Save").write_bytes(b"save")
             for action in ("start_game", "load"):
@@ -492,7 +503,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         press.assert_not_called()
 
     def test_confirmed_transition_lua_error_never_enters_wait(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             (base / "existing.Civ6Save").write_bytes(b"save")
             for action in ("start_game", "load"):
@@ -524,7 +535,7 @@ class ScenarioSafetyTests(unittest.TestCase):
         self.assertEqual(conditions, ["state", "lua"])
 
     def test_log_wait_requires_new_line_and_does_not_reuse_a_match(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             logs = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("", encoding="utf-8")
@@ -542,7 +553,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 runner._wait(condition, 0.02)
 
     def test_log_wait_stops_if_generation_changes(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             logs = Path(root)
             for name in ("Lua.log", "Database.log", "Modding.log"):
                 (logs / name).write_text("old history\n", encoding="utf-8")
@@ -553,7 +564,7 @@ class ScenarioSafetyTests(unittest.TestCase):
                 runner._wait({"type": "log_line", "log": "Lua.log", "contains": "match"}, 1)
 
     def test_later_step_cannot_reuse_previous_steps_log_line(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()
@@ -819,7 +830,7 @@ class InputSafetyTests(unittest.TestCase):
         user32.PostMessageW.assert_not_called()
 
     def test_input_error_is_logged_as_step_failure(self):
-        with tempfile.TemporaryDirectory() as root:
+        with TemporaryDirectory() as root:
             base = Path(root)
             logs = base / "logs"
             logs.mkdir()

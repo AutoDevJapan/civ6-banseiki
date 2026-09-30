@@ -630,6 +630,7 @@ class Runner:
         # The pack's era-name change screen (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuReignPopup.lua): read-only, it
         # only shows the ledger. Closing it lets the dark-age policy choice open (below), so it comes first.
         ("JAC_SengokuReignPopup", "OnClose()", "era-name change screen"),
+        ("DedicationPopup", "OnClose()", "house oath choice"),
         # The pack's dark-age policy choice (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuDarkPolicy.lua): closing keeps
         # the house's default policy, as a human who never answers (documents/poc/sengoku-ages.md).
         ("JAC_SengokuDarkPolicy", "OnClose()", "dark-age policy choice"),
