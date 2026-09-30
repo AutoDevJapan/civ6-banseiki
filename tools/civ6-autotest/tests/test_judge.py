@@ -235,6 +235,7 @@ class JudgeTests(unittest.TestCase):
             "japan-no-world-congress.json", "japan-city-names.json", "japan-house-city-names.json",
             "japan-map-setup-screen.json", "japan-map-15km-settlers.json",
             "japan-map-15km-200turn.json", "japan-15km-200turn-full.json",
+            "japan-15km-200turn-tuning.json",
             "japan-prosperous-15km.json",
             "court-arbitration.json", "probe-make-peace.json",
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
