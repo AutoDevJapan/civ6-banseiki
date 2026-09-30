@@ -99,6 +99,8 @@ def colors() -> None:
                for hue in ("RED", "ORANGE", "YELLOW", "GREEN", "AQUA", "BLUE", "PURPLE", "MAGENTA")]
     palette += [(f"COLOR_STANDARD_{hue}_LT", "COLOR_STANDARD_WHITE_DK")
                 for hue in ("RED", "GREEN", "BLUE", "PURPLE")]
+    # Takeda (JAC_CustomCivs_Colors.xml) already owns RED_DK; Date takes the charcoal of its black armour.
+    palette[0] = ("COLOR_STANDARD_WHITE_MD", "COLOR_STANDARD_WHITE_LT")
     for seat, (primary, secondary) in zip(EXTRA, palette, strict=True):
         row = ET.SubElement(rows, "Row")
         for tag, value in (("Type", leader_id(seat.slug)), ("Usage", "Unique"),
