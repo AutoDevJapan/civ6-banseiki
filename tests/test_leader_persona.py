@@ -192,6 +192,19 @@ class LeaderPersonaStaticTests(unittest.TestCase):
             for end in ["", "_FILL", "_SLOT"]:
                 found = [r for r in icons if r.get("Name") == f"ICON_GOVERNOR_JAC_PERSONA_{suffix}{end}" and r.get("Atlas") == atlas]
                 self.assertEqual([r.get("Index") for r in found], [index])
+        # Icon XML is loaded in table order, with atlas references checked immediately.
+        # Use the already loaded official 22px/32px city-banner art for both meters.
+        official = ET.parse(AUDIT.GAME / "DLC/Expansion1/Data/Expansion1_Icons_Governors.xml")
+        for end, filename in [("_FILL", "Fill"), ("_SLOT", "Slot")]:
+            atlas = "ICON_ATLAS_EXPANSION_1_GOVERNORS" + end
+            sizes = {int(r.get("IconSize")): r.get("Filename") for r in
+                     official.findall("./IconTextureAtlases/Row") if r.get("Name") == atlas}
+            self.assertEqual(sizes, {22: f"XP1_GovernorsCityBanner{filename}22.dds",
+                                     32: f"XP1_GovernorsCityBanner{filename}32.dds"})
+            meters = [r for r in icons if r.get("Atlas") == atlas]
+            self.assertEqual({r.get("Name") for r in meters},
+                             {f"ICON_GOVERNOR_JAC_PERSONA_{suffix}{end}" for suffix in leaders})
+            self.assertEqual({r.get("Index") for r in meters}, {"6"})
 
     def test_gameplay_never_registers_ui_events_or_uses_a_void_unit_return(self):
         lua = (MOD / "Scripts/JAC_LeaderPersona_Gameplay.lua").read_text(encoding="utf-8")

@@ -172,4 +172,4 @@ Events.GameCoreEventPublishComplete.Add(function()
     end
 end);
 Events.LocalPlayerTurnEnd.Add(JAC_TreeCancel);
-Events.GameplaySetActivePlayer.Add(function() JAC_TreeCancel(); ContextPtr:SetHide(true); end);
+Events.LocalPlayerChanged.Add(function() JAC_TreeCancel(); ContextPtr:SetHide(true); end);

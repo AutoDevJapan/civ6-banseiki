@@ -123,6 +123,8 @@ ExposedMembers={}
 function events()
     local handlers={}
     local bus=setmetatable({}, {__index=function(t,k)
+        -- GameplaySetActivePlayer is not a UI event in the installed game.
+        if k=='GameplaySetActivePlayer' then return nil end
         local ev=setmetatable({Add=function(f) handlers[k]=handlers[k] or {}; table.insert(handlers[k],f) end},
             {__call=function(_,...) for _,f in ipairs(handlers[k] or {}) do f(...) end end})
         rawset(t,k,ev); return ev
