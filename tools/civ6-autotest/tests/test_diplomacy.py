@@ -65,6 +65,22 @@ class FakeGame:
 
 
 class DiplomacyDuringAutoplayTests(unittest.TestCase):
+    def test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump(self):
+        game = FakeGame(set())
+        game.turn = 63
+        original_lua = game.lua
+        def lua(state, code, timeout=5.0):
+            if state == 'GameCore_Tuner':
+                self.assertEqual(code, 'return Game.GetCurrentGameTurn()')
+                return '63'
+            value = original_lua(state, code, timeout)
+            return '1|0' if 'return tostring(startTurn)' in code else value
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({'test_mode': {'skipped_turns': 62}}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, '_states', side_effect=game.states), patch.object(runner, '_lua', side_effect=lua), patch('scenario.time.sleep'):
+                detail = runner._autoplay(2, 30)
+        self.assertIn('autoplay completed 2 turns (63->65', detail)
+
     def run_autoplay(self, game, turns):
         clock = [0.0]
 

@@ -152,7 +152,7 @@
 |---|---|
 | `version`・`reign`・`reignStart` | 版（1）、今の期の番号（0 = 天文）、今の期が始まったターン |
 | `nextDue` | 次の改元のターン（遅代の後は無し）。時代スコアの画面と目盛りの説明用 |
-| `houses.p<ID>` | `civ`、`score`（今の期の点）、`parts`（内訳：`home`・`regain`・`castle`・`ko`・`ally`・`research`・`event`）、`golden`・`dark`（過去の回数。英雄期は黄金期に数える）、`age`（`NONE`・`GOLDEN`・`HEROIC`・`NORMAL`・`DARK`）、`policy`、`chosen`（暗黒期の政策を選んだ期の番号。選ぶまで無し）、`research`（完了数）、`home`（本拠のタイルのキー）、`next`（今の期の `golden`・`dark` の閾値の見込みと、次の改元が遅代なら `forced`。時代スコアの画面用） |
+| `houses.p<ID>` | `civ`、`score`（今の期の点）、`parts`（内訳：`home`・`regain`・`castle`・`ko`・`ally`・`research`・`event`・`oath`）、`golden`・`dark`（過去の回数。英雄期は黄金期に数える）、`age`（`NONE`・`GOLDEN`・`HEROIC`・`NORMAL`・`DARK`）、`policy`、`chosen`（暗黒期の政策を選んだ期の番号。選ぶまで無し）、`research`（完了数）、`home`（本拠のタイルのキー）、`next`（今の期の `golden`・`dark` の閾値の見込みと、次の改元が遅代なら `forced`。時代スコアの画面用） |
 | `cities.plot<番号>` | `owner`・`original`（最初の持ち主）・`n`（奪取の回数） |
 | `allies.<小さいID>-<大きいID>` | `none`・`on`・`start`（古い台帳の `ally` は `on` と同じ扱い） |
 | `friends.<小さいID>-<大きいID>` | 友好宣言の `none`・`on`・`start`（L-2） |

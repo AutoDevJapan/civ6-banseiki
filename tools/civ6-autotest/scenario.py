@@ -679,6 +679,10 @@ class Runner:
                   min(5, _remaining(deadline)))
         self._close_options_menu(deadline)
         self._dismiss_advisor(deadline)
+        # SetCurrentGameTurn changes the gameplay clock before the UI publishes it (live perf-13).
+        # Test-mode autoplay must count from the authoritative clock, not a stale UI snapshot.
+        core_start = (int(self._lua("GameCore_Tuner", "return Game.GetCurrentGameTurn()",
+                                   min(5, _remaining(deadline)))) if self.scenario.get("test_mode") else None)
         start_code = (
             "if AutoplayManager.IsActive() then error('autoplay already active') end\n"
             "local startTurn = Game.GetCurrentGameTurn()\n"
@@ -702,6 +706,8 @@ class Runner:
                 start_turn, human = (int(part) for part in start_value.split("|"))
             except ValueError as exc:
                 raise ScenarioError(f"Unexpected autoplay start: {start_value!r}") from exc
+            if core_start is not None:
+                start_turn = core_start
             target = start_turn + turns
             recorder = None
             research_recorder = None
