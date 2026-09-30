@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import csv
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import re
+import statistics
 import time
 
 
@@ -29,6 +32,8 @@ def process_memory(pid: int) -> dict[str, int]:
     psapi = ctypes.windll.psapi
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
     psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS_EX),
                                            wintypes.DWORD]
     psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
@@ -49,22 +54,40 @@ def process_memory(pid: int) -> dict[str, int]:
 class TurnMetrics:
     """Observed turn changes; missed polling intervals remain explicit nulls."""
 
-    def __init__(self, path: Path, start_turn: int, *, clock=time.monotonic):
+    COLUMNS = ("phase", "at", "turn", "observed", "duration_seconds", "elapsed_seconds",
+               "working_set_bytes", "private_bytes", "test_mode", "continuous_performance_valid")
+
+    def __init__(self, path: Path, start_turn: int, *, clock=time.monotonic,
+                 started_at: float | None = None, test_mode: bool = False):
+        self.test_mode = test_mode
         self.path = path
+        self.csv_path = path.with_suffix(".csv")
+        self.start_turn = start_turn
         self.turn = start_turn
         self.clock = clock
-        self.last_at = clock()
+        self.last_at = clock() if started_at is None else started_at
         self.start_at = self.last_at
         self.observed_turns = 0
         self.missed_turns = 0
+        self.rows: list[dict] = []
 
     def _write(self, row: dict) -> None:
+        row.update(test_mode=self.test_mode, continuous_performance_valid=not self.test_mode)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
+        new_file = not self.csv_path.exists()
+        with self.csv_path.open("a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.COLUMNS)
+            if new_file:
+                writer.writeheader()
+            flat = {key: row.get(key) for key in self.COLUMNS}
+            flat.update(row.get("memory") or {})
+            writer.writerow(flat)
+        self.rows.append(row)
 
     def start(self, memory: dict[str, int]) -> None:
         self._write({"phase": "start", "at": datetime.now(timezone.utc).isoformat(),
-                     "turn": self.turn, "elapsed_seconds": 0, "memory": memory})
+                     "turn": self.turn, "observed": True, "elapsed_seconds": 0, "memory": memory})
 
     def sample(self, turn: int, memory: dict[str, int]) -> None:
         if turn < self.turn:
@@ -85,6 +108,64 @@ class TurnMetrics:
         self.observed_turns += 1
         self.turn = turn
         self.last_at = now
+
+    def summary(self) -> dict:
+        return {"jsonl": self.path.name, "csv": self.csv_path.name,
+                "start_turn": self.start_turn, "last_turn": self.turn,
+                **summarize_turns(self.rows)}
+
+
+def _statistics(values: list[float | int]) -> dict:
+    if not values:
+        return {"count": 0, "min": None, "median": None, "p95": None, "max": None}
+    ordered = sorted(values)
+    return {"count": len(values), "min": ordered[0], "median": statistics.median(ordered),
+            "p95": ordered[math.ceil(len(ordered) * 0.95) - 1], "max": ordered[-1]}
+
+
+def summarize_turns(rows: list[dict]) -> dict:
+    turns = [row for row in rows if row["phase"] == "turn"]
+    durations = [row["duration_seconds"] for row in turns if row["duration_seconds"] is not None]
+    summary = {"observed_turns": sum(row["observed"] for row in turns),
+               "missed_turns": sum(not row["observed"] for row in turns),
+               "duration_seconds": _statistics(durations)}
+    for key in ("working_set_bytes", "private_bytes"):
+        values = [row["memory"][key] for row in rows if row.get("memory") is not None]
+        summary[key] = {**_statistics(values), "first": values[0] if values else None,
+                        "last": values[-1] if values else None,
+                        "growth": values[-1] - values[0] if values else None}
+    return summary
+
+
+class SaveLoadMetrics:
+    COLUMNS = ("at", "action", "save_name", "turn", "save_bytes", "duration_seconds",
+               "test_mode", "continuous_performance_valid")
+
+    def __init__(self, path: Path, *, test_mode: bool = False):
+        self.test_mode = test_mode
+        self.path = path
+        self.rows: list[dict] = []
+
+    def record(self, action: str, name: str, turn: int, size: int, seconds: float) -> dict:
+        row = {"at": datetime.now(timezone.utc).isoformat(), "action": action,
+               "save_name": name, "turn": turn, "save_bytes": size,
+               "duration_seconds": round(seconds, 3), "test_mode": self.test_mode,
+               "continuous_performance_valid": not self.test_mode}
+        new_file = not self.path.exists()
+        with self.path.open("a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.COLUMNS)
+            if new_file:
+                writer.writeheader()
+            writer.writerow(row)
+        self.rows.append(row)
+        return row
+
+    def summary(self) -> dict:
+        saves = [row["save_bytes"] for row in self.rows if row["action"] == "save"]
+        loads = [row["duration_seconds"] for row in self.rows if row["action"] == "load"]
+        return {"csv": self.path.name if self.rows else None, "samples": self.rows,
+                "save_bytes": {**_statistics(saves), "growth": saves[-1] - saves[0] if saves else None},
+                "load_seconds": _statistics(loads)}
 
 
 # The official research and civic panels read these same player APIs. The payload
