@@ -266,6 +266,30 @@ class LeaderPersonaLuaTests(unittest.TestCase):
                          ("GREAT_PERSON", None, 0))
         self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 0))
 
+    def test_partial_native_payment_restores_balance_without_appointing_or_recharging(self):
+        self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
+        self.join()
+        self.g.Players[0].points = 3
+        self.lua.execute("""
+            local original=Players[0].GetGovernors
+            Players[0].GetGovernors=function()
+                local g=original()
+                local change=g.ChangeGovernorPoints
+                g.ChangeGovernorPoints=function(_,delta)
+                    change(g, delta < 0 and -1 or delta)
+                end
+                return g
+            end
+        """)
+        for _ in range(2):
+            self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
+            self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "TITLE_PAYMENT_FAILED")
+            self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"), self.g.DESTROYS),
+                             ("GREAT_PERSON", None, 0))
+            self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (3, 0))
+            self.assertIsNone(self.g.NATIVE_GOVS[0][1002])
+        self.assertEqual(list(self.g.GRANTS[0].values()), [-1, 1, -1, 1])
+
     def test_upper_cost_consumes_two_extra_titles_and_one_native_once(self):
         self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
         self.join()

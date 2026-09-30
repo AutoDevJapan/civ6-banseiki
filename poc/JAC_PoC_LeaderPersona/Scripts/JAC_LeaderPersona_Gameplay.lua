@@ -115,7 +115,12 @@ local function PrepareEvolution(owner, leader)
         local before = AvailableTitles(p);
         p:GetGovernors():ChangeGovernorPoints(-surcharge);
         -- Negative deltas have no official example: never appoint for a cheaper price if rejected.
-        if AvailableTitles(p) ~= before - surcharge then return Finish(owner, "TITLE_PAYMENT_FAILED"); end
+        local after = AvailableTitles(p);
+        if after ~= before - surcharge then
+            -- A rejected/partial payment must not consume titles or reserve an appointment.
+            if after ~= before then p:GetGovernors():ChangeGovernorPoints(before - after); end
+            return Finish(owner, "TITLE_PAYMENT_FAILED");
+        end
     end
     Set(leader, "EVOLUTION_SURCHARGE", surcharge);
     Set(leader, "STATE", "EVOLVING");
