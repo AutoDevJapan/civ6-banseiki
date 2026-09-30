@@ -360,7 +360,7 @@ MOD の内容：
 
 - `CIVILIZATION_JAC_ODA`／`LEADER_JAC_ODA_NOBUHIDE` と `CIVILIZATION_JAC_TAKEDA`／`LEADER_JAC_TAKEDA_NOBUTORA` を追加する。勢力能力・指導者能力は効果なしの検証用
 - `Players:Expansion2_Players` に両組だけを登録する。公式 GS と独自ルールセット「万世紀」が `RulesetDomainOverrides` でこのドメインを選ぶため、標準ルールセットの選択候補には入らない。FrontEnd の `RuleSetInUse` 条件は起動後に標準から GS へ切り替えた際に登録が再実行されなかったため、公式拡張と同じドメイン方式を使う。指導者アイコン・家紋・ロード画面・外交画面の画像は自前（下記「画像」）。色は北条の配色を流用し、組合せで両家を区別する
-- 日英露の名前・説明・基本外交文を登録する。都市名は日本の既存一覧を共有し、武田の首都「甲府」を追加する
+- 日英露の名前・説明・基本外交文を登録する。都市名は家ごとの史実の地名一覧を使う（[city-names.md](city-names.md)。以前は公式の日本の一覧を共有していた）
 - ゲームプレイ Lua が生存中の主要文明の ID・文明・指導者・生存をログに記録する。各ターンには両家の都市数を記録する。3ターン目に、改名用のセッターがゲームプレイ側にあるかを API ごとに調べて記録し（呼び出しはしない）、目標名を `Game:SetProperty` に保存する。UI 側の観測 Lua は標準 UI と同じゲッターの返り値を別に記録する
 - 家名の表示は UI 側で上書きする（`UI/JAC_CivNameOverride.lua`）。各 UI コンテキストで `PlayerConfiguration` の `GetCivilizationShortDescription`・`GetCivilizationDescription` を差し替え、武田家なら `Game:GetProperty` の目標名を返す。対象は外交リボン・外交画面・ワールドランキング（`ReplaceUIScript` で GS 版を include）と都市バナー（公式の `CityBannerManager_` 拡張用 include）
 

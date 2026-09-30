@@ -36,10 +36,12 @@
 		<UpdateDatabase id="JAC_CustomCivs_Gameplay" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Gameplay.sql</File>
 			<File>Data/JAC_Japan1534_Gameplay.sql</File>
+			<File>Data/JAC_CityNames_Gameplay.sql</File>
 		</UpdateDatabase>
 		<UpdateText id="JAC_CustomCivs_Text" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Text/JAC_CustomCivs_Text.xml</File>
 			<File>Text/JAC_Japan1534_Text.xml</File>
+			<File>Text/JAC_CityNames_Text.xml</File>
 		</UpdateText>
 		<UpdateColors id="JAC_CustomCivs_Colors" criteria="JAC_CustomCivs_GatheringStorm">
 			<File>Data/JAC_CustomCivs_Colors.xml</File>
@@ -131,6 +133,7 @@
 		<File>ArtDefs/FallbackLeaders.artdef</File>
 		<File>Data/JAC_CustomCivs_Gameplay.sql</File>
 		<File>Data/JAC_Japan1534_Gameplay.sql</File>
+		<File>Data/JAC_CityNames_Gameplay.sql</File>
 		<File>Data/JAC_CustomCivs_Colors.xml</File>
 		<File>Data/JAC_Japan1534_Colors.xml</File>
 		<File>Data/JAC_CustomCivs_Icons.xml</File>
@@ -141,6 +144,7 @@
 		<File>Data/JAC_Crests_Icons.xml</File>
 		<File>Text/JAC_CustomCivs_Text.xml</File>
 		<File>Text/JAC_Japan1534_Text.xml</File>
+		<File>Text/JAC_CityNames_Text.xml</File>
 		<File>Scripts/JAC_CustomCivs.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.lua</File>
 		<File>UI/JAC_CustomCivs_Observe.xml</File>

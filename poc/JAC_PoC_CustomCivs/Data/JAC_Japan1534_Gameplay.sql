@@ -189,10 +189,6 @@ INSERT INTO CityNames (CivilizationType, CityName, SortIndex) VALUES
     ('CIVILIZATION_JAC_RYUKYU', 'LOC_JAC_1534_CAPITAL_RYUKYU', -1),
     ('CIVILIZATION_JAC_AINU', 'LOC_JAC_1534_CAPITAL_AINU', -1);
 
-INSERT INTO CityNames (CivilizationType, CityName, SortIndex)
-SELECT c.CivilizationType, n.CityName, n.SortIndex FROM Civilizations c JOIN CityNames n ON n.CivilizationType='CIVILIZATION_JAPAN'
-WHERE c.CivilizationType LIKE 'CIVILIZATION_JAC_%' AND c.CivilizationType NOT IN ('CIVILIZATION_JAC_ODA','CIVILIZATION_JAC_TAKEDA');
-
 INSERT INTO LoadingInfo (LeaderType, ForegroundImage, BackgroundImage, LeaderText, PlayDawnOfManAudio) VALUES
 
     ('LEADER_JAC_DATE_TANEMUNE', 'LEADER_JAC_DATE_TANEMUNE_NEUTRAL', 'LEADER_JAC_DATE_TANEMUNE_BACKGROUND', 'LOC_JAC_1534_LOADING', 0),
