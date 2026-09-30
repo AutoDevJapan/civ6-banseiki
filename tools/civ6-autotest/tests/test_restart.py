@@ -99,6 +99,13 @@ class FreshnessTests(unittest.TestCase):
 
 
 class RestartActionTests(unittest.TestCase):
+    def setUp(self):
+        # Runner tests default to a simulated running game. Individual lifecycle
+        # tests override this patch when testing absence or multiple processes.
+        active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        active_game.start()
+        self.addCleanup(active_game.stop)
+
     def test_restart_action_validation(self):
         valid = {"name": "restart", "steps": [{"action": "restart_game", "timeout": 300}]}
         validate_scenario(valid)

@@ -16,6 +16,11 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 
 class ScenarioSafetyTests(unittest.TestCase):
+    def setUp(self):
+        active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        active_game.start()
+        self.addCleanup(active_game.stop)
+
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -661,6 +666,11 @@ class ScenarioSafetyTests(unittest.TestCase):
 
 
 class InputSafetyTests(unittest.TestCase):
+    def setUp(self):
+        active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        active_game.start()
+        self.addCleanup(active_game.stop)
+
     def test_deadline_expiring_during_focus_sends_no_key(self):
         user32 = Mock()
         user32.SetForegroundWindow.return_value = 1
