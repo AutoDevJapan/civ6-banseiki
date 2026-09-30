@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scenario import Runner
+from scenario import Runner, ScenarioError
 from tuner import LuaExecutionError, LuaResponseUnknown, LuaResult, TunerError
 
 
@@ -71,6 +71,20 @@ class TransientTimeoutTests(unittest.TestCase):
         FakeTuner.failures = 10 ** 6
         with self.assertRaises(LuaResponseUnknown):
             self.runner._autoplay_status(time.monotonic() + 3)
+        self.assertGreater(len(FakeTuner.calls), 1)
+
+    def test_stale_research_snapshot_stops_at_deadline(self):
+        FakeTuner.failures = 0
+        FakeTuner.replies = {**FakeTuner.replies, "InGame": "1|0~LEADER_A~true~0~0~~~~"}
+        self.addCleanup(FakeTuner.replies.update, {"InGame": "42|true|false|10|0"})
+        clock = [0.0]
+        def sleep(seconds):
+            clock[0] += seconds
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("scenario.time.sleep", side_effect=sleep):
+            with self.assertRaisesRegex(ScenarioError, "deadline expired"):
+                self.runner._research_query("return snapshot", 1.0, minimum_turn=63)
+        self.assertEqual(clock[0], 1.0)
         self.assertGreater(len(FakeTuner.calls), 1)
 
     def test_lua_error_is_not_retried(self):

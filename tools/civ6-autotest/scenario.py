@@ -21,7 +21,7 @@ from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, SaveLoadMetrics, TurnMetrics,
-                     process_memory, research_sample_code, summarize_turns)
+                     parse_research_sample, process_memory, research_sample_code, summarize_turns)
 from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
                      newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
@@ -696,9 +696,20 @@ class Runner:
                           min(5, _remaining(deadline)))
         return _parse_autoplay_status(value)
 
-    def _research_query(self, code: str, deadline: float) -> str:
+    def _research_query(self, code: str, deadline: float, *, minimum_turn: int | None = None) -> str:
         # Read-only Lua, so a FireTuner timeout may be retried safely.
-        return self._retry_idempotent(lambda: self._lua("InGame", code, min(10, _remaining(deadline))), deadline)
+        while True:
+            value = self._retry_idempotent(lambda: self._lua("InGame", code, min(10, _remaining(deadline))), deadline)
+            if minimum_turn is None:
+                return value
+            try:
+                turn, _ = parse_research_sample(value)
+            except ValueError as exc:
+                raise ScenarioError(str(exc)) from exc
+            if turn >= minimum_turn:
+                return value
+            # Wait for the UI research snapshot itself to catch up; never relabel stale data.
+            time.sleep(min(0.1, _remaining(deadline)))
 
     def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
                   record_metrics: bool = False, research_metrics: bool = False,
@@ -762,7 +773,8 @@ class Runner:
                 recorder.start(initial_memory)
             if research_metrics:
                 research_recorder = ResearchMetrics(self.output / f"autoplay-research-{self.metrics_runs}.jsonl")
-                research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline))
+                research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline,
+                                                              minimum_turn=start_turn))
             restarts = 0
             dedications = 0
             inactive_since = None
@@ -807,7 +819,8 @@ class Runner:
                         raise ScenarioError("Civ VI process changed during metrics sampling")
                     recorder.sample(status.turn, process_memory(metrics_pid))
                 if research_recorder and status.turn != research_recorder.last_turn:
-                    research_recorder.sample(self._research_query(research_sample_code(research_recorder.slots), deadline))
+                    research_recorder.sample(self._research_query(research_sample_code(research_recorder.slots), deadline,
+                                                                  minimum_turn=status.turn))
                 _remaining(deadline)
                 if (elimination_turn is None and
                         (status.turn != last_alive_check_turn or status.local_player < 0)):
