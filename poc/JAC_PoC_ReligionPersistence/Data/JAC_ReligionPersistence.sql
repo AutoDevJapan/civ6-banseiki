@@ -62,19 +62,22 @@ INSERT INTO JAC_RP_Outcomes VALUES
 ('DIPLOMATIC_INCIDENT', 'LOC_JAC_RP_DIPLOMATIC_INCIDENT'),
 ('HERO', 'LOC_JAC_RP_HERO');
 
--- SSOT 9.3: recommended PoC values, fixed at standard-speed magnitudes.
+-- SSOT 9.3: owner decisions, 2026-10-01 16:07 JST. Fixed magnitudes.
 CREATE TABLE JAC_RP_Rules (ID TEXT NOT NULL PRIMARY KEY, Value INTEGER NOT NULL);
 INSERT INTO JAC_RP_Rules VALUES
-('REVIVAL_FOLLOWERS', 2),
-('REVIVAL_FAITH_COST', 60),
+('REVIVAL_FOLLOWERS', 1),
+('REVIVAL_FAITH_COST', 20),
 ('REVIVAL_COOLDOWN_TURNS', 10),
-('SELL_GOLD', 40),
-('RESEARCH_SCIENCE', 20),
+('SELL_GOLD', 500),
+('RESEARCH_SCIENCE', 10),
+('RESEARCH_CULTURE', 10),
+('RESEARCH_EUREKAS', 2),
+('HERESY_FAITH_COST', 400),
 ('HERESY_CULTURE', 20),
-('ABSORB_FAITH', 20),
+('ABSORB_FAITH_COST', 500),
+('ABSORB_DIVISOR', 3),
 ('ARTIFACT_CULTURE', 30),
-('INCIDENT_FAVOR', 10),
-('HERO_FAITH_COST', 60);
+('HERO_FAITH_MULTIPLIER', 10);
 
 -- One modifier ID per religion and branch: even RunOnce grants never need to
 -- reattach the same ID to the same player. Lua enforces the corresponding limit.
@@ -83,6 +86,19 @@ INSERT INTO Modifiers (ModifierId, ModifierType, RunOnce, Permanent)
 SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'MODIFIER_PLAYER_GRANT_YIELD', 1, 1
 FROM JAC_RP_Religions r CROSS JOIN JAC_RP_Outcomes o
 WHERE o.ID IN ('RESEARCH', 'HERESY', 'ARTIFACT');
+
+-- Research grants both yields. A separate RunOnce ID prevents conflating them.
+INSERT INTO Modifiers (ModifierId, ModifierType, RunOnce, Permanent)
+SELECT 'JAC_RP_RESEARCH_CULTURE_' || ID, 'MODIFIER_PLAYER_GRANT_YIELD', 1, 1
+FROM JAC_RP_Religions;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_RESEARCH_CULTURE_' || ID, 'YieldType', 'YIELD_CULTURE'
+FROM JAC_RP_Religions;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_RESEARCH_CULTURE_' || r.ID, 'Amount', rules.Value
+FROM JAC_RP_Religions r JOIN JAC_RP_Rules rules ON rules.ID = 'RESEARCH_CULTURE';
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_RP_RESEARCH_CULTURE_' || ID, 'Scale', 'false' FROM JAC_RP_Religions;
 INSERT INTO ModifierArguments (ModifierId, Name, Value)
 SELECT 'JAC_RP_' || o.ID || '_' || r.ID, 'YieldType',
   CASE o.ID WHEN 'RESEARCH' THEN 'YIELD_SCIENCE' ELSE 'YIELD_CULTURE' END

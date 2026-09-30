@@ -1,102 +1,50 @@
 # PoC 束2：宗教持続
 
-信徒・資料の持続に加え、有料の再興と発見後の8分岐を実装した。仕様の正本は[SSOT 9.2・9.3](../spec/ssot/09-assimilation-religion.md)。この文書は回答、提案の比較、実装・検証の根拠を記録する。
+オーナーの2026-10-01 16:07 JSTのDiscord回答を、再興と発見後の8分岐に反映した。仕様の正本は[SSOT 9.2・9.3](../spec/ssot/09-assimilation-religion.md)。以下の9件は提案から削除済みで、確定回答の反映表とする。D8の宗教・教義・人物の内容は未決のまま扱う。
 
-## 回答の反映
-
-2026-09-30のDiscord回答は依頼者から受領した。
-
-| 回答 | 反映 |
+| 回答 | 反映した結果 |
 |---|---|
-| Q79 → a | 信徒0と資料の残存を両方記録。SSOT 9.2へ明記し、質問から削除 |
-| Q80 → c | 人数・費用・資料の扱い・前提・制限をまとめて提案し、推奨案を実装 |
-| Q81 → c | 再興以外の8分岐もすべて提案し、推奨案の効果・制限・AIを実装 |
+| 1：再興b、資料を使い切らない | 信徒1人、信仰20。資料を保有し、再び信徒0になった後も同じ資料で再興可能 |
+| 2：売却 | ゴールド500 |
+| 3：秘匿a | 費用・産出0。後日の再興用に保有 |
+| 4：研究bとEureka2件、資料を使い切る | 科学10・文化10。未研究かつ未Eurekaの技術2件を識別子順に選んでEurekaを発生。資料は消費 |
+| 5：異端化 | 信仰400を払い文化20。資料は消費し、解釈と来歴は履歴に保存 |
+| 6：吸収dを変更 | 信仰500を払い、対象宗教の世界の市民信徒数を3で割って切り上げた人数を、自分が創始した宗教へ変換 |
+| 7：Artifact a | 文化30、PoCのVaultへ1件 |
+| 8：外交事件は返還 | 発祥国から現在の金と外交的支持の半分を移転。宗教同盟を結び、相手の宗教から自国民への弾圧と、自国から相手宗教への弾圧を禁じる |
+| 9：英雄d、公式モード必須 | 公式の英雄を加入させ、実行直前の毎ターンの信仰創出量の10倍を信仰として獲得。斥候による代用と加入費用は廃止 |
 
-数値は**PoCで試す推奨案**としてSSOT 9.3に記載した。本番の数値へのオーナー承認とは区別する。比較案は未実装。D8は議論待ちのまま、宗教・教義・人物の内容は定義しない。
+独立MODは`poc/JAC_PoC_ReligionPersistence/`、IDは`9b0b9a39-bd72-4ff1-9062-05eeac09b693`。Gathering Storm・万世紀・Babylon DLCに依存し、`RULESET_JAC_BANSEIKI`でのみ読み込む。宗教PoCはゲーム作成時に公式のHeroes & Legendsを有効化する必要がある。シナリオで`GAMEMODE_HEROES`を設定し、DLCのMODも有効化する。SSOT 8.4にも、Hero・英雄を使う箇所では公式モードが必須であることを明記した。
 
-独立MODは `poc/JAC_PoC_ReligionPersistence/`、IDは `9b0b9a39-bd72-4ff1-9062-05eeac09b693`。Gathering Stormと万世紀MODを前提に、`RULESET_JAC_BANSEIKI`でのみ読み込む。標準のGathering Stormルールセットには適用しない。番号付き仮宗教20枠を使い、判定はカタログIDを使う。具体的な宗教名や20という個数には依存しない。
+## 効果と接続範囲
 
-## 再興の提案（Q80）
+再興は新しい集団を信徒1人・施設0で記録する。教典・遺物・記録・人物が対象で、聖地だけでは再興しない。資料を使い切らないため、同じ資料も宗教ごとの10ターンの間隔と信徒0と信仰20の条件を満たせば再利用できる。秘匿した資料にも同じ再興条件を適用する。発見1件につき1選択、再興以外は勢力×宗教×分岐で1回までという制限は保持する。
 
-| 選択 | 人数・費用・資料の使用後 | 理由・違い |
-|---|---|---|
-| a（推奨・実装） | 信徒2人、信仰60。利用権を1回消費し、現物は記念資料として残す | 来歴を守り、同じ資料からの無限再興を防ぐ |
-| b | 信徒1人、信仰20。資料は消費して来歴だけ残す | 安価だが現物を失う |
-| c | 信徒3人、信仰100。資料は残し、再興に再利用できない | 高価だが再興時の集団が大きい |
-| d | 信徒2人、ゴールド120。利用権を1回消費し、現物は残す | 信仰のない勢力も資金で再興できる |
+研究はEureka定義を持つ未研究・未発生の技術を`TechnologyType`順に選ぶ。候補が2件に満たなければ実行しない。科学と文化の一括産出にはそれぞれ別のModifierを使い、20宗教×4種で80件を定義した。研究・異端化の資料は台帳から削除し、使用履歴と削除済みIDを残す。再登録・再発見・二重付与を拒む。
 
-aの前提は、世界の信徒0、未使用の再興資料1件、その所有者が生存する大勢力、自勢力の都市、信仰60。教典・遺物・記録・人物が対象で、聖地だけでは再興しない。都市に結び付けた新しいコミュニティIDで信徒2人・公的施設0から開始する。人数・施設数の自由指定は廃止した。
+吸収の対応付けには`BindEngineReligion(id, nativeReligionIndex)`を使う。原宗教と吸収先は別の創始済み標準宗教で、吸収先はプレイヤー自身が創始した宗教に一致し、自勢力の信徒を持つ存続宗教であることが前提。`NativeFollowers(id)`は世界のすべての生存プレイヤーの都市から、エンジンの`Followers`を合計する。都市数や多数派の都市数、手動入力したコミュニティ人数は使わない。
 
-信仰60を実際の残高から引く。現物・資料ID・来歴は記念資料として残し、人物資料も死亡させない。同じ資料は再興にも他の報酬にも再利用できない。宗教ごとに10ターン以上空け、再び信徒0になった場合は**別の未使用資料**と費用で再興できる。秘匿資料は後日の有料再興1回だけに使える。`canRevive`は未使用資料の存在を示し、費用・都市・間隔は実行時に検査する。
+合計を3で割って1回だけ切り上げ、プレイヤーID・都市ID順に市民を変換する。圧力は無宗教を含む各宗教の目標人数に比例させるため、布教圧力の過去の比率は保持しない。人口は移動しない。適用後は原宗教の減少、自宗教の増加、他宗教の人数不変をすべて検査する。負の圧力と丸めは公式例だけでは保証できず、要実機確認。自動の布教・市民変動とPoCのコミュニティ台帳の同期は後続のアダプターに残す。発見後に標準宗教の信徒が戻っていても、未解決の吸収などは解決できる。
 
-信仰60は公式の集落の中信仰報酬60、小信仰報酬20の3倍。社の信仰2/ターンでは30ターン分（F1・F2）。信徒2人はMODの台帳上の集団で、標準宗教の市民・圧力を変換した人数ではない。
+返還では発祥国の残高を減らし、同額を受取人に加える。金は半額、外交的支持は整数のため半分を切り捨てて残りを発祥国に残す。すでに同盟中なら結び直して期限を延長しない。同盟の期限切れ、戦争、どちらかの滅亡で宗教同盟を終了し、通常の同盟を結び直しただけでは宗教同盟を再開しない。
 
-## 再興以外の8分岐（Q81）
+SSOTの全分割ファイルを`hero/Hero/英雄/弾圧`で確認した。Hero型は8.4にあるが、弾圧の効果量と実行コマンドはまだ定義されていない。今回強制するのは、宗教同盟の保存状態と、`CanPersecute(actorPlayer, actingReligion, citizenPlayer, targetReligion)`および`AssertCanPersecute`の拒否である。相手の宗教が自国民を対象にする場合と、自国が相手の宗教を対象にする場合を拒む。将来の弾圧処理は効果の前にこの接続口を通す必要がある。標準の異端審問、宗教戦闘、布教を自動で遮断する処理には未接続。
 
-各行の先頭aを推奨・実装した。秘匿以外は資料の利用権を消費するが、現物や移管の来歴は保存する。
+英雄は未加入の公式英雄を`HeroClassType`順に選ぶ。公式の`HeroClasses.CreationProjectType`から加入Modifierを取得して、公式の拠点建物を持つ都市へ付ける。新しくできたUnitについて英雄クラス・寿命・加入済み所有者を確認してから、実行前の信仰創出量の10倍を付与する。PoCの生涯1人の制限は保持する。公式モードの寿命・再召喚・能力を使い、独自の人物案は作らない。
 
-| 選択 | a：推奨・実装（理由） | b | c | d |
-|---|---|---|---|---|
-| 売却 | ゴールド40、市場へ移管（公式の小報酬相当で価値を抑える） | ゴールド20 | ゴールド60 | 信仰20と交換 |
-| 秘匿 | 費用・産出0、後日の有料再興用に残す（再興の選択肢を守る） | 保管費ゴールド20 | 秘匿時に信仰10 | 資料を破棄し信仰20 |
-| 研究 | 科学20、記録保管（技術1件の即時解放を避けて研究に寄与する） | 科学10・文化10 | 技術Boost1件 | 科学40、資料を破棄 |
-| 異端化 | 文化20、異端解釈の注釈（D8を決めずに解釈の違いを残せる） | 信仰20 | 信仰20を払い文化40 | 科学10・文化10 |
-| 他宗教への吸収 | 信仰20、存続する自勢力の宗教へ移管（継承と小さな利益を両立する） | 信仰10・文化10 | 信仰40、原資料を消費 | 信仰20を払い吸収先の信徒1人を増やす |
-| Artifact獲得 | 文化30、PoCのVaultへ1件収蔵（恒久産出を積み重ねず収蔵に価値を付ける） | 文化10・信仰10 | 文化1/ターンを20ターン | 標準Artifact1件、文化3/ターン・観光3、考古博物館の空き枠が必要 |
-| 外交事件 | 発祥者へ返還し外交支持10（平和的解決を試せる） | 返還しゴールド40 | 接収し文化20、相手の不平25 | 返還し文化10 |
-| 英雄加入 | 信仰60、仮英雄として斥候1体・勢力に1人（探索人物の加入を小さな戦力で検証する） | 信仰80、戦士1体 | 信仰40、宗教ごとに斥候1体 | 信仰120、公式Heroesモードの英雄1体・同モードが必要 |
-
-| 分岐 | Civ6への効果と公式値との比較 | 前提・制限・資料の使用後 | AI |
-|---|---|---|---|
-| 売却 | `ChangeGoldBalance(40)`。公式の小ゴールド報酬40と同額（F1） | 市場へ移し所有者を外す | 盗賊の第一候補 |
-| 秘匿 | 産出・費用0。公式の小信仰報酬20より当面の利益は小さい（F1） | 隠し場所へ。後日の有料再興以外の再発見・報酬は不可 | 他の候補が使えない場合に温存 |
-| 研究 | `MODIFIER_PLAYER_GRANT_YIELD`で科学20を1回。図書館2/ターンの10ターン分（F2・F5） | 都市あり、記録保管へ | 学者の第一候補 |
-| 異端化 | 同Modifierで文化20を1回。モニュメント2/ターンの10ターン分（F2・F5） | 都市あり、注釈資料へ。新宗教・信徒・教義は増やさない | 芸人の第一候補 |
-| 他宗教への吸収 | `ChangeFaithBalance(20)`。公式の小信仰報酬と同額（F1） | 別宗教が存続し、自勢力に信徒あり。資料IDが移管先で空いていること。原宗教の来歴と利用済み記録も移管 | 第一候補が使えず吸収先がある場合 |
-| Artifact獲得 | 同Modifierで文化30を1回。標準Artifact文化3/ターンの10ターン分（F3・F5） | 都市あり、勢力全体で生涯1枠。収蔵欄へ。標準Great Work・観光・同調効果は付けない | 探検家の第一候補、空き枠が必要 |
-| 外交事件 | Gameplayの`GetDiplomacy():ChangeFavor(10)`。緊急事態の支持50の1/5、解放の支持100の1/10（F4） | 生存する他勢力の発祥者、接触済み、平和時のみ。発祥者へ返還。選択効果による自動宣戦・講和はなし | 旅人の第一候補、返還条件を満たす場合 |
-| 英雄加入 | 信仰60を引き`UNIT_SCOUT`1体を生成・台帳に登録。公式斥候の生産30相当・戦闘力10・移動3（F6） | 自勢力の都市・有効な隣接配置場所・信仰60、勢力全体で生涯1人。資料は契約の証として残す | 傾奇者の第一候補、費用と空き枠が必要 |
-
-共通の制限は、発見1件で1選択、非再興分岐は勢力×宗教×分岐で各1回。資料を削除・移管・再発見しても利用済み記録を残す。発見後に宗教が再興されても非再興の未解決選択は解決できる。値は速度によらず標準速度相当で固定し、Modifierの`Scale=false`を明示する。
-
-AIは乱数を使わず、職業の第一候補が使えなければ吸収→売却→研究→異端化→Artifact→外交事件→英雄→再興→秘匿から最初に条件を満たすものを選ぶ。人間と同じ前提・費用・上限を検査する。探索アダプターが`ResolveForAI`を呼ぶ形で、自然な探索トリガーはまだ接続していない。
-
-Artifactの同調・探索効果とNotebooksのVaultはSSOT 8.2・8.3、英雄の固有技・寿命・再登場は8.4に従う後続実装。ここでは収蔵の台帳と一括文化、人物加入と実Unitの生成を検証する。
+AIは人間と同じ前提・費用・上限を検査する。職業の第一候補と、吸収→売却→研究→異端化→Artifact→外交事件→英雄→再興→秘匿の候補順を保持する。自然な探索トリガーは後続のアダプターから接続する。
 
 ## 保存と呼び出し
 
-世界の信徒・公的施設は、登録されたコミュニティの合計。発祥者の滅亡入力だけでは消さない。
+プロパティは`JAC_RP_STATE_V1`、`schema=1`。`PUBLIC/UNDERGROUND/LOST`と、信徒なし・資料あり・地下持続の事実を保持する。資料の履歴、再興、標準宗教への対応、選択の効果、英雄Unit、Vault、宗教同盟と終了時点を保存する。
 
-| 条件 | 保存状態 |
-|---|---|
-| 信徒1以上・施設1以上 | `PUBLIC` |
-| 信徒1以上・施設0 | `UNDERGROUND` |
-| 信徒0 | `LOST`、信徒・資料・来歴を保持 |
-| 施設0で信徒または資料あり | 表示状態とは独立して`underground=true` |
-| `LOST`で未使用の教典・遺物・記録・人物あり | `canRevive=true`、自動再興しない |
+旧保存は読取用のコピーへ欄を追加するだけで、ロードだけでは書き込まない。旧`DEFERRED`や旧条件で使用済みだった資料は自動で新報酬へ変更しない。今回の条件での再興には`reusable=true`を保存する。未知スキーマを上書きせず、未設定のプロパティには`nil`を使う。
 
-プロパティは`JAC_RP_STATE_V1`、`schema=1`。旧保存の欄はコピー上に追加し、読込だけでは書かない。旧`DEFERRED`は旧仕様の未適用の選択として保持し、その資料を新報酬へ再利用しない。旧再興資料も利用済みにする。未知スキーマは上書きせず、未設定欄は`nil`、空文字のGameプロパティは作らない。
+通常の入力は検査後に1回保存する。費用・効果は予約を`PENDING`で保存し、エンジンに適用してから`APPLIED`を保存する。最初の保存失敗なら作用しない。効果・最後の保存が失敗すれば`PENDING`のまま再実行を拒む。残高・Eureka・市民・英雄とGameプロパティは一括で戻せないため、実際の状態を照合して復旧する。ロードやターン開始時に効果を再適用しない。ターン開始処理は宗教同盟の終了だけを更新する。
 
-宗教・コミュニティ・資産・発見・再興履歴に加え、資料の使用履歴、削除済みID、分岐の回数、仮英雄Unit ID、PoCのVault欄を保存する。通常入力はコピーを検証して1回保存する。費用・効果のある解決は、予約して`PENDING`を保存→エンジンへ費用・効果→`APPLIED`と移管・再興集団を保存する。最初の保存失敗ならエンジンへ作用しない。効果や最後の保存の失敗では`PENDING`を残し、再実行を拒む。残高・Modifier・Unitとプロパティの一括ロールバックはできないため、実状態を照合してから復旧する。ロード時の自動再適用は行わない。
+Gameplay APIは`ExposedMembers.JAC_ReligionPersistence`。`ResolveDiscovery(id, discovery, outcome, options)`と`Revive(id, revival, source, community, player, city)`を使う。`Rules/Inspect/Export`はコピー、`Snapshot`はキー順を固定した台帳文字列。UIからは同期されたGameplay要求を使い、手番開始前に送らない。
 
-Gameplay APIは`ExposedMembers.JAC_ReligionPersistence`。UI操作を接続する場合はGameplayへの同期された要求を使う。都市と信仰60以上があるプレイヤー0のGameCore_Tunerでの例：
-
-```lua
-local R = ExposedMembers.JAC_ReligionPersistence
-local id = "JAC_RP_PLACEHOLDER_01"
-R.Found(id, 0, "origin", 3, 1, "PLAYER_0")
-R.PreserveAsset(id, "book", "SCRIPTURE", "CAVE")
-R.SetCommunity(id, "origin", 0, 0, "PLAYER_0")
-R.Discover(id, "discovery_1", "book", "SCRIPTURE", "TRAVELER_7", "TRAVELER", "CAVE", 0)
-R.ResolveDiscovery(id, "discovery_1", "REVIVE", {
-  revival = "revival_1", community = "new", city = Players[0]:GetCities():GetCapitalCity():GetID()
-})
-return R.Snapshot()
-```
-
-`SetCommunity`は差分ではなく現在値。`PreserveAsset`・`MoveAsset`の最後の任意引数は保管先とは別の所有プレイヤーID。`Discover`の最後のプレイヤーIDは必須。`Revive(id, revivalID, sourceID, communityID, playerID, cityID)`は記録・人物・秘匿資料にも使う。`Rules()`はSQLの名前付き定数のコピー。科学・文化の60件のModifierも同じ定数から生成する。`Inspect`・`Export`はコピー、`Snapshot`はキー順を固定した全台帳文字列。`ChooseOutcome`は候補を返すだけ、`ResolveForAI`はAIの発見に限って実際に解決する。
-
-再興では、希望するコミュニティIDが使用済みなら末尾に番号を付け、同じ宗教内の空いているIDを選ぶ。費用支払い中のGameplay呼び出しで予定のIDが埋まった場合も、保存直前に空きを選び直す。実際に使ったIDは再興履歴の`community`に保存する。既存の信徒・施設・保有者と、同じIDを持つ別宗教の記録を上書きしない。生成したIDも128文字以内に収める。
+再興は空いているコミュニティIDを選ぶ。信仰支払い中のGameplay呼び出しで予定のIDが埋まった場合も選び直し、実際のIDを再興履歴に記録する。既存の信徒・施設・保有者と別宗教の同名IDを上書きせず、生成したIDも128文字以内に収める。
 
 ## 公式ファイルの根拠
 
@@ -115,27 +63,38 @@ return R.Snapshot()
 | 標準の番号付きカスタム宗教枠 | `Base/Assets/Gameplay/Data/Religions.xml:20,127-131` |
 | Gameplayの創始済み宗教一覧 | `DLC/Expansion2/Scripts/WorldCongress.lua:29` |
 | UIから創始種別・聖都を読取 | `Base/Assets/UI/ReligionScreen.lua:123,795` |
-| 市民単位の標準信徒は別システム | `Base/Assets/UI/ReligionScreen.lua:1074,1091-1092` の `GetReligionsInCity()` と `Followers` |
+| 標準の信徒を市民単位で数える | `Base/Assets/UI/ReligionScreen.lua:1074,1091-1092` の `GetReligionsInCity()` と `Followers` |
 
 上記はAPI使用例であり、今回の深い入れ子・空テーブル・false値が保存される証明ではない。GameプロパティのLuaテーブルの保存は束0で確認済み（[PoC結果](README.md)、同文書266行）。今回の台帳については下記の実機シナリオを通す必要がある。空文字Gameプロパティが保存されない件は依頼者の検証済み事実に従った。
 
 
 | 参照 | 値・仮定 | 公式ファイル:行（上記基準フォルダー配下） |
 |---|---|---|
-| F1 | 小ゴールド40、小信仰20、中信仰60と公式の速度補正 | `Base/Assets/Gameplay/Data/GoodyHuts.xml:233-245,264-291` |
-| F2 | モニュメント文化2、社信仰2、図書館科学2/ターン | `Base/Assets/Gameplay/Data/Buildings.xml:341,345,380` |
-| F3 | 標準Artifact文化3/ターン・観光3 | `Base/Assets/Gameplay/Data/GreatWorks.xml:417,616` |
-| F4 | 緊急事態の外交支持50、解放時100 | `DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:76,110,112` |
 | F5 | 一括産出ModifierとRunOnce・Permanent、Amount・YieldType・Scale | `Base/Assets/Gameplay/Data/GoodyHuts.xml:72-107,233-245`、`Base/Assets/Gameplay/Data/Modifiers.xml:2538-2543` |
-| F6 | 斥候の生産30・戦闘力10・移動3、戦士の生産40・戦闘力20 | `Base/Assets/Gameplay/Data/Units.xml:771-772` |
 | API | Gameplayのゴールドと信仰残高・費用 | `DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:764,847`、`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:404,563-565` |
 | API | GameplayでModifierを付ける | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1204-1205` |
-| API | Unit生成と所持Unitの走査・ID検索・型 | `DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:194,239`、`DLC/WarMachineScenario/Scripts/WarMachineScenario.lua:186`、`DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:1072,1554` |
 | API | 都市の検索、生存・大勢力・AIの検査 | `DLC/VikingsScenario/Scripts/VikingScenario.lua:95,261`、`DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:866`、`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:122` |
 | API | 接触・戦争状態の検査、シナリオの接触入力 | `DLC/Expansion2/Scripts/WorldCongress.lua:301`、`DLC/VikingsScenario/Scripts/VikingScenario.lua:77`、`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1308` |
 | 実機準備 | 安価な知識の付与、UIの研究選択・進捗と費用 | `DLC/VikingsScenario/Scripts/VikingScenario.lua:38-39`、`Base/Assets/UI/Screens/TechTree.lua:239-245,1107,1112-1114`、`Base/Assets/UI/Screens/CivicsTree.lua:239-245,1251,1279,1287-1289` |
 
-Unit生成がUnitを返さないこと、Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`であることは依頼者の実機検証済み事実。生成前後のUnit IDを比較し、戻り値には依存しない。UIの`Player:GetFavor()`をGameplayでは使わない。今回の型と全効果の成功は下記の実機で確認する。
+Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`を使う。UIの`Player:GetFavor()`は使わない。この区別、`GetAllianceType`と`CanTriggerBoost`がUI専用であることは依頼者の実機検証済み事実に従う。
+
+| 今回使う処理 | 公式ファイル:行（上記基準フォルダー配下） |
+|---|---|
+| 技術の既得判定とEureka発生 | `DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:768-784`の`HasTech`と`TriggerBoost(index, 1)`（集落と同じ契機）。同ファイルの`HasBeenBoosted`ではなく、現在のフラグ`HasBoostBeenTriggered`を使う例は`Base/Assets/UI/Panels/TechBoostsPanel.lua:91`。後者のGameplayでの利用はシナリオでも検査する |
+| Eurekaを持つ技術の定義 | `Base/Assets/Gameplay/Data/Technologies.xml:455-472`の`Boosts.TechnologyType`。研究済み・発生済み・Eureka定義なしを除き、`TechnologyType`順に2件選ぶ |
+| 世界の生存プレイヤーと都市を読む | `DLC/VikingsScenario/Scripts/VikingScenario.lua:224-234,93-95`の`PlayerManager.GetAlive()`と`GetCities():Members/FindID` |
+| 吸収対象の市民数と圧力 | `Base/Assets/UI/ReligionScreen.lua:1074-1092`の`GetReligionsInCity()`、`Religion`、`Followers`。圧力欄は`Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242`。無宗教を含めた合計が都市人口に一致することは要実機確認 |
+| 自分が創始した宗教と明示的な対応付け | `Base/Assets/UI/ReligionScreen.lua:123,129`、Gameplayの創始済み一覧は`DLC/Expansion2/Scripts/WorldCongress.lua:29`。`BindEngineReligion`は創始済みの標準宗教だけを登録し、番号付き仮宗教の名前から対応を推測しない |
+| 市民の宗教を変えるAPI | `DLC/VikingsScenario/Scripts/VikingScenario.lua:103`の`City:GetReligion():AddReligiousPressure(0, religionIndex, pressure, -1)`。Civ5の`ConvertPercentFollowers`は使わない。元宗教の人数を減らし自宗教を増やす人数配分に圧力を調整する。負の圧力による減算と整数人数への丸めは、この公式例だけでは証明できないため要実機確認。すべての宗教の人数を再読取して検査し、不一致を成功にしない |
+| 実機で市民を準備する | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario_Support.lua:266`の`ChangePopulation`、`DLC/NubiaScenario/Scripts/NubiaScenario.lua:820-827`の聖都・創始・`SetAllCityToReligion`。都市全体の変換は準備に限り、吸収そのものには使わない |
+| 外交の同盟を作る・存続を読む | `DLC/VikingsScenario/Scripts/VikingScenario.lua:18-20,77`の`SetHasAllied(other, true)`と`HasAllied`。標準30ターンは`Base/Assets/Gameplay/Data/GlobalParameters.xml:232`。戦争状態も毎ターン確認する。`SetHasAllied(false)`が解除にならない点は依頼者の実機検証済み事実 |
+| 必須の公式英雄モードとDLC | `DLC/Babylon/Babylon.modinfo:2,38-44`のDLC IDと`GAMEMODE_HEROES=1`条件。作成時の設定は`DLC/Babylon/Data/Babylon_ConfigData.xml:21-23`。独立MODの依存関係にもBabylonを追加 |
+| 公式の英雄と加入Modifier | `DLC/Babylon/Data/Babylon_Heroes_MODE.xml:116-127`の`HeroClasses`、`620-631`の`ProjectCompletionModifiers`、`895`の`MODIFIER_CITY_GRANT_HERO`、`903-914`の一度だけ適用するModifier、`985-1008`の英雄クラスと拠点建物。`City:AttachModifierByID`のGameplay例は`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:296-297` |
+| 英雄の加入済み所有者と生存 | `DLC/Babylon/UI/Additions/GreatPeopleHeroPanel.lua:124-159`の`GetHeroClaimPlayer`とUnit一覧、`HeroesPopup.lua:211,265`の拠点建物と`GetHeroClassType`、`Debug/Heroes.ltp:129-141`の`IsHero/GetLifespan`。公式の加入処理を都市に直接付けて所有者と寿命まで設定されることは要実機確認 |
+| 英雄加入の信仰報酬の基準 | `DLC/Indonesia_KhmerScenario/Scripts/IndonesiaKhmerScenario.lua:245-246`のGameplayの`GetFaithYield`。実行直前の値を保存して10倍を付与する。残高を10倍にする処理ではない |
+| 実機で英雄の拠点建物を準備する | `Debug/City.ltp:940-942`の`CreateIncompleteBuilding`、100%完成の指定は`Base/Assets/UI/Tuner/TunerCityPanel.lua:10`。準備後の`HasBuilding`も検査する |
+| 同盟終了を記録するターンイベント | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:64`の`GameEvents.OnGameTurnStarted.Add`。ロード時・ターン開始時に報酬を再付与しない |
 
 ## 検証
 
@@ -145,33 +104,41 @@ python -m unittest discover -s tools/civ6-autotest/tests -t .
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --check
 ```
 
-`tests/test_religion_persistence.py`はlupaを必須importし、スキップしない。SQLの定数とModifierを使ってLuaを実行し、費用・産出・移管・再利用拒否・AI・旧保存・失敗を検査する。保存は外部JSONと新しいLua VMで模擬し、残高・Unitのスタブも別に保持する。Civ6の動作保証の代用ではない。
+宗教のテストはlupaを必須importし、スキップしない。SQLと実際のLuaを使い、9件の効果、材料消費・再利用、Eurekaの選択、市民数の切り上げ、資金の移転、宗教同盟の双方向の制限と終了、公式英雄の型、予約中の失敗、AIと旧保存を検査する。市民の圧力から人数を算出するスタブは動作条件を模したものにすぎず、エンジンの丸めの証明ではない。JSONと新しいLua VMによる保存の模擬も、Civ6の保存の代用ではない。
 
-実機はメインセッションでMODを配置し、日・英・露それぞれで次を実行する。
+実機はメインセッションでMODを配置して、次の1シナリオを実行する。
 
 ```powershell
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json
 ```
 
-万世紀・織田／武田・小地図・標準速度で開始。都市を建設し、創始保存の検証用に標準`RELIGION_CUSTOM_1`と既存Cathedral信仰1件を使う。D8の宗教・教義案ではない。
+万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。85ステップ、8回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
 
-| 保存・再読込の段階 | 自己検査 |
+| 段階 | 自己検査 |
 |---|---|
-| 公開 | 信徒6・施設1、資料5種、別宗教の分離 |
-| 地下化 | 発祥者滅亡通知でも他勢力の信徒1を保持。`end_turn`の`turns=2`で実際に2ターン進んだことも外部比較 |
-| 失われた宗教 | 最後の信徒0、地下持続の根拠と資料を保持、自動再興なし |
-| 発見 | 教典発見は未解決。別資料の売却でゴールド40 |
-| 再興 | 信仰60減、信徒2・施設0、資料の利用権を消費し現物と履歴を保持 |
-| 公開へ復帰 | 施設1で公開、再興履歴を保持 |
-| 全8分岐 | 秘匿・解釈・吸収・収蔵・返還・仮英雄。人間のゴールド+40、信仰−40（吸収+20・英雄−60）、支持+10、斥候+1。AIの売却+40。UIで科学+20・文化+50を外部比較 |
-| 再興先のID衝突 | 直接の再興と発見からの再興で空いているIDを選ぶ。使用済みの2枠の施設・保有者と別宗教を保持し、合計信仰120の支払いと保存後の完全一致を検査 |
+| 公開・地下・信徒0・発見 | 発祥者の滅亡で消えないこと、信徒なし・資料あり・地下持続の記録、未解決の発見、売却500、別宗教との分離 |
+| 再興と公開への復帰 | 信仰20、信徒1・施設0、資料を保有し再利用可能。ロードで完全一致 |
+| 研究・異端化・Artifact | 研究直後の科学10・文化10とEureka2件、異端化後の追加文化20と信仰400減・資料消費、Artifact後の追加文化30とVault1件をそれぞれ検査。研究中の技術をEureka対象から外し、一括科学だけを比較 |
+| 吸収 | 標準宗教の市民を2人＋5人で準備し、合計7から3人を2都市にまたがって変換。信仰500減、原宗教4人・自宗教3人を検査。都市ごとの切り上げによる4人への変換を検出 |
+| 返還と宗教同盟 | 発祥国の金501・支持101から、金250.5・支持50を移転して同国に金250.5・支持51が残ること。外交の同盟と弾圧を拒む両方向の接続口、ロード後の存続 |
+| 英雄 | 公式HeroのUnit・クラス・所有者・寿命を検査。実行直前の信仰創出量の10倍だけを付与し、加入費用なし。ロード後の英雄と残高を外部比較 |
+| 8分岐とAI | すべての効果と資料の扱い、AIの売却500。台帳・双方の残高・研究進捗・英雄・Eureka・市民をロード前後で比較し、各分岐の二重実行を拒む |
+| 再興先のID衝突 | 直接の再興と発見からの再興で既存IDを上書きせず、施設と保有者と別宗教を保持。2回の信仰支払い計40と保存後の完全一致 |
+| 同じ資料での再興 | 10ターン進めて再び信徒0にし、残した同じ資料で信仰20・信徒1の再興ができること |
+| 宗教同盟の終了 | さらに31ターン進め、外交の同盟が自然に切れたこと、両方向の制限が解除され終了記録が残ること。強制講和と同ターンの強制宣戦は使わない |
 
-69ステップ、8回のsave→メニュー→load。台帳・手番・残高・研究進捗を外部の`capture_as`と`equals_capture`で完全比較する。ゲーム内の期待値と台帳が同時に消えても成功にならない。各分岐の再実行はエラーと台帳不変を検査。全8分岐のロードでは残高・Unit・研究進捗も比較し、ロード時の二重付与を検出する。最後にID衝突を伴う再興を保存・読込して台帳と信仰を比較する。不一致は`ui_lua`の`error()`か比較エラーで失敗する。ドライバーは`end_turn`の回数を尊重し、複数ターンで共通の期限を使う。
+比較にはドライバー側の`capture_as/equals_capture`を使う。台帳と期待値が一緒に消えても成功にならず、不一致はLuaの`error()`か外部比較で失敗する。実機には最後の期限切れの検査まで計41ターンを追加で進める時間が必要。
 
-開始時のMOD切り替えでは、無効化するMODに依存するものを、間接的な依存も含めて先に無効化する。シナリオで有効化を指定したMODは対象から外す。その指定と無効化が矛盾する場合は、変更前にエラーにする。実際に無効化したMODのIDは、そのステップの結果に記録する。これにより、以前のシナリオが残した依存MODによる無効化拒否を検出・解消する。依存関係を模したLuaテスト7件で、順序・共有依存・無効化済みのMOD・循環・指定の衝突・エンジンの拒否・結果への記録を検査する。
+既存のレビュー修正は保持した。MODは万世紀専用、再興で既存コミュニティを上書きしない。MOD切り替えのドライバーは、有効化指定と矛盾しない範囲で間接依存を先に無効化し、その結果を記録する。今回そのドライバーは変更していない。
 
 ## 結果と未検証
 
-2026-10-01：宗教PoCのlupaテスト40件を含む全366件、自動検証ツール159件が成功。スキップなし。69ステップの形式チェックとLua41片の構文検査も成功。実機はこの作業では実行しない。独自表のGameInfo参照、入れ子・空テーブル・false値・使用履歴の保存、GameCore_Tunerの参照、科学／文化Modifier・外交支持・隣接Unit生成、依存MODの切り替え、日英露表示は要実機確認。マルチプレイ、自然な探索・布教・迫害、建物／人口／人物／本体Vaultの同期は未検証・未接続。
+宗教のlupaテスト50件、85ステップの形式検査とLua55片の構文検査が成功。実機はこの作業では実行していない。圧力の減算・市民人数の丸め、GameplayでのEurekaフラグと英雄の管理API、公式Modifierによる直接加入、外交残高の端数と同盟の期限切れ、台帳の保存、日英露表示は要実機確認。標準ゲームの弾圧への接続、自然な探索・布教・台帳の自動同期、マルチプレイは未接続・未検証。
 
-指定のテスト検出では、制限付きWindowsトークンによる0700一時フォルダーの再アクセス不可と、自動検証ツールの名前空間パッケージをunittestが検出できない問題があった。一時領域だけの実行補助で、新規一時フォルダーに親の権限を継承させ、既存の名前空間パッケージを検出して全件実行した。既存フォルダーのACLは変更せず、リポジトリには実行補助や__init__.pyを追加していない。別モデルのレビューはCodexの起動時にAccess deniedで停止し、未実施。
+指定の全件テストでは、Windowsの制限付きトークンによる0700一時フォルダーの再アクセス不可と、unittestが自動検証ツールの名前空間パッケージを検出できない問題を確認した。新しく作る一時フォルダーだけに親の権限を継承させ、既存の名前空間パッケージの全テストを列挙する実行補助を`C:/Users/makhmeto/AppData/Local/Temp/religion-run-unittest.py`に置いた。既存フォルダーのACLは変更せず、リポジトリへ実行補助や`__init__.py`は追加していない。補助を使い、全376件（宗教50件を含む）と自動検証ツール159件が成功。スキップなし。
+
+別モデルのレビューはCodexのアプリサーバー起動時に`Access is denied`で停止し、未実施。共有ToDoの登録も`D:/CC/Tools/todo/todo.lock`への書き込み権限で拒否された。この作業ではコミット・pushを行わず、変更は作業ツリーに残す。
+
+補助を使う前の失敗で作られた`tmpixfeu7wh/`は、読み取り・削除とも権限で拒否されたため残っている。大きさは読み取れない。指定のDownloads内の削除希望フォルダーも、このセッションの書き込み許可範囲に含まれないため移動できない。
+
+後片付けの記録のDiscord投稿も`D:/CC/Tools/discord-ask/state.lock`への書き込み権限で拒否された。記録本文は`C:/Users/makhmeto/AppData/Local/Temp/religion-cleanup-record.txt`に残した。

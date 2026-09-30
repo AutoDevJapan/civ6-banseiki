@@ -50,36 +50,129 @@ Game = {
 }
 ExposedMembers = {}
 ENGINE = engine or {}
-FAIL_EFFECT, FAIL_SPAWN = false, false
-UnitManager = { InitUnitValidAdjacentHex = function(id, kind, x, y, radius)
-  assert(kind == 'UNIT_SCOUT' and x == 7 and y == 8 and radius == 1)
-  if FAIL_SPAWN then return end
-  local e = ENGINE[tostring(id)]
-  e.units[tostring(e.nextUnit)] = { id = e.nextUnit, kind = 5 }
-  e.nextUnit = e.nextUnit + 1
-  -- Deliberately returns nil, matching the verified engine behavior.
-end }
+FAIL_EFFECT, FAIL_SPAWN, BAD_CONVERSION = false, false, false
+GameEvents = { OnGameTurnStarted = { Add = function(f) TURN_HOOK = f end } }
+GameConfiguration = { GetValue = function() return HEROES_MODE end }
+HEROES_MODE = true
+local function info(rows, key)
+  local t = setmetatable({}, { __call = function()
+    local n = 0; return function() n = n + 1; return rows[n] end
+  end })
+  for _, row in ipairs(rows) do t[row.Index] = row; t[row[key]] = row end
+  return t
+end
+GameInfo.Technologies = info({
+  { Index = 1, TechnologyType = 'TECH_Z', Cost = 200 },
+  { Index = 2, TechnologyType = 'TECH_A', Cost = 200 },
+  { Index = 3, TechnologyType = 'TECH_M', Cost = 200 },
+  { Index = 4, TechnologyType = 'TECH_B', Cost = 200 },
+  { Index = 5, TechnologyType = 'TECH_FUTURE', Cost = 200 },
+}, 'TechnologyType')
+GameInfo.Boosts = info({ { Index = 1, TechnologyType = 'TECH_A' },
+  { Index = 2, TechnologyType = 'TECH_B' }, { Index = 3, TechnologyType = 'TECH_M' },
+  { Index = 4, TechnologyType = 'TECH_Z' } }, 'TechnologyType')
+GameInfo.HeroClasses = info({
+  { Index = 10, HeroClassType = 'HEROCLASS_ANANSI', UnitType = 'UNIT_HERO_ANANSI', CreationProjectType = 'PROJECT_CREATE_HERO_ANANSI' },
+  { Index = 11, HeroClassType = 'HEROCLASS_ARTHUR', UnitType = 'UNIT_HERO_ARTHUR', CreationProjectType = 'PROJECT_CREATE_HERO_ARTHUR' },
+}, 'HeroClassType')
+GameInfo.ProjectCompletionModifiers = info({
+  { Index = 1, ProjectType = 'PROJECT_CREATE_HERO_ANANSI', ModifierId = 'MODIFIER_CREATE_HERO_ANANSI' },
+  { Index = 2, ProjectType = 'PROJECT_CREATE_HERO_ARTHUR', ModifierId = 'MODIFIER_CREATE_HERO_ARTHUR' },
+}, 'ProjectType')
+GameInfo.Modifiers = modifiers
+for _, row in ipairs({ 'ANANSI', 'ARTHUR' }) do
+  GameInfo.Modifiers['MODIFIER_CREATE_HERO_' .. row] = { ModifierType = 'MODIFIER_CITY_GRANT_HERO' }
+end
+GameInfo.Units = { UNIT_HERO_ANANSI = { Index = 100 }, UNIT_HERO_ARTHUR = { Index = 101 }, UNIT_SCOUT = { Index = 5 } }
+GameInfo.Buildings = { BUILDING_MONUMENT = { Index = 1 } }
+local function nativeRows(c)
+  local rows, total, used = {}, 0, 0
+  for _, pressure in pairs(c.pressure) do total = total + pressure end
+  local ordered = {}
+  for religion, pressure in pairs(c.pressure) do
+    if pressure > 0 then
+      local raw = c.population * pressure / total
+      local n = math.floor(raw)
+      rows[#rows + 1] = { Religion = tonumber(religion), Followers = n, Pressure = pressure }
+      ordered[#ordered + 1] = { row = rows[#rows], remainder = raw - n }
+      used = used + n
+    end
+  end
+  table.sort(ordered, function(a, b)
+    return a.remainder > b.remainder or a.remainder == b.remainder and a.row.Religion < b.row.Religion
+  end)
+  for i = 1, c.population - used do ordered[i].row.Followers = ordered[i].row.Followers + 1 end
+  return rows
+end
 -- Native founding is a scenario fixture only. These stubs check its call path;
 -- whether the actual engine permits it remains a live-scenario assertion.
-NATIVE_RELIGION = -1
-local capital, holy = { GetID = function() return 0 end,
-  GetX = function() return 7 end, GetY = function() return 8 end }, nil
+NATIVE_RELIGION = 42
+local holy = {}
 Players = {}
 for id = 0, 1 do
   local pid = id
-  local e = ENGINE[tostring(pid)] or { faith = 500, gold = 100, science = 0, culture = 0,
-    favor = 0, units = {}, nextUnit = 1, alive = true, major = true, met = true, war = false, city = true }
+  local e = ENGINE[tostring(pid)] or { faith = 500, faithYield = 3.25, gold = 100, science = 0, culture = 0,
+    favor = 10, units = {}, nextUnit = 1, alive = true, major = true, met = true, war = false,
+    allied = false, city = true, nativeReligion = 42 + pid, researched = {}, boosted = {},
+    heroClaims = {}, cities = { ['0'] = { population = pid == 0 and 7 or 4,
+      pressure = { [tostring(42 + pid)] = (pid == 0 and 7 or 4) * 1024 }, monument = true } } }
   ENGINE[tostring(pid)] = e
-  local religion = { SetHolyCity = function(_, city) holy = city end,
+  local cityObjects = {}
+  for cid, c in pairs(e.cities) do
+    local city = { GetID = function() return tonumber(cid) end, GetOwner = function() return pid end,
+      GetX = function() return 7 end, GetY = function() return 8 end,
+      GetPopulation = function() return c.population end,
+      ChangePopulation = function(_, n) c.population = c.population + n end,
+      GetBuildings = function() return { HasBuilding = function(_, index) return index == 1 and c.monument end } end,
+      GetBuildQueue = function() return { CreateIncompleteBuilding = function(_, index, percentage)
+        assert(index == 1 and percentage == 100); c.monument = true end } end,
+      GetReligion = function() return {
+        GetReligionsInCity = function() return nativeRows(c) end,
+        AddReligiousPressure = function(_, source, r, delta, unit)
+          assert(source == 0 and unit == -1)
+          if FAIL_EFFECT then error('conversion refused') end
+          if BAD_CONVERSION then return end
+          local key = tostring(r); c.pressure[key] = math.max(0, (c.pressure[key] or 0) + delta)
+        end,
+        SetAllCityToReligion = function(_, r) c.pressure = { [tostring(r)] = c.population * 1024 } end,
+      } end,
+      AttachModifierByID = function(_, modifier)
+        assert(modifier == 'MODIFIER_CREATE_HERO_ANANSI' or modifier == 'MODIFIER_CREATE_HERO_ARTHUR')
+        if FAIL_EFFECT then error('hero refused') end
+        if FAIL_SPAWN then return end
+        local class = modifier == 'MODIFIER_CREATE_HERO_ANANSI' and 10 or 11
+        assert((ENGINE['0'].heroClaims[tostring(class)] or -1) == -1)
+        ENGINE['0'].heroClaims[tostring(class)] = pid
+        e.units[tostring(e.nextUnit)] = { id = e.nextUnit, kind = class + 90, class = class, lifespan = 30 }
+        e.nextUnit = e.nextUnit + 1
+      end,
+    }
+    cityObjects[cid] = city
+  end
+  local capital = cityObjects['0']
+  local religion = { SetHolyCity = function(_, city) holy[tostring(pid)] = city end,
+    GetReligionTypeCreated = function() return e.nativeReligion end,
+    GetFaithYield = function() return e.faithYield end,
     GetFaithBalance = function() return e.faith end,
     ChangeFaithBalance = function(_, amount) if FAIL_EFFECT then error('effect refused') end; e.faith = e.faith + amount end }
   Players[pid] = {
     GetID = function() return pid end, IsAlive = function() return e.alive end,
     IsMajor = function() return e.major end, IsHuman = function() return pid == 0 end,
     GetCities = function() return { GetCapitalCity = function() return e.city and capital or nil end,
-      FindID = function(_, city) return e.city and city == 0 and capital or nil end } end,
+      FindID = function(_, city) return e.city and cityObjects[tostring(city)] or nil end,
+      Members = function() local key; return function()
+        if not e.city then return end; key = next(cityObjects, key); if key then return tonumber(key), cityObjects[key] end
+      end end } end,
     GetReligion = function() return religion end,
-    GetTechs = function() return { SetTech = function() end } end,
+    GetTechs = function() return {
+      SetTech = function(_, index, acquired) e.researched[tostring(index)] = acquired end,
+      HasTech = function(_, index) return e.researched[tostring(index)] == true end,
+      HasBoostBeenTriggered = function(_, index) return e.boosted[tostring(index)] == true end,
+      TriggerBoost = function(_, index, source)
+        assert(source == 1 and not e.researched[tostring(index)] and not e.boosted[tostring(index)])
+        if FAIL_EFFECT then error('boost refused') end; e.boosted[tostring(index)] = true
+      end,
+    } end,
     GetCulture = function() return { SetCivic = function() end } end,
     GetTreasury = function() return {
       GetGoldBalance = function() return e.gold end,
@@ -87,14 +180,23 @@ for id = 0, 1 do
     GetDiplomacy = function() return { HasMet = function() return e.met end,
       SetHasMet = function() e.met = true end, MakePeaceWith = function() e.war = false end,
       IsAtWarWith = function() return e.war end, GetFavor = function() return e.favor end,
+      HasAllied = function() return e.allied and (e.allianceTurn == nil or TURN - e.allianceTurn < 30) end,
+      SetHasAllied = function(_, other, enabled)
+        assert(enabled == true); e.allied = true; ENGINE[tostring(other)].allied = true
+        e.allianceTurn = TURN; ENGINE[tostring(other)].allianceTurn = TURN
+      end,
       ChangeFavor = function(_, amount) if FAIL_EFFECT then error('effect refused') end; e.favor = e.favor + amount end } end,
     GetUnits = function() return {
       FindID = function(_, unit) local u = e.units[tostring(unit)]; return u and {
-        GetID = function() return u.id end, GetType = function() return u.kind end } end,
+        GetID = function() return u.id end, GetType = function() return u.kind end,
+        IsHero = function() return u.class ~= nil end, GetHeroClassType = function() return u.class end,
+        GetLifespan = function() return u.lifespan end } end,
       Members = function() local key; return function()
         key = next(e.units, key); if key == nil then return end
         local u = e.units[key]; return u.id, {
-          GetID = function() return u.id end, GetType = function() return u.kind end }
+          GetID = function() return u.id end, GetType = function() return u.kind end,
+          IsHero = function() return u.class ~= nil end, GetHeroClassType = function() return u.class end,
+          GetLifespan = function() return u.lifespan end }
       end end } end,
     AttachModifierByID = function(_, modifier)
       if FAIL_EFFECT then error('effect refused') end
@@ -104,19 +206,26 @@ for id = 0, 1 do
     end,
   }
 end
-GameInfo.Modifiers = modifiers
-GameInfo.Units = { UNIT_SCOUT = { Index = 5 } }
-GameInfo.Technologies = function() return function() return nil end end
 GameInfo.Civics = function() return function() return nil end end
-GameInfo.Religions = { RELIGION_CUSTOM_1 = { Index = 42 } }
+Game.GetPlayers = function()
+  local all = {}; for id = 0, 1 do if ENGINE[tostring(id)].alive then all[#all + 1] = Players[id] end end; return all
+end
+PlayerManager = { GetAlive = Game.GetPlayers }
+Game.GetHeroesManager = function() return {
+  GetPlayerHeroOriginBuildingType = function() return 1 end,
+  GetHeroClaimPlayer = function(_, index) return ENGINE['0'].heroClaims[tostring(index)] or -1 end,
+} end
+GameInfo.Religions = info({ { Index = 42, ReligionType = 'RELIGION_CUSTOM_1' },
+  { Index = 43, ReligionType = 'RELIGION_CUSTOM_2' }, { Index = 44, ReligionType = 'RELIGION_CUSTOM_3' } }, 'ReligionType')
 GameInfo.Beliefs = { BELIEF_CATHEDRAL = { Index = 9 } }
 local native = {
   FoundReligion = function(_, player, religion)
-    assert(player == 0 and holy == capital)
-    NATIVE_RELIGION = religion
+    assert(holy[tostring(player)] == Players[player]:GetCities():GetCapitalCity())
+    ENGINE[tostring(player)].nativeReligion = religion
+    if player == 0 then NATIVE_RELIGION = religion end
   end,
-  AddBelief = function(_, player, belief) assert(player == 0 and belief == 9) end,
-  GetReligions = function() return { { Religion = NATIVE_RELIGION } } end,
+  AddBelief = function(_, player, belief) assert(player >= 0 and player <= 1 and belief == 9) end,
+  GetReligions = function() return { { Religion = 42 }, { Religion = 43 }, { Religion = 44 } } end,
 }
 Game.GetReligion = function() return native end
 function print(line) LOG[#LOG + 1] = line end
@@ -137,7 +246,10 @@ def catalog():
 
 def plain(value):
     if hasattr(value, "items"):
-        return {k: plain(v) for k, v in value.items()}
+        data = {k: plain(v) for k, v in value.items()}
+        if data and set(data) == set(range(1, len(data) + 1)):
+            return [data[k] for k in range(1, len(data) + 1)]
+        return data
     return value
 
 class ReligionPersistenceTests(unittest.TestCase):
@@ -234,7 +346,8 @@ class ReligionPersistenceTests(unittest.TestCase):
             self.assertEqual({x.tag for x in row}, {"ja_JP", "en_US", "ru_RU"})
 
     def test_fresh_game_and_script_reload_do_not_write_or_found_anything(self):
-        self.assertEqual(plain(self.rp.Export()), {"schema": 1, "revision": 0, "religions": {}, "heroes": {}, "artifacts": {}})
+        self.assertEqual(plain(self.rp.Export()), {"schema": 1, "revision": 0, "religions": {},
+                                                  "heroes": {}, "artifacts": {}, "religiousAlliances": {}})
         self.assertIsNone(self.g.PROPERTY_STORE[KEY])
         self.lua.execute(SCRIPT)
         self.assertEqual(self.g.WRITES, 0)
@@ -299,10 +412,10 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.lost()
                 self.reload()
                 self.rp.Revive(R1, "revival", "source", "new", 1, 0)
-                self.assertEqual((self.state()["state"], self.state()["followers"]), ("UNDERGROUND", 2))
+                self.assertEqual((self.state()["state"], self.state()["followers"]), ("UNDERGROUND", 1))
                 self.assertEqual(self.state()["revivalCount"], 1)
                 self.assertEqual(self.state()["assets"]["source"]["kind"], kind)
-                self.assertEqual(self.g.ENGINE["1"].faith, 440)
+                self.assertEqual(self.g.ENGINE["1"].faith, 480)
                 self.reload()
 
     def test_holy_site_alone_and_no_source_cannot_revive(self):
@@ -341,11 +454,10 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.Revive, R1, "r", "book", "new", 1, 0)
         self.rp.SetCommunity(R1, "new", 0, 0, "PLAYER_1")
         self.rejected(self.rp.Revive, R1, "r2", "book", "new2", 1, 0)
-        self.rp.PreserveAsset(R1, "book2", "SCRIPTURE", "PLAYER_1", 1)
-        self.rejected(self.rp.Revive, R1, "r2", "book2", "new2", 1, 0)
         self.g.TURN += 10
-        self.rp.Revive(R1, "r2", "book2", "new2", 1, 0)
+        self.rp.Revive(R1, "r2", "book", "new2", 1, 0)
         self.assertEqual(self.state()["revivalCount"], 2)
+        self.assertEqual(self.g.ENGINE["1"].faith, 460)
         self.reload()
         self.assertEqual(set(self.state()["revivals"]), {"r", "r2"})
 
@@ -372,11 +484,11 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.assertNotIn(selected, original)
                 self.assertEqual({k: revived["communities"][k] for k in original}, original)
                 self.assertEqual(revived["communities"][selected],
-                                 {"followers": 2, "publicFacilities": 0, "holder": "PLAYER_1"})
+                                 {"followers": 1, "publicFacilities": 0, "holder": "PLAYER_1"})
                 self.assertEqual((revived["followers"], revived["publicFacilities"], revived["state"]),
-                                 (2, 5, "PUBLIC"))
+                                 (1, 5, "PUBLIC"))
                 self.assertEqual(self.state(R2), other)
-                self.assertEqual(self.g.ENGINE["1"].faith, 440)
+                self.assertEqual(self.g.ENGINE["1"].faith, 480)
                 self.reload()
                 self.assertEqual(self.state(), revived)
                 self.assertEqual(self.state(R2), other)
@@ -401,9 +513,9 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(revived["communities"]["new"],
                          {"followers": 0, "publicFacilities": 7, "holder": "PLAYER_0"})
         self.assertEqual(revived["communities"][selected],
-                         {"followers": 2, "publicFacilities": 0, "holder": "PLAYER_1"})
-        self.assertEqual((revived["followers"], revived["publicFacilities"], revived["revivalCount"]), (2, 7, 1))
-        self.assertEqual(self.g.ENGINE["1"].faith, 440)
+                         {"followers": 1, "publicFacilities": 0, "holder": "PLAYER_1"})
+        self.assertEqual((revived["followers"], revived["publicFacilities"], revived["revivalCount"]), (1, 7, 1))
+        self.assertEqual(self.g.ENGINE["1"].faith, 480)
         self.reload()
         self.assertEqual(self.state(), revived)
 
@@ -454,13 +566,18 @@ class ReligionPersistenceTests(unittest.TestCase):
     def discovery(self, job="MONK", actor="MONK_1", religion=R1, item="book", discovery="d", player=1):
         self.rp.Discover(religion, discovery, item, "SCRIPTURE", actor, job, "CAVE", player)
 
+    def bind_absorption(self):
+        self.rp.BindEngineReligion(R1, 42)
+        self.rp.BindEngineReligion(R2, 43)
+
     def test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay(self):
         outcomes = [r["ID"] for r in self.tables["Outcomes"]]
         self.assertEqual(set(outcomes), {"REVIVE", "SELL", "CONCEAL", "RESEARCH", "HERESY",
                                         "ABSORB", "ARTIFACT", "DIPLOMATIC_INCIDENT", "HERO"})
-        rewards = {"SELL": {"gold": 40}, "RESEARCH": {"science": 20}, "HERESY": {"culture": 20},
-                   "ABSORB": {"faith": 20}, "ARTIFACT": {"culture": 30},
-                   "DIPLOMATIC_INCIDENT": {"favor": 10}, "REVIVE": {"faith": -60}, "HERO": {"faith": -60}}
+        rewards = {"SELL": {"gold": 500}, "RESEARCH": {"science": 10, "culture": 10},
+                   "HERESY": {"culture": 20, "faith": -400}, "ABSORB": {"faith": -500},
+                   "ARTIFACT": {"culture": 30}, "DIPLOMATIC_INCIDENT": {"favor": 5, "gold": 50},
+                   "REVIVE": {"faith": -20}, "HERO": {"faith": 32.5}}
         for outcome in outcomes:
             with self.subTest(outcome=outcome):
                 self.load()
@@ -468,13 +585,14 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.lost()
                 self.found(R2)
                 self.rp.SetCommunity(R2, "origin", 3, 1, "PLAYER_1")
+                self.bind_absorption()
                 self.discovery()
                 before = plain(self.g.ENGINE["1"])
                 self.rp.ResolveDiscovery(R1, "d", outcome, self.options())
                 d = self.state()["discoveries"]["d"]
                 self.assertEqual(d["outcome"], outcome)
                 self.assertEqual(d["effects"], "APPLIED")
-                self.assertEqual(self.state()["followers"], 2 if outcome == "REVIVE" else 0)
+                self.assertEqual(self.state()["followers"], 1 if outcome == "REVIVE" else 0)
                 self.assertEqual(self.state()["revivalCount"], 1 if outcome == "REVIVE" else 0)
                 after = plain(self.g.ENGINE["1"])
                 for yield_name in ("gold", "faith", "science", "culture", "favor"):
@@ -486,7 +604,11 @@ class ReligionPersistenceTests(unittest.TestCase):
                 if outcome == "ARTIFACT":
                     self.assertTrue(self.state()["assets"]["book"]["vault"])
                 if outcome == "HERESY":
-                    self.assertEqual(self.state()["assets"]["book"]["interpretation"], "HERETICAL")
+                    self.assertNotIn("book", self.state()["assets"])
+                    self.assertEqual(self.state()["materialUses"]["book"]["interpretation"], "HERETICAL")
+                if outcome == "RESEARCH":
+                    self.assertNotIn("book", self.state()["assets"])
+                    self.assertEqual(after["boosted"], {"2": True, "4": True})
                 if outcome == "DIPLOMATIC_INCIDENT":
                     self.assertEqual(self.state()["assets"]["book"]["owner"], 0)
                 self.reload()
@@ -502,6 +624,184 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options())
         self.assertNotIn("outcome", self.state()["discoveries"]["d"])
 
+    def test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.g.ENGINE["1"].researched["2"] = True
+        self.g.ENGINE["1"].boosted["4"] = True
+        before = plain(self.g.ENGINE["1"])
+        self.rp.ResolveDiscovery(R1, "d", "RESEARCH", self.options())
+        self.assertEqual(plain(self.g.ENGINE["1"].boosted), {"4": True, "3": True, "1": True})
+        self.assertEqual(self.state()["discoveries"]["d"]["effect"]["boosts"], [3, 1])
+        self.assertEqual(self.g.ENGINE["1"].science - before["science"], 10)
+        self.assertEqual(self.g.ENGINE["1"].culture - before["culture"], 10)
+        self.assertTrue(self.state()["retiredAssets"]["book"])
+        self.rejected(self.rp.PreserveAsset, R1, "book", "SCRIPTURE", "CAVE", 1)
+        self.reload()
+
+    def test_research_requires_two_distinct_eligible_boosts_before_any_effect(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        for index in (1, 2, 3):
+            self.g.ENGINE["1"].boosted[str(index)] = True
+        before = plain(self.g.ENGINE)
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "RESEARCH", self.options())
+        self.assertEqual(plain(self.g.ENGINE), before)
+
+    def test_research_eurekas_precede_science_that_finishes_a_chosen_tech(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.lua.execute("""
+          local p=Players[1]; local attach=p.AttachModifierByID
+          p.AttachModifierByID=function(self, id)
+            if id=='JAC_RP_RESEARCH_JAC_RP_PLACEHOLDER_01' then
+              assert(ENGINE['1'].boosted['2'] and ENGINE['1'].boosted['4'])
+              ENGINE['1'].researched['2']=true
+            end
+            attach(self,id)
+          end
+        """)
+        self.rp.ResolveDiscovery(R1, "d", "RESEARCH", self.options())
+        self.assertEqual(plain(self.g.ENGINE["1"].boosted), {"2": True, "4": True})
+        self.assertEqual((self.g.ENGINE["1"].science, self.g.ENGINE["1"].culture), (10, 10))
+        self.reload()
+
+    def test_heresy_requires_400_faith_and_consumes_material(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.g.ENGINE["1"].faith = 399
+        before = plain(self.g.ENGINE)
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "HERESY", self.options())
+        self.assertEqual(plain(self.g.ENGINE), before)
+        self.g.ENGINE["1"].faith = 400
+        self.rp.ResolveDiscovery(R1, "d", "HERESY", self.options())
+        self.assertEqual((self.g.ENGINE["1"].faith, self.g.ENGINE["1"].culture), (0, 20))
+        self.assertNotIn("book", self.state()["assets"])
+        self.assertTrue(self.state()["retiredAssets"]["book"])
+        self.rejected(self.rp.Revive, R1, "r", "book", "new", 1, 0)
+        self.reload()
+
+    def test_absorption_rounds_once_worldwide_and_preserves_other_religions(self):
+        self.found()
+        self.lost()
+        self.found(R2)
+        self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+        self.bind_absorption()
+        self.discovery()
+        # Five SOURCE citizens split 1+4, one target and one third-faith citizen.
+        # ceil(5/3)=2, whereas rounding separately per city would convert 3.
+        self.lua.execute("""
+          local a,b=ENGINE['0'].cities['0'],ENGINE['1'].cities['0']
+          a.population=3; a.pressure={['42']=1024,['43']=1024,['44']=1024}
+          b.population=4; b.pressure={['42']=4096}
+        """)
+        self.g.ENGINE["1"].faith = 499
+        before = plain(self.g.ENGINE)
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
+        self.assertEqual(plain(self.g.ENGINE), before)
+        self.g.ENGINE["1"].faith = 500
+        self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+        effect = self.state()["discoveries"]["d"]["effect"]
+        self.assertEqual((effect["sourceFollowers"], effect["convertedFollowers"]), (5, 2))
+        self.assertEqual([(c["player"], c["city"], c["moved"]) for c in effect["conversions"]], [(0, 0, 1), (1, 0, 1)])
+        self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (3, 3))
+        rows = plain(self.g.Players[0].GetCities().GetCapitalCity().GetReligion().GetReligionsInCity())
+        self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1})
+        self.assertEqual(self.g.ENGINE["1"].faith, 0)
+        self.reload()
+
+    def test_absorption_rejects_unbound_or_foreign_native_target(self):
+        self.found()
+        self.lost()
+        self.found(R2)
+        self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+        self.discovery()
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
+        self.rp.BindEngineReligion(R1, 42)
+        self.rp.BindEngineReligion(R2, 44)
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
+        self.rejected(self.rp.BindEngineReligion, R2, 43)
+
+    def test_inexact_engine_conversion_stays_pending_and_never_replays(self):
+        self.found()
+        self.lost()
+        self.found(R2)
+        self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+        self.bind_absorption()
+        self.discovery()
+        self.g.BAD_CONVERSION = True
+        with self.assertRaisesRegex(LuaError, "conversion count mismatch"):
+            self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+        self.assertEqual(self.state()["discoveries"]["d"]["effects"], "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, 0)
+        self.reload()
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
+
+    def test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways(self):
+        self.found()
+        self.lost()
+        self.found(R2)
+        self.discovery()
+        self.g.ENGINE["0"].gold = 101.5
+        self.g.ENGINE["0"].favor = 11
+        self.rp.ResolveDiscovery(R1, "d", "DIPLOMATIC_INCIDENT", self.options())
+        self.assertEqual((self.g.ENGINE["0"].gold, self.g.ENGINE["1"].gold), (50.75, 150.75))
+        self.assertEqual((self.g.ENGINE["0"].favor, self.g.ENGINE["1"].favor), (6, 15))
+        self.assertFalse(self.rp.CanPersecute(0, R1, 1, R2)[0])
+        self.assertFalse(self.rp.CanPersecute(1, R2, 0, R1)[0])
+        self.assertTrue(self.rp.CanPersecute(0, R2, 1, R2))
+        with self.assertRaisesRegex(LuaError, "alliance prohibits"):
+            self.rp.AssertCanPersecute(1, R2, 0, R1)
+        self.reload()
+        self.assertFalse(self.rp.CanPersecute(0, R1, 1, R2)[0])
+
+    def test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_restart(self):
+        for cause in ("allied", "war", "alive"):
+            with self.subTest(cause=cause):
+                self.load()
+                self.found()
+                self.lost()
+                self.found(R2)
+                self.discovery()
+                self.rp.ResolveDiscovery(R1, "d", "DIPLOMATIC_INCIDENT", self.options())
+                self.g.ENGINE["1"][cause] = cause == "war"
+                self.g.TURN += 1
+                self.g.TURN_HOOK()
+                a = next(iter(plain(self.rp.Export())["religiousAlliances"].values()))
+                self.assertEqual((a["active"], a["endedTurn"]), (False, self.g.TURN))
+                self.g.ENGINE["1"][cause] = cause != "war"
+                self.reload()
+                self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
+                self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
+
+    def test_official_hero_requires_mode_origin_building_and_unclaimed_hero(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.g.HEROES_MODE = False
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "HERO", self.options())
+        self.g.HEROES_MODE = True
+        self.g.ENGINE["1"].cities["0"].monument = False
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "HERO", self.options())
+        self.g.ENGINE["1"].cities["0"].monument = True
+        self.g.ENGINE["0"].heroClaims["10"] = 0
+        self.g.ENGINE["0"].heroClaims["11"] = 0
+        self.rejected(self.rp.ResolveDiscovery, R1, "d", "HERO", self.options())
+        self.g.ENGINE["0"].heroClaims["11"] = None
+        self.g.ENGINE["1"].faith = 0
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.assertEqual(self.g.ENGINE["1"].faith, 32.5)
+        receipt = plain(self.rp.Export())["heroes"]["1"]
+        units = self.g.Players[1].GetUnits()
+        unit = units.FindID(units, receipt["unit"])
+        self.assertEqual((unit.GetType(), unit.GetHeroClassType(), unit.GetLifespan()), (101, 11, 30))
+        self.assertEqual(self.g.ENGINE["0"].heroClaims["11"], 1)
+        self.reload()
+
     def test_invalid_inputs_and_world_overflow_do_not_mutate_saved_state(self):
         self.found()
         for value in (-1, 0.5, float("nan"), float("inf"), 2147483648, "1", True, None):
@@ -516,40 +816,42 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rp.SetCommunity(R1, "origin", 2147483647, 0, "PLAYER_0")
         self.rejected(self.rp.SetCommunity, R1, "elsewhere", 1, 0, "PLAYER_1")
 
-    def test_named_rules_and_all_sixty_modifier_definitions_match_official_types(self):
+    def test_named_rules_and_all_eighty_modifier_definitions_match_official_types(self):
         rules = plain(self.rp.Rules())
-        self.assertEqual(rules, {"REVIVAL_FOLLOWERS": 2, "REVIVAL_FAITH_COST": 60,
-                                "REVIVAL_COOLDOWN_TURNS": 10, "SELL_GOLD": 40,
-                                "RESEARCH_SCIENCE": 20, "HERESY_CULTURE": 20,
-                                "ABSORB_FAITH": 20, "ARTIFACT_CULTURE": 30,
-                                "INCIDENT_FAVOR": 10, "HERO_FAITH_COST": 60})
-        self.assertEqual(len(self.tables["modifiers"]), 60)
+        self.assertEqual(rules, {"REVIVAL_FOLLOWERS": 1, "REVIVAL_FAITH_COST": 20,
+                                "REVIVAL_COOLDOWN_TURNS": 10, "SELL_GOLD": 500,
+                                "RESEARCH_SCIENCE": 10, "RESEARCH_CULTURE": 10, "RESEARCH_EUREKAS": 2,
+                                "HERESY_CULTURE": 20, "HERESY_FAITH_COST": 400,
+                                "ABSORB_FAITH_COST": 500, "ABSORB_DIVISOR": 3, "ARTIFACT_CULTURE": 30,
+                                "HERO_FAITH_MULTIPLIER": 10})
+        self.assertEqual(len(self.tables["modifiers"]), 80)
         self.assertEqual({(r["ModifierType"], r["RunOnce"], r["Permanent"])
                           for r in self.tables["modifierTypes"]}, {("MODIFIER_PLAYER_GRANT_YIELD", 1, 1)})
         for religion in self.tables["Religions"]:
-            for outcome, yield_name, amount in (("RESEARCH", "SCIENCE", "20"), ("HERESY", "CULTURE", "20"),
+            for outcome, yield_name, amount in (("RESEARCH", "SCIENCE", "10"), ("RESEARCH_CULTURE", "CULTURE", "10"),
+                                               ("HERESY", "CULTURE", "20"),
                                                  ("ARTIFACT", "CULTURE", "30")):
                 self.assertEqual(self.tables["modifiers"][f"JAC_RP_{outcome}_{religion['ID']}"],
                                  {"YieldType": "YIELD_" + yield_name, "Amount": amount, "Scale": "false"})
         exported = self.rp.Rules()
         exported.REVIVAL_FOLLOWERS = 99
-        self.assertEqual(self.rp.Rules().REVIVAL_FOLLOWERS, 2)
+        self.assertEqual(self.rp.Rules().REVIVAL_FOLLOWERS, 1)
 
     def test_revival_requires_faith_city_ownership_and_fixed_size(self):
         self.found()
         self.lost()
         self.discovery()
-        self.g.ENGINE["1"].faith = 59
+        self.g.ENGINE["1"].faith = 19
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options())
-        self.g.ENGINE["1"].faith = 60
+        self.g.ENGINE["1"].faith = 20
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options(city=99))
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options(player=0))
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "REVIVE", self.options(followers=99))
         self.rp.ResolveDiscovery(R1, "d", "REVIVE", self.options())
         self.assertEqual(self.g.ENGINE["1"].faith, 0)
-        self.assertEqual(self.state()["communities"]["new"], {"followers": 2, "publicFacilities": 0, "holder": "PLAYER_1"})
+        self.assertEqual(self.state()["communities"]["new"], {"followers": 1, "publicFacilities": 0, "holder": "PLAYER_1"})
 
-    def test_conceal_has_no_yield_and_allows_exactly_one_later_paid_revival(self):
+    def test_conceal_has_no_yield_and_keeps_material_after_later_paid_revivals(self):
         self.found()
         self.lost()
         self.discovery()
@@ -561,9 +863,10 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.reload()
         self.rp.Revive(R1, "r", "book", "new", 1, 0)
         self.rp.SetCommunity(R1, "new", 0, 0, "PLAYER_1")
-        self.assertFalse(self.state()["canRevive"])
+        self.assertTrue(self.state()["canRevive"])
         self.g.TURN += 10
-        self.rejected(self.rp.Revive, R1, "r2", "book", "new2", 1, 0)
+        self.rp.Revive(R1, "r2", "book", "new2", 1, 0)
+        self.assertEqual(self.g.ENGINE["1"].faith, 460)
 
     def test_reused_material_removed_ids_and_moved_discoveries_cannot_pay_rewards(self):
         self.found()
@@ -578,7 +881,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.PreserveAsset, R1, "book", "SCRIPTURE", "CAVE")
         self.rejected(self.rp.Discover, R1, "d3", "book", "SCRIPTURE", "ACTOR", "THIEF", "CAVE", 1)
         self.reload()
-        self.assertEqual(self.g.ENGINE["1"].gold, 140)
+        self.assertEqual(self.g.ENGINE["1"].gold, 600)
 
     def test_non_revival_limit_is_per_player_religion_and_branch(self):
         self.found()
@@ -594,7 +897,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.lost(R2)
         self.discovery(religion=R2, discovery="other", item="other")
         self.rp.ResolveDiscovery(R2, "other", "SELL", self.options())
-        self.assertEqual((self.g.ENGINE["0"].gold, self.g.ENGINE["1"].gold, self.g.ENGINE["1"].science), (140, 180, 20))
+        self.assertEqual((self.g.ENGINE["0"].gold, self.g.ENGINE["1"].gold, self.g.ENGINE["1"].science), (600, 1100, 10))
 
     def test_absorption_requires_own_living_target_and_locks_the_transferred_source(self):
         self.found()
@@ -604,7 +907,11 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.found(R2)
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
         self.rp.SetCommunity(R2, "origin", 3, 1, "PLAYER_1")
+        self.bind_absorption()
         self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+        self.assertEqual(self.rp.NativeFollowers(R1), 4)
+        self.assertEqual(self.rp.NativeFollowers(R2), 7)
+        self.assertEqual(self.g.ENGINE["1"].faith, 0)
         self.lost(R2)
         self.assertFalse(self.state(R2)["canRevive"])
         self.rejected(self.rp.Revive, R2, "newrevival", "book", "new", 1, 0)
@@ -624,7 +931,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "DIPLOMATIC_INCIDENT", self.options())
         self.g.ENGINE["0"].alive = True
         self.rp.ResolveDiscovery(R1, "d", "DIPLOMATIC_INCIDENT", self.options())
-        self.assertEqual((self.g.ENGINE["1"].favor, self.state()["assets"]["book"]["holder"]), (10, "PLAYER_0"))
+        self.assertEqual((self.g.ENGINE["1"].favor, self.state()["assets"]["book"]["holder"]), (15, "PLAYER_0"))
 
     def test_vault_and_hero_limits_apply_across_religions_after_load(self):
         for outcome in ("ARTIFACT", "HERO"):
@@ -665,7 +972,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.g.FAIL_WRITE_AT = self.g.WRITES + offset
                 with self.assertRaises(LuaError):
                     self.rp.ResolveDiscovery(R1, "d", "SELL", self.options())
-                self.assertEqual(self.g.ENGINE["1"].gold, 100 if offset == 1 else 140)
+                self.assertEqual(self.g.ENGINE["1"].gold, 100 if offset == 1 else 600)
                 if offset == 1:
                     self.assertNotIn("outcome", self.state()["discoveries"]["d"])
                 else:
@@ -707,6 +1014,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.discovery(job="THIEF", item="book2", discovery="d2")
         self.found(R2)
         self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+        self.bind_absorption()
         self.assertEqual(self.rp.ResolveForAI(R1, "d2", self.options()), "ABSORB")
         self.discovery(job="MONK", item="book3", discovery="d3")
         self.g.ENGINE["1"].faith, self.g.ENGINE["1"].met, self.g.ENGINE["1"].city = 0, False, False
@@ -781,8 +1089,9 @@ class ReligionPersistenceTests(unittest.TestCase):
                 loaded += 1
             elif step["action"] in ("autoplay", "end_turn"):
                 self.g.TURN += step["turns"]
+                self.g.TURN_HOOK()
         self.assertEqual(loaded, 8)
-        self.assertEqual(compared, 12)
+        self.assertEqual(compared, 11)
         self.assertEqual(native_founded, 1)
         self.assertEqual(self.state()["revivalCount"], 1)
         self.assertEqual(self.state()["state"], "PUBLIC")
@@ -796,7 +1105,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 41)
+        self.assertEqual(len(chunks), 55)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 

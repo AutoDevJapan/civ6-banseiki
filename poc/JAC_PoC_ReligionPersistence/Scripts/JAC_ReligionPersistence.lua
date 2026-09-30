@@ -1,5 +1,5 @@
 -- SSOT 9.2/9.3, roadmap 16.1 bundle 2. This is the MOD's ledger,
--- not Civ6's city-pressure religion system. All mutations run in gameplay.
+-- with explicit native-religion bindings for citizen conversion. Gameplay only.
 -- Official property API: DLC/BlackDeathScenario/Scripts/
 -- BlackDeathScenario_StateUtils.lua:60-78. Table save/load was verified by bundle 0.
 local KEY = "JAC_RP_STATE_V1"
@@ -30,7 +30,6 @@ end
 
 local RULES = {}
 for row in GameInfo.JAC_RP_Rules() do RULES[row.ID] = row.Value end
-local HERO_UNIT = "UNIT_SCOUT" -- placeholder person, no D8 religion/persona design
 function RP.Rules() return copy(RULES) end
 
 local function keys(value)
@@ -71,7 +70,8 @@ end
 local function recoverySource(religion, assetID)
   local asset, use = religion.assets[assetID], religion.materialUses[assetID]
   return asset ~= nil and catalog.AssetKinds[asset.kind].RevivalSource == 1
-    and (use == nil or use.outcome == "CONCEAL" and use.effects == "APPLIED")
+    and (use == nil or use.effects == "APPLIED" and
+      (use.outcome == "CONCEAL" or use.outcome == "REVIVE" and use.reusable == true))
 end
 
 local function derive(religion)
@@ -94,7 +94,8 @@ end
 
 local function read()
   local state = Game:GetProperty(KEY)
-  if state == nil then return { schema = SCHEMA, revision = 0, religions = {}, heroes = {}, artifacts = {} } end
+  if state == nil then return { schema = SCHEMA, revision = 0, religions = {}, heroes = {},
+    artifacts = {}, religiousAlliances = {} } end
   check(type(state) == "table" and state.schema == SCHEMA,
     "unsupported or damaged save schema; refusing to replace it")
   check(type(state.religions) == "table", "damaged religion ledger")
@@ -102,6 +103,7 @@ local function read()
   -- Additive V1 extension, read-only until a real mutation. Old DEFERRED choices
   -- remain history; loading a save never pays a previously undecided reward.
   state.heroes, state.artifacts = state.heroes or {}, state.artifacts or {}
+  state.religiousAlliances = state.religiousAlliances or {}
   for _, religion in pairs(state.religions) do
     religion.materialUses = religion.materialUses or {}
     religion.outcomeUses = religion.outcomeUses or {}
@@ -166,6 +168,27 @@ function RP.SetCommunity(id, communityID, followers, facilities, holder)
   commit(state)
 end
 
+-- Exploration adapters bind a catalog religion to an already founded native
+-- religion; never infer a native ID from a placeholder name or founder's ID.
+-- Native table: DLC/Expansion2/Scripts/WorldCongress.lua:29.
+function RP.BindEngineReligion(id, religionType)
+  count(religionType, "native religion")
+  check(GameInfo.Religions[religionType] ~= nil, "unknown native religion")
+  local founded = false
+  for _, r in ipairs(Game.GetReligion():GetReligions()) do
+    founded = founded or r.Religion == religionType
+  end
+  check(founded, "native religion must already be founded")
+  local state = read()
+  local religion = get(state, id)
+  check(religion.engineReligion == nil or religion.engineReligion == religionType, "native binding cannot change")
+  for otherID, other in pairs(state.religions) do
+    check(otherID == id or other.engineReligion ~= religionType, "native religion already bound")
+  end
+  religion.engineReligion = religionType
+  commit(state)
+end
+
 -- Adapter input: a faction's defeat records provenance, never deletes believers.
 function RP.NotifyFounderDefeated(founder)
   count(founder, "founder player")
@@ -223,6 +246,199 @@ local function player(playerID)
   -- Official gameplay: BlackDeathScenario.lua:122; PiratesScenario_StartScript.lua:866.
   check(p ~= nil and p:IsAlive() and p:IsMajor(), "requires a living major player")
   return p
+end
+
+local function finite(value, label)
+  check(type(value) == "number" and value == value and value >= 0 and value < math.huge,
+    "invalid " .. label)
+  return value
+end
+
+local function cityFollowers(city)
+  local rows, followers, pressure = city:GetReligion():GetReligionsInCity(), {}, {}
+  -- Official counted citizens, NOT majority cities: ReligionScreen.lua:1074-1092.
+  -- Pressure field: Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242.
+  local total = 0
+  for _, row in ipairs(rows) do
+    count(row.Followers, "native followers")
+    local key = tostring(row.Religion)
+    followers[key], pressure[key] = row.Followers, finite(row.Pressure, "religious pressure")
+    total = total + row.Followers
+  end
+  check(total == city:GetPopulation(), "native follower rows must include unaffiliated citizens")
+  return followers, pressure
+end
+
+local function nativeCities()
+  local cities = {}
+  -- All living players: DLC/VikingsScenario/Scripts/VikingScenario.lua:224-234.
+  for _, p in ipairs(PlayerManager.GetAlive()) do
+    for _, city in p:GetCities():Members() do
+      cities[#cities + 1] = { player = p:GetID(), city = city:GetID(), object = city }
+    end
+  end
+  table.sort(cities, function(a, b)
+    return a.player < b.player or a.player == b.player and a.city < b.city
+  end)
+  return cities
+end
+
+function RP.NativeFollowers(id)
+  local religion = get(read(), id)
+  check(religion.engineReligion ~= nil, "native religion binding required")
+  local total = 0
+  for _, entry in ipairs(nativeCities()) do
+    local followers = cityFollowers(entry.object)
+    total = total + (followers[tostring(religion.engineReligion)] or 0)
+  end
+  count(total, "world native followers")
+  return total
+end
+
+local function absorptionPlan(source, target, p)
+  local own = p:GetReligion():GetReligionTypeCreated() -- ReligionScreen.lua:123
+  check(source.engineReligion ~= nil and target.engineReligion == own and own >= 0,
+    "absorption needs bound source and the player's own founded religion")
+  check(source.engineReligion ~= own, "native source and target must differ")
+  local entries, total = {}, 0
+  for _, entry in ipairs(nativeCities()) do
+    local followers, pressure = cityFollowers(entry.object)
+    local n = followers[tostring(source.engineReligion)] or 0
+    if n > 0 then
+      check(entry.object:GetReligion().AddReligiousPressure ~= nil, "native pressure mutation unavailable")
+      total = total + n
+      entries[#entries + 1] = { player = entry.player, city = entry.city,
+        before = followers, pressure = pressure, available = n }
+    end
+  end
+  count(total, "world native followers")
+  local remaining = math.ceil(total / RULES.ABSORB_DIVISOR)
+  local conversions, moved = {}, remaining
+  for _, entry in ipairs(entries) do
+    if remaining == 0 then break end
+    entry.moved = math.min(entry.available, remaining)
+    entry.after = copy(entry.before)
+    local from, to = tostring(source.engineReligion), tostring(own)
+    entry.after[from] = entry.after[from] - entry.moved
+    entry.after[to] = (entry.after[to] or 0) + entry.moved
+    conversions[#conversions + 1] = entry
+    remaining = remaining - entry.moved
+  end
+  return conversions, moved, total, own
+end
+
+local function convertCitizens(entry)
+  local city = Players[entry.player]:GetCities():FindID(entry.city)
+  check(city ~= nil, "conversion city disappeared")
+  local current = cityFollowers(city)
+  for key, n in pairs(entry.before) do check((current[key] or 0) == n, "conversion population changed") end
+  for key, n in pairs(current) do check((entry.before[key] or 0) == n, "conversion population changed") end
+  -- Civ6 exposes pressure mutation, not a documented ConvertFollowers API.
+  -- AddReligiousPressure(0, religion, pressure, -1): VikingScenario.lua:103.
+  -- Reweight all pressure to integer citizen shares (including nonbelievers).
+  -- Signed removal and exact rounding are 要実機確認; never claim success without
+  -- rereading EVERY religion's counted citizens. A mismatch stays PENDING.
+  local cr = city:GetReligion()
+  local union = copy(entry.pressure)
+  for key in pairs(entry.after) do union[key] = union[key] or 0 end
+  for _, key in ipairs(keys(union)) do
+    local delta = (entry.after[key] or 0) * 1024 - (entry.pressure[key] or 0)
+    if delta < 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+  end
+  for _, key in ipairs(keys(union)) do
+    local delta = (entry.after[key] or 0) * 1024 - (entry.pressure[key] or 0)
+    if delta > 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+  end
+  local after = cityFollowers(city)
+  for key in pairs(union) do
+    check((after[key] or 0) == (entry.after[key] or 0), "native conversion count mismatch; effect pending")
+  end
+  for key, n in pairs(after) do
+    check(n == (entry.after[key] or 0), "unexpected native conversion; effect pending")
+  end
+end
+
+local function allianceActive(a)
+  local p, origin = Players[a.player], Players[a.origin]
+  return a.active and p ~= nil and origin ~= nil and p:IsAlive() and origin:IsAlive()
+    and not p:GetDiplomacy():IsAtWarWith(a.origin) and p:GetDiplomacy():HasAllied(a.origin)
+end
+
+function RP.RefreshReligiousAlliances()
+  local state, changed = read(), false
+  for _, a in pairs(state.religiousAlliances) do
+    if a.active and not allianceActive(a) then
+      a.active, a.endedTurn, changed = false, Game.GetCurrentGameTurn(), true
+    end
+  end
+  if changed then commit(state) end
+  return state
+end
+
+-- No SSOT persecution effect exists yet. Future coercion/removal adapters must
+-- call this guard before effects. Ordinary spread/voluntary absorption is not
+-- blocked. This does not intercept native inquisitors or theological combat.
+function RP.CanPersecute(actorPlayer, actingReligion, citizenPlayer, targetReligion)
+  count(actorPlayer, "persecutor")
+  count(citizenPlayer, "citizen owner")
+  known("Religions", actingReligion)
+  known("Religions", targetReligion)
+  local state = RP.RefreshReligiousAlliances()
+  for _, a in pairs(state.religiousAlliances) do
+    if allianceActive(a) and (actingReligion == a.religion and citizenPlayer == a.player
+      or actorPlayer == a.player and targetReligion == a.religion) then
+      return false, "religious alliance prohibits persecution"
+    end
+  end
+  return true
+end
+
+function RP.AssertCanPersecute(actorPlayer, actingReligion, citizenPlayer, targetReligion)
+  local allowed, reason = RP.CanPersecute(actorPlayer, actingReligion, citizenPlayer, targetReligion)
+  check(allowed, reason)
+end
+
+local function researchBoosts(p)
+  local techs, candidates, boostable = p:GetTechs(), {}, {}
+  for row in GameInfo.Boosts() do
+    if row.TechnologyType ~= nil then boostable[row.TechnologyType] = true end
+  end
+  -- Gameplay example: AustraliaScenario.lua:768-784. CanTriggerBoost is UI-only.
+  for row in GameInfo.Technologies() do
+    if boostable[row.TechnologyType] and not techs:HasTech(row.Index)
+      and not techs:HasBoostBeenTriggered(row.Index) then
+      candidates[#candidates + 1] = row
+    end
+  end
+  table.sort(candidates, function(a, b) return a.TechnologyType < b.TechnologyType end)
+  check(#candidates >= RULES.RESEARCH_EUREKAS, "requires two unresearched, unboosted technologies")
+  local boosts = {}
+  for n = 1, RULES.RESEARCH_EUREKAS do boosts[n] = candidates[n].Index end
+  return boosts
+end
+
+local function heroPlan(p, city)
+  check(GameConfiguration.GetValue("GAMEMODE_HEROES") == true
+    or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1, "official Heroes & Legends mode required")
+  local manager = Game.GetHeroesManager()
+  check(manager ~= nil and GameInfo.HeroClasses ~= nil, "official Heroes data unavailable")
+  local originBuilding = manager:GetPlayerHeroOriginBuildingType(p:GetID())
+  check(city:GetBuildings():HasBuilding(originBuilding), "hero city requires the official origin building")
+  local candidates = {}
+  for row in GameInfo.HeroClasses() do
+    if manager:GetHeroClaimPlayer(row.Index) == -1 then candidates[#candidates + 1] = row end
+  end
+  table.sort(candidates, function(a, b) return a.HeroClassType < b.HeroClassType end)
+  check(#candidates > 0, "no unclaimed official hero")
+  local hero, modifier = candidates[1], nil
+  for row in GameInfo.ProjectCompletionModifiers() do
+    if row.ProjectType == hero.CreationProjectType then
+      local def = GameInfo.Modifiers[row.ModifierId]
+      if def and def.ModifierType == "MODIFIER_CITY_GRANT_HERO" then modifier = row.ModifierId; break end
+    end
+  end
+  check(modifier ~= nil and GameInfo.Units[hero.UnitType] ~= nil, "official hero grant missing")
+  return hero, modifier
 end
 
 -- Exploration supplies facts; natural map triggers remain a later adapter.
@@ -290,7 +506,8 @@ end
 
 local function reserveMaterial(religion, assetID, outcome, playerID, discoveryID, revivalID)
   religion.materialUses[assetID] = { outcome = outcome, player = playerID,
-    discovery = discoveryID, revival = revivalID, effects = "PENDING", turn = Game.GetCurrentGameTurn() }
+    discovery = discoveryID, revival = revivalID, effects = "PENDING", turn = Game.GetCurrentGameTurn(),
+    reusable = outcome == "REVIVE" }
 end
 
 local function discoveryPlan(id, discoveryID, outcome, options)
@@ -326,6 +543,12 @@ local function discoveryPlan(id, discoveryID, outcome, options)
     check(GameInfo.Modifiers[plan.modifier] ~= nil, "missing yield modifier")
     if outcome == "ARTIFACT" then
       check(state.artifacts[tostring(discovery.player)] == nil, "PoC Vault slot occupied")
+    elseif outcome == "RESEARCH" then
+      plan.cultureModifier = "JAC_RP_RESEARCH_CULTURE_" .. id
+      check(GameInfo.Modifiers[plan.cultureModifier] ~= nil, "missing research culture modifier")
+      plan.boosts = researchBoosts(p)
+    elseif outcome == "HERESY" then
+      plan.faithCost = RULES.HERESY_FAITH_COST
     end
   elseif outcome == "ABSORB" then
     check(options.targetReligion ~= id, "absorption requires another religion")
@@ -338,22 +561,29 @@ local function discoveryPlan(id, discoveryID, outcome, options)
     check(owned, "target religion needs own followers")
     check(target.assets[discovery.asset] == nil and target.materialUses[discovery.asset] == nil
       and not target.retiredAssets[discovery.asset], "target material ID occupied")
-    plan.targetReligion, plan.faith = options.targetReligion, RULES.ABSORB_FAITH
+    plan.targetReligion, plan.faithCost = options.targetReligion, RULES.ABSORB_FAITH_COST
+    plan.conversions, plan.convertedFollowers, plan.sourceFollowers, plan.nativeTarget = absorptionPlan(religion, target, p)
+    plan.nativeSource = religion.engineReligion
   elseif outcome == "DIPLOMATIC_INCIDENT" then
     local target = player(options.targetPlayer)
     check(options.targetPlayer == religion.founder and options.targetPlayer ~= discovery.player,
       "restitution requires the living foreign founder")
     check(p:GetDiplomacy():HasMet(options.targetPlayer)
       and not p:GetDiplomacy():IsAtWarWith(options.targetPlayer), "restitution requires contact and peace")
-    plan.targetPlayer, plan.favor = target:GetID(), RULES.INCIDENT_FAVOR
+    plan.targetPlayer = target:GetID()
+    plan.gold = finite(target:GetTreasury():GetGoldBalance(), "origin gold") / 2
+    -- Favor is integral in the engine. Leave the odd remainder with its owner.
+    plan.favor = math.floor(finite(target:GetDiplomacy():GetFavor(), "origin favor") / 2)
+    plan.alliance = tostring(plan.player) .. ":" .. tostring(plan.targetPlayer) .. ":" .. id
   elseif outcome == "HERO" then
     count(options.city, "hero city")
     check(p:GetCities():FindID(options.city) ~= nil, "hero requires an owned city")
     check(state.heroes[tostring(discovery.player)] == nil, "PoC hero already recruited")
-    check(p:GetReligion():GetFaithBalance() >= RULES.HERO_FAITH_COST, "insufficient hero faith")
-    check(GameInfo.Units[HERO_UNIT] ~= nil, "missing placeholder hero unit")
-    plan.city, plan.faithCost = options.city, RULES.HERO_FAITH_COST
+    local hero, modifier = heroPlan(p, p:GetCities():FindID(options.city))
+    plan.city, plan.heroClass, plan.heroUnit, plan.heroModifier = options.city, hero.Index, hero.UnitType, modifier
+    plan.faith = finite(p:GetReligion():GetFaithYield(), "per-turn faith") * RULES.HERO_FAITH_MULTIPLIER
   end
+  check(p:GetReligion():GetFaithBalance() >= plan.faithCost, "insufficient faith for choice")
   -- CONCEAL deliberately has zero yield; preserving a source is its benefit.
   if outcome ~= "REVIVE" then religion.outcomeUses[useKey] = discoveryID end
   reserveMaterial(religion, discovery.asset, outcome, discovery.player, discoveryID, plan.revival)
@@ -371,27 +601,54 @@ local function perform(state, id, plan)
   commit(state)
   local ok, result = pcall(function()
     local p = player(plan.player)
-    if plan.faithCost > 0 and plan.outcome ~= "HERO" then
+    if plan.faithCost > 0 then
       p:GetReligion():ChangeFaithBalance(-plan.faithCost)
     end
+    if plan.outcome == "DIPLOMATIC_INCIDENT" then
+      local origin = player(plan.targetPlayer)
+      origin:GetTreasury():ChangeGoldBalance(-plan.gold)
+      origin:GetDiplomacy():ChangeFavor(-plan.favor)
+      -- Official: VikingScenario.lua:18-20,77. Never attempt SetHasAllied(false).
+      if not p:GetDiplomacy():HasAllied(plan.targetPlayer) then
+        p:GetDiplomacy():SetHasAllied(plan.targetPlayer, true)
+      end
+      check(p:GetDiplomacy():HasAllied(plan.targetPlayer), "religious alliance was not formed")
+    end
     if plan.gold then p:GetTreasury():ChangeGoldBalance(plan.gold) end
-    if plan.faith then p:GetReligion():ChangeFaithBalance(plan.faith) end
     if plan.favor then p:GetDiplomacy():ChangeFavor(plan.favor) end -- verified gameplay API
+    if plan.boosts then
+      for _, tech in ipairs(plan.boosts) do
+        p:GetTechs():TriggerBoost(tech, 1) -- AustraliaScenario.lua:784, as a goody hut
+        check(p:GetTechs():HasBoostBeenTriggered(tech), "Eureka did not trigger")
+      end
+    end
+    -- Boost before the 10 science: that grant could otherwise finish one of the
+    -- chosen technologies and make its previously valid Eureka ineligible.
     if plan.modifier then p:AttachModifierByID(plan.modifier) end
+    if plan.cultureModifier then p:AttachModifierByID(plan.cultureModifier) end
+    if plan.conversions then
+      for _, entry in ipairs(plan.conversions) do convertCitizens(entry) end
+      check(RP.NativeFollowers(id) == plan.sourceFollowers - plan.convertedFollowers,
+        "world conversion count mismatch; effect pending")
+    end
     if plan.outcome == "HERO" then
       local city, before = p:GetCities():FindID(plan.city), {}
       for _, u in p:GetUnits():Members() do before[u:GetID()] = true end
-      -- This engine call returns NO Unit. Official call: AlexanderScenario.lua:194.
-      UnitManager.InitUnitValidAdjacentHex(plan.player, HERO_UNIT, city:GetX(), city:GetY(), 1)
+      -- Official project completion uses THIS city modifier, not a normal Unit
+      -- spawn: Babylon_Heroes_MODE.xml:620-631,895,903-914,985-1008.
+      city:AttachModifierByID(plan.heroModifier) -- BlackDeathScenario.lua:296-297
       local created
       for _, u in p:GetUnits():Members() do
-        if not before[u:GetID()] and u:GetType() == GameInfo.Units[HERO_UNIT].Index then
+        if not before[u:GetID()] and u:GetType() == GameInfo.Units[plan.heroUnit].Index then
           check(created == nil, "multiple hero units created")
+          check(u:IsHero() and u:GetHeroClassType() == plan.heroClass and u:GetLifespan() > 0,
+            "unit is not a living official hero")
           created = u:GetID()
         end
       end
-      check(created ~= nil, "no valid hex for hero; effect pending")
-      p:GetReligion():ChangeFaithBalance(-plan.faithCost)
+      check(created ~= nil and Game.GetHeroesManager():GetHeroClaimPlayer(plan.heroClass) == plan.player,
+        "official hero not recruited; effect pending")
+      p:GetReligion():ChangeFaithBalance(plan.faith)
       return created
     end
   end)
@@ -409,15 +666,16 @@ local function perform(state, id, plan)
     v.community = freeCommunityID(religion, v.community)
     religion.communities[v.community] = community(v.community, RULES.REVIVAL_FOLLOWERS, 0, v.holder)
     religion.revivalCount, v.effects = religion.revivalCount + 1, "APPLIED"
-    asset.holder = "MEMORIAL_PLAYER_" .. plan.player
+    asset.holder = "PLAYER_" .. plan.player -- retained, reusable after another loss and cooldown
   elseif plan.outcome == "SELL" then
     asset.holder, asset.owner = "MARKET", nil
   elseif plan.outcome == "CONCEAL" then
     asset.holder = "HIDDEN_PLAYER_" .. plan.player
   elseif plan.outcome == "RESEARCH" then
-    asset.holder = "ARCHIVE_PLAYER_" .. plan.player
+    religion.assets[plan.asset], religion.retiredAssets[plan.asset] = nil, true
   elseif plan.outcome == "HERESY" then
-    asset.holder, asset.interpretation = "COMMENTARY_PLAYER_" .. plan.player, "HERETICAL"
+    religion.assets[plan.asset], religion.retiredAssets[plan.asset] = nil, true
+    use.interpretation = "HERETICAL"
   elseif plan.outcome == "ABSORB" then
     local target = get(state, plan.targetReligion)
     local transferred = copy(asset)
@@ -429,9 +687,12 @@ local function perform(state, id, plan)
     asset.holder, asset.vault = "VAULT_PLAYER_" .. plan.player, true
   elseif plan.outcome == "DIPLOMATIC_INCIDENT" then
     asset.holder, asset.owner = "PLAYER_" .. plan.targetPlayer, plan.targetPlayer
+    state.religiousAlliances[plan.alliance] = { player = plan.player, origin = plan.targetPlayer,
+      religion = id, active = true, startedTurn = Game.GetCurrentGameTurn(), discovery = plan.discovery }
   elseif plan.outcome == "HERO" then
     asset.holder = "HERO_PLAYER_" .. plan.player
     state.heroes[tostring(plan.player)].unit = result
+    state.heroes[tostring(plan.player)].heroClass = plan.heroClass
   end
   if plan.discovery then religion.discoveries[plan.discovery].effects = "APPLIED" end
   commit(state)
@@ -487,7 +748,10 @@ function RP.Export()
   return read()
 end
 
--- No turn/load hook recreates or normalizes saved data. Read fresh on every call:
+-- The turn hook ONLY expires alliance restrictions; never replays effects.
+-- Official gameplay turn event: BlackDeathScenario.lua:64.
+GameEvents.OnGameTurnStarted.Add(RP.RefreshReligiousAlliances)
+-- Read fresh on every call:
 -- an old save in the same process cannot inherit the previous game's Lua locals.
 ExposedMembers.JAC_ReligionPersistence = RP
 local loaded = read()
