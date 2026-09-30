@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 import sys
-from tools.test_tempdirs import TemporaryDirectory
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -71,7 +71,7 @@ class DiplomacyDuringAutoplayTests(unittest.TestCase):
         def sleep(seconds):
             clock[0] += seconds + 0.01
 
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             with patch.object(runner, "_states", side_effect=game.states), patch.object(
                 runner, "_lua", side_effect=game.lua
@@ -177,7 +177,7 @@ class StarvedInGameStepTests(unittest.TestCase):
         "type": "lua", "state_name": "InGame", "code": "return Players[0]:IsTurnActive()"}}
 
     def run_step(self, step, lua):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             with patch.object(runner, "_states", return_value=["InGame", "DiplomacyActionView"]), patch.object(
                 runner, "_lua", side_effect=lua

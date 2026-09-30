@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import sys
-from tools.test_tempdirs import TemporaryDirectory
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -26,7 +26,7 @@ class DriverFeatureTests(unittest.TestCase):
         self.assertLess(code.index("setup changed player 1"), code.index("HideGameSetup()"))
         self.assertIn("GetSlotStatus() ~= SlotStatus.SS_TAKEN", code)
         self.assertIn("GetSlotStatus() ~= SlotStatus.SS_COMPUTER", code)
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             step = {"action": "configure", "ruleset": "RULESET_JAC_BANSEIKI", "map_size": "MAPSIZE_SMALL",
                     "speed": "GAMESPEED_STANDARD", "seed": 1, "players": players, "build_setup": True}
@@ -43,14 +43,14 @@ class DriverFeatureTests(unittest.TestCase):
                  ("RULESET_STANDARD", {}, ["FrontEnd"]),
                  ("RULESET_STANDARD", {"build_setup": True}, ["FrontEnd", "HostGame"])]
         for ruleset, extra, states in cases:
-            with self.subTest(ruleset=ruleset, extra=extra), TemporaryDirectory() as folder:
+            with self.subTest(ruleset=ruleset, extra=extra), tempfile.TemporaryDirectory() as folder:
                 runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
                 with patch.object(runner, "_lua", return_value="true") as lua:
                     runner._run_step({**base, "ruleset": ruleset, **extra})
                 self.assertEqual([call.args[0] for call in lua.call_args_list], states)
 
     def test_start_turn_guard(self):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             with patch.object(runner, "_lua", return_value="16603") as lua:
                 runner._check_start_turn(time.monotonic() + 60)  # other rulesets are not checked
@@ -62,7 +62,7 @@ class DriverFeatureTests(unittest.TestCase):
                 runner._check_start_turn(time.monotonic() + 60)
 
     def test_output_scoped_save_name_and_exact_name(self):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             a = Runner({}, base / "first", base, base, 4318)
             b = Runner({}, base / "second", base, base, 4318)
@@ -81,7 +81,7 @@ class DriverFeatureTests(unittest.TestCase):
 
     def test_save_dismisses_blocking_advisor_before_saving(self):
         # Live sengoku-events-list-06: an advisor left open after autoplay kept SaveComplete from firing.
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             order = []
             name = runner._save_name({"name": "JAC-Test"})
@@ -112,7 +112,7 @@ class DriverFeatureTests(unittest.TestCase):
             validate_scenario({"name": "flag", "steps": [{"action": "save", "name": "x", "exact_name": 1}]})
 
     def test_allow_elimination_observes_target_and_records_turn(self):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             statuses = iter((AutoplayStatus(2, True, False, 1, -1),
                              AutoplayStatus(3, False, True, 0, -1)))
@@ -142,7 +142,7 @@ class DriverFeatureTests(unittest.TestCase):
         first = "1|0~LEADER_A~true~0~0~~~~;1~LEADER_B~true~0~0~~~~"
         second = "3|0~LEADER_A~true~1~1~TECH_B~CIVIC_B~TECH_A~CIVIC_A;1~LEADER_B~false~0~0~~~~"
         third = "5|0~LEADER_A~true~1~1~TECH_B~CIVIC_B~TECH_A~CIVIC_A;1~LEADER_B~false~1~0~~~TECH_A~"
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "research.jsonl"
             metrics = ResearchMetrics(path)
             self.assertEqual(metrics.sample(first), 1)
@@ -163,7 +163,7 @@ class DriverFeatureTests(unittest.TestCase):
             parse_research_sample("2|0~LEADER_A~true~2~0~~~TECH_A~")
 
     def test_autoplay_emits_research_jsonl_for_each_observed_turn(self):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             statuses = iter((AutoplayStatus(2, True, False, 1, 0),
                              AutoplayStatus(3, False, True, 0, 0)))
@@ -215,7 +215,7 @@ class DriverFeatureTests(unittest.TestCase):
             self.assertIn(text, check)
 
     def test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event(self):
-        with TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
             # Early stop at turn 2 with a stale end event, then the real end at turn 4.
             statuses = iter((AutoplayStatus(2, False, True, 0, 0), AutoplayStatus(2, False, True, 0, 0),

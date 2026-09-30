@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 import sqlite3
-from tools.test_tempdirs import TemporaryDirectory
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -374,7 +374,7 @@ class UnificationVictoryTests(unittest.TestCase):
         self.assertEqual({registry[plot] for plot in capitals}, {0, 1})
         if test_map.OFFICIAL.is_file():  # regenerate with the same tooling and compare
             # The builder also writes a sibling Lua file; keep both in inherited-permission scratch space.
-            with TemporaryDirectory(dir=ROOT) as folder:
+            with tempfile.TemporaryDirectory(dir=ROOT) as folder:
                 fresh = Path(folder) / path.name
                 test_map.build(fresh)
                 self.assertEqual(test_map.castle_rows(fresh), registry)
