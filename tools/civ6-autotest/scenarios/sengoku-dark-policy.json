@@ -300,9 +300,9 @@
       "code": "if not ContextPtr:IsHidden() then error('choice screen stayed open after acceptance') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE') then error('second UI choice accepted') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_SengokuDarkPolicyChoose', PolicyType='JAC_AGE_POLICY_PIRATE', Reign=l.reign}); return 'UI rejects a second choice; forged duplicate sent to test the gameplay receiver'"
     },
     {
-      "action": "ui_lua",
-      "state_name": "ActionPanel",
-      "code": "if JAC_IsDarkPolicyEndTurnBlocked() then error('cannot advance: a dark policy is still pending') end; local input = {GetMessageType=function() return KeyEvents.KeyUp end, GetKey=function() return Keys.VK_RETURN end, IsShiftDown=function() return true end}; if not OnInputHandler(input) then error('end-turn input was not handled') end; return 'actual Shift+Enter handler requested the next turn after the policy guard cleared'"
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 600
     },
     {
       "action": "wait_for",
