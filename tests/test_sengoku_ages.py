@@ -68,12 +68,11 @@ def ages_tables() -> dict:
     out = {name: db.execute(f"SELECT * FROM {name}").fetchall()
            for name in ("JAC_SengokuReigns", "JAC_SengokuDarkAgePolicies", "JAC_SengokuAgeEventScores",
                         "JAC_SengokuDarkAgePolicyDefaults")}
-    calendar = ET.parse(MOD / "Data/JAC_Sengoku_Calendar.xml").getroot()
-    out["StartYear"] = int(calendar.findtext("./StartEras/Update/Set/Year"))
-    out["GameSpeed_Turns"] = [
-        {"GameSpeedType": r.findtext("GameSpeedType"), "TurnsPerIncrement": int(r.findtext("TurnsPerIncrement")),
-         "MonthIncrement": int(r.findtext("MonthIncrement"))}
-        for r in calendar.findall("./GameSpeed_Turns/Row")]
+    # The engine eras of Data/JAC_Sengoku_Eras.sql, in the official Index order (renamed first, then added).
+    out["Eras"] = [{"EraType": e["EraType"], "ChronologyIndex": e["ChronologyIndex"]} for e in REIGNS_GEN.eras()]
+    out["Eras_XP1"] = [{"EraType": e["EraType"], "GameEraMaximumTurns": e["length"]} for e in REIGNS_GEN.eras()]
+    out["Multiplier"] = REIGNS_GEN.MULTIPLIER
+    out["StartYear"] = REIGNS_GEN.calendar()[0]  # the screens show 天文's year
     return out
 
 
@@ -123,7 +122,46 @@ class AgesDataTests(unittest.TestCase):
                                 "WHERE RequiresDarkAge = 1 OR RequiresGoldenAge = 1"), [])
         self.assertEqual(self.q("SELECT * FROM DiplomaticActions WHERE DiplomaticActionType = "
                                 "'DIPLOACTION_DECLARE_GOLDEN_AGE_WAR'"), [])
-        self.assertEqual(self.q("SELECT GameEraMaximumTurns FROM Eras_XP1 WHERE EraType = 'ERA_RENAISSANCE'"), [(10000,)])
+
+    def test_every_reign_is_an_engine_era_lasting_its_turns(self):
+        # 元号 = 時代 (owner decision T, documents/poc/era-equals-reign.md).
+        eras = self.q("SELECT e.EraType, e.Name, e.Description, e.ChronologyIndex, x.GameEraMinimumTurns, "
+                      "x.GameEraMaximumTurns FROM Eras e JOIN Eras_XP1 x USING (EraType) ORDER BY e.ChronologyIndex")
+        reigns = [REIGNS_JSON["start"]] + REIGNS_JSON["reigns"]
+        self.assertEqual(len(eras), 48)
+        self.assertEqual(self.q("SELECT COUNT(*) FROM Eras"), [(48,)])
+        self.assertEqual([e[3] for e in eras], list(range(1, 49)))
+        self.assertEqual([e[1] for e in eras], [f"LOC_JAC_ERA_{r['id']}_NAME" for r in reigns])
+        self.assertEqual([e[1] for e in eras], [e[2] for e in eras])
+        self.assertEqual([e[0] for e in eras[:9]], list(REIGNS_GEN.OFFICIAL_ERAS))  # official IDs kept
+        self.assertEqual(eras[-1][4:], (None, None))  # 遅代 never ends
+        starts = [1]
+        for era in eras[:-1]:
+            self.assertEqual(era[4], era[5], era[0])
+            self.assertGreaterEqual(era[4], 2, era[0])  # the engine stretches a 1-turn era to 2 (probe)
+            starts.append(starts[-1] + era[4])
+        self.assertEqual(starts[1:], REIGNS_GEN.turns_by_speed()["GAMESPEED_STANDARD"])  # 改元 turn = era start
+        self.assertEqual(starts[1:3], [66, 73])  # 弘治, 永禄
+        self.assertEqual(self.q("SELECT Value FROM GlobalParameters WHERE Name = 'NEXT_ERA_TURN_COUNTDOWN'"), [("1",)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM Eras_XP1 WHERE GameEraMaximumTurns >= 1000"), [(0,)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM Eras_XP2"), [(48,)])
+        self.assertEqual(self.q("SELECT COUNT(*) FROM Types WHERE Kind = 'KIND_ERA'"), [(48,)])
+        # Each 改元 names the next era in order.
+        rows = self.q("SELECT e.ChronologyIndex FROM JAC_SengokuReigns r JOIN Eras e USING (EraType) ORDER BY r.Year, r.Month")
+        self.assertEqual([r[0] for r in rows], list(range(2, 49)))
+        # The trees' eras are reigns in column order; the official late great people moved to their own reigns.
+        for table, key in (("Technologies", "TechnologyType"), ("Civics", "CivicType")):
+            order = [r[0] for r in self.q(f"SELECT e.ChronologyIndex FROM {table} t JOIN Eras e USING (EraType) "
+                                          f"ORDER BY t.Cost, t.{key}")]
+            self.assertEqual(len(order), 32 if table == "Technologies" else 30)
+            self.assertEqual(order, sorted(order))
+        late = tuple(era for era, _ in REIGNS_GEN.LATE_OFFICIAL_ERA_YEARS)
+        marks = ",".join("?" * len(late))
+        self.assertEqual(self.q(f"SELECT COUNT(*) FROM GreatPersonIndividuals WHERE EraType IN ({marks})", *late), [(0,)])
+        self.assertEqual(self.q(f"SELECT COUNT(*) FROM GreatWorks WHERE EraType IN ({marks})", *late), [(0,)])
+        self.assertGreater(self.q("SELECT COUNT(*) FROM GreatPersonIndividuals WHERE EraType = 'ERA_JAC_MEIJI'")[0][0], 0)
+        for table in ("Eras", "Eras_XP1", "Technologies", "Civics", "GreatPersonIndividuals", "GreatWorks", "JAC_SengokuReigns"):
+            self.assertEqual(self.q(f"PRAGMA foreign_key_check({table})"), [], table)
 
     def test_reigns_policies_and_effect_modifiers(self):
         rows = self.q("SELECT ReignType, Year, Month, ForcedAge FROM JAC_SengokuReigns ORDER BY Year, Month")
@@ -177,6 +215,7 @@ class AgesDataTests(unittest.TestCase):
                                      "UNION SELECT Description FROM JAC_SengokuDarkAgePolicies "
                                      "UNION SELECT Announcement FROM JAC_SengokuDarkAgePolicies")}
         keys |= {"LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT", "LOC_JAC_AGE_HEROIC_ANNOUNCEMENT", "LOC_JAC_AGE_NORMAL_ANNOUNCEMENT"}
+        keys |= {r[0] for r in self.q("SELECT Name FROM Eras UNION SELECT Description FROM Eras")}  # the reigns' eras
         # The choice screen (UI/JAC_SengokuDarkPolicy.lua / .xml).
         ui = "".join((MOD / f"UI/JAC_SengokuDarkPolicy.{ext}").read_text(encoding="utf-8") for ext in ("lua", "xml"))
         ui_keys = set(re.findall(r"LOC_JAC_AGE_DARK_CHOICE_[A-Z]+", ui))
@@ -205,6 +244,18 @@ class ReignFilesTests(unittest.TestCase):
         for path, content in REIGNS_GEN.outputs().items():
             self.assertEqual(path.read_text(encoding="utf-8"), content, f"run tools/generate_sengoku_reigns.py: {path}")
 
+    def test_every_engine_era_lasts_at_least_two_standard_turns_in_order(self):
+        eras = REIGNS_GEN.eras()
+        self.assertEqual(len(eras), 1 + len(REIGNS_JSON["reigns"]))
+        self.assertEqual([e["ChronologyIndex"] for e in eras], list(range(1, len(eras) + 1)))
+        self.assertEqual(len({e["EraType"] for e in eras}), len(eras))
+        self.assertTrue(all(e["length"] >= REIGNS_GEN.MIN_ERA_TURNS for e in eras[:-1]))
+        self.assertEqual(min(e["length"] for e in eras[:-1]), 3)  # 万延 (1860-04 to 1861-03)
+        self.assertIsNone(eras[-1]["length"])
+        for speed in REIGNS_GEN.SPEEDS:
+            turns = REIGNS_GEN.engine_turns(speed)
+            self.assertTrue(all(b - a >= REIGNS_GEN.MIN_ERA_TURNS for a, b in zip([1] + turns, turns)), speed)
+
 
 START_TURN = 16603  # live 1534 calendar
 CIVS = ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_TAKEDA", "CIVILIZATION_JAC_HOJO", "CIVILIZATION_JAC_IMAGAWA"]
@@ -222,10 +273,12 @@ end
 local techs, civics = {}, {}
 for i = 1, 10 do techs[i] = { TechnologyType = "T" .. i } end
 for i = 1, 10 do civics[i] = { CivicType = "C" .. i } end
+speed = speed or "GAMESPEED_STANDARD"
 GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
-  GameSpeeds = { [0] = { GameSpeedType = speed or "GAMESPEED_STANDARD" } },
-  GameSpeed_Turns = gameInfoTable(tables.GameSpeed_Turns),
+  GameSpeeds = { [0] = { GameSpeedType = speed, CostMultiplier = tables.Multiplier[speed] } },
+  Eras = gameInfoTable(tables.Eras, "EraType"),
+  Eras_XP1 = gameInfoTable(tables.Eras_XP1, "EraType"),
   Technologies = gameInfoTable(techs), Civics = gameInfoTable(civics),
   JAC_SengokuReigns = gameInfoTable(tables.JAC_SengokuReigns),
   JAC_SengokuDarkAgePolicies = gameInfoTable(tables.JAC_SengokuDarkAgePolicies),
@@ -238,7 +291,9 @@ local function properties()
   local values = {}
   return function(_, k) return values[k] end, function(_, k, v) values[k] = v end
 end
-Game = { GetCurrentGameTurn = function() return CURRENT_TURN end }
+-- ENGINE_ERA: what Game.GetEras():GetCurrentEra() returns; nil = no Game.GetEras (the call fails).
+Game = { GetCurrentGameTurn = function() return CURRENT_TURN end,
+  GetEras = function() return { GetCurrentEra = function() return ENGINE_ERA end } end }
 Game.GetProperty, Game.SetProperty = properties()
 PLOTS = {}
 Map = { GetPlot = function(x, y)
@@ -729,9 +784,13 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(len({r["id"] for r in reigns}), len(reigns))
 
     def test_reign_turns_at_every_speed_match_the_generator_and_never_share_a_turn(self):
-        expected = REIGNS_GEN.turns_by_speed()
+        expected = {speed: REIGNS_GEN.engine_turns(speed) for speed in REIGNS_GEN.SPEEDS}
         self.assertEqual(expected["GAMESPEED_STANDARD"][:8], [66, 73, 110, 119, 178, 189, 246, 271])
         self.assertEqual(expected["GAMESPEED_STANDARD"][-2:], [1457, 1757])
+        # At standard speed the engine era starts on the calendar turn containing the 改元's month.
+        self.assertEqual(expected["GAMESPEED_STANDARD"], REIGNS_GEN.turns_by_speed()["GAMESPEED_STANDARD"])
+        # Quick: 1 + 65 x 67 // 100, then + 7 x 67 // 100 (the calendar turns are 44 and 49).
+        self.assertEqual(expected["GAMESPEED_QUICK"][:2], [44, 48])
         for speed in REIGNS_GEN.SPEEDS:
             with self.subTest(speed=speed):
                 lua = lupa.LuaRuntime(unpack_returned_tuples=True)
@@ -747,29 +806,31 @@ class LedgerTests(unittest.TestCase):
                 self.assertEqual(dues, expected[speed])
                 self.assertEqual(dues, sorted(set(dues)))  # strictly increasing: no period of length 0
 
-    def test_reigns_on_one_turn_merge_into_the_last_and_are_judged_once(self):
-        tables = ages_tables()
-        # A made-up 改元 a month before 弘治: both fall in turn 66 (1555-09..12), a period of length 0.
-        tables["JAC_SengokuReigns"].insert(0, {"ReignType": "REIGN_TEST", "Year": 1555, "Month": 10,
-                                               "Name": "LOC_T", "Announcement": "LOC_T", "Notification": "LOC_T_NOTE"})
-        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-        self.lua.execute(STUBS, self.lua.table_from(tables, recursive=True), self.lua.table_from(CIVS), START_TURN)
-        self.g = self.lua.globals()
-        self.g.FOUND(3, 12, 12, True, True)
-        self.load_script()
-        self.turns(1, 65)
-        self.assertEqual(self.g.LEDGER().nextDue, 66)
-        self.assertEqual(self.house(3).next.golden, 7)  # the projection is for the merged period (L = 65)
-        self.g.Players[3].research.techs[1] = True
-        self.turns(66, 73)
+    def test_engine_era_change_judges_the_reign_and_the_period_ends_there(self):
+        # 元号 = 時代 (owner decision T): the engine starting the 弘治 era (Index 1) judges 弘治 even before turn 66,
+        # the period ending on that turn; the turn table alone does not judge again.
+        self.turns(1, 59)
+        self.g.ENGINE_ERA = 0
+        self.turns(60)
+        self.assertEqual(self.g.LEDGER().reign, 0)
+        self.g.ENGINE_ERA = 1
+        self.turns(61)
         l = self.g.LEDGER()
-        self.assertIsNone(l.history["r1"])  # REIGN_TEST: merged, never judged
-        r2 = l.history["r2"]  # 弘治: judged once for the whole period since the start
-        self.assertEqual((r2.turn, r2.length, r2["from"]), (66, 65, 0))
-        self.assertEqual(l.history["r3"]["from"], 2)
-        notes = [tuple(n.values()) for n in self.g.NOTES.values()]
-        self.assertEqual([n[2] for n in notes if n[4] == 66], ["LOC_JAC_REIGN_KOJI_NOTIFICATION"] * 4)
-        self.assertNotIn("LOC_T_NOTE", {n[2] for n in notes})
+        r1 = l.history["r1"]
+        self.assertEqual((l.reign, l.reignStart, r1.turn, r1.length, r1.engineEra), (1, 61, 61, 60, 1))
+        self.turns(62, 72)
+        self.assertEqual(self.g.LEDGER().reign, 1)
+        self.turns(73)  # 永禄 by the turn table (the engine still reports 弘治)
+        r2 = self.g.LEDGER().history["r2"]
+        self.assertEqual((self.g.LEDGER().reign, r2.turn, r2.length, r2.engineEra), (2, 73, 12, 1))
+        self.assertTrue(any("judged reign=REIGN_EIROKU turn=73 length=12 era=2 engineEra=1" in line
+                            for line in self.g.LOG.values()))
+
+    def test_reigns_are_the_engine_eras_in_order(self):
+        tables = ages_tables()
+        index = {row["EraType"]: i for i, row in enumerate(tables["Eras"])}
+        reigns = sorted(tables["JAC_SengokuReigns"], key=lambda r: (r["Year"], r["Month"]))
+        self.assertEqual([index[r["EraType"]] for r in reigns], list(range(1, len(reigns) + 1)))
 
     def test_chidai_makes_every_house_dark_whatever_its_score_and_lasts_to_the_end(self):
         self.turns(1, 5)

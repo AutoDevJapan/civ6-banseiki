@@ -54,9 +54,11 @@ class HouseNameTests(unittest.TestCase):
         cls.registry = read_registry()
         cls.texts = read_texts()
 
-    def test_sengoku_names_are_registered(self):
-        pairs = {(generic, civ) for generic, _, civ, _ in self.registry}
-        self.assertIn(("LOC_JAC_SENGOKU_ERA_3_NAME", "CIVILIZATION_JAC_ODA"), pairs)
+    def test_tree_periods_and_their_house_name_are_gone(self):
+        # 元号 = 時代 (owner decision T): the eras are the reigns, so the four tree periods and Oda's name for the
+        # third (天下布武と広域戦) have no text left (the mechanism is tested in test_house_names_lua).
+        self.assertFalse([tag for tag in self.texts if tag.startswith("LOC_JAC_SENGOKU_ERA_")])
+        self.assertNotIn("LOC_JAC_SENGOKU_ERA_3_NAME", {generic for generic, _, _, _ in self.registry})
 
     def test_taiko_survey_is_the_name_for_every_house(self):
         # SSOT 3.2 (owner decision): every house that researches C25 sees 太閤検地, so it is the plain name, not a house name.
@@ -67,7 +69,6 @@ class HouseNameTests(unittest.TestCase):
         self.assertEqual(self.texts[taiko]["en_US"], "Taikō Land Survey")
 
     def test_registry_is_well_formed(self):
-        self.assertTrue(self.registry)
         seen = set()
         civilizations = (RULESET.parent / "JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql").read_text(encoding="utf-8")
         houses = {house for _, house, _, _ in self.registry}

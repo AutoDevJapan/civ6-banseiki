@@ -69,8 +69,18 @@ class SengokuTreeTests(unittest.TestCase):
             self.assertTrue(all(row_min <= n.row <= row_max and 1 <= n.column <= 12 for n in group))
             self.assertTrue(all(n.cost == costs[n.column - 1] for n in group))
             self.assertTrue(all(a < b for a, b in zip(costs, costs[1:])))
-            self.assertTrue(all(n.era == MODULE.ERAS[(n.column - 1) // 3] for n in group))
-            self.assertEqual({n.era for n in group}, set(MODULE.ERAS))
+            # 元号 = 時代: the reign at the column's intended date, never earlier for a later column.
+            order = [e["EraType"] for e in MODULE.reigns.eras()]
+            by_column = sorted(group, key=lambda n: n.column)
+            self.assertEqual([order.index(n.era) for n in by_column], sorted(order.index(n.era) for n in by_column))
+            self.assertTrue(all(n.era == MODULE.column_era(n.column) for n in group))
+
+    def test_columns_map_to_the_reigns_of_their_intended_dates(self):
+        # Middle of each column's third of its period (1534-1542, 1543-1567, 1568-1581, 1582-1600): columns 1-5
+        # 天文 (column 5: 1555-07), 6 永禄 (1563-11), 7 元亀 (1570-05), 8-11 天正, 12 慶長 (1597-11).
+        eras = [MODULE.column_era(column) for column in range(1, 13)]
+        self.assertEqual(eras, ["ERA_ANCIENT"] * 5 + ["ERA_MEDIEVAL", "ERA_RENAISSANCE"] + ["ERA_INDUSTRIAL"] * 4
+                         + ["ERA_ATOMIC"])
 
     def test_generated_files_current_and_all_text_keys_translated(self):
         for path, expected in MODULE.outputs().items():
@@ -82,8 +92,6 @@ class SengokuTreeTests(unittest.TestCase):
             self.assertNotIn(language, translations[key], f"duplicate {key}/{language}")
             translations[key][language] = row.findtext("Text")
         required = {f"LOC_{n.id}_{suffix}" for n in self.nodes for suffix in ("NAME", "DESCRIPTION")}
-        required |= {f"LOC_JAC_SENGOKU_ERA_{i}_{suffix}" for i in range(1, 5)
-                     for suffix in ("NAME", "DESCRIPTION")}
         required |= {f"LOC_JAC_SENGOKU_BOOST_{short}" for short in MODULE.BOOSTS}
         required |= {house for _, house, _, _ in MODULE.HOUSE_NAMES}
         self.assertEqual(set(translations), required)
@@ -98,7 +106,7 @@ class SengokuTreeTests(unittest.TestCase):
             self.assertTrue(all(row.findtext(lang) for lang in ("en_US", "ja_JP", "ru_RU")))
         files = [row.text for row in meta.findall("./Files/File")]
         self.assertEqual(files, [
-            "Data/JAC_Sengoku_Calendar.xml",
+            "Data/JAC_Sengoku_Calendar.xml", "Data/JAC_Sengoku_Eras.sql",
             "Data/JAC_Sengoku_Trees.sql", "Data/JAC_Sengoku_Resources.sql", "Data/JAC_Sengoku_Cascade.sql",
             "Data/JAC_Sengoku_Unlocks.sql",
             "Data/JAC_Sengoku_Victories.sql", "Data/JAC_Sengoku_Unification.sql",
@@ -108,7 +116,7 @@ class SengokuTreeTests(unittest.TestCase):
             "Scripts/JAC_Sengoku_UnificationPact.lua", "UI/JAC_UnificationPact.xml", "UI/JAC_UnificationPact.lua",
             "UI/JAC_SengokuDarkPolicy.xml", "UI/JAC_SengokuDarkPolicy.lua",
             "UI/JAC_SengokuReignPopup.xml", "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuAgesView.lua",
-            "UI/JAC_EraProgressPanel_Sengoku.lua", "UI/JAC_ActionPanel_Sengoku.lua",
+            "UI/JAC_EraProgressPanel_Sengoku.lua", "UI/JAC_EraCompletePopup_Sengoku.lua", "UI/JAC_ActionPanel_Sengoku.lua",
             "Data/JAC_Sengoku_Icons.xml",
             "Config/JAC_Sengoku_Victories.xml", "Config/JAC_Sengoku_Calendar.xml",
             "Text/JAC_Sengoku_Text.xml", "Text/JAC_Sengoku_Unification_Text.xml",
@@ -199,6 +207,8 @@ class SengokuTreeTests(unittest.TestCase):
         self.assertEqual(db.execute("SELECT PrereqTech FROM Districts WHERE DistrictType='DISTRICT_AERODROME'").fetchone()[0],
                          "TECH_JAC_SENGOKU_OUTER_DEFENSES")
         self.assertIsNone(db.execute("SELECT PrereqTech FROM Resources WHERE ResourceType='RESOURCE_HORSES'").fetchone()[0])
+        self.assertEqual(db.execute("SELECT * FROM Eras ORDER BY EraType").fetchall()[:2],
+                         [("ERA_ANCIENT", "Ancient", None), ("ERA_CLASSICAL", "Classical", None)])  # names: the Eras SQL
         starting_civics = [row[0] for row in db.execute("SELECT Civic FROM StartingCivics WHERE Era='ERA_ANCIENT'")]
         self.assertEqual(starting_civics, ["CIVIC_JAC_SENGOKU_HOUSE_RULES"])
         # Printing's +1 diplomatic access level moves to a Sengoku tech (the other Printing modifier is dropped)

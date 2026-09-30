@@ -91,5 +91,31 @@ class EraTimingProbeTests(unittest.TestCase):
         self.assertEqual(list(lua.globals().printed.values()), [first, after])
 
 
+
+class EraReignsScenarioTests(unittest.TestCase):
+    """scenarios/sengoku-era-reigns.json checks the turns the reign generator gives the engine eras."""
+
+    def test_checked_turns_are_the_generated_era_starts(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("generate_sengoku_reigns", ROOT / "tools/generate_sengoku_reigns.py")
+        reigns = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reigns)
+        koji, eiroku, genki = reigns.engine_turns("GAMESPEED_STANDARD")[:3]
+        self.assertEqual((koji, eiroku, genki), (66, 73, 110))
+        data = json.loads((SCENARIOS / "sengoku-era-reigns.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["steps"][1]["speed"], "GAMESPEED_STANDARD")
+        self.assertIn("JAC_Japan_15km.Civ6Map", data["steps"][1]["map_file"])
+        self.assertIn(PROBE_MOD, data["steps"][0]["disable_ids"])
+        code = [step.get("code", "") for step in data["steps"]]
+        # Each era's end as the engine reports it, and the ledger's judgement on the era's first turn.
+        for turn, era, ends in ((1, 0, koji), (66, 1, eiroku), (73, 2, genki)):
+            self.assertTrue(any(f"elapsed ~= {turn} " in c and f"expected {ends}')" in c and f"~= {era} then" in c
+                                for c in code), turn)
+        for turn, index in ((koji, 1), (eiroku, 2)):
+            self.assertTrue(any(f"l.history.r{index}" in c and f"r.turn ~= {turn}" in c for c in code), turn)
+        turns = 1 + sum(step["turns"] for step in data["steps"] if step["action"] == "autoplay")
+        self.assertEqual(turns, 75)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では
 
 | 対象 | 一般名（既定・DB が指す） | 家固有名 | 表示する家 | 理由 |
 |---|---|---|---|---|
-| 時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 / Campaigns for Unification / Походы за объединение | 天下布武と広域戦 / Tenka Fubu and Wide-Area Campaigns / «Тэнка фубу» и походы широкого масштаба | 織田（暫定） | 「天下布武」は信長の印文。従来の日本語名が家固有だったため、一般名を作り直した |
+| （削除）時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 | 天下布武と広域戦 | 織田 | オーナー判断 T（元号＝時代）でツリーの4期が元号に置き換わり、期の名前ごと無くなった（[元号＝時代](era-equals-reign.md)）。今、戦国パックに登録した家固有名は無い。仕組みの検査は `tests/test_house_names_lua.py` の検査用の登録で行う |
 
 対象外にしたもの：C25 太閤検地（オーナー判断 Q31。研究したすべての家に同じ名前で出す）。一般的な制度名・史実の出来事で、特定の人物・家の名ではないもの：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
 
@@ -89,7 +89,7 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 |---|---|
 | `Lua.log` の `houseNames context=BoostUnlockedPopup result=installed` | 出る。他のコンテキスト（EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments・Civilopedia など）も `installed`（同じコンテキストで2回目以降は `already_installed`）。`error …` や `no_locale` は取り付け失敗。`error Attempt to modify read-only table` は `Locale` 表へ書き込む旧方式の失敗 |
 | 各 UI コンテキスト（TechTree・CivicsTree・CivicsChooser・ResearchChooser・WorldTracker・TechCivicCompletedPopup・BoostUnlockedPopup・NotificationPanel）で C25 の名前 | 織田・武田とも太閤検地（`_HOUSE` のテキストが無いことも確かめる）。`ui_lua` が書式文の引数（`LOC_UI_CIVIC_PROGRESS_COMPLETE_BLURB`）にも名前が入ることを確かめる |
-| 上のコンテキストと EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments の時代3（`ERA_MEDIEVAL`）の名前 | 織田：天下布武と広域戦。武田：統一への広域戦。HistoricMoments では記録済みの瞬間の説明も確かめる |
+| 上のコンテキストと EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments の `ERA_MEDIEVAL` の名前 | 織田・武田とも永禄の世（元号＝時代。時代3の家固有名は削除）。HistoricMoments では記録済みの瞬間の説明に LOC キーが残らないことも確かめる |
 | 社会制度ツリーのツールチップ（TechTree・CivicsTree の `ToolTipHelper.GetToolTip`） | 織田・武田とも C25 の名前（太閤検地）を含む |
 | シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田・武田とも太閤検地 |
 | **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文と、表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田・武田とも太閤検地を含む。家固有名の通知での切り替えは、実機のシナリオでは確かめていない（`tests/test_house_names_lua.py` の模擬実行で時代3の名前を使って確かめる）。`house-names-*-notification.png` に記録 |

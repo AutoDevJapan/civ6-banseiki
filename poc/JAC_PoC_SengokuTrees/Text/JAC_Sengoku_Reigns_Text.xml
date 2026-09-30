@@ -428,5 +428,149 @@
     <Row Tag="LOC_JAC_REIGN_CHIDAI_NOTIFICATION" Language="ja_JP"><Text>改元：遅代の世</Text></Row>
     <Row Tag="LOC_JAC_REIGN_CHIDAI_NOTIFICATION" Language="en_US"><Text>New era name: Chidai Era</Text></Row>
     <Row Tag="LOC_JAC_REIGN_CHIDAI_NOTIFICATION" Language="ru_RU"><Text>Смена девиза: эпоха Тидай</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENBUN_NAME" Language="ja_JP"><Text>天文の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENBUN_NAME" Language="en_US"><Text>Tenbun Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENBUN_NAME" Language="ru_RU"><Text>Эпоха Тэмбун</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOJI_NAME" Language="ja_JP"><Text>弘治の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOJI_NAME" Language="en_US"><Text>Kōji Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOJI_NAME" Language="ru_RU"><Text>Эпоха Кодзи</Text></Row>
+    <Row Tag="LOC_JAC_ERA_EIROKU_NAME" Language="ja_JP"><Text>永禄の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_EIROKU_NAME" Language="en_US"><Text>Eiroku Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_EIROKU_NAME" Language="ru_RU"><Text>Эпоха Эйроку</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENKI_NAME" Language="ja_JP"><Text>元亀の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENKI_NAME" Language="en_US"><Text>Genki Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENKI_NAME" Language="ru_RU"><Text>Эпоха Гэнки</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENSHO_NAME" Language="ja_JP"><Text>天正の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENSHO_NAME" Language="en_US"><Text>Tenshō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENSHO_NAME" Language="ru_RU"><Text>Эпоха Тэнсё</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNROKU_NAME" Language="ja_JP"><Text>文禄の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNROKU_NAME" Language="en_US"><Text>Bunroku Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNROKU_NAME" Language="ru_RU"><Text>Эпоха Бунроку</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEICHO_NAME" Language="ja_JP"><Text>慶長の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEICHO_NAME" Language="en_US"><Text>Keichō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEICHO_NAME" Language="ru_RU"><Text>Эпоха Кэйтё</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENNA_NAME" Language="ja_JP"><Text>元和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENNA_NAME" Language="en_US"><Text>Genna Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENNA_NAME" Language="ru_RU"><Text>Эпоха Гэнна</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EI_NAME" Language="ja_JP"><Text>寛永の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EI_NAME" Language="en_US"><Text>Kan'ei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EI_NAME" Language="ru_RU"><Text>Эпоха Канъэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOHO_NAME" Language="ja_JP"><Text>正保の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOHO_NAME" Language="en_US"><Text>Shōhō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOHO_NAME" Language="ru_RU"><Text>Эпоха Сёхо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIAN_NAME" Language="ja_JP"><Text>慶安の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIAN_NAME" Language="en_US"><Text>Keian Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIAN_NAME" Language="ru_RU"><Text>Эпоха Кэйан</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOO_NAME" Language="ja_JP"><Text>承応の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOO_NAME" Language="en_US"><Text>Jōō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOO_NAME" Language="ru_RU"><Text>Эпоха Дзёо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIREKI_NAME" Language="ja_JP"><Text>明暦の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIREKI_NAME" Language="en_US"><Text>Meireki Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIREKI_NAME" Language="ru_RU"><Text>Эпоха Мэйрэки</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MANJI_NAME" Language="ja_JP"><Text>万治の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MANJI_NAME" Language="en_US"><Text>Manji Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MANJI_NAME" Language="ru_RU"><Text>Эпоха Мандзи</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANBUN_NAME" Language="ja_JP"><Text>寛文の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANBUN_NAME" Language="en_US"><Text>Kanbun Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANBUN_NAME" Language="ru_RU"><Text>Эпоха Камбун</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENPO_NAME" Language="ja_JP"><Text>延宝の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENPO_NAME" Language="en_US"><Text>Enpō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENPO_NAME" Language="ru_RU"><Text>Эпоха Эмпо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENNA_NAME" Language="ja_JP"><Text>天和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENNA_NAME" Language="en_US"><Text>Tenna Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENNA_NAME" Language="ru_RU"><Text>Эпоха Тэнна</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOKYO_NAME" Language="ja_JP"><Text>貞享の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOKYO_NAME" Language="en_US"><Text>Jōkyō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_JOKYO_NAME" Language="ru_RU"><Text>Эпоха Дзёкё</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENROKU_NAME" Language="ja_JP"><Text>元禄の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENROKU_NAME" Language="en_US"><Text>Genroku Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENROKU_NAME" Language="ru_RU"><Text>Эпоха Гэнроку</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOEI_NAME" Language="ja_JP"><Text>宝永の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOEI_NAME" Language="en_US"><Text>Hōei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOEI_NAME" Language="ru_RU"><Text>Эпоха Хоэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOTOKU_NAME" Language="ja_JP"><Text>正徳の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOTOKU_NAME" Language="en_US"><Text>Shōtoku Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOTOKU_NAME" Language="ru_RU"><Text>Эпоха Сётоку</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOHO_NAME" Language="ja_JP"><Text>享保の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOHO_NAME" Language="en_US"><Text>Kyōhō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOHO_NAME" Language="ru_RU"><Text>Эпоха Кёхо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENBUN_NAME" Language="ja_JP"><Text>元文の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENBUN_NAME" Language="en_US"><Text>Genbun Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENBUN_NAME" Language="ru_RU"><Text>Эпоха Гэмбун</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANPO_NAME" Language="ja_JP"><Text>寛保の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANPO_NAME" Language="en_US"><Text>Kanpō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANPO_NAME" Language="ru_RU"><Text>Эпоха Кампо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENKYO_NAME" Language="ja_JP"><Text>延享の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENKYO_NAME" Language="en_US"><Text>Enkyō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ENKYO_NAME" Language="ru_RU"><Text>Эпоха Энкё</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EN_NAME" Language="ja_JP"><Text>寛延の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EN_NAME" Language="en_US"><Text>Kan'en Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAN_EN_NAME" Language="ru_RU"><Text>Эпоха Канъэн</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOREKI_NAME" Language="ja_JP"><Text>宝暦の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOREKI_NAME" Language="en_US"><Text>Hōreki Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HOREKI_NAME" Language="ru_RU"><Text>Эпоха Хорэки</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIWA_NAME" Language="ja_JP"><Text>明和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIWA_NAME" Language="en_US"><Text>Meiwa Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIWA_NAME" Language="ru_RU"><Text>Эпоха Мэйва</Text></Row>
+    <Row Tag="LOC_JAC_ERA_AN_EI_NAME" Language="ja_JP"><Text>安永の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_AN_EI_NAME" Language="en_US"><Text>An'ei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_AN_EI_NAME" Language="ru_RU"><Text>Эпоха Анъэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENMEI_NAME" Language="ja_JP"><Text>天明の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENMEI_NAME" Language="en_US"><Text>Tenmei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENMEI_NAME" Language="ru_RU"><Text>Эпоха Тэммэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANSEI_NAME" Language="ja_JP"><Text>寛政の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANSEI_NAME" Language="en_US"><Text>Kansei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KANSEI_NAME" Language="ru_RU"><Text>Эпоха Кансэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOWA_NAME" Language="ja_JP"><Text>享和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOWA_NAME" Language="en_US"><Text>Kyōwa Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KYOWA_NAME" Language="ru_RU"><Text>Эпоха Кёва</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKA_NAME" Language="ja_JP"><Text>文化の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKA_NAME" Language="en_US"><Text>Bunka Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKA_NAME" Language="ru_RU"><Text>Эпоха Бунка</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNSEI_NAME" Language="ja_JP"><Text>文政の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNSEI_NAME" Language="en_US"><Text>Bunsei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNSEI_NAME" Language="ru_RU"><Text>Эпоха Бунсэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENPO_NAME" Language="ja_JP"><Text>天保の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENPO_NAME" Language="en_US"><Text>Tenpō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TENPO_NAME" Language="ru_RU"><Text>Эпоха Тэмпо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOKA_NAME" Language="ja_JP"><Text>弘化の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOKA_NAME" Language="en_US"><Text>Kōka Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KOKA_NAME" Language="ru_RU"><Text>Эпоха Кока</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAEI_NAME" Language="ja_JP"><Text>嘉永の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAEI_NAME" Language="en_US"><Text>Kaei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KAEI_NAME" Language="ru_RU"><Text>Эпоха Каэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ANSEI_NAME" Language="ja_JP"><Text>安政の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ANSEI_NAME" Language="en_US"><Text>Ansei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_ANSEI_NAME" Language="ru_RU"><Text>Эпоха Ансэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MAN_EN_NAME" Language="ja_JP"><Text>万延の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MAN_EN_NAME" Language="en_US"><Text>Man'en Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MAN_EN_NAME" Language="ru_RU"><Text>Эпоха Манъэн</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKYU_NAME" Language="ja_JP"><Text>文久の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKYU_NAME" Language="en_US"><Text>Bunkyū Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_BUNKYU_NAME" Language="ru_RU"><Text>Эпоха Бункю</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENJI_NAME" Language="ja_JP"><Text>元治の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENJI_NAME" Language="en_US"><Text>Genji Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_GENJI_NAME" Language="ru_RU"><Text>Эпоха Гэндзи</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIO_NAME" Language="ja_JP"><Text>慶応の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIO_NAME" Language="en_US"><Text>Keiō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_KEIO_NAME" Language="ru_RU"><Text>Эпоха Кэйо</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIJI_NAME" Language="ja_JP"><Text>明治の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIJI_NAME" Language="en_US"><Text>Meiji Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_MEIJI_NAME" Language="ru_RU"><Text>Эпоха Мэйдзи</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TAISHO_NAME" Language="ja_JP"><Text>大正の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TAISHO_NAME" Language="en_US"><Text>Taishō Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_TAISHO_NAME" Language="ru_RU"><Text>Эпоха Тайсё</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOWA_NAME" Language="ja_JP"><Text>昭和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOWA_NAME" Language="en_US"><Text>Shōwa Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_SHOWA_NAME" Language="ru_RU"><Text>Эпоха Сёва</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HEISEI_NAME" Language="ja_JP"><Text>平成の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HEISEI_NAME" Language="en_US"><Text>Heisei Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_HEISEI_NAME" Language="ru_RU"><Text>Эпоха Хэйсэй</Text></Row>
+    <Row Tag="LOC_JAC_ERA_REIWA_NAME" Language="ja_JP"><Text>令和の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_REIWA_NAME" Language="en_US"><Text>Reiwa Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_REIWA_NAME" Language="ru_RU"><Text>Эпоха Рэйва</Text></Row>
+    <Row Tag="LOC_JAC_ERA_CHIDAI_NAME" Language="ja_JP"><Text>遅代の世</Text></Row>
+    <Row Tag="LOC_JAC_ERA_CHIDAI_NAME" Language="en_US"><Text>Chidai Era</Text></Row>
+    <Row Tag="LOC_JAC_ERA_CHIDAI_NAME" Language="ru_RU"><Text>Эпоха Тидай</Text></Row>
   </LocalizedText>
 </GameData>
