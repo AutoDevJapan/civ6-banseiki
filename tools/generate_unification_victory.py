@@ -338,7 +338,10 @@ def scenario() -> dict:
     )
     configure = {**base["steps"][1], "map_file": test_map.MAP_FILE, "map_size": test_map.MAP_SIZE,
                  "seed": 620951, "players": players}
-    enable = {**base["steps"][0], "ids": [*base["steps"][0]["ids"], test_map.TEST_MOD_ID]}
+    # The era-timing probe mod (poc/JAC_Test_EraTiming) acts on the same test map and stays enabled once a probe ran
+    # (documents/poc/era-equals-reign.md), so these scenarios switch it off.
+    enable = {**base["steps"][0], "ids": [*base["steps"][0]["ids"], test_map.TEST_MOD_ID],
+              "disable_ids": [*base["steps"][0].get("disable_ids", []), "57a3af09-fb38-41da-b367-818de11a995c"]}
     return {
         "name": "Sengoku unification victory on the test map: raze, one castle missing, save/load, rebuild, then all",
         "judge_profile": "generic",

@@ -35,10 +35,14 @@ local function gameInfoTable(rows, key)
     return function() i = i + 1; return rows[i] end
   end })
 end
+local speedTurns = {}  -- the navigation property GameSpeedTurnCollection: the speed's rows in row order
+for _, row in ipairs(tables.GameSpeed_Turns) do
+  if row.GameSpeedType == (tables.Speed or "GAMESPEED_STANDARD") then table.insert(speedTurns, row) end
+end
 GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
-  GameSpeeds = { [0] = { GameSpeedType = tables.Speed or "GAMESPEED_STANDARD" } },
-  GameSpeed_Turns = gameInfoTable(tables.GameSpeed_Turns),
+  GameSpeeds = { [0] = { GameSpeedType = tables.Speed or "GAMESPEED_STANDARD", GameSpeedTurnCollection = speedTurns } },
+  GameSpeed_Turns = gameInfoTable(tables.GameInfoSpeedTurns or tables.GameSpeed_Turns),
   Technologies = gameInfoTable(tables.Technologies, "TechnologyType"),
   Civics = gameInfoTable(tables.Civics, "CivicType"),
   Boosts = gameInfoTable(tables.Boosts),
@@ -351,16 +355,17 @@ class HistoricalEventsTurnTests(unittest.TestCase):
         self.assertEqual(len(self.g.NOTES), notes)
         self.assertEqual(self.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO"), 1)
 
-    def test_calendar_stages_do_not_depend_on_row_order(self):
-        # Epic: 3 months/turn for 200 turns, then 2. Teppo (1543/9, 116 months) is turn 1 + ceil(116/3) = 40;
-        # walking the 2-month stage first would give 59.
+    def test_calendar_stages_follow_the_speeds_row_order(self):
+        # Epic (generated calendar): 3 months a turn for 34 turns, then 2 for 29. Teppo (1543/9, 116 months) is
+        # turn 35 + ceil(14 / 2) = 42; sorting the stages by increment (the old walk) would give 28. The Lua reads
+        # GameSpeedTurnCollection (row order), not the GameInfo iteration, which is reversed here.
         data = tables()
         data["Speed"] = "GAMESPEED_EPIC"
-        data["GameSpeed_Turns"].reverse()
+        data["GameInfoSpeedTurns"] = list(reversed(data["GameSpeed_Turns"]))
         self.setUp(data)
-        self.run_turns(1, 39)
+        self.run_turns(1, 41)
         self.assertEqual(self.boosts("tech", self.teppo), [])
-        self.run_turns(40, 40)
+        self.run_turns(42, 42)
         self.assertEqual([b[0] for b in self.boosts("tech", self.teppo)], [1, 2, 3])
 
     # --- advisor popup (owner decision E5a) ---

@@ -19,9 +19,17 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "poc/JAC_PoC_BanseikiRuleset/UI"
 DATA = ROOT / "poc/JAC_PoC_SengokuTrees/UI/JAC_HouseNamesData_Sengoku.lua"
 TEXT = ROOT / "poc/JAC_PoC_SengokuTrees/Text/JAC_Sengoku_Text.xml"
-# A second registered key; C25 (太閤検地) is no longer a house name (SSOT 3.2).
-DESC = "LOC_JAC_SENGOKU_ERA_3_DESCRIPTION"
-ERA = "LOC_JAC_SENGOKU_ERA_3_NAME"
+# The mechanism is tested with a registration of its own: the pack registers no house name now (the tree period
+# "天下布武と広域戦" went with the periods when the eras became reigns, owner decision T; C25 太閤検地 is the plain
+# name, SSOT 3.2). The shipped data file is still loaded next to it.
+DESC = "LOC_JAC_TEST_PERIOD_DESCRIPTION"
+ERA = "LOC_JAC_TEST_PERIOD_NAME"
+SAMPLE_DATA = "\n".join(f'JAC_RegisterHouseName("{tag}", "{tag}_HOUSE", "CIVILIZATION_JAC_ODA")' for tag in (ERA, DESC))
+SAMPLE_TEXT = {
+    tag: {"en_US": "Campaigns for Unification", "ja_JP": "統一への広域戦"} for tag in (ERA, DESC)
+} | {
+    tag + "_HOUSE": {"en_US": "Tenka Fubu and Wide-Area Campaigns", "ja_JP": "天下布武と広域戦"} for tag in (ERA, DESC)
+}
 
 # Engine-side text as it would be built in C++ (notification bodies, moments).
 ENGINE_TEXT = {
@@ -94,7 +102,7 @@ ContextPtr = { GetID = function() return "Civilopedia" end }
 
 
 def load_texts(language: str) -> dict[str, str]:
-    texts = {tag: by_language[language] for tag, by_language in ENGINE_TEXT.items()}
+    texts = {tag: by_language[language] for tag, by_language in (ENGINE_TEXT | SAMPLE_TEXT).items()}
     for row in ET.parse(TEXT).getroot().iter("Row"):
         if row.get("Language") == language:
             texts[row.get("Tag")] = row.findtext("Text") or ""
@@ -107,7 +115,8 @@ class HouseNamesLuaTests(unittest.TestCase):
         lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         texts = load_texts(language)
         sources = {"JAC_HouseNames": (UI / "JAC_HouseNames.lua").read_text(encoding="utf-8"),
-                   "JAC_HouseNamesData_Sengoku": DATA.read_text(encoding="utf-8")}
+                   "JAC_HouseNamesData_Sengoku": DATA.read_text(encoding="utf-8"),
+                   "JAC_HouseNamesData_Test": SAMPLE_DATA}
         lua.execute(STUBS, lua.table_from(texts), language, lua.table_from(sources), civilization)
         if extra:
             lua.execute(extra)
@@ -222,6 +231,7 @@ class HouseNamesLuaTests(unittest.TestCase):
         texts = load_texts("en_US")
         sources = {"JAC_HouseNames": (UI / "JAC_HouseNames.lua").read_text(encoding="utf-8"),
                    "JAC_HouseNamesData_Sengoku": DATA.read_text(encoding="utf-8"),
+                   "JAC_HouseNamesData_Test": SAMPLE_DATA,
                    "HistoricMoments": "CHECK = Game.GetHistoryManager()"}
         lua.execute(STUBS, lua.table_from(texts), "en_US", lua.table_from(sources), "CIVILIZATION_JAC_ODA")
         lua.execute(extra, texts[ERA])

@@ -127,8 +127,8 @@ end
 
 -- Calendar year of the current turn, from the same data the engine dates turns with:
 -- the start era's StartEras.Year (01_GameplaySchema.sql:2545-2560; 1534 under the Sengoku pack,
--- JAC_Sengoku_Calendar.xml) plus the months of the elapsed turns taken from GameSpeed_Turns in row order
--- (01_GameplaySchema.sql:1403-1408, :3337). Elapsed turns are counted from GameConfiguration.GetStartTurn()
+-- JAC_Sengoku_Calendar.xml) plus the months of the elapsed turns taken from the speed's GameSpeed_Turns rows
+-- in row order, the navigation property GameSpeedTurnCollection (01_GameplaySchema.sql:1403-1408, :3337). Elapsed turns are counted from GameConfiguration.GetStartTurn()
 -- because a 1534 start puts the engine turn near 16603 (TopPanel.lua:387-389 normalizes the same way).
 -- No official Lua calls a turn-to-year function; Calendar.MakeYearStr only returns display text.
 local function StartYear()
@@ -149,15 +149,13 @@ local function CurrentYear()
 	end
 	local left = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn()
 	local months = 0
-	for row in GameInfo.GameSpeed_Turns() do
+	for _, row in ipairs(speed.GameSpeedTurnCollection) do
 		if left <= 0 then
 			break
 		end
-		if row.GameSpeedType == speed.GameSpeedType then
-			local turns = math.min(left, row.TurnsPerIncrement)
-			months = months + turns * row.MonthIncrement
-			left = left - turns
-		end
+		local turns = math.min(left, row.TurnsPerIncrement)
+		months = months + turns * row.MonthIncrement
+		left = left - turns
 	end
 	return startYear + math.floor(months / 12)
 end

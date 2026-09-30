@@ -387,13 +387,41 @@ class EraIndicatorTests(ScreenTestBase):
         self.assertEqual(self.snapshot(), before)
 
 
+# The official EraCompletePopup flow (DLC/Expansion2/UI/Additions/EraCompletePopup.lua:42-65: the turn-begin check
+# calls the global StartEraShow, which queues the popup), reduced to what the extension relies on.
+ERA_COMPLETE_STUBS = r"""
+SHOWN = 0
+function StartEraShow() SHOWN = SHOWN + 1 end
+function OnCheckGameEraChanged() StartEraShow() end
+"""
+
+
+class EraCompletePopupTests(ScreenTestBase):
+    """UI/JAC_EraCompletePopup_Sengoku.lua: 元号 = 時代 (owner decision T), so the 改元 screen replaces the official one."""
+
+    def context(self, with_sengoku: bool):
+        files = dict(_files(), EraCompletePopup=ERA_COMPLETE_STUBS)
+        if with_sengoku:
+            files["JAC_EraCompletePopup_Sengoku"] = (MOD / "UI/JAC_EraCompletePopup_Sengoku.lua").read_text(encoding="utf-8")
+        self.lua.execute(SCREEN_STUBS, self.lua.table_from(files))
+        return self.g.NEW_CONTEXT("EraCompletePopup", (RULESET_UI / "JAC_EraCompletePopup.lua").read_text(encoding="utf-8"))
+
+    def test_the_official_screen_stays_off_with_the_pack_and_on_without(self):
+        for with_sengoku, shown in ((True, 0), (False, 1)):
+            with self.subTest(with_sengoku=with_sengoku):
+                popup = self.context(with_sengoku)
+                popup.OnCheckGameEraChanged()
+                self.assertEqual(popup.SHOWN, shown)
+
+
 class WiringTests(unittest.TestCase):
     def test_ruleset_panel_loads_the_extension_after_the_official_script(self):
         source = (RULESET_UI / "JAC_EraProgressPanel.lua").read_text(encoding="utf-8").rstrip().splitlines()
         self.assertEqual(source[-2:], ['include("EraProgressPanel")', 'include("JAC_EraProgressPanel_", true)'])
         modinfo = (MOD / "JAC_PoC_SengokuTrees.modinfo").read_text(encoding="utf-8")
         imports = modinfo.split('<ImportFiles id="JAC_Sengoku_HouseNames"')[1].split("</ImportFiles>")[0]
-        for name in ("JAC_EraProgressPanel_Sengoku.lua", "JAC_SengokuAgesView.lua", "JAC_SengokuReignPopup.lua",
+        for name in ("JAC_EraProgressPanel_Sengoku.lua", "JAC_EraCompletePopup_Sengoku.lua", "JAC_SengokuAgesView.lua",
+                     "JAC_SengokuReignPopup.lua",
                      "JAC_SengokuReignPopup.xml", "JAC_ActionPanel_Sengoku.lua"):
             self.assertIn(f"<File>UI/{name}</File>", imports)
             self.assertEqual(modinfo.count(f"<File>UI/{name}</File>"), 3 if name.endswith(".xml") else 2, name)

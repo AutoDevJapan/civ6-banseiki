@@ -32,18 +32,11 @@ local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpee
 
 -- Month (1-12, optional) is the month the event list gives (the Western month of the source date); turn 1 is
 -- month 1 of the start year.
--- Stage order: the engine walks a speed's rows in rowid order (GameSpeedTurnCollection, ORDER BY rowid in
--- 01_GameplaySchema.sql), which Lua cannot see, and GameInfo iteration order is not guaranteed. Every
--- calendar (GameSpeeds.xml and JAC_Sengoku_Calendar.xml) lists a speed's stages from the longest turn to the
--- shortest, so sorting by MonthIncrement descending gives the same order deterministically.
-local STAGES = {}
-for row in GameInfo.GameSpeed_Turns() do
-	if row.GameSpeedType == SPEED then table.insert(STAGES, row) end
-end
-table.sort(STAGES, function(a, b)
-	if a.MonthIncrement ~= b.MonthIncrement then return a.MonthIncrement > b.MonthIncrement end
-	return a.TurnsPerIncrement < b.TurnsPerIncrement
-end)
+-- Stage order: the engine walks a speed's rows in rowid order, the navigation property GameSpeedTurnCollection
+-- (ORDER BY rowid, 01_GameplaySchema.sql:3337). Lua reads the same collection (official Lua reads collections
+-- the same way, e.g. leader.TraitCollection in Base/Assets/UI/MapTacks.lua:172). Outside standard speed the
+-- Sengoku calendar's rows alternate their increments (JAC_Sengoku_Calendar.xml), so no sort recovers the order.
+local STAGES = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedTurnCollection
 
 local function TurnForYear(year, month)
 	local target, months, turn = (year - START_YEAR) * 12 + (month or 1) - 1, 0, 1

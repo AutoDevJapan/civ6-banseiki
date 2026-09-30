@@ -1,0 +1,293 @@
+{
+  "name": "Era = reign (owner decision T) on the 15 km Japan map at standard speed: 48 engine eras (Tenbun to Chidai) of the reigns' lengths, the tree headers and era names are reign names, the engine era changes exactly at Koji (turn 66) and Eiroku (turn 73) in GameCore and InGame, the ledger judges on those turns, the era-name change screen appears once per change while the official new-era screen stays hidden, and the official era score and ages stay off (to turn 75)",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local n = 0; for _ in GameInfo.Eras() do n = n + 1 end; if n ~= 48 then error('eras ' .. n) end; local cd = GameInfo.GlobalParameters['NEXT_ERA_TURN_COUNTDOWN']; if cd == nil or tostring(cd.Value) ~= '1' then error('countdown parameter ' .. tostring(cd and cd.Value)) end; local function len(t) local x = GameInfo.Eras_XP1[t]; return x and (tostring(x.GameEraMinimumTurns) .. '/' .. tostring(x.GameEraMaximumTurns)) or 'none' end; local got = len('ERA_ANCIENT') .. ' ' .. len('ERA_CLASSICAL') .. ' ' .. len('ERA_MEDIEVAL') .. ' ' .. len('ERA_JAC_CHIDAI'); if got ~= '65/65 7/7 37/37 nil/nil' then error('era lengths ' .. got) end; local e = GameInfo.Eras; if e['ERA_ANCIENT'].Name ~= 'LOC_JAC_ERA_TENBUN_NAME' or e['ERA_CLASSICAL'].Name ~= 'LOC_JAC_ERA_KOJI_NAME' or e['ERA_MEDIEVAL'].Name ~= 'LOC_JAC_ERA_EIROKU_NAME' then error('official eras not renamed') end; local r = GameInfo.JAC_SengokuReigns; if r['REIGN_KOJI'].EraType ~= 'ERA_CLASSICAL' or r['REIGN_EIROKU'].EraType ~= 'ERA_MEDIEVAL' or r['REIGN_CHIDAI'].EraType ~= 'ERA_JAC_CHIDAI' then error('reign eras') end; local era = Game.GetEras():GetCurrentEra(); if era ~= 0 then error('GameCore era ' .. tostring(era)) end; return 'turn 1: 48 eras (Tenbun to Chidai), Tenbun 65, Koji 7, Eiroku 37 turns, Chidai endless, countdown 1, GameCore era 0'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 1 then error('not turn 1: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 0 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 0') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 66 then error('era ends on turn ' .. last .. ', expected 66') end; local name = Locale.Lookup(GameInfo.Eras[0].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_TENBUN_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_TENBUN_NAME'), 1, true) then error('era name ' .. name) end; return 'turn 1: engine era 0 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "TechTree",
+      "code": "local want = { 'TENBUN', 'EIROKU', 'GENKI', 'TENSHO', 'KEICHO' }; if type(g_kEras) ~= 'table' then error('no tree eras') end; local got = {}; for _, e in ipairs(g_kEras) do got[#got + 1] = e.Description end; if #got ~= #want then error('tree eras: ' .. table.concat(got, ' / ')) end; for i, k in ipairs(want) do if got[i] ~= Locale.Lookup('LOC_JAC_ERA_' .. k .. '_NAME') then error('tree era ' .. i .. ': ' .. tostring(got[i])) end end; return 'TechTree era headers: ' .. table.concat(got, ' / ')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CivicsTree",
+      "code": "local want = { 'TENBUN', 'EIROKU', 'GENKI', 'TENSHO', 'KEICHO' }; if type(g_kEras) ~= 'table' then error('no tree eras') end; local got = {}; for _, e in ipairs(g_kEras) do got[#got + 1] = e.Description end; if #got ~= #want then error('tree eras: ' .. table.concat(got, ' / ')) end; for i, k in ipairs(want) do if got[i] ~= Locale.Lookup('LOC_JAC_ERA_' .. k .. '_NAME') then error('tree era ' .. i .. ': ' .. tostring(got[i])) end end; return 'CivicsTree era headers: ' .. table.concat(got, ' / ')"
+    },
+    {
+      "action": "autoplay",
+      "turns": 64,
+      "timeout": 14400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 65 then error('not turn 65: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 0 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 0') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 66 then error('era ends on turn ' .. last .. ', expected 66') end; local name = Locale.Lookup(GameInfo.Eras[0].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_TENBUN_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_TENBUN_NAME'), 1, true) then error('era name ' .. name) end; if eras:GetNextEraCountdown() ~= 0 then error('countdown ' .. tostring(eras:GetNextEraCountdown())) end; return 'turn 65: engine era 0 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 65 then error('not turn 65: ' .. elapsed) end; local era = Game.GetEras():GetCurrentEra(); if era ~= 0 then error('GameCore era ' .. tostring(era) .. ', expected 0') end; if l.reign ~= 0 then error('ledger reign ' .. tostring(l.reign)) end; return 'turn 65: GameCore era 0, ledger still in reign 0 (next due ' .. tostring(l.nextDue) .. ')'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "NewTurnPanel",
+      "code": "return 'new turn panel label (the official countdown; informational): ' .. tostring(Controls.NewTurnLabel:GetText())"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 66 then error('not turn 66: ' .. elapsed) end; local era = Game.GetEras():GetCurrentEra(); if era ~= 1 then error('GameCore era ' .. tostring(era) .. ', expected 1') end; if l.reign ~= 1 then error('ledger reign ' .. tostring(l.reign)) end; local r = l.history.r1; if type(r) ~= 'table' or r.turn ~= 66 then error('reign 1 not judged on turn 66') end; return 'turn 66: GameCore era 1, ledger judged reign 1 on turn 66 (engine era seen by the ledger: ' .. tostring(r.engineEra) .. ', length ' .. r.length .. ')'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 66 then error('not turn 66: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 1 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 1') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 73 then error('era ends on turn ' .. last .. ', expected 73') end; local name = Locale.Lookup(GameInfo.Eras[1].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_KOJI_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_KOJI_NAME'), 1, true) then error('era name ' .. name) end; return 'turn 66: engine era 1 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('the official new-era screen is shown') end; return 'official new-era screen not shown (the era-name change screen replaces it)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' or type(l.history) ~= 'table' or type(l.history.r1) ~= 'table' then error('reign 1 not judged') end; local r = l.history.r1['p' .. me]; if type(r) ~= 'table' then error('no REIGN_KOJI result for the human') end; local last = JAC_REIGN_POPUP_LAST; if type(last) ~= 'table' then error('no era-name change screen shown') end; if last.reign ~= 1 or last.reignType ~= 'REIGN_KOJI' or last.turn ~= 66 or last.age ~= r.age or last.score ~= r.score then error('shown: ' .. tostring(last.reignType) .. ' turn ' .. tostring(last.turn) .. ' age ' .. tostring(last.age) .. ' score ' .. tostring(last.score)) end; local wasOpen = not ContextPtr:IsHidden(); if not wasOpen and not JAC_ShowReignPopup(true) then error('cannot reopen') end; if ContextPtr:IsHidden() then error('screen hidden after reopening') end; local title = Controls.Title:GetText(); if title ~= Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_KOJI_ANNOUNCEMENT')) then error('title ' .. tostring(title)) end; local ribbon = Controls.EraRibbonValue:GetText(); if ribbon ~= JAC_AgesView_AgeLabel(r.age) then error('age ' .. tostring(ribbon)) end; local score = Controls.Score:GetText(); if score ~= Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE', 'LOC_JAC_REIGN_TENBUN_NAME', r.score) then error('score text ' .. tostring(score)) end; OnClose(); if not ContextPtr:IsHidden() then error('the era-name change screen did not close') end; return 'era-name change screen for REIGN_KOJI (turn 66, ' .. (wasOpen and 'still open' or 'closed by the driver during autoplay, reopened') .. '): ' .. title .. ' / ' .. ribbon .. ' / ' .. score .. '; closed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "local open = not ContextPtr:IsHidden(); if open then OnClose() end; return open and 'dark-age policy choice closed' or 'no dark-age policy choice'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; RealizeEraIndicator(); local text = JAC_ERA_INDICATOR_TEXT; if type(text) ~= 'string' then error('era indicator not replaced') end; local want = Locale.Lookup('LOC_JAC_AGE_ERA_NAME', 'LOC_JAC_REIGN_KOJI_NAME') .. '[NEWLINE][NEWLINE]' .. Locale.Lookup('LOC_JAC_AGE_ERA_ENDS_IN', l.nextDue - elapsed); if text ~= want then error('era indicator: ' .. text .. ' ~= ' .. want) end; return 'era indicator: ' .. text"
+    },
+    {
+      "action": "screenshot",
+      "path": "01-koji.png"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 67 then error('not turn 67: ' .. elapsed) end; if not ContextPtr:IsHidden() then error('the era-name change screen opened again') end; if type(JAC_REIGN_POPUP_LAST) ~= 'table' or JAC_REIGN_POPUP_LAST.reign ~= 1 then error('another era-name change screen was shown') end; return 'turn 67: no second era-name change screen'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 5,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 72 then error('not turn 72: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 1 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 1') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 73 then error('era ends on turn ' .. last .. ', expected 73') end; local name = Locale.Lookup(GameInfo.Eras[1].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_KOJI_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_KOJI_NAME'), 1, true) then error('era name ' .. name) end; if eras:GetNextEraCountdown() ~= 0 then error('countdown ' .. tostring(eras:GetNextEraCountdown())) end; return 'turn 72: engine era 1 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 73 then error('not turn 73: ' .. elapsed) end; local era = Game.GetEras():GetCurrentEra(); if era ~= 2 then error('GameCore era ' .. tostring(era) .. ', expected 2') end; if l.reign ~= 2 then error('ledger reign ' .. tostring(l.reign)) end; local r = l.history.r2; if type(r) ~= 'table' or r.turn ~= 73 then error('reign 2 not judged on turn 73') end; return 'turn 73: GameCore era 2, ledger judged reign 2 on turn 73 (engine era seen by the ledger: ' .. tostring(r.engineEra) .. ', length ' .. r.length .. ')'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 73 then error('not turn 73: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 2 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 2') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 110 then error('era ends on turn ' .. last .. ', expected 110') end; local name = Locale.Lookup(GameInfo.Eras[2].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_EIROKU_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_EIROKU_NAME'), 1, true) then error('era name ' .. name) end; return 'turn 73: engine era 2 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraCompletePopup",
+      "code": "if not ContextPtr:IsHidden() then error('the official new-era screen is shown') end; return 'official new-era screen not shown (the era-name change screen replaces it)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local me = Game.GetLocalPlayer(); local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' or type(l.history) ~= 'table' or type(l.history.r2) ~= 'table' then error('reign 2 not judged') end; local r = l.history.r2['p' .. me]; if type(r) ~= 'table' then error('no REIGN_EIROKU result for the human') end; local last = JAC_REIGN_POPUP_LAST; if type(last) ~= 'table' then error('no era-name change screen shown') end; if last.reign ~= 2 or last.reignType ~= 'REIGN_EIROKU' or last.turn ~= 73 or last.age ~= r.age or last.score ~= r.score then error('shown: ' .. tostring(last.reignType) .. ' turn ' .. tostring(last.turn) .. ' age ' .. tostring(last.age) .. ' score ' .. tostring(last.score)) end; local wasOpen = not ContextPtr:IsHidden(); if not wasOpen and not JAC_ShowReignPopup(true) then error('cannot reopen') end; if ContextPtr:IsHidden() then error('screen hidden after reopening') end; local title = Controls.Title:GetText(); if title ~= Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT')) then error('title ' .. tostring(title)) end; local ribbon = Controls.EraRibbonValue:GetText(); if ribbon ~= JAC_AgesView_AgeLabel(r.age) then error('age ' .. tostring(ribbon)) end; local score = Controls.Score:GetText(); if score ~= Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE', 'LOC_JAC_REIGN_KOJI_NAME', r.score) then error('score text ' .. tostring(score)) end; OnClose(); if not ContextPtr:IsHidden() then error('the era-name change screen did not close') end; return 'era-name change screen for REIGN_EIROKU (turn 73, ' .. (wasOpen and 'still open' or 'closed by the driver during autoplay, reopened') .. '): ' .. title .. ' / ' .. ribbon .. ' / ' .. score .. '; closed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "local open = not ContextPtr:IsHidden(); if open then OnClose() end; return open and 'dark-age policy choice closed' or 'no dark-age policy choice'"
+    },
+    {
+      "action": "screenshot",
+      "path": "02-eiroku.png"
+    },
+    {
+      "action": "autoplay",
+      "turns": 2,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 75 then error('not turn 75: ' .. elapsed) end; local eras = Game.GetEras(); for _, p in ipairs(PlayerManager.GetAliveMajors()) do local id = p:GetID(); if eras:GetPlayerCurrentScore(id) ~= 0 then error('official era score for ' .. id) end; if eras:HasGoldenAge(id) or eras:HasDarkAge(id) or eras:HasHeroicGoldenAge(id) then error('official age for ' .. id) end end; local start = GameConfiguration.GetStartTurn(); if eras:GetCurrentEra() ~= 2 then error('engine era ' .. tostring(eras:GetCurrentEra()) .. ', expected 2') end; local first, last = eras:GetCurrentEraStartTurn() - start + 1, eras:GetCurrentEraMaximumEndTurn() - start + 1; if last ~= 110 then error('era ends on turn ' .. last .. ', expected 110') end; local name = Locale.Lookup(GameInfo.Eras[2].Name); if name ~= Locale.Lookup('LOC_JAC_ERA_EIROKU_NAME') or not string.find(name, Locale.Lookup('LOC_JAC_REIGN_EIROKU_NAME'), 1, true) then error('era name ' .. name) end; return 'turn 75: engine era 2 (' .. name .. ') from turn ' .. first .. ' to turn ' .. last .. ', countdown ' .. tostring(eras:GetNextEraCountdown()) .. '; official era score 0 and no official age'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; if elapsed ~= 75 then error('not turn 75: ' .. elapsed) end; if not ContextPtr:IsHidden() then error('the era-name change screen opened again') end; if type(JAC_REIGN_POPUP_LAST) ~= 'table' or JAC_REIGN_POPUP_LAST.reign ~= 2 then error('another era-name change screen was shown') end; return 'turn 75: no second era-name change screen'"
+    }
+  ]
+}

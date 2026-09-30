@@ -61,19 +61,11 @@ function R.GameTurn()
 	return Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1
 end
 
--- 年月 → ターン。JAC_HistoricalEvents.lua の TurnForYear と同じ換算（GameSpeed_Turns を月数の長い順に歩く）
+-- 年月 → ターン。JAC_HistoricalEvents.lua の TurnForYear と同じ換算（速度の GameSpeedTurnCollection を行の順に歩く）
 local STAGES = nil
 function R.TurnForYear(year, month)
 	if STAGES == nil then
-		local speed = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
-		STAGES = {}
-		for row in GameInfo.GameSpeed_Turns() do
-			if row.GameSpeedType == speed then table.insert(STAGES, row) end
-		end
-		table.sort(STAGES, function(a, b)
-			if a.MonthIncrement ~= b.MonthIncrement then return a.MonthIncrement > b.MonthIncrement end
-			return a.TurnsPerIncrement < b.TurnsPerIncrement
-		end)
+		STAGES = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedTurnCollection
 	end
 	local target = (year - GameInfo.StartEras["ERA_ANCIENT"].Year) * 12 + (month or 1) - 1
 	local months, turn = 0, 1

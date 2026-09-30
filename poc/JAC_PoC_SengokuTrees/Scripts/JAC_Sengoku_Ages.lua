@@ -43,34 +43,32 @@ local function Log(message)
 	print("[JAC_AGES] " .. message)
 end
 
--- Calendar: the stages of GameSpeed_Turns for the game speed, longest turn first (same deterministic order as
--- JAC_HistoricalEvents.lua:36-47). A 改元 is judged at the start of the turn containing its month (§4.1).
-local START_YEAR = GameInfo.StartEras["ERA_ANCIENT"].Year
-local SPEED = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].GameSpeedType
-local STAGES = {}
-for row in GameInfo.GameSpeed_Turns() do
-	if row.GameSpeedType == SPEED then table.insert(STAGES, row) end
-end
-table.sort(STAGES, function(a, b)
-	if a.MonthIncrement ~= b.MonthIncrement then return a.MonthIncrement > b.MonthIncrement end
-	return a.TurnsPerIncrement < b.TurnsPerIncrement
-end)
-
-local function TurnContaining(year, month)
-	local target, months, turn = (year - START_YEAR) * 12 + month - 1, 0, 1
-	for _, row in ipairs(STAGES) do
-		local span = row.TurnsPerIncrement * row.MonthIncrement
-		if target < months + span then return turn + math.floor((target - months) / row.MonthIncrement) end
-		months, turn = months + span, turn + row.TurnsPerIncrement
+-- 元号 = 時代 (owner decision T, documents/poc/era-equals-reign.md): each reign is one engine era
+-- (Data/JAC_Sengoku_Eras.sql) and a 改元 is judged when its era starts. ERA_START: era Index -> the game-relative turn
+-- the engine starts it, from the same Eras_XP1 lengths the engine uses: scaled by the speed's CostMultiplier and
+-- rounded down, at least 2 turns (probe 2026-09-30, standard and quick). At standard speed this is the turn
+-- containing the 改元's month.
+local MULTIPLIER = GameInfo.GameSpeeds[GameConfiguration.GetGameSpeedType()].CostMultiplier
+local ERA_START = {}
+do
+	local eras = {}
+	for row in GameInfo.Eras() do table.insert(eras, row) end
+	table.sort(eras, function(a, b) return a.ChronologyIndex < b.ChronologyIndex end)
+	local turn = 1
+	for _, era in ipairs(eras) do
+		ERA_START[era.Index] = turn
+		local xp1 = GameInfo.Eras_XP1[era.EraType]
+		if xp1 == nil or xp1.GameEraMaximumTurns == nil then break end  -- the last era never ends
+		turn = turn + math.max(2, math.floor(xp1.GameEraMaximumTurns * MULTIPLIER / 100))
 	end
-	return turn
 end
 
--- Date order (the UI's order, UI/JAC_SengokuAgesView.lua); turns never decrease with the date. forced: the age of
--- every house at that 改元 (遅代: DARK, SSOT 3.2).
+-- Date order (the UI's order, UI/JAC_SengokuAgesView.lua), which is the era order. era: the engine era's Index.
+-- forced: the age of every house at that 改元 (遅代: DARK, SSOT 3.2).
 local REIGNS = {}
 for row in GameInfo.JAC_SengokuReigns() do
-	table.insert(REIGNS, { type = row.ReignType, date = row.Year * 12 + row.Month, due = TurnContaining(row.Year, row.Month),
+	local era = GameInfo.Eras[row.EraType].Index
+	table.insert(REIGNS, { type = row.ReignType, date = row.Year * 12 + row.Month, era = era, due = ERA_START[era],
 		notification = row.Notification, forced = row.ForcedAge })
 end
 table.sort(REIGNS, function(a, b)
@@ -78,14 +76,27 @@ table.sort(REIGNS, function(a, b)
 	return a.type < b.type
 end)
 
--- The next 改元 judged after the period `reign`, or nil after the last. 改元 falling on one turn leave periods of
--- length 0: they merge into the last of that turn, which is judged once (§4.1). No two share a turn in the table at
--- any speed (tests/test_sengoku_ages.py); the rule keeps the judgement deterministic if a table or calendar changes.
+-- The next 改元 after the period `reign`, or nil after the last.
 local function NextJudged(reign)
-	local index = reign + 1
-	if REIGNS[index] == nil then return nil end
-	while REIGNS[index + 1] and REIGNS[index + 1].due == REIGNS[index].due do index = index + 1 end
-	return index
+	return REIGNS[reign + 1] and reign + 1 or nil
+end
+
+-- The engine's current era (GameCore has Game.GetEras():GetCurrentEra(); probe 2026-09-30), nil without it.
+local function EngineEra()
+	local ok, era = pcall(function() return Game.GetEras():GetCurrentEra() end)
+	return ok and type(era) == "number" and era or nil
+end
+
+-- A 改元 is due when its era's start turn has come or the engine is already in its era (either way deterministic;
+-- the turn covers a turn-start event that runs before the engine changes the era, the era a length the formula
+-- does not predict).
+local function IsDue(reign, turn, engineEra)
+	return reign.due <= turn or (engineEra ~= nil and engineEra >= reign.era)
+end
+
+-- The turn the period before `reign` ends: its era's start, or now if the engine changed the era earlier.
+local function EndTurn(reign, turn)
+	return math.min(reign.due, turn)
 end
 
 local POLICIES = {}
@@ -361,12 +372,14 @@ local function Thresholds(house, cities, length)
 	return math.max(MIN_GOLDEN, math.ceil((GOLDEN_BASE + shift) * length / per)), dark
 end
 
-local function Judge(l, index)
+local function Judge(l, index, engineEra)
 	local reign = REIGNS[index]
-	local length = reign.due - l.reignStart
+	local endTurn = EndTurn(reign, ElapsedTurn())
+	local length = endTurn - l.reignStart
 	local _, counts = CurrentCities()
-	-- from: the period judged (its 改元; 0 is 天文). The previous index unless 改元 of one turn were merged.
-	local results = { turn = ElapsedTurn(), due = reign.due, length = length, from = l.reign, forced = reign.forced }
+	-- from: the period judged (its 改元; 0 is 天文). engineEra: the engine's era then (nil without Game.GetEras).
+	local results = { turn = ElapsedTurn(), due = reign.due, length = length, from = l.reign, forced = reign.forced,
+		engineEra = engineEra }
 	for _, id in ipairs(AliveMajorIDs()) do
 		local house = House(l, id)
 		if house then
@@ -388,15 +401,15 @@ local function Judge(l, index)
 			house.policy = age == "DARK" and (DEFAULT_POLICY[house.civ] or POLICIES[1].PolicyType) or nil
 			house.age = age
 			results["p" .. tostring(id)] = { age = age, score = house.score, golden = golden, dark = dark }
-			Log(string.format("judged reign=%s turn=%d length=%d player=%d age=%s score=%d golden>=%d dark>=%d policy=%s%s",
-				reign.type, results.turn, length, id, age, house.score, golden, dark, house.policy or "",
-				reign.forced and " forced" or ""))
+			Log(string.format("judged reign=%s turn=%d length=%d era=%d engineEra=%s player=%d age=%s score=%d golden>=%d dark>=%d policy=%s%s",
+				reign.type, results.turn, length, reign.era, tostring(engineEra), id, age, house.score, golden, dark,
+				house.policy or "", reign.forced and " forced" or ""))
 			house.score, house.parts = 0, {}
 			Notify(id, reign, age, house.policy)
 		end
 	end
 	l.history["r" .. tostring(index)] = results
-	l.reign, l.reignStart = index, reign.due
+	l.reign, l.reignStart = index, endTurn
 end
 
 -- For the era score screen (UI only reads the ledger): the next 改元's turn and each house's thresholds for the
@@ -422,9 +435,10 @@ local function Initialize()
 	local l = { version = 1, reign = 0, reignStart = 1, houses = {}, cities = {}, allies = {}, friends = {}, keys = {},
 		history = {} }
 	-- A ledger started mid-game (the pack added to a save) skips the 改元 already passed.
+	local engineEra = EngineEra()
 	local index = NextJudged(l.reign)
-	while index and REIGNS[index].due <= turn do
-		l.reign, l.reignStart = index, REIGNS[index].due
+	while index and IsDue(REIGNS[index], turn, engineEra) do
+		l.reign, l.reignStart = index, EndTurn(REIGNS[index], turn)
 		index = NextJudged(l.reign)
 	end
 	for _, id in ipairs(AliveMajorIDs()) do
@@ -459,10 +473,11 @@ local function OnGameTurnStarted()
 		IntakeCities(l)
 		IntakeAlliances(l)
 		IntakeResearch(l)
+		local engineEra = EngineEra()
 		local index = NextJudged(l.reign)
-		while index and REIGNS[index].due <= turn do
-			IntakeEvents(l, REIGNS[index].due)
-			Judge(l, index)
+		while index and IsDue(REIGNS[index], turn, engineEra) do
+			IntakeEvents(l, EndTurn(REIGNS[index], turn))
+			Judge(l, index, engineEra)
 			index = NextJudged(l.reign)
 		end
 		IntakeEvents(l, nil)
@@ -525,8 +540,8 @@ local function OnChoosePolicy(playerID, params)
 	Game:SetProperty(LEDGER_KEY, l)
 end
 
-Log(string.format("loaded reigns=%d first=%s@%d speed=%s", #REIGNS, REIGNS[1] and REIGNS[1].type or "none",
-	REIGNS[1] and REIGNS[1].due or -1, SPEED))
+Log(string.format("loaded reigns=%d first=%s@%d multiplier=%s", #REIGNS, REIGNS[1] and REIGNS[1].type or "none",
+	REIGNS[1] and REIGNS[1].due or -1, tostring(MULTIPLIER)))
 GameEvents.OnGameTurnStarted.Add(OnGameTurnStarted)
 GameEvents.CityConquered.Add(OnCityConquered)
 GameEvents.CityBuilt.Add(OnCityBuilt)

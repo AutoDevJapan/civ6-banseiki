@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test only: the era-timing probe (documents/poc/era-equals-reign.md). Acts only on the unification test map,
+     so leaving it enabled does not touch play or the 15 km map scenarios. -->
+<Mod id="57a3af09-fb38-41da-b367-818de11a995c" version="1">
+  <Properties>
+    <Name>LOC_JAC_TEST_ERA_TIMING_MOD_NAME</Name>
+    <Teaser>LOC_JAC_TEST_ERA_TIMING_MOD_TEASER</Teaser>
+    <Description>LOC_JAC_TEST_ERA_TIMING_MOD_TEASER</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="LOC_JAC_SENGOKU_TREES_MOD_NAME"/>
+    <Mod id="5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85" title="LOC_JAC_TEST_UNIFICATION_MOD_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_TEST_ERA_TIMING_MOD_NAME">
+      <en_US>JAC TEST ONLY: era timing probe</en_US>
+      <ja_JP>JAC テスト専用：時代の長さの検証</ja_JP>
+      <ru_RU>JAC ТОЛЬКО ДЛЯ ТЕСТОВ: проверка длины эпох</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_TEST_ERA_TIMING_MOD_TEASER">
+      <en_US>Shortens the eras on the unification test map for an automated probe. Do not enable for play.</en_US>
+      <ja_JP>自動検証のため、天下統一の検証地図でだけ時代を短くする。プレイでは有効にしない。</ja_JP>
+      <ru_RU>Сокращает эпохи на тестовой карте объединения для автопроверки. Не включайте для игры.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_Test_EraTiming_InUse">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85}Maps/JAC_Unification_Test.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <!-- After JAC_Sengoku_Trees (LoadOrder 200), which sets ERA_RENAISSANCE max to 10000. -->
+    <UpdateDatabase id="JAC_Test_EraTiming_Data" criteria="JAC_Test_EraTiming_InUse">
+      <Properties><LoadOrder>400</LoadOrder></Properties>
+      <File>Data/JAC_Test_EraTiming.sql</File>
+    </UpdateDatabase>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_Test_EraTiming.sql</File>
+  </Files>
+</Mod>
