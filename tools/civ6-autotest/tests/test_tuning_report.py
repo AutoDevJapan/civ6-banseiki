@@ -83,6 +83,10 @@ end
         self.assertEqual(value.count(' ; house player='), 22)
         self.assertTrue(value.startswith('checkpoint turn=1 era=ERA_ANCIENT targets=1 ; era-values grievances=10 tensions=10 trade-minimum-change=0 ; '))
         self.assertIn('house player=21 civ=CIVILIZATION_JAC_TEST alive=true cities=2 castles=0 legitimacy=nil age=nil policy=nil pact-lead=nil', value)
+        lua.execute("""Game.GetCurrentGameTurn=function() return 16669 end
+Game.GetProperty=function(self,key) if key=='JAC_AGES_LEDGER' then return {reign=1,history={r1={turn=66,p1={age='DARK'},p0={age='NORMAL'}}}} end end""")
+        value = lua.execute(code)
+        self.assertIn(' ; judgment-roster reign-index=1 turn=66 players=0,1',value)
 
     def test_variant_preserves_original_settings_and_progression(self):
         folder = path.parent / 'scenarios'
@@ -101,6 +105,40 @@ end
                     step.pop('metrics')
             restored.append(step)
         self.assertEqual(restored, base['steps'])
+
+    def full_coverage_fixture(self):
+        ids = ','.join(str(i) for i in range(22))
+        snapshots = []
+        for turn in (1,51,101,151,201):
+            parts = [f'checkpoint turn={turn} era=ERA_ANCIENT targets=56']
+            parts += [f'house player={i} alive=true' for i in range(22)]
+            parts += [f'judgment-roster reign-index={index} turn={due} players={ids}'
+                      for index,(_,due) in enumerate(report.EXPECTED_REIGNS,1) if due<=turn]
+            snapshots.append(' ; '.join(parts))
+        rows = [dict(reign=name,turn=turn,player=i) for name,turn in report.EXPECTED_REIGNS for i in range(22)]
+        return snapshots,rows
+
+    def test_coverage_checks_saved_player_rosters_for_every_reign(self):
+        snapshots,rows = self.full_coverage_fixture()
+        self.assertEqual(report.coverage(snapshots,rows),([],5))
+        rows = [r for r in rows if not (r['reign']=='REIGN_GENKI' and r['player']==13)]
+        issues,count = report.coverage(snapshots,rows)
+        self.assertEqual(count,5)
+        self.assertIn('age log player coverage mismatch: REIGN_GENKI',issues)
+
+    def test_five_repeated_checkpoints_are_not_complete(self):
+        snapshots,rows = self.full_coverage_fixture()
+        issues,count = report.coverage([snapshots[-1]]*5,rows)
+        self.assertEqual(count,1)
+        self.assertIn('duplicate checkpoint: T+201',issues)
+        self.assertIn('checkpoint turns mismatch: [201]',issues)
+
+    def test_missing_saved_rosters_do_not_prove_complete_measurement(self):
+        snapshots,rows = self.full_coverage_fixture()
+        snapshots = [' ; '.join(part for part in s.split(' ; ') if not part.startswith('judgment-roster ')) for s in snapshots]
+        issues,count = report.coverage(snapshots,rows)
+        self.assertEqual(count,5)
+        self.assertIn('saved judgment rosters do not cover all six expected reigns',issues)
 
 
 if __name__ == '__main__':

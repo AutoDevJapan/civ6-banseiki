@@ -13,6 +13,62 @@ AGE = re.compile(
     r'(?: engineEra=\S+)? player=(\d+) age=(GOLDEN|NORMAL|DARK|HEROIC)'
     r' score=(-?\d+) golden>=(\d+) dark>=(\d+) policy=(\S*)')
 ARB = re.compile(r'\[JAC_ARB\] (.*)')
+EXPECTED_CHECKPOINTS = {1, 51, 101, 151, 201}
+EXPECTED_REIGNS = [('REIGN_KOJI',66), ('REIGN_EIROKU',73), ('REIGN_GENKI',110),
+                   ('REIGN_TENSHO',119), ('REIGN_BUNROKU',178), ('REIGN_KEICHO',189)]
+
+
+def coverage(checkpoints: list[str], judgments: list[dict]) -> tuple[list[str], int]:
+    """Compare log rows with the saved gameplay history, not an inferred survivor count."""
+    issues, seen, rosters = [], set(), {}
+    for checkpoint in checkpoints:
+        parts = checkpoint.split(' ; ')
+        header = re.fullmatch(r'checkpoint turn=(\d+) era=\S+ targets=\d+', parts[0])
+        if not header:
+            issues.append('invalid checkpoint header')
+            continue
+        turn = int(header[1])
+        if turn in seen:
+            issues.append(f'duplicate checkpoint: T+{turn}')
+        seen.add(turn)
+        houses = [int(m[1]) for part in parts for m in [re.match(r'house player=(\d+) ',part)] if m]
+        if len(houses)!=22 or set(houses)!=set(range(22)):
+            issues.append(f'incomplete house observations: T+{turn}')
+        local_rosters = set()
+        for part in parts:
+            if not part.startswith('judgment-roster '):
+                continue
+            m = re.fullmatch(r'judgment-roster reign-index=(\d+) turn=(\d+) players=(\d+(?:,\d+)*)',part)
+            if not m:
+                issues.append(f'invalid judgment roster: T+{turn}')
+                continue
+            index, due = int(m[1]), int(m[2])
+            ids = tuple(int(v) for v in m[3].split(','))
+            if index in local_rosters:
+                issues.append(f'duplicate roster within T+{turn}: reign {index}')
+            local_rosters.add(index)
+            if len(ids)!=len(set(ids)) or not set(ids)<=set(range(22)):
+                issues.append(f'invalid player IDs in reign {index}')
+            if index in rosters and rosters[index]!=(due,ids):
+                issues.append(f'inconsistent saved roster: reign {index}')
+            rosters[index]=(due,ids)
+    if seen!=EXPECTED_CHECKPOINTS:
+        issues.append(f'checkpoint turns mismatch: {sorted(seen)}')
+    actual_reigns = {row['reign'] for row in judgments}
+    if actual_reigns!={name for name,_ in EXPECTED_REIGNS}:
+        issues.append('age log does not contain all six expected reigns')
+    if set(rosters)!=set(range(1,7)):
+        issues.append('saved judgment rosters do not cover all six expected reigns')
+    for index,(name,turn) in enumerate(EXPECTED_REIGNS,1):
+        rows = [row for row in judgments if row['reign']==name]
+        expected = rosters.get(index)
+        if expected is None:
+            continue
+        if expected[0]!=turn or any(row['turn']!=turn for row in rows):
+            issues.append(f'judgment turn mismatch: {name}')
+        if {row['player'] for row in rows}!=set(expected[1]) or len(rows)!=len(expected[1]):
+            issues.append(f'age log player coverage mismatch: {name}')
+    return issues, len(seen & EXPECTED_CHECKPOINTS)
 
 
 def summarize(artifact: Path) -> dict:
@@ -58,10 +114,12 @@ def summarize(artifact: Path) -> dict:
     full = (len(completed) == 4 and all('autoplay completed 50 turns' in s for s in completed)
             and any('return=T+201 surviving majors=' in s['detail'] for s in steps if s['status'] == 'OK')
             and bool(judge) and judge[-1]['status'] == 'OK' and not failures)
+    issues, checkpoint_count = coverage(checkpoints, judgments)
     return dict(artifact=artifact.name, lua_sha256=hashlib.sha256(lua_bytes).hexdigest(),
                 complete_200_turns=full, autoplay=completed, overview=overview, checkpoints=checkpoints,
                 reigns=grouped, judgments=judgments, arbitration=counts, elimination_point_events=falls,
-                age_data_present=bool(judgments), checkpoint_count=len(checkpoints), failures=failures, judge=judge,
+                age_data_present=bool(judgments), checkpoint_count=checkpoint_count,
+                measurement_complete=full and not issues, coverage_issues=issues, failures=failures, judge=judge,
                 limitations=['No autonomous AI arbitration requests in this implementation.',
                              'Refused counts respondents; accepted counts cases.',
                              'Era values are observations, not measured trade/grievance/road effects.'])
@@ -69,6 +127,7 @@ def summarize(artifact: Path) -> dict:
 
 def markdown(data: dict) -> str:
     lines = [f"実行: {data['artifact']}。200ターン完了とログ判定: {'PASS' if data['complete_200_turns'] else '未達'}。",
+             f"計測の完全性: {'PASS' if data['measurement_complete'] else '未達（以下は部分集計。数値調整の根拠にしない）'}。",
              '', '| 改元 | ターン | 期の長さ | 黄金 | 英雄 | 通常 | 暗黒 |',
              '|---|---:|---:|---:|---:|---:|---:|']
     for reign, g in sorted(data['reigns'].items(), key=lambda item:item[1]['turn']):
