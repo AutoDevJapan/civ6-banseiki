@@ -74,12 +74,17 @@ local function recoverySource(religion, assetID)
       (use.outcome == "CONCEAL" or use.outcome == "REVIVE" and use.reusable == true))
 end
 
+local nativeFollowerCount
 local function derive(religion)
   local followers, facilities, source = 0, 0, false
   for _, c in pairs(religion.communities) do
     followers = followers + c.followers
     facilities = facilities + c.publicFacilities
   end
+  -- A binding declares these to be the SAME religion. Native citizens are its
+  -- source of truth; a manual community input must never label it lost while
+  -- the bound engine religion still has believers.
+  if religion.engineReligion ~= nil then followers = nativeFollowerCount(religion.engineReligion) end
   count(followers, "world followers")
   count(facilities, "world public facilities")
   for assetID in pairs(religion.assets) do source = source or recoverySource(religion, assetID) end
@@ -259,9 +264,9 @@ local function cityFollowers(city)
   -- Official counted citizens, NOT majority cities: ReligionScreen.lua:1074-1092.
   -- Pressure field: Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242.
   local total, unaffiliated = 0, 0
-  for _, row in ipairs(rows) do
+  for _, row in pairs(rows) do
     count(row.Followers, "native followers")
-    if row.Religion < 0 then
+    if row.Religion <= 0 then
       -- CitySupport.lua:504: negative IDs represent unaffiliated citizens,
       -- never a religion accepted by AddReligiousPressure.
       unaffiliated = unaffiliated + row.Followers
@@ -292,16 +297,20 @@ local function nativeCities()
   return cities
 end
 
-function RP.NativeFollowers(id)
-  local religion = get(read(), id)
-  check(religion.engineReligion ~= nil, "native religion binding required")
+nativeFollowerCount = function(engineReligion)
   local total = 0
   for _, entry in ipairs(nativeCities()) do
     local followers = cityFollowers(entry.object)
-    total = total + (followers[tostring(religion.engineReligion)] or 0)
+    total = total + (followers[tostring(engineReligion)] or 0)
   end
   count(total, "world native followers")
   return total
+end
+
+function RP.NativeFollowers(id)
+  local religion = get(read(), id)
+  check(religion.engineReligion ~= nil, "native religion binding required")
+  return nativeFollowerCount(religion.engineReligion)
 end
 
 local function absorptionPlan(source, target, p)
@@ -322,6 +331,7 @@ local function absorptionPlan(source, target, p)
   end
   count(total, "world native followers")
   local remaining = math.ceil(total / RULES.ABSORB_DIVISOR)
+  count(remaining, "converted followers", true)
   local conversions, moved = {}, remaining
   for _, entry in ipairs(entries) do
     if remaining == 0 then break end
@@ -513,12 +523,27 @@ local function revivalPlan(state, id, revivalID, sourceID, communityID, playerID
     check(Game.GetCurrentGameTurn() - v.turn >= RULES.REVIVAL_COOLDOWN_TURNS, "revival cooldown")
   end
   check(p:GetReligion():GetFaithBalance() >= RULES.REVIVAL_FAITH_COST, "insufficient revival faith")
+  local conversion
+  if religion.engineReligion ~= nil then
+    local before, pressure = cityFollowers(city)
+    local donor = before["-1"] > 0 and "-1" or nil
+    if donor == nil then
+      for _, key in ipairs(keys(before)) do if before[key] > 0 then donor = key; break end end
+    end
+    check(donor ~= nil, "revival needs a citizen in the owned city")
+    local after = copy(before)
+    after[donor] = after[donor] - RULES.REVIVAL_FOLLOWERS
+    local target = tostring(religion.engineReligion)
+    after[target] = (after[target] or 0) + RULES.REVIVAL_FOLLOWERS
+    conversion = { player = playerID, city = cityID, before = before, after = after, pressure = pressure }
+  end
   communityID = freeCommunityID(religion, communityID)
   religion.revivals[revivalID] = { source = sourceID, community = communityID,
     followers = RULES.REVIVAL_FOLLOWERS, publicFacilities = 0, holder = "PLAYER_" .. playerID,
     player = playerID, city = cityID, faithCost = RULES.REVIVAL_FAITH_COST,
     effects = "PENDING", turn = Game.GetCurrentGameTurn() }
-  return { player = playerID, faithCost = RULES.REVIVAL_FAITH_COST, revival = revivalID }
+  return { player = playerID, faithCost = RULES.REVIVAL_FAITH_COST, revival = revivalID,
+    conversions = conversion and { conversion } or nil, nativeRevival = religion.engineReligion ~= nil }
 end
 
 local function reserveMaterial(religion, assetID, outcome, playerID, discoveryID, revivalID)
@@ -645,7 +670,9 @@ local function perform(state, id, plan)
     if plan.cultureModifier then p:AttachModifierByID(plan.cultureModifier) end
     if plan.conversions then
       for _, entry in ipairs(plan.conversions) do convertCitizens(entry) end
-      check(RP.NativeFollowers(id) == plan.sourceFollowers - plan.convertedFollowers,
+      local expected = plan.nativeRevival and RULES.REVIVAL_FOLLOWERS
+        or plan.sourceFollowers - plan.convertedFollowers
+      check(RP.NativeFollowers(id) == expected,
         "world conversion count mismatch; effect pending")
       -- Unsupported pressure mutation must not consume the absorption fee.
       p:GetReligion():ChangeFaithBalance(-plan.faithCost)
