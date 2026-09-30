@@ -119,6 +119,11 @@ function CITY(owner,x,pop,faith)
   city.GetX=function(self) return self.x end;city.GetY=function(self) return self.y end
   city.GetPopulation=function(self) return self.pop end
   city.GetName=function(self) return "CITY_"..self.x end
+  city.GetBuildQueue=function(self) return {
+    CreateIncompleteBuilding=function(_,building,plot,progress)
+      assert(building==1 and plot==self.x and progress==100,'building needs its city plot and construction progress')
+      BUILDING_CREATIONS=(BUILDING_CREATIONS or 0)+1;self.monument=true
+    end} end
   city.GetBuildings=function() return {
     HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
     GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007 end
@@ -129,14 +134,16 @@ function CITY(owner,x,pop,faith)
   end} end
   Players[owner].cities[x]=city;CITIES[x]=city
   for index=x,x+1 do
-    local plot={owner=owner,city=x}
+    local plot={owner=owner,city=x,index=index}
     plot.GetOwner=function(self) return self.owner end
+    plot.GetIndex=function(self) return self.index end
     PLOTS[index]=plot
   end
   return city
 end
 for i=0,19 do PLOTS[i]={GetOwner=function() return -1 end} end
-Map={GetPlotCount=function() return 20 end,GetPlotByIndex=function(i) return PLOTS[i] end}
+Map={GetPlotCount=function() return 20 end,GetPlotByIndex=function(i) return PLOTS[i] end,
+  GetPlot=function(x,y) assert(y==0);return PLOTS[x] end}
 CityManager={GetCityAt=function(x,y) return CITIES[x] end,
   TransferCity=function(city,owner)
     if FAIL_CITY then error("city failed") end
@@ -1018,6 +1025,14 @@ class AbsorptionTests(unittest.TestCase):
             AddReligiousPressure=function(_,_,id,pressure,owner) self.faith[tostring(id)]=self.pop end} end end
         ''')
         return steps
+
+    def test_live_scenario_builds_missing_hero_origins_on_their_actual_city_plots(self):
+        steps = self.live_scenario_fixture()
+        self.run_lua("CITIES[4].monument=false;CITIES[8].monument=false;BUILDING_CREATIONS=0")
+        self.run_lua(steps[0]["code"])
+        self.assertEqual(self.g.BUILDING_CREATIONS, 2)
+        self.assertTrue(self.g.CITIES[4].monument)
+        self.assertTrue(self.g.CITIES[8].monument)
 
     def test_live_scenario_checks_execute_in_lua_and_detect_asset_corruption_after_reload(self):
         steps = self.live_scenario_fixture()
