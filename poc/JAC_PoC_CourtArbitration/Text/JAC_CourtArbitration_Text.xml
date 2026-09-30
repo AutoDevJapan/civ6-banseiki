@@ -73,9 +73,9 @@
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ja_JP"><Text>{1_Refuser}は{2_A}と{3_B}の停戦裁定を拒み、正当性を失った。{4_Until}ターンまで{1_Refuser}への討伐の勅命が出る。「朝廷に停戦を請う」の画面から参加でき、期間中に{1_Refuser}の都市を攻め取った家は褒賞を得る。</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="en_US"><Text>{1_Refuser} refused the ceasefire ruling between {2_A} and {3_B} and lost Legitimacy. An order to subdue {1_Refuser} stands until turn {4_Until}; join it from the Court ceasefire screen. Houses that take a city of {1_Refuser} meanwhile are rewarded.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY" Language="ru_RU"><Text>{1_Refuser} отверг решение о перемирии между {2_A} и {3_B} и потерял легитимность. До хода {4_Until} действует приказ о походе на {1_Refuser}; присоединиться можно на экране двора. Дома, взявшие за это время город {1_Refuser}, получат награду.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ja_JP"><Text>正当性が{1_High}以上なら全都市の忠誠度 +2/ターン、{2_Low}未満なら -2/ターンで、裁定を請求できない。</Text></Row>
-		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="en_US"><Text>At {1_High} Legitimacy or more all cities gain +2 Loyalty per turn; below {2_Low} they lose 2 per turn and the house cannot petition.</Text></Row>
-		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ru_RU"><Text>При легитимности {1_High} и выше все города получают +2 лояльности за ход; ниже {2_Low} теряют 2 за ход, и дом не может подавать прошения.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ja_JP"><Text>正当性が{1_High}以上なら全都市の金と文化 +10%、{2_Low}未満なら -10%で、裁定を請求できない。</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="en_US"><Text>At {1_High} Legitimacy or more all cities gain +10% Gold and Culture; below {2_Low} they lose 10% and the house cannot petition.</Text></Row>
+		<Row Tag="LOC_JAC_ARB_LEGITIMACY_EFFECTS" Language="ru_RU"><Text>При легитимности {1_High} и выше все города получают +10% золота и культуры; ниже {2_Low} теряют 10%, и дом не может подавать прошения.</Text></Row>
 		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="ja_JP"><Text>討伐の勅命：{1_Target}（{2_Until}ターンまで）。参加：{3_Joined}</Text></Row>
 		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="en_US"><Text>Order to subdue {1_Target} (until turn {2_Until}). Joined: {3_Joined}</Text></Row>
 		<Row Tag="LOC_JAC_ARB_ORDER_ROW" Language="ru_RU"><Text>Приказ о походе на {1_Target} (до хода {2_Until}). Участники: {3_Joined}</Text></Row>

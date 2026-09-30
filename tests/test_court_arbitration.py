@@ -58,7 +58,7 @@ class ScopeAndTextTests(unittest.TestCase):
         self.assertEqual(used - set(languages), set())
 
     def test_the_modifiers_read_the_flags_the_script_writes(self):
-        # Owner decisions R-1 / R-2: +2 / -2 loyalty per city and the participants' war weariness, gated by 0/1 plot flags.
+        # Owner decisions R-1 / R-2 / S: +10% / -10% gold and culture per city and the participants' war weariness, gated by 0/1 plot flags.
         sql = (MOD / "Data/JAC_CourtArbitration_Legitimacy.sql").read_text(encoding="utf-8")
         rules = (MOD / "Scripts/JAC_CourtArbitration_Rules.lua").read_text(encoding="utf-8")
         flags = dict(re.findall(r'R\.(FLAG_[A-Z]+) = "([A-Z_]+)"', rules))
@@ -66,12 +66,17 @@ class ScopeAndTextTests(unittest.TestCase):
         for name in flags.values():
             self.assertIn(f"'PropertyName', '{name}'", sql)
         rows = dict(re.findall(r"\('(JAC_ARB_[A-Z_]+)', '(MODIFIER_[A-Z_]+)'", sql))
-        self.assertEqual(rows["JAC_ARB_LOYALTY_HIGH"], "MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN")
+        self.assertNotIn("IDENTITY", sql)  # loyalty is pinned by the Japan maps' +100 stabilization (question S)
+        yields = [f"JAC_ARB_{hl}_{y}" for hl in ("HIGH", "LOW") for y in ("GOLD", "CULTURE")]
+        for modifier in yields:
+            self.assertEqual(rows[modifier], "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER")
+            hl, y = modifier.split("_")[2:]
+            self.assertIn(f"'MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER', NULL, 'JAC_ARB_CITY_LEGITIMACY_{hl}')", sql)
+            self.assertIn(f"('{modifier}', 'YieldType', 'YIELD_{y}')", sql)
+            self.assertIn(f"('{modifier}', 'Amount', '{'10' if hl == 'HIGH' else '-10'}')", sql)
         self.assertEqual(rows["JAC_ARB_WAR_WEARINESS"], "MODIFIER_PLAYER_ADJUST_WAR_WEARINESS")
-        self.assertIn("('JAC_ARB_LOYALTY_HIGH', 'Amount', '2')", sql)
-        self.assertIn("('JAC_ARB_LOYALTY_LOW', 'Amount', '-2')", sql)
         self.assertIn("('JAC_ARB_WAR_WEARINESS', 'MODIFIER_PLAYER_ADJUST_WAR_WEARINESS', 'JAC_ARB_CITY_SUBJUGATION_ANCHOR', NULL)", sql)
-        for modifier in ("JAC_ARB_LOYALTY_HIGH", "JAC_ARB_LOYALTY_LOW", "JAC_ARB_ATTACH_WAR_WEARINESS"):
+        for modifier in yields + ["JAC_ARB_ATTACH_WAR_WEARINESS"]:
             self.assertIn(f"('TRAIT_LEADER_MAJOR_CIV', '{modifier}')", sql)
         script = (MOD / "Scripts/JAC_CourtArbitration.lua").read_text(encoding="utf-8")
         self.assertNotRegex(rules + script, r"GetFavor|ChangeFavor")  # legitimacy replaces Favor on the Japan maps
@@ -95,6 +100,7 @@ GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
   GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD" } },
   GameSpeed_Turns = rowsTable(tables.GameSpeed_Turns),
+  Yields = { YIELD_GOLD = { Index = 2 }, YIELD_CULTURE = { Index = 4 } },
 }
 CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
@@ -152,7 +158,11 @@ for i, civ in ipairs(civs) do
     local list = {}
     for k = 1, p.cities do
       local x = 100 * id + k
-      list[k] = { GetX = function() return x end, GetY = function() return 0 end }
+      -- Every yield is 10, +10% / -10% while the city's high / low flag is set (Data/JAC_CourtArbitration_Legitimacy.sql).
+      local function yield()
+        return 10 * (1 + 0.1 * ((plot(x):GetProperty("JAC_ARB_LEGITIMACY_HIGH") or 0) - (plot(x):GetProperty("JAC_ARB_LEGITIMACY_LOW") or 0)))
+      end
+      list[k] = { GetX = function() return x end, GetY = function() return 0 end, GetYield = yield }
     end
     return list
   end
@@ -402,13 +412,13 @@ class ArbitrationTurnTests(unittest.TestCase):
 
     def test_high_and_low_legitimacy_flag_every_city(self):
         FLAG = self.g.FLAG
-        # Ashikaga (73) >= 70: +2 loyalty in both its cities; Ouchi (53): neither flag.
+        # Ashikaga (73) >= 70: +10% gold and culture in both its cities; Ouchi (53): neither flag.
         self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_HIGH") for x in (201, 202)], [1, 1])
         self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (201, 202)], [0, 0])
         self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_HIGH") for x in (1, 2)], [0, 0])
         self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (1, 2)], [0, 0])
         self.g.Players[self.OUCHI].SetProperty(None, "JAC_LEGITIMACY", 20)
-        self.next_turn()  # 23 < 30: -2 loyalty
+        self.next_turn()  # 23 < 30: -10% gold and culture
         self.assertEqual([FLAG(x, "JAC_ARB_LEGITIMACY_LOW") for x in (1, 2)], [1, 1])
         self.g.Players[self.OUCHI].SetProperty(None, "JAC_LEGITIMACY", 27)
         self.next_turn()  # 30: back to neither
@@ -719,13 +729,16 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
         self.assertIn("legitimacy 3=61 4=61 (+5 for accepting)", results[2])
         self.assertEqual(results[4], "refused by Ouchi (legitimacy 56 -> 14: -45 with this turn income; order to subdue until 33 "
                                      "= 3+10x3); joined by 1; accepted pair 3-4 still at peace")
-        self.assertEqual(results[5], "join sent via EXECUTE_SCRIPT")
+        self.assertEqual(results[5], "legitimacy yield modifiers live (flag on/off, high +10% / low -10%): "
+                                     + ", ".join(f"p{p} {y} {on}/10.0" for p, on, n in ((2, "11.0", 2), (0, "9.0", 4))
+                                                 for _ in range(n) for y in ("GOLD", "CULTURE")))
+        self.assertEqual(results[6], "join sent via EXECUTE_SCRIPT")
         # The breach is forced only past the minimum peace length (court-arbitration-08 hung when forced on turn 2).
-        self.assertEqual(results[6], "forced war inside the truce between 3 and 4 on turn 13")
-        self.assertEqual(results[7], "order to subdue Ouchi shortened to end after turn 14 (test only); "
+        self.assertEqual(results[7], "forced war inside the truce between 3 and 4 on turn 13")
+        self.assertEqual(results[8], "order to subdue Ouchi shortened to end after turn 14 (test only); "
                                      "truce breach 3-4 forced on turn 13 undone on turn 14, truce still until 32")
-        self.assertEqual(results[8], "order to subdue Ouchi ended on turn 15; war-weariness anchor flags of Ashikaga and Otomo off")
-        self.assertEqual(len(results), 9)
+        self.assertEqual(results[9], "order to subdue Ouchi ended on turn 15; war-weariness anchor flags of Ashikaga and Otomo off")
+        self.assertEqual(len(results), 10)
         self.assertIn("[JAC_ARB] joined player=2 target=0 turn=3 until=33 by=request", self.log())
         self.assertFalse(any("deferred" in line for line in self.log()))
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))

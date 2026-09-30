@@ -16,8 +16,8 @@ R.COST_LEGITIMACY = 5
 -- 正当性（R-1）。0〜100、初期値 50（足利将軍家は 70）。プロパティが無い間は初期値として読む
 R.LEGITIMACY_MIN, R.LEGITIMACY_MAX = 0, 100
 R.LEGITIMACY_START, R.LEGITIMACY_START_ASHIKAGA = 50, 70
-R.LEGITIMACY_HIGH = 70       -- 以上：全都市の忠誠度 +2/ターン（Data/JAC_CourtArbitration_Legitimacy.sql）
-R.LEGITIMACY_LOW = 30        -- 未満：全都市の忠誠度 -2/ターン、裁定を請求できない、AI が裁定を拒みやすい
+R.LEGITIMACY_HIGH = 70       -- 以上：全都市の金と文化 +10%（Data/JAC_CourtArbitration_Legitimacy.sql）
+R.LEGITIMACY_LOW = 30        -- 未満：全都市の金と文化 -10%、裁定を請求できない、AI が裁定を拒みやすい
 R.ACCEPT_LEGITIMACY = 5      -- 裁定に応じた家の正当性の上昇
 R.REFUSAL_LEGITIMACY = 15    -- 裁定を拒んだ家の正当性の低下
 R.OUTLAW_TURNS = 10          -- 拒んだ家を対象にする討伐の勅命のターン数

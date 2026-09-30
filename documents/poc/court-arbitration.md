@@ -16,7 +16,7 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 | 応否 | 答えるのは、当事者の請求では相手、将軍家の発議では両当事者。人間は画面で答え、届かなければ拒否。AI は暫定規則（下記） | 設計案「マルチプレイ」 |
 | 成立 | 全員が応じれば裁くターンの初めにその場で講和し、停戦中（10 または 30 ターン）に戦争になっていれば、次のターンの初めに講和し直す（スクリプトが講和させたターンの中の宣戦だけは1ターン待つ）。講和は `MakePeaceWith(相手, true)` で、エンジンの最短の戦争期間（開戦から10ターン）の中でも効く | 設計案「一定ターン再宣戦を制限」 |
 | 拒否 | 拒んだ勢力は正当性 -15 で、10ターンの討伐の勅命の対象になる（将軍家の裁定では3倍）。応じた勢力は正当性 +5（力は掛けない。相手が拒んでも上がる） | 3.2（オーナー判断 R-1・R-2） |
-| 正当性 | 家ごとの 0〜100（初期値 50、足利将軍家 70）。毎ターンの初めに +1〜3（基本 +1、本拠を保つ +1、1573年まで将軍家と戦争していない +1）。70以上で全都市の忠誠度 +2/ターン、30未満で -2/ターン（Q73：安定化の +100 に打ち消される）。30未満の家は請求できず、AI は都市数で相手を上回るだけで拒む | 3.2（オーナー判断 R-1） |
+| 正当性 | 家ごとの 0〜100（初期値 50、足利将軍家 70）。毎ターンの初めに +1〜3（基本 +1、本拠を保つ +1、1573年まで将軍家と戦争していない +1）。70以上で全都市の金と文化 +10%、30未満で -10%。30未満の家は請求できず、AI は都市数で相手を上回るだけで拒む | 3.2（オーナー判断 R-1・S） |
 | 討伐の勅命 | 期間中、どの家も参加できる（人間は画面のボタン、AI は対象と戦争中か、自分の都市と対象の都市の距離が6以下なら自動）。参加した家は戦争疲弊 -50%。期間中に対象の都市を攻め取るたびに金 200・正当性 +10、対象は正当性 -10。期間が終われば参加と戦争疲弊の軽減も終わる。拒否が重なれば長い方の期限にする | 3.2（オーナー判断 R-2） |
 | 件数 | 裁定は全体で1ターンに1件まで（審理中の請求があれば次を受け付けない） | 設計案「詰まり防止」 |
 
@@ -92,14 +92,13 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 
 | 修正値 | 種類 | 条件 | 値 |
 |---|---|---|---|
-| `JAC_ARB_LOYALTY_HIGH` | `MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN` | 都市（Subject）の `JAC_ARB_LEGITIMACY_HIGH` ≥ 1 | +2 |
-| `JAC_ARB_LOYALTY_LOW` | 同上 | 都市の `JAC_ARB_LEGITIMACY_LOW` ≥ 1 | -2 |
+| `JAC_ARB_HIGH_GOLD`・`JAC_ARB_HIGH_CULTURE` | `MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER` | 都市（Subject）の `JAC_ARB_LEGITIMACY_HIGH` ≥ 1 | 金・文化 +10% |
+| `JAC_ARB_LOW_GOLD`・`JAC_ARB_LOW_CULTURE` | 同上 | 都市の `JAC_ARB_LEGITIMACY_LOW` ≥ 1 | 金・文化 -10% |
 | `JAC_ARB_ATTACH_WAR_WEARINESS` → `JAC_ARB_WAR_WEARINESS` | `MODIFIER_PLAYER_CITIES_ATTACH_MODIFIER` → `MODIFIER_PLAYER_ADJUST_WAR_WEARINESS` | 付けた先の都市（Owner）の `JAC_ARB_SUBJUGATION_ANCHOR` ≥ 1 | -50%（`Overall` = true） |
 
-- 忠誠度：全都市への修正値を都市の条件で絞る形は公式どおり（`DLC/Expansion1/Data/Expansion1_Civilizations_Major.xml:484-485`）。依頼の設計案にあった「`MODIFIER_PLAYER_CITIES_ATTACH_MODIFIER` + `MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PER_TURN`」より修正値が1つ少なく、効果は同じ。
+- 金と文化：オーナー判断 S（2026-09-30、旧 Q73 の②）で、忠誠度 ±2/ターン から変えた。日本マップは忠誠度の安定化として全都市に +100/ターン を与えており（`poc/JAC_PoC_JapanMapScale/Data/JAC_Japan_MapRules.xml`、[PoC の記録](README.md)）、±2 では目に見える差にならないため。全都市の産出の修正値を都市の条件で絞る形は戦国パックの黄金時代（`JAC_AGE_GOLDEN_GOLD`）と同じで、種類は公式の `MONASTICISM_CULTURE_MODIFIER`（`DLC/Expansion1/Data/Expansion1_Policies.xml:279-282`）。黄金時代の生産 +10% は旗の付け外しで実機の産出が変わることを確かめてある（`tools/civ6-autotest/scenarios/sengoku-ages.json`）。
 - 戦争疲弊：`MODIFIER_PLAYER_ADJUST_WAR_WEARINESS`（`Base/Assets/Gameplay/Data/Modifiers.xml:84`、定義 `:1205-1207` は `COLLECTION_OWNER`）は家に1つ効く種類なので、全都市に付けて代表の都市だけで効かせる（時代の家ごとの効果と同じ。`MODIFIER_PLAYER_CITIES_ATTACH_MODIFIER` は `Modifiers.xml:780`）。値の形は公式の戒厳令・宣伝（`Base/Assets/Gameplay/Data/Policies.xml:836-837`、`:2919-2927` の `Amount` -25・`Overall` true）に合わせ、倍の -50 を暫定値にした。期間が終われば旗が 0 になり効かなくなる。
 - **要実機確認**：代表の都市に付けた家単位の修正値が戦争疲弊に効くか、旗を 0 に戻すと外れるか（時代の家ごとの効果と同じく、実機で効き方を見ていない）。
-- **Q73**：日本マップは忠誠度の安定化として全都市に +100/ターン を与えている（`poc/JAC_PoC_JapanMapScale/Data/JAC_Japan_MapRules.xml`、[PoC の記録](README.md)）。そのため忠誠度は常に最大のままで、±2 は忠誠度の内訳に出るだけで目に見える差にならない。扱いはオーナー判断待ち。
 
 ## 公式の根拠
 
@@ -163,4 +162,4 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 2. 審理中の請求や停戦中にセーブ／ロードしたときの状態の復元
 3. マルチプレイでの請求・応答の同期
 4. 実際の攻略で `GameEvents.CityConquered` の引数（攻略者・元の所有者）が公式の使用例どおりに届くこと
-5. 正当性の忠誠度の効果（Q73）と、勅命の参加者の戦争疲弊の軽減（上の「要実機確認」）
+5. 正当性の金と文化の効果（シナリオに旗の付け外しの確認を入れたが未実行）と、勅命の参加者の戦争疲弊の軽減（上の「要実機確認」）
