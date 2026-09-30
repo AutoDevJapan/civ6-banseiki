@@ -366,6 +366,9 @@ local function convertCitizens(entry)
     for _, key in ipairs(keys(union)) do
       cr:RemovePressureOneReligion(tonumber(key))
     end
+    if attempt == 1 and GameConfiguration.GetValue("JAC_AUTOTEST") == 1 then
+      print("[JAC_RP] after pressure clearing=" .. encode(cityFollowers(city)))
+    end
     for _, key in ipairs(keys(union)) do
       local amount = (entry.after[key] or 0) * scale
       if amount > 0 then cr:AddReligiousPressure(0, tonumber(key), amount, -1) end
