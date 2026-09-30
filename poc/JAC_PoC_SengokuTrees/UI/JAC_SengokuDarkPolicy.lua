@@ -53,8 +53,12 @@ function JAC_ChooseDarkPolicy(policyType)
 	return true
 end
 
+-- 改元の画面（UI/JAC_SengokuReignPopup.lua）が出ている間は出さず、閉じたら出す（下の LuaEvents）。
+local m_ReignPopupOpen = false
+
 -- 選択待ちの間、自分の手番の始まり（と読み込み）ごとに出す。「あとで」と手番の終わりは次の手番まで閉じるだけ（Q72）
 local function Refresh()
+	if m_ReignPopupOpen then return end
 	local house = PendingHouse()
 	if house == nil then
 		OnClose()
@@ -79,3 +83,11 @@ Controls.LaterButton:RegisterCallback(Mouse.eLClick, OnClose)
 Events.LocalPlayerTurnBegin.Add(Refresh) -- Base/Assets/UI/ActionPanel.lua:1334
 Events.LocalPlayerTurnEnd.Add(OnClose)  -- Base/Assets/UI/ActionPanel.lua:1335。手番外では送れないので閉じる
 Events.LoadScreenClose.Add(Refresh)      -- Base/Assets/UI/Popups/PlayerChange.lua:298
+LuaEvents.JAC_SengokuReignPopup_Shown.Add(function()
+	m_ReignPopupOpen = true
+	OnClose()
+end)
+LuaEvents.JAC_SengokuReignPopup_Closed.Add(function(showChoice)
+	m_ReignPopupOpen = false
+	if showChoice then Refresh() end
+end)

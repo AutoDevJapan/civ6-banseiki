@@ -165,6 +165,15 @@ class AgesDataTests(unittest.TestCase):
         self.assertEqual(ui_keys, {"LOC_JAC_AGE_DARK_CHOICE_TITLE", "LOC_JAC_AGE_DARK_CHOICE_BODY",
                                    "LOC_JAC_AGE_DARK_CHOICE_CHOOSE", "LOC_JAC_AGE_DARK_CHOICE_LATER"})
         keys |= ui_keys
+        # The 改元 screen, the era score screen and their shared view (UI/JAC_SengokuReignPopup.lua / .xml,
+        # UI/JAC_EraProgressPanel_Sengoku.lua, UI/JAC_SengokuAgesView.lua) and the notification heading.
+        screens = "".join((MOD / name).read_text(encoding="utf-8") for name in (
+            "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuReignPopup.xml", "UI/JAC_EraProgressPanel_Sengoku.lua",
+            "UI/JAC_SengokuAgesView.lua", "Scripts/JAC_Sengoku_Ages.lua"))
+        screen_keys = {k for k in re.findall(r"LOC_JAC_[A-Z0-9_]+", screens) if not k.endswith("_")}
+        screen_keys |= {f"LOC_JAC_AGE_PART_{part}" for part in ("HOME", "REGAIN", "CASTLE", "KO", "ALLY", "RESEARCH", "EVENT")}
+        self.assertIn("LOC_JAC_AGE_REIGN_NOTIFICATION", screen_keys)
+        keys |= screen_keys
         text = {}
         for row in ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row"):
             text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
@@ -585,7 +594,23 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.g.LEDGER().reign, 6)
         notes = [tuple(n.values()) for n in self.g.NOTES.values()]
         self.assertEqual(len(notes), 6 * 4)
-        self.assertIn((0, 2, "LOC_JAC_REIGN_KOJI_ANNOUNCEMENT", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
+        # Q36 ①: the era name is only on the 改元 and era score screens, so the heading is the generic one.
+        self.assertIn((0, 2, "LOC_JAC_AGE_REIGN_NOTIFICATION", "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT", 66), notes)
+        self.assertEqual({n[2] for n in notes}, {"LOC_JAC_AGE_REIGN_NOTIFICATION"})
+
+    def test_projection_for_the_era_score_screen_matches_the_next_judgement(self):
+        self.turns(1, 40)
+        l = self.g.LEDGER()
+        self.assertEqual(l.nextDue, 66)
+        projected = {pid: (self.house(pid).next.golden, self.house(pid).next.dark) for pid in range(4)}
+        self.turns(41, 66)  # no city changes: the 弘治 judgement uses the same thresholds
+        r1 = self.g.LEDGER().history["r1"]
+        self.assertEqual(projected, {pid: (r1[f"p{pid}"].golden, r1[f"p{pid}"].dark) for pid in range(4)})
+        self.assertEqual(self.g.LEDGER().nextDue, 73)  # 永禄
+        self.turns(67, 400)  # past 寛永, the last 改元: nothing to project
+        self.assertEqual(self.g.LEDGER().reign, 8)
+        self.assertIsNone(self.g.LEDGER().nextDue)
+        self.assertIsNone(self.house(0).next)
 
     def plot_properties(self) -> dict:
         names = ["JAC_AGE_GOLDEN"] + [f"JAC_AGE_{kind}_{p}" for kind in ("POLICY", "ANCHOR")
@@ -722,16 +747,27 @@ UI_STUBS = r"""
 -- gameplay handler as the engine does for EXECUTE_SCRIPT (requesting player, parameter table).
 LOCAL_PLAYER, TURN_ACTIVE, REQUESTS = 1, true, {}
 local function control()
-  local c = { hidden = false, disabled = false }
+  -- Unlisted control methods (SetColor, SetIcon, ...) are no-ops.
+  local c = setmetatable({ hidden = false, disabled = false }, { __index = function() return function() end end })
   function c:SetText(t) self.text = t end
+  function c:GetText() return self.text end
   function c:SetHide(h) self.hidden = h end
   function c:IsHidden() return self.hidden end
   function c:SetDisabled(d) self.disabled = d end
   function c:RegisterCallback(_, f) self.click = f end
-  function c:CalculateSize() end
-  function c:DoAutoSize() end
+  function c:SetTexture(t) self.texture = t end
+  function c:SetToolTipString(t) self.tooltip = t end
   return c
 end
+CONTROL = control
+-- LuaEvents: every name is an event; calling it runs its handlers (they are shared by all contexts, as live).
+LuaEvents = setmetatable({}, { __index = function(t, name)
+  local handlers = {}
+  local event = setmetatable({ Add = function(f) table.insert(handlers, f) end },
+    { __call = function(_, ...) for _, f in ipairs(handlers) do f(...) end end })
+  rawset(t, name, event)
+  return event
+end })
 Controls = setmetatable({}, { __index = function(t, k) local c = control(); rawset(t, k, c); return c end })
 ContextPtr = control()
 ROWS = {}

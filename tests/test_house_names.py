@@ -122,7 +122,10 @@ class HouseNameTests(unittest.TestCase):
         for context, script in REPLACED_CONTEXTS.items():
             source = (RULESET / f"UI/JAC_{context}.lua").read_text(encoding="utf-8")
             self.assertIn("JAC_InstallHouseNames", source, context)
-            self.assertTrue(source.rstrip().endswith(f'include("{script}")'), context)
+            # After the official script, only the wildcard hook for other mods' additions may follow
+            # (JAC_EraProgressPanel_*.lua, e.g. the Sengoku era score screen).
+            body = source.rstrip().removesuffix(f'\ninclude("JAC_{context}_", true)')
+            self.assertTrue(body.endswith(f'include("{script}")'), context)
             self.assertIn(f"<LuaContext>{context}</LuaContext>", ruleset)
             self.assertIn(f"<LuaReplace>UI/JAC_{context}.lua</LuaReplace>", ruleset)
         self.assertEqual(ruleset.count("<ReplaceUIScript "), len(REPLACED_CONTEXTS))

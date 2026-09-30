@@ -1,0 +1,201 @@
+{
+  "name": "Sengoku ages screens on the 15 km Japan map: the human house (Takeda) sees the era-name change (改元) screen at Koji (turn 66) with its judged age and 元号, the screen closes, and the era score screen (the official era progress panel from the top panel button) shows the ledger: period, merit by category, thresholds, turns to the next era name and the past judgement",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "autoplay",
+      "turns": 65,
+      "timeout": 14400
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; if elapsed ~= 66 then error('not turn 66: ' .. elapsed) end; if l.reign ~= 1 or type(l.history.r1) ~= 'table' or l.history.r1.turn ~= 66 then error('Koji not judged on turn 66') end; local r = l.history.r1['p' .. me]; if type(r) ~= 'table' then error('no Koji result for the human') end; if l.nextDue ~= 73 then error('next era name due ' .. tostring(l.nextDue)) end; if type(h.next) ~= 'table' then error('no projected thresholds') end; return 'Koji (turn 66): human house ' .. r.age .. ' with ' .. r.score .. ' (golden ' .. r.golden .. ', dark ' .. r.dark .. '); next thresholds golden ' .. h.next.golden .. ' dark ' .. h.next.dark"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local r = l.history.r1['p' .. me]; local last = JAC_REIGN_POPUP_LAST; if type(last) ~= 'table' then error('the era-name change screen was not shown at the Koji turn') end; if last.reign ~= 1 or last.reignType ~= 'REIGN_KOJI' or last.turn ~= 66 or last.age ~= r.age or last.score ~= r.score then error('shown: reign ' .. tostring(last.reign) .. ' ' .. tostring(last.reignType) .. ' turn ' .. tostring(last.turn) .. ' age ' .. tostring(last.age) .. ' score ' .. tostring(last.score) .. '; ledger ' .. r.age .. ' ' .. r.score) end; local wasOpen = not ContextPtr:IsHidden(); if not wasOpen and not JAC_ShowReignPopup(true) then error('cannot reopen') end; if ContextPtr:IsHidden() then error('screen hidden after reopening') end; local title = Controls.Title:GetText(); if title ~= Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_KOJI_ANNOUNCEMENT')) then error('title ' .. tostring(title)) end; local ribbon = Controls.EraRibbonValue:GetText(); if ribbon ~= JAC_AgesView_AgeLabel(r.age) then error('age ' .. tostring(ribbon)) end; if Controls.Score:GetText() ~= Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE', 'LOC_JAC_REIGN_TENBUN_NAME', r.score) then error('score text ' .. tostring(Controls.Score:GetText())) end; local button = Controls.Continue:GetText(); local pending = r.age == 'DARK' and h.chosen ~= 1; if button ~= Locale.Lookup(pending and 'LOC_JAC_AGE_REIGN_CHOOSE_POLICY' or 'LOC_CONTINUE') then error('button ' .. tostring(button)) end; return 'era-name change screen shown for Koji (' .. (wasOpen and 'still open' or 'closed by the driver during autoplay, reopened') .. '): ' .. title .. ' / ' .. ribbon .. ' / ' .. Controls.Score:GetText()"
+    },
+    {
+      "action": "screenshot",
+      "path": "01-reign-popup.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "OnClose(); if not ContextPtr:IsHidden() then error('era-name change screen still open after OnClose') end; return 'era-name change screen closed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "local open = not ContextPtr:IsHidden(); if open then OnClose() end; return open and 'dark-age policy choice opened after the era-name screen (dark house) and was closed' or 'no dark-age policy choice (house not dark)'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "LuaEvents.PartialScreenHooks_Expansion1_ToggleEraProgress(); return 'era progress toggled (the top panel era button, PartialScreenHooks_Expansion1.lua:47-56)'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "EraProgressPanel",
+        "code": "return not ContextPtr:IsHidden() and JAC_AGES_PANEL_VIEW ~= nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraProgressPanel",
+      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local v = JAC_AGES_PANEL_VIEW; local r = l.history.r1['p' .. me]; local function check(control, want) local got = Controls[control]:GetText(); if got ~= want then error(control .. ': ' .. tostring(got) .. ' ~= ' .. tostring(want)) end end; check('EraName', Locale.Lookup('LOC_JAC_AGE_PANEL_PERIOD', 'LOC_JAC_REIGN_KOJI_NAME', '1555')); check('EraScoreValue', tostring(h.score)); check('TimeToNextEra', tostring(l.nextDue - elapsed)); check('EraRibbonValue', JAC_AgesView_AgeLabel(h.age)); check('GoldenThreshold', h.next.golden .. '+'); check('NormalThreshold', h.next.dark .. ' - ' .. (h.next.golden - 1)); local effects = Controls.EraEffects:GetText(); local function has(text) if string.find(effects, text, 1, true) == nil then error('era effects lack: ' .. text) end end; for _, part in ipairs(JAC_AGES_VIEW_PARTS) do has(Locale.Lookup('LOC_JAC_AGE_PART_' .. string.upper(part), (h.parts and h.parts[part]) or 0)) end; has(Locale.Lookup('LOC_JAC_AGE_PANEL_HISTORY_ROW', 'LOC_JAC_REIGN_KOJI_NAME', '1555', JAC_AgesView_AgeLabel(r.age), r.score)); has(JAC_AgesView_ThresholdText(r.golden, r.dark)); return 'era score screen matches the ledger: ' .. Controls.EraName:GetText() .. ', score ' .. h.score .. ', ' .. (l.nextDue - elapsed) .. ' turns to Eiroku, golden ' .. h.next.golden .. '+ dark <' .. h.next.dark"
+    },
+    {
+      "action": "screenshot",
+      "path": "02-era-score-panel.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "EraProgressPanel",
+      "code": "Close(); return 'era score screen closed'"
+    }
+  ]
+}
