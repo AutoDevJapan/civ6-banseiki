@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import mmap
 import os
 from pathlib import Path
 import time
@@ -69,6 +70,35 @@ def newest_mod_file(folders: list[Path]) -> tuple[Path, float] | None:
     if folders and newest is None:
         raise InputError("Enabled mod folders contain no files")
     return newest
+
+
+def missing_atlas_textures(folders: list[Path]) -> list[str]:
+    """Icon atlas images (IconTextureAtlases Filename) that no cooked package or loose DDS of the same mod holds.
+
+    The icon database rows load even when the BLP is stale, so IconManager:FindIconAtlas still names the sheet, but
+    the game then draws the template texture: the official CivilizationIcon (Base/Assets/UI/Instances/
+    CivilizationIcon.lua:42-65) showed the "?" of CivSymbols36 for all 22 crests in ages-screens-01, because the
+    installed JAC_CustomCivs_Icons.blp predated the crests (#54). The same byte search as
+    tools/jac_art/tests/test_frontend_art.py package_textures.
+    """
+    missing: list[str] = []
+    for folder in folders:
+        names: set[str] = set()
+        for path in folder.rglob("*.xml"):
+            try:
+                root = ET.parse(path).getroot()
+            except ET.ParseError:
+                continue
+            names.update(Path(row.attrib["Filename"]).stem for row in root.iterfind("./IconTextureAtlases/Row")
+                         if row.attrib.get("Filename"))
+        names -= {path.stem for path in folder.rglob("*.dds")}
+        for package in sorted(folder.rglob("*.blp")):
+            if not names or package.stat().st_size == 0:
+                continue
+            with package.open("rb") as file, mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                names = {name for name in names if data.find(name.encode("ascii")) < 0}
+        missing += [f"{folder.name}: {name}" for name in sorted(names)]
+    return missing
 
 
 def restart_reason(newest: tuple[Path, float] | None, process_start: float | None) -> str | None:

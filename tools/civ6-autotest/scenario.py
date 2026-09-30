@@ -20,8 +20,8 @@ from judge import (default_log_dir, judge, log_marker_replaced, print_table, rea
                    slice_log_bytes, snapshot_logs)
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, TurnMetrics, process_memory,
                      research_sample_code)
-from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, newest_mod_file,
-                     restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
+from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
+                     newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
@@ -600,6 +600,9 @@ class Runner:
         ("DiplomacyDealView", "OnLocalPlayerTurnEnd()", "AI deal proposal"),
         # Base/Assets/UI/DiplomacyActionView.lua:2883-2886 OnClose, "Act like they pressed ESC".
         ("DiplomacyActionView", "OnClose()", "AI diplomacy statement"),
+        # The pack's era-name change screen (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuReignPopup.lua): read-only, it
+        # only shows the ledger. Closing it lets the dark-age policy choice open (below), so it comes first.
+        ("JAC_SengokuReignPopup", "OnClose()", "era-name change screen"),
         # The pack's dark-age policy choice (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuDarkPolicy.lua): closing keeps
         # the house's default policy, as a human who never answers (documents/poc/sengoku-ages.md).
         ("JAC_SengokuDarkPolicy", "OnClose()", "dark-age policy choice"),
@@ -1083,6 +1086,11 @@ class Runner:
             front_end_ready = False
             if self.auto_restart:
                 folders = enabled_mod_folders(self.scenario, self.mods_dir)
+                stale_art = missing_atlas_textures(folders)
+                if stale_art:
+                    raise ScenarioError("Icon atlas images missing from the installed mods' BLP packages (rebuild with "
+                                        "python tools/jac_art/build_art.py in the installed worktree): "
+                                        + ", ".join(stale_art))
                 newest = newest_mod_file(folders)
                 process = single_civ_process()
                 reason = restart_reason(newest, process[1] if process else None)
