@@ -93,7 +93,9 @@ end
                 continue
             step = dict(step)
             if step['action']=='autoplay':
-                self.assertIs(step.pop('metrics'), True)
+                self.assertIs(step['metrics'], True)
+                if 'metrics' not in base['steps'][len(restored)]:
+                    step.pop('metrics')
             restored.append(step)
         self.assertEqual(restored, base['steps'])
 
