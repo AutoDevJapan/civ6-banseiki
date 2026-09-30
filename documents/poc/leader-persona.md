@@ -276,13 +276,13 @@ tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQ
 
 次の実行では、人物加入前にゲーム側とUI側の総督・都市APIの存在をそれぞれ記録する。診断は読取りだけで、APIの存在を模擬環境の結果から推定しない。結果に合わせてゲーム側で確認できる本物の任命・定着状態を使う設計へ修正し、保存・再試行・功績・AIを再検査する。称号減算と都市効果の実機確認も未完了。
 
-再開コマンド（先にpushし、追加実行の判断を受けた後だけ使う）:
+再開コマンド（先にpushする。実行上限に達したら結果をPRへ記録し、次の担当が続行する）:
 
 ```powershell
 python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json --stop-on-failure
 ```
 
-成果の場所は `civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/leaderperson-01`、`leaderperson-02`、`leaderperson-03`。追加実行待ちの間はこの作業フォルダを保持する。
+成果の場所は `civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/leaderperson-01`、`leaderperson-02`、`leaderperson-03`。不具合が残る間はこの作業フォルダを保持する。追加検証の回数や再試行は担当が判断し、オーナーの許可待ちにはしない。
 
 最新レビューのMust（複数人物が同じ任命称号を重ねて数える）に対応し、EVOLVINGの人物ごとに公式任命用の1称号を予約する。予約は保存した状態から算出し、進化待ちのボタンも無効化する。2人連続要求・読込・称号追加・両者完了をLuaで検査し、予約を無効にすると検査が失敗することを確認した。除外する総督は標準の公式8種だけに限定し、他MODの総督と子表を保持するDB検査も追加した。これらの変更は追加実機の判断待ちの間に実施したもので、実機合格を示さない。
 

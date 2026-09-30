@@ -25,7 +25,6 @@ class ScenarioSafetyTests(unittest.TestCase):
         self.addCleanup(launch.stop)
         launch.start()
 
-
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
         with patch.object(runner, "_lua", return_value="true") as run_lua, patch.object(
@@ -678,7 +677,6 @@ class InputSafetyTests(unittest.TestCase):
         launch = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
         self.addCleanup(launch.stop)
         launch.start()
-
 
     def test_deadline_expiring_during_focus_sends_no_key(self):
         user32 = Mock()
