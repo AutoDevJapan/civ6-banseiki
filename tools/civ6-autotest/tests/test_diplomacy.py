@@ -65,6 +65,25 @@ class FakeGame:
 
 
 class DiplomacyDuringAutoplayTests(unittest.TestCase):
+    def test_statement_after_final_turn_retries_only_idempotent_handler_cleanup(self):
+        class CleanupGame(FakeGame):
+            cleanup_calls = 0
+            def lua(self, state, code, _timeout=5.0):
+                if state == 'InGame' and code.startswith('if JAC_AUTOTEST_AUTO_HANDLER then'):
+                    self.cleanup_calls += 1
+                    if self.cleanup_calls == 1:
+                        self.visible['DiplomacyActionView'] = True
+                        raise LuaResponseUnknown('cleanup acknowledgment lost after final turn')
+                return super().lua(state, code, _timeout)
+        game = CleanupGame(set())
+        detail, steps = self.run_autoplay(game, 2)
+        self.assertEqual(game.turn, 3)
+        self.assertEqual(game.cleanup_calls, 2)
+        self.assertEqual(self.sent(game, 'InGame', 'SetActive(true)'), 1)
+        self.assertClosed(game, ['DiplomacyActionView'])
+        self.assertIn('autoplay completed 2 turns (1->3', detail)
+        self.assertIn('closed AI diplomacy statement after an InGame timeout', steps)
+
     def test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump(self):
         game = FakeGame(set())
         game.turn = 63

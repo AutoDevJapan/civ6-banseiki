@@ -32,6 +32,8 @@
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
 | [`poc/sengoku-oaths.md`](poc/sengoku-oaths.md) | 家ごとの誓約66件：公式Commemorationsの調査、史実資料、3言語の名前、年齢別の効果、台帳・選択画面・AI・保存と実機シナリオ |
 | [`poc/data/sengoku-oaths.json`](poc/data/sengoku-oaths.json) | 上記誓約の暫定カタログ。SQLと3言語の翻訳の生成元 |
+| [`poc/tuning-200.md`](poc/tuning-200.md) | 約200ターンで暫定値を測る手順・結果・再開記録 |
+| [poc/data/tuning-200-03.json](poc/data/tuning-200-03.json) | 完全性を確認した200ターンの年齢判定・観測・裁定・滅亡の実測 |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと61件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階（織田は研究による襲名）・旧領と AI の攻略目標・助言ポップアップ・実機確認項目 |
 | [`poc/unification-victory.md`](poc/unification-victory.md) | 天下統一勝利の実装、公式根拠、実機確認項目 |
 | [`poc/unification-pact.md`](poc/unification-pact.md) | 天下統一の合算（チーム・1534年の開始時の同盟・天下統一同盟）：同盟の申し込み・脱退の画面、交戦での解消、AI からの申し込み、登録城のない地図での本拠の合算、主体だけが勝つ仕組み、公式根拠、実機確認項目 |

@@ -841,8 +841,20 @@ class Runner:
             except (ScenarioError, TunerError, OSError) as cleanup_error:
                 print(f"Autoplay cleanup failed: {cleanup_error}", flush=True)
             raise
-        self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
-                  "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
+        # Autoplay can finish just as a leader statement opens and starves InGame (live oaths-05).
+        # Only repeat this idempotent UI-handler cleanup; never replay the turn/start operation.
+        attempts = 0
+        while True:
+            try:
+                self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
+                          "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
+                break
+            except LuaExecutionError:
+                raise
+            except (TunerError, OSError):
+                if not self._unblock_ingame("InGame", deadline, attempts):
+                    raise
+                attempts += 1
         _remaining(deadline)
         detail = f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
         if elimination_turn is not None:
