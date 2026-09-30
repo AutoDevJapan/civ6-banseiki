@@ -957,6 +957,27 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.Nation(1).CurrentLeader=='OLD_PERSON') -- use Game archive when native slot data is unavailable
         """)
 
+    def test_live_fixture_reveals_hidden_target_without_disabling_gameplay_visibility(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("""
+          REVEALS=0; HIDDEN_CITY=true; HIDDEN_UNIT=true
+          Map.GetPlot=function(x,y) return {GetIndex=function() return x*1000+y end} end
+          PlayersVisibility[0].ChangeVisibilityCount=function(_,index,count)
+            assert(index==2000 and count==1); REVEALS=REVEALS+1
+            HIDDEN_CITY=false; HIDDEN_UNIT=false
+          end
+        """)
+        self.run_lua("local R=A; "+helper+"""
+          assert(not pcall(function() FixtureReveal(0,2,0) end) and REVEALS==0)
+          local ok,why=R.CheckAttempt(0,U,1,'LEADER'); assert(not ok and why=='TARGET_UNKNOWN')
+          Game:SetProperty(R.TEST,1); FixtureReveal(0,2,0)
+          assert(REVEALS==1 and R.KnownTarget(0,R.ResolveTarget(1,'LEADER')))
+          assert(R.PROVISIONAL.Visibility=='REVEALED_CITY_VISIBLE_UNIT')
+          assert(R.StartAttempt(0,U,1,'LEADER'))
+        """)
+
     def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
         self.run_lua("""

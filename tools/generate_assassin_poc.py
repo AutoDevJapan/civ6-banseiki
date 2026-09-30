@@ -148,13 +148,22 @@ def build_scenario():
     configure=copy.deepcopy(source["steps"][1]); configure["seed"]=620995
     for p in configure["players"]: p["human"]=p["civ"]=="CIVILIZATION_JAC_ODA"
     prefix="local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); "
-    grant="""local function Grant(owner,kind,city)
+    grant="""local function FixtureReveal(owner,x,y)
+      assert(Game:GetProperty(R.TEST)==1,'fixture reveal requires test mode')
+      local vision=PlayersVisibility[owner]
+      if not vision:IsVisible(x,y) then vision:ChangeVisibilityCount(Map.GetPlot(x,y):GetIndex(),1) end
+      assert(vision:IsRevealed(x,y) and vision:IsVisible(x,y),'fixture reveal failed')
+    end; local function Grant(owner,kind,city)
       local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end
       UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)
       local found; for _,u in Players[owner]:GetUnits():Members() do
         if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end
       end
-      assert(found,'unit grant failed'); return found
+      assert(found,'unit grant failed')
+      if R.IsAssassin(found) then
+        FixtureReveal(owner,city:GetX(),city:GetY()); FixtureReveal(owner,found:GetX(),found:GetY())
+      end
+      return found
     end; """
     equality="""local function Same(a,b)
       if type(a)~=type(b) then return false end
@@ -177,13 +186,14 @@ def build_scenario():
                       {"action":"load","name":name,"timeout":300},active()])
 
     check("""
+      Game:SetProperty(R.TEST,1)
       local houses={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do
         houses[PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()]=p:GetID()
       end
       local a,b=houses.CIVILIZATION_JAC_ODA,houses.CIVILIZATION_JAC_MATSUDAIRA
       assert(a and b,'test houses missing'); assert(not Players[b]:IsHuman(),'target must be AI')
       local city=Players[b]:GetCities():GetCapitalCity(); local u=Grant(a,R.UNIT,city)
-      assert(PlayersVisibility[a]:IsRevealed(city:GetX(),city:GetY()),'grant did not reveal capital')
+      assert(PlayersVisibility[a]:IsRevealed(city:GetX(),city:GetY()),'fixture capital not revealed')
       local gp=Grant(b,'UNIT_GREAT_GENERAL',city)
       Players[b]:SetProperty(R.INPUT,{Successors={{Identity='JAC_LIVE_FREE_PERSON',Kind='GREAT_PERSON',Unit=gp:GetID()}}})
       local assets={}; for _,c in Players[b]:GetCities():Members() do assets[#assets+1]={X=c:GetX(),Y=c:GetY()} end
@@ -385,6 +395,7 @@ def build_scenario():
           local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city)
           local s=R.State(t.Actor); assert(s.Mission==nil and R.CanCommand(s,R.Turn()),'loss command wait')
           Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success="""+str(success)+",Detected="+str(detected)+"""})
+          FixtureReveal(t.Actor,victim:GetX(),victim:GetY())
           assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID()))
           local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {}
           assert(m.Due==R.Turn()+2,'unit targets are too far apart')
