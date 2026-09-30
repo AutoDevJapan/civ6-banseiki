@@ -258,14 +258,23 @@ local function cityFollowers(city)
   local rows, followers, pressure = city:GetReligion():GetReligionsInCity(), {}, {}
   -- Official counted citizens, NOT majority cities: ReligionScreen.lua:1074-1092.
   -- Pressure field: Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242.
-  local total = 0
+  local total, unaffiliated = 0, 0
   for _, row in ipairs(rows) do
     count(row.Followers, "native followers")
-    local key = tostring(row.Religion)
-    followers[key], pressure[key] = row.Followers, finite(row.Pressure, "religious pressure")
+    if row.Religion < 0 then
+      -- CitySupport.lua:504: negative IDs represent unaffiliated citizens,
+      -- never a religion accepted by AddReligiousPressure.
+      unaffiliated = unaffiliated + row.Followers
+    else
+      local key = tostring(row.Religion)
+      followers[key], pressure[key] = row.Followers, finite(row.Pressure, "religious pressure")
+    end
     total = total + row.Followers
   end
-  check(total == city:GetPopulation(), "native follower rows must include unaffiliated citizens")
+  check(total <= city:GetPopulation(), "native follower counts exceed population")
+  -- Some contexts omit the unaffiliated row. Infer only the citizen count;
+  -- never invent an unaffiliated pressure value or mutate its engine ID.
+  followers["-1"] = unaffiliated + city:GetPopulation() - total
   return followers, pressure
 end
 
@@ -335,27 +344,35 @@ local function convertCitizens(entry)
   for key, n in pairs(current) do check((entry.before[key] or 0) == n, "conversion population changed") end
   -- Civ6 exposes pressure mutation, not a documented ConvertFollowers API.
   -- AddReligiousPressure(0, religion, pressure, -1): VikingScenario.lua:103.
-  -- Reweight all pressure to integer citizen shares (including nonbelievers).
-  -- Signed removal and exact rounding are 要実機確認; never claim success without
-  -- rereading EVERY religion's counted citizens. A mismatch stays PENDING.
+  -- Reweight real religions only. The unaffiliated pressure is engine-owned.
+  -- Find an integer scale that preserves its counted citizens as well as all
+  -- unrelated religions, rather than passing a negative religion ID to the API.
   local cr = city:GetReligion()
   local union = copy(entry.pressure)
   for key in pairs(entry.after) do union[key] = union[key] or 0 end
-  for _, key in ipairs(keys(union)) do
-    local delta = (entry.after[key] or 0) * 1024 - (entry.pressure[key] or 0)
-    if delta < 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+  union["-1"] = nil
+  local low, high, scale = 0, nil, 1024
+  local ceiling = math.floor(2147483647 / city:GetPopulation())
+  for _ = 1, 64 do
+    local _, actualPressure = cityFollowers(city)
+    for _, key in ipairs(keys(union)) do
+      local delta = (entry.after[key] or 0) * scale - (actualPressure[key] or 0)
+      if delta < 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+    end
+    for _, key in ipairs(keys(union)) do
+      local delta = (entry.after[key] or 0) * scale - (actualPressure[key] or 0)
+      if delta > 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
+    end
+    local after, exact = cityFollowers(city), true
+    for key, n in pairs(entry.after) do exact = exact and (after[key] or 0) == n end
+    for key, n in pairs(after) do exact = exact and n == (entry.after[key] or 0) end
+    if exact then return end
+    if after["-1"] > entry.after["-1"] then low = scale else high = scale end
+    local nextScale = high and math.floor((low + high) / 2) or math.min(scale * 2, ceiling)
+    if nextScale < 1 or nextScale == scale or nextScale == low then break end
+    scale = nextScale
   end
-  for _, key in ipairs(keys(union)) do
-    local delta = (entry.after[key] or 0) * 1024 - (entry.pressure[key] or 0)
-    if delta > 0 then cr:AddReligiousPressure(0, tonumber(key), delta, -1) end
-  end
-  local after = cityFollowers(city)
-  for key in pairs(union) do
-    check((after[key] or 0) == (entry.after[key] or 0), "native conversion count mismatch; effect pending")
-  end
-  for key, n in pairs(after) do
-    check(n == (entry.after[key] or 0), "unexpected native conversion; effect pending")
-  end
+  error("[JAC_RP] native conversion count mismatch; effect pending")
 end
 
 local function allianceActive(a)
@@ -601,7 +618,7 @@ local function perform(state, id, plan)
   commit(state)
   local ok, result = pcall(function()
     local p = player(plan.player)
-    if plan.faithCost > 0 then
+    if plan.faithCost > 0 and not plan.conversions then
       p:GetReligion():ChangeFaithBalance(-plan.faithCost)
     end
     if plan.outcome == "DIPLOMATIC_INCIDENT" then
@@ -630,6 +647,8 @@ local function perform(state, id, plan)
       for _, entry in ipairs(plan.conversions) do convertCitizens(entry) end
       check(RP.NativeFollowers(id) == plan.sourceFollowers - plan.convertedFollowers,
         "world conversion count mismatch; effect pending")
+      -- Unsupported pressure mutation must not consume the absorption fee.
+      p:GetReligion():ChangeFaithBalance(-plan.faithCost)
     end
     if plan.outcome == "HERO" then
       local city, before = p:GetCities():FindID(plan.city), {}

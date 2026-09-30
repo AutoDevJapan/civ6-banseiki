@@ -88,6 +88,7 @@ GameInfo.Buildings = { BUILDING_MONUMENT = { Index = 1 } }
 local function nativeRows(c)
   local rows, total, used = {}, 0, 0
   for _, pressure in pairs(c.pressure) do total = total + pressure end
+  if total == 0 then c.pressure['-1'] = 100; total = 100 end
   local ordered = {}
   for religion, pressure in pairs(c.pressure) do
     if pressure > 0 then
@@ -102,6 +103,11 @@ local function nativeRows(c)
     return a.remainder > b.remainder or a.remainder == b.remainder and a.row.Religion < b.row.Religion
   end)
   for i = 1, c.population - used do ordered[i].row.Followers = ordered[i].row.Followers + 1 end
+  if OMIT_UNAFFILIATED_ROWS then
+    local filtered = {}
+    for _, row in ipairs(rows) do if row.Religion >= 0 then filtered[#filtered + 1] = row end end
+    return filtered
+  end
   return rows
 end
 -- Native founding is a scenario fixture only. These stubs check its call path;
@@ -130,6 +136,7 @@ for id = 0, 1 do
         GetReligionsInCity = function() return nativeRows(c) end,
         AddReligiousPressure = function(_, source, r, delta, unit)
           assert(source == 0 and unit == -1)
+          assert(r >= 0, 'unaffiliated pressure must remain engine-owned')
           if FAIL_EFFECT then error('conversion refused') end
           if BAD_CONVERSION then return end
           local key = tostring(r); c.pressure[key] = math.max(0, (c.pressure[key] or 0) + delta)
@@ -742,6 +749,31 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
         self.rejected(self.rp.BindEngineReligion, R2, 43)
 
+    def test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted(self):
+        for omitted in (False, True):
+            with self.subTest(omitted=omitted):
+                self.load()
+                self.found()
+                self.lost()
+                self.found(R2)
+                self.rp.SetCommunity(R2, "origin", 1, 0, "PLAYER_1")
+                self.bind_absorption()
+                self.discovery()
+                self.g.OMIT_UNAFFILIATED_ROWS = omitted
+                self.lua.execute("""
+                  local a,b=ENGINE['0'].cities['0'],ENGINE['1'].cities['0']
+                  a.population=4; a.pressure={['42']=256,['43']=256,['44']=256,['-1']=256}
+                  b.population=4; b.pressure={['42']=4096}
+                """)
+                self.g.ENGINE["1"].faith = 500
+                self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+                self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (3, 3))
+                self.assertEqual(self.g.ENGINE["0"].cities["0"].pressure["-1"], 256)
+                self.g.OMIT_UNAFFILIATED_ROWS = False
+                rows = plain(self.g.Players[0].GetCities().GetCapitalCity().GetReligion().GetReligionsInCity())
+                self.assertEqual({r["Religion"]: r["Followers"] for r in rows}, {43: 2, 44: 1, -1: 1})
+                self.assertEqual(self.g.ENGINE["1"].faith, 0)
+
     def test_inexact_engine_conversion_stays_pending_and_never_replays(self):
         self.found()
         self.lost()
@@ -753,7 +785,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         with self.assertRaisesRegex(LuaError, "conversion count mismatch"):
             self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
         self.assertEqual(self.state()["discoveries"]["d"]["effects"], "PENDING")
-        self.assertEqual(self.g.ENGINE["1"].faith, 0)
+        self.assertEqual(self.g.ENGINE["1"].faith, 500)
         self.reload()
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
 
