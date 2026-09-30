@@ -28,6 +28,14 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_scenario_localization_keys_exist_in_mod_text(self):
+        defined = {row.attrib["Tag"] for path in (ROOT / "poc").glob("*/Text/*.xml")
+                   for row in ET.parse(path).getroot().iter("Row") if "Tag" in row.attrib}
+        self.assertGreater(len(defined), 0)
+        for name in NEW_SCENARIOS + ("sengoku-era-reigns.json",):
+            keys = set(re.findall(r"LOC_JAC_[A-Z0-9_]+", json.dumps(scenario(name))))
+            self.assertEqual(keys - defined, set(), name)
+
     def test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics(self):
         original = scenario("japan-15km-300turn-full-metrics.json")
         short = fast_forward_scenario(original)
