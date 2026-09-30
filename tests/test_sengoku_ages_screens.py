@@ -9,7 +9,9 @@ screen shows, not the wording. Takeda (player 1) is the local human.
 
 from __future__ import annotations
 
+import unicodedata
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from tests.test_sengoku_ages import MOD, UI_STUBS, LedgerTests, lupa
@@ -317,6 +319,38 @@ class WiringTests(unittest.TestCase):
             self.assertIn(f"<File>UI/{name}</File>", imports)
             self.assertEqual(modinfo.count(f"<File>UI/{name}</File>"), 3 if name.endswith(".xml") else 2, name)
         self.assertIn("<File>UI/JAC_SengokuReignPopup.xml</File>\n\t\t</AddUserInterfaces>", modinfo)
+
+
+class TitleLengthTests(unittest.TestCase):
+    """Titles that must fit their frames in all three languages (live ages-screens-01 cut both)."""
+
+    @staticmethod
+    def width(text: str) -> int:
+        # A wide (CJK) character takes about two Latin/Cyrillic small-caps cells.
+        return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+    def texts(self, prefix: str, suffix: str) -> dict[tuple[str, str], str]:
+        rows = ET.parse(MOD / "Text/JAC_Sengoku_Ages_Text.xml").getroot().findall("./LocalizedText/Row")
+        return {(r.get("Tag"), r.get("Language")): r.findtext("Text") for r in rows
+                if r.get("Tag").startswith(prefix) and r.get("Tag").endswith(suffix)}
+
+    def test_era_name_popup_title_is_two_short_lines(self):
+        # One line was cut at 38 cells ("NEW ERA NAME: FROM TENBUN TO KŌJI (155"). The official era popup splits its
+        # title the same way (LOC_ERA_REVIEW_POPUP_TITLE, DLC/Expansion1/Text/en_US/Expansion1_Eras_Text.xml:103-104).
+        titles = self.texts("LOC_JAC_REIGN_", "_ANNOUNCEMENT")
+        self.assertEqual(len(titles), 8 * 3)
+        for key, text in titles.items():
+            lines = text.split("[NEWLINE]")
+            self.assertEqual(len(lines), 2, key)
+            self.assertLessEqual(max(map(self.width, lines)), 32, key)
+
+    def test_era_score_panel_title_fits_the_header(self):
+        # The header showed 16 cells before the ellipsis ("MERIT AND ERA NA…"); the official title is
+        # "Era Progress" / "Ход эпохи" (LOC_ERA_PROGRESS_TITLE, DLC/Expansion1/Text/en_US/Expansion1_Eras_Text.xml:37-38).
+        titles = self.texts("LOC_JAC_AGE_PANEL_TITLE", "")
+        self.assertEqual(len(titles), 3)
+        for key, text in titles.items():
+            self.assertLessEqual(self.width(text), 15, key)
 
 
 if __name__ == "__main__":

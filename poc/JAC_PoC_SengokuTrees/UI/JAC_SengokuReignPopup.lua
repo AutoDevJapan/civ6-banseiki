@@ -31,7 +31,9 @@ end
 local function Show(view, playerID)
 	local style = JAC_AgesView_Style(view.age)
 	local heroic = view.age == "HEROIC"
-	Controls.Title:SetText(Locale.ToUpper(Locale.Lookup(view.reign.Announcement)))  -- 「改元：天文から弘治へ（1555年）」
+	Controls.Title:SetText(Locale.ToUpper(Locale.Lookup(view.reign.Announcement)))
+	-- 「改元」「天文から弘治へ（1555年）」の2行（[NEWLINE]）。1行では英語・ロシア語が枠の幅を超えて切れる（実機 ages-screens-01）。
+	-- 公式も同じ見出しを LOC_ERA_REVIEW_POPUP_TITLE の [NEWLINE] で2行にする（DLC/Expansion1/Text/en_US/Expansion1_Eras_Text.xml:103-104）
 	Controls.EraRibbon:SetTexture("Ages_BannerLong" .. style.art)
 	Controls.Background:SetTexture("Ages_Parchment" .. style.art)
 	Controls.WindowFrame:SetTexture("Ages_Frame" .. style.art)

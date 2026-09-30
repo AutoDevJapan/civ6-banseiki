@@ -20,8 +20,8 @@ from judge import (default_log_dir, judge, log_marker_replaced, print_table, rea
                    slice_log_bytes, snapshot_logs)
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, TurnMetrics, process_memory,
                      research_sample_code)
-from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, newest_mod_file,
-                     restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
+from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
+                     newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
@@ -1086,6 +1086,11 @@ class Runner:
             front_end_ready = False
             if self.auto_restart:
                 folders = enabled_mod_folders(self.scenario, self.mods_dir)
+                stale_art = missing_atlas_textures(folders)
+                if stale_art:
+                    raise ScenarioError("Icon atlas images missing from the installed mods' BLP packages (rebuild with "
+                                        "python tools/jac_art/build_art.py in the installed worktree): "
+                                        + ", ".join(stale_art))
                 newest = newest_mod_file(folders)
                 process = single_civ_process()
                 reason = restart_reason(newest, process[1] if process else None)
