@@ -104,6 +104,8 @@ CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
 local function properties()
   local values = {}
+  PROPERTY_TABLES = PROPERTY_TABLES or {}
+  table.insert(PROPERTY_TABLES, values)
   return function(_, k) return values[k] end, function(_, k, v) values[k] = v end
 end
 Game = { GetCurrentGameTurn = function() return CURRENT_TURN end }
@@ -174,7 +176,7 @@ for i, civ in ipairs(civs) do
   } end
   p.GetUnits = function() return { Members = function()
     local list = {}
-    for k = 1, p.units do list[k] = {GetType = function() return 0 end} end
+    for k = 1, p.units do list[k] = {GetType = function() return 0 end, GetOwner = function() return id end} end
     -- Civilians must not contribute to the military count or its contraction.
     list[#list + 1] = {GetType = function() return 1 end}
     return ipairs(list)

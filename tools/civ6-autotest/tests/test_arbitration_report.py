@@ -128,6 +128,62 @@ class ArbitrationReportTests(unittest.TestCase):
         harness.lua.execute("Players[0]:SetProperty('JAC_ARB_AI_LAST_REQUEST',nil)")
         self.assertNotEqual(harness.lua.execute(builder.SNAPSHOT), before)
 
+    def test_all_live_gameplay_steps_run_with_save_restore_on_lupa(self):
+        from lupa import LuaRuntime
+        from tests.test_court_arbitration import STUBS, START_TURN, calendar, MOD
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        data = builder.scenario()
+        civs = [p["civ"] for p in data["steps"][1]["players"]]
+        lua.execute(STUBS, lua.table_from(calendar(), recursive=True), lua.table_from(civs),
+                    START_TURN, (MOD / "Scripts/JAC_CourtArbitration_Rules.lua").as_posix())
+        lua.execute((MOD / "Scripts/JAC_CourtArbitration.lua").read_text(encoding="utf-8"))
+        lua.execute("""
+Players[14].human=true
+SET_WAR(14,18,true)
+UnitManager={InitUnitValidAdjacentHex=function(id) Players[id].units=Players[id].units+1 end,
+ Kill=function(u) local p=Players[u:GetOwner()]; p.units=p.units-1 end}
+Game.SetCurrentGameTurn=function(value) CURRENT_TURN=value end
+local function copy(v)
+ if type(v)~='table' then return v end
+ local t={}; for k,x in pairs(v) do t[k]=copy(x) end; return t
+end
+local saved={}
+function STUB_SAVE(name)
+ local state={turn=CURRENT_TURN,props=copy(PROPERTY_TABLES),war=copy(WAR),changed=copy(WAR_CHANGED),gold={}}
+ for id,p in pairs(Players) do state.gold[id]=p.gold end
+ saved[name]=state
+end
+function STUB_LOAD(name)
+ local state=assert(saved[name]); CURRENT_TURN=state.turn; WAR=copy(state.war); WAR_CHANGED=copy(state.changed)
+ for i,props in ipairs(PROPERTY_TABLES) do
+  for k in pairs(props) do props[k]=nil end
+  for k,v in pairs(state.props[i] or {}) do props[k]=copy(v) end
+ end
+ for id,value in pairs(state.gold) do Players[id].gold=value end
+end
+START_TURN(1)
+""")
+        captures, executed = {}, 0
+        for index, step in enumerate(data["steps"], 1):
+            with self.subTest(step=index, action=step["action"]):
+                if step["action"] == "ui_lua":
+                    value = lua.execute(step["code"])
+                    executed += 1
+                    if "capture_as" in step:
+                        captures[step["capture_as"]] = value
+                    if "equals_capture" in step:
+                        self.assertEqual(value, captures[step["equals_capture"]])
+                elif step["action"] == "autoplay":
+                    lua.globals().START_TURN(lua.globals().JAC_ARB.GameTurn() + step["turns"])
+                elif step["action"] == "save":
+                    lua.globals().STUB_SAVE(step["name"])
+                elif step["action"] == "load":
+                    lua.globals().STUB_LOAD(step["name"])
+        self.assertEqual((executed, len(captures), lua.globals().JAC_ARB.GameTurn()), (25, 5, 121))
+        logs = list(lua.globals().LOG.values())
+        self.assertEqual(sum(line.startswith("[JAC_ARB] ai request ") for line in logs), 3)
+        self.assertEqual(sum(" by=ai_shogun " in line and line.startswith("[JAC_ARB] ai request ") for line in logs), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
