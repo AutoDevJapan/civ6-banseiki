@@ -160,6 +160,10 @@ def validate_scenario(data: dict) -> None:
             if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
         elif action == "ui_lua":
+            lua_timeout = step.get("lua_timeout", 5)
+            if (type(lua_timeout) not in (int, float) or not 0 < lua_timeout <= 600
+                    or not math.isfinite(lua_timeout)):
+                raise ScenarioError(f"Step {number}: lua_timeout must be finite and between 0 and 600 seconds")
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
             for key in ("capture_as", "equals_capture"):
@@ -1123,7 +1127,7 @@ class Runner:
             attempts = 0
             while True:
                 try:
-                    value = self._lua(step["state_name"], step["code"], min(5, _remaining(deadline)))
+                    value = self._lua(step["state_name"], step["code"], min(step.get("lua_timeout", 5), _remaining(deadline)))
                     break
                 except (LuaResponseUnknown, LuaExecutionError):
                     raise  # The command may have run: never replay it.

@@ -31,14 +31,21 @@ end
 
 local function FindPerson(owner, row)
     local p = Player(owner, false);
-    local read = ExposedMembers.JAC_LeaderPersonaPersonRead;
-    if not p or type(read) ~= "function" then return nil, false; end
-    local native = read(owner, row.LeaderType);
-    if not native then return nil, false; end
-    if native.unitID == nil then return nil, true; end
-    local unit = p:GetUnits():FindID(native.unitID);
-    if not unit or unit:GetOwner() ~= owner or unit:GetType() ~= native.unitType then return nil, false; end
-    return unit, true;
+    local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
+    local class = individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+    local unitType = class and GameInfo.Units[class.UnitType];
+    if not p or not unitType then return nil, false; end
+    -- leaderperson-06 verified GetIndividual in GameCore, but not IsGreatPerson.
+    -- Filter by the class's native unit type before reading the individual identity.
+    for _,unit in p:GetUnits():Members() do
+        if unit:GetType() == unitType.Index then
+            local gp = unit:GetGreatPerson();
+            local id = gp and gp:GetIndividual();
+            local actual = id ~= nil and id ~= -1 and GameInfo.GreatPersonIndividuals[id];
+            if actual and actual.GreatPersonIndividualType == row.PersonType then return unit, true; end
+        end
+    end
+    return nil, true;
 end
 
 local function NativeGovernor(owner, row)
@@ -61,20 +68,25 @@ local function Join(owner, source, personality, trait)
         return Finish(owner, Get(leader, "OWNER") == owner and "ALREADY_JOINED" or "OTHER_OWNER");
     end
     if trait ~= nil and trait ~= row.Trait then return Finish(owner, "INVALID_METADATA"); end
+    print("JAC_PERSONA_STAGE " .. leader .. " native-governor");
     local native = NativeGovernor(owner, row);
     if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
     local city = p:GetCities():GetCapitalCity();
     if not city then return Finish(owner, "NO_CITY"); end
+    print("JAC_PERSONA_STAGE " .. leader .. " find-person-before");
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if not unit then
         -- Official placement call: Base/Assets/UI/Tuner/TunerMapPanel.lua:190.
+        print("JAC_PERSONA_STAGE " .. leader .. " create-person-before");
         Game.GetGreatPeople():CreatePerson(owner, GameInfo.GreatPersonIndividuals[row.PersonType].Index,
                                           city:GetX(), city:GetY());
+        print("JAC_PERSONA_STAGE " .. leader .. " create-person-after");
         unit = FindPerson(owner, row);
     end
     if not unit then return Finish(owner, "SPAWN_FAILED"); end
+    print("JAC_PERSONA_STAGE " .. leader .. " person-identified");
     Set(leader, "SOURCE", source);
     Set(leader, "NAME", row.Name);
     Set(leader, "PORTRAIT", row.PortraitIcon);

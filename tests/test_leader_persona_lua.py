@@ -41,11 +41,12 @@ for i,n in ipairs(names) do
         Personality=i==1 and 'BOLD' or 'CALM', Trait=i==3 and 'DEVOUT' or 'ASTUTE',
         EvolutionCost=i==1 and 1 or 2}
     ROWS[i]=row
-    INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, Index=i+10, Name=row.Name}
+    INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA", Index=i+10, Name=row.Name}
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
 end
-GameInfo={ JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
+GameInfo={ GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_GREAT_GENERAL"}},"GreatPersonClassType"),
+    Units=collection({{UnitType="UNIT_GREAT_GENERAL",Index=99}},"UnitType"), JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
     Governors=collection(GOVDEFS,'GovernorType'), GovernorPromotions=collection(PROMOS,'GovernorPromotionType') }
 PlayerConfigurations, Players = {}, {}
@@ -106,7 +107,7 @@ Game.GetGreatPeople=function() return { CreatePerson=function(_,owner,individual
     local u={ individual=individual, GetID=function() return id end,
         GetOwner=function() return owner end, GetType=function() return 99 end }
     u.GetGreatPerson=function()
-        if GAMECORE_UNIT_READS and not UI_NATIVE_READ then return {} end
+        if GAMECORE_UNIT_READS and not UI_NATIVE_READ then return {GetIndividual=function() return u.individual end} end
         return {IsGreatPerson=function() return true end, GetIndividual=function() return u.individual end}
     end
     NATIVE_UNITS[owner][id]=u
@@ -294,14 +295,6 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             local read=ExposedMembers.JAC_LeaderPersonaNativeRead
             UI_NATIVE_READ=false
             GAMECORE_UNIT_READS=true
-            local personRead=ExposedMembers.JAC_LeaderPersonaPersonRead
-            ExposedMembers.JAC_LeaderPersonaPersonRead=function(owner,leader)
-                UI_NATIVE_READ=true
-                local ok,result=pcall(personRead,owner,leader)
-                UI_NATIVE_READ=false
-                if not ok then error(result) end
-                return result
-            end
             Players[0].GetGovernors=function()
                 local all=original()
                 if UI_NATIVE_READ then return all end
@@ -354,22 +347,15 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = read
         self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
 
-    def test_missing_person_reader_preserves_native_unit_and_reserved_titles(self):
-        read = self.g.ExposedMembers.JAC_LeaderPersonaPersonRead
-        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = None
-        self.assertEqual(self.api.Join(0, 1), "NATIVE_UNAVAILABLE")
-        self.assertEqual(self.g.SPAWNS, 0)
-        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = read
+    def test_non_great_person_unit_type_never_reads_an_individual_identity(self):
+        self.lua.execute("""
+            NATIVE_UNITS[0][77]={GetID=function() return 77 end,
+                GetOwner=function() return 0 end,GetType=function() return 0 end,
+                GetGreatPerson=function() error('ordinary unit has no person identity') end}
+        """)
         self.join()
-        self.grant_titles(0, DATE)
-        self.api.PrepareEvolution(0, DATE)
-        self.g.NEWGOV(0, DATE)
-        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = None
-        self.assertEqual(self.api.CompleteEvolution(0, DATE), "REMOVAL_PENDING")
-        self.assertEqual((self.prop("STATE"), self.g.DESTROYS), ("EVOLVING", 0))
-        self.assertEqual(self.g.Players[0].points, 1)
-        self.g.ExposedMembers.JAC_LeaderPersonaPersonRead = read
-        self.assertEqual(self.api.CompleteEvolution(0, DATE), "EVOLVED")
+        self.assertEqual(self.g.SPAWNS, 1)
+        self.assertEqual(self.prop("UNIT"), 1)
 
     def test_purchase_is_only_available_through_the_gameplay_event(self):
         self.assertIsNone(self.api.Purchase)

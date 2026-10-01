@@ -11,12 +11,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from metrics import RESEARCH_SAMPLE_CODE, ResearchMetrics, parse_research_sample, research_sample_code
 from research_report import summarize
 from scenario import AutoplayStatus, Runner, ScenarioError, _build_setup_code, validate_scenario
+from tuner import LuaResponseUnknown
 
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class DriverFeatureTests(unittest.TestCase):
+    def test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline(self):
+        step = {"action":"ui_lua", "state_name":"GameCore_Tuner", "code":"return true", "lua_timeout":30}
+        validate_scenario({"name":"slow native mutation", "steps":[step]})
+        for value in (0, -1, True, "30", float("nan"), float("inf"), 601, 10**1000):
+            with self.subTest(value=value), self.assertRaisesRegex(ScenarioError, "lua_timeout"):
+                validate_scenario({"name":"invalid wait", "steps":[{**step,"lua_timeout":value}]})
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch("scenario._remaining", return_value=17), patch.object(runner, "_lua", return_value="true") as lua:
+                runner._run_step(step)
+                lua.assert_called_once_with("GameCore_Tuner", "return true", 17)
+
+    def test_slow_mutation_with_unknown_ack_is_never_replayed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_lua", side_effect=LuaResponseUnknown("command may have run")) as lua:
+                with self.assertRaises(LuaResponseUnknown):
+                    runner._run_step({"action":"ui_lua", "state_name":"GameCore_Tuner",
+                                      "code":"return true", "lua_timeout":30})
+                self.assertEqual(lua.call_count, 1)
+
     def test_end_turn_honours_turns_and_stops_on_failure_with_one_shared_deadline(self):
         with tempfile.TemporaryDirectory() as folder:
             runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
