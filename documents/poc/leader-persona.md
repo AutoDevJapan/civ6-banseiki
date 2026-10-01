@@ -194,7 +194,7 @@ G/は下のインストールディレクトリ。
 |---|---|
 | 所属・首都・所有ユニット | `G/DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:1200,1389`: 文明と指導者の種類をPlayerConfigurationsから読む。`G/DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1103`: 首都を取得する。`G/DLC/WarMachineScenario/Scripts/WarMachineScenario.lua:186`: 所有ユニットのMembersを走査する |
 | 偉人クラス・個人の定義 | `G/Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql:1502,1519`: クラスにUnitType・AvailableInTimeline、個人にName・EraType・ActionChargesがある。`G/Base/Assets/Gameplay/Data/GreatPeople.xml:20` に将軍クラスと `UNIT_GREAT_GENERAL` の対応がある |
-| 個人を指定した偉人の生成 | `G/Debug/Map.ltp:577,579`: 個人の行の **Index** を選択する。`G/Base/Assets/UI/Tuner/TunerMapPanel.lua:190`: `Game.GetGreatPeople():CreatePerson(playerID, individualIndex, x, y)` を呼ぶ。戻り値は使わず、生成後に所有ユニットを調べる |
+| 個人を指定した偉人の生成 | `G/DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111` と `G/DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:169`: `GrantPerson(individualHash, classHash, eraHash, 0, playerID, false)` をゲーム側で呼ぶ。戻り値は使わず、生成後に所有ユニットの種類と個人IDを照合する。`G/Base/Assets/UI/Tuner/TunerMapPanel.lua:190` の `CreatePerson` は専用配置ツールの例で、通常のゲーム処理の根拠にしない |
 | 本物の偉人か、どの人物かを確認する | `G/Base/Assets/UI/PortraitSupport.lua:50-52`: `unit:GetGreatPerson():IsGreatPerson()` と `GetIndividual()`。`G/Base/Assets/UI/Panels/UnitPanel.lua:2273-2285`: 個人・クラス・残りの使用回数を読む |
 | 偉人を取り除く | `G/Base/Assets/UI/Tuner/TunerMapPanel.lua:197-199`: `Players[owner]:GetUnits():Destroy(unit)`。任命成功の確認前には呼ばない |
 | 総督と昇進ツリーを追加する | `G/DLC/Expansion1/Data/Expansion1_Schema.sql:131,160,183,190`: Governors、GovernorPromotions、GovernorPromotionPrereqs、GovernorPromotionSets。`G/DLC/Expansion1/Data/Expansion1_Governors.xml:69-75`: 通常総督のIdentityPressure=8・TransitionStrength=100。`G/DLC/Expansion1/Data/Expansion1_GlobalParameters.xml:70`: 定着の基準は5ターン |
