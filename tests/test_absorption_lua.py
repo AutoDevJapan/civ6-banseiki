@@ -1639,7 +1639,7 @@ class AbsorptionTests(unittest.TestCase):
         self.live_scenario_fixture()
         steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                            .read_text(encoding='utf-8'))['steps']
-        steps = [step for step in steps if step['action'] != 'autoplay' and not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
+        steps = [step for step in steps if 'recall spawn blockers relocated' not in step.get('code', '') and step['action'] != 'autoplay' and not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
                  and not any(key in step.get('condition', {}).get('code', '') for key in ('JAC_ABSORPTION_FIXTURE_UI_WAIT', 'GetUIPhase'))]
         self.run_lua('''
           Game.GetLocalPlayer=function() return 0 end
@@ -1872,6 +1872,53 @@ class AbsorptionPackageTests(unittest.TestCase):
         self.assertFalse(vm.execute(conditions[0]))
         vm.execute("UI_RELIGION=5;UI_CHARGES=2")
         self.assertFalse(vm.execute(conditions[0]))
+
+    def test_recall_spawn_preparation_moves_only_blockers_and_preserves_them(self):
+        data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
+                          .read_text(encoding='utf-8'))
+        code = next(s['code'] for s in data['steps']
+                    if 'recall spawn blockers relocated' in s.get('code', ''))
+        vm = LuaRuntime()
+        vm.execute('''
+          FREE=true;UNITS={}
+          for id=1,3 do
+            local u={id=id,x=20,y=20,moves=2,damage=5,type=id==2 and 'Civilian' or 'Warrior'}
+            u.GetID=function(self) return self.id end
+            u.GetType=function(self) return self.type end
+            u.GetX=function(self) return self.x end;u.GetY=function(self) return self.y end
+            u.GetDamage=function(self) return self.damage end
+            u.SetDamage=function(self,n) self.damage=n end
+            u.GetMovesRemaining=function(self) return self.moves end
+            u.ChangeMovesRemaining=function(self,n) self.moves=self.moves+n end
+            UNITS[id]=u
+          end
+          GameInfo={HeroClasses={[0]={UnitType='Hero'}},Units={Hero={FormationClass='LAND'},
+            Warrior={FormationClass='LAND'},Civilian={FormationClass='CIVILIAN'}}}
+          Game={GetProperty=function() return {To=2,Class=0} end}
+          ExposedMembers={JAC_Absorption={GetHeroesManager=function() return {
+            GetHeroOriginCityID=function() return {player=2,id=7} end} end}}
+          Players={[2]={GetCities=function() return {FindID=function(_,id)
+            assert(id==7);return {GetX=function() return 20 end,GetY=function() return 20 end} end} end,
+            GetUnits=function() return {Members=function() return ipairs(UNITS) end} end}}
+          Map={GetPlot=function(x,y) return {x=x,y=y,GetOwner=function()
+            return FREE and x==14 and y>=14 and y<=17 and 2 or -1 end,
+            IsWater=function() return y==14 end,IsImpassable=function() return false end} end,
+            GetUnitsAt=function(plot) return {GetCount=function()
+              local n=plot.x==14 and plot.y==15 and 1 or 0
+              for _,u in ipairs(UNITS) do if u.x==plot.x and u.y==plot.y then n=n+1 end end
+              return n end} end}
+          UnitManager={PlaceUnit=function(u,x,y) u.x=x;u.y=y;u.moves=0;u.damage=0 end,
+            Kill=function() error('spawn preparation must never delete units') end}
+        ''')
+        self.assertIn('without deletion: 2', vm.execute(code))
+        vm.execute('''assert(UNITS[1].x==14 and UNITS[1].y==16)
+          assert(UNITS[3].x==14 and UNITS[3].y==17)
+          assert(UNITS[2].x==20 and UNITS[2].y==20)
+          for _,u in ipairs(UNITS) do assert(u.damage==5 and u.moves==2) end
+          FREE=false;UNITS[1].x=20;UNITS[1].y=20''')
+        with self.assertRaisesRegex(Exception, 'no empty owned plot'):
+            vm.execute(code)
+        vm.execute('assert(#UNITS==3 and UNITS[1].x==20 and UNITS[1].y==20)')
 
     def test_human_recall_scenario_uses_custom_native_classes_and_real_purchase(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-hero-recall.json")

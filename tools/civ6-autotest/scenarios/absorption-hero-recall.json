@@ -731,6 +731,11 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.To]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.To and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
       "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.PreRecallEra,'global era boundary not processed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'global era advanced through test-mode autoplay; recall intent saved'"
     },
     {
