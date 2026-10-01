@@ -486,3 +486,13 @@ Lua模擬検査では、成立時の8点、未配置・未定着・活動不能�
 ### 同盟通知のゲーム側観測（2026-10-01）
 
 開始比較のleaderperson-21は全6手順・3判定に成功した。同じゲームのGameCore_Tunerで両方の通知に観測関数を登録し、公式VikingScenario.luaと同じSetHasAlliedで新同盟を作った。HasAlliedはtrueになり、Events.DiplomacyRelationshipChangedは3回、GameEvents.OnDiplomacyRelationshipChangedは0回だった。登録は観測後に解除した。証跡は実機成果のalliance-event-probe.txt。功績実装とLua回帰は、観測したEvents側へ合わせた。人物総督が定着した場合の8点加算は、次の通し実機で確認する。
+
+### 加入後の保存と称号控除の観測（2026-10-01）
+
+leaderperson-20はff9e634へmain b4e7c53を統合した内容で25/111手順に成功した。伊達・織田・上杉憲政の各偉人1体と功績0、加入直後の保存・読込、読込後の伊達の名前・個体・プロパティの一致、2つの戦国社会制度が各1個の称号を与えることを確認した。保存前の未設定プロパティの文字列化修正は実機で通った。
+
+26番の費用2の進化は60秒で停止した。停止後の読取結果はSTATE=GREAT_PERSON、EVOLUTION_SURCHARGE=nil、人物個体589832、結果TITLE_PAYMENT_FAILED、称号の獲得数2・使用済み数0だった。ChangeGovernorPoints(-1)の控除が実機へ反映されなかった。返金・失敗時の保護により、称号や人物は失われていない。GameCoreにはChangeGovernorPointsSpent・SetGovernorPoints・SetGovernorPointsSpent・SpendGovernorPointsも存在しなかった。費用1・2・3の進化と、その後の都市効果の成功はこの実機から推定しない。
+
+leaderperson-21は人物化なしの開始比較で全6手順と3判定に成功した。両実機は検証モードで実行し、早送り0手番で手番進行には未到達。Lua.log・Modding.log・steps.jsonl・result.jsonと隣の.logを共有live作業フォルダの各実機IDへ保持した。21にはゲーム側の同盟通知を追加観測したalliance-event-probe.txtもある。
+
+功績修正を取り込んだ729ada8は通常641件・ドライバー247件に成功し、Luaスキップなし。指定シナリオは都市効果とゲーム側の定着マーカーの一致9件、新同盟の8点加算を加えて112手順の形式検査に成功した。実機でのマーカー付与・解除と加点は未確認である。
