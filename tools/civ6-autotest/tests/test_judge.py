@@ -237,7 +237,7 @@ class JudgeTests(unittest.TestCase):
             "japan-map-15km-200turn.json", "japan-15km-200turn-full.json",
             "japan-15km-200turn-tuning.json",
             "japan-prosperous-15km.json",
-            "court-arbitration.json", "probe-make-peace.json",
+            "court-arbitration.json", "court-arbitration-human.json", "probe-make-peace.json",
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
             "absorption-japan.json",
