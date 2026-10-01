@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal16" FontStyle="Shadow">
+  <GridButton ID="OpenButton" Anchor="C,T" Offset="230,36" Size="180,30" Style="ButtonControl" String="LOC_JAC_ASN_TITLE"/>
+  <Grid ID="Panel" Anchor="C,C" Size="700,540" Texture="Controls_DropdownPanel"
+        SliceCorner="10,10" SliceTextureSize="22,22" Hidden="1" ConsumeAllMouse="1">
+    <Label Anchor="L,T" Offset="20,12" Style="FontFlair24" String="LOC_JAC_ASN_TITLE"/>
+    <GridButton ID="CloseButton" Anchor="R,T" Offset="12,10" Size="100,28" Style="ButtonControl" String="LOC_JAC_ASN_CLOSE"/>
+    <Label ID="Status" Anchor="L,T" Offset="20,52" WrapWidth="660" Style="FontNormal14"/>
+    <Label Anchor="L,T" Offset="20,90" WrapWidth="660" Style="FontNormal14" String="LOC_JAC_ASN_SELECT"/>
+    <ScrollPanel ID="Scroll" Anchor="L,T" Offset="20,140" Size="660,330" Vertical="1">
+      <Stack ID="Rows" StackGrowth="Down" Padding="4"/>
+      <ScrollBar Style="Slider_Blue" Offset="-13,0" Anchor="R,T"/>
+    </ScrollPanel>
+    <Label ID="Result" Anchor="L,B" Offset="20,20" WrapWidth="660" Style="FontNormal14"/>
+  </Grid>
+  <Instance Name="AssassinRow">
+    <Container ID="Root" Size="640,42">
+      <Box Size="parent,parent" Color="0,0,0,110"/>
+      <Label ID="Text" Anchor="L,C" Offset="8,0" WrapWidth="490" Style="FontNormal14"/>
+      <GridButton ID="Action" Anchor="R,C" Offset="4,0" Size="130,30" Style="ButtonControl"/>
+    </Container>
+  </Instance>
+</Context>

@@ -1,0 +1,202 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Mod id="fbb5219d-d7b9-4b31-884f-057f623476a0" version="1">
+  <Properties>
+    <Name>LOC_JAC_ASN_MOD_NAME</Name>
+    <Teaser>LOC_JAC_ASN_MOD_DESCRIPTION</Teaser>
+    <Description>LOC_JAC_ASN_MOD_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE" />
+    <Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME" />
+    <Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME" />
+    <Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="LOC_JAC_SENGOKU_TREES_MOD_NAME" />
+    <Mod id="403be889-1455-4de7-967b-ad54c0ff3431" title="LOC_JAC_JAPAN_SCALE_MOD_NAME" />
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_ASN_MOD_NAME">
+      <ja_JP>JAC PoC：暗殺者</ja_JP>
+      <en_US>JAC PoC: Assassin</en_US>
+      <ru_RU>JAC PoC: убийца</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_ASN_MOD_DESCRIPTION">
+      <ja_JP>日本マップの暗殺者育成・任務・保存の試作。自由都市への分裂、隣国吸収、外交支持による採決、後継者の継承を処理。</ja_JP>
+      <en_US>Japan-map training, missions and persistence. Leader death uses free cities, weighted neighbours, favor-weighted voting or succession.</en_US>
+      <ru_RU>Подготовка, задания и сохранение на картах Японии. После гибели правителя: вольные города, поглощение соседом, голосование с дипломатическим влиянием или наследование.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_Assassin_15">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Assassin_15_Settlers">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Assassin_20">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+    <Criteria id="JAC_Assassin_20_Settlers">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_Assassin_15_UpdateDatabase" criteria="JAC_Assassin_15">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Assassin_15_UpdateText" criteria="JAC_Assassin_15">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Text/JAC_Assassin_Text.xml</File>
+    </UpdateText>
+    <UpdateIcons id="JAC_Assassin_15_UpdateIcons" criteria="JAC_Assassin_15">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin_Icons.xml</File>
+    </UpdateIcons>
+    <AddGameplayScripts id="JAC_Assassin_15_AddGameplayScripts" criteria="JAC_Assassin_15">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_Assassin_Gameplay.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_Assassin_15_AddUserInterfaces" criteria="JAC_Assassin_15">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_AssassinPanel.xml</File>
+    </AddUserInterfaces>
+    <UpdateDatabase id="JAC_Assassin_15_Settlers_UpdateDatabase" criteria="JAC_Assassin_15_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Assassin_15_Settlers_UpdateText" criteria="JAC_Assassin_15_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Text/JAC_Assassin_Text.xml</File>
+    </UpdateText>
+    <UpdateIcons id="JAC_Assassin_15_Settlers_UpdateIcons" criteria="JAC_Assassin_15_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin_Icons.xml</File>
+    </UpdateIcons>
+    <AddGameplayScripts id="JAC_Assassin_15_Settlers_AddGameplayScripts" criteria="JAC_Assassin_15_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_Assassin_Gameplay.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_Assassin_15_Settlers_AddUserInterfaces" criteria="JAC_Assassin_15_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_AssassinPanel.xml</File>
+    </AddUserInterfaces>
+    <UpdateDatabase id="JAC_Assassin_20_UpdateDatabase" criteria="JAC_Assassin_20">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Assassin_20_UpdateText" criteria="JAC_Assassin_20">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Text/JAC_Assassin_Text.xml</File>
+    </UpdateText>
+    <UpdateIcons id="JAC_Assassin_20_UpdateIcons" criteria="JAC_Assassin_20">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin_Icons.xml</File>
+    </UpdateIcons>
+    <AddGameplayScripts id="JAC_Assassin_20_AddGameplayScripts" criteria="JAC_Assassin_20">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_Assassin_Gameplay.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_Assassin_20_AddUserInterfaces" criteria="JAC_Assassin_20">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_AssassinPanel.xml</File>
+    </AddUserInterfaces>
+    <UpdateDatabase id="JAC_Assassin_20_Settlers_UpdateDatabase" criteria="JAC_Assassin_20_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_Assassin_20_Settlers_UpdateText" criteria="JAC_Assassin_20_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Text/JAC_Assassin_Text.xml</File>
+    </UpdateText>
+    <UpdateIcons id="JAC_Assassin_20_Settlers_UpdateIcons" criteria="JAC_Assassin_20_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Data/JAC_Assassin_Icons.xml</File>
+    </UpdateIcons>
+    <AddGameplayScripts id="JAC_Assassin_20_Settlers_AddGameplayScripts" criteria="JAC_Assassin_20_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_Assassin_Gameplay.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_Assassin_20_Settlers_AddUserInterfaces" criteria="JAC_Assassin_20_Settlers">
+      <Properties>
+        <LoadOrder>350</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_AssassinPanel.xml</File>
+    </AddUserInterfaces>
+    <ImportFiles id="JAC_Assassin_SharedFiles">
+      <File>Scripts/JAC_Assassin_Rules.lua</File>
+      <File>UI/JAC_AssassinPanel.lua</File>
+    </ImportFiles>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_Assassin.sql</File>
+    <File>Data/JAC_Assassin_Icons.xml</File>
+    <File>Scripts/JAC_Assassin_Gameplay.lua</File>
+    <File>Scripts/JAC_Assassin_Rules.lua</File>
+    <File>Text/JAC_Assassin_Text.xml</File>
+    <File>UI/JAC_AssassinPanel.lua</File>
+    <File>UI/JAC_AssassinPanel.xml</File>
+  </Files>
+</Mod>
