@@ -78,6 +78,8 @@ LUA_SETUP = """
 ContextPtr={SetHide=function() end}
 print=function() end
 ExposedMembers={}
+GameEvents={JAC_NativeSlotsGiveTitles={Add=function(fn) GIVE_TITLES=fn end}}
+GameConfiguration={IsAnyMultiplayer=function() return MULTIPLAYER==true end}
 props, playerProps, cityProps, appointed = {}, {}, {}, {}
 turn=1
 Game={GetLocalPlayer=function() return 0 end, GetCurrentGameTurn=function() return turn end,
@@ -134,6 +136,18 @@ class NativeSlotsDiagnosticRejectionTests(unittest.TestCase):
         self.lua.execute((MOD / "Scripts/JAC_NativeSlots_GameCore.lua").read_text(encoding="utf-8"))
         self.lua.execute((MOD / "UI/JAC_NativeSlots_View.lua").read_text(encoding="utf-8"))
 
+    def test_multiplayer_is_rejected_before_diagnostic_state_changes(self):
+        self.lua.execute("MULTIPLAYER=true; writes=0; Game.SetProperty=function() writes=writes+1 end")
+        with self.assertRaisesRegex(Exception, "single-player diagnostic required"):
+            self.lua.globals().JAC_SlotsPrepare()
+        self.assertEqual(self.lua.globals().writes, 0)
+
+    def test_numeric_zero_and_false_are_both_valid_non_city_state_flags(self):
+        self.lua.execute("GameInfo.GovernorsCannotAssign.GOVERNOR_JAC_TITLE_PROXY={CannotAssign=true}")
+        self.assertTrue(self.lua.globals().JAC_SlotsPrepare())
+        self.lua.execute("GameInfo.Governors.GOVERNOR_JAC_NATIVE_SLOT.AssignCityState=0")
+        self.assertTrue(self.lua.globals().JAC_SlotsPrepare())
+
     def test_core_observer_preserves_missing_receipts_instead_of_inventing_payment(self):
         seen = self.lua.globals().ExposedMembers.JAC_NativeSlotsRead(0)
         self.assertEqual((seen.points, seen.spent), (3, 0))
@@ -179,7 +193,7 @@ class NativeSlotsDiagnosticRejectionTests(unittest.TestCase):
             text = file.read_text(encoding="utf-8")
             self.assertNotIn(":SetProperty('JAC_NATIVE_SLOT_", text)
             self.assertNotIn(":SetProperty('JAC_PROXY_NATIVE_PAID_", text)
-        self.assertNotIn("SetProperty", (MOD / "Scripts/JAC_NativeSlots_GameCore.lua").read_text(encoding="utf-8"))
+        self.assertNotIn("SetProperty", (MOD / "Scripts/JAC_NativeSlots_GameCore.lua").read_text(encoding="utf-8").split("GameEvents.JAC_NativeSlotsGiveTitles.Add",1)[0])
 
 
 class NativeSlotsScenarioTests(unittest.TestCase):
@@ -187,10 +201,10 @@ class NativeSlotsScenarioTests(unittest.TestCase):
         data = json.loads(PRIMARY.read_text(encoding="utf-8"))
         steps = data["steps"]
         self.assertTrue(data["strict_lua_errors"])
-        self.assertEqual(steps[5], {"action": "end_turn", "turns": 1, "timeout": 180})
-        self.assertEqual(steps[7]["code"], "return JAC_SlotsAssertAI(true)")
-        self.assertEqual(steps[14]["code"], "return JAC_SlotsRequireUnassignedReceipt()")
-        self.assertFalse(any(step["action"] in ("save", "autoplay") or "Appoint(" in step.get("code", "") for step in steps[:8]))
+        self.assertEqual(steps[6], {"action": "end_turn", "turns": 1, "timeout": 180})
+        self.assertEqual(steps[8]["code"], "return JAC_SlotsAssertAI(true)")
+        self.assertEqual(steps[15]["code"], "return JAC_SlotsRequireUnassignedReceipt()")
+        self.assertFalse(any(step["action"] in ("save", "autoplay") or "Appoint(" in step.get("code", "") for step in steps[:9]))
         self.assertEqual([s["turns"] for s in steps if s["action"] == "end_turn"], [1, 4, 1])
         self.assertEqual([s["action"] for s in steps].count("save"), 2)
         self.assertEqual([s["action"] for s in steps].count("load"), 2)
@@ -199,7 +213,7 @@ class NativeSlotsScenarioTests(unittest.TestCase):
     def test_classification_keeps_ai_gate_and_rejects_missing_original_receipt(self):
         primary = json.loads(PRIMARY.read_text(encoding="utf-8"))
         data = json.loads(CLASSIFICATION.read_text(encoding="utf-8"))
-        self.assertEqual(data["steps"][:14], primary["steps"][:14])
+        self.assertEqual(data["steps"][:15], primary["steps"][:15])
         self.assertEqual(data["steps"][-1]["code"], "return JAC_SlotsRequireUnassignedReceipt()")
         self.assertIn("classification ONLY", data["name"])
         self.assertNotIn("autoplay", [s["action"] for s in data["steps"]])

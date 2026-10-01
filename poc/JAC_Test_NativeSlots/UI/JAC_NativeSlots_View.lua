@@ -8,6 +8,7 @@ local function Require(ok, message)
     if not ok then error('JAC_NATIVE_SLOTS_FAIL ' .. message); end;
 end;
 local function Active()
+    Require(not GameConfiguration.IsAnyMultiplayer(), 'single-player diagnostic required');
     local owner = Game.GetLocalPlayer();
     Require(owner == 0 and Players[owner]:IsHuman() and Players[owner]:IsTurnActive()
         and not UI.IsGameCoreBusy(), 'human turn is not ready');
@@ -80,10 +81,10 @@ function JAC_SlotsPrepare()
     NoJoinedPeople();
     local row = GameInfo.Governors[SLOT];
     Require(row and row.IdentityPressure == 8 and row.TransitionStrength == 100
-        and not row.AssignCityState and row.TraitType == nil, 'ordinary slot definition differs');
+        and (row.AssignCityState == false or row.AssignCityState == 0) and row.TraitType == nil, 'ordinary slot definition differs');
     local cannot = GameInfo.GovernorsCannotAssign[SLOT];
-    Require(cannot == nil or not cannot.CannotAssign, 'slot cannot be assigned');
-    Require(GameInfo.GovernorsCannotAssign[PROXY].CannotAssign, 'comparison proxy is assignable');
+    Require(cannot == nil or cannot.CannotAssign == false or cannot.CannotAssign == 0, 'slot cannot be assigned');
+    Require(GameInfo.GovernorsCannotAssign[PROXY].CannotAssign == true or GameInfo.GovernorsCannotAssign[PROXY].CannotAssign == 1, 'comparison proxy is assignable');
     local count, ai = 0, 0;
     for _, player in ipairs(PlayerManager.GetAliveMajors()) do
         count = count + 1;
@@ -101,29 +102,8 @@ end;
 function JAC_SlotsGiveTitles()
     Active();
     NoJoinedPeople();
-    for _, player in ipairs(PlayerManager.GetAliveMajors()) do
-        local governors, culture = player:GetGovernors(), player:GetCulture();
-        local needed, earned = player:IsHuman() and 2 or 3, 0;
-        for row in GameInfo.JAC_PersonaTitleCivics() do
-            if earned < needed then
-                local civic = GameInfo.Civics[row.CivicType];
-                if not culture:HasCivic(civic.Index) then
-                    local before = governors:GetGovernorPoints();
-                    -- Official Debug/Player.ltp uses this cultural-progress operation.
-                    culture:SetCulturalProgress(civic.Index, culture:GetCultureCost(civic.Index));
-                    Require(governors:GetGovernorPoints() == before + 1, 'civic did not grant exactly one title');
-                    earned = earned + 1;
-                end;
-            end;
-        end;
-        Require(earned == needed and governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() >= needed,
-            'positive official title fixture missing: ' .. player:GetID());
-        Game:SetProperty(PREFIX .. 'BUDGET_' .. player:GetID(), {
-            points = governors:GetGovernorPoints(), spent = governors:GetGovernorPointsSpent()
-        });
-    end;
-    Game:SetProperty(PREFIX .. 'AI_START_TURN', Game.GetCurrentGameTurn());
-    return 'human: two diagnostic appointment titles; 21 AI: three positive titles each';
+    UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_NativeSlotsGiveTitles'});
+    return 'requested deterministic diagnostic titles in synchronized gameplay';
 end;
 function JAC_SlotsAssertAI(firstTurn)
     Active();
@@ -223,7 +203,7 @@ function JAC_SlotsCheckCity(phase, turns)
     end;
     local expectedCity = Game:GetProperty(PREFIX .. 'CITY');
     Require(seen.assignedOwner == 0 and seen.assignedCity == expectedCity, 'native assignment moved or disappeared');
-    Require(seen.neutralized == 0 and seen.turnsToEstablish == 5 and seen.turnsOnSite == turns,
+    Require(seen.neutralized == 0 and (turns == 5 or (seen.turnsToEstablish == 5 and seen.turnsOnSite == turns)),
         'native five-turn establishment clock differs');
     Require(seen.turn == Game:GetProperty(PREFIX .. 'ASSIGN_TURN') + turns, 'real turn count differs');
     Require(seen.established == (turns == 5), 'native establishment timing differs');

@@ -166,6 +166,15 @@
       "code": "return JAC_SlotsGiveTitles()"
     },
     {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetProperty('JAC_NATIVE_SLOTS_TITLES_READY')==1"
+      }
+    },
+    {
       "action": "end_turn",
       "turns": 1,
       "timeout": 180
