@@ -21,7 +21,8 @@ R.DURATIONS = { LEADER=5, GOVERNOR=3, GREAT_PERSON=2 }
 -- OWNER_UNDECIDED: these are PoC switches/coefficients, not SSOT decisions.
 R.PROVISIONAL = {
   UnitTurns=2, HeroTurns=2, Near=1, Middle=3, MaximumDistance=6,
-  SecurityDefault=50, ProductionSecurity=20,
+  SecurityDefault=50, ProductionSecurity=20, ProductionRelation=10,
+  TrainingRelation="WORST_ALIVE_MAJOR", -- training has no selected mission target
   ChanceSecurityDivisor=100, ChanceRelation=0.25, ChanceGuard=0.5,
   BranchBase=100, BranchSecurity=1, BranchUnrest=1, BranchStrength=100, BranchRelation=25,
   NeighborDistance=6,
@@ -67,6 +68,7 @@ function R.ProductionTurns(f, speed)
   f=f or {}; local p=R.PROVISIONAL
   local security=R.Clamp(f.Security or p.SecurityDefault,0,100)
   local turns=R.BASE_PRODUCTION + p.ProductionSecurity*(security-50)/50
+  turns=turns-p.ProductionRelation*R.Clamp(f.Relation or 0,0,1)
   for _,kind in ipairs({"Building","District","Policy","Government","Trait","Job"}) do
     turns=turns - (f[kind] or 0)*p["Production"..kind]
   end
@@ -181,7 +183,13 @@ function R.Relation(a,b)
 end
 function R.ProductionInput(id, city)
   local a,b=R.Input(Players[id]),R.Input(city)
-  return { Security=a.Security, Building=b.Building, District=b.District,
+  assert(R.PROVISIONAL.TrainingRelation=="WORST_ALIVE_MAJOR","JAC_ASN: training relation policy not implemented")
+  local relation=0
+  for _,player in ipairs(PlayerManager.GetAliveMajors()) do
+    local other=player:GetID()
+    if other~=id then relation=math.max(relation,R.Relation(id,other)) end
+  end
+  return { Security=a.Security, Relation=relation, Building=b.Building, District=b.District,
     Policy=a.Policy, Government=a.Government, Trait=b.Trait, Job=b.Job }
 end
 function R.RefreshTraining(id,p,city,turn)

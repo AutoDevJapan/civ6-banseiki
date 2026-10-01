@@ -279,7 +279,7 @@ class AssassinLuaTests(unittest.TestCase):
           Players[0]:SetProperty(A.INPUT,{Security=100}); ADVANCE(1)
           assert(A.State(0).Production.Due==1120 and A.State(0).Production.Start==1000)
           Players[0]:SetProperty(A.INPUT,{Security=0,Policy=1,Relations={['1']=1}}); ADVANCE(1)
-          assert(A.State(0).Production.Due==1070)
+          assert(A.State(0).Production.Due==1060)
           Players[0]:GetCities():FindID(10):SetProperty(A.INPUT,{Building=1000})
           ADVANCE(7); assert(NOW==1019 and A.State(0).Production.Due==1020)
           assert(A.State(0).LastCompletion==nil); ADVANCE(1)
@@ -592,14 +592,41 @@ class AssassinLuaTests(unittest.TestCase):
           ADVANCE(2); assert(DATA[1].Units[target] and A.State(0).LastMission.Result=='TARGET_GONE')
         """)
 
-    def test_diplomacy_changes_do_not_change_training_duration(self):
+    def test_diplomacy_changes_recalculate_training_with_worst_living_major(self):
         self.run_lua("""
           assert(A.StartProduction(0,10))
-          DATA[0].Wars[1]=true; Players[0]:SetProperty(A.INPUT,{Relations={['1']=1}})
-          ADVANCE(1); assert(A.State(0).Production.Due==1100)
+          Players[0]:SetProperty(A.INPUT,{Relations={['0']=1,['1']=0.5,['2']=-1,['3']=1}})
+          ADVANCE(1); assert(A.State(0).Production.Due==1095)
+          DATA[0].Wars[2]=true
+          ADVANCE(1); assert(A.State(0).Production.Due==1090)
+          DATA[0].Wars[2]=nil; DATA[2].Alive=false
           Players[1]:SetProperty('JAC_ASN_DIPLOMACY_V1',{Friendship={['0']=-10}})
-          ADVANCE(1); assert(A.State(0).Production.Due==1100)
-          assert(A.ProductionTurns({Relation=1})==100)
+          ADVANCE(1); assert(A.State(0).Production.Due==1094)
+          Players[0]:SetProperty(A.INPUT,{Relations={['1']=-1,['2']=1}})
+          ADVANCE(1); assert(A.State(0).Production.Due==1100 and RAND_CALLS==0)
+          assert(A.ProductionTurns({Relation=1})==90)
+          assert(A.ProductionTurns({Relation=2})==90 and A.ProductionTurns({Relation=-1})==100)
+          assert(A.ProductionTurns({Relation=1,Building=1000})==20)
+          for _,v in ipairs({{0.5,45},{0.67,61},{1,90},{1.5,135},{3,270}}) do
+            assert(A.ProductionTurns({Relation=1},v[1])==v[2])
+          end
+        """)
+
+    def test_training_relation_survives_reload_and_completes_at_reduced_boundary(self):
+        self.run_lua("""
+          Players[0]:SetProperty(A.INPUT,{Relations={['1']=1}})
+          assert(A.StartProduction(0,10)); ADVANCE(89)
+          assert(A.State(0).LastCompletion==nil and A.State(0).Production.Due==1090)
+          SAVED={Game=clone(GAME_PROPS),Players=clone(DATA),Now=NOW}
+          ADVANCE(1); GAME_PROPS,DATA,NOW=clone(SAVED.Game),clone(SAVED.Players),SAVED.Now
+          rebuild(); EVENTS={}
+        """)
+        self.lua.execute(RULES); self.lua.execute(GAMEPLAY)
+        self.run_lua("""
+          A=JAC_ASN; A.Tick(); local p=A.State(0).Production
+          assert(p.Start==1000 and p.Speed==1 and p.Turns==90 and p.Due==1090)
+          ADVANCE(1); assert(A.State(0).LastCompletion==1090 and A.State(0).ProductionUnlock==1100)
+          assert(RAND_CALLS==0)
         """)
 
     def test_relation_penalty_increases_hostility_and_shortens_wait(self):
@@ -616,7 +643,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(A.StartProduction(0,10)); FORCE(false,true)
           assert(A.StartAttempt(0,U,1,'LEADER')); ADVANCE(101)
           assert(Players[1]:GetProperty('JAC_ASN_DIPLOMACY_V1').Grievances['0']==25)
-          assert(A.State(0).LastCompletion==1100 and A.State(0).Production==nil)
+          assert(A.State(0).LastCompletion==1099 and A.State(0).Production==nil)
           local n=Players[0]:GetUnits():GetCount(); ADVANCE(2); assert(Players[0]:GetUnits():GetCount()==n)
         """)
 
@@ -1073,7 +1100,7 @@ class AssassinLuaTests(unittest.TestCase):
           assert(not pcall(function() NewTrainedUnit(0,before,fresh) end))
         """)
 
-    def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
+    def test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
         self.run_lua("""
           MAX_MAJOR=4
@@ -1118,8 +1145,8 @@ class AssassinLuaTests(unittest.TestCase):
                 elif step["action"]=="load":
                     self.run_lua("local s=LIVE_SAVES['"+step["name"]+"']; GAME_PROPS,DATA,NOW=clone(s.Game),clone(s.Players),s.Now; rebuild(); EVENTS={}")
                     self.lua.execute(RULES); self.lua.execute(GAMEPLAY)
-        self.assertEqual(turns,16)
-        self.run_lua("assert(NOW==1016 and RAND_CALLS==20 and FREE_CITY_CALLS==2 and Game:GetProperty('JAC_ASN_TEST_MODE')==nil)")
+        self.assertEqual(turns,18)
+        self.run_lua("assert(NOW==1018 and RAND_CALLS==20 and FREE_CITY_CALLS==2 and Game:GetProperty('JAC_ASN_TEST_MODE')==nil)")
 
     def test_live_final_check_rejects_penalty_added_during_load(self):
         scenario=json.loads((ROOT/"tools/civ6-autotest/scenarios/assassin-leader-save-load.json").read_text(encoding="utf-8"))
@@ -1193,12 +1220,12 @@ class AssassinPackagingTests(unittest.TestCase):
         actions=[s["action"] for s in scenario["steps"]]
         self.assertEqual(actions.count("save"),3); self.assertEqual(actions.count("load"),3)
         turns=sum(s.get("turns",1) for s in scenario["steps"] if s["action"]=="end_turn")
-        self.assertEqual(turns,16)
+        self.assertEqual(turns,18)
         self.assertTrue(all(s["timeout"]>=600 for s in scenario["steps"] if s["action"]=="end_turn"))
         code="\n".join(s.get("code","") for s in scenario["steps"])
         for needle in ("IsHuman()","SuccessRoll","FREE_STATE","ABSORPTION","SUCCESSION","CONGRESS",
                        "PRODUCTION_LOCK","MISSION_ACTIVE","COMMAND_LOCK","t.Lock-1","s.LastCompletion+10",
-                       "t.Start+120","t.Start+80","t.MinStart+20","ACTOR_GONE","LossGrievances+25","WarReason","PostDeathPlan",
+                       "t.Start+120","t.Start+110","t.Start+70","t.MinStart+20","ACTOR_GONE","LossGrievances+25","WarReason","PostDeathPlan",
                        "TestAdvanceDeadlines","TEST_MODE_OFF","GetFreeCitiesPlayerID","receiver formula",
                        "GetDiplomacy()","ChangeFavor","favor did not outweigh majority","Same(s.Mission,t.Frozen)"):
             self.assertIn(needle,code)

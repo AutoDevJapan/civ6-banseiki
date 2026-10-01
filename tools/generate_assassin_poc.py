@@ -262,19 +262,35 @@ def build_scenario():
       assert(Same(s.Mission,t.Frozen),'mission snapshot/SuccessRoll/DetectionRoll/BranchRoll rerolled')
       assert(s.Mission.PostDeathPlan.Policy.FreeState=='ENGINE_FREE_CITIES','plan lost')
       assert(s.CommandUnlock==t.CommandUnlock,'command wait lost')
-      Players[t.Actor]:SetProperty(R.INPUT,{Security=0}); return 'load retains all training and mission fields'
+      Players[t.Actor]:SetProperty(R.INPUT,{Security=100,Relations={[tostring(t.LossTarget)]=1}})
+      return 'load retains all training and mission fields; hostility set on a third country'
     """)
     advance()
     check("""
-      local s=R.State(t.Actor); assert(R.Turn()==t.Start+2,'turn count')
-      assert(s.Production.Due==t.Start+80 and s.Production.Turns==80,'current security did not shorten training')
+      local s=R.State(t.Actor)
+      assert(s.Production.Due==t.Start+110 and s.Production.Turns==110,'hostility did not shorten training by 10')
+      assert(Same(s.Mission,t.Frozen) and s.CommandUnlock==t.CommandUnlock,'relation changed frozen mission or wait')
+      Players[t.Actor]:SetProperty(R.INPUT,{Security=100,Relations={[tostring(t.LossTarget)]=-1}})
+      return 'worst living major hostility shortens training to 110; mission and command wait unchanged'
+    """)
+    advance()
+    check("""
+      local s=R.State(t.Actor)
+      assert(s.Production.Due==t.Start+120 and s.Production.Turns==120,'friendly relation did not restore training')
+      Players[t.Actor]:SetProperty(R.INPUT,{Security=0,Relations={[tostring(t.LossTarget)]=1}})
+      return 'friendly relations restore the 120-turn training deadline'
+    """)
+    advance()
+    check("""
+      local s=R.State(t.Actor); assert(R.Turn()==t.Start+4,'turn count')
+      assert(s.Production.Due==t.Start+70 and s.Production.Turns==70,'security and hostility did not shorten training')
       assert(s.Production and s.Mission and s.LastCompletion==nil,'premature result')
       assert(R.TestAdvanceDeadlines(t.Actor,{Training=true,Mission=true}))
       local accelerated=R.State(t.Actor); t.FastDue=R.Turn()+1; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
       assert(accelerated.Production.Due==t.FastDue and accelerated.Mission.Due==t.FastDue,'test deadlines not saved')
-      assert(accelerated.Production.Start==t.Start and accelerated.Production.Turns==80,'hook changed training rule')
+      assert(accelerated.Production.Start==t.Start and accelerated.Production.Turns==70,'hook changed training rule')
       assert(accelerated.CommandUnlock==s.CommandUnlock and accelerated.Mission.SuccessRoll==s.Mission.SuccessRoll,'hook changed outcome/wait')
-      return 'normal 80-turn deadline verified; test-only training and mission deadlines shortened'
+      return 'normal 70-turn deadline verified; test-only training and mission deadlines shortened'
     """)
     advance()
     check("""
@@ -490,8 +506,8 @@ def build_scenario():
       return 'next turn cannot repeat effects; test mode disabled; hook inert; at most 20 end_turns'
     """)
     turns=sum(s.get("turns",1) for s in steps if s["action"]=="end_turn")
-    assert turns==16, f"unexpected live turn budget: {turns}"
-    return {"name":"Assassin: 16 live turns, dynamic 100/120/80/20 training, decided death outcomes, favor vote, lost actors, three save/load cycles",
+    assert turns==18, f"unexpected live turn budget: {turns}"
+    return {"name":"Assassin: 18 live turns, dynamic 100/120/110/120/70/20 training with diplomacy, decided death outcomes, favor vote, lost actors, three save/load cycles",
             "judge_profile":"japan_map","steps":steps}
 
 
