@@ -488,6 +488,29 @@ class AbsorptionTests(unittest.TestCase):
         self.assertGreater(self.g.UI_CITY_READS, 0)
         self.assertTrue(self.a.Verify("test-absorption", True))
 
+    def test_only_missing_work_slot_getter_still_requires_final_ui_publication(self):
+        self.run_lua("""local full={}
+          for x,c in pairs(CITIES) do
+            local b=c.GetBuildings;full[x]=b
+            c.GetBuildings=function(self) local v=b(self);v.GetGreatWorkInSlot=nil;return v end
+          end
+          UI_FINAL_READY=false
+          ExposedMembers.JAC_HeroReadAPI={
+            GetObservation=function(token) return UI_FINAL_READY and {Published=true} or nil end,
+            ReadCity=function(owner,id,method,building,slot)
+              assert(method=='WORK')
+              local c=assert(Players[owner]:GetCities():FindID(id))
+              return full[c.x](c):GetGreatWorkInSlot(building,slot)
+            end}
+        """)
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertTrue(tx.AwaitingFinalUI)
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.run_lua("UI_FINAL_READY=true")
+        self.assertEqual(self.a.Resume("test-absorption").Status, "COMPLETE")
+        self.assertTrue(self.a.Verify("test-absorption", True))
+
     def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
         self.add_native_hero(second=True)
         self.apply()

@@ -251,6 +251,38 @@ class RestartActionTests(unittest.TestCase):
             runner._launch_steam_and_wait(120)
         self.assertEqual(launch.call_count, 2)
 
+    def test_failed_new_launch_releases_its_helper_before_next_steam_request(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock, events, orphan = [0.0], [], [False]
+
+        def cleanup():
+            if orphan[0]:
+                orphan[0] = False
+                events.append("closed failed launch helper")
+                return [99]
+            return []
+
+        def launch():
+            self.assertFalse(orphan[0], "Steam is still blocked by the crashed launch")
+            events.append("launch")
+            orphan[0] = events.count("launch") == 1
+
+        def wait(deadline):
+            clock[0] = deadline
+            if events.count("launch") < 2:
+                raise InputError("first launch crashed")
+            return 123
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.close_orphaned_civ_reporters", side_effect=cleanup), patch(
+            "scenario.launch_via_steam", side_effect=launch
+        ), patch("scenario.wait_for_civ_window", side_effect=wait), patch(
+            "scenario.time.sleep", side_effect=lambda n: clock.__setitem__(0, clock[0] + n)
+        ):
+            runner._launch_steam_and_wait(120)
+        self.assertEqual(events, ["launch", "closed failed launch helper", "launch"])
+
     def test_four_launch_requests_still_wait_for_delayed_window_until_deadline(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         clock = [0.0]

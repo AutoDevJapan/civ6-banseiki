@@ -1032,7 +1032,8 @@ local function Execute(state, tx)
   -- Finish all city mutations, then let UI-only citizen/work caches catch up.
   if tx.Cities[1] then
     local first = CityManager.GetCityAt(tx.Cities[1].X, tx.Cities[1].Y)
-    if not first:GetReligion().GetReligionsInCity or not first:GetBuildings().GetNumGreatWorkSlots then
+    if not first:GetReligion().GetReligionsInCity or not first:GetBuildings().GetNumGreatWorkSlots
+      or not first:GetBuildings().GetGreatWorkInSlot then
       local reads = ExposedMembers.JAC_HeroReadAPI
       if not reads or not reads.GetObservation or not reads.GetObservation(tx.ID .. ":final") then
         tx.AwaitingFinalUI = true

@@ -507,6 +507,19 @@ class Runner:
             if not process_present and now >= next_launch and attempts < 4:
                 # Exhausting launch requests is not the caller's timeout: Steam can
                 # complete the fourth request later. Keep waiting without launching again.
+                # A launch can itself crash before opening a window and leave a new
+                # helper that keeps Steam's running-app entry alive for the retry.
+                closed = close_orphaned_civ_reporters()
+                if closed:
+                    print(f"Closed helpers from failed launch: {closed}", flush=True)
+                    time.sleep(min(8, _remaining(deadline)))
+                    try:
+                        if single_civ_process(settle=0) is not None:
+                            continue
+                    except InputError as exc:
+                        if str(exc).startswith("Multiple Civ VI processes found"):
+                            continue
+                        raise
                 launch_via_steam()
                 attempts += 1
                 next_launch = now + 45
