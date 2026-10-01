@@ -389,8 +389,28 @@
     },
     {
       "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "-- Keep hero verification pending until the saved game reloads.\nExposedMembers.JAC_RP_HeroUI.UnitInfo=function() return nil end; return 'hero verification held for pending save'"
+    },
+    {
+      "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local before=p:GetReligion():GetFaithBalance(); local yield=p:GetReligion():GetFaithYield(); ExposedMembers.JAC_RP_ExpectedHeroFaith=before+yield*10; R.ResolveDiscovery(id,'choice_HERO','HERO',{city=city}); return 'official hero created, awaiting UI verification'"
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local before=p:GetReligion():GetFaithBalance(); local yield=p:GetReligion():GetFaithYield(); R.ResolveDiscovery(id,'choice_HERO','HERO',{city=city}); local h=R.Export().heroes['0']; if not h or h.verification~='PENDING' or R.Inspect(id).discoveries.choice_HERO.effects~='PENDING' or p:GetReligion():GetFaithBalance()~=before then error('hero reward must remain unpaid before pending save') end; return tostring(before+yield*10)..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "capture_as": "RP_HERO_EXPECTED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-HERO-PENDING",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-HERO-PENDING",
+      "timeout": 240
     },
     {
       "action": "wait_for",
@@ -404,7 +424,13 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=h and Players[0]:GetUnits():FindID(h.unit); if not u or not u:IsHero() or u:GetHeroClassType()~=h.heroClass or u:GetLifespan()<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 or Players[0]:GetReligion():GetFaithBalance()~=ExposedMembers.JAC_RP_ExpectedHeroFaith then error('official hero and faith reward not verified') end; return 'official hero class, lifespan, claim and ten times faith yield verified'"
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=h and Players[0]:GetUnits():FindID(h.unit); if not u or not u:IsHero() or u:GetHeroClassType()~=h.heroClass or u:GetLifespan()<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 then error('official hero and faith reward not verified') end; return 'official hero class, lifespan, claim and ten times faith yield verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local p=Players[0]; if h.verification~='APPLIED' or pcall(R.CompleteHero,0) then error('saved hero must complete only once') end; return tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "RP_HERO_EXPECTED"
     },
     {
       "action": "ui_lua",

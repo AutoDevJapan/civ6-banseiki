@@ -112,7 +112,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
 ```
 
-万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。95ステップ、9回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
+万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。100ステップ、10回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。
 
 | 段階 | 自己検査 |
 |---|---|
@@ -168,7 +168,7 @@ religion-09のModding.logには「UserInterface components require only the .xml
 
 残る実機はreligion-persistence.jsonの通し成功。吸収の消去・人数配分、科学と文化の実産出、Artifactと返還の効果、公式英雄の加入・信仰報酬、残る3段階の保存と読み込み、保有資料の再利用、対応付けた実宗教の再興、宗教同盟の自然終了、手動の新規ゲームでの検証フラグ解除を確認する。英雄が未完了の状態での保存・再開は追加の確認項目。無宗教・他宗教の市民数を変えて通すことや、検査を外して通すことはしない。マージは実機成功とMust解消の後とする。
 
-最終レビューの提案に従い、動作済みのJAC_CustomCivs_UIFilesと同じく、XMLと同名LuaをImportFilesにも登録した。ゲーム開始直後にUI橋の存在を待つ検査を追加し、吸収の不一致で止まる前にも読込を判定する。現行のシナリオは95ステップ・Lua61片。追加後の実機は上限のため次のShepherdで実行する。
+最終レビューの提案に従い、動作済みのJAC_CustomCivs_UIFilesと同じく、XMLと同名LuaをImportFilesにも登録した。ゲーム開始直後にUI橋の存在を待つ検査を追加し、吸収の不一致で止まる前にも読込を判定する。現行のシナリオは100ステップ・Lua63片。追加後の実機は上限のため次のShepherdで実行する。
 
 
 ## 圧力消去の引数を確認する診断
@@ -178,3 +178,6 @@ religion-09のModding.logには「UserInterface components require only the .xml
 消去は `RemovePressureOneReligion(religion,8388607,-1)` と、最大値に残り得る小数部分を消す `RemovePressureOneReligion(religion,1,-1)` の2回へ変更した。追加の圧力量も符号付き24.8形式の上限を超えない倍率へ制限する。同じ1引数呼び出しを使っていた実機準備と再興前の喪失準備も修正した。Luaの模擬は単なる全消去から圧力量の減算へ変え、最大圧力と小数部分がある状態での変換も検査する。
 
 `religion-pressure-probe.json` は12手順の診断である。表示用Luaから圧力の一覧を読み、各候補について消去前・直後・追加による再計算後を記録する。本体解析から得た引数と通し実行の成功は、実機結果が出るまで未確認として扱う。
+
+
+英雄の未完了予約も通しシナリオで保存する。加入前に検証用コードだけでUIのUnit情報を一時的に取得不能にし、報酬が未払いの予約を確認して保存する。メニューへ戻り読み込むと表示用Luaが新しく読み込まれ、公式英雄の照合と信仰報酬が再開する。報酬を加える前の残高と予定の報酬・Unit・クラスをドライバー側に保存し、読込後の実残高とUnit・クラスを比較する。完了の再実行は拒否される。100手順・Lua63片・10回の保存読込を検査し、実機成功は結果が出てから記録する。

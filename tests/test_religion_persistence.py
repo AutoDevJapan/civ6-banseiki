@@ -1329,7 +1329,9 @@ class ReligionPersistenceTests(unittest.TestCase):
         captures, saves = {}, {}
         compared, loaded, native_founded = 0, 0, 0
         for step in scenario["steps"]:
-            if step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner":
+            if step.get("code", "").startswith("-- Keep hero verification pending"):
+                self.lua.execute(step["code"])
+            elif step["action"] == "ui_lua" and step["state_name"] == "GameCore_Tuner":
                 value = self.lua.execute(step["code"])
                 self.g.HERO_UI_TICK()
                 if value == "native placeholder religion founded":
@@ -1346,12 +1348,13 @@ class ReligionPersistenceTests(unittest.TestCase):
                 saved, engine, turn = saves[step["name"]]
                 self.load(saved, engine=engine)
                 self.g.TURN = turn
+                self.g.HERO_UI_TICK()
                 loaded += 1
             elif step["action"] in ("autoplay", "end_turn"):
                 self.g.TURN += step["turns"]
                 self.g.TURN_HOOK()
-        self.assertEqual(loaded, 9)
-        self.assertEqual(compared, 12)
+        self.assertEqual(loaded, 10)
+        self.assertEqual(compared, 13)
         self.assertEqual(native_founded, 1)
         self.assertEqual(self.state()["revivalCount"], 1)
         self.assertEqual(self.state()["state"], "PUBLIC")
@@ -1365,7 +1368,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                 chunks.append(step["code"])
             elif step["action"] == "wait_for" and step["condition"]["type"] == "lua":
                 chunks.append(step["condition"]["code"])
-        self.assertEqual(len(chunks), 61)
+        self.assertEqual(len(chunks), 63)
         for code in chunks:
             self.assertTrue(self.lua.execute("local f,e=load(...); if not f then error(e) end; return true", code))
 
