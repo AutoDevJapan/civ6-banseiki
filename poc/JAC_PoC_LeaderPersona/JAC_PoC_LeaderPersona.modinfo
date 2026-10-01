@@ -201,6 +201,58 @@
       </Properties>
       <File>UI/JAC_TitleProxy_View.xml</File>
     </AddUserInterfaces>
+    <UpdateIcons id="JAC_Persona_UpdateIcons_0" criteria="JAC_Persona_Map_0">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Data/JAC_LeaderPersona_Icons.xml</File>
+    </UpdateIcons>
+    <ReplaceUIScript id="JAC_Persona_UnitPanel_0" criteria="JAC_Persona_Map_0">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <LuaContext>UnitPanel</LuaContext>
+        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
+      </Properties>
+    </ReplaceUIScript>
+    <UpdateIcons id="JAC_Persona_UpdateIcons_1" criteria="JAC_Persona_Map_1">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Data/JAC_LeaderPersona_Icons.xml</File>
+    </UpdateIcons>
+    <ReplaceUIScript id="JAC_Persona_UnitPanel_1" criteria="JAC_Persona_Map_1">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <LuaContext>UnitPanel</LuaContext>
+        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
+      </Properties>
+    </ReplaceUIScript>
+    <UpdateIcons id="JAC_Persona_UpdateIcons_2" criteria="JAC_Persona_Map_2">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Data/JAC_LeaderPersona_Icons.xml</File>
+    </UpdateIcons>
+    <ReplaceUIScript id="JAC_Persona_UnitPanel_2" criteria="JAC_Persona_Map_2">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <LuaContext>UnitPanel</LuaContext>
+        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
+      </Properties>
+    </ReplaceUIScript>
+    <UpdateIcons id="JAC_Persona_UpdateIcons_3" criteria="JAC_Persona_Map_3">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Data/JAC_LeaderPersona_Icons.xml</File>
+    </UpdateIcons>
+    <ReplaceUIScript id="JAC_Persona_UnitPanel_3" criteria="JAC_Persona_Map_3">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <LuaContext>UnitPanel</LuaContext>
+        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
+      </Properties>
+    </ReplaceUIScript>
   </InGameActions>
   <Files>
     <File>JAC_PoC_LeaderPersona.dep</File>

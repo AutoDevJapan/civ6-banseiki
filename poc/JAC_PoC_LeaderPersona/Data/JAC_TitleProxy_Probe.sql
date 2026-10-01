@@ -2,6 +2,7 @@
 -- GovernorsCannotAssign: Expansion2_Schema.sql:362; official UI calls these
 -- "secret governors". AI abstention is unproven and MUST be measured in game.
 DELETE FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas);
+DELETE FROM Types WHERE Type IN (SELECT GovernorType FROM JAC_LeaderPersonas);
 INSERT INTO Types (Type, Kind) VALUES
  ('GOVERNOR_JAC_TITLE_PROXY', 'KIND_GOVERNOR'),
  ('GOVERNOR_PROMOTION_JAC_TITLE_PROXY_BASE', 'KIND_GOVERNOR_PROMOTION');
