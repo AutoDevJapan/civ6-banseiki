@@ -18,3 +18,9 @@ INSERT INTO JAC_AbsorptionOutcomes (Kind, Outcome, Destination) VALUES
 ('ITEM','RETURN','RETURN'), ('ITEM','SCATTER','ARCHIVE'),
 ('UNLOCK','INHERIT','ABSORBER'), ('UNLOCK','PRESERVE','ARCHIVE'),
 ('RELIGION','PRESERVE','ABSORBER');
+
+-- Absorption PoC needs a purchasable native cleric as a diagnostic stand-in.
+-- Sengoku_Unlocks disables units outside its provisional allowlist (load order 200).
+-- This action runs only with the absorption PoC in the Banseiki ruleset; it does
+-- not define the final religious profession/unlock design. Keep the Shrine prerequisite.
+UPDATE Units SET CanTrain = 1 WHERE UnitType = 'UNIT_MISSIONARY';

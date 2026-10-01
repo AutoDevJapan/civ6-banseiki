@@ -220,6 +220,7 @@ function print() end
 def outcome_rows():
     db = sqlite3.connect(":memory:")
     try:
+        db.execute("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER)")
         db.executescript((MOD / "Data/JAC_Absorption.sql").read_text(encoding="utf-8"))
         return [dict(zip(("Kind", "Outcome", "Destination"), row))
                 for row in db.execute("SELECT Kind,Outcome,Destination FROM JAC_AbsorptionOutcomes")]
@@ -1855,6 +1856,19 @@ class AbsorptionTests(unittest.TestCase):
 
 
 class AbsorptionPackageTests(unittest.TestCase):
+    def test_cleric_fixture_can_be_purchased_without_enabling_other_disabled_units(self):
+        with sqlite3.connect(":memory:") as db:
+            db.execute("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER)")
+            db.executemany("INSERT INTO Units VALUES (?,?)", [
+                ("UNIT_MISSIONARY", 0), ("UNIT_APOSTLE", 0), ("UNIT_HERO_HERCULES", 0), ("UNIT_WARRIOR", 1)])
+            db.executescript((MOD / "Data/JAC_Absorption.sql").read_text(encoding="utf-8"))
+            self.assertEqual(dict(db.execute("SELECT UnitType,CanTrain FROM Units")), {
+                "UNIT_MISSIONARY": 1, "UNIT_APOSTLE": 0, "UNIT_HERO_HERCULES": 0, "UNIT_WARRIOR": 1})
+        root = ET.parse(MOD / "JAC_PoC_Absorption.modinfo").getroot()
+        action = root.find("./InGameActions/UpdateDatabase")
+        self.assertEqual(action.get("criteria"), "JAC_Absorption_Banseiki")
+        self.assertGreater(int(action.findtext("./Properties/LoadOrder")), 200)
+
     def test_scenario_lua_compiles_and_both_snapshots_have_round_trip_comparisons(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json").read_text(encoding="utf-8"))
         steps = data["steps"]
