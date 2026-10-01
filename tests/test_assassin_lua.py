@@ -1220,6 +1220,11 @@ class AssassinLuaTests(unittest.TestCase):
           local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); t.FinalNations=Game:GetProperty(A.NATIONS)
           t.FinalState=A.State(0); Game:SetProperty('JAC_ASN_LIVE_TEST',t)
         """)
+        self.run_lua(checks[0].split('local function Same')[0]+"""
+          t.FinalUnits={}
+          for _,id in ipairs({U,U2}) do t.FinalUnits[tostring(id)]=TrainedSnapshot(0,id) end
+          Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+        """)
         self.run_lua(checks[0])
         self.run_lua("""
           local ledger=Players[1]:GetProperty('JAC_ASN_DIPLOMACY_V1')

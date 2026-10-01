@@ -136,7 +136,20 @@ def ui(code, state="GameCore_Tuner"):
 
 def active():
     return {"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"InGame",
-        "code":"local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"}}
+        "code":"""local p=Players[Game.GetLocalPlayer()]
+        if not p or not p:IsTurnActive() then return false end
+        if not JAC_ASN_TRACE then
+          JAC_ASN_TRACE=true
+          Events.UnitDamageChanged.Add(function(owner,id,damage)
+            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')
+            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end
+          end)
+          Events.UnitRemovedFromMap.Add(function(owner,id)
+            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')
+            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end
+          end)
+        end
+        return true"""}}
 
 
 def build_scenario():
@@ -176,8 +189,17 @@ def build_scenario():
       return found
     end; local function TrainedUnit(owner,id)
       local u=Players[owner]:GetUnits():FindID(id)
-      assert(u and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,'trained unit is not placed on the map')
+      assert(u and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,
+        'trained unit is not placed on the map: id='..tostring(id)..' turn='..R.Turn()..
+        ' type='..tostring(u and u:GetType())..' x='..tostring(u and u:GetX())..' y='..tostring(u and u:GetY()))
       return u
+    end; local function TrainedSnapshot(owner,id)
+      local u=Players[owner]:GetUnits():FindID(id)
+      local row={ID=id,Present=u~=nil}
+      if u then row.Type=u:GetType(); row.X=u:GetX(); row.Y=u:GetY(); row.Damage=u:GetDamage() end
+      print('[JAC_ASN_TRACE] snapshot turn='..R.Turn()..' id='..id..' present='..tostring(row.Present)..
+        ' type='..tostring(row.Type)..' xy='..tostring(row.X)..','..tostring(row.Y)..' damage='..tostring(row.Damage))
+      return row
     end; local function TrainingUnits(owner)
       local ids={}; for _,u in Players[owner]:GetUnits():Members() do
         if R.IsAssassin(u) then ids[tostring(u:GetID())]=true end
@@ -199,7 +221,12 @@ def build_scenario():
     steps=[enable,configure,{"action":"start_game","timeout":300},active()]
 
     def check(code, state="GameCore_Tuner"):
-        steps.append(ui(prefix+grant+equality+" ".join(line.strip() for line in code.splitlines()),state))
+        trace="""if t and t.LockState then
+          TrainedSnapshot(t.Actor,t.LockState.LastProducedUnit)
+          local id=R.State(t.Actor).LastProducedUnit
+          if id and id~=t.LockState.LastProducedUnit then TrainedSnapshot(t.Actor,id) end
+        end; """
+        steps.append(ui(prefix+grant+equality+trace+" ".join(line.strip() for line in code.splitlines()),state))
 
     def advance(n=1):
         # assassin-04: ~150 seconds per human turn on 15 km / 22 houses.
@@ -474,6 +501,10 @@ def build_scenario():
       t.FinalGrievances=ledger.Grievances[tostring(t.Actor)]; t.FinalFriendship=ledger.Friendship[tostring(t.Actor)]
       t.FinalApplied=ledger.Applied; t.FinalMissionID=s.LastMission.ID; t.FinalWait=s.CommandUnlock
       t.FinalNations=Game:GetProperty(R.NATIONS); t.FinalState=s
+      t.FinalUnits={}
+      for _,id in ipairs({t.LockState.LastProducedUnit,s.LastProducedUnit}) do
+        t.FinalUnits[tostring(id)]=TrainedSnapshot(t.Actor,id); TrainedUnit(t.Actor,id)
+      end
       Game:SetProperty('JAC_ASN_LIVE_TEST',t); return 'full national histories, state, penalties and applied missions recorded before save'
     """)
     round_trip("JAC-Assassin-Outcomes")
@@ -485,6 +516,9 @@ def build_scenario():
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'load added applied mission') end
       local s=R.State(t.Actor); assert(Same(s,t.FinalState),'load changed state')
       TrainedUnit(t.Actor,t.LockState.LastProducedUnit); TrainedUnit(t.Actor,s.LastProducedUnit)
+      for key,row in pairs(t.FinalUnits) do
+        assert(Same(TrainedSnapshot(t.Actor,tonumber(key)),row),'load changed trained individual: '..key)
+      end
       assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE' and s.CommandUnlock==t.FinalWait,'load changed result or wait')
       R.Tick(); return 'all branch histories, cancelled results and pre-save penalties survive load'
     """)
