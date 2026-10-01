@@ -32,6 +32,18 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_persona_native_eligibility_diagnostic_validates_without_operating_the_game(self):
+        data = scenario("leader-persona-native-eligibility-15km.json")
+        validate_scenario(data)
+        self.assertTrue(data["strict_lua_errors"])
+        self.assertEqual([s["turns"] for s in data["steps"] if s["action"] == "end_turn"], [1])
+        self.assertFalse(any(s["action"] in ("restart_game", "autoplay") for s in data["steps"]))
+        compile_chunk = lupa.LuaRuntime().eval("function(code) local f,err=load(code); assert(f,err); return true end")
+        for step in data["steps"]:
+            code = step.get("code") or step.get("condition", {}).get("code")
+            if code:
+                self.assertTrue(compile_chunk(code))
+
     def test_run_rejects_invalid_metadata_even_without_a_fast_forward_step(self):
         for action in ({"action": "restart_game"}, {"action": "pause", "seconds": 0.1}):
             with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
