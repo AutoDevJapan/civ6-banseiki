@@ -174,6 +174,10 @@ def build_scenario():
       assert(found,'fixture unit has no valid placement within six tiles: '..kind..' owner='..owner)
       if R.IsAssassin(found) then FixtureReveal(owner,x,y); FixtureReveal(owner,found:GetX(),found:GetY()) end
       return found
+    end; local function TrainedUnit(owner,id)
+      local u=Players[owner]:GetUnits():FindID(id)
+      assert(u and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,'trained unit is not placed on the map')
+      return u
     end; """
     equality="""local function Same(a,b)
       if type(a)~=type(b) then return false end
@@ -275,6 +279,7 @@ def build_scenario():
       assert(n.People.JAC_LIVE_FREE_PERSON.SourceUnit==t.FreePersonUnit,'free person identity lost')
       local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait')
       assert(s.Production==nil and s.LastCompletion==t.FastDue and Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'training not processed')
+      TrainedUnit(t.Actor,s.LastProducedUnit)
       assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin')
       for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK') end
       R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock')
@@ -284,6 +289,7 @@ def build_scenario():
     round_trip("JAC-Assassin-Lock")
     check("""
       local s=R.State(t.Actor); assert(Same(s,t.LockState),'lock/state lost')
+      TrainedUnit(t.Actor,s.LastProducedUnit)
       assert(Same(R.Nation(t.Target),t.FreeNation),'free-city history or people lost')
       assert(not Players[t.Target]:IsAlive(),'load resurrected retired slot')
       for _,c in ipairs(t.FreeAssets) do local actual=CityManager.GetCityAt(c.X,c.Y)
@@ -309,6 +315,7 @@ def build_scenario():
     check("""local s=R.State(t.Actor); assert(s.LastCompletion==t.MinStart+1 and s.Production==nil,'shortened minimum completion')
       assert(s.ProductionUnlock==s.LastCompletion+10,'second nationwide lock')
       assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'second trained unit absent')
+      TrainedUnit(t.Actor,s.LastProducedUnit)
       Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil)
       return 'real turn completes second training and starts a new full 10-turn lock'""")
 
@@ -448,6 +455,7 @@ def build_scenario():
       for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'load lost applied mission') end
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'load added applied mission') end
       local s=R.State(t.Actor); assert(Same(s,t.FinalState),'load changed state')
+      TrainedUnit(t.Actor,t.LockState.LastProducedUnit); TrainedUnit(t.Actor,s.LastProducedUnit)
       assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE' and s.CommandUnlock==t.FinalWait,'load changed result or wait')
       R.Tick(); return 'all branch histories, cancelled results and pre-save penalties survive load'
     """)
@@ -459,6 +467,7 @@ def build_scenario():
       for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'next turn lost applied mission') end
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'next turn added applied mission') end
       local s=R.State(t.Actor); assert(Same(s,t.FinalState),'next turn changed state')
+      TrainedUnit(t.Actor,t.LockState.LastProducedUnit); TrainedUnit(t.Actor,s.LastProducedUnit)
       assert(s.LastMission.ID==t.FinalMissionID and s.CommandUnlock==t.FinalWait,'next turn changed result or wait')
       assert(not Players[t.Target]:IsAlive() and not Players[t.Houses.CIVILIZATION_JAC_ASAKURA]:IsAlive(),'retired slot resurrected')
       assert(R.Turn()-t.Start<=20,'scenario exceeded live turn budget')

@@ -1047,6 +1047,18 @@ class AssassinLuaTests(unittest.TestCase):
           assert(Players[0]:GetUnits():FindID(U) and Players[0]:GetUnits():FindID(U2))
         """)
 
+    def test_live_trained_unit_check_rejects_unplaced_missing_or_wrong_type_unit(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("BAD_TRAINED=GRANT(0,0,-9999,-9999):GetID(); WRONG_TRAINED=GRANT(0,1,2,0):GetID()")
+        self.run_lua("local R=A; "+helper+"""
+          assert(TrainedUnit(0,U):GetID()==U)
+          assert(not pcall(function() TrainedUnit(0,BAD_TRAINED) end))
+          assert(not pcall(function() TrainedUnit(0,WRONG_TRAINED) end))
+          assert(not pcall(function() TrainedUnit(0,-1) end))
+        """)
+
     def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
         self.run_lua("""
@@ -1104,9 +1116,10 @@ class AssassinLuaTests(unittest.TestCase):
             ['3']={State='ABSORPTION'},['4']={Branch='CONGRESS'}})
           Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,Target=1,LossTarget=1,Houses={CIVILIZATION_JAC_IMAGAWA=2,
             CIVILIZATION_JAC_ASAKURA=3,CIVILIZATION_JAC_ASHIKAGA=4},
+            LockState={LastProducedUnit=U},
             FinalGrievances=100,FinalFriendship=-40,FinalApplied={m=1},FinalMissionID='m',FinalWait=1100})
           Players[1]:SetProperty('JAC_ASN_DIPLOMACY_V1',{Grievances={['0']=100},Friendship={['0']=-40},Applied={m=1}})
-          Players[0]:SetProperty(A.STATE,{LastMission={ID='m',Result='ACTOR_GONE'},CommandUnlock=1100})
+          Players[0]:SetProperty(A.STATE,{LastMission={ID='m',Result='ACTOR_GONE'},CommandUnlock=1100,LastProducedUnit=U2})
           local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); t.FinalNations=Game:GetProperty(A.NATIONS)
           t.FinalState=A.State(0); Game:SetProperty('JAC_ASN_LIVE_TEST',t)
         """)

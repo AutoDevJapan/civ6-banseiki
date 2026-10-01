@@ -15,7 +15,9 @@ local BASE_OnRefresh = OnRefresh
 -- 通知の有無ではなく、保存された判定ターンと選択済みの期で手番の終了を止める。
 -- ボタン・Enter・通知の追加ボタンは公式 ActionPanel.lua:250,297,605,1298 の DoEndTurn を通る。
 function JAC_IsDarkPolicyEndTurnBlocked()
-	return JAC_AgesView_PendingDarkPolicy(JAC_AgesView_Ledger(), Game.GetLocalPlayer()) ~= nil
+	local ledger, id = JAC_AgesView_Ledger(), Game.GetLocalPlayer()
+	return JAC_AgesView_PendingOath(ledger, id) ~= nil
+		or JAC_AgesView_PendingDarkPolicy(ledger, id) ~= nil
 end
 
 -- 公式の Shift+Enter は DoEndTurn を通さず直接終了する（ActionPanel.lua:1093-1106）。
@@ -33,7 +35,11 @@ function DoEndTurn(optionalNewBlocker)
 		local player = Players[Game.GetLocalPlayer()]
 		if player and player:IsTurnActive() then
 			LuaEvents.JAC_SengokuReignPopup_CloseForPolicy()
-			LuaEvents.JAC_SengokuDarkPolicy_Open(JAC_AgesView_Ledger().reign)
+			if JAC_AgesView_PendingOath(JAC_AgesView_Ledger(), Game.GetLocalPlayer()) then
+				LuaEvents.JAC_SengokuOaths_Open()
+			else
+				LuaEvents.JAC_SengokuDarkPolicy_Open(JAC_AgesView_Ledger().reign)
+			end
 		end
 		return
 	end
@@ -49,8 +55,9 @@ function OnRefresh()
 	BASE_OnRefresh()
 	local player = Players[Game.GetLocalPlayer()]
 	if not JAC_IsDarkPolicyEndTurnBlocked() or not player or not player:IsTurnActive() then return end
-	Controls.EndTurnText:SetText(Locale.Lookup("LOC_JAC_AGE_DARK_CHOICE_TITLE"))
-	Controls.EndTurnButton:SetToolTipString(Locale.Lookup("LOC_JAC_AGE_DARK_CHOICE_REQUIRED"))
+	local oath = JAC_AgesView_PendingOath(JAC_AgesView_Ledger(), Game.GetLocalPlayer())
+	Controls.EndTurnText:SetText(Locale.Lookup(oath and "LOC_JAC_OATH_CHOOSE" or "LOC_JAC_AGE_DARK_CHOICE_TITLE"))
+	Controls.EndTurnButton:SetToolTipString(Locale.Lookup(oath and "LOC_JAC_OATH_PENDING" or "LOC_JAC_AGE_DARK_CHOICE_REQUIRED"))
 	Controls.CurrentTurnBlockerIcon:SetHide(false)
 	Controls.CurrentTurnBlockerIcon:SetIcon("ICON_NOTIFICATION_USER_DEFINED_3")
 	Controls.CountImage:SetHide(true)
