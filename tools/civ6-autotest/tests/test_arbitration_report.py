@@ -38,9 +38,21 @@ LOG = """[JAC_ARB] loaded shogunate_end_turn=120
 
 
 class ArbitrationReportTests(unittest.TestCase):
-    def summary(self, log=LOG, test_mode=None, result=True):
+    def coverage_log(self):
+        lines = []
+        for turn in range(1, 202):
+            lines.append(f"[JAC_ARB] ai weariness roster turn={turn} cities=0:2,1:2,2:2,3:2\n")
+            for player in range(4):
+                lines.append(f"[JAC_ARB] ai weariness player={player} turn={turn} total=0 observed=2 cities=2\n")
+        return "".join(lines)
+
+    def summary(self, log=LOG, test_mode=None, result=True, coverage=True):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            if coverage is True:
+                log += self.coverage_log()
+            elif isinstance(coverage, str):
+                log += coverage
             (root / "Lua.log").write_text(log, encoding="utf-8")
             steps = [dict(status="OK", action=f"{i}/18 autoplay", detail="autoplay completed 50 turns") for i in range(4)]
             steps += [dict(status="OK", action="18/18 ui_lua", detail="return=T+201 surviving majors=22"),
@@ -126,10 +138,20 @@ class ArbitrationReportTests(unittest.TestCase):
         data = self.summary("""[JAC_ARB] loaded shogunate_end_turn=120
 [JAC_ARB] ai weariness player=0 turn=2 total=0 observed=0 cities=2
 [JAC_ARB] ai weariness player=1 turn=2 total=0 observed=2 cities=2
-""")
+""", coverage=False)
         self.assertEqual(data["requests"], 0)
         self.assertEqual(data["weariness_coverage"], {"samples": 2, "observed_cities": 2, "total_cities": 4})
         self.assertIn("延べ2/4都市", report.markdown(data))
+
+    def test_weariness_missing_duplicate_or_mismatched_samples_prevent_completion(self):
+        full = self.coverage_log()
+        row = "[JAC_ARB] ai weariness player=0 turn=7 total=0 observed=2 cities=2\n"
+        roster = "[JAC_ARB] ai weariness roster turn=7 cities=0:2,1:2,2:2,3:2\n"
+        for changed in ("", full.replace(row, ""), full + row, full.replace(roster, ""), full + roster,
+                        full.replace(row, row.replace("observed=2", "observed=3")),
+                        full.replace(row, row.replace("cities=2", "cities=3"))):
+            with self.subTest(tail=changed[-80:]):
+                self.assertFalse(self.summary(coverage=changed)["measurement_complete"])
 
     def test_refusal_cost_must_match_each_respondent_and_pair(self):
         for changed in (

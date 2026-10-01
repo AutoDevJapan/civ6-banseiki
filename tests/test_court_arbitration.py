@@ -727,6 +727,7 @@ class ArbitrationAiTests(unittest.TestCase):
         self.assertIsNone(self.game("JAC_ARB_PENDING"))
         self.assertIn("[JAC_ARB] ai weariness player=0 turn=2 total=0 observed=0 cities=2", self.log())
         self.assertIn("[JAC_ARB] ai weariness player=1 turn=2 total=0 observed=2 cities=2", self.log())
+        self.assertIn("[JAC_ARB] ai weariness roster turn=2 cities=0:2,1:2,2:2", self.log())
         self.assertFalse(any(line.startswith("[JAC_ARB] ai weariness player=3 turn=2 ") for line in self.log()))
 
     def test_exhausted_party_requests_pays_and_waits_until_the_following_turn(self):

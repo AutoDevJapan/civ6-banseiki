@@ -21,6 +21,7 @@ def summarize(artifact: Path) -> dict:
     refusals, decisions, ai, blocked = [], Counter(), {}, Counter()
     refused_players, loads = {}, 0
     weariness = []
+    rosters = {}
     end_turns = set()
     for event in events:
         f = dict(FIELDS.findall(event))
@@ -72,6 +73,12 @@ def summarize(artifact: Path) -> dict:
         elif event.startswith("ai blocked "):
             for key in ("gold", "legitimacy", "interval"):
                 blocked[key] += int(f[key])
+        elif event.startswith("ai weariness roster "):
+            turn = int(f["turn"])
+            pairs = [] if f["cities"] == "none" else [tuple(map(int, v.split(":"))) for v in f["cities"].split(",")]
+            if turn in rosters or len({r[0] for r in pairs}) != len(pairs):
+                issues.append(f"duplicate weariness roster on turn {turn}")
+            rosters[turn] = dict(pairs)
         elif event.startswith("ai weariness "):
             weariness.append({k: int(f[k]) for k in ("player", "turn", "observed", "cities")})
     sources, spending = Counter(), defaultdict(lambda: Counter())
@@ -128,6 +135,18 @@ def summarize(artifact: Path) -> dict:
         issues.append("refusal costs must match each respondent exactly once")
     if len(end_turns) != 1:
         issues.append("missing or inconsistent shogunate cutoff")
+    if set(rosters) != set(range(1, 202)):
+        issues.append("weariness rosters do not cover all turns 1 through 201")
+    samples = Counter()
+    for row in weariness:
+        key = (row["turn"], row["player"])
+        samples[key] += 1
+        if (rosters.get(row["turn"], {}).get(row["player"]) != row["cities"]
+                or not 0 <= row["observed"] <= row["cities"]):
+            issues.append(f"weariness sample mismatches roster {key}")
+    expected_samples = {(turn, player) for turn, roster in rosters.items() for player in roster}
+    if set(samples) != expected_samples or any(count != 1 for count in samples.values()):
+        issues.append("weariness samples must match every roster entry exactly once")
     cutoff = next(iter(end_turns)) if len(end_turns) == 1 else None
     shogun_after = [turn for turn, cost in costs.items() if cost["source"] == "ai_shogun" and cutoff is not None and turn >= cutoff]
     if shogun_after:

@@ -233,13 +233,17 @@ end
 
 -- 閾値未満・費用不足・審理中でも、Gameplayで快適性を読めた都市数を残す。
 local function LogAiWeariness(turn, ids)
+	local roster = {}
 	for _, id in ipairs(ids) do
 		if not Players[id]:IsHuman() then
 			local total, observed = R.AiWeariness(id)
+			local cities = Players[id]:GetCities():GetCount()
+			roster[#roster + 1] = string.format("%d:%d", id, cities)
 			Log(string.format("ai weariness player=%d turn=%d total=%g observed=%d cities=%d", id, turn,
-				total, observed, Players[id]:GetCities():GetCount()))
+				total, observed, cities))
 		end
 	end
+	Log(string.format("ai weariness roster turn=%d cities=%s", turn, #roster > 0 and table.concat(roster, ",") or "none"))
 end
 
 -- 人間の応否（同じく EXECUTE_SCRIPT。params.Accept = 1 / 0）。答える立場で、まだ答えていないときだけ記録する
