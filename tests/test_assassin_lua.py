@@ -1059,6 +1059,20 @@ class AssassinLuaTests(unittest.TestCase):
           assert(not pcall(function() TrainedUnit(0,-1) end))
         """)
 
+    def test_live_training_check_requires_one_new_unit_and_rejects_reused_id(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("local R=A; "+helper+"""
+          local before=TrainingUnits(0)
+          assert(not pcall(function() NewTrainedUnit(0,before,U) end))
+          local fresh=GRANT(0,0,2,0):GetID()
+          assert(NewTrainedUnit(0,before,fresh+0.0):GetID()==fresh)
+          assert(not pcall(function() NewTrainedUnit(0,before,U) end))
+          GRANT(0,0,2,1)
+          assert(not pcall(function() NewTrainedUnit(0,before,fresh) end))
+        """)
+
     def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
         self.run_lua("""

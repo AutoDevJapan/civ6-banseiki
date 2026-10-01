@@ -178,6 +178,16 @@ def build_scenario():
       local u=Players[owner]:GetUnits():FindID(id)
       assert(u and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,'trained unit is not placed on the map')
       return u
+    end; local function TrainingUnits(owner)
+      local ids={}; for _,u in Players[owner]:GetUnits():Members() do
+        if R.IsAssassin(u) then ids[tostring(u:GetID())]=true end
+      end; return ids
+    end; local function NewTrainedUnit(owner,before,id)
+      local count=0; for key in pairs(TrainingUnits(owner)) do if not before[key] then
+        count=count+1; assert(tonumber(key)==id,'completion recorded an old or different unit')
+      end end
+      assert(count==1,'training did not create exactly one new assassin')
+      return TrainedUnit(owner,id)
     end; """
     equality="""local function Same(a,b)
       if type(a)~=type(b) then return false end
@@ -236,6 +246,7 @@ def build_scenario():
       local u=Grant(t.Actor,R.UNIT,Players[t.Target]:GetCities():GetCapitalCity())
       local ok,why=R.StartAttempt(t.Actor,u:GetID(),t.Target,'LEADER'); assert(not ok and why=='MISSION_ACTIVE','second unit')
       t.SecondUnit=u:GetID(); t.Frozen=s.Mission; t.CommandUnlock=s.CommandUnlock
+      t.TrainingBefore=TrainingUnits(t.Actor)
       Game:SetProperty('JAC_ASN_LIVE_TEST',t)
       Players[t.Actor]:SetProperty(R.INPUT,{Security=100}); return 'separate clocks and saved national plan'
     """)
@@ -279,7 +290,7 @@ def build_scenario():
       assert(n.People.JAC_LIVE_FREE_PERSON.SourceUnit==t.FreePersonUnit,'free person identity lost')
       local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait')
       assert(s.Production==nil and s.LastCompletion==t.FastDue and Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'training not processed')
-      TrainedUnit(t.Actor,s.LastProducedUnit)
+      NewTrainedUnit(t.Actor,t.TrainingBefore,s.LastProducedUnit)
       assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin')
       for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK') end
       R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock')
@@ -304,6 +315,7 @@ def build_scenario():
     advance()
     check("""
       assert(R.Turn()==t.FastLock,'wrong shortened unlock boundary')
+      t.TrainingBefore=TrainingUnits(t.Actor)
       Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,{Building=10000})
       assert(R.StartProduction(t.Actor,t.Cities[2])); local s=R.State(t.Actor)
       t.MinStart=R.Turn(); assert(s.Production.Start==t.MinStart and s.Production.Turns==20 and s.Production.Due==t.MinStart+20,'minimum rule')
@@ -315,7 +327,8 @@ def build_scenario():
     check("""local s=R.State(t.Actor); assert(s.LastCompletion==t.MinStart+1 and s.Production==nil,'shortened minimum completion')
       assert(s.ProductionUnlock==s.LastCompletion+10,'second nationwide lock')
       assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'second trained unit absent')
-      TrainedUnit(t.Actor,s.LastProducedUnit)
+      assert(s.LastProducedUnit~=t.LockState.LastProducedUnit,'two trainings reused one unit')
+      NewTrainedUnit(t.Actor,t.TrainingBefore,s.LastProducedUnit)
       Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil)
       return 'real turn completes second training and starts a new full 10-turn lock'""")
 
