@@ -60,3 +60,25 @@ Events.LoadScreenClose.Add(function()
     print("[JAC_RP] hero UI frame verification active after load")
   end
 end)
+
+
+-- Stop per-frame work after the deadline, but retry once when the engine
+-- publishes new state. A delayed replicated class/lifespan can then complete
+-- without a reload. CompleteHero persists APPLYING before paying the reward.
+Events.GameCoreEventPublishComplete.Add(function()
+  local rp = ExposedMembers.JAC_ReligionPersistence
+  if not rp or next(timedOut) == nil then return end
+  for playerID in pairs(timedOut) do
+    local p = Players[tonumber(playerID)]
+    if p and p:IsTurnActive() then
+      local h = rp.Export().heroes[playerID]
+      if not h or h.verification ~= "PENDING" then
+        timedOut[playerID] = nil
+      else
+        local ok, applied = pcall(rp.CompleteHero, tonumber(playerID))
+        if ok and applied then timedOut[playerID] = nil
+        elseif not ok then print("[JAC_RP] hero verification on published state pending: " .. tostring(applied)) end
+      end
+    end
+  end
+end)

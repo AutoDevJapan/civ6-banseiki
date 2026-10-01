@@ -113,7 +113,8 @@ local function nativeRows(c)
 end
 NativeRows = nativeRows
 HERO_UI_HIDDEN = true
-Events = { LoadScreenClose = { Add = function(fn) HERO_UI_LOAD_CLOSE = fn end } }
+Events = { LoadScreenClose = { Add = function(fn) HERO_UI_LOAD_CLOSE = fn end },
+  GameCoreEventPublishComplete = { Add = function(fn) HERO_UI_PUBLISH = fn end } }
 ContextPtr = {
   SetHide = function(_, hidden) HERO_UI_HIDDEN = hidden end,
   SetUpdate = function(_, fn)
@@ -968,6 +969,31 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.reload()
                 self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
                 self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
+
+    def test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].lifespan=nil")
+        self.g.HERO_UI_TICK(31)
+        self.g.HERO_UI_PUBLISH()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, 500)
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].lifespan=30")
+        self.g.ENGINE["1"].active = False
+        self.g.HERO_UI_PUBLISH()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, 500)
+        self.g.ENGINE["1"].active = True
+        self.g.HERO_UI_PUBLISH()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "APPLIED")
+        self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
+        self.g.HERO_UI_PUBLISH()
+        self.g.HERO_UI_TICK(1)
+        self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
 
     def test_hero_waits_for_valid_class_without_querying_negative_claim(self):
         self.found()
