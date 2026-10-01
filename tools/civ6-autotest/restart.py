@@ -18,6 +18,7 @@ DEFAULT_MODS_DIR = (Path.home() / "Documents" / "My Games" /
                     "Sid Meier's Civilization VI" / "Mods")
 STEAM_URI = "steam://rungameid/289070"
 PROCESS_TERMINATE = 0x0001
+SYNCHRONIZE = 0x100000
 EPOCH_DIFFERENCE = 11644473600
 
 kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.FILETIME),
@@ -26,6 +27,8 @@ kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.FI
 kernel32.GetProcessTimes.restype = wintypes.BOOL
 kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
 kernel32.TerminateProcess.restype = wintypes.BOOL
+kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+kernel32.WaitForSingleObject.restype = wintypes.DWORD
 
 
 def enabled_mod_folders(scenario: dict, mods_dir: Path = DEFAULT_MODS_DIR) -> list[Path]:
@@ -174,39 +177,38 @@ def terminate_civ_process(pid: int, expected_start: float) -> None:
         kernel32.CloseHandle(process)
 
 
-def close_orphan_crash_reporters() -> int:
-    """A Civ6 crash reporter can keep Steam's game session alive after the game exits."""
+def close_orphan_civ_reporters() -> None:
+    """Steam counts a leftover Civ6 crash reporter as a running game."""
     if _civ_process_ids():
-        return 0
-    closed = 0
+        return
     for pid in sorted(_process_ids({"firaxisbugreporter.exe"})):
-        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        process = kernel32.OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                                       False, pid)
         if not process:
-            continue  # It may have exited since enumeration.
+            if pid not in _process_ids({"firaxisbugreporter.exe"}):
+                continue  # It exited between the snapshot and OpenProcess.
+            raise InputError(f"Cannot open remaining crash reporter {pid}")
         try:
             executable = ctypes.create_unicode_buffer(32768)
             length = wintypes.DWORD(len(executable))
             if not kernel32.QueryFullProcessImageNameW(process, 0, executable, ctypes.byref(length)):
-                raise InputError(f"Cannot identify crash reporter {pid}")
-            path = Path(executable.value)
-            expected = ("sid meier's civilization vi", "base", "binaries", "win64steam", "firaxisbugreporter.exe")
-            if tuple(part.casefold() for part in path.parts[-5:]) != expected:
-                continue  # Other Firaxis games use the same executable name.
+                raise InputError(f"Cannot inspect crash reporter {pid}")
+            suffix = "\\sid meier's civilization vi\\base\\binaries\\win64steam\\firaxisbugreporter.exe"
+            if not executable.value.casefold().endswith(suffix):
+                continue  # A reporter belonging to another Firaxis game.
             if _civ_process_ids():
-                return closed  # A new game appeared; do not touch its reporter.
-            # Verify and terminate the same handle, so PID reuse cannot target another process.
+                return  # The game appeared while enumerating; keep its reporter.
             if not kernel32.TerminateProcess(process, 1):
-                raise InputError(f"Could not close Civ VI crash reporter {pid}")
-            closed += 1
+                raise InputError(f"Could not close orphan Civ VI crash reporter {pid}")
+            if kernel32.WaitForSingleObject(process, 10_000) != 0:
+                raise InputError(f"Orphan Civ VI crash reporter {pid} did not finish exiting")
+            print(f"Closed orphan Civ VI crash reporter {pid}", flush=True)
         finally:
             kernel32.CloseHandle(process)
-    return closed
 
 
 def launch_via_steam() -> None:
-    closed = close_orphan_crash_reporters()
-    if closed:
-        print(f"Closed {closed} orphan Civ VI crash reporter(s)", flush=True)
+    close_orphan_civ_reporters()
     os.startfile(STEAM_URI)
 
 

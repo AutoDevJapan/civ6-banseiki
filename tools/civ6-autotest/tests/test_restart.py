@@ -9,7 +9,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import (close_orphan_crash_reporters, enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
+from restart import (close_orphan_civ_reporters, launch_via_steam, enabled_mod_folders,
+                     missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
                      wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
@@ -19,51 +20,117 @@ MOD_ID = "ba3a1c58-9287-4654-a22f-85f9e6841e9b"
 
 
 class CrashReporterTests(unittest.TestCase):
-    def test_closes_only_a_civ6_reporter_from_the_verified_process_handle(self):
+    REPORTER = r"D:\SteamLibrary\steamapps\common\Sid Meier's Civilization VI\Base\Binaries\Win64Steam\FiraxisBugReporter.exe"
+
+    def test_only_civ6_reporter_is_closed_without_a_running_game(self):
+        for path, game_appears, terminated in (
+            (self.REPORTER, False, True),
+            (self.REPORTER.upper(), False, True),
+            (r"D:\OtherGame\FiraxisBugReporter.exe", False, False),
+            (self.REPORTER, True, False),
+        ):
+            with self.subTest(path=path, game_appears=game_appears), patch(
+                "restart._civ_process_ids", side_effect=[set(), {42} if game_appears else set()]
+            ), patch("restart._process_ids", return_value={7}) as enumerate_reporters, patch(
+                "restart.kernel32"
+            ) as kernel:
+                kernel.OpenProcess.return_value = 55
+                def image(_handle, _flags, buffer, _length):
+                    buffer.value = path
+                    return True
+                kernel.QueryFullProcessImageNameW.side_effect = image
+                kernel.TerminateProcess.return_value = True
+                kernel.WaitForSingleObject.return_value = 0
+                close_orphan_civ_reporters()
+                enumerate_reporters.assert_called_once_with({"firaxisbugreporter.exe"})
+                kernel.OpenProcess.assert_called_once_with(0x101001, False, 7)
+                if terminated:
+                    kernel.TerminateProcess.assert_called_once_with(55, 1)
+                    kernel.WaitForSingleObject.assert_called_once_with(55, 10_000)
+                else:
+                    kernel.TerminateProcess.assert_not_called()
+                    kernel.WaitForSingleObject.assert_not_called()
+                kernel.CloseHandle.assert_called_once_with(55)
+
+    def test_running_game_keeps_reporters(self):
+        with patch("restart._civ_process_ids", return_value={42}), patch(
+            "restart._process_ids"
+        ) as enumerate_reporters, patch("restart.kernel32") as kernel:
+            close_orphan_civ_reporters()
+        enumerate_reporters.assert_not_called()
+        kernel.OpenProcess.assert_not_called()
+
+    def test_unreadable_reporter_is_not_terminated(self):
         with patch("restart._civ_process_ids", return_value=set()), patch(
-            "restart._process_ids", return_value={81}
+            "restart._process_ids", return_value={7}
         ), patch("restart.kernel32") as kernel:
-            kernel.OpenProcess.return_value = 701
+            kernel.OpenProcess.return_value = 55
+            kernel.QueryFullProcessImageNameW.return_value = False
+            with self.assertRaisesRegex(InputError, "Cannot inspect crash reporter 7"):
+                close_orphan_civ_reporters()
+            kernel.TerminateProcess.assert_not_called()
+            kernel.CloseHandle.assert_called_once_with(55)
 
-            def image(_handle, _flags, buffer, _length):
-                buffer.value = "C:/Steam/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
-                return True
-
-            kernel.QueryFullProcessImageNameW.side_effect = image
-            self.assertEqual(close_orphan_crash_reporters(), 1)
-            kernel.TerminateProcess.assert_called_once_with(701, 1)
-            kernel.CloseHandle.assert_called_once_with(701)
-
-    def test_other_firaxis_game_reporter_is_preserved(self):
+    def test_exited_reporter_is_ignored(self):
         with patch("restart._civ_process_ids", return_value=set()), patch(
-            "restart._process_ids", return_value={81}
+            "restart._process_ids", side_effect=[{7}, set()]
         ), patch("restart.kernel32") as kernel:
-            def image(_handle, _flags, buffer, _length):
-                buffer.value = "C:/Steam/OtherGame/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
-                return True
+            kernel.OpenProcess.return_value = 0
+            close_orphan_civ_reporters()
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_not_called()
 
-            kernel.QueryFullProcessImageNameW.side_effect = image
-            self.assertEqual(close_orphan_crash_reporters(), 0)
+    def test_remaining_reporter_that_cannot_be_opened_stops_launch(self):
+        with patch("restart._civ_process_ids", return_value=set()), patch(
+            "restart._process_ids", return_value={7}
+        ), patch("restart.kernel32") as kernel, patch("restart.os.startfile") as start:
+            kernel.OpenProcess.return_value = 0
+            with self.assertRaisesRegex(InputError, "Cannot open remaining crash reporter 7"):
+                launch_via_steam()
+            start.assert_not_called()
             kernel.TerminateProcess.assert_not_called()
-            kernel.CloseHandle.assert_called_once()
 
-    def test_running_civ6_preserves_reporters(self):
-        with patch("restart._civ_process_ids", return_value={22}), patch("restart._process_ids") as scan:
-            self.assertEqual(close_orphan_crash_reporters(), 0)
-            scan.assert_not_called()
+    def test_reporter_must_finish_exiting_before_launch(self):
+        for wait_result in (0x102, 0xFFFFFFFF):
+            with self.subTest(wait_result=wait_result), patch(
+                "restart._civ_process_ids", return_value=set()
+            ), patch("restart._process_ids", return_value={7}), patch(
+                "restart.kernel32"
+            ) as kernel, patch("restart.os.startfile") as start:
+                kernel.OpenProcess.return_value = 55
+                def image(_handle, _flags, buffer, _length):
+                    buffer.value = self.REPORTER
+                    return True
+                kernel.QueryFullProcessImageNameW.side_effect = image
+                kernel.TerminateProcess.return_value = True
+                kernel.WaitForSingleObject.return_value = wait_result
+                with self.assertRaisesRegex(InputError, "did not finish exiting"):
+                    launch_via_steam()
+                start.assert_not_called()
+                kernel.CloseHandle.assert_called_once_with(55)
 
-    def test_new_game_appearing_during_identity_check_preserves_reporter(self):
-        with patch("restart._civ_process_ids", side_effect=[set(), {22}]), patch(
-            "restart._process_ids", return_value={81}
-        ), patch("restart.kernel32") as kernel:
+    def test_steam_launch_clears_reporters_before_sending_uri(self):
+        events = []
+        with patch("restart.close_orphan_civ_reporters", side_effect=lambda: events.append("reporter")), patch(
+            "restart.os.startfile", side_effect=lambda uri: events.append(uri)
+        ):
+            launch_via_steam()
+        self.assertEqual(events, ["reporter", "steam://rungameid/289070"])
+
+    def test_close_failure_stops_steam_launch(self):
+        with patch("restart._civ_process_ids", return_value=set()), patch(
+            "restart._process_ids", return_value={7}
+        ), patch("restart.kernel32") as kernel, patch("restart.os.startfile") as start:
+            kernel.OpenProcess.return_value = 55
             def image(_handle, _flags, buffer, _length):
-                buffer.value = "C:/Steam/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+                buffer.value = self.REPORTER
                 return True
-
             kernel.QueryFullProcessImageNameW.side_effect = image
-            self.assertEqual(close_orphan_crash_reporters(), 0)
-            kernel.TerminateProcess.assert_not_called()
-            kernel.CloseHandle.assert_called_once()
+            kernel.TerminateProcess.return_value = False
+            with self.assertRaisesRegex(InputError, "Could not close orphan Civ VI crash reporter 7"):
+                launch_via_steam()
+            start.assert_not_called()
+            kernel.CloseHandle.assert_called_once_with(55)
 
 
 class FreshnessTests(unittest.TestCase):
