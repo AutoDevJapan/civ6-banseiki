@@ -978,6 +978,35 @@ class AssassinLuaTests(unittest.TestCase):
           assert(R.StartAttempt(0,U,1,'LEADER'))
         """)
 
+    def test_live_fixture_reveals_unit_tile_separately_from_known_capital(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("""
+          VISIBLE_TILES={[2000]=true}; REVEALED_TILES={[2000]=true,[3001]=true}; REVEALS=0
+          Map.GetPlot=function(x,y) return {GetIndex=function() return x*1000+y end} end
+          PlayersVisibility[0].IsRevealed=function(_,x,y) return REVEALED_TILES[x*1000+y]==true end
+          PlayersVisibility[0].IsVisible=function(_,x,y) return VISIBLE_TILES[x*1000+y]==true end
+          PlayersVisibility[0].ChangeVisibilityCount=function(_,index,count)
+            assert(index==3001 and count==1); REVEALS=REVEALS+1
+            VISIBLE_TILES[index]=true; REVEALED_TILES[index]=true
+          end
+          VICTIM=GRANT(1,4,3,1):GetID()
+        """)
+        self.run_lua("local R=A; "+helper+"""
+          assert(R.KnownTarget(0,R.ResolveTarget(1,'LEADER')))
+          local ok,why=R.CheckAttempt(0,U,1,'UNIT',VICTIM)
+          assert(not ok and why=='TARGET_UNKNOWN' and R.State(0).Mission==nil)
+          assert(not pcall(function() FixtureReveal(0,3,1) end) and REVEALS==0)
+          Game:SetProperty(R.TEST,1); FixtureReveal(0,2,0)
+          assert(REVEALS==0 and not R.KnownTarget(0,R.ResolveTarget(1,'UNIT',VICTIM)))
+          FixtureReveal(0,3,1); FixtureReveal(0,3,1)
+          assert(REVEALS==1 and R.PROVISIONAL.Visibility=='REVEALED_CITY_VISIBLE_UNIT')
+          assert(R.StartAttempt(0,U,1,'UNIT',VICTIM))
+          local target=R.State(0).Mission.Target
+          assert(target.Kind=='UNIT' and target.Owner==1 and target.ID==VICTIM and target.X==3 and target.Y==1)
+        """)
+
     def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
         self.run_lua("""
