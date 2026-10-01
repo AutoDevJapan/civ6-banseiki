@@ -1531,12 +1531,15 @@ class AbsorptionTests(unittest.TestCase):
             PlayerConfigurations[id]={GetLeaderTypeName=function() return 'LEADER_TEST_'..n end,
               GetCivilizationTypeName=function() return n==1 and 'CIVILIZATION_JAC_ASHINA' or n==2 and 'CIVILIZATION_JAC_DATE' or 'CIVILIZATION_JAC_ODA' end}
           end
-          local founder={}
+          local founder,beliefs,holyCities={},{},{}
+          GameInfo.Beliefs={BELIEF_DIVINE_INSPIRATION={Index=3},BELIEF_CATHEDRAL={Index=7}}
           for id,p in pairs(Players) do local n=id;p.GetReligion=function() return {
             GetReligionTypeCreated=function() return founder[n] or -1 end,
+            SetHolyCity=function(_,city) holyCities[n]=city:GetID() end,
             ChangeFaithBalance=function(_,v) FAITH[n]=FAITH[n]+v end} end end
-          Game.GetReligion=function() return {FoundReligion=function(_,owner,id) founder[owner]=id end,
-            GetReligions=function() local list={};for owner,id in pairs(founder) do list[#list+1]={Religion=id,Founder=owner,Beliefs={3,7}} end;return list end} end
+          Game.GetReligion=function() return {FoundReligion=function(_,owner,id) assert(holyCities[owner]);founder[owner]=id;beliefs[owner]={} end,
+            AddBelief=function(_,owner,id) table.insert(beliefs[owner],id) end,
+            GetReligions=function() local list={};for owner,id in pairs(founder) do list[#list+1]={Religion=id,Founder=owner,Beliefs=beliefs[owner]} end;return list end} end
           GameInfo.Religions.RELIGION_CUSTOM_1={Index=5,ReligionType='RELIGION_TEST'}
           local individual={Index=42,GreatPersonClassType='GREAT_PERSON_CLASS_GENERAL'}
           GameInfo.GreatPersonIndividuals=setmetatable({[42]=individual},{__call=function()
@@ -1905,6 +1908,31 @@ class AbsorptionPackageTests(unittest.TestCase):
         vm.execute('UI_CHARGES=3;CORE_RELIGION=4')
         with self.assertRaisesRegex(Exception, 'core religion mismatch'):
             vm.execute(check)
+
+    def test_recall_publication_uses_ui_class_getter_and_waits_for_native_claim(self):
+        data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
+                          .read_text(encoding='utf-8'))
+        code = next(s['condition']['code'] for s in data['steps']
+                    if s['action'] == 'wait_for' and 'e.TransferID' in s['condition']['code'])
+        vm = LuaRuntime()
+        vm.execute('''
+          CLASS=0;ID=10;CLAIM=2;ORIGIN={player=2,id=7};VISIBLE=true
+          Game={GetProperty=function() return {To=2,Class=0,TransferID=10} end,
+            GetHeroesManager=function() return {
+              GetHeroClaimPlayer=function() return CLAIM end,
+              GetHeroOriginCityID=function() return ORIGIN end} end}
+          local u={GetHeroClassType=function() return CLASS end,GetID=function() return ID end}
+          -- Installed UI Units have GetHeroClassType, but no IsHero method.
+          Players={[2]={GetUnits=function() return {Members=function()
+            return ipairs(VISIBLE and {u} or {}) end} end}}
+        ''')
+        self.assertFalse(vm.execute(code))
+        vm.execute('ID=11')
+        self.assertTrue(vm.execute(code))
+        for state in ('CLASS=1', 'CLAIM=1', 'ORIGIN=nil', 'ORIGIN={player=1,id=7}', 'VISIBLE=false'):
+            vm.execute('CLASS=0;CLAIM=2;ORIGIN={player=2,id=7};VISIBLE=true')
+            vm.execute(state)
+            self.assertFalse(vm.execute(code), state)
 
     def test_recall_spawn_preparation_moves_only_blockers_and_preserves_them(self):
         data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')

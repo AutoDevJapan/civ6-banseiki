@@ -772,7 +772,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')\nif not e then return false end\nfor _,u in Players[e.To]:GetUnits():Members() do\n if u:IsHero() and u:GetHeroClassType()==e.Class and u:GetID()~=e.TransferID then return true end\nend\nreturn false"
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')\nif not e then return false end\nlocal manager=Game.GetHeroesManager();local origin=manager:GetHeroOriginCityID(e.Class)\nif manager:GetHeroClaimPlayer(e.Class)~=e.To or not origin or origin.player~=e.To then return false end\nfor _,u in Players[e.To]:GetUnits():Members() do\n if u:GetHeroClassType()==e.Class and u:GetID()~=e.TransferID then return true end\nend\nreturn false"
       },
       "timeout": 120
     },
