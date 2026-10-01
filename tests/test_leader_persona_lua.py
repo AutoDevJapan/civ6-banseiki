@@ -3,6 +3,7 @@
 These test the mod's transition logic, not Civ6's native implementation. The live scenario tests that.
 """
 from pathlib import Path
+import json
 import unittest
 
 from lupa import LuaRuntime, LuaError  # Required: never silently skip Lua tests.
@@ -249,6 +250,35 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def prop(self, field, leader=DATE):
         return self.g.Game.GetProperty(None, f"JAC_PERSONA_{leader}_{field}")
+
+    def test_all_live_save_snapshots_accept_properties_with_no_return_value(self):
+        self.join()
+        # Native GetProperty returns no values for an unset key, unlike the
+        # usual Lua mock's single nil. Exercise every save/load snapshot.
+        self.lua.execute("""
+            local read = Game.GetProperty
+            Game.GetProperty = function(self, key)
+                local value = read(self, key)
+                if value ~= nil then return value end
+            end
+            GameInfo.JAC_LeaderPersonas.LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA = {
+                GovernorType='GOVERNOR_TEST_NORIMASA'
+            }
+            GameInfo.Governors.GOVERNOR_TEST_NORIMASA = {Hash=9000}
+        """)
+        scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/leader-persona-15km.json")
+                              .read_text(encoding="utf-8"))
+        snapshots = [step for step in scenario["steps"]
+                     if "capture_as" in step or "equals_capture" in step]
+        self.assertEqual(len(snapshots), 12)
+        for step in snapshots:
+            with self.subTest(snapshot=step.get("capture_as", step.get("equals_capture"))):
+                value = self.lua.execute(step["code"])
+                self.assertIn("EVOLUTION_SURCHARGE=nil", value)
+                self.assertIn("CATEGORY=nil", value)
+                if "local leader='LEADER_JAC_DATE_TANEMUNE'" in step["code"]:
+                    self.assertIn("STATE=GREAT_PERSON", value)
+                    self.assertIn("MERIT=0", value)
 
     def join(self):
         self.assertEqual(self.api.Join(0, 1, "CALM", "ASTUTE"), "JOINED")
