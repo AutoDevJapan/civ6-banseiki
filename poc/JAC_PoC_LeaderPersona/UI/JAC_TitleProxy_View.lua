@@ -1,6 +1,7 @@
 -- Diagnostic UI submits the same synchronized operations as the future view.
 -- Native reads may decide when to request Advance; GameCore alone proves payment.
 ContextPtr:SetHide(false);
+include('JAC_TitlePaymentRules');
 local attempted = {};
 local requestSerial = 0;
 local function Active()
@@ -32,6 +33,12 @@ function JAC_ProxyPayNext()
     local request;
     for _, item in ipairs(queue.requests) do if item.status == 'PENDING' then request = item; break; end; end;
     if not request then return false; end;
+    if not JAC_TitlePaymentRules.Valid(owner, request.leader) then
+        UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_TitleProxyReconcile'});
+        return false;
+    end;
+    local descriptor = JAC_TitlePaymentRules.Next(owner);
+    if not descriptor then return false; end;
     local stage = queue.cursor;
     local governors = Players[owner]:GetGovernors();
     local definition = GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY'];

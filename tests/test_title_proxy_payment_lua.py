@@ -13,12 +13,33 @@ Game = {
  SetProperty=function(_,key,value) properties[key]=value end
 }
 GameInfo = {JAC_LeaderPersonas={A={EvolutionCost=2},B={EvolutionCost=3},C={EvolutionCost=1}}}
+GameInfo.GreatPersonIndividuals={}
+GameInfo.GreatPersonClasses={GP_CLASS={UnitType='UNIT_PERSONA'}}
+GameInfo.Units={UNIT_PERSONA={Index=5000}}
+PERSON_EXISTS={A=true,B=true,C=true}
+for index,leader in ipairs({'A','B','C'}) do
+ GameInfo.JAC_LeaderPersonas[leader].PersonType='PERSON_'..leader
+ GameInfo.GreatPersonIndividuals['PERSON_'..leader]={GreatPersonClassType='GP_CLASS'}
+ GameInfo.GreatPersonIndividuals[2000+index]={GreatPersonIndividualType='PERSON_'..leader}
+end
 Players = {}
 for id=0,1 do
  local player={points=6,spent=0}
  player.IsAlive=function() return true end
  player.IsMajor=function() return true end
  player.GetProperty=function(_,key) return receipts[id][key] end
+ player.GetUnits=function() return {Members=function()
+  local index=0; return function()
+   while index<3 do
+    index=index+1; local current=index; local leader=({'A','B','C'})[index]
+    if id==0 and PERSON_EXISTS[leader] then
+     return index,{GetType=function() return 5000 end,GetGreatPerson=function()
+      return {GetIndividual=function() return 2000+current end}
+     end}
+    end
+   end
+  end
+ end} end
  player.GetGovernors=function() return {
   GetGovernorPoints=function() return player.points end,
   GetGovernorPointsSpent=function() return player.spent end
@@ -145,6 +166,56 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_0']=2; Players[0].spent=1")
         self.assertEqual(self.rules.Advance(0), "INVALID_RECEIPT")
         self.assertFalse(self.rules.Paid(0, "C"))
+
+    def test_same_official_spending_cannot_pay_later_concurrent_requests(self):
+        for leader in ("B", "C", "A"):
+            self.rules.Request(0, leader)
+        for stage in range(3):
+            self.lua.globals().native_payment(0, stage)
+            self.rules.Advance(0)
+        self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_3']=1")
+        self.assertEqual(self.rules.Advance(0), "ACCOUNTING_PENDING")
+        self.assertEqual(self.rules.Queue(0)["cursor"], 3)
+        self.assertFalse(self.rules.Paid(0, "C"))
+        self.assertFalse(self.rules.Paid(0, "A"))
+
+    def test_lost_person_releases_unpaid_reservation_and_keeps_consumed_stages(self):
+        self.rules.Request(0, "B")
+        self.rules.Request(0, "A")
+        self.lua.globals().native_payment(0, 0)
+        self.rules.Advance(0)
+        self.lua.execute("PERSON_EXISTS.B=false")
+        self.assertIsNone(self.rules.Next(0))
+        self.assertEqual(self.rules.Advance(0), "PERSON_MISSING")
+        self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
+        old = self.rules.Queue(0)["requests"][1]
+        self.assertEqual(old["status"], "CANCELLED")
+        self.assertEqual(list(old["payments"].values()), [0])
+        self.assertEqual(self.rules.Next(0)["leader"], "A")
+        self.assertEqual(self.rules.Next(0)["stage"], 1)
+        self.assertFalse(self.rules.Paid(0, "B"))
+
+    def test_owner_change_after_native_consumption_cannot_credit_the_following_person(self):
+        self.rules.Request(0, "C")
+        self.rules.Request(0, "A")
+        self.lua.globals().native_payment(0, 0)
+        self.lua.execute("properties['JAC_PERSONA_C_OWNER']=1")
+        self.assertIsNone(self.rules.Next(0))
+        self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
+        self.assertEqual(self.rules.Queue(0)["cursor"], 1)
+        self.assertEqual(self.rules.Queue(0)["spentFloor"], 1)
+        self.assertEqual(self.rules.Next(0)["stage"], 1)
+        self.assertFalse(self.rules.Paid(0, "C"))
+
+    def test_reload_after_native_consumption_before_allocation_does_not_charge_again(self):
+        self.rules.Request(0, "C")
+        self.lua.globals().native_payment(0, 0)
+        self.lua.execute(RULES)
+        self.rules = self.lua.globals().JAC_TitlePaymentRules
+        self.assertEqual(self.rules.Queue(0)["cursor"], 0)
+        self.assertEqual(self.rules.Advance(0), "PAID")
+        self.assertEqual(self.rules.Advance(0), "NO_PENDING_REQUEST")
+        self.assertEqual(self.lua.globals().Players[0]["spent"], 1)
 
 
 class TitleProxyGameplayIntegrationTests(unittest.TestCase):

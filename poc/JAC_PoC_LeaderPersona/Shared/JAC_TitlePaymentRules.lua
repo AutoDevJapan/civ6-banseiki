@@ -17,6 +17,24 @@ local function Owned(owner, leader)
     return player and player:IsAlive() and player:IsMajor() and row and
         Person(leader, 'OWNER') == owner and (state == 'GREAT_PERSON' or state == 'EVOLVING');
 end;
+function Rules.Valid(owner, leader)
+    if not Owned(owner, leader) then return false, 'OWNER_CHANGED'; end;
+    local row = GameInfo.JAC_LeaderPersonas[leader];
+    local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
+    local class = individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+    local definition = class and GameInfo.Units[class.UnitType];
+    if not definition then return false, 'PERSON_MISSING'; end;
+    local count = 0;
+    for _, unit in Players[owner]:GetUnits():Members() do
+        if unit:GetType() == definition.Index then
+            local gp = unit:GetGreatPerson();
+            local index = gp and gp:GetIndividual();
+            local person = index ~= nil and index ~= -1 and GameInfo.GreatPersonIndividuals[index];
+            if person and person.GreatPersonIndividualType == row.PersonType then count = count + 1; end;
+        end;
+    end;
+    return count == 1, count == 1 and nil or 'PERSON_MISSING';
+end;
 local function Receipt(owner, stage)
     return Players[owner]:GetProperty('JAC_PROXY_NATIVE_PAID_' .. stage);
 end;
@@ -32,6 +50,7 @@ end;
 function Rules.Queue(owner) return Game:GetProperty(QUEUE .. owner); end;
 function Rules.Request(owner, leader)
     if not Owned(owner, leader) then return 'NOT_OWNED'; end;
+    if not Rules.Valid(owner, leader) then return 'PERSON_MISSING'; end;
     local row = GameInfo.JAC_LeaderPersonas[leader];
     local cost = Person(leader, 'EVOLUTION_COST') or row.EvolutionCost;
     if type(cost) ~= 'number' or cost % 1 ~= 0 or cost < 1 or cost > 3 then return 'INVALID_COST'; end;
@@ -41,7 +60,7 @@ function Rules.Request(owner, leader)
             local paid = Receipt(owner, stage);
             if paid ~= nil and paid ~= 0 then return 'UNEXPECTED_NATIVE_PAYMENT'; end;
         end;
-        queue = {cursor=0, serial=0, requests={}};
+        queue = {cursor=0, serial=0, requests={}, spentFloor=Players[owner]:GetGovernors():GetGovernorPointsSpent()};
     end;
     for _, request in ipairs(queue.requests) do
         if request.leader == leader then return request.status == 'PAID' and 'ALREADY_PAID' or 'PENDING'; end;
@@ -65,7 +84,7 @@ function Rules.Next(owner)
     if not queue or queue.cursor >= MAX_PAYMENTS then return nil; end;
     for _, request in ipairs(queue.requests) do
         if request.status == 'PENDING' then
-            if not Owned(owner, request.leader) then return nil; end;
+            if not Rules.Valid(owner, request.leader) then return nil; end;
             local governors = Players[owner]:GetGovernors();
             local others = Outstanding(queue) - (request.cost - #request.payments);
             if governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() - others < 1 then return nil; end;
@@ -76,21 +95,53 @@ function Rules.Next(owner)
     return nil;
 end;
 
+-- Only gameplay calls this transition. A cancelled request keeps the receipts
+-- already consumed for it; its unspent reservation is released for later people.
+function Rules.Reconcile(owner)
+    local queue = Rules.Queue(owner);
+    if not queue or not Players[owner] then return 'NO_REQUEST'; end;
+    local changed = false;
+    local head = true;
+    for _, request in ipairs(queue.requests) do
+        if request.status == 'PENDING' then
+            local valid, reason = Rules.Valid(owner, request.leader);
+            if not valid then
+                -- If the last native request already consumed a title, retain
+                -- its stage on the original person rather than credit it later.
+                if head and Receipt(owner, queue.cursor) == 1 then
+                    local spent = Players[owner]:GetGovernors():GetGovernorPointsSpent();
+                    if spent <= queue.spentFloor then return 'ACCOUNTING_PENDING'; end;
+                    request.payments[#request.payments + 1] = queue.cursor;
+                    queue.cursor = queue.cursor + 1;
+                    queue.spentFloor = spent;
+                end;
+                request.status, request.reason = 'CANCELLED', reason;
+                changed = true;
+            end;
+            head = false;
+        end;
+    end;
+    if changed then Save(owner, queue); return 'CANCELLED'; end;
+    return 'UNCHANGED';
+end;
+
 function Rules.Advance(owner)
     local queue = Rules.Queue(owner);
     if not queue or not Players[owner] then return 'NO_REQUEST'; end;
     for _, request in ipairs(queue.requests) do
         if request.status == 'PENDING' then
-            if not Owned(owner, request.leader) then return 'OWNER_CHANGED'; end;
+            local valid, reason = Rules.Valid(owner, request.leader);
+            if not valid then return reason; end;
             local paid = Receipt(owner, queue.cursor);
             if paid == nil or paid == 0 then return 'NATIVE_PENDING'; end;
             if paid ~= 1 then return 'INVALID_RECEIPT'; end;
             -- A native payment must also be reflected in the official spent
             -- count. Other governors' expenses cannot stand in for this marker.
             local spent = Players[owner]:GetGovernors():GetGovernorPointsSpent();
-            if spent < request.spentAtRequest + #request.payments + 1 then return 'ACCOUNTING_PENDING'; end;
+            if spent <= queue.spentFloor then return 'ACCOUNTING_PENDING'; end;
             request.payments[#request.payments + 1] = queue.cursor;
             queue.cursor = queue.cursor + 1;
+            queue.spentFloor = spent;
             if #request.payments == request.cost then request.status = 'PAID'; end;
             Save(owner, queue);
             return request.status == 'PAID' and 'PAID' or 'PARTIAL';

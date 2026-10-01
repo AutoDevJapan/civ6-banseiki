@@ -259,6 +259,31 @@
       }
     },
     {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-Native-Unallocated"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-Native-Unallocated"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=0 or q.requests[1].status~='PENDING' or ExposedMembers.JAC_TitleProxyReceipt(0,0)~=1 then error('native payment was not restored before allocation') end; local g=Players[0]:GetGovernors(); if g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('unallocated native expense lost or repeated') end; return 'native expense and pending allocation restored without a second charge'"
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_TitleProxy_View",
       "code": "if not JAC_ProxyPayNext() then error('gameplay receipt confirmation was not submitted') end; return 'receipt confirmation submitted'"
