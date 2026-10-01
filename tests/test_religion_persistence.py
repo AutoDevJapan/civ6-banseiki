@@ -243,7 +243,7 @@ end
 PlayerManager = { GetAlive = Game.GetPlayers }
 Game.GetHeroesManager = function() return {
   GetPlayerHeroOriginBuildingType = function() return 1 end,
-  GetHeroClaimPlayer = function(_, index) return ENGINE['0'].heroClaims[tostring(index)] or -1 end,
+  GetHeroClaimPlayer = function(_, index) assert(GameInfo.HeroClasses[index] ~= nil); return ENGINE['0'].heroClaims[tostring(index)] or -1 end,
 } end
 GameInfo.Religions = info({ { Index = 42, ReligionType = 'RELIGION_CUSTOM_1' },
   { Index = 43, ReligionType = 'RELIGION_CUSTOM_2' }, { Index = 44, ReligionType = 'RELIGION_CUSTOM_3' },
@@ -968,6 +968,22 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.reload()
                 self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
                 self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
+
+    def test_hero_waits_for_valid_class_without_querying_negative_claim(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].class=nil")
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, 500)
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].class=10")
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "APPLIED")
+        self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
 
     def test_hero_waits_for_replicated_lifespan_property_before_reward(self):
         self.found()

@@ -16,9 +16,10 @@ function Bridge.UnitInfo(playerID, unitID)
   -- UnitPanel.lua:2269 reads remaining lifespan as a unit property, not a getter.
   local heroClass = u:GetHeroClassType()
   local lifespan = u:GetProperty(UnitPropertyKeys.LifespanRemaining)
-  return { hero = type(heroClass) == "number" and heroClass >= 0
-      and GameInfo.HeroClasses[heroClass] ~= nil, class = heroClass, lifespan = lifespan,
-    claim = Bridge.ClaimPlayer(heroClass), active = p:IsTurnActive() }
+  local isHero = type(heroClass) == "number" and heroClass >= 0
+    and GameInfo.HeroClasses[heroClass] ~= nil
+  return { hero = isHero, class = heroClass, lifespan = lifespan,
+    claim = isHero and Bridge.ClaimPlayer(heroClass) or -1, active = p:IsTurnActive() }
 end
 function Bridge.Schedule(playerID)
   local key = tostring(playerID)
