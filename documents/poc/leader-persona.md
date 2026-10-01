@@ -245,7 +245,7 @@ ModifierのID・Active・対象一覧の公式根拠はG/Debug/Modifiers.ltp:233
 
 tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQLで22人・762個の展開済み独自ノード・15称号獲得源・公式総督の定義除外・外部キー・3言語・前提と排他群を調べる。XMLのInsertOrIgnoreを監査ローダーが読み落としていた点も修正し、公式のKIND_TRAITを読み込む。65件の人物化検査（Lua52件）で功績の人物別獲得・消費・再読込・重複と上限・取消・専攻固定・分岐固定・9昇進・AI・キーボード操作を確認する。全シナリオLuaもlupaで構文検査する。生成APIは戻り値なし、IndexとHashは別値とした。実機効果の代替ではない。
 
-指定のunittest discoverコマンドをこの作業フォルダから実行する。今回の検証は全体411件・実機ドライバー192件が成功し、Lua検査のスキップはない。人物化65件は全体の内数。105ステップの実機シナリオは形式・Lua構文検査に成功した。修正後の実機合格を別途確認する。
+指定のunittest discoverコマンドをこの作業フォルダから実行する。6785219の検証は全体455件・実機ドライバー200件が成功し、Lua検査のスキップはない。人物化67件は全体の内数。105ステップの実機シナリオは形式・Lua構文検査に成功した。修正後の実機合格を別途確認する。
 
 - 加入条件・吸収・後継者・AIの加入／進化・他国都市派遣は範囲外。AIの人物総督の技能選択は今回実装した。全員AssignCityState=0。
 - 非同期任命の取消は設けず、人物と予約した追加費用を保持して再試行する。
@@ -339,7 +339,7 @@ python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json
 
 leaderperson-08は先端3025765（mainの更新を統合済み）で実行した。独自人物の加入前に、公式GREAT_PERSON_CLASS_GENERALの個人Indexを選び、同じ首都座標へCreatePersonで生成する比較を追加した。9/107で30秒後も応答がなく、Lua.logの最後はofficial-create-beforeだった。独自人物の個人データだけが停止の条件とは断定できない。
 
-呼出し元はGameCore_Tuner。公式のBase/Assets/UI/Tuner/TunerMapPanel.lua:183-190もゲーム側の配置処理でCreatePersonを呼び、Debug/Map.ltp:564-579は個人のIndexを渡す。現行PoCの引数形式はこれに一致する。公式GreatPeople.xml:20-28では各クラスが別のユニット型を使うが、PoCは公式GENERALと同じUNIT_GREAT_GENERALへ別クラスを対応させている。この差と、AvailableInTimeline=false、PseudoYieldTypeなしの影響は未確定で、エンジン内部の根因として断定しない。
+呼出し元はGameCore_Tuner。公式のBase/Assets/UI/Tuner/TunerMapPanel.lua:183-190は専用TunerMapPanelコンテキストの配置処理でCreatePersonを呼び、Debug/Map.ltp:564-579は個人のIndexを渡す。Map.ltp:20-24のCompatibleStates/LoadStatesはTunerMapPanelを指定しており、通常のGameCore_Tunerやゲームプレイスクリプトからの使用例ではない。現行PoCの引数形式はこれに一致する。公式GreatPeople.xml:20-28では各クラスが別のユニット型を使うが、PoCは公式GENERALと同じUNIT_GREAT_GENERALへ別クラスを対応させている。この差と、AvailableInTimeline=false、PseudoYieldTypeなしの影響は未確定で、エンジン内部の根因として断定しない。
 
 次の比較では、加入要求をUIのEXECUTE_SCRIPTからゲームプレイスクリプトのJAC_LeaderPersonaJoinへ送る。これにより生成の実行コンテキストを変え、FireTunerからExposedMembers.Joinを直接呼ぶ方法との差を検査する。要求の前には人物を作らず、無効な発生元を拒否し、同じ要求の再送で重複しないことをLuaで検査した。実機の成功は結果が出てから記録する。
 
@@ -348,3 +348,22 @@ leaderperson-08は先端3025765（mainの更新を統合済み）で実行した
 leaderperson-09（コード85f968b）はInGameから加入の同期操作を送り、10（0aedfac）は人物画面のUIコンテキストから同じ操作を送った。いずれも送信のLuaは正常終了したが、60秒後も人物のOWNERは未設定だった。10は専用ユニット型を読み込んでいるが、受信処理のjoin-operationログがないため、CreatePersonの改善を判断できない。09終了後の読取りで、操作結果も未設定、自分の手番はactive=true、EXECUTE_SCRIPTの定数も存在した。受信しない原因は未確定。
 
 次の比較は、専用ユニット型とモデル参照を読み込んだ新規ゲームで、JAC_LeaderPersona_GameplayのLua状態から直接加入関数を呼ぶ。生成コンテキストを公式配置ツールと分け、実際の人物IDと保存を確認する。同期加入の成功を仮定せず、画面からの進化・技能購入を含む後段の同期操作は通しシナリオで別途確認する。
+
+## この担当の実機4本と再開条件
+
+実機leaderperson-08〜11の4本を終了した。PR #86は未マージ。6785219の全体455件・ドライバー200件、Luaのスキップなし、105手順の形式・Lua構文検査、CIは成功。以下の実機結果は成功扱いにしない。
+
+| 実行 | コード | 結果 | 切り分けた事実 |
+|---|---|---|---|
+| leaderperson-08 | 3025765 | 9/107で30秒後に応答不明 | GameCore_Tunerで公式の大将軍を同じ首都に生成してもCreatePersonが戻らない |
+| leaderperson-09 | 85f968b | 10/108で60秒後に待機終了 | InGameから同期加入を送ってもOWNERと操作結果は未設定 |
+| leaderperson-10 | 0aedfac | 10/108で60秒後に待機終了 | 専用ユニット型を追加し、人物画面のUIから送ってもjoin-operationの受信ログがない |
+| leaderperson-11 | 6785219 | 9/106で30秒後に応答不明 | 専用ユニット型とモデル参照を読み込み、JAC_LeaderPersona_Gameplayから直接呼んでもcreate-person-beforeで停止 |
+
+11は実際のゲームプレイスクリプトのLua状態から呼んだ。末尾のログはJAC_LeaderPersona_Gameplay: JAC_PERSONA_STAGE LEADER_JAC_DATE_TANEMUNE create-person-beforeで、create-person-afterはない。ユニット型の共有解消だけでは生成停止を解消できなかった。引数はowner=0、個人のIndex、首都の座標で、公式のIndex指定形式と一致する。専用TunerMapPanelに限られた生成APIを通常のゲーム処理に使えるとした根拠は不足していた。
+
+次の担当はCreatePersonの待機延長を繰り返さず、公式AustraliaScenario.lua:1428のUnitManager.InitUnitによる直接生成を比較し、安定した人物IDをユニットのプロパティと世界の所有者記録で照合する方式を優先して調べる。返り値と実際の配置・所有者・種類を独立に確認し、ネイティブ偉人のIDを持てるか、名前・肖像・退役・捕獲・保存後の照合が仕様どおりかを検査する。偉人ポイント方式は特定人物の選択と、未加入の人物が自動獲得されないことを追加設計する必要があるため、先に直接生成を比較する。代理ユニットだけでSSOTの偉人要件を満たしたとは扱わない。
+
+**未完走の指定シナリオはleader-persona-15km.jsonの1本。** 加入を通した後、称号費用1・2・3、偉人の除去、配置・定着・再配置、功績の獲得と専攻・分岐の永久固定、技能の実際の都市効果、6回の保存・読込、保留通知と履歴不足ゼロ、21人のAIの未加入総督不存在を最後まで検査する。同期操作を受信しない問題も未解決で、加入・進化・購入の各操作が実際のゲームイベントへ届くことを確認する。過去のLua合格を実機合格の代わりにしない。
+
+結果の保存先は共有live作業フォルダのtools/civ6-autotest/artifacts/leaderperson-08〜11。各フォルダにLua.log、Modding.log、steps.jsonl、result.jsonがあり、隣の.logも保存した。今回の早送り手番はすべて0。実機上限に達したため、この担当は追加実行をせず、共有ToDo #150を未完了の継続作業に残す。オーナー判断待ちはない。
