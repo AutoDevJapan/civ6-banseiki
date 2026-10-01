@@ -1684,6 +1684,20 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua(steps[14]['code'])
         self.load_scripts()
         self.run_lua(steps[15]['code'])
+        all_steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
+                               .read_text(encoding='utf-8'))['steps']
+        binding = next(s for s in all_steps if s.get('capture_as') == 'JAC_ABSORPTION_SYNC_VERIFY_2')
+        self.run_lua("""local a=ExposedMembers.JAC_Absorption;local request=a.RequestVerification
+          a.RequestVerification=function(id)
+            assert(a.GetState().Recalls['japan-human-recall:1'].Status=='COMPLETE','verification requested before binding')
+            return request(id)
+          end""")
+        self.run_lua(binding['code'])
+        self.run_lua("""local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')
+          local a=ExposedMembers.JAC_Absorption;local r=a.GetRoster(e.To)[e.RecordID]
+          assert(a.GetState().Recalls['japan-human-recall:1'].Status=='COMPLETE')
+          assert(r.Unit.ID~=e.TransferID and #r.RecallHistory==1)""")
+        self.run_lua("ExposedMembers.JAC_Absorption.CompleteHeroRecall=function() error('binding after verification request') end")
         self.run_lua(steps[17]['code'])
         self.load_scripts()
         self.run_lua(steps[22]['code'])
