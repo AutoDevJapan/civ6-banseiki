@@ -484,6 +484,38 @@ class AbsorptionTests(unittest.TestCase):
                 return tx
         self.fail("spread-charge UI publications did not finish")
 
+    def test_native_clones_stage_at_recipient_city_then_return_to_original_positions(self):
+        self.run_lua("""local spawn=UnitManager.InitUnitValidAdjacentHex
+          UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,radius)
+            assert(owner==2 and x==12 and y==0 and KILLS==0 and TRANSFERS==0)
+            return spawn(owner,kind,x,y,radius)
+          end
+          local manager=Game.GetGreatPeople();local create=manager.CreatePerson
+          manager.CreatePerson=function(self,owner,individual,x,y)
+            assert(owner==2 and x==12 and y==0 and KILLS==0 and TRANSFERS==0)
+            return create(self,owner,individual,x,y)
+          end
+          Game.GetGreatPeople=function() return manager end""")
+        tx = self.apply()
+        self.assertEqual(tx.Status, 'COMPLETE')
+        self.run_lua("""for _,s in ipairs(ExposedMembers.JAC_Absorption.GetState().Transactions['test-absorption'].Units) do
+          if s.KeepUnit then local u=ExposedMembers.JAC_Absorption.FindUnit(s.Destination,s.Token)
+            assert(u:GetX()==s.X and u:GetY()==s.Y) end
+        end""")
+
+    def test_large_army_batches_publication_requests_instead_of_waiting_per_unit(self):
+        self.run_lua("""for id=1000,1019 do UNIT(1,id,'UNIT_WARRIOR',4,0);PLAN.Units['1:'..id]='INCORPORATE' end""")
+        self.split_unit_contexts()
+        tx = self.apply()
+        publications = 0
+        while tx.Status != 'COMPLETE' and publications < 4:
+            self.run_lua('UI_PUBLISH()')
+            tx = self.a.Resume('test-absorption')
+            publications += 1
+        self.assertEqual(tx.Status, 'COMPLETE')
+        self.assertEqual(self.g.SPAWNS, 26)
+        self.assertTrue(self.verify('test-absorption', True))
+
     def test_off_map_native_candidates_are_placed_before_transfer_and_verified(self):
         self.run_lua("""local create=UNIT
           UNIT=function(...) local u=create(...);u.x=-9999;u.y=-9999;return u end""")

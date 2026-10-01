@@ -594,11 +594,11 @@ local function FindToken(owner, token)
 end
 A.FindUnit = FindToken
 
-local function VerifySpread(unit, snap, state, tx, phase)
-  if snap.SpreadCharges == nil then return end
+local function VerifySpread(unit, snap, state, tx, phase, batch)
+  if snap.SpreadCharges == nil then return true end
   if unit.GetSpreadCharges or not tx then
     assert(SpreadCharges(unit) == snap.SpreadCharges, "spent spread charges need adapter")
-    return
+    return true
   end
   local owner, id = unit:GetOwner(), unit:GetID()
   local token = snap.Token .. ":spread:" .. phase .. ":" .. id
@@ -608,16 +608,21 @@ local function VerifySpread(unit, snap, state, tx, phase)
     read = { Token = token, Owner = owner, ID = id, Turn = tx.Turn, AwaitingUI = true }
     snap.SpreadReads[phase] = read
     Save(state)
+    if batch then return false end
     error("JAC_ABSORPTION_WAITING_UI", 0)
   end
-  if read.Verified then return end
+  if read.Verified then return true end
   local reads = ExposedMembers.JAC_HeroReadAPI
   local charges = reads and reads.GetUnitObservation and reads.GetUnitObservation(token)
-  if charges == nil then error("JAC_ABSORPTION_WAITING_UI", 0) end
+  if charges == nil then
+    if batch then return false end
+    error("JAC_ABSORPTION_WAITING_UI", 0)
+  end
   assert(type(charges) == "number" and charges == snap.SpreadCharges,
     "spent spread charges need adapter")
   read.AwaitingUI, read.Verified = nil, true
   Save(state)
+  return true
 end
 
 local function RestoreUnit(unit, snap, coreOnly)
@@ -732,12 +737,16 @@ local function Spawn(snap)
   assert(not snap.Hero, "native Hero must be created through HeroesManager at its transferred origin")
   local before = {}
   for _, unit in ipairs(Units(snap.Destination)) do before[unit:GetID()] = true end
+  -- The donor's province can reject the new owner's peaceful units. Stage at
+  -- the recipient's city, verify the clone, then restore position after transfer.
+  local staging = assert(Players[snap.Destination]:GetCities():GetCapitalCity(), "destination staging city unavailable")
+  local x, y = staging:GetX(), staging:GetY()
   if snap.Individual >= 0 then
     -- Official TunerMapPanel.lua:190 + Debug/Map.ltp:579: individual INDEX, not hash.
-    Game.GetGreatPeople():CreatePerson(snap.Destination, snap.Individual, snap.X, snap.Y)
+    Game.GetGreatPeople():CreatePerson(snap.Destination, snap.Individual, x, y)
   else
     -- Returns no Unit object (verified live); discover the new ID afterwards.
-    UnitManager.InitUnitValidAdjacentHex(snap.Destination, snap.Type, snap.X, snap.Y, R.UNIT_SEARCH_RADIUS_POC)
+    UnitManager.InitUnitValidAdjacentHex(snap.Destination, snap.Type, x, y, R.UNIT_SEARCH_RADIUS_POC)
   end
   local found
   for _, unit in ipairs(Units(snap.Destination)) do
@@ -1050,7 +1059,8 @@ local function Execute(state, tx)
       -- InitUnitValidAdjacentHex can issue an ID while leaving the unit off-map
       -- (verified live: -9999/-9999). Such a unit never enters the UI unit cache.
       if unit:GetX() < 0 or unit:GetY() < 0 or not Map.GetPlot(unit:GetX(), unit:GetY()) then
-        UnitManager.PlaceUnit(unit, snap.X, snap.Y)
+        local staging = assert(Players[snap.Destination]:GetCities():GetCapitalCity(), "destination staging city unavailable")
+        UnitManager.PlaceUnit(unit, staging:GetX(), staging:GetY())
         assert(unit:GetX() >= 0 and unit:GetY() >= 0 and Map.GetPlot(unit:GetX(), unit:GetY()),
           "staged unit placement failed; saved candidate retained")
         Save(state)
@@ -1062,14 +1072,16 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Units) do if snap.Hero and snap.KeepUnit then hasHeroes = true end end
   if hasHeroes and not tx.UnitMapFrozen then
     MovedAssets(tx) -- check concurrent roster conflicts before any native escrow/city change
+    local ready = true
     for _, snap in ipairs(tx.Units) do
       if snap.KeepUnit and not snap.Hero then
         local unit = FindToken(snap.Destination, snap.Token)
         RestoreUnit(unit, snap, true)
         VerifyUnit(unit, snap, true)
-        VerifySpread(unit, snap, state, tx, "stage")
+        if not VerifySpread(unit, snap, state, tx, "stage", true) then ready = false end
       end
     end
+    if not ready then error("JAC_ABSORPTION_WAITING_UI", 0) end
   end
   for _, snap in ipairs(tx.Units) do
     if snap.Hero and snap.KeepUnit then StageHero(state, tx, snap) end
@@ -1085,15 +1097,17 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Cities) do PlanProperties(snap, tx, cityRebinders, false) end
   Save(state)
   MovedAssets(tx) -- detect newly conflicting destination IDs before donor deletion
+  local ready = true
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit then
       local unit = FindToken(snap.Destination, snap.Token)
       RestoreUnit(unit, snap)
       VerifyUnit(unit, snap)
-      VerifySpread(unit, snap, state, tx, "final")
+      if not VerifySpread(unit, snap, state, tx, "final", true) then ready = false end
       Save(state)
     end
   end
+  if not ready then error("JAC_ABSORPTION_WAITING_UI", 0) end
   tx.Status = "STAGED"
   Save(state)
   for _, snap in ipairs(tx.Units) do
@@ -1128,19 +1142,21 @@ local function Execute(state, tx)
     end
     Save(state)
   end
-  -- Hero creation establishes the native origin; restore its actual location after territory is transferred.
+  -- Restore all native positions only after the province belongs to the recipient.
   -- Official gameplay example: DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:854,886.
+  ready = true
   for _, snap in ipairs(tx.Units) do
-    if snap.Hero and snap.KeepUnit then
-      local unit = assert(FindToken(snap.Destination, snap.Token), "native Hero lost before placement")
+    if snap.KeepUnit then
+      local unit = assert(FindToken(snap.Destination, snap.Token), "transferred unit lost before placement")
       if unit:GetX() ~= snap.X or unit:GetY() ~= snap.Y then UnitManager.PlaceUnit(unit, snap.X, snap.Y) end
-      assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "native Hero placement failed; saved snapshot retained")
+      assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "transferred unit placement failed; saved snapshot retained")
       RestoreUnit(unit, snap)
       VerifyUnit(unit, snap)
-      VerifySpread(unit, snap, state, tx, "hero-final")
+      if not VerifySpread(unit, snap, state, tx, "placed", true) then ready = false end
       Save(state)
     end
   end
+  if not ready then error("JAC_ABSORPTION_WAITING_UI", 0) end
   -- Finish all city mutations, then let UI-only citizen/work caches catch up.
   if tx.Cities[1] then
     local first = CityManager.GetCityAt(tx.Cities[1].X, tx.Cities[1].Y)
