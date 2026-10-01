@@ -1,0 +1,220 @@
+{
+  "name": "Religion hero: positive faith reward, thirty-second lifespan delay, real published-state recovery, no replay and save/load",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "8424840C-92EF-4426-A9B4-B4E0CB818049"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620940,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true); GameConfiguration.UpdateEnabledMods(); if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode not enabled') end; return 'official Heroes mode enabled'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local bridge=ExposedMembers.JAC_RP_HeroUI; return bridge~=nil and bridge.OriginBuilding~=nil and bridge.UnitInfo~=nil and bridge.Schedule~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetValue('JAC_AUTOTEST')==1 then if tonumber(GameInfo.GlobalParameters.DIPLOMACY_ALLIANCE_TIME_LIMIT.Value)~=1 then error('test alliance deadline SQL not loaded') end; if not ExposedMembers.JAC_ReligionPersistence or ExposedMembers.JAC_ReligionPersistence.Rules().REVIVAL_COOLDOWN_TURNS~=1 then error('test revival deadline SQL not loaded') end end; if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode required') end; if not Game.GetHeroesManager() or not GameInfo.HeroClasses then error('official Heroes data did not load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_APPLIED','LOC_JAC_RP_PENDING'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 then error('wrong local founder') end; local p=Players[0]; local settler=nil; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units.UNIT_SETTLER.Index then settler=u; break end end; if not settler then error('missing founding settler') end; UnitManager.RequestOperation(settler,UnitOperationTypes.FOUND_CITY); return 'capital requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetCities():GetCapitalCity()~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); for _,name in ipairs({'BUILDING_MONUMENT','BUILDING_SHRINE'}) do local b=GameInfo.Buildings[name]; if not c:GetBuildings():HasBuilding(b.Index) then c:GetBuildQueue():CreateIncompleteBuilding(b.Index,100) end; if not c:GetBuildings():HasBuilding(b.Index) then error('faith fixture building missing '..name) end end; p:GetReligion():ChangeFaithBalance(100-p:GetReligion():GetFaithBalance()); local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_01'; R.Found(id,0,'origin',1,0,'PLAYER_0'); R.SetCommunity(id,'origin',0,0,'PLAYER_0'); R.Discover(id,'delay_hero','book','SCRIPTURE','ACTOR','TRAVELER','CAVE',0); return 'lost religion, monument and positive-faith fixture prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local B=ExposedMembers.JAC_RP_HeroUI; B.AutotestOriginal=B.UnitInfo; B.AutotestReads=0; B.UnitInfo=function(player,unit) B.AutotestReads=B.AutotestReads+1; local info=B.AutotestOriginal(player,unit); if info then info.lifespan=nil end; return info end; return 'lifespan replication held by the test driver'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local R=ExposedMembers.JAC_ReligionPersistence; local yield=p:GetReligion():GetFaithYield(); if yield<=0 then error('hero reward test requires positive per-turn faith') end; local before=p:GetReligion():GetFaithBalance(); R.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','delay_hero','HERO',{city=p:GetCities():GetCapitalCity():GetID()}); local h=R.Export().heroes['0']; if h.verification~='PENDING' or h.rewardFaith~=yield*10 or p:GetReligion():GetFaithBalance()~=before then error('delayed hero was paid prematurely') end; return tostring(before+yield*10)..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "capture_as": "DELAY_EXPECTED"
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 5,
+      "timeout": 10
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; if h.verification~='PENDING' or R.Inspect(h.religion).discoveries[h.discovery].effects~='PENDING' or Players[0]:GetReligion():GetFaithBalance()~=100 then error('missing lifespan must retain an unpaid reservation after thirty seconds') end; return 'deadline expired with reward unpaid'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local B=ExposedMembers.JAC_RP_HeroUI; B.AutotestReadsAtDeadline=B.AutotestReads; if B.AutotestReadsAtDeadline<1 then error('hero verifier never ran') end; return 'read counter recorded after the deadline'"
+    },
+    {
+      "action": "pause",
+      "seconds": 2,
+      "timeout": 10
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local B=ExposedMembers.JAC_RP_HeroUI; if B.AutotestReads~=B.AutotestReadsAtDeadline then error('per-frame verification did not stop at the deadline') end; B.UnitInfo=B.AutotestOriginal; B.AutotestOriginal=nil; return 'real lifespan reads restored after per-frame verification stopped'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "Players[0]:GetTreasury():ChangeGoldBalance(1); return 'real engine state changed to publish a game-core update'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R and R.Export().heroes['0']; return h and h.verification=='APPLIED'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=Players[0]:GetUnits():FindID(h.unit); local life=u and u:GetProperty(UnitPropertyKeys.LifespanRemaining); if not u or u:GetHeroClassType()~=h.heroClass or not GameInfo.HeroClasses[h.heroClass] or type(life)~='number' or life<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 then error('delayed verification did not recruit an official hero') end; return 'official hero verified after the delayed update'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local d=R.Inspect(h.religion).discoveries[h.discovery]; if h.verification~='APPLIED' or d.effects~='APPLIED' or pcall(R.CompleteHero,0) then error('hero reward receipt or replay rejection failed') end; return tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "DELAY_EXPECTED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "Players[0]:GetTreasury():ChangeGoldBalance(1); return 'second real game-core update'"
+    },
+    {
+      "action": "pause",
+      "seconds": 2,
+      "timeout": 10
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local d=R.Inspect(h.religion).discoveries[h.discovery]; if h.verification~='APPLIED' or d.effects~='APPLIED' or pcall(R.CompleteHero,0) then error('hero reward receipt or replay rejection failed') end; return tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "DELAY_EXPECTED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-HERO-DELAY",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-HERO-DELAY",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local d=R.Inspect(h.religion).discoveries[h.discovery]; if h.verification~='APPLIED' or d.effects~='APPLIED' or pcall(R.CompleteHero,0) then error('hero reward receipt or replay rejection failed') end; return tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "DELAY_EXPECTED"
+    }
+  ]
+}

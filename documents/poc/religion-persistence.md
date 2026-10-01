@@ -98,6 +98,12 @@ Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`を使う�
 
 ## 検証
 
+`religion-hero-delay.json` は、英雄の寿命情報を検証ドライバーで一時的に隠し、30秒の期限後の回復を検査する34手順の追加シナリオである。首都に記念碑と祠を用意し、実際の毎ターンの信仰創出量が正であることを必須にする。期限後も予約と未払いを保ち、フレームごとの照会が停止したことを呼出し回数で検査する。寿命の読取を戻した後、ゴールドを1増やす実際のゲーム更新で確認を再開し、実際の信仰報酬が創出量の10倍であることを確かめる。後続の更新と保存・読込の後にも報酬が重複しないことを検査する。エンジン自体が寿命の反映を遅らせた証拠とは扱わない。
+
+```powershell
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-hero-delay.json --check
+```
+
 ```powershell
 python -m unittest discover -s tests -t .
 python -m unittest discover -s tools/civ6-autotest/tests
