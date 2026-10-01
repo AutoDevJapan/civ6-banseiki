@@ -117,7 +117,8 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: ids must be mod UUIDs")
             disabled = step.get("disable_ids", [])
             if (not isinstance(disabled, list) or any(not isinstance(item, str) or not MOD_ID.fullmatch(item)
-                                                    for item in disabled) or set(disabled) & set(step["ids"])):
+                                                    for item in disabled)
+                    or {item.lower() for item in disabled} & {item.lower() for item in step["ids"]}):
                 raise ScenarioError(f"Step {number}: invalid disable_ids")
         elif action == "configure":
             if "build_setup" in step and type(step["build_setup"]) is not bool:
@@ -156,6 +157,11 @@ def validate_scenario(data: dict) -> None:
                 raise ScenarioError(f"Step {number}: fast_forward must be boolean")
             if step.get("fast_forward") and not isinstance(data.get("test_mode"), dict):
                 raise ScenarioError(f"Step {number}: fast_forward requires test mode")
+        elif action == "end_turn":
+            if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
+                raise ScenarioError(f"Step {number}: turns must be positive")
+            if "test_turns" in step and (type(step["test_turns"]) is not int or step["test_turns"] < 1):
+                raise ScenarioError(f"Step {number}: test_turns must be positive")
         elif action == "ui_lua":
             if not isinstance(step.get("state_name"), str) or not isinstance(step.get("code"), str) or not step["code"].strip():
                 raise ScenarioError(f"Step {number}: ui_lua needs state_name and code")
@@ -221,29 +227,151 @@ def validate_scenario(data: dict) -> None:
 
 
 def _enable_mods_code(ids: list[str], disable_ids: list[str] | None = None) -> str:
-    lines = ["if not UI.IsInFrontEnd() then error('main menu required') end"]
-    for mod_id in disable_ids or []:
-        literal = _lua_string(mod_id)
-        lines += [
-            f"local disabledHandle = Modding.GetModHandle({literal})",
-            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then Modding.DisableMod(disabledHandle) end",
-            "if disabledHandle and Modding.GetModInfo(disabledHandle).Enabled then error('mod stayed enabled') end",
-        ]
-    for mod_id in ids:
-        literal = _lua_string(mod_id)
-        lines += [
-            f"local handle = Modding.GetModHandle({literal})",
-            f"if not handle then error('mod is not installed: ' .. {literal}) end",
-            "local info = Modding.GetModInfo(handle)",
-            "if not info.Enabled then",
-            "  local reason = Modding.CanEnableMod(handle, true)",
-            "  if reason ~= 'OK' then error('cannot enable mod: ' .. tostring(reason)) end",
-            "  Modding.EnableMod(handle, true)",
-            "end",
-            "if not Modding.GetModInfo(handle).Enabled then error('mod did not become enabled') end",
-        ]
-    lines += ["GameConfiguration.UpdateEnabledMods()", "return true"]
-    return "\n".join(lines)
+    # Official FrontEnd APIs: Base/Assets/UI/FrontEnd/Mods.lua:67,255,
+    # 296-327,545-550. Only associations' dependencies (not references) block disabling.
+    return "\n".join([
+        "if not UI.IsInFrontEnd() then error('main menu required') end",
+        "local enableIDs = {" + ", ".join(_lua_string(i) for i in ids) + "}",
+        "local disableIDs = {" + ", ".join(_lua_string(i) for i in disable_ids or []) + "}",
+        """local keep, disabled = {}, {}
+for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
+local handles, dependents, original = {}, {}, {}
+for _, installed in ipairs(Modding.GetInstalledMods()) do
+    local info = Modding.GetModInfo(installed.Handle)
+    local id = string.lower(info.Id)
+    handles[id] = installed.Handle
+    original[id] = info.Enabled
+    local dependencies = Modding.GetModAssociations(installed.Handle)
+    for _, dependency in ipairs(dependencies or {}) do
+      local target = string.lower(dependency.Id)
+      dependents[target] = dependents[target] or {}
+      table.insert(dependents[target], id)
+    end
+end
+local order = {}
+if #disableIDs > 0 then
+  local visiting, visited = {}, {}
+  local function visit(id)
+    if visiting[id] then error('mod dependency cycle: ' .. id) end
+    if visited[id] then return end
+    if keep[id] then error('scenario enables a dependent mod of a disable target: ' .. id) end
+    visiting[id] = true
+    local children = dependents[id] or {}
+    table.sort(children)
+    for _, child in ipairs(children) do visit(child) end
+    local handle = handles[id]
+    if handle and Modding.GetModInfo(handle).Enabled then table.insert(order, id) end
+    visiting[id], visited[id] = nil, true
+  end
+  -- Build the complete order before changing anything, including paths through
+  -- disabled intermediates. An enable-list conflict must not disable other mods.
+  for _, id in ipairs(disableIDs) do visit(string.lower(id)) end
+  local positions = {}
+  for i, id in ipairs(order) do positions[id] = i end
+  for i, id in ipairs(order) do
+    local reason, _, sources = Modding.CanDisableMod(handles[id])
+    if reason == 'MissingDependencies' and sources and #sources > 0 then
+      -- The engine still sees dependents as enabled during preflight. Only
+      -- dependencies already scheduled BEFORE this target can be resolved.
+      for _, source in ipairs(sources) do
+        local position = positions[string.lower(source.Id)]
+        if not position or position >= i then
+          error('cannot disable mod: ' .. id .. ' (unscheduled dependent ' .. source.Id .. ')')
+        end
+      end
+    elseif reason ~= 'OK' then
+      error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')')
+    end
+  end
+end
+for _, id in ipairs(enableIDs) do
+  if not Modding.GetModHandle(id) then error('mod is not installed: ' .. id) end
+end
+local ok, failure = pcall(function()
+    for _, id in ipairs(order) do
+      local handle = handles[id]
+      local reason = Modding.CanDisableMod(handle)
+      if reason ~= 'OK' then error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
+      Modding.DisableMod(handle)
+      if Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+      table.insert(disabled, id)
+    end
+for _, id in ipairs(enableIDs) do
+  local handle = Modding.GetModHandle(id)
+  if not handle then error('mod is not installed: ' .. id) end
+  if not Modding.GetModInfo(handle).Enabled then
+    local reason = Modding.CanEnableMod(handle, true)
+    if reason ~= 'OK' then error('cannot enable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
+    Modding.EnableMod(handle, true)
+  end
+end
+for _, id in ipairs(enableIDs) do
+  if not Modding.GetModInfo(Modding.GetModHandle(id)).Enabled then error('mod did not become enabled: ' .. id) end
+end
+for _, id in ipairs(disableIDs) do
+  local handle = Modding.GetModHandle(id)
+  if handle and Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+end
+GameConfiguration.UpdateEnabledMods()
+end)
+if not ok then
+  -- Restore the complete original selection, including prerequisites enabled
+  -- implicitly by EnableMod(..., true), on failure in EITHER direction.
+  local all, visited, restoreOrder = {}, {}, {}
+  for id in pairs(handles) do table.insert(all, id) end
+  table.sort(all)
+  local function visit(id)
+    if visited[id] then return end
+    visited[id] = true
+    local children = dependents[id] or {}
+    table.sort(children)
+    for _, child in ipairs(children) do visit(child) end
+    if handles[id] then table.insert(restoreOrder, id) end
+  end
+  for _, id in ipairs(all) do visit(id) end
+  local turnOff, changed = {}, false
+  local function mark(id)
+    if turnOff[id] then return end
+    turnOff[id] = true
+    for _, child in ipairs(dependents[id] or {}) do mark(child) end
+  end
+  for _, id in ipairs(all) do
+    if Modding.GetModInfo(handles[id]).Enabled ~= original[id] then changed = true end
+    if not original[id] and Modding.GetModInfo(handles[id]).Enabled then mark(id) end
+  end
+  local failures = {}
+  for _, id in ipairs(restoreOrder) do
+    if turnOff[id] and Modding.GetModInfo(handles[id]).Enabled then
+      local restored, err = pcall(Modding.DisableMod, handles[id])
+      if not restored or Modding.GetModInfo(handles[id]).Enabled then
+        table.insert(failures, id .. ': ' .. tostring(err))
+      end
+    end
+  end
+  for i = #restoreOrder, 1, -1 do
+    local id = restoreOrder[i]
+    if original[id] and not Modding.GetModInfo(handles[id]).Enabled then
+      -- False preserves an initially disabled intermediate prerequisite.
+      local restored, err = pcall(Modding.EnableMod, handles[id], false)
+      if not restored or not Modding.GetModInfo(handles[id]).Enabled then
+        table.insert(failures, id .. ': ' .. tostring(err))
+      end
+    end
+  end
+  for _, id in ipairs(all) do
+    if Modding.GetModInfo(handles[id]).Enabled ~= original[id] then
+      table.insert(failures, id .. ': selection differs from original')
+    end
+  end
+  if changed then
+    local updated, err = pcall(GameConfiguration.UpdateEnabledMods)
+    if not updated then table.insert(failures, 'configuration: ' .. tostring(err)) end
+  end
+  if #failures > 0 then error(tostring(failure) .. '; restoration failed: ' .. table.concat(failures, ', ')) end
+  error(failure)
+end
+return table.concat(disabled, ', ')""",
+    ])
 
 
 def _configure_code(step: dict) -> str:
@@ -307,8 +435,10 @@ def _build_setup_code(players: list[dict]) -> str:
 
 class Runner:
     def __init__(self, scenario: dict, output: Path, logs: Path, saves: Path, port: int,
-                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False):
+                 *, auto_restart: bool = True, mods_dir: Path = DEFAULT_MODS_DIR, owner_start: bool = False,
+                 test_mode: bool = False):
         self.scenario = scenario
+        self.test_mode = test_mode
         self.owner_start = owner_start
         self.output = output
         self.logs = logs
@@ -1118,15 +1248,20 @@ class Runner:
         if action == "restart_game":
             return self._restart_game(_remaining(deadline))
         if action == "enable_mods":
-            self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")),
-                      min(5, _remaining(deadline)))
-            return "enabled/verified " + ", ".join(step["ids"])
+            disabled = self._lua("FrontEnd", _enable_mods_code(step["ids"], step.get("disable_ids")),
+                                 min(5, _remaining(deadline)))
+            return "enabled/verified " + ", ".join(step["ids"]) + "; disabled " + (disabled or "none")
         if action == "configure":
             self._lua("FrontEnd", _configure_code(step), min(5, _remaining(deadline)))
             self.ruleset = step["ruleset"]
             build = _builds_setup(step)
             if build:
                 self._lua("HostGame", _build_setup_code(step["players"]), min(30, _remaining(deadline)))
+            # Set after FullRefresh: test-only database criteria use this saved
+            # configuration flag. Explicitly clear it on ordinary runs.
+            self._lua("FrontEnd", "GameConfiguration.SetValue('JAC_AUTOTEST', "
+                      + ("1" if self.test_mode else "0") + ")\nGameConfiguration.UpdateEnabledMods()\nreturn true",
+                      min(5, _remaining(deadline)))
             return (f"{step['ruleset']}, {step['map_size']}, {step['speed']}, seed={step['seed']}, "
                     f"players={len(step['players'])}"
                     + ("; Create Game setup built and checked" if build else ""))
@@ -1163,7 +1298,11 @@ class Runner:
                                   allow_human_elimination=step.get("allow_human_elimination", False),
                                   metrics_group=step.get("metrics_group", "AUTOPLAY"))
         if action == "end_turn":
-            return self._end_turn(timeout, deadline=deadline)
+            results = []
+            turns = step.get("test_turns", step.get("turns", 1)) if self.test_mode else step.get("turns", 1)
+            for _ in range(turns):
+                results.append(self._end_turn(_remaining(deadline), deadline=deadline))
+            return "; ".join(results)
         if action == "ui_lua":
             attempts = 0
             while True:
@@ -1418,7 +1557,7 @@ def main() -> int:
     parser.add_argument("scenario", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate JSON only; do not connect to the game")
     parser.add_argument("--test-mode", action="store_true",
-                        help="Fast-forward long autoplay waits; does not measure continuous-play performance")
+                        help="Fast-forward long autoplay waits and shorten test deadlines; not continuous-play performance")
     parser.add_argument("--output", type=Path, help="New directory for baseline, trace and screenshots")
     parser.add_argument("--logs", type=Path)
     parser.add_argument("--saves", type=Path)
@@ -1442,7 +1581,7 @@ def main() -> int:
         saves = args.saves or (Path.home() / "Documents" / "My Games" / "Sid Meier's Civilization VI" / "Saves" / "Single")
         return Runner(data, output, args.logs or default_log_dir(), saves, args.port,
                       auto_restart=not args.no_auto_restart, mods_dir=args.mods,
-                      owner_start=args.owner_start).run()
+                      owner_start=args.owner_start, test_mode=args.test_mode).run()
     except (OSError, json.JSONDecodeError, ScenarioError, ValueError) as exc:
         parser.exit(2, f"Scenario error: {exc}\n")
 

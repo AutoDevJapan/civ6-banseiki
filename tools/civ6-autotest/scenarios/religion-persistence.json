@@ -1,0 +1,573 @@
+{
+  "name": "Religion persistence: owner decisions, nine effects, native citizens, official Heroes, religious alliance and save/load",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "8424840C-92EF-4426-A9B4-B4E0CB818049"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620940,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true); GameConfiguration.UpdateEnabledMods(); if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode not enabled') end; return 'official Heroes mode enabled'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local bridge=ExposedMembers.JAC_RP_HeroUI; return bridge~=nil and bridge.OriginBuilding~=nil and bridge.UnitInfo~=nil and bridge.Schedule~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetValue('JAC_AUTOTEST')==1 then if not ExposedMembers.JAC_ReligionPersistence or ExposedMembers.JAC_ReligionPersistence.Rules().REVIVAL_COOLDOWN_TURNS~=1 then error('test revival deadline SQL not loaded') end end; if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode required') end; if not Game.GetHeroesManager() or not GameInfo.HeroClasses then error('official Heroes data did not load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_APPLIED','LOC_JAC_RP_PENDING'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 then error('wrong local founder') end; local p=Players[0]; local settler=nil; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units.UNIT_SETTLER.Index then settler=u; break end end; if not settler then error('missing founding settler') end; UnitManager.RequestOperation(settler,UnitOperationTypes.FOUND_CITY); return 'capital requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetCities():GetCapitalCity()~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); if not c then error('native holy city missing') end; local custom=GameInfo.Religions.RELIGION_CUSTOM_1; if not custom then error('native custom religion slot missing') end; p:GetReligion():SetHolyCity(c); Game.GetReligion():FoundReligion(0,custom.Index); Game.GetReligion():AddBelief(0,GameInfo.Beliefs.BELIEF_CATHEDRAL.Index); local found=false; for _,r in ipairs(Game.GetReligion():GetReligions()) do if r.Religion==custom.Index then found=true end end; if not found then error('native placeholder not founded') end; return 'native placeholder religion founded'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; p:GetReligion():ChangeFaithBalance(180-p:GetReligion():GetFaithBalance()); local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; if Game:GetProperty(R.PROPERTY_KEY)~=nil then error('fresh game inherited a ledger') end; R.Found(id,0,'origin',5,1,'PLAYER_0'); R.SetCommunity(id,'diaspora',1,0,'PLAYER_1'); R.Found('JAC_RP_PLACEHOLDER_02',1,'origin',2,1,'PLAYER_1'); for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do R.PreserveAsset(id,asset,kind,asset=='exile_original' and 'EXILE_1' or (asset=='book_original' and 'CAVE' or 'RUINS')) end; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=6 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=false or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_PUBLIC"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-PUBLIC",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-PUBLIC",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=6 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=false or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_PUBLIC"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.NotifyFounderDefeated(0); R.SetCommunity(id,'origin',0,0,'PLAYER_0'); local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_UNDERGROUND"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return tostring(Game.GetCurrentGameTurn())",
+      "capture_as": "RP_TURN_BEFORE"
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "timeout": 180
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "return tostring(Game.GetCurrentGameTurn()-2)",
+      "equals_capture": "RP_TURN_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_UNDERGROUND"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-UNDERGROUND",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-UNDERGROUND",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_UNDERGROUND"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.SetCommunity(id,'diaspora',0,0,'PLAYER_1'); local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "capture_as": "RP_LOST"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-LOST",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-LOST",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='CAVE' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; return R.Snapshot()",
+      "equals_capture": "RP_LOST"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.Discover(id,'discovery_book','book_original','SCRIPTURE','TRAVELER_7','TRAVELER','CAVE',0); local before=R.Snapshot(); local faith=Players[0]:GetReligion():GetFaithBalance(); local ok=pcall(function() R.Revive(id,'illegal_direct','book_original','illegal_direct',0,Players[0]:GetCities():GetCapitalCity():GetID()) end); if ok or R.Snapshot()~=before or Players[0]:GetReligion():GetFaithBalance()~=faith then error('direct revival stranded an unresolved discovery') end; R.Discover(id,'discovery_sale','relic_discovered','RELIC','MONK_7','MONK','SHIPWRECK',0); local gold=Players[0]:GetTreasury():GetGoldBalance(); R.ResolveDiscovery(id,'discovery_sale','SELL',{}); if Players[0]:GetTreasury():GetGoldBalance()~=gold+500 then error('sale gold not applied') end; local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; if s.discoveries.discovery_book.outcome~=nil then error('pending discovery resolved') end; return R.Snapshot()",
+      "capture_as": "RP_DISCOVERED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-DISCOVERED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-DISCOVERED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='LOST' or s.followers~=0 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=0 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=true or s.underground~=true or s.canRevive~=true then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='TRAVELER_7' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; if s.discoveries.discovery_book.outcome~=nil then error('pending discovery resolved') end; return R.Snapshot()",
+      "equals_capture": "RP_DISCOVERED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local faith=Players[0]:GetReligion():GetFaithBalance(); R.ResolveDiscovery(id,'discovery_book','REVIVE',{revival='revival_1',community='revived',city=Players[0]:GetCities():GetCapitalCity():GetID()}); if Players[0]:GetReligion():GetFaithBalance()~=faith-20 then error('revival cost not charged') end; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='PLAYER_0' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=1 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "capture_as": "RP_REVIVED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-REVIVED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-REVIVED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='UNDERGROUND' or s.followers~=1 or s.publicFacilities~=0 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=true or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='PLAYER_0' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=1 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "equals_capture": "RP_REVIVED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; R.SetCommunity(id,'revived',1,1,'PLAYER_0'); local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=1 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='PLAYER_0' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=1 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "capture_as": "RP_RESTORED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-RESTORED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-RESTORED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; if p:GetReligion():GetReligionTypeCreated()~=r then error('native founding lost after load') end; if not CityManager.GetCity(p:GetReligion():GetHolyCityID()) then error('native holy city lost after load') end; return 'native founding survives load'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local id='JAC_RP_PLACEHOLDER_01'; local s=R.Inspect(id); if s.state~='PUBLIC' or s.followers~=1 or s.publicFacilities~=1 or s.founder~=0 or s.founderDefeated~=true or s.revivalCount~=1 then error('wrong religion state '..s.state..' followers='..s.followers..' facilities='..s.publicFacilities..' revivals='..s.revivalCount) end; if s.lost~=false or s.underground~=false or s.canRevive~=false then error('lost/underground/revival flags') end; for asset,kind in pairs({book_original='SCRIPTURE',relic_original='RELIC',record_original='RECORD',exile_original='PERSON',holy_site='HOLY_SITE'}) do if not s.assets[asset] or s.assets[asset].kind~=kind then error('missing asset '..asset) end end; if s.assets.book_original.holder~='PLAYER_0' or s.assets.exile_original.holder~='EXILE_1' then error('wrong holder') end; local other=R.Inspect('JAC_RP_PLACEHOLDER_02'); if other.state~='PUBLIC' or other.followers~=2 or other.publicFacilities~=1 or other.founderDefeated or next(other.assets)~=nil or other.revivalCount~=0 then error('second religion changed') end; local d=s.discoveries.discovery_book; if not d or d.asset~='book_original' or d.job~='TRAVELER' or d.site~='CAVE' or d.actor~='TRAVELER_7' then error('discovery facts') end; local sell=s.discoveries.discovery_sale; if not sell or sell.outcome~='SELL' or sell.effects~='APPLIED' or s.assets.relic_discovered.kind~='RELIC' then error('sale effect receipt') end; local d=s.discoveries.discovery_book; local v=s.revivals.revival_1; if d.outcome~='REVIVE' or d.effects~='APPLIED' or d.revival~='revival_1' or not v or v.source~='book_original' or v.community~='revived' or v.followers~=1 or v.publicFacilities~=0 then error('revival history') end; return R.Snapshot()",
+      "equals_capture": "RP_RESTORED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; for r in GameInfo.Technologies() do if r.Cost<=60 then p:GetTechs():SetTech(r.Index,true) end end; for r in GameInfo.Civics() do if r.Cost<=100 then p:GetCulture():SetCivic(r.Index,true) end end; p:GetDiplomacy():SetHasMet(1); if p:GetDiplomacy():IsAtWarWith(1) then p:GetDiplomacy():MakePeaceWith(1,true) end;  local c=Players[0]:GetCities():GetCapitalCity(); if not c:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MONUMENT.Index) then c:GetBuildQueue():CreateIncompleteBuilding(GameInfo.Buildings.BUILDING_MONUMENT.Index,100) end; return 'branch prerequisites prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local candidates={}; local boostable={}; for b in GameInfo.Boosts() do if b.TechnologyType then boostable[b.TechnologyType]=true end end;\nfor r in GameInfo.Technologies() do if boostable[r.TechnologyType] and not p:GetTechs():HasTech(r.Index) and not p:GetTechs():HasBoostBeenTriggered(r.Index) then candidates[#candidates+1]=r end end;\ntable.sort(candidates,function(a,b) return a.TechnologyType<b.TechnologyType end); if #candidates<2 then error('two new Eurekas required') end;\nlocal tech,civic; for r in GameInfo.Technologies() do if r.Index~=candidates[1].Index and r.Index~=candidates[2].Index and p:GetTechs():CanResearch(r.Index) and p:GetTechs():GetResearchCost(r.Index)-p:GetTechs():GetResearchProgress(r.Index)>10 then tech=r; break end end;\nfor r in GameInfo.Civics() do if p:GetCulture():CanProgress(r.Index) and p:GetCulture():GetCultureCost(r.Index)-p:GetCulture():GetCulturalProgress(r.Index)>60 then civic=r; break end end;\nif not tech or not civic then error('no research targets for exact yield checks') end;\nUI.RequestPlayerOperation(0,PlayerOperations.RESEARCH,{[PlayerOperations.PARAM_TECH_TYPE]=tech.Hash,[PlayerOperations.PARAM_INSERT_MODE]=PlayerOperations.VALUE_EXCLUSIVE});\nUI.RequestPlayerOperation(0,PlayerOperations.PROGRESS_CIVIC,{[PlayerOperations.PARAM_CIVIC_TYPE]=civic.Hash,[PlayerOperations.PARAM_INSERT_MODE]=PlayerOperations.VALUE_EXCLUSIVE});\nExposedMembers.JAC_RP_TestTargets={tech=tech.Index,civic=civic.Index}; return 'research selected'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[0]; local t=ExposedMembers.JAC_RP_TestTargets; return t~=nil and p:GetTechs():GetResearchingTech()==t.tech and p:GetCulture():GetProgressingCivic()==t.civic"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t))..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c))",
+      "capture_as": "RP_PROGRESS_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); \nlocal q=Players[1]; local c0=p:GetCities():GetCapitalCity(); local c1=q:GetCities():GetCapitalCity(); if not c1 then error('origin nation needs a city') end;\nR.Found(id,1,'origin',1,0,'PLAYER_1'); R.SetCommunity(id,'origin',0,0,'PLAYER_1'); for _,outcome in ipairs({'SELL','CONCEAL','RESEARCH','HERESY','ABSORB','ARTIFACT','DIPLOMATIC_INCIDENT','HERO'}) do R.Discover(id,'choice_'..outcome,'material_'..outcome,'SCRIPTURE','ACTOR_'..outcome,'TRAVELER','CAVE',0) end;\n-- Another community restores the native religion after the material discoveries.\nq:GetReligion():SetHolyCity(c1); Game.GetReligion():FoundReligion(1,GameInfo.Religions.RELIGION_CUSTOM_2.Index);\nif q:GetReligion():GetReligionTypeCreated()~=GameInfo.Religions.RELIGION_CUSTOM_2.Index then error('origin religion not founded') end;\n\nR.SetCommunity('JAC_RP_PLACEHOLDER_02','adopter',1,0,'PLAYER_0');\nR.BindEngineReligion(id,GameInfo.Religions.RELIGION_CUSTOM_2.Index); R.BindEngineReligion('JAC_RP_PLACEHOLDER_02',GameInfo.Religions.RELIGION_CUSTOM_1.Index);\nc0:ChangePopulation(5-c0:GetPopulation()); c1:ChangePopulation(5-c1:GetPopulation());\nc1:GetReligion():SetAllCityToReligion(GameInfo.Religions.RELIGION_CUSTOM_2.Index);\nlocal cr=c0:GetReligion(); local src=GameInfo.Religions.RELIGION_CUSTOM_2.Index; local own=GameInfo.Religions.RELIGION_CUSTOM_1.Index;\ncr:SetAllCityToReligion(-1); -- official Nubia scenario prepares unaffiliated citizens\nlocal function weights(scale)\n  for r in GameInfo.Religions() do if r.Index>0 then cr:RemovePressureOneReligion(r.Index,8388607,-1); cr:RemovePressureOneReligion(r.Index,1,-1) end end;\n  cr:AddReligiousPressure(0,src,2*scale,-1); cr:AddReligiousPressure(0,own,scale,-1);\n  local f,total={},0; for r in GameInfo.Religions() do if r.Index>0 then local n=cr:GetNumFollowers(r.Index); f[r.Index]=n; total=total+n end end;\n  return f[src] or 0,f[own] or 0,5-total;\nend;\nlocal low,high,scale=0,nil,32; local ready=false;\nfor attempt=1,32 do local ns,nt,nu=weights(scale); if ns==2 and nt==1 and nu==2 then ready=true; break end; if nu>2 then low=scale else high=scale end; local nextScale=high and math.floor((low+high)/2) or scale*2; if nextScale<1 or nextScale==scale or nextScale==low then break end; scale=nextScale end;\nif not ready then error('fixture needs two source, one own and two unaffiliated citizens') end;\n\nif R.NativeFollowers(id)~=7 or R.Inspect(id).followers~=7 or R.Inspect(id).lost then error('native binding must reflect seven actual citizens') end; local ok=pcall(function() R.Discover(id,'illegal_live','illegal_material','SCRIPTURE','ACTOR','TRAVELER','CAVE',0) end); if ok then error('living native religion incorrectly accepted lost discovery') end;\np:GetReligion():ChangeFaithBalance(1000-p:GetReligion():GetFaithBalance()); q:GetTreasury():ChangeGoldBalance(501-q:GetTreasury():GetGoldBalance()); q:GetDiplomacy():ChangeFavor(101-q:GetDiplomacy():GetFavor());\nreturn 'native citizens and balances prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local q=Players[1]; return tostring(p:GetTreasury():GetGoldBalance())..'|'..tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(p:GetDiplomacy():GetFavor())..'|'..tostring(q:GetTreasury():GetGoldBalance())..'|'..tostring(q:GetDiplomacy():GetFavor())",
+      "capture_as": "RP_BALANCE_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local g=p:GetTreasury():GetGoldBalance(); R.ResolveDiscovery(id,'choice_SELL','SELL',{}); if p:GetTreasury():GetGoldBalance()~=g+500 then error('sale must pay 500 gold') end; return 'sale checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local f,g=p:GetReligion():GetFaithBalance(),p:GetTreasury():GetGoldBalance(); R.ResolveDiscovery(id,'choice_CONCEAL','CONCEAL',{}); if p:GetReligion():GetFaithBalance()~=f or p:GetTreasury():GetGoldBalance()~=g or R.Inspect(id).assets.material_CONCEAL.holder~='HIDDEN_PLAYER_0' then error('conceal must be free and retained') end; return 'conceal checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); R.ResolveDiscovery(id,'choice_RESEARCH','RESEARCH',{}); local s=R.Inspect(id); if s.assets.material_RESEARCH~=nil or not s.retiredAssets.material_RESEARCH then error('research must use up material') end; local b=s.discoveries.choice_RESEARCH.effect.boosts; if #b~=2 or b[1]==b[2] then error('two distinct Eurekas required') end; for _,t in ipairs(b) do if not p:GetTechs():HasBoostBeenTriggered(t) then error('Eureka missing') end end; return 'research checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t)-10)..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c)-10)",
+      "equals_capture": "RP_PROGRESS_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local f=p:GetReligion():GetFaithBalance(); R.ResolveDiscovery(id,'choice_HERESY','HERESY',{}); if p:GetReligion():GetFaithBalance()~=f-400 or R.Inspect(id).assets.material_HERESY~=nil or not R.Inspect(id).retiredAssets.material_HERESY then error('heresy cost or consumption') end; return 'heresy checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t)-10)..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c)-30)",
+      "equals_capture": "RP_PROGRESS_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local f=p:GetReligion():GetFaithBalance(); local before=R.NativeFollowers(id); local own=R.NativeFollowers('JAC_RP_PLACEHOLDER_02'); R.ResolveDiscovery(id,'choice_ABSORB','ABSORB',{targetReligion='JAC_RP_PLACEHOLDER_02'}); local e=R.Inspect(id).discoveries.choice_ABSORB.effect; if before~=7 or e.convertedFollowers~=3 or #e.conversions~=2 or R.NativeFollowers(id)~=4 or R.NativeFollowers('JAC_RP_PLACEHOLDER_02')~=own+3 or p:GetReligion():GetFaithBalance()~=f-500 then error('absorption must move ceil(world citizens/3) and cost 500') end; local c=p:GetCities():GetCapitalCity(); local total=0; for r in GameInfo.Religions() do if r.Index>0 then total=total+c:GetReligion():GetNumFollowers(r.Index) end end; if c:GetPopulation()-total~=2 then error('absorption changed unaffiliated citizens') end; return 'native absorption checked, two unaffiliated citizens preserved'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); R.ResolveDiscovery(id,'choice_ARTIFACT','ARTIFACT',{}); local a=R.Export().artifacts['0']; if not a or a.asset~='material_ARTIFACT' or not R.Inspect(id).assets.material_ARTIFACT.vault then error('one PoC Vault item required') end; return 'artifact checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t)-10)..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c)-60)",
+      "equals_capture": "RP_PROGRESS_BEFORE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local q=Players[1]; local g,f=p:GetTreasury():GetGoldBalance(),p:GetDiplomacy():GetFavor(); R.ResolveDiscovery(id,'choice_DIPLOMATIC_INCIDENT','DIPLOMATIC_INCIDENT',{targetPlayer=1}); if p:GetTreasury():GetGoldBalance()~=g+250.5 or q:GetTreasury():GetGoldBalance()~=250.5 or p:GetDiplomacy():GetFavor()~=f+50 or q:GetDiplomacy():GetFavor()~=51 then error('half balances must transfer from founder') end; if not p:GetDiplomacy():HasAllied(1) then error('diplomatic alliance missing') end; if R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('persecution restriction missing') end; if pcall(R.AssertCanPersecute,0,'JAC_RP_PLACEHOLDER_02',1,id) then error('persecution guard accepted prohibited action') end; return 'religious alliance checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "-- Keep hero verification pending until the saved game reloads.\nExposedMembers.JAC_RP_HeroUI.UnitInfo=function() return nil end; return 'hero verification held for pending save'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); local before=p:GetReligion():GetFaithBalance(); local yield=p:GetReligion():GetFaithYield(); R.ResolveDiscovery(id,'choice_HERO','HERO',{city=city}); local h=R.Export().heroes['0']; if not h or h.verification~='PENDING' or R.Inspect(id).discoveries.choice_HERO.effects~='PENDING' or p:GetReligion():GetFaithBalance()~=before then error('hero reward must remain unpaid before pending save') end; return tostring(before+yield*10)..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "capture_as": "RP_HERO_EXPECTED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-HERO-PENDING",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-HERO-PENDING",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local R=ExposedMembers.JAC_ReligionPersistence; return R and R.Inspect('JAC_RP_PLACEHOLDER_03').discoveries.choice_HERO.effects=='APPLIED'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=h and Players[0]:GetUnits():FindID(h.unit); local lifespan=u and u:GetProperty(UnitPropertyKeys.LifespanRemaining); if not u or not GameInfo.HeroClasses[u:GetHeroClassType()] or u:GetHeroClassType()~=h.heroClass or type(lifespan)~='number' or lifespan<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 then error('official hero and faith reward not verified') end; return 'official hero class, lifespan, claim and ten times faith yield verified'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local p=Players[0]; if h.verification~='APPLIED' or pcall(R.CompleteHero,0) then error('saved hero must complete only once') end; return tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "RP_HERO_EXPECTED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_04'; R.Found(id,0,'origin',1,0,'PLAYER_0'); R.SetCommunity(id,'origin',0,0,'PLAYER_0');\nR.Discover(id,'ai_sale','ai_book','RELIC','THIEF_1','THIEF','RUINS',1); local g=Players[1]:GetTreasury():GetGoldBalance(); if R.ResolveForAI(id,'ai_sale',{})~='SELL' or Players[1]:GetTreasury():GetGoldBalance()~=g+500 then error('AI sale failed') end; return 'AI sale checked'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); \nlocal s=R.Inspect(id); if s.followers~=4 or s.state~='UNDERGROUND' or not s.underground or s.canRevive then error('concealed continuity lost') end;\nfor _,o in ipairs({'SELL','CONCEAL','RESEARCH','HERESY','ABSORB','ARTIFACT','DIPLOMATIC_INCIDENT','HERO'}) do\nlocal d=s.discoveries['choice_'..o]; if not d or d.outcome~=o or d.effects~='APPLIED' then error('missing applied choice '..o) end;\nlocal before=R.Snapshot(); if pcall(R.ResolveDiscovery,id,'choice_'..o,o,{city=city,targetReligion='JAC_RP_PLACEHOLDER_02',targetPlayer=1}) then error('replay accepted '..o) end; if R.Snapshot()~=before then error('replay mutated ledger') end end;\nif s.assets.material_RESEARCH~=nil or s.assets.material_HERESY~=nil or not s.retiredAssets.material_RESEARCH or not s.retiredAssets.material_HERESY then error('consumed material returned') end;\nif s.assets.material_CONCEAL.holder~='HIDDEN_PLAYER_0' or not s.assets.material_ARTIFACT.vault then error('material disposition') end;\nif s.assets.material_ABSORB~=nil or R.Inspect('JAC_RP_PLACEHOLDER_02').assets.material_ABSORB.originReligion~=id then error('absorption provenance lost') end;\nif s.assets.material_DIPLOMATIC_INCIDENT.owner~=1 or R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('returned material or alliance guards lost') end;\nlocal h=R.Export().heroes['0']; local u=h and p:GetUnits():FindID(h.unit); if not u or h.verification~='APPLIED' then error('official hero lost') end;\nif R.NativeFollowers(id)~=4 or R.NativeFollowers('JAC_RP_PLACEHOLDER_02')~=4 then error('native citizen conversion lost') end;\nfor _,t in ipairs(s.discoveries.choice_RESEARCH.effect.boosts) do if not p:GetTechs():HasBoostBeenTriggered(t) then error('saved Eureka missing') end end; return R.Snapshot()",
+      "capture_as": "RP_ALL_CHOICES"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t))..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c))",
+      "capture_as": "RP_PROGRESS_AFTER"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local q=Players[1]; local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['0']; return tostring(p:GetTreasury():GetGoldBalance())..'|'..tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(p:GetDiplomacy():GetFavor())..'|'..tostring(q:GetTreasury():GetGoldBalance())..'|'..tostring(q:GetDiplomacy():GetFavor())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "capture_as": "RP_BALANCE_AFTER"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-ALL-CHOICES",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-ALL-CHOICES",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); \nlocal s=R.Inspect(id); if s.followers~=4 or s.state~='UNDERGROUND' or not s.underground or s.canRevive then error('concealed continuity lost') end;\nfor _,o in ipairs({'SELL','CONCEAL','RESEARCH','HERESY','ABSORB','ARTIFACT','DIPLOMATIC_INCIDENT','HERO'}) do\nlocal d=s.discoveries['choice_'..o]; if not d or d.outcome~=o or d.effects~='APPLIED' then error('missing applied choice '..o) end;\nlocal before=R.Snapshot(); if pcall(R.ResolveDiscovery,id,'choice_'..o,o,{city=city,targetReligion='JAC_RP_PLACEHOLDER_02',targetPlayer=1}) then error('replay accepted '..o) end; if R.Snapshot()~=before then error('replay mutated ledger') end end;\nif s.assets.material_RESEARCH~=nil or s.assets.material_HERESY~=nil or not s.retiredAssets.material_RESEARCH or not s.retiredAssets.material_HERESY then error('consumed material returned') end;\nif s.assets.material_CONCEAL.holder~='HIDDEN_PLAYER_0' or not s.assets.material_ARTIFACT.vault then error('material disposition') end;\nif s.assets.material_ABSORB~=nil or R.Inspect('JAC_RP_PLACEHOLDER_02').assets.material_ABSORB.originReligion~=id then error('absorption provenance lost') end;\nif s.assets.material_DIPLOMATIC_INCIDENT.owner~=1 or R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('returned material or alliance guards lost') end;\nlocal h=R.Export().heroes['0']; local u=h and p:GetUnits():FindID(h.unit); if not u or h.verification~='APPLIED' then error('official hero lost') end;\nif R.NativeFollowers(id)~=4 or R.NativeFollowers('JAC_RP_PLACEHOLDER_02')~=4 then error('native citizen conversion lost') end;\nfor _,t in ipairs(s.discoveries.choice_RESEARCH.effect.boosts) do if not p:GetTechs():HasBoostBeenTriggered(t) then error('saved Eureka missing') end end; return R.Snapshot()",
+      "equals_capture": "RP_ALL_CHOICES"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local p=Players[0]; local t=p:GetTechs():GetResearchingTech(); local c=p:GetCulture():GetProgressingCivic(); if t<0 or c<0 then error('research not selected') end; return tostring(t)..'|'..tostring(p:GetTechs():GetResearchProgress(t))..'|'..tostring(c)..'|'..tostring(p:GetCulture():GetCulturalProgress(c))",
+      "equals_capture": "RP_PROGRESS_AFTER"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local q=Players[1]; local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['0']; return tostring(p:GetTreasury():GetGoldBalance())..'|'..tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(p:GetDiplomacy():GetFavor())..'|'..tostring(q:GetTreasury():GetGoldBalance())..'|'..tostring(q:GetDiplomacy():GetFavor())..'|'..tostring(h.unit)..'|'..tostring(h.heroClass)",
+      "equals_capture": "RP_BALANCE_AFTER"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local p=Players[0]; local city=p:GetCities():GetCapitalCity():GetID(); p:GetReligion():ChangeFaithBalance(200-p:GetReligion():GetFaithBalance()); local direct='JAC_RP_PLACEHOLDER_05'; local discovered='JAC_RP_PLACEHOLDER_06'; R.Found('JAC_RP_PLACEHOLDER_07',1,'origin',3,2,'PLAYER_1'); R.Found(direct,0,'origin',1,3,'PLAYER_1'); R.SetCommunity(direct,'origin',0,3,'PLAYER_1'); R.SetCommunity(direct,'origin:revival_1',0,2,'PLAYER_1'); R.PreserveAsset(direct,'book','SCRIPTURE','PLAYER_0',0); R.Revive(direct,'slot_direct','book','origin',0,city); R.Found(discovered,0,'origin',1,4,'PLAYER_1'); R.SetCommunity(discovered,'origin',0,4,'PLAYER_1'); R.Discover(discovered,'slot_discovery','book','SCRIPTURE','MONK_0','MONK','CAVE',0); R.ResolveDiscovery(discovered,'slot_discovery','REVIVE',{revival='slot_discovered',community='origin',city=city}); local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local direct=R.Inspect('JAC_RP_PLACEHOLDER_05'); local discovered=R.Inspect('JAC_RP_PLACEHOLDER_06'); local other=R.Inspect('JAC_RP_PLACEHOLDER_07'); local city=Players[0]:GetCities():GetCapitalCity():GetID(); for _,entry in ipairs({{s=direct,revival='slot_direct',facilities=5},{s=discovered,revival='slot_discovered',facilities=4}}) do local s=entry.s; local v=s.revivals[entry.revival]; local old=s.communities.origin; if s.state~='PUBLIC' or s.followers~=1 or s.publicFacilities~=entry.facilities or s.revivalCount~=1 then error('collision revival totals') end; if not old or old.followers~=0 or old.holder~='PLAYER_1' or old.publicFacilities~=(entry.facilities==5 and 3 or 4) then error('existing community overwritten') end; if not v or v.effects~='APPLIED' or v.community=='origin' or v.city~=city or v.player~=0 then error('free slot receipt') end; local c=s.communities[v.community]; if not c or c.followers~=1 or c.publicFacilities~=0 or c.holder~='PLAYER_0' then error('new revival community') end; end; local reserved=direct.communities['origin:revival_1']; if not reserved or reserved.followers~=0 or reserved.publicFacilities~=2 or reserved.holder~='PLAYER_1' or direct.revivals.slot_direct.community=='origin:revival_1' then error('second occupied slot overwritten') end; if other.followers~=3 or other.publicFacilities~=2 or other.communities.origin.holder~='PLAYER_1' or other.revivalCount~=0 or next(other.assets)~=nil then error('other religion overwritten') end; if Players[0]:GetReligion():GetFaithBalance()~=160 then error('two revival costs not charged exactly once') end; return R.Snapshot()..'|'..tostring(Players[0]:GetReligion():GetFaithBalance())",
+      "capture_as": "RP_COLLISION"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-COLLISION",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-COLLISION",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; if not R then error('religion ledger not loaded') end; local direct=R.Inspect('JAC_RP_PLACEHOLDER_05'); local discovered=R.Inspect('JAC_RP_PLACEHOLDER_06'); local other=R.Inspect('JAC_RP_PLACEHOLDER_07'); local city=Players[0]:GetCities():GetCapitalCity():GetID(); for _,entry in ipairs({{s=direct,revival='slot_direct',facilities=5},{s=discovered,revival='slot_discovered',facilities=4}}) do local s=entry.s; local v=s.revivals[entry.revival]; local old=s.communities.origin; if s.state~='PUBLIC' or s.followers~=1 or s.publicFacilities~=entry.facilities or s.revivalCount~=1 then error('collision revival totals') end; if not old or old.followers~=0 or old.holder~='PLAYER_1' or old.publicFacilities~=(entry.facilities==5 and 3 or 4) then error('existing community overwritten') end; if not v or v.effects~='APPLIED' or v.community=='origin' or v.city~=city or v.player~=0 then error('free slot receipt') end; local c=s.communities[v.community]; if not c or c.followers~=1 or c.publicFacilities~=0 or c.holder~='PLAYER_0' then error('new revival community') end; end; local reserved=direct.communities['origin:revival_1']; if not reserved or reserved.followers~=0 or reserved.publicFacilities~=2 or reserved.holder~='PLAYER_1' or direct.revivals.slot_direct.community=='origin:revival_1' then error('second occupied slot overwritten') end; if other.followers~=3 or other.publicFacilities~=2 or other.communities.origin.holder~='PLAYER_1' or other.revivalCount~=0 or next(other.assets)~=nil then error('other religion overwritten') end; if Players[0]:GetReligion():GetFaithBalance()~=160 then error('two revival costs not charged exactly once') end; return R.Snapshot()..'|'..tostring(Players[0]:GetReligion():GetFaithBalance())",
+      "equals_capture": "RP_COLLISION"
+    },
+    {
+      "action": "end_turn",
+      "turns": 10,
+      "test_turns": 1,
+      "timeout": 1200
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local p=Players[0]; local id='JAC_RP_PLACEHOLDER_05'; local s=R.Inspect(id); R.SetCommunity(id,s.revivals.slot_direct.community,0,0,'PLAYER_0');\nif not R.Inspect(id).canRevive or not R.Inspect(id).assets.book then error('retained material must remain reusable') end;\nlocal f=p:GetReligion():GetFaithBalance(); R.Revive(id,'retained_again','book','origin',0,p:GetCities():GetCapitalCity():GetID()); if p:GetReligion():GetFaithBalance()~=f-20 or R.Inspect(id).followers~=1 or not R.Inspect(id).assets.book then error('retained-material revival failed') end;\nreturn 'retained material reused after ten turns'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; local source=GameInfo.Religions.RELIGION_CUSTOM_2.Index;\nfor _,p in ipairs(PlayerManager.GetAlive()) do for _,c in p:GetCities():Members() do local cr=c:GetReligion(); cr:RemovePressureOneReligion(source,8388607,-1); cr:RemovePressureOneReligion(source,1,-1) end end;\nif R.NativeFollowers(id)~=0 or not R.Inspect(id).lost then error('native loss must update ledger state') end;\nlocal p=Players[0]; local faith=p:GetReligion():GetFaithBalance(); R.Revive(id,'native_revival','material_CONCEAL','native_reborn',0,p:GetCities():GetCapitalCity():GetID());\nif R.NativeFollowers(id)~=1 or R.Inspect(id).followers~=1 or R.Inspect(id).lost or p:GetReligion():GetFaithBalance()~=faith-20 then error('bound revival must create one actual citizen and charge twenty faith') end;\nreturn R.Snapshot()..'|'..tostring(p:GetReligion():GetFaithBalance())..'|'..tostring(R.NativeFollowers(id))",
+      "capture_as": "RP_NATIVE_REVIVED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-RP-NATIVE-REVIVED",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-RP-NATIVE-REVIVED",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; if R.NativeFollowers(id)~=1 or R.Inspect(id).followers~=1 or R.Inspect(id).lost then error('bound native revival lost on load') end; return R.Snapshot()..'|'..tostring(Players[0]:GetReligion():GetFaithBalance())..'|'..tostring(R.NativeFollowers(id))",
+      "equals_capture": "RP_NATIVE_REVIVED"
+    },
+    {
+      "action": "autoplay",
+      "turns": 31,
+      "timeout": 3600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; if Players[0]:GetDiplomacy():HasAllied(1) then error('diplomatic alliance has not naturally ended') end;\nlocal found=false; for _,a in pairs(R.Export().religiousAlliances) do if a.religion==id then found=true; if a.active or a.endedTurn==nil then error('turn-start handler did not expire religious alliance') end end end; if not found then error('alliance history missing') end;\nR.RefreshReligiousAlliances(); if not R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or not R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('expired alliance restrictions remain') end; return 'natural alliance expiry checked'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('JAC_AUTOTEST',1); local set=GameConfiguration.GetValue('JAC_AUTOTEST'); if tonumber(set)~=1 then error('test flag setup failed') end; GameConfiguration.SetToDefaults(); local cleared=GameConfiguration.GetValue('JAC_AUTOTEST'); if tonumber(cleared)==1 then error('test deadlines leaked into new game defaults') end; return 'manual new-game setup clears test deadlines'"
+    }
+  ]
+}
