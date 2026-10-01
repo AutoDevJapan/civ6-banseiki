@@ -25,7 +25,7 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 1. 画面右上の「朝廷に停戦を請う」ボタン（請求できる組か、答えるべき請求があるときだけ出る）から一覧を開き、組ごとの「裁定を請う」を押す。費用が足りないなどで請求できない組は押せず、理由をツールチップに出す。
 2. UI は `UI.RequestPlayerOperation(…, PlayerOperations.EXECUTE_SCRIPT, {OnStart = "JAC_CourtArbitrationRequest", A, B})` を送る。ゲームプレイ側の `GameEvents.JAC_CourtArbitrationRequest` が全マシンで同じ検証（`Scripts/JAC_CourtArbitration_Rules.lua` の `CheckRequest`）をして費用を引き、請求を Game プロパティ `JAC_ARB_PENDING` に置く。答える側に通知する。
 3. 人間の答える側は、同じ一覧の「応じる」「拒む」で `JAC_CourtArbitrationRespond` を送る。
-4. 次のターンの初め（`GameEvents.OnGameTurnStarted`）に、本拠の記録 → 期限の過ぎた勅命の終了 → 正当性の収入 → 停戦中の組の講和し直し（と、安全網の講和待ちの組の講和） → 裁定 → AI の勅命への参加 → 都市の旗の書き直し、の順に行う。
+4. 次のターンの初め（`GameEvents.OnGameTurnStarted`）に、本拠の記録 → 期限の過ぎた勅命の終了 → 正当性の収入 → 戦争の観測 → 停戦中の組の講和し直し（と、安全網の講和待ちの組の講和） → 前の請求の裁定 → 新しいAI請求 → AI の勅命への参加 → 都市の旗の書き直し、の順に行う。受け付けたターンの請求はそのターンには裁かない。
 5. 勅命が出ている間は、同じ一覧に「討伐の勅命：<対象>（<期限>ターンまで）。参加：<家>」の行と「参加する」ボタンが出る。ボタンは `JAC_CourtArbitrationJoin`（`Target` = 対象）を送る。
 6. 都市が攻め取られると `GameEvents.CityConquered`（攻略者・元の所有者・都市 ID・座標。公式：`DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:174,248`）で、勅命の参加者が対象の都市を取ったかを判定する。
 
@@ -64,7 +64,17 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 
 ### AI の応諾（暫定）
 
-自分の都市数が相手の 1.5 倍を超えるとき（明らかに優勢）だけ拒み、それ以外は応じる。正当性が30未満の AI は、都市数で相手を上回るだけで拒む（R-1「AI が拒みやすい」）。戦争疲弊と軍事力はゲームプレイ側で読めない（`GetStats():GetMilitaryStrength()` は UI の使用例しか無い）ため、都市数で代える。拒否の不利益の見積もり、AI からの請求、将軍家 AI の発議は入れていない（設計案でも「最小実装のあと」）。
+自分の都市数が相手の 1.5 倍を超えるとき（明らかに優勢）だけ拒み、それ以外は応じる。正当性が30未満の AI は、都市数で相手を上回るだけで拒む（R-1「AI が拒みやすい」）。軍事力の合計は UI の使用例しか無いため都市数で代える。拒否の不利益を見積もって判断を変える処理は入れていない。
+
+### AIの請求
+
+オーナー判断b（2026-10-01）を[SSOT 3.2](../spec/ssot/03-map-and-scale.md)に反映した。点数・間隔・候補の順序の正本は同節に置く。`Scripts/JAC_CourtArbitration_AI.lua` はゲームプレイ側だけで読み、軍・都市・交戦期間・読める戦争疲弊・正当性から当事者の候補を作る。将軍家には同盟相手・本拠周辺・長期戦の候補を作り、既存の1573年7月の判定で他家への発議を止める。
+
+人間の操作とAIの請求は同じ`Request`を使い、検証・費用・審理中の状態・通知を共通にする。AIは人間の`EXECUTE_SCRIPT`を作らない。既存の`request`ログに加え、`cost`で実際の金・正当性の支出と直後の残高、`ai request`で経路・点数・材料、`ai blocked`で点数を満たした候補の費用不足・正当性不足・間隔待ちを記録する。待ちの件数は候補を調べた延べ回数で、別々の家の数ではない。
+
+戦争疲弊の快適性は公式`Base/Assets/UI/CitySupport.lua:537`と同じ読み方を`pcall`で試す。ゲームプレイ側で読めるかは実機のログの`weariness_cities`で確認し、読めない場合を0の観測と区別する。軍の数は既存MODと同じ`GetUnits():Members()`と`GameInfo.Units`で読む。観測を使うため、手番の間に和平と再開を両方済ませた戦争は別の戦争と判別できない。
+
+実機シナリオ・200ターン計測・レビューの結果と再開先は[検証記録](court-arbitration-ai-progress.md)に残す。
 
 ### 保存しているもの
 
@@ -81,6 +91,10 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 | `JAC_ARB_TRUCE_<小さいID>_<大きいID>` | Game | 停戦が続く最後のターン。停戦中の宣戦を講和させるまでは、期限が過ぎても残す |
 | `JAC_ARB_AWAIT_<小さいID>_<大きいID>` | Game | 安全網：応諾したのに講和できなかった組。講和した時から数える停戦のターン数（実機では置かれていない） |
 | `JAC_ARB_PEACE_TURN_<小さいID>_<大きいID>` | Game | スクリプトが最後に講和させたターン（検証用の記録） |
+| `JAC_ARB_AI_WARS` | Game | 交戦中の組ごとの `{Since, CitiesA, CitiesB, ArmyA, ArmyB}`。Aは小さいID。最大数と初観測ターン |
+| `JAC_ARB_AI_LAST_REQUEST` | Player | そのAIの最後の受付ターン。当事者と将軍家の両経路で共通 |
+| `JAC_ARB_AI_PAIR_REQUEST_<小さいID>_<大きいID>` | Game | その組へのAI請求の最後の受付ターン。請求者が変わっても共通 |
+| `JAC_ARB_LAST_COST` | Player | 最後の支払 `{Turn, A, B, Source, Gold, Legitimacy, GoldBefore, GoldAfter, LegitimacyBefore, LegitimacyAfter}`。検証用で判断には使わない。AIの手番の進行で変わる現在の残高と、保存された裁定の費用を区別する |
 
 プロットの旗は毎ターンの初め、参加の受付、都市の攻略のたびに書き直す（冪等）。ターンの途中で建てた都市や正当性の変化は、次の書き直しまで旗に出ない。
 
@@ -168,7 +182,7 @@ owner-o-03・05 は、手順6の後、手番を待つ間に AI の外交の声�
 
 `tools/civ6-autotest/scenarios/court-arbitration-human.json` は、人間の足利将軍家が回答する側になる。既存シナリオと同じ15 km・史実領土・22勢力で、承諾と拒否を別の相手との戦争で確かめる。実際に進めるのは合計2ターンだけ。講和した組に同じターンに宣戦し直すことも、期限切れまで何十ターンも待つこともしない。
 
-AI からの請求はまだ実装されていないため、ゲームプレイ側から、通常の当事者の請求と同じ審理中の状態（力1・回答は未設定）と通知をテスト用に置く。相手の金100・正当性5も差し引く。この準備は請求ハンドラや AI の請求を検証するものではない。人間の回答と裁定には本来の処理を使う。
+このシナリオは人間の回答を単独で検査するため、ゲームプレイ側から、通常の当事者の請求と同じ審理中の状態（力1・回答は未設定）と通知をテスト用に置く。相手の金100・正当性5も差し引く。この準備は請求ハンドラや AI の請求を検証するものではない。人間の回答と裁定には本来の処理を使う。AI の実際の請求は `court-arbitration-ai.json` で検査する。
 
 1. 未回答の請求を保存する。保存後に審理中の状態を消してから、メニューに戻って読み込む。請求、正当性、戦争などの記録が保存前と一致することを確かめる。
 2. `JAC_CourtArbitrationPanel` を開き、一覧の子コントロールから、翻訳されたボタンの文言で対象を探す。`RowInstance.Action` の「応じる」、または `RowInstance.Action2` の「拒む」を `DoLeftClick()` で押す。回答関数は直接呼ばない。両ボタンのハンドラは UI Lua の `Refresh` 内で登録され、`JAC_RespondArbitration` から `EXECUTE_SCRIPT` を送る。

@@ -117,6 +117,7 @@
 		     ゲームプレイ側がこの UI ファイルを読んでしまうので、名前を分ける（tests/test_lua_file_names.py）。 -->
 		<ImportFiles id="JAC_Arbitration_Files">
 			<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
+			<File>Scripts/JAC_CourtArbitration_AI.lua</File>
 			<File>UI/JAC_CourtArbitrationPanel.lua</File>
 		</ImportFiles>
 	</InGameActions>
@@ -125,6 +126,7 @@
 		<File>Text/JAC_CourtArbitration_Text.xml</File>
 		<File>Scripts/JAC_CourtArbitration.lua</File>
 		<File>Scripts/JAC_CourtArbitration_Rules.lua</File>
+		<File>Scripts/JAC_CourtArbitration_AI.lua</File>
 		<File>UI/JAC_CourtArbitrationPanel.xml</File>
 		<File>UI/JAC_CourtArbitrationPanel.lua</File>
 	</Files>

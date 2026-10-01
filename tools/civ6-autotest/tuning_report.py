@@ -155,6 +155,12 @@ def summarize(artifact: Path) -> dict:
     full = (len(completed) == 4 and all('autoplay completed 50 turns' in s for s in completed)
             and any('return=T+201 surviving majors=' in s['detail'] for s in steps if s['status'] == 'OK')
             and bool(judge) and judge[-1]['status'] == 'OK' and not failures)
+    result_path = artifact / 'result.json'
+    result = json.loads(result_path.read_text(encoding='utf-8')) if result_path.exists() else {}
+    continuous = (result.get('passed') is True and not result.get('test_mode')
+                  and not any(s['status'] == 'OK' and s['action'].endswith(' load') for s in steps)
+                  and sum(line.startswith('loaded ') for line in arb_lines) <= 1)
+    full = full and continuous
     checkpoint_positions = {}
     for checkpoint in checkpoints:
         header = checkpoint.split(' ; ')[0]
@@ -163,12 +169,14 @@ def summarize(artifact: Path) -> dict:
         if m and position>=0:
             checkpoint_positions[int(m[1])] = position
     issues, checkpoint_count = coverage(checkpoints, judgments, falls, checkpoint_positions)
+    if not continuous:
+        issues.append('successful uninterrupted scenario result is missing, failed, synthetic or reloaded')
     return dict(artifact=artifact.name, lua_sha256=hashlib.sha256(lua_bytes).hexdigest(),
                 complete_200_turns=full, autoplay=completed, overview=overview, checkpoints=checkpoints,
                 reigns=grouped, judgments=judgments, arbitration=counts, elimination_point_events=falls,
                 age_data_present=bool(judgments), checkpoint_count=checkpoint_count,
                 measurement_complete=full and not issues, coverage_issues=issues, failures=failures, judge=judge,
-                limitations=['No autonomous AI arbitration requests in this implementation.',
+                limitations=['Request sources and actual costs require arbitration_report.py.',
                              'Refused counts respondents; accepted counts cases.',
                              'Era values are observations, not measured trade/grievance/road effects.'])
 
@@ -183,7 +191,7 @@ def markdown(data: dict) -> str:
         lines.append(f"| {reign} | {g['turn']} | {g['length']} | {a['GOLDEN']} | {a['HEROIC']} | {a['NORMAL']} | {a['DARK']} |")
     c = data['arbitration']
     lines += ['', f"裁定の請求 {c['request']}件、成立 {c['accepted']}件、拒否した当事者 {c['refused']}人。",
-              '現行実装にAIの自発請求が無いため、請求0件を頻度・費用の適正さの根拠には使わない。', '',
+              '請求数だけでは頻度・費用の適正さを評価できない。AIの請求経路と実際の支出は裁定専用の集計で照合する。', '',
               '各家の存続・城数・暦などのチェックポイント：']
     lines += ['- ' + line for line in data['overview']]
     if not data['age_data_present']:

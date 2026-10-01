@@ -16,6 +16,7 @@ class TuningReportTests(unittest.TestCase):
         root = Path(root)
         (root / 'Lua.log').write_text(lua, encoding='utf-8')
         (root / 'steps.jsonl').write_text('\n'.join(json.dumps(s) for s in steps), encoding='utf-8')
+        (root / 'result.json').write_text(json.dumps({'passed': True, 'test_mode': None}), encoding='utf-8')
         return root
 
     def test_counts_ages_policies_and_case_vs_respondent_outcomes(self):
@@ -59,6 +60,27 @@ class TuningReportTests(unittest.TestCase):
             steps.append({'action':'run','status':'FAIL','detail':'failed'})
             self.make_artifact(tmp, '', steps)
             self.assertFalse(report.summarize(root)['complete_200_turns'])
+
+    def test_completion_rejects_missing_failed_synthetic_and_reloaded_results(self):
+        steps = [{'action': f'{i}/18 autoplay', 'status': 'OK', 'detail': 'autoplay completed 50 turns'} for i in range(4)]
+        steps += [{'action': '18/18 ui_lua', 'status': 'OK', 'detail': 'return=T+201 surviving majors=22'},
+                  {'action': 'judge', 'status': 'OK', 'detail': 'all passed'}]
+        for case in ('missing', 'failed', 'synthetic', 'load-step', 'load-log'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                root = self.make_artifact(tmp, '', steps)
+                result = root / 'result.json'
+                if case == 'missing':
+                    result.unlink()
+                elif case == 'failed':
+                    result.write_text(json.dumps({'passed': False}), encoding='utf-8')
+                elif case == 'synthetic':
+                    result.write_text(json.dumps({'passed': True, 'test_mode': {'skipped_turns': 192}}), encoding='utf-8')
+                elif case == 'load-step':
+                    with (root / 'steps.jsonl').open('a', encoding='utf-8') as f:
+                        f.write('\n' + json.dumps({'action': '1/18 load', 'status': 'OK', 'detail': 'loaded'}))
+                else:
+                    (root / 'Lua.log').write_text('[JAC_ARB] loaded shogunate_end_turn=120\n' * 2, encoding='utf-8')
+                self.assertFalse(report.summarize(root)['complete_200_turns'])
 
     def test_observer_handles_engine_functions_returning_no_values(self):
         from lupa import LuaRuntime
