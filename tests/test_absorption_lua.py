@@ -1610,7 +1610,7 @@ class AbsorptionTests(unittest.TestCase):
             if HERO_CLAIMS[class]~=city.owner or not origin or origin.player~=city.owner or origin.id~=city.id then
               return false,{[4]={'WRONG_OWNER_OR_ORIGIN'}} end
             for _,u in pairs(Players[city.owner].units) do
-              if u:IsHero() and u:GetHeroClassType()==class then return false,{[4]={'HERO_ALIVE'}} end
+              if u:GetHeroClassType()==class then return false,{[4]={'HERO_ALIVE'}} end
             end
             if HERO_CLAIM_ERAS[class]>=GLOBAL_ERA then return false,{[4]={'APPEARANCE_ERA'}} end
             if FAITH[city.owner]<1000 then return false,{[4]={'INSUFFICIENT_FAITH'}} end
@@ -1631,12 +1631,22 @@ class AbsorptionTests(unittest.TestCase):
                     self.run_lua(recall[-1]['code'])
                 self.g.GLOBAL_ERA = 1
                 continue
+            if step.get('state_name') == 'InGame':
+                self.run_lua('for _,u in Players[2]:GetUnits():Members() do u.IsHero=nil end')
             result = self.run_lua(step['code'])
         self.assertEqual(self.g.RECALL_QUERIES - queries, 2)
         self.assertIn('faith cost=1000', result)
         self.run_lua('HERO_CLAIMS[0]=1')
         with self.assertRaisesRegex(Exception, 'recall owner reverted'):
             self.run_lua(recall[-1]['code'])
+        self.run_lua('''HERO_CLAIMS[0]=2;for _,u in Players[2]:GetUnits():Members() do
+          u.GetHeroClassType=function() return 0 end;break end''')
+        probes = [step for step in recall if step.get('state_name') == 'InGame'
+                  and 'death fixture still alive' in step['code']]
+        self.assertEqual(len(probes), 2)
+        for step in probes:
+            with self.assertRaisesRegex(Exception, 'death fixture still alive'):
+                self.run_lua(step['code'])
 
     def test_human_receiver_scenario_executes_real_recall_and_rebinds_person_in_lua_vm(self):
         self.live_scenario_fixture()
