@@ -508,6 +508,16 @@ def build_scenario():
       Events.UnitRemovedFromMap.Add(JAC_ASN_LIVE_REMOVED)
       return 'both trained individuals survive load; native damage/removal watch installed for next turn'
     """, "JAC_AssassinPanel")
+    check("""
+      assert(Game:GetProperty(R.TEST)==1,'native removal fixture requires test mode')
+      local id=t.LockState.LastProducedUnit; local u=TrainedUnit(t.Actor,id)
+      u:ChangeDamage(u:GetMaxDamage()-u:GetDamage())
+      local remaining=Players[t.Actor]:GetUnits():FindID(id)
+      if remaining then UnitManager.Kill(remaining) end
+      assert(not Players[t.Actor]:GetUnits():FindID(id),'native removal fixture did not remove the individual')
+      t.ExpectedNativeDeath=id; Game:SetProperty('JAC_ASN_LIVE_TEST',t)
+      return 'fixture applies native lethal damage and removal to the first trained individual after save/load'
+    """)
     advance()
     check("""
       local watch=JAC_ASN_LIVE_WATCH
@@ -515,6 +525,9 @@ def build_scenario():
       assert(watch and watch.Owner==t.Actor,'unit watch missing')
       for key,row in pairs(watch.Rows) do
         local u=Players[watch.Owner]:GetUnits():FindID(tonumber(key))
+        if tonumber(key)==t.ExpectedNativeDeath then
+          assert(not u and row.Removed and row.Damage>=row.MaxDamage,'native damage/removal fixture not observed')
+        end
         if u then
           assert(not row.Removed and u:GetType()==row.Type and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,
             'trained individual replaced or unplaced after next turn')

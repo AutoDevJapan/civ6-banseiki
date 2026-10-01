@@ -75,7 +75,11 @@ end
 function makeUnit(d)
   local u={GetID=function() return d.ID end, GetType=function() return d.Type end,
     GetOwner=function() return d.Owner end, GetX=function() return d.X end,GetY=function() return d.Y end,
-    GetDamage=function() return d.Damage or 0 end,GetMaxDamage=function() return 100 end}
+    GetDamage=function() return d.Damage or 0 end,GetMaxDamage=function() return 100 end,
+    ChangeDamage=function(_,delta)
+      d.Damage=(d.Damage or 0)+delta
+      if UI_HANDLERS and UI_HANDLERS.UnitDamageChanged then UI_HANDLERS.UnitDamageChanged(d.Owner,d.ID,d.Damage) end
+    end}
   props(u,d); return u
 end
 function makeCity(d)
@@ -122,6 +126,7 @@ UnitManager={InitUnitValidAdjacentHex=function(id,kind,x,y)
   GRANT(id,GameInfo.Units[kind].Index,x,y)  -- like the engine: creates the unit, returns no Unit object (live assassin-01)
 end, Kill=function(u)
   KILLS[#KILLS+1]={Owner=u:GetOwner(),ID=u:GetID()}; DATA[u:GetOwner()].Units[u:GetID()]=nil
+  if UI_HANDLERS and UI_HANDLERS.UnitRemovedFromMap then UI_HANDLERS.UnitRemovedFromMap(u:GetOwner(),u:GetID()) end
 end}
 TRANSFERS={}
 CityManager={TransferCity=function(city,owner)
