@@ -66,6 +66,7 @@ R.PEACE_PREFIX = "JAC_ARB_PEACE_TURN_"              -- Game：スクリプトが
 R.AI_WARS_KEY = "JAC_ARB_AI_WARS"                    -- Game：交戦中の組の初観測ターン・軍/都市数の最大値
 R.AI_LAST_KEY = "JAC_ARB_AI_LAST_REQUEST"            -- Player：AIが最後に請求したターン（両経路で共通）
 R.AI_PAIR_PREFIX = "JAC_ARB_AI_PAIR_REQUEST_"         -- Game：同じ組へAIが最後に請求したターン
+R.COST_RECORD_KEY = "JAC_ARB_LAST_COST"              -- Player：最後の請求支払の直前・直後（検証用、判断には使わない）
 -- 都市の中心のプロットに置く 0/1 の旗（Data/JAC_CourtArbitration_Legitimacy.sql の条件が読む）
 R.FLAG_HIGH = "JAC_ARB_LEGITIMACY_HIGH"
 R.FLAG_LOW = "JAC_ARB_LEGITIMACY_LOW"

@@ -728,6 +728,8 @@ class ArbitrationAiTests(unittest.TestCase):
         self.assertEqual((pending.Requester, pending.A, pending.B, pending.Turn, pending.Power, pending.Source),
                          (0, 0, 1, 2, 1, "ai_party"))
         self.assertEqual((self.g.Players[0].gold, self.legitimacy(0)), (400, 51))
+        cost = self.player(0, "JAC_ARB_LAST_COST")
+        self.assertEqual((cost.GoldBefore, cost.GoldAfter, cost.LegitimacyBefore, cost.LegitimacyAfter), (500, 400, 56, 51))
         self.assertEqual(self.game("JAC_ARB_AI_PAIR_REQUEST_0_1"), 2)
         self.assertEqual(self.player(0, "JAC_ARB_AI_LAST_REQUEST"), 2)
         self.assertTrue(self.at_war(0, 1))

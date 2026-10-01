@@ -94,6 +94,7 @@ MOD：`poc/JAC_PoC_CourtArbitration`（ID `4785cfe4-8d9a-4deb-89ea-d2d566551fec`
 | `JAC_ARB_AI_WARS` | Game | 交戦中の組ごとの `{Since, CitiesA, CitiesB, ArmyA, ArmyB}`。Aは小さいID。最大数と初観測ターン |
 | `JAC_ARB_AI_LAST_REQUEST` | Player | そのAIの最後の受付ターン。当事者と将軍家の両経路で共通 |
 | `JAC_ARB_AI_PAIR_REQUEST_<小さいID>_<大きいID>` | Game | その組へのAI請求の最後の受付ターン。請求者が変わっても共通 |
+| `JAC_ARB_LAST_COST` | Player | 最後の支払 `{Turn, A, B, Source, Gold, Legitimacy, GoldBefore, GoldAfter, LegitimacyBefore, LegitimacyAfter}`。検証用で判断には使わない。AIの手番の進行で変わる現在の残高と、保存された裁定の費用を区別する |
 
 プロットの旗は毎ターンの初め、参加の受付、都市の攻略のたびに書き直す（冪等）。ターンの途中で建てた都市や正当性の変化は、次の書き直しまで旗に出ない。
 

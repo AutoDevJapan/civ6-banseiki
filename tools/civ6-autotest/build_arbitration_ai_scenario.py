@@ -42,12 +42,10 @@ local out={encode(R.GameTurn()),encode(Game:GetProperty(R.PENDING_KEY)),
   encode(Game:GetProperty(R.AI_WARS_KEY)),encode(Game:GetProperty(R.LAST_REQUEST_KEY))}
 local ids={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do ids[#ids+1]=p:GetID() end; table.sort(ids)
 for _,id in ipairs(ids) do
-  -- Some other houses' treasury balances change while the loaded game becomes active
-  -- (live02: Honganji +9.19921875, the human Ouchi +2.5). Compare money for the actual parties/shogun;
-  -- legitimacy and AI intervals still compare every house. No game accounting is changed here.
-  local gold=(id==t.a or id==t.b or id==t.shogun) and Players[id]:GetTreasury():GetGoldBalance() or 'outside-arbitration'
+  -- Native AI can spend/earn money while the local turn becomes active after loading (live02/03).
+  -- Compare the saved exact payment receipt; current treasury is checked only at payment time.
   out[#out+1]=id..':'..encode(Players[id]:GetProperty(R.AI_LAST_KEY))..':'..R.Legitimacy(id)
-    ..':'..encode(gold)
+    ..':'..encode(Players[id]:GetProperty(R.COST_RECORD_KEY))
   for _,other in ipairs(ids) do if id<other then
     out[#out+1]=id..'_'..other..':'..encode(Game:GetProperty(R.AiPairKey(id,other)))
       ..':'..encode(Game:GetProperty(R.TruceKey(id,other)))..':'..encode(Game:GetProperty(R.AwaitKey(id,other)))
@@ -78,6 +76,8 @@ Game:SetProperty(R.AI_WARS_KEY,nil)
 Game:SetProperty(R.LAST_REQUEST_KEY,nil)
 Players[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)
 Players[t.a]:SetProperty(R.AI_LAST_KEY,nil)
+Players[t.shogun]:SetProperty(R.COST_RECORD_KEY,nil)
+Players[t.a]:SetProperty(R.COST_RECORD_KEY,nil)
 Game:SetProperty(R.AiPairKey(t.a,t.b),nil)
 Players[t.a]:GetTreasury():ChangeGoldBalance(7)
 Players[t.a]:SetProperty(R.LEGITIMACY_KEY,90)
@@ -121,6 +121,10 @@ if not p or p.Source~='ai_party' or p.Requester~=t.a or p.A~=t.a or p.B~=t.b
   or p.Turn~=2 or p.Power~=1 then error('exhausted AI did not request on turn 2') end
 if Players[t.a]:GetProperty(R.AI_LAST_KEY)~=2 or Game:GetProperty(R.AiPairKey(t.a,t.b))~=2
   then error('AI interval not recorded') end
+local cost=Players[t.a]:GetProperty(R.COST_RECORD_KEY)
+if not cost or cost.Turn~=2 or cost.Source~='ai_party' or cost.Gold~=100 or cost.Legitimacy~=5
+  or cost.GoldBefore-cost.GoldAfter~=100 or cost.LegitimacyBefore-cost.LegitimacyAfter~=5
+  then error('party did not pay exactly 100 gold and 5 legitimacy') end
 if not Players[t.a]:GetDiplomacy():IsAtWarWith(t.b) then error('same-turn ruling') end
 return 'exhausted AI party requested; paid normal cost; awaiting the next turn'
 """)
@@ -145,6 +149,10 @@ return 'fresh AI war prepared for the shogun long-war proposal'
 if not p or p.Source~='ai_shogun' or p.Requester~=t.shogun or p.A~=t.a or p.B~=t.b
   or p.Turn~=4 or p.Power~=3 then error('shogun proposal absent before 1573') end
 if Players[t.shogun]:GetProperty(R.AI_LAST_KEY)~=4 then error('shogun interval missing') end
+local cost=Players[t.shogun]:GetProperty(R.COST_RECORD_KEY)
+if not cost or cost.Turn~=4 or cost.Source~='ai_shogun' or cost.Gold~=34 or cost.Legitimacy~=2
+  or cost.GoldBefore-cost.GoldAfter~=34 or cost.LegitimacyBefore-cost.LegitimacyAfter~=2
+  then error('shogun did not pay exactly 34 gold and 2 legitimacy') end
 return 'AI shogun proposed before 1573; threefold power and one-third cost'
 """)
     round_trip("shogun-pending")

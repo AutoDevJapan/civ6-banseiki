@@ -188,8 +188,12 @@ local function Request(requester, a, b, source)
 	local player = Players[requester]
 	local power = R.Power(requester, turn)
 	local gold, legitimacy = R.Costs(power) -- 将軍家の請求は3分の1（オーナー判断 O-3・R-3）
+	local goldBefore, legitimacyBefore = player:GetTreasury():GetGoldBalance(), R.Legitimacy(requester)
 	player:GetTreasury():ChangeGoldBalance(-gold) -- AustraliaScenario.lua:847
 	ChangeLegitimacy(requester, -legitimacy)
+	player:SetProperty(R.COST_RECORD_KEY, { Turn = turn, A = a, B = b, Source = source, Gold = gold, Legitimacy = legitimacy,
+		GoldBefore = goldBefore, GoldAfter = player:GetTreasury():GetGoldBalance(),
+		LegitimacyBefore = legitimacyBefore, LegitimacyAfter = R.Legitimacy(requester) })
 	local pending = { Requester = requester, A = a, B = b, Turn = turn, Power = power, Source = source }
 	Game:SetProperty(R.PENDING_KEY, pending)
 	Game:SetProperty(R.LAST_REQUEST_KEY, turn)

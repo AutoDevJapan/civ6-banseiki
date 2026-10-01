@@ -150,19 +150,22 @@ class ArbitrationReportTests(unittest.TestCase):
         before = harness.lua.execute(builder.SNAPSHOT)
         self.assertIn("Source=ai_party", before)
         self.assertIn("p0_1={ArmyA=4,ArmyB=4,CitiesA=2,CitiesB=2,Since=1}", before)
-        self.assertIn("0:2:51:400", before)
+        self.assertIn("0:2:51:{A=0,B=1,Gold=100,GoldAfter=400,GoldBefore=500,Legitimacy=5,LegitimacyAfter=51,LegitimacyBefore=56,Source=ai_party,Turn=2}", before)
         harness.lua.execute("Players[0]:SetProperty('JAC_ARB_AI_LAST_REQUEST',nil)")
         self.assertNotEqual(harness.lua.execute(builder.SNAPSHOT), before)
 
-    def test_snapshot_checks_money_for_parties_but_legitimacy_and_intervals_for_every_house(self):
+    def test_snapshot_checks_saved_costs_instead_of_native_ai_spending_during_load(self):
         from tests.test_court_arbitration import ArbitrationAiTests
         harness = ArbitrationAiTests()
         harness.setUp()
+        harness.exhaust()
+        harness.next_turn(2)
         harness.lua.execute("Game:SetProperty('JAC_ARB_AI_TEST',{shogun=2,a=0,b=1})")
         before = harness.lua.execute(builder.SNAPSHOT)
         harness.g.Players[3].gold += 10
+        harness.g.Players[0].gold += 10
         self.assertEqual(harness.lua.execute(builder.SNAPSHOT), before)
-        harness.lua.execute("Players[3]:SetProperty('JAC_ARB_AI_LAST_REQUEST',1)")
+        harness.lua.execute("Players[0]:SetProperty('JAC_ARB_LAST_COST',nil)")
         self.assertNotEqual(harness.lua.execute(builder.SNAPSHOT), before)
 
     def test_all_live_gameplay_steps_run_with_save_restore_on_lupa(self):
