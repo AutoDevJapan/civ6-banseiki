@@ -200,6 +200,24 @@ def build_scenario():
       print('[JAC_ASN_TRACE] snapshot turn='..R.Turn()..' id='..id..' present='..tostring(row.Present)..
         ' type='..tostring(row.Type)..' xy='..tostring(row.X)..','..tostring(row.Y)..' damage='..tostring(row.Damage))
       return row
+    end; local function ParkTrainedUnit(owner,id,cityID)
+      assert(Game:GetProperty(R.TEST)==1,'trained parking requires test mode')
+      local u=TrainedUnit(owner,id); local city=Players[owner]:GetCities():FindID(cityID)
+      assert(city and city:GetOwner()==owner,'trained parking requires an owned city')
+      local blockers={}
+      for _,other in Players[owner]:GetUnits():Members() do
+        if other:GetID()~=id and other:GetX()==city:GetX() and other:GetY()==city:GetY() then
+          assert(not R.IsAssassin(other),'trained parking would remove another assassin')
+          blockers[#blockers+1]=other
+        end
+      end
+      -- Clear the fixture's native garrison to avoid stacking two combat units.
+      -- Keep the production ID; do not replace it with a fixture-granted unit.
+      for _,other in ipairs(blockers) do UnitManager.Kill(other) end
+      -- Official DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:854.
+      UnitManager.PlaceUnit(u,city:GetX(),city:GetY())
+      assert(u:GetX()==city:GetX() and u:GetY()==city:GetY(),'trained parking did not reach city center')
+      return TrainedSnapshot(owner,id)
     end; local function TrainingUnits(owner)
       local ids={}; for _,u in Players[owner]:GetUnits():Members() do
         if R.IsAssassin(u) then ids[tostring(u:GetID())]=true end
@@ -334,6 +352,7 @@ def build_scenario():
       local ok,why=R.CanCommand(s,R.Turn()); assert(not ok and why=='COMMAND_LOCK','command wait')
       assert(s.Production==nil and s.LastCompletion==t.FastDue and Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'training not processed')
       NewTrainedUnit(t.Actor,t.TrainingBefore,s.LastProducedUnit)
+      t.LockUnit=ParkTrainedUnit(t.Actor,s.LastProducedUnit,t.Cities[1])
       assert(s.ProductionUnlock==s.LastCompletion+10,'lock origin')
       for _,city in ipairs(t.Cities) do local ok,why=R.StartProduction(t.Actor,city); assert(not ok and why=='PRODUCTION_LOCK') end
       R.CancelProduction(t.Actor); assert(R.State(t.Actor).ProductionUnlock==s.ProductionUnlock,'cancel cleared lock')
@@ -344,6 +363,7 @@ def build_scenario():
     check("""
       local s=R.State(t.Actor); assert(Same(s,t.LockState),'lock/state lost')
       TrainedUnit(t.Actor,s.LastProducedUnit)
+      assert(Same(TrainedSnapshot(t.Actor,s.LastProducedUnit),t.LockUnit),'load changed first parked individual')
       assert(Same(R.Nation(t.Target),t.FreeNation),'free-city history or people lost')
       assert(not Players[t.Target]:IsAlive(),'load resurrected retired slot')
       for _,c in ipairs(t.FreeAssets) do local actual=CityManager.GetCityAt(c.X,c.Y)
@@ -372,6 +392,7 @@ def build_scenario():
       assert(Players[t.Actor]:GetUnits():FindID(s.LastProducedUnit),'second trained unit absent')
       assert(s.LastProducedUnit~=t.LockState.LastProducedUnit,'two trainings reused one unit')
       NewTrainedUnit(t.Actor,t.TrainingBefore,s.LastProducedUnit)
+      ParkTrainedUnit(t.Actor,s.LastProducedUnit,t.Cities[2])
       Players[t.Actor]:GetCities():FindID(t.Cities[2]):SetProperty(R.INPUT,nil)
       return 'real turn completes second training and starts a new full 10-turn lock'""")
 

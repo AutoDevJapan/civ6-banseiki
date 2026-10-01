@@ -128,6 +128,8 @@ end
 UnitManager={InitUnitValidAdjacentHex=function(id,kind,x,y)
   if SPAWN_BLOCKED then return nil end
   GRANT(id,GameInfo.Units[kind].Index,x,y)  -- like the engine: creates the unit, returns no Unit object (live assassin-01)
+end,PlaceUnit=function(u,x,y)
+  local d=DATA[u:GetOwner()].Units[u:GetID()]; d.X=x; d.Y=y
 end, Kill=function(u)
   KILLS[#KILLS+1]={Owner=u:GetOwner(),ID=u:GetID()}; DATA[u:GetOwner()].Units[u:GetID()]=nil
   if UI_HANDLERS and UI_HANDLERS.UnitRemovedFromMap then UI_HANDLERS.UnitRemovedFromMap(u:GetOwner(),u:GetID()) end
@@ -1116,6 +1118,24 @@ class AssassinLuaTests(unittest.TestCase):
           assert(not pcall(function() NewTrainedUnit(0,before,fresh) end))
         """)
 
+    def test_live_parking_keeps_identity_requires_test_mode_and_preserves_other_assassins(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("local R=A; "+helper+"""
+          assert(not pcall(function() ParkTrainedUnit(0,U,10) end))
+          assert(Players[0]:GetUnits():FindID(U):GetX()==1)
+          Game:SetProperty(A.TEST,1)
+          local guard=GRANT(0,4,0,0):GetID()
+          local snapshot=ParkTrainedUnit(0,U,10)
+          assert(snapshot.ID==U and snapshot.X==0 and snapshot.Y==0 and snapshot.Damage==0)
+          assert(Players[0]:GetUnits():FindID(guard)==nil and Players[0]:GetUnits():FindID(U2))
+          local before=#KILLS
+          assert(not pcall(function() ParkTrainedUnit(0,U2,10) end))
+          assert(#KILLS==before and Players[0]:GetUnits():FindID(U) and Players[0]:GetUnits():FindID(U2))
+          assert(not pcall(function() ParkTrainedUnit(0,U2,-1) end))
+        """)
+
     def _start_live_trained_unit_watch(self):
         from tools.generate_assassin_poc import build_scenario
         steps=build_scenario()['steps']
@@ -1232,6 +1252,20 @@ class AssassinLuaTests(unittest.TestCase):
           HIDDEN_UNIT=true; UI_CALLS={}; UI_HANDLERS.UnitSelectionChanged()
           for _,row in ipairs(UI_ROWS) do if row.Action.Text=='LOC_JAC_ASN_ATTEMPT' then row.Action.Callback() end end
           for _,call in ipairs(UI_CALLS) do assert(call.Params.Target~=3,'hidden non-major unit leaked') end
+        """)
+
+    def test_non_major_person_targets_are_rejected_in_core_without_excluding_units(self):
+        self.run_lua("""
+          DATA[3].Alive=true
+          DATA[3].Cities[10]={ID=10,Owner=3,X=2,Y=0,Properties={}}
+          DATA[3].Properties[A.INPUT]={Governors={['4']={City=10,Identity='MINOR_GOVERNOR'}}}
+          local victim=GRANT(3,4,2,0):GetID(); rebuild()
+          for _,kind in ipairs({'LEADER','GOVERNOR'}) do
+            local dest,why=A.ResolveTarget(3,kind,4); assert(dest==nil and why=='TARGET_KIND')
+            local ok,why=A.StartAttempt(0,U,3,kind,4); assert(not ok and why=='TARGET_KIND')
+          end
+          assert(RAND_CALLS==0 and Players[0]:GetProperty(A.STATE)==nil and #KILLS==0)
+          assert(A.CheckAttempt(0,U,3,'UNIT',victim),'non-major units must remain eligible')
         """)
 
     def test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips(self):

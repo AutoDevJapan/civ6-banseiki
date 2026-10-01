@@ -217,6 +217,7 @@ function R.Classify(unit)
 end
 function R.ResolveTarget(id,kind,objectID)
   if not Players[id] or not Players[id]:IsAlive() then return nil,"TARGET_GONE" end
+  if (kind=="LEADER" or kind=="GOVERNOR") and not Players[id]:IsMajor() then return nil,"TARGET_KIND" end
   if kind=="LEADER" then
     local nation=R.Nation(id)
     if nation and nation.LeaderDead==1 and not nation.CurrentLeader then return nil,"TARGET_GONE" end
