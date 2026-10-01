@@ -341,8 +341,22 @@
       </Properties>
       <File>UI/JAC_LeaderPersona_Tree.xml</File>
     </AddUserInterfaces>
+    <UpdateArt id="JAC_Persona_Art_0" criteria="JAC_Persona_Map_0">
+      <File>JAC_PoC_LeaderPersona.dep</File>
+    </UpdateArt>
+    <UpdateArt id="JAC_Persona_Art_1" criteria="JAC_Persona_Map_1">
+      <File>JAC_PoC_LeaderPersona.dep</File>
+    </UpdateArt>
+    <UpdateArt id="JAC_Persona_Art_2" criteria="JAC_Persona_Map_2">
+      <File>JAC_PoC_LeaderPersona.dep</File>
+    </UpdateArt>
+    <UpdateArt id="JAC_Persona_Art_3" criteria="JAC_Persona_Map_3">
+      <File>JAC_PoC_LeaderPersona.dep</File>
+    </UpdateArt>
   </InGameActions>
   <Files>
+    <File>JAC_PoC_LeaderPersona.dep</File>
+    <File>ArtDefs/Units.artdef</File>
     <File>Data/JAC_LeaderPersona.sql</File>
     <File>Data/JAC_LeaderPersona_Icons.xml</File>
     <File>Scripts/JAC_LeaderPersona_Gameplay.lua</File>

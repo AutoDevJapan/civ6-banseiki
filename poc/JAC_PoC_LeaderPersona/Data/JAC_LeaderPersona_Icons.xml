@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <GameInfo>
   <IconDefinitions>
+    <Row Name="ICON_UNIT_JAC_PERSONA" Atlas="ICON_ATLAS_UNITS" Index="8" />
     <Row Name="ICON_GOVERNOR_JAC_PERSONA_ODA_NOBUHIDE" Atlas="ICON_ATLAS_JAC_LEADERS" Index="0" />
     <Row Name="ICON_GOVERNOR_JAC_PERSONA_ODA_NOBUHIDE_FILL" Atlas="ICON_ATLAS_JAC_LEADERS" Index="0" />
     <Row Name="ICON_GOVERNOR_JAC_PERSONA_ODA_NOBUHIDE_SLOT" Atlas="ICON_ATLAS_JAC_LEADERS" Index="0" />

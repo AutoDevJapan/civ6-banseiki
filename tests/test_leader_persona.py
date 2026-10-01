@@ -218,8 +218,8 @@ class LeaderPersonaStaticTests(unittest.TestCase):
                     leaders[row.get("Name")[16:]] = (row.get("Atlas"), row.get("Index"))
         icons = ET.parse(MOD / "Data/JAC_LeaderPersona_Icons.xml").findall("./IconDefinitions/Row")
         self.assertEqual(len(leaders), 22)
-        self.assertEqual(len(icons), 110)
-        self.assertEqual(len({(r.get("Name"), r.get("Atlas")) for r in icons}), 110)
+        self.assertEqual(len(icons), 111)
+        self.assertEqual(len({(r.get("Name"), r.get("Atlas")) for r in icons}), 111)
         for suffix, (atlas, index) in leaders.items():
             for end in ["", "_FILL", "_SLOT"]:
                 found = [r for r in icons if r.get("Name") == f"ICON_GOVERNOR_JAC_PERSONA_{suffix}{end}" and r.get("Atlas") == atlas]
@@ -246,6 +246,25 @@ class LeaderPersonaStaticTests(unittest.TestCase):
         self.assertNotIn("LuaEvents.", lua)
         self.assertNotIn("GrantTestTitle", lua)
         self.assertNotIn("TEST_TITLE_", lua)
+
+    def test_dedicated_persona_unit_loads_the_official_general_model_on_all_target_maps(self):
+        art = ET.parse(MOD / "ArtDefs/Units.artdef")
+        units = art.findall("./m_RootCollections/Element/Element")
+        self.assertEqual([u.find("m_Name").get("text") for u in units], ["UNIT_JAC_PERSONA"])
+        members = units[0].findall(".//Element[@class='AssetObjects..ArtDefReferenceValue']")
+        self.assertTrue(any(e.find("m_ElementName").get("text") == "GreatGeneral_Classical_Male"
+                            and e.find("m_RootCollectionName").get("text") == "UnitMemberTypes"
+                            for e in members))
+        dep = ET.parse(MOD / "JAC_PoC_LeaderPersona.dep")
+        self.assertEqual([e.get("text") for e in dep.findall("./ArtDefDependencies/Element/ArtDefPath")],
+                         ["Units.artdef"])
+        mod = ET.parse(MOD / "JAC_PoC_LeaderPersona.modinfo")
+        actions = mod.findall("./InGameActions/UpdateArt")
+        self.assertEqual({a.get("criteria") for a in actions}, {f"JAC_Persona_Map_{i}" for i in range(4)})
+        self.assertEqual([a.find("File").text for a in actions], ["JAC_PoC_LeaderPersona.dep"] * 4)
+        icons = ET.parse(MOD / "Data/JAC_LeaderPersona_Icons.xml")
+        icon = icons.find("./IconDefinitions/Row[@Name='ICON_UNIT_JAC_PERSONA']")
+        self.assertEqual((icon.get("Atlas"), icon.get("Index")), ("ICON_ATLAS_UNITS", "8"))
 
     def test_live_scenario_compiles_and_asserts_civic_titles_merit_and_permanent_locks(self):
         scenario=json.loads((ROOT / "tools/civ6-autotest/scenarios/leader-persona-15km.json").read_text(encoding="utf-8"))
