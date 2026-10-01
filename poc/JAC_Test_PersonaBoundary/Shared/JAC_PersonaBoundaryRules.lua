@@ -67,6 +67,10 @@ function R.Check(s, phase, merit)
     else
         assert(s.target.owner == s.owner, "fixture city unexpectedly changed owner");
     end
+    assert(type(s.cities)=="table" and type(s.gameplay.cities)=="table", "city observation collection missing");
+    for key in pairs(s.gameplay.cities) do
+        assert(s.cities[key], "Gameplay-only city observation at " .. key);
+    end;
     local count = 0;
     for key,city in pairs(s.cities) do
         count = count + 1;

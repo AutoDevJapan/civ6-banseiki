@@ -380,6 +380,22 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
                 with self.assertRaisesRegex(LuaError,"city identity disagreement"):
                     self.b.Check("LOST",12)
 
+    def test_gameplay_only_city_with_active_or_inactive_marker_is_rejected(self):
+        for marker in (0,1):
+            with self.subTest(marker=marker):
+                self.setUp()
+                self.lua.execute("""
+                    lose()
+                    local read=ExposedMembers.JAC_PersonaBoundaryGameplayRead
+                    ExposedMembers.JAC_PersonaBoundaryGameplayRead=function()
+                        local result=read()
+                        result.cities['9/9']={id=99,owner=0,settled=MARKER,selectors={}}
+                        return result
+                    end
+                """.replace("MARKER",str(marker)))
+                with self.assertRaisesRegex(LuaError,"Gameplay-only city observation"):
+                    self.b.Check("LOST",12)
+
     def prepare_inputs(self, title_delta):
         self.lua.execute((MOD / "Scripts/JAC_PersonaBoundary_Fixture.lua").read_text(encoding="utf-8"))
         self.lua.execute("""
