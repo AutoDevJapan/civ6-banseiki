@@ -62,9 +62,12 @@ GameEvents.JAC_TitleProxyRequest.Add(function(owner, params)
 end);
 GameEvents.JAC_TitleProxyAdvance.Add(function(owner)
     local reconciled = Payments.Reconcile(owner);
-    local result = reconciled == 'CANCELLED' and reconciled or Payments.Advance(owner);
+    local result = Payments.Advance(owner);
     if Players[owner] then Players[owner]:SetProperty('JAC_PROXY_ADVANCE_RESULT', result); end;
     print('JAC_PROXY_ADVANCE ' .. tostring(owner) .. ':' .. result);
+end);
+GameEvents.JAC_TitleProxyBegin.Add(function(owner)
+    Payments.Begin(owner);
 end);
 GameEvents.JAC_TitleProxyReconcile.Add(function(owner)
     Payments.Reconcile(owner);

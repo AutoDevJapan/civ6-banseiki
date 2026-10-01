@@ -63,7 +63,9 @@ function Rules.Request(owner, leader)
         queue = {cursor=0, serial=0, requests={}, spentFloor=Players[owner]:GetGovernors():GetGovernorPointsSpent()};
     end;
     for _, request in ipairs(queue.requests) do
-        if request.leader == leader then return request.status == 'PAID' and 'ALREADY_PAID' or 'PENDING'; end;
+        if request.leader == leader then
+            return request.status == 'PAID' and 'ALREADY_PAID' or request.status;
+        end;
     end;
     local governors = Players[owner]:GetGovernors();
     local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
@@ -82,6 +84,16 @@ end;
 function Rules.Next(owner)
     local queue = Rules.Queue(owner);
     if not queue or queue.cursor >= MAX_PAYMENTS then return nil; end;
+    if queue.flight then
+        for _, request in ipairs(queue.requests) do
+            if request.id == queue.flight.request then
+                if request.status ~= 'PENDING' or not Rules.Valid(owner, request.leader) then return nil; end;
+                return {request=request.id, leader=request.leader, stage=queue.flight.stage,
+                    action=queue.flight.stage == 0 and 'APPOINT' or 'PROMOTE'};
+            end;
+        end;
+        return nil;
+    end;
     for _, request in ipairs(queue.requests) do
         if request.status == 'PENDING' then
             if not Rules.Valid(owner, request.leader) then return nil; end;
@@ -93,6 +105,20 @@ function Rules.Next(owner)
         end;
     end;
     return nil;
+end;
+
+-- Persist the native stage's original request BEFORE the UI sends APPOINT or
+-- PROMOTE. It survives cancellation, reload and delayed modifier publication.
+function Rules.Begin(owner)
+    local queue = Rules.Queue(owner);
+    if not queue then return 'NO_REQUEST'; end;
+    if queue.flight then return 'ALREADY_STARTED'; end;
+    local next = Rules.Next(owner);
+    if not next then return 'NOT_READY'; end;
+    if Receipt(owner, next.stage) == 1 then return 'UNEXPECTED_NATIVE_PAYMENT'; end;
+    queue.flight = {request=next.request, stage=next.stage};
+    Save(owner, queue);
+    return 'STARTED';
 end;
 
 -- Only gameplay calls this transition. A cancelled request keeps the receipts
@@ -108,7 +134,7 @@ function Rules.Reconcile(owner)
             if not valid then
                 -- If the last native request already consumed a title, retain
                 -- its stage on the original person rather than credit it later.
-                if head and Receipt(owner, queue.cursor) == 1 then
+                if head and not queue.flight and Receipt(owner, queue.cursor) == 1 then
                     local spent = Players[owner]:GetGovernors():GetGovernorPointsSpent();
                     if spent <= queue.spentFloor then return 'ACCOUNTING_PENDING'; end;
                     request.payments[#request.payments + 1] = queue.cursor;
@@ -128,22 +154,29 @@ end;
 function Rules.Advance(owner)
     local queue = Rules.Queue(owner);
     if not queue or not Players[owner] then return 'NO_REQUEST'; end;
+    local flight = queue.flight;
+    if not flight then return 'NO_STARTED_STAGE'; end;
     for _, request in ipairs(queue.requests) do
-        if request.status == 'PENDING' then
+        if request.id == flight.request then
             local valid, reason = Rules.Valid(owner, request.leader);
-            if not valid then return reason; end;
-            local paid = Receipt(owner, queue.cursor);
+            if not valid and request.status ~= 'CANCELLED' then
+                request.status, request.reason = 'CANCELLED', reason;
+            end;
+            local paid = Receipt(owner, flight.stage);
             if paid == nil or paid == 0 then return 'NATIVE_PENDING'; end;
             if paid ~= 1 then return 'INVALID_RECEIPT'; end;
             -- A native payment must also be reflected in the official spent
             -- count. Other governors' expenses cannot stand in for this marker.
             local spent = Players[owner]:GetGovernors():GetGovernorPointsSpent();
             if spent <= queue.spentFloor then return 'ACCOUNTING_PENDING'; end;
-            request.payments[#request.payments + 1] = queue.cursor;
-            queue.cursor = queue.cursor + 1;
+            if flight.stage ~= queue.cursor then return 'INVALID_STAGE'; end;
+            request.payments[#request.payments + 1] = flight.stage;
+            queue.cursor = flight.stage + 1;
             queue.spentFloor = spent;
-            if #request.payments == request.cost then request.status = 'PAID'; end;
+            queue.flight = nil;
+            if request.status ~= 'CANCELLED' and #request.payments == request.cost then request.status = 'PAID'; end;
             Save(owner, queue);
+            if request.status == 'CANCELLED' then return 'CANCELLED_PAYMENT'; end;
             return request.status == 'PAID' and 'PAID' or 'PARTIAL';
         end;
     end;

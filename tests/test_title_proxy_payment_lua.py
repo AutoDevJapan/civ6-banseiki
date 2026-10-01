@@ -51,6 +51,7 @@ for _,leader in ipairs({'A','B','C'}) do
  properties['JAC_PERSONA_'..leader..'_STATE']='GREAT_PERSON'
 end
 function native_payment(owner,stage)
+ if JAC_TitlePaymentRules and JAC_TitlePaymentRules.Queue(owner) and not JAC_TitlePaymentRules.Queue(owner).flight then JAC_TitlePaymentRules.Begin(owner) end
  receipts[owner]['JAC_PROXY_NATIVE_PAID_'..stage]=1
  Players[owner].spent=Players[owner].spent+1
 end
@@ -81,6 +82,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
 
     def test_spent_points_without_the_named_native_receipt_are_not_payment(self):
         self.rules.Request(0, "A")
+        self.rules.Begin(0)
         self.lua.execute("Players[0].spent=1")
         self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
         self.assertFalse(self.rules.Paid(0, "A"))
@@ -88,6 +90,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
 
     def test_native_receipt_without_official_spending_is_not_payment(self):
         self.rules.Request(0, "C")
+        self.rules.Begin(0)
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_0']=1")
         self.assertEqual(self.rules.Advance(0), "ACCOUNTING_PENDING")
         self.assertFalse(self.rules.Paid(0, "C"))
@@ -97,10 +100,10 @@ class TitleProxyPaymentTests(unittest.TestCase):
     def test_foreign_and_duplicate_receipts_do_not_satisfy_an_owned_request(self):
         self.rules.Request(0, "A")
         self.lua.execute("native_payment(1,0)")
-        self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.lua.execute("native_payment(0,0)")
         self.assertEqual(self.rules.Advance(0), "PARTIAL")
-        self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.assertEqual(list(self.rules.Queue(0)["requests"][1]["payments"].values()), [0])
 
     def test_a_payment_is_allocated_to_only_one_person(self):
@@ -110,7 +113,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.assertEqual(self.rules.Advance(0), "PAID")
         self.assertTrue(self.rules.Paid(0, "C"))
         self.assertFalse(self.rules.Paid(0, "A"))
-        self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.assertEqual(self.rules.Next(0)["stage"], 1)
 
     def test_costs_one_two_and_three_consume_six_distinct_official_payments(self):
@@ -137,7 +140,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules = self.lua.globals().JAC_TitlePaymentRules
         self.assertEqual(self.rules.Request(0, "B"), "PENDING")
         self.assertEqual(self.rules.Next(0)["stage"], 1)
-        self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         for stage in (1, 2):
             self.lua.globals().native_payment(0, stage)
             self.rules.Advance(0)
@@ -163,6 +166,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.assertIsNone(self.rules.Queue(0))
         self.lua.execute("receipts[0]={}; Players[0].spent=0")
         self.rules.Request(0, "C")
+        self.rules.Begin(0)
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_0']=2; Players[0].spent=1")
         self.assertEqual(self.rules.Advance(0), "INVALID_RECEIPT")
         self.assertFalse(self.rules.Paid(0, "C"))
@@ -173,11 +177,40 @@ class TitleProxyPaymentTests(unittest.TestCase):
         for stage in range(3):
             self.lua.globals().native_payment(0, stage)
             self.rules.Advance(0)
+        self.rules.Begin(0)
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_3']=1")
         self.assertEqual(self.rules.Advance(0), "ACCOUNTING_PENDING")
         self.assertEqual(self.rules.Queue(0)["cursor"], 3)
         self.assertFalse(self.rules.Paid(0, "C"))
         self.assertFalse(self.rules.Paid(0, "A"))
+
+    def test_late_native_receipt_after_cancellation_stays_with_the_original_person(self):
+        self.rules.Request(0, "A")
+        self.rules.Request(0, "C")
+        self.assertEqual(self.rules.Begin(0), "STARTED")
+        self.lua.execute("Players[0].spent=1; PERSON_EXISTS.A=false")
+        self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
+        self.assertIsNone(self.rules.Next(0))
+        self.assertEqual(self.rules.Queue(0)["flight"]["request"], 1)
+        self.assertEqual(self.rules.Advance(0), "NATIVE_PENDING")
+        self.lua.execute(RULES)
+        self.rules = self.lua.globals().JAC_TitlePaymentRules
+        self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_0']=1")
+        self.assertEqual(self.rules.Advance(0), "CANCELLED_PAYMENT")
+        self.assertEqual(list(self.rules.Queue(0)["requests"][1]["payments"].values()), [0])
+        self.assertFalse(self.rules.Paid(0, "C"))
+        self.assertEqual(self.rules.Next(0)["leader"], "C")
+        self.assertEqual(self.rules.Next(0)["stage"], 1)
+        self.lua.globals().native_payment(0, 1)
+        self.assertEqual(self.rules.Advance(0), "PAID")
+        self.assertEqual(list(self.rules.Queue(0)["requests"][2]["payments"].values()), [1])
+
+    def test_cancelled_person_does_not_report_pending_on_replay(self):
+        self.rules.Request(0, "A")
+        self.lua.execute("PERSON_EXISTS.A=false")
+        self.rules.Reconcile(0)
+        self.lua.execute("PERSON_EXISTS.A=true")
+        self.assertEqual(self.rules.Request(0, "A"), "CANCELLED")
 
     def test_lost_person_releases_unpaid_reservation_and_keeps_consumed_stages(self):
         self.rules.Request(0, "B")
@@ -186,7 +219,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules.Advance(0)
         self.lua.execute("PERSON_EXISTS.B=false")
         self.assertIsNone(self.rules.Next(0))
-        self.assertEqual(self.rules.Advance(0), "PERSON_MISSING")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
         old = self.rules.Queue(0)["requests"][1]
         self.assertEqual(old["status"], "CANCELLED")
@@ -202,6 +235,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.lua.execute("properties['JAC_PERSONA_C_OWNER']=1")
         self.assertIsNone(self.rules.Next(0))
         self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
+        self.assertEqual(self.rules.Advance(0), "CANCELLED_PAYMENT")
         self.assertEqual(self.rules.Queue(0)["cursor"], 1)
         self.assertEqual(self.rules.Queue(0)["spentFloor"], 1)
         self.assertEqual(self.rules.Next(0)["stage"], 1)
@@ -214,7 +248,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules = self.lua.globals().JAC_TitlePaymentRules
         self.assertEqual(self.rules.Queue(0)["cursor"], 0)
         self.assertEqual(self.rules.Advance(0), "PAID")
-        self.assertEqual(self.rules.Advance(0), "NO_PENDING_REQUEST")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.assertEqual(self.lua.globals().Players[0]["spent"], 1)
 
 
