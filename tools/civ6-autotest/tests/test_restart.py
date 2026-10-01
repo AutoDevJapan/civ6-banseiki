@@ -283,6 +283,19 @@ class RestartActionTests(unittest.TestCase):
             runner._launch_steam_and_wait(120)
         self.assertEqual(events, ["launch", "closed failed launch helper", "launch"])
 
+    def test_helper_cleanup_exhausting_deadline_sends_no_steam_request(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.close_orphaned_civ_reporters", return_value=[99]), patch(
+            "scenario.time.sleep", side_effect=lambda n: clock.__setitem__(0, clock[0] + n)
+        ), patch("scenario.launch_via_steam") as launch, patch("scenario.wait_for_civ_window") as window:
+            with self.assertRaisesRegex(ScenarioError, "deadline expired"):
+                runner._launch_steam_and_wait(5)
+        launch.assert_not_called()
+        window.assert_not_called()
+
     def test_four_launch_requests_still_wait_for_delayed_window_until_deadline(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         clock = [0.0]

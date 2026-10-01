@@ -520,6 +520,7 @@ class Runner:
                         if str(exc).startswith("Multiple Civ VI processes found"):
                             continue
                         raise
+                _remaining(deadline)  # Cleanup may have consumed the last seconds.
                 launch_via_steam()
                 attempts += 1
                 next_launch = now + 45
