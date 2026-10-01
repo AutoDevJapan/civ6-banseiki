@@ -1649,6 +1649,7 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('''
           CityCommandTypes={PURCHASE=1,PARAM_UNIT_TYPE=2,PARAM_YIELD_TYPE=3}
           CityCommandResults={FAILURE_REASONS=4};MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+          Locale={Lookup=function(key) return key=='LOC_CAN_TRAIN_FAILURE_SAME_ERA' and 'APPEARANCE_ERA' or key end}
           GameInfo.Yields={YIELD_FAITH={Index=6}}
           GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
             {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
@@ -1708,6 +1709,9 @@ class AbsorptionTests(unittest.TestCase):
         self.assertTrue(observed.Visible)
         self.assertFalse(observed.Allowed)
         self.assertEqual(observed.Alive, 0)
+        self.run_lua("JAC_ABSORPTION_AI_PROBE.Results[1].Results[CityCommandResults.FAILURE_REASONS]={'SPAWN_BLOCKED'}")
+        with self.assertRaisesRegex(Exception, 'did not report the native era restriction'):
+            self.run_lua(checks[1])
         self.g.GLOBAL_ERA = 1
         self.run_lua(setup[1])
         self.run_lua('JAC_ABSORPTION_AI_PROBE_HANDLER()')
