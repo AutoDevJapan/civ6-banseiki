@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Context Style="FontNormal14" FontStyle="Shadow">
 	<!-- 天下統一同盟（SSOT 3.1）。枠とボタンは JAC_Notebooks.xml と同じ部品。状態は Game のプロパティを読むだけ。 -->
-	<GridButton ID="PactToggle" Anchor="C,T" Offset="0,40" Size="180,28" Style="ButtonControl" String="LOC_JAC_UNIFICATION_PACT_TITLE"/>
+	<GridButton ID="PactToggle" Anchor="R,T" Offset="12,84" Size="220,28" Style="ButtonControl" String="LOC_JAC_UNIFICATION_PACT_TITLE"/>
 	<Grid ID="PactPanel" Anchor="C,T" Offset="0,72" Size="420,auto" SizePadding="0,16"
 		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22"
 		Hidden="1" ConsumeAllMouse="1">

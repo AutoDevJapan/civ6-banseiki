@@ -744,6 +744,122 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
         self.assertFalse(any("deferred" in line for line in self.log()))
         self.assertFalse(any("SAFETY NET" in line for line in self.log()))
 
+    def test_human_snapshots_preserve_missing_properties_and_boolean_answers(self):
+        # Civ6 GetProperty returns no values for an unset property, unlike the
+        # Lua table stub's explicit nil. tostring(GetProperty(...)) then fails.
+        self.lua.execute("""
+            local R = ExposedMembers.JAC_CourtArbitration
+            Game:SetProperty('JAC_ARB_HUMAN_TEST', {case='accept', human=2, other=0})
+            Game:SetProperty(R.LAST_REQUEST_KEY, 1)
+            Players[2]:SetProperty(R.LEGITIMACY_KEY, 65)
+            Players[0]:SetProperty(R.LEGITIMACY_KEY, 45)
+            Players[0].cities = 2
+            SET_WAR(0, 2, true)
+            local function engineProperties(object)
+                local get = object.GetProperty
+                object.GetProperty = function(self, key)
+                    local value = get(self, key)
+                    if value ~= nil then return value end
+                end
+            end
+            engineProperties(Game)
+            for _, id in ipairs({0, 2}) do
+                engineProperties(Players[id])
+                for _, city in Players[id]:GetCities():Members() do
+                    local plot = Map.GetPlot(city:GetX(), city:GetY())
+                    for _, key in ipairs({R.FLAG_HIGH, R.FLAG_LOW, R.FLAG_SUBJUGATION}) do
+                        plot:SetProperty(key, nil)
+                    end
+                    engineProperties(plot)
+                end
+            end
+        """)
+        steps = json.loads((ROOT / "tools/civ6-autotest/scenarios/court-arbitration-human.json")
+                           .read_text(encoding="utf-8"))["steps"]
+        snapshots = [step for step in steps if "capture_as" in step or "equals_capture" in step]
+        self.assertEqual(len(snapshots), 12)
+        prefix = "accept|1|65|45|500|500|1|nil|nil|nil|nil|nil|nil|true|true|"
+        cities = "0:1:nil:nil:nil,0:2:nil:nil:nil,2:201:nil:nil:nil,2:202:nil:nil:nil"
+        for answer in (False, True, None):
+            if answer is None:
+                self.lua.execute("Game:SetProperty(ExposedMembers.JAC_CourtArbitration.PENDING_KEY, nil)")
+                pending = "no pending"
+            else:
+                self.lua.execute("""
+                    Game:SetProperty(ExposedMembers.JAC_CourtArbitration.PENDING_KEY,
+                        {Requester=0, A=0, B=2, Turn=1, Power=1, AnswerB=...})
+                """, answer)
+                pending = ("Requester=0|A=0|B=2|Turn=1|Power=1|AnswerA=nil|AnswerB="
+                           + str(answer).lower())
+            for step in snapshots:
+                with self.subTest(answer=answer, capture=step.get("capture_as", step.get("equals_capture"))):
+                    self.assertEqual(self.lua.execute(step["code"]), prefix + pending + "|" + cities)
+
+    def test_overlay_buttons_can_open_and_close_from_an_initially_hidden_context(self):
+        # InGame.lua loads every AddUserInterfaces context hidden. A visible
+        # child alone is not reachable by the player while its parent is hidden.
+        for source, toggle, panel, close in (
+            (MOD / "UI/JAC_CourtArbitrationPanel.lua", "OpenButton", "Panel", "CloseButton"),
+            (ROOT / "poc/JAC_PoC_SengokuTrees/UI/JAC_UnificationPact.lua",
+             "PactToggle", "PactPanel", "PactToggle"),
+        ):
+            with self.subTest(screen=source.name):
+                self.lua.execute("""
+                    local function control()
+                        local c = setmetatable({hidden=false, sizeY=34}, {__index=function()
+                            return function() end
+                        end})
+                        function c:SetHide(value) self.hidden=value end
+                        function c:IsHidden() return self.hidden end
+                        function c:SetText(value) self.text=value; self.sizeY=64 end
+                        function c:GetSizeY() return self.sizeY end
+                        function c:SetSizeY(value) self.sizeY=value end
+                        function c:RegisterCallback(_, callback) self.callback=callback end
+                        function c:DoLeftClick()
+                            assert(not ContextPtr:IsHidden() and not self:IsHidden(), 'unreachable control')
+                            self.callback()
+                        end
+                        return c
+                    end
+                    ContextPtr=control(); ContextPtr:SetHide(true)
+                    Controls=setmetatable({}, {__index=function(t, key)
+                        local c=control(); rawset(t, key, c); return c
+                    end})
+                    Controls.Panel:SetHide(true); Controls.PactPanel:SetHide(true)
+                    InstanceManager={new=function(_, template, root, stack)
+                        stack.instances={}
+                        return {ResetInstances=function() stack.instances={} end,
+                            GetInstance=function()
+                                local row=setmetatable({}, {__index=function(t, key)
+                                    local c=control(); rawset(t, key, c); return c
+                                end})
+                                table.insert(stack.instances,row)
+                                return row
+                            end}
+                    end}
+                    Events=setmetatable({}, {__index=function() return {Add=function() end} end})
+                    Mouse={eLClick=1}
+                    include=function() end
+                    Game.GetLocalPlayer=function() return 2 end
+                    Players[2].IsTurnActive=function() return true end
+                    local diplomacy=Players[2].GetDiplomacy
+                    Players[2].GetDiplomacy=function()
+                        local d=diplomacy(); d.HasMet=function() return false end; return d
+                    end
+                """)
+                self.lua.execute(source.read_text(encoding="utf-8"))
+                self.assertIs(self.g.ContextPtr.IsHidden(self.g.ContextPtr), False)
+                self.g.Controls[toggle].DoLeftClick(self.g.Controls[toggle])
+                self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), False)
+                if panel == "Panel":
+                    # A four-line label must fit its own row, rather than
+                    # overlap another row or escape the scrollable area.
+                    rows = self.g.Controls.Rows.instances
+                    self.assertEqual(len(rows), 1)
+                    self.assertEqual(rows[1].Root.GetSizeY(rows[1].Root), 76)
+                self.g.Controls[close].DoLeftClick(self.g.Controls[close])
+                self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), True)
+
 
 if __name__ == "__main__":
     unittest.main()
