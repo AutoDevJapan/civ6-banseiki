@@ -355,6 +355,11 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
+      "code": "local bad={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do local def=GameInfo.Governors[row.GovernorType]; if gs:HasGovernor(def.Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then local g=gs:GetGovernor(def.Hash); bad[#bad+1]=p:GetID()..'/'..row.LeaderType..'/nativeType='..tostring(g and g:GetType()) end end end end; if #bad>0 then error('AI appointed unjoined personas after native turn: '..table.concat(bad,',')) end; return 'native AI appointment gate verified after first turn'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
       "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
       "capture_as": "JAC_PERSONA_ESTABLISHING"
     },
