@@ -74,7 +74,8 @@ function memberCollection(items,make)
 end
 function makeUnit(d)
   local u={GetID=function() return d.ID end, GetType=function() return d.Type end,
-    GetOwner=function() return d.Owner end, GetX=function() return d.X end,GetY=function() return d.Y end}
+    GetOwner=function() return d.Owner end, GetX=function() return d.X end,GetY=function() return d.Y end,
+    GetDamage=function() return d.Damage or 0 end,GetMaxDamage=function() return 100 end}
   props(u,d); return u
 end
 function makeCity(d)
@@ -142,6 +143,12 @@ CityManager.GetCityAt=function(x,y)
 end
 GameEvents=setmetatable({}, {__index=function(t,k)
   local event={Add=function(f) EVENTS[k]=f end}; rawset(t,k,event); return event
+end})
+UI_HANDLERS={}
+Events=setmetatable({}, {__index=function(t,k)
+  local event={Add=function(f) UI_HANDLERS[k]=f end,
+    Remove=function(f) if UI_HANDLERS[k]==f then UI_HANDLERS[k]=nil end end}
+  rawset(t,k,event); return event
 end})
 ExposedMembers={}
 NotificationTypes={USER_DEFINED_1=1}; ParameterTypes={MESSAGE='MESSAGE',SUMMARY='SUMMARY'}
@@ -1099,6 +1106,50 @@ class AssassinLuaTests(unittest.TestCase):
           GRANT(0,0,2,1)
           assert(not pcall(function() NewTrainedUnit(0,before,fresh) end))
         """)
+
+    def _start_live_trained_unit_watch(self):
+        from tools.generate_assassin_poc import build_scenario
+        steps=build_scenario()['steps']
+        setup=next(s['code'] for s in steps if 'JAC_ASN_LIVE_WATCH=watch' in s.get('code',''))
+        check=next(s['code'] for s in steps if 'trained unit vanished without lethal native damage' in s.get('code',''))
+        self.run_lua("""
+          Game.GetLocalPlayer=function() return 0 end; Game:SetProperty(A.TEST,1)
+          Players[0]:SetProperty(A.STATE,{LastProducedUnit=U2})
+          Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,LockState={LastProducedUnit=U}})
+        """)
+        self.run_lua(setup)
+        return check
+
+    def test_live_unit_watch_accepts_witnessed_native_death_and_removes_observers(self):
+        check=self._start_live_trained_unit_watch()
+        self.run_lua("""
+          UI_HANDLERS.UnitDamageChanged(0,U,100,83)
+          UI_HANDLERS.UnitRemovedFromMap(0,U); DATA[0].Units[U]=nil
+        """)
+        self.run_lua(check)
+        self.run_lua("""
+          assert(Players[0]:GetUnits():FindID(U2))
+          assert(JAC_ASN_LIVE_WATCH==nil and UI_HANDLERS.UnitDamageChanged==nil and UI_HANDLERS.UnitRemovedFromMap==nil)
+        """)
+
+    def test_live_unit_watch_rejects_unexplained_loss_or_replacement(self):
+        for change in (
+            "DATA[0].Units[U]=nil",
+            "UI_HANDLERS.UnitDamageChanged(1,U,100,83); UI_HANDLERS.UnitRemovedFromMap(1,U); DATA[0].Units[U]=nil",
+            "UI_HANDLERS.UnitRemovedFromMap(0,U); DATA[0].Units[U]=nil",
+            "UI_HANDLERS.UnitDamageChanged(0,U,100,83); DATA[0].Units[U]=nil",
+            "UI_HANDLERS.UnitDamageChanged(0,U,99,83); UI_HANDLERS.UnitRemovedFromMap(0,U); DATA[0].Units[U]=nil",
+            "DATA[0].Units[U].X=-9999",
+            "DATA[0].Units[U].Type=1",
+            "UI_HANDLERS.UnitDamageChanged(0,U,100,83); UI_HANDLERS.UnitRemovedFromMap(0,U)",
+        ):
+            with self.subTest(change=change):
+                self.setUp()
+                check=self._start_live_trained_unit_watch()
+                self.run_lua(change)
+                with self.assertRaisesRegex(Exception,'trained'):
+                    self.run_lua(check)
+                self.run_lua("assert(JAC_ASN_LIVE_WATCH==nil and UI_HANDLERS.UnitDamageChanged==nil and UI_HANDLERS.UnitRemovedFromMap==nil)")
 
     def test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario

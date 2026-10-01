@@ -488,7 +488,48 @@ def build_scenario():
       assert(s.LastMission.ID==t.FinalMissionID and s.LastMission.Result=='ACTOR_GONE' and s.CommandUnlock==t.FinalWait,'load changed result or wait')
       R.Tick(); return 'all branch histories, cancelled results and pre-save penalties survive load'
     """)
+    check("""
+      assert(Game:GetProperty(R.TEST)==1 and Game.GetLocalPlayer()==t.Actor,'unit watch requires the test human')
+      local watch={Owner=t.Actor,Rows={}}
+      for _,id in ipairs({t.LockState.LastProducedUnit,R.State(t.Actor).LastProducedUnit}) do
+        local u=TrainedUnit(t.Actor,id)
+        watch.Rows[tostring(id)]={Type=u:GetType(),MaxDamage=u:GetMaxDamage(),Damage=u:GetDamage(),Removed=false}
+      end
+      JAC_ASN_LIVE_WATCH=watch
+      JAC_ASN_LIVE_DAMAGE=function(owner,id,damage)
+        local row=owner==watch.Owner and watch.Rows[tostring(id)]
+        if row then row.Damage=damage; print('[JAC_ASN_FIXTURE] trained damage id='..id..' damage='..damage) end
+      end
+      JAC_ASN_LIVE_REMOVED=function(owner,id)
+        local row=owner==watch.Owner and watch.Rows[tostring(id)]
+        if row then row.Removed=true; print('[JAC_ASN_FIXTURE] trained removed id='..id) end
+      end
+      Events.UnitDamageChanged.Add(JAC_ASN_LIVE_DAMAGE)
+      Events.UnitRemovedFromMap.Add(JAC_ASN_LIVE_REMOVED)
+      return 'both trained individuals survive load; native damage/removal watch installed for next turn'
+    """, "JAC_AssassinPanel")
     advance()
+    check("""
+      local watch=JAC_ASN_LIVE_WATCH
+      local ok,why=pcall(function()
+      assert(watch and watch.Owner==t.Actor,'unit watch missing')
+      for key,row in pairs(watch.Rows) do
+        local u=Players[watch.Owner]:GetUnits():FindID(tonumber(key))
+        if u then
+          assert(not row.Removed and u:GetType()==row.Type and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,
+            'trained individual replaced or unplaced after next turn')
+        else
+          assert(row.Removed and row.Damage>=row.MaxDamage,'trained unit vanished without lethal native damage')
+          print('[JAC_ASN_FIXTURE] trained native death confirmed id='..key)
+        end
+      end
+      end)
+      if JAC_ASN_LIVE_DAMAGE then Events.UnitDamageChanged.Remove(JAC_ASN_LIVE_DAMAGE) end
+      if JAC_ASN_LIVE_REMOVED then Events.UnitRemovedFromMap.Remove(JAC_ASN_LIVE_REMOVED) end
+      JAC_ASN_LIVE_WATCH=nil; JAC_ASN_LIVE_DAMAGE=nil; JAC_ASN_LIVE_REMOVED=nil
+      assert(ok,why)
+      return 'trained individuals remain placed or have witnessed native lethal damage and removal'
+    """, "JAC_AssassinPanel")
     check("""
       assert(Same(Game:GetProperty(R.NATIONS),t.FinalNations),'next turn changed national histories')
       local ledger=Players[t.LossTarget]:GetProperty('JAC_ASN_DIPLOMACY_V1')
@@ -496,7 +537,6 @@ def build_scenario():
       for id,applied in pairs(t.FinalApplied) do assert(ledger.Applied[id]==applied,'next turn lost applied mission') end
       for id,applied in pairs(ledger.Applied) do assert(t.FinalApplied[id]==applied,'next turn added applied mission') end
       local s=R.State(t.Actor); assert(Same(s,t.FinalState),'next turn changed state')
-      TrainedUnit(t.Actor,t.LockState.LastProducedUnit); TrainedUnit(t.Actor,s.LastProducedUnit)
       assert(s.LastMission.ID==t.FinalMissionID and s.CommandUnlock==t.FinalWait,'next turn changed result or wait')
       assert(not Players[t.Target]:IsAlive() and not Players[t.Houses.CIVILIZATION_JAC_ASAKURA]:IsAlive(),'retired slot resurrected')
       assert(R.Turn()-t.Start<=20,'scenario exceeded live turn budget')
