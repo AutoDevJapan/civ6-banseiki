@@ -169,14 +169,22 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local p=Players[0]; local city=p:GetCities():GetCapitalCity(); local individual;\nfor r in GameInfo.GreatPersonIndividuals() do if r.GreatPersonClassType=='GREAT_PERSON_CLASS_GENERAL' then individual=r; break end end;\nif not individual then error('official General control absent') end;\nlocal class=GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'];\nprint('JAC_PERSONA_CONTROL class='..class.Index..' unit='..class.UnitType..' timeline='..tostring(class.AvailableInTimeline));\nprint('JAC_PERSONA_CONTROL official-create-before individual='..individual.Index..' x='..city:GetX()..' y='..city:GetY());\nGame.GetGreatPeople():CreatePerson(0,individual.Index,city:GetX(),city:GetY());\nprint('JAC_PERSONA_CONTROL official-create-after');\nlocal found;\nfor _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units['UNIT_GREAT_GENERAL'].Index then\n local gp=u:GetGreatPerson(); local r=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()];\n if r and r.GreatPersonIndividualType==individual.GreatPersonIndividualType then found=u end;\nend end;\nif not found then error('official General control missing') end;\np:GetUnits():Destroy(found);\nreturn 'official General creation and removal succeeded'",
-      "lua_timeout": 30
+      "state_name": "InGame",
+      "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end;\n UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaJoin',Source=source});\nend; return 'three synchronized gameplay joins requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n if Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then return false end;\nend; return true"
+      }
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local api=ExposedMembers.JAC_LeaderPersona; if not api then error('gameplay context absent') end;\nlocal cities=Players[0]:GetCities(); local a=cities:GetCapitalCity(); local b;\nlocal names={}; for _,city in cities:Members() do\n local name=Locale.Lookup(city:GetName()); if names[name] then error('duplicate owned city display name: '..name) end; names[name]=true;\n if city:GetID()~=a:GetID() and (not b or city:GetID()<b:GetID()) then b=city end\nend\nif not a or not b then error('two owned cities required') end;\nGame:SetProperty('JAC_PERSONA_SCENARIO_CITY_A',a:GetID()); Game:SetProperty('JAC_PERSONA_SCENARIO_CITY_B',b:GetID());\nfor _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil or api.Join(0,source)~='JOINED' then error('join failed: '..l) end;\n if api.Join(0,source)~='ALREADY_JOINED' then error('join not idempotent') end\nend\nlocal g=Players[0]:GetGovernors(); if g:GetGovernorPoints()-g:GetGovernorPointsSpent()~=0 then error('titles before civic research') end;\nif api.PrepareEvolution(0,'LEADER_JAC_DATE_TANEMUNE')~='NO_TITLE' then error('evolution without title') end;\nreturn 'three world-unique Great People joined; no free evolution' ",
+      "code": "local api=ExposedMembers.JAC_LeaderPersona; if not api then error('gameplay context absent') end;\nlocal cities=Players[0]:GetCities(); local a=cities:GetCapitalCity(); local b;\nlocal names={}; for _,city in cities:Members() do\n local name=Locale.Lookup(city:GetName()); if names[name] then error('duplicate owned city display name: '..name) end; names[name]=true;\n if city:GetID()~=a:GetID() and (not b or city:GetID()<b:GetID()) then b=city end\nend\nif not a or not b then error('two owned cities required') end;\nGame:SetProperty('JAC_PERSONA_SCENARIO_CITY_A',a:GetID()); Game:SetProperty('JAC_PERSONA_SCENARIO_CITY_B',b:GetID());\nfor _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil or Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then error('join failed: '..l) end;\n if api.Join(0,source)~='ALREADY_JOINED' then error('join not idempotent') end\nend\nlocal g=Players[0]:GetGovernors(); if g:GetGovernorPoints()-g:GetGovernorPointsSpent()~=0 then error('titles before civic research') end;\nif api.PrepareEvolution(0,'LEADER_JAC_DATE_TANEMUNE')~='NO_TITLE' then error('evolution without title') end;\nreturn 'three world-unique Great People joined; no free evolution' ",
       "lua_timeout": 30
     },
     {

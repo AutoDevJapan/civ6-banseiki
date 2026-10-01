@@ -398,6 +398,11 @@ local function OnCombatOccurred(attacker, attackerUnit, defender, defenderUnit)
     end
 end
 
+-- UI integrations submit this synchronized operation; native creation runs in
+-- the gameplay script rather than a cross-context FireTuner function call.
+GameEvents.JAC_LeaderPersonaJoin.Add(function(owner, params)
+    Join(owner, type(params) == "table" and params.Source or nil);
+end);
 GameEvents.JAC_LeaderPersonaEvolve.Add(function(owner, params)
     PrepareEvolution(owner, type(params) == "table" and params.Leader or nil);
 end);
