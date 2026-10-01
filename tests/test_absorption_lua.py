@@ -477,6 +477,25 @@ class AbsorptionTests(unittest.TestCase):
                 return tx
         self.fail("spread-charge UI publications did not finish")
 
+    def test_ui_only_purchase_cost_and_faith_balance_return_scalars_to_core(self):
+        self.split_unit_contexts()
+        self.run_lua("""MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+          for owner=0,3 do
+            local n=owner
+            UI_PLAYERS[n].GetCities=function() return {FindID=function(_,id)
+              return {GetGold=function() return {GetPurchaseCost=function(_,yield,hash,formation)
+                assert(yield==6 and hash==104 and formation==0);return 1000 end} end}
+            end} end
+            UI_PLAYERS[n].GetReligion=function() return {GetFaithBalance=function() return FAITH[n] end} end
+          end
+          Game,Players=UI_GAME,UI_PLAYERS""")
+        self.run_lua((MOD / "UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8"))
+        self.run_lua("""Game,Players=CORE_GAME,CORE_PLAYERS;FAITH[2]=777
+          for _,c in pairs(CITIES) do c.GetGold=nil end
+          for _,p in pairs(Players) do p.GetReligion=function() return {} end end""")
+        self.assertEqual(self.a.CityPurchaseCost(self.g.CITIES[4], 6, 104), 1000)
+        self.assertEqual(self.a.PlayerFaithBalance(2), 777)
+
     def test_ui_only_spread_getter_waits_for_publication_and_reuses_candidates(self):
         self.split_unit_contexts()
         tx = self.apply()
@@ -1539,6 +1558,12 @@ class AbsorptionTests(unittest.TestCase):
           assert(e.Before.HeroCountAvailable and e.Before.Hero==1 and e.AfterRecall.Hero==1)
           assert(#ExposedMembers.JAC_Absorption.GetRoster(e.To)[e.RecordID].RecallHistory==1)
         ''')
+        recall_owner = self.run_lua("return Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1').To")
+        for invalid_balance in (999500, 998500):
+            self.g.FAITH[recall_owner] = invalid_balance
+            with self.assertRaisesRegex(Exception, "native recall faith payment changed"):
+                self.run_lua(steps[17]['code'])
+        self.g.FAITH[recall_owner] = 999000
 
     def test_partial_expected_properties_freeze_references_to_every_staged_unit(self):
         self.run_lua('''

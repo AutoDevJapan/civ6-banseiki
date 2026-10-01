@@ -39,7 +39,11 @@ local function PublishHeroKeys()
       local charges = reads.ReadUnit(owner, id, "SPREAD_CHARGES", turn)
       if type(charges) == "number" then observed[token] = charges end
     end
-    reads.ReadCity = function(owner, id, method, building, slot)
+    reads.ReadPlayer = function(owner, method)
+      assert(method == "FAITH_BALANCE", "unsupported UI player read")
+      return uiPlayers[owner]:GetReligion():GetFaithBalance()
+    end
+    reads.ReadCity = function(owner, id, method, building, slot, extra)
       local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
       if method == "RELIGIONS" then
         local rows = {}
@@ -48,7 +52,11 @@ local function PublishHeroKeys()
         end
         return rows
       elseif method == "SLOTS" then return city:GetBuildings():GetNumGreatWorkSlots(building)
-      elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot) end
+      elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot)
+      elseif method == "PURCHASE_COST" then
+        return city:GetGold():GetPurchaseCost(building, slot,
+          extra or MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)
+      end
       error("unsupported UI city read")
     end
     reads.Observe = function(token, class)

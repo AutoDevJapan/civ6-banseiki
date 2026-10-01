@@ -231,6 +231,25 @@ local function SnapshotHero(unit, info)
     Renown = renown, RenownUnavailable = renown == nil, RenownRestorable = renownRestorable,
     Discovered = discovered, OriginBuilding = building }
 end
+function A.CityPurchaseCost(city, yield, unitHash, formation)
+  local gold = city.GetGold and city:GetGold()
+  local kind = formation or (MilitaryFormationTypes and MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)
+  if gold and gold.GetPurchaseCost and kind ~= nil then return gold:GetPurchaseCost(yield, unitHash, kind) end
+  Log("purchase cost via UI owner=" .. city:GetOwner() .. " coreGold=" .. tostring(city.GetGold ~= nil)
+    .. " coreCost=" .. tostring(gold ~= nil and gold.GetPurchaseCost ~= nil))
+  local cost = CityRead(city, "PURCHASE_COST", yield, unitHash, formation)
+  assert(type(cost) == "number", "UI purchase cost must be a number")
+  return cost
+end
+function A.PlayerFaithBalance(owner)
+  local religion = Players[owner]:GetReligion()
+  if religion.GetFaithBalance then return religion:GetFaithBalance() end
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  assert(reads and reads.ReadPlayer, "UI player read API unavailable")
+  local balance = reads.ReadPlayer(owner, "FAITH_BALANCE")
+  assert(type(balance) == "number", "UI faith balance must be a number")
+  return balance
+end
 
 local function SpreadCharges(unit)
   if unit.GetSpreadCharges then return unit:GetSpreadCharges() end
