@@ -182,7 +182,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');for _,u in Players[e.Owner]:GetUnits():Members() do if not e.Before[tostring(u:GetID())] and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index then return u:GetReligionType()==e.Religion and u:GetSpreadCharges()==3 end end;return false"
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');for _,u in Players[e.Owner]:GetUnits():Members() do if not e.Before[tostring(u:GetID())] and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index then return u:GetSpreadCharges()==3 end end;return false"
       }
     },
     {
