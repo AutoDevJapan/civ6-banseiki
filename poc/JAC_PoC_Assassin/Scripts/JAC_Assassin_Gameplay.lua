@@ -66,6 +66,22 @@ function R.CancelProduction(id)
   local s=R.State(id); s.Production=nil; Save(id,s)
   -- Cancellation never clears the nationwide completion lock; elapsed progress is discarded.
 end
+function R.TestRevealTile(id,x,y)
+  if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
+  -- Resolve the plot in Gameplay, as in the official AlexanderScenario. The
+  -- FireTuner caller can have different Map bindings, particularly after load.
+  local vision=PlayersVisibility[id]
+  if not vision then return false,"TEST_VISIBILITY_UNAVAILABLE" end
+  if not vision:IsVisible(x,y) then
+    local plot=Map.GetPlot(x,y)
+    if not plot then return false,"TEST_TILE_UNAVAILABLE:"..tostring(x)..","..tostring(y) end
+    vision:ChangeVisibilityCount(plot:GetIndex(),1)
+  end
+  if not vision:IsRevealed(x,y) or not vision:IsVisible(x,y) then
+    return false,"TEST_VISIBILITY_NOT_UPDATED"
+  end
+  return true
+end
 function R.TestAdvanceDeadlines(id,clocks)
   if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
   if not Players[id] then return false,"TARGET_GONE" end

@@ -969,7 +969,7 @@ class AssassinLuaTests(unittest.TestCase):
             HIDDEN_CITY=false; HIDDEN_UNIT=false
           end
         """)
-        self.run_lua("local R=A; "+helper+"""
+        self.run_lua("local Map={}; local PlayersVisibility={}; local R=A; "+helper+"""
           assert(not pcall(function() FixtureReveal(0,2,0) end) and REVEALS==0)
           local ok,why=R.CheckAttempt(0,U,1,'LEADER'); assert(not ok and why=='TARGET_UNKNOWN')
           Game:SetProperty(R.TEST,1); FixtureReveal(0,2,0)
@@ -993,13 +993,15 @@ class AssassinLuaTests(unittest.TestCase):
           end
           VICTIM=GRANT(1,4,3,1):GetID()
         """)
-        self.run_lua("local R=A; "+helper+"""
+        self.run_lua("local Map={}; local PlayersVisibility={}; local R=A; "+helper+"""
           assert(R.KnownTarget(0,R.ResolveTarget(1,'LEADER')))
           local ok,why=R.CheckAttempt(0,U,1,'UNIT',VICTIM)
           assert(not ok and why=='TARGET_UNKNOWN' and R.State(0).Mission==nil)
           assert(not pcall(function() FixtureReveal(0,3,1) end) and REVEALS==0)
           Game:SetProperty(R.TEST,1); FixtureReveal(0,2,0)
           assert(REVEALS==0 and not R.KnownTarget(0,R.ResolveTarget(1,'UNIT',VICTIM)))
+          ok,why=R.CheckAttempt(0,U,1,'UNIT',VICTIM)
+          assert(not ok and why=='TARGET_UNKNOWN' and R.State(0).Mission==nil)
           FixtureReveal(0,3,1); FixtureReveal(0,3,1)
           assert(REVEALS==1 and R.PROVISIONAL.Visibility=='REVEALED_CITY_VISIBLE_UNIT')
           assert(R.StartAttempt(0,U,1,'UNIT',VICTIM))

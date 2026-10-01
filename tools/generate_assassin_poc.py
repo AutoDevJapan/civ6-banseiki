@@ -149,10 +149,8 @@ def build_scenario():
     for p in configure["players"]: p["human"]=p["civ"]=="CIVILIZATION_JAC_ODA"
     prefix="local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent'); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); "
     grant="""local function FixtureReveal(owner,x,y)
-      assert(Game:GetProperty(R.TEST)==1,'fixture reveal requires test mode')
-      local vision=PlayersVisibility[owner]
-      if not vision:IsVisible(x,y) then vision:ChangeVisibilityCount(Map.GetPlot(x,y):GetIndex(),1) end
-      assert(vision:IsRevealed(x,y) and vision:IsVisible(x,y),'fixture reveal failed')
+      local ok,why=R.TestRevealTile(owner,x,y)
+      assert(ok,'fixture reveal failed: '..tostring(why))
     end; local function Grant(owner,kind,city)
       local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end
       UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)
