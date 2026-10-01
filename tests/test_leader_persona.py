@@ -73,6 +73,13 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
         for governor,base in people:
             self.assertEqual(self.db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType=?", (governor,)).fetchall(), [(base,)])
             self.assertEqual(self.db.execute("SELECT BaseAbility,Level FROM GovernorPromotions WHERE GovernorPromotionType=?", (base,)).fetchone(), (1,0))
+        for leader,base in self.db.execute("SELECT LeaderType,BasePromotionType FROM JAC_LeaderPersonas"):
+            marker = "JAC_PERSONA_SETTLED_" + leader
+            self.assertEqual(self.db.execute("SELECT ModifierType FROM Modifiers WHERE ModifierId=?", (marker,)).fetchone(),
+                             ("MODIFIER_SINGLE_CITY_ADJUST_PROPERTY",))
+            self.assertEqual(dict(self.db.execute("SELECT Name,Value FROM ModifierArguments WHERE ModifierId=?", (marker,))),
+                             {"Key":marker, "Amount":"1"})
+            self.assertEqual(self.db.execute("SELECT GovernorPromotionType FROM GovernorPromotionModifiers WHERE ModifierId=?", (marker,)).fetchall(), [(base,)])
         nodes = self.db.execute("SELECT LeaderType,ModifierId,EffectKind,Amount FROM JAC_PersonaTreeNodes").fetchall()
         self.assertEqual(len(nodes), 762)
         for leader,modifier,kind,amount in nodes:

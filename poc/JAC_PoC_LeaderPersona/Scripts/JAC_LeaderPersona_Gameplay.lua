@@ -183,13 +183,26 @@ end
 local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
 local function SettledCity(owner, row)
     if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil, true; end
-    local governor = NativeGovernor(owner, row);
-    if not governor then return nil, false; end
-    if not governor.appointed or not governor.base or
-       not governor.established or governor.neutralized > 0 or governor.cityOwner ~= owner then return nil, true; end
-    local city = governor.cityID and CityManager.GetCity(owner, governor.cityID);
-    if city and city:GetOwner() == owner then return city, true; end
-    return nil, true;
+    local p = Player(owner, true);
+    if not p then return nil, true; end
+    local marker = "JAC_PERSONA_SETTLED_" .. row.LeaderType;
+    local settled;
+    for _,city in p:GetCities():Members() do
+        if city:GetOwner() == owner then
+            if type(city.GetProperty) ~= "function" then return nil, false; end
+            local ok, value = pcall(city.GetProperty, city, marker);
+            if not ok or (value ~= nil and value ~= 0 and value ~= 1 and value ~= false) then
+                return nil, false;
+            end
+            if value == 1 then
+                if settled then return nil, false; end -- contradictory native markers
+                settled = city;
+            end
+        end
+    end
+    -- Zero markers is a valid unassigned, establishing or neutralized state.
+    -- An old saved pending deed remains unknown; never reinterpret it here.
+    return settled, true;
 end
 
 -- Flag all owned city centres, so native reassignment immediately carries purchased skills.
@@ -227,14 +240,14 @@ local function Purchase(owner, leader, nodeType, confirmCategory, confirmRoute)
     return Finish(owner, "PURCHASED");
 end
 
-local function Award(row, deed, identity)
+local function Award(row, deed, identity, city)
     local leader = row.LeaderType;
     local owner = Get(leader, "OWNER");
     -- A repeated notification cannot turn an unproven historical deed into a
     -- current eligible one, even after reassignment or reload in the same turn.
     local pending = Game:GetProperty(PENDING) or {};
     if pending[leader .. "_" .. deed .. "_" .. identity] then return false; end
-    if not Player(owner, true) or not SettledCity(owner, row) then return false; end
+    if not Player(owner, true) or not city then return false; end
     local design = GameInfo.JAC_PersonaTreePeople[leader];
     local rule = GameInfo.JAC_PersonaMeritRules[design.MeritProfile];
     local turn = Game.GetCurrentGameTurn();
@@ -277,14 +290,21 @@ local function MarkPendingHistory()
 end
 MarkPendingHistory();
 local function HandleDeed(row, deed, identity, cityID, x, y)
-    local owner = Get(row.LeaderType, "OWNER");
-    if Get(row.LeaderType, "STATE") ~= "GOVERNOR" or not Player(owner, true) then return; end
+    local leader = row.LeaderType;
+    local owner = Get(leader, "OWNER");
+    if Get(leader, "STATE") ~= "GOVERNOR" or not Player(owner, true) then return; end
+    if Get(leader, "DEED_" .. deed .. "_" .. identity) ~= nil then return; end
+    local pending = Game:GetProperty(PENDING) or {};
+    if pending[leader .. "_" .. deed .. "_" .. identity] then return; end
     local city, ready = SettledCity(owner, row);
     if not ready then Defer(row, deed, identity, cityID, x, y); return; end
-    if not city then return; end
-    if deed == "BUILDING" and city:GetID() ~= cityID then return; end
-    if deed == "VICTORY" and Map.GetPlotDistance(city:GetX(), city:GetY(), x, y) > Parameter("VICTORY_RADIUS") then return; end
-    Award(row, deed, identity);
+    if not city or (deed == "BUILDING" and city:GetID() ~= cityID) or
+       (deed == "VICTORY" and Map.GetPlotDistance(city:GetX(), city:GetY(), x, y) > Parameter("VICTORY_RADIUS")) then
+        -- A replay after assignment/recovery cannot turn this event into a deed.
+        Set(leader, "DEED_" .. deed .. "_" .. identity, Game.GetCurrentGameTurn());
+        return;
+    end
+    Award(row, deed, identity, city);
 end
 local function MajorIDs()
     local ids = PlayerManager.GetAliveMajorIDs(); -- BlackDeathScenario.lua:461.
@@ -311,6 +331,30 @@ local function ObserveAlliances(owner, row)
         if other ~= owner and diplomacy:HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
             Set(leader, "ALLY_SEEN_" .. other, 1);
             Defer(row, "ALLIANCE", tostring(other));
+        end
+    end
+end
+
+-- Formation is the only moment at which eligibility can be decided. The turn
+-- scan above records a missed formation as unknown; it never awards it late.
+local function OnDiplomacyRelationshipChanged(first, second)
+    if not Player(first, true) or not Player(second, true) or first == second then return; end
+    for _,pair in ipairs({{first, second}, {second, first}}) do
+        local owner, other = pair[1], pair[2];
+        if Players[owner]:GetDiplomacy():HasAllied(other) then
+            for row in GameInfo.JAC_LeaderPersonas() do
+                local leader = row.LeaderType;
+                if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
+                    if not Get(leader, "ALLIANCES_BASELINED") then
+                        SnapshotAlliances(owner, leader); -- old save: formation time is unknown
+                    elseif not Get(leader, "ALLY_SEEN_" .. other) then
+                        Set(leader, "ALLY_SEEN_" .. other, 1);
+                        local city, ready = SettledCity(owner, row);
+                        if not ready then Defer(row, "ALLIANCE", tostring(other));
+                        elseif city then Award(row, "ALLIANCE", tostring(other), city); end
+                    end
+                end
+            end
         end
     end
 end
@@ -351,12 +395,12 @@ OnPlayerTurnStarted = function(owner)
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
             local pending = Game:GetProperty(PENDING) or {};
             local city, ready = SettledCity(owner, row);
-            if not ready or pending[leader .. "_TURN_" .. tostring(turn)] then
-                Defer(row, "TURN", tostring(turn));
-            else
-                if city and Get(leader, "GOVERN_LAST_TURN") ~= turn then
-                    Set(leader, "GOVERN_LAST_TURN", turn);
-                    Award(row, "GOVERN_TURN", tostring(turn));
+            if Get(leader, "GOVERN_LAST_TURN") ~= turn then
+                Set(leader, "GOVERN_LAST_TURN", turn); -- the eligibility decision is final for this turn
+                if not ready or pending[leader .. "_TURN_" .. tostring(turn)] then
+                    Defer(row, "TURN", tostring(turn));
+                elseif city then
+                    Award(row, "GOVERN_TURN", tostring(turn), city);
                 end
             end
             ObserveAlliances(owner, row);
@@ -417,6 +461,10 @@ GameEvents.OnGameTurnStarted.Add(SyncEffects);
 GameEvents.PlayerTurnStarted.Add(OnPlayerTurnStarted);
 GameEvents.BuildingConstructed.Add(OnBuildingConstructed);
 GameEvents.OnCombatOccurred.Add(OnCombatOccurred);
+-- GameCore availability and callback timing require a live Civ6 probe.
+if GameEvents.OnDiplomacyRelationshipChanged then
+    GameEvents.OnDiplomacyRelationshipChanged.Add(OnDiplomacyRelationshipChanged);
+end
 GameEvents.CityBuilt.Add(SyncEffects); -- AustraliaScenario.lua:1465.
 GameEvents.CityConquered.Add(SyncEffects); -- AlexanderScenario.lua:248.
 GameEvents.JAC_LeaderPersonaPurchase.Add(function(owner, params)
