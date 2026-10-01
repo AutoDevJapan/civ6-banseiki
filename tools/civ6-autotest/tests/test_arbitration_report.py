@@ -100,6 +100,20 @@ class ArbitrationReportTests(unittest.TestCase):
     def test_test_clock_jump_never_counts_as_uninterrupted_measurement(self):
         self.assertFalse(self.summary(test_mode=dict(skipped_turns=113))["complete_200_turns"])
 
+    def test_reloaded_log_is_not_an_uninterrupted_measurement(self):
+        data = self.summary(LOG + "[JAC_ARB] loaded shogunate_end_turn=120\n")
+        self.assertFalse(data["measurement_complete"])
+
+    def test_refusal_cost_must_match_each_respondent_and_pair(self):
+        for changed in (
+            LOG.replace("refusal cost player=1", "refusal cost player=8"),
+            LOG.replace("refusal cost player=1 pair=1-3", "refusal cost player=1 pair=1-8"),
+            LOG.replace("refusal cost player=3", "refusal cost player=1"),
+            LOG.replace("refusal cost player=1 pair=1-3 turn=15", "refusal cost player=1 pair=1-3 turn=16"),
+        ):
+            with self.subTest(changed=changed):
+                self.assertFalse(self.summary(changed)["measurement_complete"])
+
     def test_scenario_generator_matches_fixture_and_compiles_every_gameplay_step(self):
         from lupa import LuaRuntime
         generated = builder.scenario()

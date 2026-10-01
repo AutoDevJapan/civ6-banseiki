@@ -18,10 +18,12 @@ def summarize(artifact: Path) -> dict:
     steps = [json.loads(line) for line in (artifact / "steps.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     issues, requests, costs, outcomes = [], {}, {}, {}
     refusals, decisions, ai, blocked = [], Counter(), {}, Counter()
+    refused_players, loads = {}, 0
     end_turns = set()
     for event in events:
         f = dict(FIELDS.findall(event))
         if event.startswith("loaded "):
+            loads += 1
             end_turns.add(int(f["shogunate_end_turn"]))
         if event.startswith("request "):
             turn = int(f["turn"])
@@ -52,8 +54,15 @@ def summarize(artifact: Path) -> dict:
             if key in outcomes and (kind != "refused" or outcomes[key] != "refused"):
                 issues.append(f"duplicate or conflicting ruling {key}")
             outcomes[key] = kind
+            if kind == "refused":
+                respondent = (turn, pair, int(f["player"]))
+                if respondent in refused_players:
+                    issues.append(f"duplicate refused respondent {respondent}")
+                refused_players[respondent] = int(f["legitimacy"])
         elif event.startswith("refusal cost "):
-            refusals.append({k: int(f[k]) for k in ("player", "turn", "intended", "applied", "legitimacy_before", "legitimacy_after")})
+            row = {k: int(f[k]) for k in ("player", "turn", "intended", "applied", "legitimacy_before", "legitimacy_after")}
+            row["pair"] = tuple(sorted(map(int, f["pair"].split("-"))))
+            refusals.append(row)
         elif event.startswith("decision "):
             decisions[f["by"] + ":" + f["accept"]] += 1
         elif event.startswith("ai blocked "):
@@ -90,9 +99,19 @@ def summarize(artifact: Path) -> dict:
     for turn, request in requests.items():
         if (turn + 1, request["pair"]) not in outcomes and turn < 201:
             issues.append(f"request has no following-turn ruling on turn {turn}")
+    refusal_keys = Counter()
     for row in refusals:
+        key = (row["turn"], row["pair"], row["player"])
+        refusal_keys[key] += 1
+        request = requests.get(row["turn"] - 1)
+        if (key not in refused_players or refused_players[key] != row["legitimacy_after"]
+                or not request or request["pair"] != row["pair"]
+                or row["intended"] != 15 * request["power"]):
+            issues.append(f"refusal cost missing or mismatched respondent {key}")
         if row["legitimacy_before"] - row["legitimacy_after"] != row["applied"] or not 0 <= row["applied"] <= row["intended"]:
             issues.append(f"invalid applied refusal loss on turn {row['turn']}")
+    if set(refusal_keys) != set(refused_players) or any(count != 1 for count in refusal_keys.values()):
+        issues.append("refusal costs must match each respondent exactly once")
     if len(end_turns) != 1:
         issues.append("missing or inconsistent shogunate cutoff")
     cutoff = next(iter(end_turns)) if len(end_turns) == 1 else None
@@ -111,6 +130,9 @@ def summarize(artifact: Path) -> dict:
     failures = [s for s in steps if s["status"] == "FAIL"]
     full = (len(completed) == 4 and bool(judge) and judge[-1]["status"] == "OK" and not failures
             and any(s["status"] == "OK" and "return=T+201 surviving majors=" in s["detail"] for s in steps))
+    if loads != 1 or any(s["status"] == "OK" and s["action"].endswith(" load") for s in steps):
+        full = False
+        issues.append("reloaded or missing gameplay log is not an uninterrupted measurement")
     if (artifact / "result.json").exists():
         result = json.loads((artifact / "result.json").read_text(encoding="utf-8"))
         if result.get("test_mode"):
