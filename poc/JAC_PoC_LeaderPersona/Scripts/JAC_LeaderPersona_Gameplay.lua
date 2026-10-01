@@ -78,11 +78,14 @@ local function Join(owner, source, personality, trait)
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if not unit then
-        -- Official placement call: Base/Assets/UI/Tuner/TunerMapPanel.lua:190.
-        print("JAC_PERSONA_STAGE " .. leader .. " create-person-before");
-        Game.GetGreatPeople():CreatePerson(owner, GameInfo.GreatPersonIndividuals[row.PersonType].Index,
-                                          city:GetX(), city:GetY());
-        print("JAC_PERSONA_STAGE " .. leader .. " create-person-after");
+        -- Gameplay grant: DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111.
+        -- CreatePerson is a Tuner placement API and does not return here.
+        local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
+        local class = GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+        local era = GameInfo.Eras[individual.EraType];
+        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-before");
+        Game.GetGreatPeople():GrantPerson(individual.Hash, class.Hash, era.Hash, 0, owner, false);
+        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-after");
         unit = FindPerson(owner, row);
     end
     if not unit then return Finish(owner, "SPAWN_FAILED"); end

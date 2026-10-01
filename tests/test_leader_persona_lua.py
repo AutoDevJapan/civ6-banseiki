@@ -41,11 +41,12 @@ for i,n in ipairs(names) do
         Personality=i==1 and 'BOLD' or 'CALM', Trait=i==3 and 'DEVOUT' or 'ASTUTE',
         EvolutionCost=i==1 and 1 or 2}
     ROWS[i]=row
-    INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA", Index=i+10, Name=row.Name}
+    INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA", Index=i+10, Hash=3000+i, EraType="ERA_ANCIENT", Name=row.Name}
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
 end
-GameInfo={ GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_JAC_PERSONA"}},"GreatPersonClassType"),
+GameInfo={ Eras=collection({{EraType="ERA_ANCIENT",Hash=5000}},"EraType"),
+    GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_JAC_PERSONA",Hash=4000}},"GreatPersonClassType"),
     Units=collection({{UnitType="UNIT_JAC_PERSONA",Index=99}},"UnitType"), JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
     Governors=collection(GOVDEFS,'GovernorType'), GovernorPromotions=collection(PROMOS,'GovernorPromotionType') }
@@ -99,10 +100,13 @@ Map={GetPlot=function(x,y)
 end,GetPlotDistance=function(x,y,ox,oy) return math.max(math.abs(x-ox),math.abs(y-oy)) end}
 CityManager={GetCity=function(owner,id) return CITIES[owner] and CITIES[owner][id] end}
 local nextUnit=0
-Game.GetGreatPeople=function() return { CreatePerson=function(_,owner,individual,x,y)
+Game.GetGreatPeople=function() return { CreatePerson=function() error('Tuner-only creation forbidden') end,
+    GrantPerson=function(_,hash,class,era,cost,owner,claim)
     SPAWNS=SPAWNS+1; if FAIL_SPAWN then return end
-    assert(GameInfo.GreatPersonIndividuals[individual], 'individual INDEX required')
-    assert(x==1 and y==owner)
+    local individual
+    for _,row in ipairs(INDIVIDUALS) do if row.Hash==hash then individual=row.Index end end
+    assert(individual, 'individual HASH required')
+    assert(class==4000 and era==5000 and cost==0 and claim==false, 'native grant arguments required')
     nextUnit=nextUnit+1; local id=nextUnit
     local u={ individual=individual, GetID=function() return id end,
         GetOwner=function() return owner end, GetType=function() return 99 end }
