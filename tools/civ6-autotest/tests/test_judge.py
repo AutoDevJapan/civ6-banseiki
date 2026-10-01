@@ -216,7 +216,7 @@ class JudgeTests(unittest.TestCase):
         folder = Path(__file__).resolve().parents[1] / "scenarios"
         names = {path.name for path in folder.glob("*.json")}
         self.assertEqual(names, {
-            "assassin-leader-save-load.json",
+            "assassin-leader-save-load.json", "assassin-placement-probe.json",
             "banseiki-ruleset.json", "bundle0-load-save.json", "clans-notebooks.json",
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
             "leader-portraits.json",

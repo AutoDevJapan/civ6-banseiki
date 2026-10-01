@@ -1,0 +1,50 @@
+{
+  "name": "Assassin: diagnose coordinates after saved lock state",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-Lock-assassin-08-53fd4b8fcbe0",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R and Game:GetProperty(R.TEST)==1); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); \nlocal b=t.Houses.CIVILIZATION_JAC_IMAGAWA\nlocal city=Players[b]:GetCities():GetCapitalCity(); assert(city)\nlocal dest=R.ResolveTarget(b,'LEADER'); assert(dest)\nlocal x,y=city:GetX(),city:GetY()\nlocal before={}; for _,u in Players[t.Actor]:GetUnits():Members() do before[u:GetID()]=true end\nif x>=0 and y>=0 then UnitManager.InitUnitValidAdjacentHex(t.Actor,R.UNIT,x,y,1) end\nlocal found; for _,u in Players[t.Actor]:GetUnits():Members() do\n  if not before[u:GetID()] and R.IsAssassin(u) then found=u end\nend\nGame:SetProperty('JAC_ASN_PLACEMENT_PROBE',{Actor=t.Actor,Target=b,Unit=found and found:GetID()})\nreturn 'city='..x..','..y..'; Gameplay destination='..dest.X..','..dest.Y..'; unit='..\n  (found and (found:GetX()..','..found:GetY()) or 'not created')\n"
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R and Game:GetProperty(R.TEST)==1); local t=Game:GetProperty('JAC_ASN_LIVE_TEST'); \nlocal p=Game:GetProperty('JAC_ASN_PLACEMENT_PROBE')\nlocal city=Players[p.Target]:GetCities():GetCapitalCity()\nlocal u=p.Unit and Players[p.Actor]:GetUnits():FindID(p.Unit)\nreturn 'after returning to engine: city='..city:GetX()..','..city:GetY()..'; unit='..\n  (u and (u:GetX()..','..u:GetY()) or 'not created')\n"
+    }
+  ]
+}
