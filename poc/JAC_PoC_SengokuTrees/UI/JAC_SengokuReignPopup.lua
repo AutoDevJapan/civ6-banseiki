@@ -44,8 +44,10 @@ local function Show(view, playerID)
 	Controls.EraRibbonValue:SetText(JAC_AgesView_AgeLabel(view.age))
 	Controls.Score:SetText(Locale.Lookup("LOC_JAC_AGE_REIGN_SCORE", view.previous.Name, view.score))
 	Controls.Thresholds:SetText(JAC_AgesView_ThresholdText(view.golden, view.dark))
-	Controls.EraEffects:SetText(JAC_AgesView_EffectText(view.age, view.policy))
-	Controls.Continue:SetText(Locale.Lookup(view.pendingChoice and "LOC_JAC_AGE_REIGN_CHOOSE_POLICY" or "LOC_CONTINUE"))
+	Controls.EraEffects:SetText(JAC_AgesView_EffectText(view.age, view.policy)
+		.. (view.oathText and ("[NEWLINE]" .. view.oathText) or ""))
+	Controls.Continue:SetText(Locale.Lookup(view.pendingOath and "LOC_JAC_OATH_CHOOSE"
+		or (view.pendingChoice and "LOC_JAC_AGE_REIGN_CHOOSE_POLICY" or "LOC_CONTINUE")))
 	SetLocalPlayerIcon(playerID)
 	Controls.MainStack:CalculateSize()
 	JAC_REIGN_POPUP_LAST = { reign = view.index, reignType = view.reign.ReignType, age = view.age, score = view.score,

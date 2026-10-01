@@ -181,7 +181,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_SengokuReignPopup",
-      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local r = l.history.r1['p' .. me]; local last = JAC_REIGN_POPUP_LAST; if type(last) ~= 'table' then error('the era-name change screen was not shown at the Koji turn') end; if last.reign ~= 1 or last.reignType ~= 'REIGN_KOJI' or last.turn ~= 66 or last.age ~= r.age or last.score ~= r.score then error('shown: reign ' .. tostring(last.reign) .. ' ' .. tostring(last.reignType) .. ' turn ' .. tostring(last.turn) .. ' age ' .. tostring(last.age) .. ' score ' .. tostring(last.score) .. '; ledger ' .. r.age .. ' ' .. r.score) end; local wasOpen = not ContextPtr:IsHidden(); if not wasOpen and not JAC_ShowReignPopup(true) then error('cannot reopen') end; if ContextPtr:IsHidden() then error('screen hidden after reopening') end; local title = Controls.Title:GetText(); if title ~= Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_KOJI_ANNOUNCEMENT')) then error('title ' .. tostring(title)) end; local ribbon = Controls.EraRibbonValue:GetText(); if ribbon ~= JAC_AgesView_AgeLabel(r.age) then error('age ' .. tostring(ribbon)) end; if Controls.Score:GetText() ~= Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE', 'LOC_JAC_REIGN_TENBUN_NAME', r.score) then error('score text ' .. tostring(Controls.Score:GetText())) end; local button = Controls.Continue:GetText(); local pending = r.age == 'DARK' and h.chosen ~= 1; if button ~= Locale.Lookup(pending and 'LOC_JAC_AGE_REIGN_CHOOSE_POLICY' or 'LOC_CONTINUE') then error('button ' .. tostring(button)) end; return 'era-name change screen shown for Koji (' .. (wasOpen and 'still open' or 'closed by the driver during autoplay, reopened') .. '): ' .. title .. ' / ' .. ribbon .. ' / ' .. Controls.Score:GetText()"
+      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local r = l.history.r1['p' .. me]; local last = JAC_REIGN_POPUP_LAST; if type(last) ~= 'table' then error('the era-name change screen was not shown at the Koji turn') end; if last.reign ~= 1 or last.reignType ~= 'REIGN_KOJI' or last.turn ~= 66 or last.age ~= r.age or last.score ~= r.score then error('shown: reign ' .. tostring(last.reign) .. ' ' .. tostring(last.reignType) .. ' turn ' .. tostring(last.turn) .. ' age ' .. tostring(last.age) .. ' score ' .. tostring(last.score) .. '; ledger ' .. r.age .. ' ' .. r.score) end; local wasOpen = not ContextPtr:IsHidden(); if not wasOpen and not JAC_ShowReignPopup(true) then error('cannot reopen') end; if ContextPtr:IsHidden() then error('screen hidden after reopening') end; local title = Controls.Title:GetText(); if title ~= Locale.ToUpper(Locale.Lookup('LOC_JAC_REIGN_KOJI_ANNOUNCEMENT')) then error('title ' .. tostring(title)) end; local ribbon = Controls.EraRibbonValue:GetText(); if ribbon ~= JAC_AgesView_AgeLabel(r.age) then error('age ' .. tostring(ribbon)) end; if Controls.Score:GetText() ~= Locale.Lookup('LOC_JAC_AGE_REIGN_SCORE', 'LOC_JAC_REIGN_TENBUN_NAME', r.score) then error('score text ' .. tostring(Controls.Score:GetText())) end; local button = Controls.Continue:GetText(); local pending = r.age == 'DARK' and h.chosen ~= 1; local _, pendingOath = JAC_AgesView_OathText(l, me); if button ~= Locale.Lookup(pendingOath and 'LOC_JAC_OATH_CHOOSE' or (pending and 'LOC_JAC_AGE_REIGN_CHOOSE_POLICY' or 'LOC_CONTINUE')) then error('button ' .. tostring(button)) end; return 'era-name change screen shown for Koji (' .. (wasOpen and 'still open' or 'closed by the driver during autoplay, reopened') .. '): ' .. title .. ' / ' .. ribbon .. ' / ' .. Controls.Score:GetText()"
     },
     {
       "action": "screenshot",
@@ -196,6 +196,49 @@
       "action": "ui_lua",
       "state_name": "JAC_SengokuReignPopup",
       "code": "OnClose(); if not ContextPtr:IsHidden() then error('era-name change screen still open after OnClose') end; return 'era-name change screen closed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if ContextPtr:IsHidden() then error('oath did not automatically open after reign popup') end; OnClose(); return 'automatic oath popup verified and closed without choosing'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local n; for _,id in pairs(NotificationManager.GetList(me) or {}) do local row=NotificationManager.Find(me,id); if row and row:GetValue('JAC_DARK_POLICY_REIGN')==1 and not row:IsDismissed() then n=row end end; if not n then error('missing reign notification') end; LuaEvents.ActionPanel_ActivateNotification(n); return 'reign notification activated while oath is pending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if not ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT~=0 then error('notification bypassed pending oath') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE') then error('policy accepted before oath') end; return 'policy remains deferred until oath is confirmed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "if not JAC_IsDarkPolicyEndTurnBlocked() or AllowAutoEndTurn_Expansion() then error('pending oath can end turn') end; local turn=Game.GetCurrentGameTurn(); DoEndTurn(); OnInputHandler({GetMessageType=function() return KeyEvents.KeyUp end,GetKey=function() return Keys.VK_RETURN end,IsShiftDown=function() return true end}); if Game.GetCurrentGameTurn()~=turn then error('pending oath ended turn') end; return 'button and Shift+Enter reopen oath without ending turn'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if ContextPtr:IsHidden() then error('pending oath not reopened') end; if not JAC_ChooseOath('JAC_OATH_TAKEDA_TSUTSUJIGASAKI') then error('Takeda oath not sent') end; return 'Takeda oath confirmed through UI'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses['p'..Game.GetLocalPlayer()].oathChosen==l.reign"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_SengokuDarkPolicy",
+        "code": "return not ContextPtr:IsHidden() and JAC_DARK_POLICY_SHOW_COUNT==1"
+      }
     },
     {
       "action": "ui_lua",
@@ -243,7 +286,7 @@
     {
       "action": "ui_lua",
       "state_name": "EraProgressPanel",
-      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local v = JAC_AGES_PANEL_VIEW; local r = l.history.r1['p' .. me]; local function check(control, want) local got = Controls[control]:GetText(); if got ~= want then error(control .. ': ' .. tostring(got) .. ' ~= ' .. tostring(want)) end end; check('EraName', Locale.Lookup('LOC_JAC_AGE_PANEL_PERIOD', 'LOC_JAC_REIGN_KOJI_NAME', '1555')); check('EraScoreValue', tostring(h.score)); check('TimeToNextEra', tostring(l.nextDue - elapsed)); check('EraRibbonValue', JAC_AgesView_AgeLabel(h.age)); check('GoldenThreshold', h.next.golden .. '+'); check('NormalThreshold', h.next.dark .. ' - ' .. (h.next.golden - 1)); local effects = Controls.EraEffects:GetText(); local function has(text) if string.find(effects, text, 1, true) == nil then error('era effects lack: ' .. text) end end; for _, part in ipairs(JAC_AGES_VIEW_PARTS) do has(Locale.Lookup('LOC_JAC_AGE_PART_' .. string.upper(part), (h.parts and h.parts[part]) or 0)) end; has(Locale.Lookup('LOC_JAC_AGE_PANEL_HISTORY_ROW', 'LOC_JAC_REIGN_KOJI_NAME', '1555', JAC_AgesView_AgeLabel(r.age), r.score)); has(JAC_AgesView_ThresholdText(r.golden, r.dark)); return 'era score screen matches the ledger: ' .. Controls.EraName:GetText() .. ', score ' .. h.score .. ', ' .. (l.nextDue - elapsed) .. ' turns to Eiroku, golden ' .. h.next.golden .. '+ dark <' .. h.next.dark"
+      "code": "local me = Game.GetLocalPlayer(); if me == nil or me < 0 then error('no local player') end; local l = Game:GetProperty('JAC_AGES_LEDGER'); if type(l) ~= 'table' then error('no ledger property') end; local elapsed = Game.GetCurrentGameTurn() - GameConfiguration.GetStartTurn() + 1; local h = l.houses['p' .. me]; if type(h) ~= 'table' then error('no ledger house for the local player') end; local v = JAC_AGES_PANEL_VIEW; local r = l.history.r1['p' .. me]; local function check(control, want) local got = Controls[control]:GetText(); if got ~= want then error(control .. ': ' .. tostring(got) .. ' ~= ' .. tostring(want)) end end; check('EraName', Locale.Lookup('LOC_JAC_AGE_PANEL_PERIOD', 'LOC_JAC_REIGN_KOJI_NAME', '1555')); check('EraScoreValue', tostring(h.score)); check('TimeToNextEra', tostring(l.nextDue - elapsed)); check('EraRibbonValue', JAC_AgesView_AgeLabel(h.age)); check('GoldenThreshold', h.next.golden .. '+'); check('NormalThreshold', h.next.dark .. ' - ' .. (h.next.golden - 1)); local effects = Controls.EraEffects:GetText(); local function has(text) if string.find(effects, text, 1, true) == nil then error('era effects lack: ' .. text) end end; for _, part in ipairs(JAC_AGES_VIEW_PARTS) do has(Locale.Lookup(part == 'oath' and 'LOC_JAC_OATH_SCORE' or ('LOC_JAC_AGE_PART_' .. string.upper(part)), (h.parts and h.parts[part]) or 0)) end; has(Locale.Lookup('LOC_JAC_AGE_PANEL_HISTORY_ROW', 'LOC_JAC_REIGN_KOJI_NAME', '1555', JAC_AgesView_AgeLabel(r.age), r.score)); has(JAC_AgesView_ThresholdText(r.golden, r.dark)); return 'era score screen matches the ledger: ' .. Controls.EraName:GetText() .. ', score ' .. h.score .. ', ' .. (l.nextDue - elapsed) .. ' turns to Eiroku, golden ' .. h.next.golden .. '+ dark <' .. h.next.dark"
     },
     {
       "action": "ui_lua",
