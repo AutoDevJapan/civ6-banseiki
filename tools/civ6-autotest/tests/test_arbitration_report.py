@@ -154,6 +154,17 @@ class ArbitrationReportTests(unittest.TestCase):
         harness.lua.execute("Players[0]:SetProperty('JAC_ARB_AI_LAST_REQUEST',nil)")
         self.assertNotEqual(harness.lua.execute(builder.SNAPSHOT), before)
 
+    def test_snapshot_checks_money_for_parties_but_legitimacy_and_intervals_for_every_house(self):
+        from tests.test_court_arbitration import ArbitrationAiTests
+        harness = ArbitrationAiTests()
+        harness.setUp()
+        harness.lua.execute("Game:SetProperty('JAC_ARB_AI_TEST',{shogun=2,a=0,b=1})")
+        before = harness.lua.execute(builder.SNAPSHOT)
+        harness.g.Players[3].gold += 10
+        self.assertEqual(harness.lua.execute(builder.SNAPSHOT), before)
+        harness.lua.execute("Players[3]:SetProperty('JAC_ARB_AI_LAST_REQUEST',1)")
+        self.assertNotEqual(harness.lua.execute(builder.SNAPSHOT), before)
+
     def test_all_live_gameplay_steps_run_with_save_restore_on_lupa(self):
         from lupa import LuaRuntime
         from tests.test_court_arbitration import STUBS, START_TURN, calendar, MOD

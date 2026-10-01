@@ -42,8 +42,12 @@ local out={encode(R.GameTurn()),encode(Game:GetProperty(R.PENDING_KEY)),
   encode(Game:GetProperty(R.AI_WARS_KEY)),encode(Game:GetProperty(R.LAST_REQUEST_KEY))}
 local ids={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do ids[#ids+1]=p:GetID() end; table.sort(ids)
 for _,id in ipairs(ids) do
+  -- Civ6 credits some other houses' current-turn income again while entering a loaded game
+  -- (live02: Honganji +9.19921875, the human Ouchi +2.5). Compare money for the actual parties/shogun;
+  -- legitimacy and AI intervals still compare every house. No game accounting is changed here.
+  local gold=(id==t.a or id==t.b or id==t.shogun) and Players[id]:GetTreasury():GetGoldBalance() or 'outside-arbitration'
   out[#out+1]=id..':'..encode(Players[id]:GetProperty(R.AI_LAST_KEY))..':'..R.Legitimacy(id)
-    ..':'..encode(Players[id]:GetTreasury():GetGoldBalance())
+    ..':'..encode(gold)
   for _,other in ipairs(ids) do if id<other then
     out[#out+1]=id..'_'..other..':'..encode(Game:GetProperty(R.AiPairKey(id,other)))
       ..':'..encode(Game:GetProperty(R.TruceKey(id,other)))..':'..encode(Game:GetProperty(R.AwaitKey(id,other)))
