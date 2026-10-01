@@ -1,0 +1,218 @@
+{
+  "name": "Religion pressure: engine signatures and unaffiliated reset diagnostics",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "8424840C-92EF-4426-A9B4-B4E0CB818049"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_size": "MAPSIZE_SMALL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620940,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true); GameConfiguration.UpdateEnabledMods(); if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode not enabled') end; return 'official Heroes mode enabled'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local bridge=ExposedMembers.JAC_RP_HeroUI; return bridge~=nil and bridge.OriginBuilding~=nil and bridge.UnitInfo~=nil and bridge.Schedule~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.GetValue('JAC_AUTOTEST')==1 then if not ExposedMembers.JAC_ReligionPersistence or ExposedMembers.JAC_ReligionPersistence.Rules().REVIVAL_COOLDOWN_TURNS~=1 then error('test revival deadline SQL not loaded') end end; if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode required') end; if not Game.GetHeroesManager() or not GameInfo.HeroClasses then error('official Heroes data did not load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_APPLIED','LOC_JAC_RP_PENDING'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 then error('wrong local founder') end; local p=Players[0]; local settler=nil; for _,u in p:GetUnits():Members() do if u:GetType()==GameInfo.Units.UNIT_SETTLER.Index then settler=u; break end end; if not settler then error('missing founding settler') end; UnitManager.RequestOperation(settler,UnitOperationTypes.FOUND_CITY); return 'capital requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetCities():GetCapitalCity()~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); if not c then error('native holy city missing') end; local custom=GameInfo.Religions.RELIGION_CUSTOM_1; if not custom then error('native custom religion slot missing') end; p:GetReligion():SetHolyCity(c); Game.GetReligion():FoundReligion(0,custom.Index); Game.GetReligion():AddBelief(0,GameInfo.Beliefs.BELIEF_CATHEDRAL.Index); local found=false; for _,r in ipairs(Game.GetReligion():GetReligions()) do if r.Religion==custom.Index then found=true end end; if not found then error('native placeholder not founded') end; return 'native placeholder religion founded'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_RP_PressureProbe=function()\n local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local out={};\n for _,r in pairs(cr:GetReligionsInCity()) do local row={}; for k,v in pairs(r) do row[#row+1]=tostring(k)..'='..tostring(v) end; table.sort(row); out[#out+1]=table.concat(row,',') end;\n table.sort(out); return table.concat(out,';')\nend; return 'UI pressure reader installed' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local c=Players[0]:GetCities():GetCapitalCity(); c:ChangePopulation(5-c:GetPopulation()); local cr=c:GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:SetAllCityToReligion(-1); cr:AddReligiousPressure(0,r,10000,-1); if cr:GetNumFollowers(r)~=5 then error('probe fixture must start with five religious citizens') end; return 'one argument prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'one argument before: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:RemovePressureOneReligion(r); return 'one argument core followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'one argument after subtraction: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:AddReligiousPressure(0,r,0,-1); return 'one argument refreshed followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'one argument after refresh: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local c=Players[0]:GetCities():GetCapitalCity(); c:ChangePopulation(5-c:GetPopulation()); local cr=c:GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:SetAllCityToReligion(-1); cr:AddReligiousPressure(0,r,10000,-1); if cr:GetNumFollowers(r)~=5 then error('probe fixture must start with five religious citizens') end; return 'subtract 100 prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 100 before: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:RemovePressureOneReligion(r,100,-1); return 'subtract 100 core followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 100 after subtraction: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:AddReligiousPressure(0,r,0,-1); return 'subtract 100 refreshed followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 100 after refresh: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local c=Players[0]:GetCities():GetCapitalCity(); c:ChangePopulation(5-c:GetPopulation()); local cr=c:GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:SetAllCityToReligion(-1); cr:AddReligiousPressure(0,r,10000,-1); if cr:GetNumFollowers(r)~=5 then error('probe fixture must start with five religious citizens') end; return 'subtract 10000 prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 10000 before: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:RemovePressureOneReligion(r,10000,-1); return 'subtract 10000 core followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 10000 after subtraction: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:AddReligiousPressure(0,r,0,-1); return 'subtract 10000 refreshed followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'subtract 10000 after refresh: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local c=Players[0]:GetCities():GetCapitalCity(); c:ChangePopulation(5-c:GetPopulation()); local cr=c:GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:SetAllCityToReligion(-1); cr:AddReligiousPressure(0,r,10000,-1); if cr:GetNumFollowers(r)~=5 then error('probe fixture must start with five religious citizens') end; return 'clear maximum prepared'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'clear maximum before: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:RemovePressureOneReligion(r,8388607,-1); cr:RemovePressureOneReligion(r,1,-1); if cr:GetNumFollowers(r)~=0 then error('maximum subtraction must remove all real religious citizens') end; return 'clear maximum core followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'clear maximum after subtraction: '..ExposedMembers.JAC_RP_PressureProbe()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local cr=Players[0]:GetCities():GetCapitalCity():GetReligion(); local r=GameInfo.Religions.RELIGION_CUSTOM_1.Index; cr:AddReligiousPressure(0,r,0,-1); return 'clear maximum refreshed followers='..cr:GetNumFollowers(r)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return 'clear maximum after refresh: '..ExposedMembers.JAC_RP_PressureProbe()"
+    }
+  ]
+}

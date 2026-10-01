@@ -89,7 +89,7 @@ kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY
 kernel32.Process32NextW.restype = wintypes.BOOL
 
 
-def _civ_process_ids() -> set[int]:
+def _process_ids(executables: set[str]) -> set[int]:
     """Include hidden game processes; a visible-window count alone is insufficient."""
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if snapshot is None or snapshot == wintypes.HANDLE(-1).value:
@@ -101,7 +101,7 @@ def _civ_process_ids() -> set[int]:
             raise InputError("Could not read Civ VI process list")
         found = set()
         while True:
-            if entry.szExeFile.casefold() in CIV_EXECUTABLES:
+            if entry.szExeFile.casefold() in executables:
                 found.add(entry.th32ProcessID)
             if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
                 if kernel32.GetLastError() != ERROR_NO_MORE_FILES:
@@ -110,6 +110,10 @@ def _civ_process_ids() -> set[int]:
         return found
     finally:
         kernel32.CloseHandle(snapshot)
+
+
+def _civ_process_ids() -> set[int]:
+    return _process_ids(CIV_EXECUTABLES)
 
 
 def require_single_civ_process() -> None:
