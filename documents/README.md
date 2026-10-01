@@ -52,7 +52,7 @@
 | [`poc/resources.md`](poc/resources.md) | 資源の出現（SSOT 3.2）。戦国ツリー下の技術ゲート、後発地点の Lua API とデータ、独自資源（金・漆）、実機確認項目 |
 | [`poc/house-crests.md`](poc/house-crests.md) | 1534年日本22勢力の家紋・出典・原画・アートビルド・実機確認項目 |
 | [`poc/japan-prosperous-start.md`](poc/japan-prosperous-start.md) | 日本マップ（史実開始）の栄えた1534年開始の実装：人口・建物・区域・改善・部隊・初期金、規模の見直しと実機シナリオ（Q28） |
-| [`poc/assassin.md`](poc/assassin.md) | 束2の暗殺者：毎ターン補正する育成、全国ロック・任務、自由都市分裂・複数要因の隣国吸収・外交支持の採決・後継者、固定罰則、保存、日英露UI、16ターンの実機シナリオ |
+| [`poc/assassin.md`](poc/assassin.md) | 束2の暗殺者：毎ターン補正する育成、全国ロック・任務、自由都市分裂・複数要因の隣国吸収・外交支持の採決・後継者、固定罰則、保存、日英露UI、18ターンの実機シナリオ |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
 
