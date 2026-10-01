@@ -45,7 +45,7 @@ class EraTimingProbeTests(unittest.TestCase):
         self.assertIn("('NEXT_ERA_TURN_COUNTDOWN', '1')", SQL.read_text())
 
     def test_other_scenarios_on_the_test_map_disable_the_probe_mod(self):
-        # enable_mods never disables other mods, and the probe mod acts on the unification test map.
+        # Without disable_ids the probe stays enabled and acts on the unification test map.
         for path in SCENARIOS.glob("*.json"):
             text = path.read_text(encoding="utf-8")
             if path.name == "sengoku-era-reigns-beyond-nine.json":
