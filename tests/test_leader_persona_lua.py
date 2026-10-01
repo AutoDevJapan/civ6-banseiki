@@ -747,6 +747,24 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.g.NATIVE_UNITS[0][1].individual, 12)
         self.assertEqual(self.g.Players[1].alive, True)
 
+    def test_synchronized_join_validates_source_and_replays_only_once(self):
+        self.lua.execute('''
+            UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,
+                {OnStart='JAC_LeaderPersonaJoin',Source=1})
+        ''')
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.assertIsNone(self.prop("OWNER"))
+        self.g.DRAIN()
+        self.assertEqual((self.prop("OWNER"), self.prop("SOURCE"), self.g.SPAWNS), (0, 1, 1))
+        self.g.FIRE("JAC_LeaderPersonaJoin", 0, self.lua.table_from({"Source": 1}))
+        self.assertEqual(self.g.SPAWNS, 1)
+        self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "ALREADY_JOINED")
+        for params in [None, self.lua.table_from({}), self.lua.table_from({"Source": "1"}),
+                       self.lua.table_from({"Source": 0})]:
+            self.g.FIRE("JAC_LeaderPersonaJoin", 0, params)
+            self.assertEqual(self.g.SPAWNS, 1)
+            self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "INVALID")
+
     def test_designed_personality_trait_and_cost_are_join_defaults(self):
         self.assertEqual(self.api.Join(0, 1), "JOINED")
         self.assertEqual((self.prop("PERSONALITY"), self.prop("TRAIT"), self.prop("EVOLUTION_COST")),
