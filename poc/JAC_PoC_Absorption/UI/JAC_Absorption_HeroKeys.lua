@@ -81,7 +81,10 @@ local function ObservePendingHeroes()
       for _, read in pairs(tx.SourceSpreadReads or {}) do
         reads.ObserveUnit(read.Token, read.Owner, read.ID, read.Turn)
       end
+      if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn then reads.MarkPublished(tx.SourceReadyToken) end
     end
+    local verification = tx.VerificationUI
+    if verification and uiGame.GetCurrentGameTurn() == verification.Turn then reads.MarkPublished(verification.Token) end
     if tx.AwaitingFinalUI then reads.MarkPublished(tx.ID .. ":final") end
     for _, snap in ipairs(tx.Units or {}) do
       local intent = snap.HeroSpawnIntent

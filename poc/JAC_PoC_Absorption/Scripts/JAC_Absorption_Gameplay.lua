@@ -381,7 +381,12 @@ local function DormantHero(manager, def, owner)
   return hero
 end
 
-local function Prepare(plan, state, sourceReads)
+local function CityNeedsUI(city)
+  local religion, buildings = city:GetReligion(), city:GetBuildings()
+  return not religion.GetReligionsInCity or not buildings.GetNumGreatWorkSlots or not buildings.GetGreatWorkInSlot
+end
+
+local function Prepare(plan, state, sourceReads, sourceReadyToken)
   assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "", "transaction ID required")
   assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To, "distinct factions required")
   local source, target = Players[plan.From], Players[plan.To]
@@ -396,6 +401,14 @@ local function Prepare(plan, state, sourceReads)
       (previous.From ~= plan.From and previous.To ~= plan.From and previous.From ~= plan.To and previous.To ~= plan.To),
       "faction already has an unfinished absorption")
     assert(previous.Status ~= "COMPLETE" or previous.From ~= plan.From, "faction was already absorbed")
+  end
+  for _, city in source:GetCities():Members() do
+    if CityNeedsUI(city) then
+      local reads = ExposedMembers.JAC_HeroReadAPI
+      if not sourceReadyToken or not reads or not reads.GetObservation
+        or not reads.GetObservation(sourceReadyToken) then error("JAC_ABSORPTION_WAITING_UI", 0) end
+      break
+    end
   end
   local tx = { ID = plan.ID, From = plan.From, To = plan.To, Mode = plan.Mode,
     Turn = Game.GetCurrentGameTurn(), Request = R.Copy(plan), Status = "PREPARED", Units = {}, UnitMap = {}, Cities = {}, Plots = {},
@@ -610,7 +623,7 @@ end
 local function RestoreUnit(unit, snap, coreOnly)
   if not coreOnly then WriteProperties(unit, snap.TransferredProperties, snap.PropertyKeys) end
   -- Official Debug/Unit.ltp:164,175,463; NubiaScenario.lua:150-151; Tutorial.lua:71.
-  if snap.Formation then unit:SetMilitaryFormation(snap.Formation) end
+  if snap.Formation and unit:GetMilitaryFormation() ~= snap.Formation then unit:SetMilitaryFormation(snap.Formation) end
   local xp = unit:GetExperience()
   if snap.Name and unit:GetName() ~= snap.Name then xp:SetVeteranName(snap.Name) end
   for _, promotion in ipairs(snap.Promotions or {}) do
@@ -691,6 +704,8 @@ end
 local function VerifyUnit(unit, snap, coreOnly)
   assert(unit and unit:GetOwner() == snap.Destination and GameInfo.Units[unit:GetType()].UnitType == snap.Type,
     "transferred unit missing/type/owner mismatch: " .. snap.Token)
+  assert(unit:GetX() >= 0 and unit:GetY() >= 0 and Map.GetPlot(unit:GetX(), unit:GetY()),
+    "transferred unit is off-map: " .. snap.Token)
   assert(unit:GetProperty(R.TOKEN_KEY) == snap.Token, "unit token mismatch")
   local greatPerson = unit:GetGreatPerson()
   assert((greatPerson and greatPerson:GetIndividual() or -1) == snap.Individual, "great person individual changed")
@@ -1032,6 +1047,15 @@ local function Execute(state, tx)
       unit = unit or Spawn(snap)
       tx.UnitMap[R.UnitKey(tx.From, snap.ID)] = { ID = unit:GetID(), Token = snap.Token }
       Save(state)
+      -- InitUnitValidAdjacentHex can issue an ID while leaving the unit off-map
+      -- (verified live: -9999/-9999). Such a unit never enters the UI unit cache.
+      if unit:GetX() < 0 or unit:GetY() < 0 or not Map.GetPlot(unit:GetX(), unit:GetY()) then
+        UnitManager.PlaceUnit(unit, snap.X, snap.Y)
+        assert(unit:GetX() >= 0 and unit:GetY() >= 0 and Map.GetPlot(unit:GetX(), unit:GetY()),
+          "staged unit placement failed; saved candidate retained")
+        Save(state)
+        Log("placed off-map candidate token=" .. snap.Token .. " id=" .. unit:GetID())
+      end
     end
   end
   local hasHeroes = false
@@ -1255,15 +1279,16 @@ function A.Resume(id)
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
   assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
   if tx.AwaitingPreparation then
-    if not tx.SourceSpreadReads then
+    if not tx.SourceSpreadReads or not tx.SourceReadyToken then
       state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
       tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
+      tx.SourceReadyToken = tx.ID .. ":source-ready:" .. state.SourceReadSerial
       Save(state)
       return R.Copy(tx)
     end
     -- Preparation has no mutations. Retry its donor snapshot after the UI reaches this turn.
     state.Transactions[id] = nil
-    local ready, prepared = pcall(Prepare, tx.Request, state, tx.SourceSpreadReads)
+    local ready, prepared = pcall(Prepare, tx.Request, state, tx.SourceSpreadReads, tx.SourceReadyToken)
     state.Transactions[id] = tx
     if not ready then
       if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" then return R.Copy(tx) end
@@ -1308,6 +1333,7 @@ function A.Apply(plan)
       Request = R.Copy(plan), Status = "WAITING_UI", AwaitingPreparation = true, Units = {}, Adapters = {} }
     state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
     tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
+    tx.SourceReadyToken = tx.ID .. ":source-ready:" .. state.SourceReadSerial
     state.Transactions[plan.ID] = tx
     Save(state)
     return R.Copy(tx)
@@ -1317,11 +1343,47 @@ function A.Apply(plan)
   return A.Resume(plan.ID)
 end
 
+local function VerificationNeedsUI(tx, exact)
+  for _, snap in ipairs(tx.Cities) do
+    local city = CityManager.GetCityAt(snap.X, snap.Y)
+    if city and CityNeedsUI(city) then return true end
+  end
+  local native = Game.GetHeroesManager and Game.GetHeroesManager()
+  for _, snap in ipairs(tx.Units) do
+    if snap.Hero and snap.KeepUnit and (not native or not native.GetHeroClaimPlayer or not native.GetHeroOriginCityID) then return true end
+    if exact and snap.KeepUnit then
+      local unit = FindToken(snap.Destination, snap.Token)
+      if unit and not unit.GetSpreadCharges then return true end
+    end
+  end
+  return false
+end
+
+function A.RequestVerification(id)
+  local state = State()
+  local tx = assert(state.Transactions[id], "unknown absorption transaction")
+  assert(tx.Status == "COMPLETE", "absorption did not complete: " .. tx.Status)
+  if not VerificationNeedsUI(tx, true) then return nil end
+  state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
+  tx.VerificationUI = { Token = id .. ":verify:" .. state.SourceReadSerial, Turn = Game.GetCurrentGameTurn() }
+  Save(state)
+  return R.Copy(tx.VerificationUI)
+end
+
+-- RequestVerification -> UI publication -> Verify. The caller must not mutate
+-- assets between the request and its check; every published request is consumed.
 -- Exact=true is for the same-turn save/load check. Later turns can legitimately change HP, XP, followers etc.
 function A.Verify(id, exact)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   assert(tx.Status == "COMPLETE", "absorption did not complete: " .. tx.Status)
+  if VerificationNeedsUI(tx, exact == true) then
+    local request, reads = tx.VerificationUI, ExposedMembers.JAC_HeroReadAPI
+    assert(request and request.Turn == Game.GetCurrentGameTurn() and reads and reads.GetObservation
+      and reads.GetObservation(request.Token), "verification requires a published UI request")
+    tx.VerificationUI = nil
+    Save(state)
+  end
   Verify(tx, state, exact == true)
   return true
 end

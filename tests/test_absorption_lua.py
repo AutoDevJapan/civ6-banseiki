@@ -246,6 +246,13 @@ class AbsorptionTests(unittest.TestCase):
     def apply(self):
         return self.a.Apply(self.g.PLAN)
 
+    def verify(self, transaction_id, exact):
+        if self.a.RequestVerification(transaction_id):
+            self.run_lua("""if UI_PUBLISH then UI_PUBLISH()
+              elseif PUBLISH_HERO_UI then PUBLISH_HERO_UI()
+              else error('UI publication fixture missing') end""")
+        return self.a.Verify(transaction_id, exact)
+
     def snapshot(self):
         return self.run_lua('''local a=ExposedMembers.JAC_Absorption;local result={State=a.GetState(),Owners={},Cities={},Units={},
           HeroClaims=HERO_CLAIMS,HeroOrigins=HERO_ORIGINS,HeroDiscoveries=HERO_DISCOVERED}
@@ -269,7 +276,7 @@ class AbsorptionTests(unittest.TestCase):
         tx = self.apply()
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 5, 2))
-        self.assertTrue(self.a.Verify(tx.ID, True))
+        self.assertTrue(self.verify(tx.ID, True))
         self.run_lua('''local a=ExposedMembers.JAC_Absorption;local r=a.GetRoster(2)
           assert(r.person.Owner==2 and r.person.Level==6 and r.person.Equipment[1]=='ARMOR')
           assert(r.hero.Owner==2 and r.hero.Contract=='PROTECT' and r.hero.Loyalty==73 and r.hero.Lifespan==19 and r.hero.Relations.friend==25)
@@ -297,7 +304,7 @@ class AbsorptionTests(unittest.TestCase):
           ExposedMembers={};JAC_AbsorptionRules=nil''')
         self.load_scripts()
         self.assertEqual(self.snapshot(), before)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.apply()
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 5, 2))
 
@@ -305,7 +312,7 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('''PLAN.Units['1:3']='ESCAPE';PLAN.Units['1:8']='RETIRE';PLAN.Units['1:11']='HIDE';PLAN.Assets.hero='HIDE'
           PLAN.Units['1:12']='RETIRE';PLAN.Assets.person='RETIRE';PLAN.Assets.artifact='SCATTER';PLAN.Assets.unlock='PRESERVE';PLAN.Leader='EXILE' ''')
         self.apply()
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.run_lua('''local s=ExposedMembers.JAC_Absorption.GetState();local ar=s.Archive
           assert(ar.hero.Owner==-1 and ar.hero.Lifespan==19 and ar.hero.Unit==nil and ar.hero.FormerUnit.ID==11)
           assert(ar.person.Outcome=='RETIRE' and ar.artifact.Outcome=='SCATTER' and ar['leader:1'].LeaderType=='LEADER_TEST_1')
@@ -318,7 +325,7 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua("PLAN.Assets.artifact={Outcome='RETURN',ReturnOwner=3}")
         self.apply()
         self.assertEqual(self.a.GetRoster(3).artifact.Owner, 3)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_every_spec_disposition_is_routable_and_rejects_cross_kind_outcomes(self):
         expected = {
@@ -477,6 +484,88 @@ class AbsorptionTests(unittest.TestCase):
                 return tx
         self.fail("spread-charge UI publications did not finish")
 
+    def test_off_map_native_candidates_are_placed_before_transfer_and_verified(self):
+        self.run_lua("""local create=UNIT
+          UNIT=function(...) local u=create(...);u.x=-9999;u.y=-9999;return u end""")
+        tx = self.apply()
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(self.g.SPAWNS, 6)
+        self.assertTrue(self.verify(tx.ID, True))
+        self.run_lua("""local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:3')
+          assert(u:GetX()==4 and u:GetY()==0);u.x=-9999;u.y=-9999""")
+        with self.assertRaisesRegex(Exception, "off-map"):
+            self.verify(tx.ID, True)
+
+    def test_failed_off_map_placement_keeps_donors_and_reuses_saved_candidate_on_resume(self):
+        self.run_lua("""local create=UNIT
+          UNIT=function(...) local u=create(...);u.x=-9999;u.y=-9999;return u end
+          ORIGINAL_PLACE=UnitManager.PlaceUnit;UnitManager.PlaceUnit=function() end""")
+        with self.assertRaisesRegex(Exception, "placement failed; saved candidate retained"):
+            self.apply()
+        candidate_id = self.a.FindUnit(2, 'test-absorption:unit:3').GetID(self.a.FindUnit(2, 'test-absorption:unit:3'))
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (1, 0, 0))
+        self.run_lua("UnitManager.PlaceUnit=ORIGINAL_PLACE")
+        tx = self.a.Resume('test-absorption')
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(self.g.SPAWNS, 6)
+        unit = self.a.FindUnit(2, 'test-absorption:unit:3')
+        self.assertEqual(unit.GetID(unit), candidate_id)
+        self.assertTrue(self.verify(tx.ID, True))
+
+    def test_empty_army_still_waits_for_city_cache_publication_before_preparation(self):
+        self.split_unit_contexts()
+        self.run_lua("""Players[1].units={};Players[1].props.JAC_ABSORPTION_ASSETS_V1={};PLAN.Units={};PLAN.Assets={}
+          UI_CITY_FAITH={}
+          for x,c in pairs(CITIES) do
+            UI_CITY_FAITH[x]=ExposedMembers.JAC_Absorption.Rules.Copy(c.faith)
+            local get=c.GetReligion
+            c.GetReligion=function(self) local r=get(self);r.GetReligionsInCity=nil;return r end
+          end
+          local original=ExposedMembers.JAC_HeroReadAPI.ReadCity
+          ExposedMembers.JAC_HeroReadAPI.ReadCity=function(owner,id,method,...)
+            if method~='RELIGIONS' then return original(owner,id,method,...) end
+            local city=assert(Players[owner]:GetCities():FindID(id))
+            local rows={};for religion,count in pairs(UI_CITY_FAITH[city:GetX()]) do
+              rows[#rows+1]={Religion=tonumber(religion),Followers=count}
+            end;return rows
+          end
+          CITY_PUBLISH=function()
+            for x,c in pairs(CITIES) do UI_CITY_FAITH[x]=ExposedMembers.JAC_Absorption.Rules.Copy(c.faith) end
+            UI_PUBLISH()
+          end
+          CITIES[4].faith['5']=5""")
+        tx = self.apply()
+        self.assertEqual(tx.Status, 'WAITING_UI')
+        self.assertTrue(tx.AwaitingPreparation)
+        self.assertEqual((self.g.SPAWNS, self.g.TRANSFERS), (0, 0))
+        self.assertEqual(self.a.Resume('test-absorption').Status, 'WAITING_UI')
+        self.run_lua('CITY_PUBLISH()')
+        tx = self.a.Resume('test-absorption')
+        self.assertEqual(tx.Cities[1].Faith['5'], 5)
+        self.assertEqual(tx.Status, 'WAITING_UI')
+        self.run_lua('CITY_PUBLISH()')
+        self.assertEqual(self.a.Resume('test-absorption').Status, 'COMPLETE')
+
+    def test_public_verification_requires_a_new_publication_and_consumes_it(self):
+        self.split_unit_contexts()
+        self.apply()
+        self.finish_spread_publications()
+        with self.assertRaisesRegex(Exception, 'verification requires a published UI request'):
+            self.a.Verify('test-absorption', True)
+        self.a.RequestVerification('test-absorption')
+        with self.assertRaisesRegex(Exception, 'verification requires a published UI request'):
+            self.a.Verify('test-absorption', True)
+        self.run_lua('UI_PUBLISH()')
+        self.assertTrue(self.a.Verify('test-absorption', True))
+        with self.assertRaisesRegex(Exception, 'verification requires a published UI request'):
+            self.a.Verify('test-absorption', True)
+        self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10').spread=1")
+        self.a.RequestVerification('test-absorption')
+        self.run_lua('UI_PUBLISH()')
+        with self.assertRaisesRegex(Exception, 'spent spread charges'):
+            self.a.Verify('test-absorption', True)
+        self.assertIsNone(self.a.GetState().Transactions['test-absorption'].VerificationUI)
+
     def test_ui_only_purchase_cost_and_faith_balance_return_scalars_to_core(self):
         self.split_unit_contexts()
         self.run_lua("""MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
@@ -525,11 +614,11 @@ class AbsorptionTests(unittest.TestCase):
         tx = self.finish_spread_publications()
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 5, 2))
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.run_lua("""local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10')
-          UI_SPREAD_CACHE[2][u:GetID()]=1""")
+          u.spread=1""")
         with self.assertRaisesRegex(Exception, "spent spread charges"):
-            self.a.Verify("test-absorption", True)
+            self.verify("test-absorption", True)
 
     def test_ui_only_spread_mismatch_blocks_and_preserves_donors_until_resume(self):
         self.run_lua("Players[1].units[10].spread=1")  # A spent missionary charge has no setter.
@@ -557,7 +646,7 @@ class AbsorptionTests(unittest.TestCase):
         tx = self.finish_spread_publications()
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual(self.g.SPAWNS, 6)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_old_turn_ui_spread_cache_waits_before_preparation_and_resumes(self):
         self.split_unit_contexts()
@@ -647,7 +736,7 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual(self.g.HERO_CREATIONS, 1)
         self.assertEqual(tx.HeroResults.native.Outcome, "RECONTRACT")
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_published_hero_spread_mismatch_records_suicide_instead_of_blocking_other_assets(self):
         self.add_native_hero()
@@ -668,7 +757,7 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.HeroResults.native.Outcome, "SUICIDE")
         self.assertEqual(tx.HeroResults.native.Cause, "HERO_RESTORE_ERROR")
         self.assertEqual(self.g.HERO_CREATIONS, 1)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes(self):
         self.split_hero_contexts()
@@ -676,16 +765,16 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.Status, "WAITING_UI")
         spawns = self.g.SPAWNS
         with self.assertRaisesRegex(Exception, "did not complete"):
-            self.a.Verify("test-absorption", True)
+            self.verify("test-absorption", True)
         self.load_scripts()
         self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
         self.assertEqual(self.g.SPAWNS, spawns)
-        for _ in range(2):
+        for _ in range(3):
             self.run_lua("PUBLISH_HERO_UI()")
             tx = self.a.Resume("test-absorption")
         self.assertEqual(tx.Status, "COMPLETE")
         self.load_scripts()
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.run_lua("""local a=ExposedMembers.JAC_Absorption
           local u=assert(a.FindUnit(2,'test-absorption:unit:13'))
           local h=a.SnapshotUnit(u).Hero
@@ -704,7 +793,7 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual(tx.HeroResults.native.Outcome, "SUICIDE")
         self.assertEqual(tx.HeroResults.native.Cause, "HERO_MANAGER_MISMATCH")
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_ui_only_city_citizens_and_work_slots_wait_for_final_publication(self):
         self.split_hero_contexts()
@@ -727,13 +816,13 @@ class AbsorptionTests(unittest.TestCase):
         before = self.run_lua("return ExposedMembers.JAC_Absorption.Canonical(ExposedMembers.JAC_Absorption.CityReligion(CITIES[4]))")
         tx = self.apply()
         self.assertEqual(tx.Status, "WAITING_UI")
-        for _ in range(3):
+        for _ in range(4):
             self.run_lua("PUBLISH_HERO_UI()")
             tx = self.a.Resume("test-absorption")
         self.assertEqual(tx.Status, "COMPLETE")
         self.assertEqual(self.run_lua("return ExposedMembers.JAC_Absorption.Canonical(ExposedMembers.JAC_Absorption.CityReligion(CITIES[4]))"), before)
         self.assertGreater(self.g.UI_CITY_READS, 0)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_only_missing_work_slot_getter_still_requires_final_ui_publication(self):
         self.run_lua("""local full={}
@@ -741,9 +830,9 @@ class AbsorptionTests(unittest.TestCase):
             local b=c.GetBuildings;full[x]=b
             c.GetBuildings=function(self) local v=b(self);v.GetGreatWorkInSlot=nil;return v end
           end
-          UI_FINAL_READY=false
+          UI_READY={}
           ExposedMembers.JAC_HeroReadAPI={
-            GetObservation=function(token) return UI_FINAL_READY and {Published=true} or nil end,
+            GetObservation=function(token) return UI_READY[token] end,
             ReadCity=function(owner,id,method,building,slot)
               assert(method=='WORK')
               local c=assert(Players[owner]:GetCities():FindID(id))
@@ -752,17 +841,22 @@ class AbsorptionTests(unittest.TestCase):
         """)
         tx = self.apply()
         self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertTrue(tx.AwaitingPreparation)
+        self.g.UI_READY[tx.SourceReadyToken] = self.lua.table_from({"Published": True})
+        tx = self.a.Resume("test-absorption")
         self.assertTrue(tx.AwaitingFinalUI)
         self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
-        self.run_lua("UI_FINAL_READY=true")
+        self.run_lua("UI_READY['test-absorption:final']={Published=true}")
         self.assertEqual(self.a.Resume("test-absorption").Status, "COMPLETE")
+        request = self.a.RequestVerification('test-absorption')
+        self.g.UI_READY[request.Token] = self.lua.table_from({"Published": True})
         self.assertTrue(self.a.Verify("test-absorption", True))
 
     def test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record(self):
         self.add_native_hero(second=True)
         self.apply()
         self.assertEqual(self.g.HERO_CREATIONS, 2)
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
         self.run_lua('''
           local a=ExposedMembers.JAC_Absorption;local u=a.FindUnit(2,'test-absorption:unit:13')
           assert(u:IsHero() and u:GetHeroClassType()==0 and u:GetProperty(UnitPropertyKeys.LifespanRemaining)==17 and u:GetActionCharges()==2 and u:GetRenown()==13)
@@ -779,7 +873,7 @@ class AbsorptionTests(unittest.TestCase):
         ''')
         before = self.snapshot()
         self.load_scripts()
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
         self.apply()
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.g.HERO_CREATIONS, 2)
@@ -848,7 +942,7 @@ class AbsorptionTests(unittest.TestCase):
         self.add_native_hero()
         self.g.HERO_THROW_AFTER_SPAWN = True
         self.apply()
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
         self.assertEqual(self.g.HERO_CREATIONS, 1)
 
     def test_native_hero_token_write_failure_kills_only_its_candidate(self):
@@ -883,7 +977,7 @@ class AbsorptionTests(unittest.TestCase):
         self.g.FAIL_CITY = False
         self.load_scripts()
         self.a.Resume('test-absorption')
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
         self.assertEqual((self.g.KILLS, self.g.HERO_CREATIONS), (6, 1))
 
     def test_native_hero_manager_mismatch_is_not_reported_as_inheritance(self):
@@ -957,7 +1051,7 @@ class AbsorptionTests(unittest.TestCase):
         ''')
         self.load_scripts()
         self.a.CompleteHeroRecall('recall:1')
-        self.assertTrue(self.a.Verify('test-absorption', False))
+        self.assertTrue(self.verify('test-absorption', False))
         self.assertEqual(len(self.a.GetRoster(2).native.RecallHistory), 1)
 
     def test_recall_after_second_absorption_preserves_original_owner_and_uses_current_mapping(self):
@@ -1053,7 +1147,7 @@ class AbsorptionTests(unittest.TestCase):
                 self.apply()
                 self.run_lua("local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13');" + corruption)
                 with self.assertRaisesRegex(Exception, message):
-                    self.a.Verify('test-absorption', True)
+                    self.verify('test-absorption', True)
 
     def test_native_lifespan_changes_after_turn_but_owner_recall_identity_must_remain(self):
         self.add_native_hero()
@@ -1061,12 +1155,12 @@ class AbsorptionTests(unittest.TestCase):
         self.g.CURRENT_TURN = 6
         self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13').lifespan=16")
         self.load_scripts()
-        self.assertTrue(self.a.Verify('test-absorption', False))
+        self.assertTrue(self.verify('test-absorption', False))
         with self.assertRaisesRegex(Exception, 'lifespan changed'):
-            self.a.Verify('test-absorption', True)
+            self.verify('test-absorption', True)
         self.run_lua('HERO_CLAIMS[0]=1')
         with self.assertRaisesRegex(Exception, 'manager owner changed'):
-            self.a.Verify('test-absorption', False)
+            self.verify('test-absorption', False)
 
     def test_all_gameplay_scenario_chunks_use_shared_lifespan_key(self):
         for name in ('absorption-japan.json', 'absorption-hero-recall.json'):
@@ -1112,7 +1206,7 @@ class AbsorptionTests(unittest.TestCase):
           local r=a.GetRoster(2).native;assert(r.Renown==13 and r.NativeHero.RenownUnavailable and r.NativeHero.Renown==nil)
           assert(u.GetLifespan==nil and u.SetLifespan==nil and u.GetRenown==nil and u.SetRenown==nil)
         ''')
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
 
     def test_native_hero_archival_and_explicit_suicide_preserve_requested_outcome(self):
         for outcome in ('HIDE', 'DEFECT', 'SUICIDE'):
@@ -1132,7 +1226,7 @@ class AbsorptionTests(unittest.TestCase):
           assert(u:GetX()==10 and u:GetY()==0 and u:GetDamage()==7 and u:GetMovesRemaining()==1)
           assert(HERO_ORIGINS[0].id==CITIES[4].id and HERO_ORIGINS[0].player==2)
         ''')
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
 
     def test_native_hero_unrestorable_exposed_renown_becomes_suicide(self):
         self.add_native_hero()
@@ -1166,7 +1260,7 @@ class AbsorptionTests(unittest.TestCase):
             self.apply()
         self.load_scripts()
         self.a.Resume('test-absorption')
-        self.assertTrue(self.a.Verify('test-absorption', True))
+        self.assertTrue(self.verify('test-absorption', True))
         self.assertEqual((self.g.TRANSFERS, self.g.HERO_CREATIONS), (2, 1))
 
     def test_native_hero_token_set_then_throw_becomes_suicide(self):
@@ -1193,7 +1287,7 @@ class AbsorptionTests(unittest.TestCase):
         self.g.FAIL_SPAWN = None
         self.load_scripts()  # no session-local transaction cache can help recovery
         self.a.Resume("test-absorption")
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (7, 5, 2))
 
     def test_property_copy_failure_is_blocked_before_removing_any_donor(self):
@@ -1221,7 +1315,7 @@ class AbsorptionTests(unittest.TestCase):
         self.g.FAIL_CITY = False
         self.a.Resume("test-absorption")
         self.assertEqual(self.g.SPAWNS, 6)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_later_turn_resume_is_rejected_without_reapplying_old_damage_or_movement(self):
         self.g.FAIL_CITY = True
@@ -1243,14 +1337,14 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()
         self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:8').individual=43")
         with self.assertRaisesRegex(Exception, "individual changed"):
-            self.a.Verify("test-absorption", True)
+            self.verify("test-absorption", True)
 
     def test_completed_transaction_is_not_replayed_after_later_turns(self):
         self.apply()
         self.g.CURRENT_TURN = 6
         self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:3').damage=0")
         self.apply()
-        self.assertTrue(self.a.Verify("test-absorption", False))
+        self.assertTrue(self.verify("test-absorption", False))
         self.assertEqual(self.g.SPAWNS, 6)
 
     def test_registered_unit_and_city_properties_are_preserved_and_unsupported_values_rejected(self):
@@ -1270,7 +1364,7 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(self.g.ADAPTER_APPLIED, 1)
         self.load_scripts()
         with self.assertRaisesRegex(Exception, "re-register"):
-            self.a.Verify("test-absorption", True)
+            self.verify("test-absorption", True)
 
     def test_bad_adapter_and_empty_string_fail_before_native_mutation(self):
         self.run_lua("ExposedMembers.JAC_Absorption.RegisterAdapter('bad',{Prepare=function() return {} end,Apply=function() end,Verify=function() end});Players[1].props.JAC_ABSORPTION_ASSETS_V1.hero.Name=''")
@@ -1308,7 +1402,7 @@ class AbsorptionTests(unittest.TestCase):
           assert(tx.Units[1].TransferredProperties.FOREIGN_MISSION.Actor.Owner==2)
         ''')
         self.load_scripts()
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.apply()
         self.assertEqual(self.g.REBIND_CALLS, 1)
 
@@ -1321,7 +1415,7 @@ class AbsorptionTests(unittest.TestCase):
         self.load_scripts()
         self.g.FAIL_COPY = False
         self.a.Resume("test-absorption")
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
         self.run_lua("local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:3');assert(u:GetProperty('FOREIGN_MISSION').Actor.ID==u:GetID())")
         self.assertEqual(self.g.REBIND_CALLS, 1)
 
@@ -1330,7 +1424,7 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()
         self.run_lua("ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:3'):GetProperty('FOREIGN_MISSION').Actor.Owner=1")
         with self.assertRaisesRegex(Exception, "unit properties changed"):
-            self.a.Verify("test-absorption", True)
+            self.verify("test-absorption", True)
 
     def test_city_property_rebind_uses_saved_expectations_on_reload(self):
         self.run_lua('''
@@ -1342,7 +1436,7 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()
         self.assertEqual(self.g.CITIES[4].props.FOREIGN_CITY_OWNER.Custodian, 2)
         self.load_scripts()
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_nonserializable_property_rebind_blocks_before_destroying_donors(self):
         self.run_lua("ExposedMembers.JAC_Absorption.RegisterUnitProperty('BAD_REBIND',function() return function() end end)")
@@ -1591,7 +1685,7 @@ class AbsorptionTests(unittest.TestCase):
         roster = self.a.GetRoster(2)
         self.assertEqual(roster.existing.Level, 9)
         self.assertEqual(roster.new.Owner, 2)
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_receiver_assets_added_by_city_transfer_hooks_are_not_overwritten(self):
         self.run_lua('''
@@ -1649,14 +1743,14 @@ class AbsorptionTests(unittest.TestCase):
         ''')
         self.apply()
         self.assertTrue(self.a.OwnedGreatWorks(2)[9001])
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
     def test_previous_governance_is_saved_before_engine_clears_city_properties(self):
         self.run_lua("OLD_GOV={ID='prior',From=3,To=1,Turn=2,Previous={ID='older',From=0,To=3,Turn=1}};CITIES[4]:SetProperty('JAC_ABSORPTION_GOVERNANCE_V1',OLD_GOV)")
         self.apply()
         self.run_lua("assert(JAC_AbsorptionRules.Equal(CITIES[4]:GetProperty('JAC_ABSORPTION_GOVERNANCE_V1').Previous,OLD_GOV))")
         self.load_scripts()
-        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.assertTrue(self.verify("test-absorption", True))
 
 
 class AbsorptionPackageTests(unittest.TestCase):
