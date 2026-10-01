@@ -57,6 +57,7 @@
 | [`poc/assassin.md`](poc/assassin.md) | 束2の暗殺者：毎ターン補正する育成、全国ロック・任務、自由都市分裂・複数要因の隣国吸収・外交支持の採決・後継者、固定罰則、保存、日英露UI、18ターンの実機シナリオ |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
+| [`worklogs/pr87-todo437.md`](worklogs/pr87-todo437.md) | PR #87の実機3本、マージ、main CIの担当作業と再開記録 |
 
 仕様を変える場合は `spec/ssot/` の該当ファイルを更新する。変更の経緯は Git の履歴で管理する（旧「18 更新履歴」は廃止し、18番は欠番）。節番号（3.3、14.5 など）は分割後も変えない。SSOT 以外のドキュメントと SSOT が食い違ったら SSOT が正しい。
 
