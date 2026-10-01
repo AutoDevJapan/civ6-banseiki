@@ -264,13 +264,51 @@ if #disableIDs > 0 then
   -- Build the complete order before changing anything, including paths through
   -- disabled intermediates. An enable-list conflict must not disable other mods.
   for _, id in ipairs(disableIDs) do visit(string.lower(id)) end
-  for _, id in ipairs(order) do
-    local handle = handles[id]
-    local reason = Modding.CanDisableMod(handle)
-    if reason ~= 'OK' then error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
-    Modding.DisableMod(handle)
-    if Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
-    table.insert(disabled, id)
+  local positions = {}
+  for i, id in ipairs(order) do positions[id] = i end
+  for i, id in ipairs(order) do
+    local reason, _, sources = Modding.CanDisableMod(handles[id])
+    if reason == 'MissingDependencies' and sources and #sources > 0 then
+      -- The engine still sees dependents as enabled during preflight. Only
+      -- dependencies already scheduled BEFORE this target can be resolved.
+      for _, source in ipairs(sources) do
+        local position = positions[string.lower(source.Id)]
+        if not position or position >= i then
+          error('cannot disable mod: ' .. id .. ' (unscheduled dependent ' .. source.Id .. ')')
+        end
+      end
+    elseif reason ~= 'OK' then
+      error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')')
+    end
+  end
+  for _, id in ipairs(enableIDs) do
+    if not Modding.GetModHandle(id) then error('mod is not installed: ' .. id) end
+  end
+  local ok, failure = pcall(function()
+    for _, id in ipairs(order) do
+      local handle = handles[id]
+      local reason = Modding.CanDisableMod(handle)
+      if reason ~= 'OK' then error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')') end
+      Modding.DisableMod(handle)
+      if Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+      table.insert(disabled, id)
+    end
+  end)
+  if not ok then
+    local failures = {}
+    for i = #disabled, 1, -1 do
+      local id = disabled[i]
+      -- Do not re-enable dependencies: some intermediates were disabled even
+      -- before this scenario. Restore only mods this operation turned off.
+      local restored, err = pcall(Modding.EnableMod, handles[id], false)
+      if not restored or not Modding.GetModInfo(handles[id]).Enabled then
+        table.insert(failures, id .. ': ' .. tostring(err))
+      end
+    end
+    if #failures > 0 then
+      error(tostring(failure) .. '; restoration failed: ' .. table.concat(failures, ', '))
+    end
+    error(failure)
   end
 end
 for _, id in ipairs(enableIDs) do

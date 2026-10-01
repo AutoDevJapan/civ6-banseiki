@@ -6,6 +6,7 @@
     <Description>LOC_JAC_RP_MOD_DESCRIPTION</Description>
     <Authors>civ6-banseiki</Authors>
     <CompatibleVersions>2.0</CompatibleVersions>
+    <SupportsMultiplayer>0</SupportsMultiplayer>
   </Properties>
   <Dependencies>
     <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>

@@ -39,6 +39,7 @@ Modding = {
         return dependencies, {}, {}
     end,
     CanDisableMod = function(handle)
+        if REFUSE_DISABLE_REASON == handle then return 'OwnershipRequired' end
         local sources = {}
         for _, info in ipairs(INSTALLED) do
             if info.Enabled then
@@ -59,6 +60,7 @@ Modding.DisableMod = function(handle)
     DISABLED[#DISABLED + 1] = handle
 end
 Modding.EnableMod = function(handle, dependencies)
+    if REFUSE_ENABLE == handle then return end
     if dependencies then
         for _, id in ipairs(MODS[handle].Dependencies) do
             local dependency = Modding.GetModHandle(id)
@@ -134,6 +136,47 @@ class EnableModsTests(unittest.TestCase):
             detail = runner._run_step({"action": "enable_mods", "ids": [KEEP]})
         self.assertEqual(detail, f"enabled/verified {KEEP}; disabled none")
         self.assertEqual(list(lua.globals().DISABLED.values()), [])
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+
+    def test_late_disable_rejection_is_detected_before_any_settings_change(self):
+        lua = self.graph({BASE: [], LEAF: [BASE], KEEP: []}, disabled=[KEEP])
+        lua.globals().REFUSE_DISABLE_REASON = BASE
+        with self.assertRaisesRegex(LuaError, "cannot disable mod: " + BASE):
+            lua.execute(_enable_mods_code([KEEP], [BASE]))
+        self.assertEqual(list(lua.globals().DISABLED.values()), [])
+        self.assertEqual(list(lua.globals().ENABLED.values()), [])
+        self.assertTrue(lua.globals().MODS[LEAF].Enabled)
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+        self.assertFalse(lua.globals().MODS[KEEP].Enabled)
+
+    def test_missing_enable_target_fails_before_disabling_other_mods(self):
+        lua = self.graph({BASE: [], LEAF: [BASE]})
+        with self.assertRaisesRegex(LuaError, "mod is not installed: " + MISSING):
+            lua.execute(_enable_mods_code([MISSING], [BASE]))
+        self.assertEqual(list(lua.globals().DISABLED.values()), [])
+        self.assertTrue(lua.globals().MODS[LEAF].Enabled)
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+
+    def test_engine_refusal_restores_changes_without_enabling_disabled_intermediates(self):
+        lua = self.graph({BASE: [], MIDDLE: [BASE], LEAF: [MIDDLE], KEEP: []},
+                         disabled=[MIDDLE, KEEP])
+        lua.globals().REFUSE_DISABLE = BASE
+        with self.assertRaisesRegex(LuaError, "mod stayed enabled: " + BASE):
+            lua.execute(_enable_mods_code([KEEP], [BASE]))
+        self.assertEqual(list(lua.globals().DISABLED.values()), [LEAF])
+        self.assertEqual(list(lua.globals().ENABLED.values()), [LEAF])
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+        self.assertTrue(lua.globals().MODS[LEAF].Enabled)
+        self.assertFalse(lua.globals().MODS[MIDDLE].Enabled)
+        self.assertFalse(lua.globals().MODS[KEEP].Enabled)
+
+    def test_failed_restoration_identifies_the_mod_still_disabled(self):
+        lua = self.graph({BASE: [], LEAF: [BASE], KEEP: []})
+        lua.globals().REFUSE_DISABLE = BASE
+        lua.globals().REFUSE_ENABLE = LEAF
+        with self.assertRaisesRegex(LuaError, "restoration failed: " + LEAF):
+            lua.execute(_enable_mods_code([KEEP], [BASE]))
+        self.assertFalse(lua.globals().MODS[LEAF].Enabled)
         self.assertTrue(lua.globals().MODS[BASE].Enabled)
 
     def test_enable_and_disable_overlap_is_case_insensitive(self):
