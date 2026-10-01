@@ -25,16 +25,19 @@ class NativeEligibilityDiagnosticTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute(r'''
-            PROPERTIES, EVER, NOW, APPOINTED = {}, {}, {}, {}
+            PROPERTIES, EVER, NOW, APPOINTED, UNITS = {}, {}, {}, {}, {}
             Game={GetProperty=function(_,key) return PROPERTIES[key] end}
             ExposedMembers=setmetatable({}, {__index=function() error('persona bridge must not be consulted') end})
-            Players, ROWS, DEFS = {}, {}, {}
+            Players, ROWS, DEFS, INDIVIDUALS = {}, {}, {}, {}
             for i=0,21 do
                 local id=i
                 local def={Index=i,Hash=9000+i,GovernorType='GOVERNOR_TEST_'..i}
                 DEFS[def.GovernorType]=def
-                ROWS[#ROWS+1]={LeaderType='LEADER_TEST_'..i,GovernorType=def.GovernorType}
+                ROWS[#ROWS+1]={LeaderType='LEADER_TEST_'..i,GovernorType=def.GovernorType,
+                    PersonType='PERSON_TEST_'..i}
+                INDIVIDUALS[2000+i]={GreatPersonIndividualType='PERSON_TEST_'..i}
                 EVER[id],NOW[id],APPOINTED[id]={},{},{}
+                UNITS[id]={}
                 local function hash(value) return value<22 and value+9000 or value end
                 local govs={
                     CanEverAppointGovernor=function(_,value) return EVER[id][hash(value)]==true end,
@@ -45,9 +48,17 @@ class NativeEligibilityDiagnosticTests(unittest.TestCase):
                     GetGovernorPointsSpent=function() return 0 end
                 }
                 Players[id]={GetID=function() return id end,
-                    IsHuman=function() return id==0 end,GetGovernors=function() return govs end}
+                    IsHuman=function() return id==0 end,GetGovernors=function() return govs end,
+                    GetUnits=function() return {Members=function()
+                        local nextUnit=0; return function()
+                            nextUnit=nextUnit+1; local person=UNITS[id][nextUnit]
+                            if person then return nextUnit,{GetType=function() return 5000 end,
+                                GetGreatPerson=function() return {GetIndividual=function() return person end} end} end
+                        end
+                    end} end}
             end
-            GameInfo={Governors=DEFS,JAC_LeaderPersonas=function()
+            GameInfo={Governors=DEFS,GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}},
+                Units={UNIT_PERSONA={Index=5000}},GreatPersonIndividuals=INDIVIDUALS,JAC_LeaderPersonas=function()
                 local i=0; return function() i=i+1; return ROWS[i] end
             end}
             PlayerManager={GetAliveMajors=function()
@@ -80,11 +91,36 @@ class NativeEligibilityDiagnosticTests(unittest.TestCase):
 
     def test_wrong_owner_and_already_appointed_unjoined_governor_are_rejected(self):
         self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_OWNER"] = 0
+        self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_STATE"] = "GREAT_PERSON"
+        self.g.UNITS[0][1] = 2005
         self.g.EVER[0][9005] = True
         self.g.NOW[0][9005] = True
         self.assertEqual(self.lua.execute(self.gate), "484 engine eligibility checks passed")
         self.g.APPOINTED[1][9005] = True
         with self.assertRaisesRegex(LuaError, "1/LEADER_TEST_5/ever=false/now=false/appointed=true/nativeType=5"):
+            self.lua.execute(self.gate)
+
+    def test_stale_owner_without_a_native_person_cannot_bypass_the_qualification_gate(self):
+        self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_OWNER"] = 0
+        self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_STATE"] = "GREAT_PERSON"
+        self.g.EVER[0][9005] = True
+        self.g.NOW[0][9005] = True
+        with self.assertRaisesRegex(LuaError, "joined owner lacks exactly one native Great Person"):
+            self.lua.execute(self.gate)
+        self.g.UNITS[0][1] = 2005
+        self.g.UNITS[0][2] = 2005
+        with self.assertRaisesRegex(LuaError, "joined owner lacks exactly one native Great Person"):
+            self.lua.execute(self.gate)
+
+    def test_committed_governor_needs_a_native_instance_and_no_surviving_great_person(self):
+        self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_OWNER"] = 0
+        self.g.PROPERTIES["JAC_PERSONA_LEADER_TEST_5_STATE"] = "GOVERNOR"
+        with self.assertRaisesRegex(LuaError, "joined owner lacks a consistent native Governor"):
+            self.lua.execute(self.gate)
+        self.g.APPOINTED[0][9005] = True
+        self.assertEqual(self.lua.execute(self.gate), "484 engine eligibility checks passed")
+        self.g.UNITS[0][1] = 2005
+        with self.assertRaisesRegex(LuaError, "joined owner lacks a consistent native Governor"):
             self.lua.execute(self.gate)
 
     def test_all_22_players_and_types_are_required(self):
