@@ -1226,6 +1226,17 @@ class AssassinLuaTests(unittest.TestCase):
           Game:SetProperty('JAC_ASN_LIVE_TEST',t)
         """)
         self.run_lua(checks[0])
+        for change in (
+            "DATA[0].Units[U].X=DATA[0].Units[U].X+1",
+            "DATA[0].Units[U2].Y=DATA[0].Units[U2].Y+1",
+            "DATA[0].Units[U].Damage=83",
+            "DATA[0].Units[U2]=nil",
+        ):
+            with self.subTest(change=change):
+                self.run_lua("local saved=clone(DATA); BAD_LOAD_BACKUP=saved; "+change)
+                with self.assertRaisesRegex(Exception,"load changed trained individual|trained unit is not placed"):
+                    self.run_lua(checks[0])
+                self.run_lua("DATA=BAD_LOAD_BACKUP; rebuild()")
         self.run_lua("""
           local ledger=Players[1]:GetProperty('JAC_ASN_DIPLOMACY_V1')
           ledger.Grievances['0']=125; Players[1]:SetProperty('JAC_ASN_DIPLOMACY_V1',ledger)
