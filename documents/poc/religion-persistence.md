@@ -108,11 +108,13 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-he
 python -m unittest discover -s tests -t .
 python -m unittest discover -s tools/civ6-autotest/tests
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --check
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-hero-delay.json --check
+python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pressure-probe.json --check
 ```
 
 宗教のテストはlupaを必須importし、スキップしない。SQLと実際のLuaを使い、9件の効果、材料消費・再利用、Eurekaの選択、市民数の切り上げ、資金の移転、宗教同盟の双方向の制限と終了、公式英雄の型、予約中の失敗、AIと旧保存を検査する。市民の圧力から人数を算出するスタブは動作条件を模したものにすぎず、エンジンの丸めの証明ではない。JSONと新しいLua VMによる保存の模擬も、Civ6の保存の代用ではない。
 
-実機はメインセッションでMODを配置して、次の1シナリオを実行する。
+実機ではMODを配置して、次の3シナリオを実行する。
 
 ```powershell
 python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
