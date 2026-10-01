@@ -232,6 +232,16 @@ local function SnapshotHero(unit, info)
     Discovered = discovered, OriginBuilding = building }
 end
 
+local function SpreadCharges(unit)
+  if unit.GetSpreadCharges then return unit:GetSpreadCharges() end
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  assert(reads and reads.ReadUnit, "UI unit read API unavailable")
+  local charges = reads.ReadUnit(unit:GetOwner(), unit:GetID(), "SPREAD_CHARGES", Game.GetCurrentGameTurn())
+  if charges == nil then error("JAC_ABSORPTION_WAITING_UI", 0) end
+  assert(type(charges) == "number", "UI spread charges must be a number")
+  return charges
+end
+
 local function SnapshotUnit(unit)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
   local hero = SnapshotHero(unit, info)
@@ -253,7 +263,7 @@ local function SnapshotUnit(unit)
     Individual = individual, Hero = hero, Damage = unit:GetDamage(), Moves = unit:GetMovesRemaining(),
     GreatPersonCharges = greatPerson and greatPerson.GetActionCharges and greatPerson:GetActionCharges() or nil,
     XP = experience and experience:GetExperiencePoints() or nil, Promotions = promotions, Formation = unit:GetMilitaryFormation(),
-    BuildCharges = unit:GetBuildCharges(), SpreadCharges = unit:GetSpreadCharges(), Religion = religion,
+    BuildCharges = unit:GetBuildCharges(), SpreadCharges = SpreadCharges(unit), Religion = religion,
     Properties = Properties(unit, unitKeys), PropertyKeys = R.Copy(unitKeys), RebindKeys = RebindKeys(unitRebinders),
     Name = unit:GetName(),
   }
@@ -532,6 +542,32 @@ local function FindToken(owner, token)
 end
 A.FindUnit = FindToken
 
+local function VerifySpread(unit, snap, state, tx, phase)
+  if snap.SpreadCharges == nil then return end
+  if unit.GetSpreadCharges or not tx then
+    assert(SpreadCharges(unit) == snap.SpreadCharges, "spent spread charges need adapter")
+    return
+  end
+  local owner, id = unit:GetOwner(), unit:GetID()
+  local token = snap.Token .. ":spread:" .. phase .. ":" .. id
+  snap.SpreadReads = snap.SpreadReads or {}
+  local read = snap.SpreadReads[phase]
+  if not read or read.Token ~= token or read.Owner ~= owner or read.Turn ~= tx.Turn then
+    read = { Token = token, Owner = owner, ID = id, Turn = tx.Turn, AwaitingUI = true }
+    snap.SpreadReads[phase] = read
+    Save(state)
+    error("JAC_ABSORPTION_WAITING_UI", 0)
+  end
+  if read.Verified then return end
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local charges = reads and reads.GetUnitObservation and reads.GetUnitObservation(token)
+  if charges == nil then error("JAC_ABSORPTION_WAITING_UI", 0) end
+  assert(type(charges) == "number" and charges == snap.SpreadCharges,
+    "spent spread charges need adapter")
+  read.AwaitingUI, read.Verified = nil, true
+  Save(state)
+end
+
 local function RestoreUnit(unit, snap, coreOnly)
   if not coreOnly then WriteProperties(unit, snap.TransferredProperties, snap.PropertyKeys) end
   -- Official Debug/Unit.ltp:164,175,463; NubiaScenario.lua:150-151; Tutorial.lua:71.
@@ -543,13 +579,15 @@ local function RestoreUnit(unit, snap, coreOnly)
   end
   if snap.XP then xp:ChangeExperience(snap.XP - xp:GetExperiencePoints()) end
   if snap.Religion and snap.Religion >= 0 then
-    unit:GetReligion():SetReligionType(GameInfo.Religions[snap.Religion].ReligionType)
+    local religion = unit:GetReligion()
+    if religion:GetReligionType() ~= snap.Religion then
+      religion:SetReligionType(GameInfo.Religions[snap.Religion].ReligionType)
+    end
   end
   if snap.Damage then unit:SetDamage(snap.Damage) end
   if snap.Moves then unit:ChangeMovesRemaining(snap.Moves - unit:GetMovesRemaining()) end
-  -- No documented setter for spent build/spread charges: keep the donor and block if reproduction differs.
+  -- No documented setter for spent charges; VerifySpread waits for a published UI read when needed.
   if snap.BuildCharges then assert(unit:GetBuildCharges() == snap.BuildCharges, "spent build charges need adapter") end
-  if snap.SpreadCharges then assert(unit:GetSpreadCharges() == snap.SpreadCharges, "spent spread charges need adapter") end
   if snap.GreatPersonCharges then
     assert(unit:GetGreatPerson():GetActionCharges() == snap.GreatPersonCharges, "spent great-person charges need adapter")
   end
@@ -807,6 +845,13 @@ local function StageHero(state, tx, snap)
   end
   snap.NativeRestored = true
   Save(state)
+  -- A missing Core getter is not a Hero restoration failure. Keep the saved candidate
+  -- while the UI observes it at the next game-core publication.
+  local spreadOK, spreadError = pcall(VerifySpread, unit, snap, state, tx, "hero-stage")
+  if not spreadOK then
+    if tostring(spreadError) == "JAC_ABSORPTION_WAITING_UI" then error(spreadError, 0) end
+    SetHeroSuicide(state, tx, snap, "HERO_RESTORE_ERROR", unit)
+  end
 end
 
 local function MovedAssets(tx)
@@ -876,6 +921,7 @@ local function Verify(tx, state, exactUnits)
       local unit = FindToken(snap.Destination, snap.Token)
       if exactUnits then
         VerifyUnit(unit, snap)
+        VerifySpread(unit, snap)
         if snap.Hero then
           assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "native Hero position changed")
         end
@@ -958,6 +1004,7 @@ local function Execute(state, tx)
         local unit = FindToken(snap.Destination, snap.Token)
         RestoreUnit(unit, snap, true)
         VerifyUnit(unit, snap, true)
+        VerifySpread(unit, snap, state, tx, "stage")
       end
     end
   end
@@ -980,6 +1027,7 @@ local function Execute(state, tx)
       local unit = FindToken(snap.Destination, snap.Token)
       RestoreUnit(unit, snap)
       VerifyUnit(unit, snap)
+      VerifySpread(unit, snap, state, tx, "final")
       Save(state)
     end
   end
@@ -1026,6 +1074,7 @@ local function Execute(state, tx)
       assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "native Hero placement failed; saved snapshot retained")
       RestoreUnit(unit, snap)
       VerifyUnit(unit, snap)
+      VerifySpread(unit, snap, state, tx, "hero-final")
       Save(state)
     end
   end
@@ -1166,6 +1215,19 @@ function A.Resume(id)
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
   assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
+  if tx.AwaitingPreparation then
+    -- Preparation has no mutations. Retry its donor snapshot after the UI reaches this turn.
+    state.Transactions[id] = nil
+    local ready, prepared = pcall(Prepare, tx.Request, state)
+    state.Transactions[id] = tx
+    if not ready then
+      if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" then return R.Copy(tx) end
+      error(prepared)
+    end
+    tx = prepared
+    state.Transactions[id] = tx
+    Save(state)
+  end
   for name in pairs(tx.Adapters) do assert(adapters[name], "missing absorption adapter: " .. name) end
   local ok, result = pcall(Execute, state, tx)
   if not ok then
@@ -1190,7 +1252,15 @@ function A.Apply(plan)
     assert(R.Equal(existing.Request, plan), "transaction ID reused with a different plan")
     return A.Resume(plan.ID)
   end
-  local tx = Prepare(plan, state)
+  local ready, tx = pcall(Prepare, plan, state)
+  if not ready then
+    if tostring(tx) ~= "JAC_ABSORPTION_WAITING_UI" then error(tx) end
+    tx = { ID = plan.ID, From = plan.From, To = plan.To, Turn = Game.GetCurrentGameTurn(),
+      Request = R.Copy(plan), Status = "WAITING_UI", AwaitingPreparation = true, Units = {}, Adapters = {} }
+    state.Transactions[plan.ID] = tx
+    Save(state)
+    return R.Copy(tx)
+  end
   state.Transactions[plan.ID] = tx
   Save(state)
   return A.Resume(plan.ID)

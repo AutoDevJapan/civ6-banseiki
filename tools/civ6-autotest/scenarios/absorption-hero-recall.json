@@ -168,13 +168,13 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
       }
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n assert(coroutine.status(JAC_ABSORPTION_PHASE)=='dead','fixture or transfer exceeded publication phases');return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_1"
     },
     {
@@ -188,7 +188,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
       }
     },
     {
@@ -203,7 +203,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
       }
     },
     {
@@ -211,6 +211,456 @@
       "state_name": "GameCore_Tuner",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_2"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_3"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_4"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_5"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_6"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_7"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_8"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_9"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_10"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_11"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_12"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_13"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_14"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_15"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_16"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_17"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_18"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_19"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_20"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_21"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_22"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_23"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_24"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_25"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_26"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_27"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_28"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_29"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_30"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_31"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n assert(coroutine.status(JAC_ABSORPTION_PHASE)=='dead','fixture or transfer exceeded publication phases');return tostring(v)\nend\nreturn 'phase already complete' ",
+      "capture_as": "JAC_ABSORPTION_SYNC_32"
     },
     {
       "action": "save",

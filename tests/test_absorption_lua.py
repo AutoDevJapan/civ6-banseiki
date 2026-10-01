@@ -423,6 +423,174 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua("""Game.GetHeroesManager=function() return CORE_HERO_MANAGER end
           assert(ExposedMembers.JAC_HeroReadAPI.CreateHero==nil)
           assert(ExposedMembers.JAC_HeroReadAPI.SetHeroDiscovered==nil)""")
+
+    def split_unit_contexts(self):
+        # Distinct UI handles keep GetSpreadCharges while every Core handle loses it.
+        # The UI cache only gains newly created units when the test publishes Core changes.
+        self.run_lua("""CORE_PLAYERS,CORE_GAME=Players,Game
+          UI_SPREAD_CACHE={};UI_TURN=CURRENT_TURN;UI_PLAYERS={}
+          UI_SYNC=function()
+            UI_TURN=CURRENT_TURN
+            for owner=0,3 do
+              UI_SPREAD_CACHE[owner]={}
+              for id,u in pairs(CORE_PLAYERS[owner].units) do UI_SPREAD_CACHE[owner][id]=u.spread end
+            end
+          end
+          UI_SYNC()
+          for owner=0,3 do
+            local source=CORE_PLAYERS[owner]
+            UI_PLAYERS[owner]={
+              GetUnits=function() return {Members=function()
+                local visible={}
+                for id,charges in pairs(UI_SPREAD_CACHE[owner]) do
+                  visible[id]={id=id,charges=charges,GetID=function(self) return self.id end,
+                    GetSpreadCharges=function(self) return self.charges end}
+                end
+                return pairs(visible)
+              end} end,
+              GetCities=function() return source:GetCities() end}
+          end
+          UI_GAME=setmetatable({GetCurrentGameTurn=function() return UI_TURN end}, {__index=CORE_GAME})
+          Game,Players=UI_GAME,UI_PLAYERS
+          Events={LoadScreenClose={Add=function() end},
+            GameCoreEventPublishComplete={Add=function(f) PUBLISH_HERO_UI=f end}}
+        """)
+        self.run_lua((MOD / "UI/JAC_Absorption_HeroKeys.lua").read_text(encoding="utf-8"))
+        self.run_lua("""Game,Players=CORE_GAME,CORE_PLAYERS
+          for _,p in pairs(Players) do
+            for _,u in pairs(p.units) do u.GetSpreadCharges=nil end
+          end
+          local create=UNIT
+          UNIT=function(...)
+            local u=create(...);u.GetSpreadCharges=nil;return u
+          end
+          UI_PUBLISH=function() UI_SYNC();PUBLISH_HERO_UI() end
+          assert(Players[1].units[3].GetSpreadCharges==nil)
+          assert(type(ExposedMembers.JAC_HeroReadAPI.ReadUnit(1,3,'SPREAD_CHARGES',CURRENT_TURN))=='number')
+        """)
+
+    def finish_spread_publications(self):
+        for _ in range(16):
+            self.run_lua("UI_PUBLISH()")
+            tx = self.a.Resume("test-absorption")
+            if tx.Status == "COMPLETE":
+                return tx
+        self.fail("spread-charge UI publications did not finish")
+
+    def test_ui_only_spread_getter_waits_for_publication_and_reuses_candidates(self):
+        self.split_unit_contexts()
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
+        self.run_lua("""local tx=ExposedMembers.JAC_Absorption.GetState().Transactions['test-absorption']
+          for _,snap in ipairs(tx.Units) do
+            if snap.ID>=0 then
+              assert(type(snap.SpreadCharges)=='number')
+              if snap.ID==10 then assert(snap.SpreadCharges==3) else assert(snap.SpreadCharges==0) end
+            end
+          end
+          assert(tx.Units[1].SpreadReads.final.AwaitingUI)
+        """)
+        self.load_scripts()
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.run_lua("PUBLISH_HERO_UI()")  # The candidate is still absent from the UI cache.
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.run_lua("UI_SYNC();UI_TURN=CURRENT_TURN-1;PUBLISH_HERO_UI()")
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS), (6, 0))
+        tx = self.finish_spread_publications()
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 5, 2))
+        self.assertTrue(self.a.Verify("test-absorption", True))
+        self.run_lua("""local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10')
+          UI_SPREAD_CACHE[2][u:GetID()]=1""")
+        with self.assertRaisesRegex(Exception, "spent spread charges"):
+            self.a.Verify("test-absorption", True)
+
+    def test_ui_only_spread_mismatch_blocks_and_preserves_donors_until_resume(self):
+        self.run_lua("Players[1].units[10].spread=1")  # A spent missionary charge has no setter.
+        self.split_unit_contexts()
+        self.assertEqual(self.apply().Status, "WAITING_UI")
+        self.run_lua("""local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10')
+          MISSIONARY_CANDIDATE=u:GetID();assert(u.spread==3)""")
+        for _ in range(16):
+            self.run_lua("UI_PUBLISH()")
+            try:
+                tx = self.a.Resume("test-absorption")
+            except Exception as exc:
+                self.assertIn("spent spread charges", str(exc))
+                break
+            self.assertEqual(tx.Status, "WAITING_UI")
+        else:
+            self.fail("UI spread mismatch was not detected")
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
+        self.assertEqual(self.a.GetState().Transactions["test-absorption"].Status, "BLOCKED")
+        self.run_lua("""assert(Players[1].units[10] and Players[1].units[3])
+          assert(ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10'):GetID()==MISSIONARY_CANDIDATE)
+          ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10').spread=1""")
+        tx = self.finish_spread_publications()
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(self.g.SPAWNS, 6)
+        self.assertTrue(self.a.Verify("test-absorption", True))
+
+    def test_old_turn_ui_spread_cache_waits_before_preparation_and_resumes(self):
+        self.split_unit_contexts()
+        self.run_lua("UI_TURN=CURRENT_TURN-1")
+        tx = self.apply()
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertTrue(tx.AwaitingPreparation)
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.load_scripts()
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.run_lua("UI_SYNC()")
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual(self.g.SPAWNS, 6)
+        self.assertEqual(self.finish_spread_publications().Status, "COMPLETE")
+
+    def test_native_hero_ui_only_spread_wait_never_becomes_suicide(self):
+        self.add_native_hero()
+        self.split_unit_contexts()
+        self.assertEqual(self.apply().Status, "WAITING_UI")
+        saw_hero_wait = False
+        for _ in range(20):
+            self.run_lua("UI_PUBLISH()")
+            tx = self.a.Resume("test-absorption")
+            if tx.Status == "WAITING_UI" and self.g.HERO_CREATIONS == 1:
+                saw_hero_wait = True
+                creations = self.g.HERO_CREATIONS
+                self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+                self.assertEqual(self.g.HERO_CREATIONS, creations)
+                self.assertNotEqual(tx.HeroResults.native.Outcome, "SUICIDE")
+                self.run_lua("assert(ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13'))")
+            if tx.Status == "COMPLETE":
+                break
+        self.assertTrue(saw_hero_wait)
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+        self.assertEqual(tx.HeroResults.native.Outcome, "RECONTRACT")
+        self.assertTrue(self.a.Verify("test-absorption", True))
+
+    def test_published_hero_spread_mismatch_records_suicide_instead_of_blocking_other_assets(self):
+        self.add_native_hero()
+        self.split_unit_contexts()
+        tx = self.apply()
+        corrupted = False
+        for _ in range(24):
+            if self.g.HERO_CREATIONS and not corrupted:
+                self.run_lua("""local u=assert(ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:13'))
+                  u.spread=1""")
+                corrupted = True
+            self.run_lua("UI_PUBLISH()")
+            tx = self.a.Resume("test-absorption")
+            if tx.Status == "COMPLETE":
+                break
+        self.assertTrue(corrupted)
+        self.assertEqual(tx.Status, "COMPLETE")
+        self.assertEqual(tx.HeroResults.native.Outcome, "SUICIDE")
+        self.assertEqual(tx.HeroResults.native.Cause, "HERO_RESTORE_ERROR")
+        self.assertEqual(self.g.HERO_CREATIONS, 1)
+        self.assertTrue(self.a.Verify("test-absorption", True))
+
     def test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes(self):
         self.split_hero_contexts()
         tx = self.apply()

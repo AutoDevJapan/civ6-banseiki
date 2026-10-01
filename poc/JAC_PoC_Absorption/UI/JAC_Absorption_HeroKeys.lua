@@ -1,5 +1,6 @@
 -- UnitPropertyKeys exists in the UI context but not in gameplay on the installed engine.
 -- Share the engine's actual numeric enum value; never invent a replacement property.
+local uiPlayers, uiGame = Players, Game
 local function PublishHeroKeys()
   if UnitPropertyKeys and type(UnitPropertyKeys.LifespanRemaining) == "number" then
     ExposedMembers.JAC_HeroLifespanKey = UnitPropertyKeys.LifespanRemaining
@@ -19,9 +20,27 @@ local function PublishHeroKeys()
     end
     local observed = {}
     reads.GetObservation = function(token) return observed[token] end
+    reads.GetUnitObservation = function(token) return observed[token] end
     reads.MarkPublished = function(token) observed[token] = { Published = true } end
+    reads.ReadUnit = function(owner, id, method, turn)
+      assert(method == "SPREAD_CHARGES", "unsupported UI unit read")
+      if uiGame.GetCurrentGameTurn() ~= turn then return nil end
+      local player = uiPlayers[owner]
+      if not player then return nil end
+      for _, unit in player:GetUnits():Members() do
+        if unit:GetID() == id then
+          assert(unit.GetSpreadCharges, "UI spread-charge getter unavailable")
+          return unit:GetSpreadCharges()
+        end
+      end
+      return nil
+    end
+    reads.ObserveUnit = function(token, owner, id, turn)
+      local charges = reads.ReadUnit(owner, id, "SPREAD_CHARGES", turn)
+      if type(charges) == "number" then observed[token] = charges end
+    end
     reads.ReadCity = function(owner, id, method, building, slot)
-      local city = assert(Players[owner]:GetCities():FindID(id), "UI city cache is not ready")
+      local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
       if method == "RELIGIONS" then
         local rows = {}
         for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
@@ -55,6 +74,11 @@ local function ObservePendingHeroes()
       local intent = snap.HeroSpawnIntent
       if intent and intent.AwaitingUI then
         reads.Observe(snap.Token .. ":created:" .. intent.CreatedID, snap.Hero.Class)
+      end
+      for _, spread in pairs(snap.SpreadReads or {}) do
+        if spread.AwaitingUI then
+          reads.ObserveUnit(spread.Token, spread.Owner, spread.ID, spread.Turn)
+        end
       end
     end
   end
