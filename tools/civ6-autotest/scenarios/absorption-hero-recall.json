@@ -720,7 +720,18 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=A.GetState().Transactions['japan-human-recall']\nassert(Game.GetCurrentGameTurn()>tx.Turn,'real turn did not advance')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID]);local unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(unit:GetProperty(ExposedMembers.JAC_HeroLifespanKey)==19-(Game.GetCurrentGameTurn()-tx.Turn),'native lifespan did not advance')\nUnitManager.Kill(unit)\nassert(A.GetHeroesManager():GetHeroClaimPlayer(e.Class)==e.To,'Hero claim lost on retirement')\nlocal eras=Players[e.To]:GetEras();local current=eras:GetEra()\nif current<0 then current=Game.GetEras():GetCurrentEra() end\nlocal def=assert(GameInfo.Eras[current]);local nextEra\nfor row in GameInfo.Eras() do\n if row.ChronologyIndex>def.ChronologyIndex and (not nextEra or row.ChronologyIndex<nextEra.ChronologyIndex) then nextEra=row end\nend\nassert(nextEra,'next test era unavailable');eras:SetEra(nextEra.Index)\nassert(eras:GetEra()==nextEra.Index,'test era advance failed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'native Hero retired after one real turn; next era set and recall intent saved'"
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=A.GetState().Transactions['japan-human-recall']\nassert(Game.GetCurrentGameTurn()>tx.Turn,'real turn did not advance')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID]);local unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(unit:GetProperty(ExposedMembers.JAC_HeroLifespanKey)==19-(Game.GetCurrentGameTurn()-tx.Turn),'native lifespan did not advance')\nUnitManager.Kill(unit)\nassert(A.GetHeroesManager():GetHeroClaimPlayer(e.Class)==e.To,'Hero claim lost on retirement')\ne.PreRecallEra=Game.GetEras():GetCurrentEra()\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'native Hero retired after one real turn; waiting for global era boundary'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 66,
+      "fast_forward": true,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.PreRecallEra,'global era boundary not processed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'global era advanced through test-mode autoplay; recall intent saved'"
     },
     {
       "action": "ui_lua",
@@ -797,5 +808,9 @@
       "state_name": "GameCore_Tuner",
       "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal r=A.GetRoster(e.To)[e.RecordID];local u=assert(A.FindUnit(e.To,r.Unit.Token))\nassert(r.Unit.ID==e.RecallID and u:GetID()==e.RecallID and #r.RecallHistory==1,'recalled identity changed after load')\nassert(r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29,'person state lost after load')\nassert(A.Verify('japan-human-recall',false),'recalled absorption failed after load')\nreturn 'real native recall and person record survived save/load'"
     }
-  ]
+  ],
+  "test_mode": {
+    "skipped_turns": 0,
+    "continuous_performance_valid": false
+  }
 }

@@ -1594,7 +1594,8 @@ class AbsorptionTests(unittest.TestCase):
           GameInfo.Yields={YIELD_FAITH={Index=6}}
           GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
             {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
-          Game.GetEras=function() return {GetCurrentEra=function() return 0 end} end
+          GLOBAL_ERA=0
+          Game.GetEras=function() return {GetCurrentEra=function() return GLOBAL_ERA end} end
           for _,c in pairs(CITIES) do c.GetGold=function() return {GetPurchaseCost=function(_,yield,hash,formation)
             assert(yield==6 and (hash==104 or hash==105) and formation==0);return 1000 end} end end
           RECALL_QUERIES=0
@@ -1608,7 +1609,7 @@ class AbsorptionTests(unittest.TestCase):
             for _,u in pairs(Players[city.owner].units) do
               if u:IsHero() and u:GetHeroClassType()==class then return false,{[4]={'HERO_ALIVE'}} end
             end
-            if HERO_CLAIM_ERAS[class]>=PLAYER_ERAS[city.owner] then return false,{[4]={'APPEARANCE_ERA'}} end
+            if HERO_CLAIM_ERAS[class]>=GLOBAL_ERA then return false,{[4]={'APPEARANCE_ERA'}} end
             if FAITH[city.owner]<1000 then return false,{[4]={'INSUFFICIENT_FAITH'}} end
             return true,{}
           end
@@ -1622,6 +1623,11 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('HERO_CLAIMS[0]=2')
         queries = self.g.RECALL_QUERIES
         for step in recall[1:]:
+            if step['action']=='autoplay':
+                with self.assertRaisesRegex(Exception, 'global era boundary not processed'):
+                    self.run_lua(recall[-1]['code'])
+                self.g.GLOBAL_ERA = 1
+                continue
             result = self.run_lua(step['code'])
         self.assertEqual(self.g.RECALL_QUERIES - queries, 2)
         self.assertIn('faith cost=1000', result)
@@ -1633,7 +1639,7 @@ class AbsorptionTests(unittest.TestCase):
         self.live_scenario_fixture()
         steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                            .read_text(encoding='utf-8'))['steps']
-        steps = [step for step in steps if not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
+        steps = [step for step in steps if step['action'] != 'autoplay' and not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
                  and not any(key in step.get('condition', {}).get('code', '') for key in ('JAC_ABSORPTION_FIXTURE_UI_WAIT', 'GetUIPhase'))]
         self.run_lua('''
           Game.GetLocalPlayer=function() return 0 end
@@ -1647,7 +1653,8 @@ class AbsorptionTests(unittest.TestCase):
           Game.GetGreatWorkType=function(id) assert(id==1007);return 0 end
           GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
             {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
-          Game.GetEras=function() return {GetCurrentEra=function() return 0 end} end
+          GLOBAL_ERA=0
+          Game.GetEras=function() return {GetCurrentEra=function() return GLOBAL_ERA end} end
           CityCommandTypes={PURCHASE=1,PARAM_UNIT_TYPE=2,PARAM_MILITARY_FORMATION_TYPE=3,PARAM_YIELD_TYPE=4}
           CityCommandResults={FAILURE_REASONS=5}
           MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
@@ -1664,7 +1671,7 @@ class AbsorptionTests(unittest.TestCase):
           end
           CityManager.CanStartCommand=function(city,command,visible,parameters,results)
             assert(command==1 and parameters[2]==104 and parameters[3]==0 and parameters[4]==6)
-            return HERO_CLAIMS[0]==city.owner and PLAYER_ERAS[city.owner]>HERO_CLAIM_ERAS[0]
+            return HERO_CLAIMS[0]==city.owner and GLOBAL_ERA>HERO_CLAIM_ERAS[0]
               and FAITH[city.owner]>=1000,{}
           end
           CityManager.RequestCommand=function(city,command,parameters)
@@ -1683,7 +1690,11 @@ class AbsorptionTests(unittest.TestCase):
           a.FindUnit(e.To,r.Unit.Token).lifespan=18''')
         self.run_lua(steps[14]['code'])
         self.load_scripts()
+        with self.assertRaisesRegex(Exception, 'global era boundary not processed'):
+            self.run_lua(steps[15]['code'])
+        self.g.GLOBAL_ERA = 1
         self.run_lua(steps[15]['code'])
+        self.run_lua(steps[16]['code'])
         all_steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                                .read_text(encoding='utf-8'))['steps']
         binding = next(s for s in all_steps if s.get('capture_as') == 'JAC_ABSORPTION_SYNC_VERIFY_2')
@@ -1698,9 +1709,9 @@ class AbsorptionTests(unittest.TestCase):
           assert(a.GetState().Recalls['japan-human-recall:1'].Status=='COMPLETE')
           assert(r.Unit.ID~=e.TransferID and #r.RecallHistory==1)""")
         self.run_lua("ExposedMembers.JAC_Absorption.CompleteHeroRecall=function() error('binding after verification request') end")
-        self.run_lua(steps[17]['code'])
+        self.run_lua(steps[18]['code'])
         self.load_scripts()
-        self.run_lua(steps[22]['code'])
+        self.run_lua(steps[23]['code'])
         self.run_lua('''local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1')
           assert(e.RecallID~=e.TransferID and e.FaithAfter==999000 and e.CostAfter==1000)
           assert(e.Before.HeroCountAvailable and e.Before.Hero==1 and e.AfterRecall.Hero==1)
@@ -1710,7 +1721,7 @@ class AbsorptionTests(unittest.TestCase):
         for invalid_balance in (999500, 998500):
             self.g.FAITH[recall_owner] = invalid_balance
             with self.assertRaisesRegex(Exception, "native recall faith payment changed"):
-                self.run_lua(steps[17]['code'])
+                self.run_lua(steps[18]['code'])
         self.g.FAITH[recall_owner] = 999000
 
     def test_partial_expected_properties_freeze_references_to_every_staged_unit(self):
