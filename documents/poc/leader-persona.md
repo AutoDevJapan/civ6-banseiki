@@ -311,3 +311,26 @@ leaderperson-05は再起動と総督API診断に成功し、加入の人物識�
 leaderperson-06は人物加入の途中で5秒以内に応答がなくなり、処理を送った後なので再送せず終了した。実測ではGameCoreのGreatPerson:GetIndividualが存在し、IsGreatPersonだけがない。人物識別を再設計し、ゲーム側で個人のクラスに対応するユニット種類を先に絞り、実測済みのGetIndividualで本物の個人IDを照合する。UIへユニットの識別を問い合わせる処理は撤去した。生成の前後と識別完了を段階ごとに記録し、止まる呼び出しを特定できるようにした。
 
 応答が5秒を超えても処理済みかもしれないため、加入のLuaだけ待機を30秒へ明示して再送を禁止する。新しいlua_timeoutは600秒以内の有限正数だけを受け付け、ステップ全体の期限を超えない。長い待機でも応答不明を再送しないことを検査した。04〜06とも進化・称号減算・技能・保存の合格には到達していない。
+
+## 今回の仕上げ作業の引き継ぎ（実機4本を終了）
+
+このジョブの実機はleaderperson-04〜07の4本で上限に達した。追加実行の許可は求めず、次の担当が続行する。PR #86は未マージで、作業フォルダを保持する。
+
+| 実行 | 結果 | 次に扱う問題 |
+|---|---|---|
+| leaderperson-04 | API診断成功、人物加入で失敗 | ゲーム側のHasGovernor不存在を再現。総督の読取りをUI側へ移した。起動失敗分は04-try1に保存 |
+| leaderperson-05 | API診断成功、人物加入で失敗 | ゲーム側のIsGreatPerson不存在を確定。生成と除去はゲーム側に存在する |
+| leaderperson-06 | 加入送信後5秒で応答不明 | GetIndividualはゲーム側に存在する。UIへの識別問い合わせを撤去し、ゲーム側で種類と個人IDを照合する設計へ変更。起動失敗分は06-try1に保存 |
+| leaderperson-07 | 9/106で応答不明 | 加入の待機を30秒へ広げても失敗。段階ログの最後はcreate-person-beforeで、CreatePersonから戻った記録がない |
+
+07はコード先端69e0b04を反映して実行した。検証モードのスキップ手番は0で、実際の手番進行にも未到達。ゲーム側からUIを通らず、対象クラスのユニット種類とGetIndividualで探した前段は通過した。停止したのはGame.GetGreatPeople():CreatePerson(owner, individual.Index, capitalX, capitalY)の呼び出し。応答不明の変更処理は再送していない。Index指定の公式例はDebug/Map.ltp:577-579で確認済みだが、独自人物の生成が停止するエンジン内部の原因は未確定。
+
+次の担当は人物データとクラス・ユニットの対応、タイムライン設定、生成位置を公式定義と照合し、この呼び出しが戻る条件を調べる。加入が成功した後、leader-persona-15km.jsonの残りすべてを実行する。未確認は称号費用1・2・3の残高、人物の除去、配置と定着、功績と技能の実効果、6回の保存と読込、保留通知ゼロ、21人のAIの未加入総督不存在。07ではいずれにも未到達で、Lua検査の成功を実機合格の代わりにしない。
+
+成果は共有live作業フォルダのtools/civ6-autotest/artifacts/leaderperson-04〜07。各フォルダのLua.log、Modding.log、steps.jsonl、隣の.logに保存した。再開は先にpushし、共通ロックを使う次のコマンドで行う。
+
+```powershell
+python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json --stop-on-failure --test-mode
+```
+
+オーナーの判断待ちはない。前回の追加検証の許可依頼は閉じ、共有ToDo #150は継続作業として残す。
