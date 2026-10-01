@@ -777,7 +777,8 @@ function RP.CompleteHero(playerID)
   local h = state.heroes[tostring(playerID)]
   check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
   local info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
-  if tonumber(GameConfiguration.GetValue("JAC_AUTOTEST")) == 1 then
+  local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
+  if tonumber(testFlag) == 1 then
     local observed = "unit=" .. h.unit .. " expectedClass=" .. h.heroClass .. " actual=" .. encode(info)
     if heroObservations[playerID] ~= observed then
       heroObservations[playerID] = observed

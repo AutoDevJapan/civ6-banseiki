@@ -968,6 +968,21 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
                 self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
 
+    def test_hero_verification_accepts_unset_test_flag_in_manual_game(self):
+        for getter in ("function() return nil end", "function() end"):
+            with self.subTest(getter=getter):
+                self.load()
+                self.found()
+                self.lost()
+                self.discovery()
+                self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+                self.reload()
+                self.lua.execute("GameConfiguration.GetValue=" + getter)
+                self.g.HERO_UI_LOAD_CLOSE()
+                self.g.HERO_UI_FRAME(0)
+                self.assertEqual(self.rp.Export().heroes["1"].verification, "APPLIED")
+                self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
+
     def test_hidden_addin_activates_after_load_and_completes_pending_hero_once(self):
         self.found()
         self.lost()

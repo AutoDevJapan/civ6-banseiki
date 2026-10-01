@@ -49,7 +49,8 @@ end)
 Events.LoadScreenClose.Add(function()
   pending, elapsed, timedOut = true, {}, {}
   ContextPtr:SetHide(false)
-  if tonumber(GameConfiguration.GetValue("JAC_AUTOTEST")) == 1 then
+  local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
+  if tonumber(testFlag) == 1 then
     print("[JAC_RP] hero UI frame verification active after load")
   end
 end)
