@@ -1652,13 +1652,18 @@ class AbsorptionTests(unittest.TestCase):
           GameInfo.Yields={YIELD_FAITH={Index=6}}
           GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
             {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
-          GLOBAL_ERA=0
+          GLOBAL_ERA=0;AI_ACTIVE=false;LOCAL_PLAYER=1;FAITH[2]=1000000
           Game.GetEras=function() return {GetCurrentEra=function() return GLOBAL_ERA end} end
+          Game.GetLocalPlayer=function() return LOCAL_PLAYER end
+          Players[1].IsTurnActive=function() return not AI_ACTIVE end
+          Players[2].IsTurnActive=function() return AI_ACTIVE end
+          Players[1].IsHuman=function() return true end;Players[2].IsHuman=function() return false end
+          Events={GameCoreEventPublishComplete={Add=function() end,Remove=function() end}}
           for _,c in pairs(CITIES) do c.GetGold=function() return {GetPurchaseCost=function(_,yield,hash,formation)
             assert(yield==6 and (hash==104 or hash==105) and formation==0);return 1000 end} end end
           RECALL_QUERIES=0
           CityManager.CanStartCommand=function(city,command,visible,parameters,results)
-            assert(command==1 and visible==false and parameters[3]==6 and results==true)
+            assert(command==1 and parameters[3]==6 and results==not visible)
             RECALL_QUERIES=RECALL_QUERIES+1
             local class=parameters[2]==104 and 0 or parameters[2]==105 and 1 or error('not a native hero')
             local origin=HERO_ORIGINS[class]
@@ -1667,42 +1672,121 @@ class AbsorptionTests(unittest.TestCase):
             for _,u in pairs(Players[city.owner].units) do
               if u:GetHeroClassType()==class then return false,{[4]={'HERO_ALIVE'}} end
             end
+            -- The official display query can stay true in the appearance era.
+            if visible then return true end
+            if not AI_ACTIVE or LOCAL_PLAYER>=0 and LOCAL_PLAYER~=city.owner then return false end
             if HERO_CLAIM_ERAS[class]>=GLOBAL_ERA then return false,{[4]={'APPEARANCE_ERA'}} end
             if FAITH[city.owner]<1000 then return false,{[4]={'INSUFFICIENT_FAITH'}} end
             return true,{}
           end
         ''')
         data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json').read_text(encoding='utf-8'))
-        recall = [step for step in data['steps'][-6:]
-                  if 'recall spawn blockers relocated' not in step.get('code', '')]
-        self.assertIn('duplicate recall denied', self.run_lua(recall[0]['code']))
+        setup = [s['code'] for s in data['steps'] if "JAC_ABSORPTION_AI_PROBE={Phase=" in s.get('code', '')]
+        checks = [s['code'] for s in data['steps'] if "AI active-turn probe never ran" in s.get('code', '')]
+        self.assertEqual(len(setup), 2)
+        self.assertEqual(len(checks), 2)
+        self.run_lua(setup[0])
+        self.run_lua('JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        self.assertEqual(self.g.RECALL_QUERIES, 0)
+        with self.assertRaisesRegex(Exception, 'AI active-turn probe never ran'):
+            self.run_lua(checks[0])
+        self.run_lua('AI_ACTIVE=true;LOCAL_PLAYER=-1;JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        self.run_lua(checks[0])
+        self.assertEqual(self.g.RECALL_QUERIES, 4)
         self.run_lua('HERO_CLAIMS[0]=1')
-        with self.assertRaisesRegex(Exception, 'recall rights retained by donor'):
-            self.run_lua(recall[0]['code'])
-        self.run_lua('HERO_CLAIMS[0]=2')
-        queries = self.g.RECALL_QUERIES
-        for step in recall[1:]:
-            if step['action']=='autoplay':
-                with self.assertRaisesRegex(Exception, 'global era boundary not processed'):
-                    self.run_lua(recall[-1]['code'])
-                self.g.GLOBAL_ERA = 1
-                continue
-            if step.get('state_name') == 'InGame':
-                self.run_lua('for _,u in Players[2]:GetUnits():Members() do u.IsHero=nil end')
-            result = self.run_lua(step['code'])
-        self.assertEqual(self.g.RECALL_QUERIES - queries, 2)
-        self.assertIn('faith cost=1000', result)
-        self.run_lua('HERO_CLAIMS[0]=1')
-        with self.assertRaisesRegex(Exception, 'recall owner reverted'):
-            self.run_lua(recall[-1]['code'])
-        self.run_lua('''HERO_CLAIMS[0]=2;for _,u in Players[2]:GetUnits():Members() do
-          u.GetHeroClassType=function() return 0 end;break end''')
-        probes = [step for step in recall if step.get('state_name') == 'InGame'
-                  and 'death fixture still alive' in step['code']]
-        self.assertEqual(len(probes), 2)
-        for step in probes:
-            with self.assertRaisesRegex(Exception, 'death fixture still alive'):
-                self.run_lua(step['code'])
+        self.run_lua(setup[0])
+        self.run_lua('JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        with self.assertRaisesRegex(Exception, 'recall claim/owner changed'):
+            self.run_lua(checks[0])
+        self.run_lua('HERO_CLAIMS[0]=2;AI_ACTIVE=false;LOCAL_PLAYER=1')
+        death = next(s['code'] for s in data['steps'] if 'retired for engine recall eligibility probe' in s.get('code', ''))
+        self.run_lua(death)
+        self.run_lua(setup[1])
+        self.run_lua('AI_ACTIVE=true;LOCAL_PLAYER=-1;JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        self.run_lua(checks[1])
+        observed = self.g.JAC_ABSORPTION_AI_PROBE.Results[1]
+        self.assertTrue(observed.Visible)
+        self.assertFalse(observed.Allowed)
+        self.assertEqual(observed.Alive, 0)
+        self.g.GLOBAL_ERA = 1
+        self.run_lua(setup[1])
+        self.run_lua('JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        self.assertTrue(self.g.JAC_ABSORPTION_AI_PROBE.Results[1].Allowed)
+        with self.assertRaisesRegex(Exception, 'native recall ignored same-era restriction'):
+            self.run_lua(checks[1])
+        self.run_lua('GLOBAL_ERA=0;LOCAL_PLAYER=1')
+        self.run_lua(setup[1])
+        self.run_lua('JAC_ABSORPTION_AI_PROBE_HANDLER()')
+        with self.assertRaisesRegex(Exception, 'another human command context'):
+            self.run_lua(checks[1])
+
+        begin = next(s['code'] for s in data['steps'] if 'actual AI recall intent saved' in s.get('code', ''))
+        purchase = next(s['code'] for s in data['steps'] if 'real purchase handler prepared' in s.get('code', ''))
+        payment = next(s['code'] for s in data['steps'] if 'native AI recall payment changed' in s.get('code', ''))
+        complete = next(s['code'] for s in data['steps'] if 'person rebound to new native Unit' in s.get('code', ''))
+        self.run_lua('GLOBAL_ERA=1;AI_ACTIVE=false;LOCAL_PLAYER=1')
+        self.run_lua(begin)
+        self.run_lua('''
+          CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE=5
+          PURCHASE_REQUESTS=0;PURCHASE_COST=1000
+          Events.FaithChanged={Add=function(f) FAITH_EVENT=f end,Remove=function() end}
+          Events.CityCommandStarted={Add=function(f) COMMAND_EVENT=f end,Remove=function() end}
+          Events.UnitAddedToMap={Add=function(f) UNIT_EVENT=f end,Remove=function() end}
+          for _,c in pairs(CITIES) do c.GetGold=function() return {
+            GetPurchaseCost=function() return PURCHASE_COST end} end end
+          CityManager.RequestCommand=function(city,command,parameters)
+            assert(CityManager.CanStartCommand(city,command,false,parameters,true))
+            assert(parameters[5]==0)
+            PURCHASE_REQUESTS=PURCHASE_REQUESTS+1
+            FAITH[city.owner]=FAITH[city.owner]-PURCHASE_COST
+            FAITH_EVENT(city.owner,0,FAITH[city.owner])
+            local id=NEXT_ID
+            HERO_MANAGER:CreateHero(city.owner,0,city.x,city.y)
+            UNIT_EVENT(city.owner,id,city.x,city.y)
+            PURCHASE_COST=1600
+          end
+        ''')
+        self.run_lua(purchase)
+        self.run_lua('JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+        self.assertEqual(self.g.PURCHASE_REQUESTS, 0)
+        with self.assertRaisesRegex(Exception, 'AI purchase did not complete'):
+            self.run_lua(payment)
+        self.run_lua('AI_ACTIVE=true;JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+        self.assertEqual(self.g.PURCHASE_REQUESTS, 0)
+        with self.assertRaisesRegex(Exception, 'another human command context'):
+            self.run_lua(payment)
+        self.run_lua('LOCAL_PLAYER=-1')
+        self.run_lua(purchase)
+        self.run_lua('JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+        self.assertEqual(self.g.PURCHASE_REQUESTS, 1)
+        self.assertFalse(bool(self.g.JAC_ABSORPTION_AI_PURCHASE.Complete))
+        self.run_lua('JAC_ABSORPTION_AI_PURCHASE_HANDLER();JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+        self.assertEqual(self.g.PURCHASE_REQUESTS, 1)
+        proof = self.g.JAC_ABSORPTION_AI_PURCHASE
+        self.assertTrue(proof.Complete)
+        self.assertEqual(proof.FaithBefore - proof.FaithAfter, 1000)
+        self.assertEqual(proof.CostAfter, 1600)
+        self.run_lua(payment)
+        self.run_lua(complete)
+        self.assertEqual(self.a.GetRoster(2)['live:hero'].Unit.ID, proof.NewID)
+        capture = next(s['code'] for s in data['steps'] if s.get('capture_as') == 'ABSORPTION_AI_RECALL')
+        saved = self.run_lua(capture)
+        self.run_lua('CAPTURE_STATE=ExposedMembers.JAC_Absorption.GetState()')
+        self.run_lua("local s=ExposedMembers.JAC_Absorption.GetState();s.Transactions['japan-live-absorption'].HeroRecallUnits=nil;Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)")
+        with self.assertRaisesRegex(Exception, 'saved Hero recall mapping missing'):
+            self.run_lua(capture)
+        self.run_lua("Game:SetProperty('JAC_ABSORPTION_STATE_V1',CAPTURE_STATE)")
+        self.run_lua("local s=ExposedMembers.JAC_Absorption.GetState();s.Transactions['japan-live-absorption'].RecallRecords['live:hero'].Unit.Token='wrong';Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)")
+        with self.assertRaisesRegex(Exception, 'saved recalled person mapping changed'):
+            self.run_lua(capture)
+        self.run_lua("Game:SetProperty('JAC_ABSORPTION_STATE_V1',CAPTURE_STATE)")
+        self.assertEqual(self.run_lua(capture), saved)
+        self.run_lua('FAITH[2]=FAITH[2]-1')
+        self.assertNotEqual(self.run_lua(capture), saved)
+        self.run_lua('FAITH[2]=FAITH[2]+1')
+        self.run_lua('JAC_ABSORPTION_AI_PURCHASE.FaithAfter=JAC_ABSORPTION_AI_PURCHASE.FaithAfter-1')
+        with self.assertRaisesRegex(Exception, 'native AI recall payment changed'):
+            self.run_lua(payment)
 
     def test_human_receiver_scenario_executes_real_recall_and_rebinds_person_in_lua_vm(self):
         self.live_scenario_fixture()
@@ -2058,6 +2142,61 @@ class AbsorptionTests(unittest.TestCase):
 
 
 class AbsorptionPackageTests(unittest.TestCase):
+    def test_ai_purchase_receipt_rejects_interleaved_faith_or_unit_events(self):
+        steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json').read_text(encoding='utf-8'))['steps']
+        purchase = next(s['code'] for s in steps if 'real purchase handler prepared' in s.get('code', ''))
+        check = next(s['code'] for s in steps if 'native AI recall payment changed' in s.get('code', ''))
+        for interference in ('none', 'faith', 'unit', 'order'):
+            with self.subTest(interference=interference):
+                vm = LuaRuntime()
+                vm.execute('''
+                  BALANCE=5000;COST=1000;UNITS={};REQUESTS=0
+                  local api={Canonical=function() return 'receipt verified' end,Rules={Copy=function(v) return v end}}
+                  ExposedMembers={JAC_Absorption=api}
+                  GameInfo={HeroClasses={[0]={UnitType='HERO'}},Units={HERO={Hash=104}},Yields={YIELD_FAITH={Index=6}}}
+                  CityCommandTypes={PURCHASE=1,PARAM_UNIT_TYPE=2,PARAM_YIELD_TYPE=3,PARAM_MILITARY_FORMATION_TYPE=4}
+                  MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+                  local city={GetX=function() return 4 end,GetY=function() return 0 end,
+                    GetGold=function() return {GetPurchaseCost=function() return COST end} end}
+                  Players={[1]={IsTurnActive=function() return false end},[2]={IsTurnActive=function() return true end,
+                    IsHuman=function() return false end,GetCities=function() return {FindID=function() return city end} end,
+                    GetUnits=function() return {Members=function() return ipairs(UNITS) end} end,
+                    GetReligion=function() return {GetFaithBalance=function() return BALANCE end} end}}
+                  local manager={GetHeroClaimPlayer=function() return 2 end,
+                    GetHeroOriginCityID=function() return {player=2,id=7} end}
+                  Game={GetProperty=function() return {Owner=2,Class=0,CityID=7,EraBefore=0} end,
+                    GetHeroesManager=function() return manager end,GetLocalPlayer=function() return -1 end,
+                    GetCurrentGameTurn=function() return 10 end,GetEras=function() return {GetCurrentEra=function() return 1 end} end}
+                  Events={GameCoreEventPublishComplete={Add=function() end,Remove=function() end},
+                    FaithChanged={Add=function(f) FAITH_EVENT=f end,Remove=function() end},
+                    CityCommandStarted={Add=function(f) COMMAND_EVENT=f end,Remove=function() end},
+                    UnitAddedToMap={Add=function(f) UNIT_EVENT=f end,Remove=function() end}}
+                  CityManager={CanStartCommand=function() return true,{} end,RequestCommand=function()
+                    REQUESTS=REQUESTS+1;BALANCE=BALANCE-1000;FAITH_EVENT(2,0,BALANCE) end}
+                  function Spawn(class,id)
+                    UNITS[#UNITS+1]={GetHeroClassType=function() return class end,GetID=function() return id end}
+                    UNIT_EVENT(2,id,4,0);if class==0 then COST=1600 end
+                  end
+                ''')
+                vm.execute(purchase)
+                vm.execute('JAC_ABSORPTION_AI_PURCHASE_HANDLER();JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+                self.assertEqual(vm.globals().REQUESTS, 1)
+                self.assertFalse(bool(vm.globals().JAC_ABSORPTION_AI_PURCHASE.Complete))
+                if interference == 'faith':
+                    vm.execute('BALANCE=BALANCE-100;FAITH_EVENT(2,0,BALANCE);BALANCE=BALANCE+100;FAITH_EVENT(2,0,BALANCE)')
+                elif interference == 'unit':
+                    vm.execute('Spawn(1,20)')
+                vm.execute('Spawn(0,21);JAC_ABSORPTION_AI_PURCHASE_HANDLER()')
+                self.assertTrue(vm.globals().JAC_ABSORPTION_AI_PURCHASE.Complete)
+                self.assertEqual(vm.globals().JAC_ABSORPTION_AI_PURCHASE.FaithBefore - vm.globals().JAC_ABSORPTION_AI_PURCHASE.FaithAfter, 1000)
+                if interference == 'order':
+                    vm.execute('local t=JAC_ABSORPTION_AI_PURCHASE.Trace;t[2],t[3]=t[3],t[2]')
+                if interference == 'none':
+                    self.assertEqual(vm.execute(check), 'receipt verified')
+                else:
+                    with self.assertRaisesRegex(Exception, 'payment interval includes unrelated or unordered events'):
+                        vm.execute(check)
+
     def test_cleric_fixture_can_be_purchased_without_enabling_other_disabled_units(self):
         with sqlite3.connect(":memory:") as db:
             db.execute("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER)")
@@ -2082,10 +2221,10 @@ class AbsorptionPackageTests(unittest.TestCase):
             if step["action"] == "wait_for":
                 self.assertIsNone(compile_error(step["condition"]["code"]))
         captures = {step["capture_as"] for step in steps if "capture_as" in step and not step["capture_as"].startswith("JAC_ABSORPTION_SYNC_")}
-        self.assertEqual(captures, {"ABSORPTION_IMMEDIATE", "ABSORPTION_AFTER_AI_TURN"})
+        self.assertEqual(captures, {"ABSORPTION_IMMEDIATE", "ABSORPTION_AFTER_AI_TURN", "ABSORPTION_AI_RECALL"})
         self.assertEqual({step["equals_capture"] for step in steps if "equals_capture" in step}, captures)
-        self.assertEqual(sum(step["action"] == "save" for step in steps), 2)
-        self.assertEqual(sum(step["action"] == "load" for step in steps), 2)
+        self.assertEqual(sum(step["action"] == "save" for step in steps), 3)
+        self.assertEqual(sum(step["action"] == "load" for step in steps), 3)
         configure = next(step for step in steps if step["action"] == "configure")
         enabled = next(step for step in steps if step['action'] == 'enable_mods')
         self.assertIn('8424840C-92EF-4426-A9B4-B4E0CB818049', enabled['ids'])
