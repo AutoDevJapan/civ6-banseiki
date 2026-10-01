@@ -24,7 +24,7 @@
 
 吸収の対応付けには`BindEngineReligion(id, nativeReligionIndex)`を使う。原宗教と吸収先は別の創始済み標準宗教で、吸収先はプレイヤー自身が創始した宗教に一致し、自勢力の信徒を持つ存続宗教であることが前提。`NativeFollowers(id)`は世界のすべての生存プレイヤーの都市から、エンジンの`Followers`を合計する。都市数や多数派の都市数、手動入力したコミュニティ人数は使わない。
 
-合計を3で割って1回だけ切り上げ、プレイヤーID・都市ID順に市民を変換する。圧力は無宗教を含む各宗教の目標人数に比例させるため、布教圧力の過去の比率は保持しない。人口は移動しない。適用後は原宗教の減少、自宗教の増加、他宗教の人数不変をすべて検査する。負の圧力と丸めは公式例だけでは保証できず、要実機確認。自動の布教・市民変動とPoCのコミュニティ台帳の同期は後続のアダプターに残す。発見後に標準宗教の信徒が戻っていても、未解決の吸収などは解決できる。
+合計を3で割って1回だけ切り上げ、プレイヤーID・都市ID順に市民を変換する。圧力は無宗教を含む各宗教の目標人数に比例させるため、布教圧力の過去の比率は保持しない。人口は移動しない。適用後は原宗教の減少、自宗教の増加、他宗教の人数不変をすべて検査する。宗教ごとの圧力は量を指定して減算し、無宗教の圧力を保ったまま正の圧力を再配分する。religion-11・13で2都市にまたがる変換と無宗教の保持を確認した。第三の宗教の保持は追加の実機確認として残る。自動の布教・市民変動とPoCのコミュニティ台帳の同期は後続のアダプターに残す。発見後に標準宗教の信徒が戻っていても、未解決の吸収などは解決できる。
 
 返還では発祥国の残高を減らし、同額を受取人に加える。金は半額、外交的支持は整数のため半分を切り捨てて残りを発祥国に残す。すでに同盟中なら結び直して期限を延長しない。同盟の期限切れ、戦争、どちらかの滅亡で宗教同盟を終了し、通常の同盟を結び直しただけでは宗教同盟を再開しない。
 
@@ -86,12 +86,12 @@ Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`を使う�
 | 世界の生存プレイヤーと都市を読む | `DLC/VikingsScenario/Scripts/VikingScenario.lua:224-234,93-95`の`PlayerManager.GetAlive()`と`GetCities():Members/FindID` |
 | 吸収対象の市民数と圧力 | `Base/Assets/UI/ReligionScreen.lua:1074-1092`の`GetReligionsInCity()`、`Religion`、`Followers`。圧力欄は`Base/Assets/UI/WorldView/CityBannerManager.lua:1240-1242`。無宗教を含めた合計が都市人口に一致することは要実機確認 |
 | 自分が創始した宗教と明示的な対応付け | `Base/Assets/UI/ReligionScreen.lua:123,129`、Gameplayの創始済み一覧は`DLC/Expansion2/Scripts/WorldCongress.lua:29`。`BindEngineReligion`は創始済みの標準宗教だけを登録し、番号付き仮宗教の名前から対応を推測しない |
-| 市民の宗教を変えるAPI | `DLC/VikingsScenario/Scripts/VikingScenario.lua:103`の`City:GetReligion():AddReligiousPressure(0, religionIndex, pressure, -1)`。Civ5の`ConvertPercentFollowers`は使わない。元宗教の人数を減らし自宗教を増やす人数配分に圧力を調整する。負の圧力による減算と整数人数への丸めは、この公式例だけでは証明できないため要実機確認。すべての宗教の人数を再読取して検査し、不一致を成功にしない |
+| 市民の宗教を変えるAPI | `DLC/VikingsScenario/Scripts/VikingScenario.lua:103`の`City:GetReligion():AddReligiousPressure(0, religionIndex, pressure, -1)`。Civ5の`ConvertPercentFollowers`は使わない。元宗教の人数を減らし自宗教を増やす人数配分に圧力を調整する。減算は`RemovePressureOneReligion(religionIndex, pressure, responsiblePlayer)`で行う。正しい引数は本体解析とreligion-10・12の診断で確認し、整数人数の再配分と無宗教の保持はreligion-11・13で確認した。すべての宗教の人数を再読取して検査し、不一致を成功にしない |
 | 実機で市民を準備する | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario_Support.lua:266`の`ChangePopulation`、`DLC/NubiaScenario/Scripts/NubiaScenario.lua:820-827`の聖都・創始・`SetAllCityToReligion`。都市全体の変換は準備に限り、吸収そのものには使わない |
 | 外交の同盟を作る・存続を読む | `DLC/VikingsScenario/Scripts/VikingScenario.lua:18-20,77`の`SetHasAllied(other, true)`と`HasAllied`。標準30ターンは`Base/Assets/Gameplay/Data/GlobalParameters.xml:232`。戦争状態も毎ターン確認する。`SetHasAllied(false)`が解除にならない点は依頼者の実機検証済み事実 |
 | 必須の公式英雄モードとDLC | `DLC/Babylon/Babylon.modinfo:2,38-44`のDLC IDと`GAMEMODE_HEROES=1`条件。作成時の設定は`DLC/Babylon/Data/Babylon_ConfigData.xml:21-23`。独立MODの依存関係にもBabylonを追加 |
 | 公式の英雄と加入Modifier | `DLC/Babylon/Data/Babylon_Heroes_MODE.xml:116-127`の`HeroClasses`、`620-631`の`ProjectCompletionModifiers`、`895`の`MODIFIER_CITY_GRANT_HERO`、`903-914`の一度だけ適用するModifier、`985-1008`の英雄クラスと拠点建物。`City:AttachModifierByID`のGameplay例は`DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:296-297` |
-| 英雄の加入済み所有者と生存 | `DLC/Babylon/UI/Additions/GreatPeopleHeroPanel.lua:124-159`の`GetHeroClaimPlayer`とUnit一覧、`HeroesPopup.lua:211,265`の拠点建物と`GetHeroClassType`、`Debug/Heroes.ltp:129-141`の`IsHero/GetLifespan`。公式の加入処理を都市に直接付けて所有者と寿命まで設定されることは要実機確認 |
+| 英雄の加入済み所有者と生存 | `DLC/Babylon/UI/Additions/GreatPeopleHeroPanel.lua:124-159`の`GetHeroClaimPlayer`とUnit一覧、`HeroesPopup.lua:211,265`の拠点建物と`GetHeroClassType`、`Base/Assets/UI/Panels/UnitPanel.lua:2269`の`Unit:GetProperty(UnitPropertyKeys.LifespanRemaining)`。英雄判定は`HeroesPopup.lua:265-268`と同じく英雄クラスの負の値で判定し、今回のUIで存在しなかった直接の寿命 getter は使わない。公式の加入処理を都市に直接付けて所有者と寿命まで設定されることは要実機確認 |
 | 英雄加入の信仰報酬の基準 | `DLC/Indonesia_KhmerScenario/Scripts/IndonesiaKhmerScenario.lua:245-246`のGameplayの`GetFaithYield`。実行直前の値を保存して10倍を付与する。残高を10倍にする処理ではない |
 | 実機で英雄の拠点建物を準備する | `Debug/City.ltp:940-942`の`CreateIncompleteBuilding`、100%完成の指定は`Base/Assets/UI/Tuner/TunerCityPanel.lua:10`。準備後の`HasBuilding`も検査する |
 | 同盟終了を記録するターンイベント | `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:64`の`GameEvents.OnGameTurnStarted.Add`。ロード時・ターン開始時に報酬を再付与しない |
@@ -134,9 +134,9 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pe
 
 ## 現在の検証結果
 
-最新の通常テスト453件（宗教のLua67件）と自動検証ツール212件が成功し、Luaのスキップはない。100手順・Lua63片・10回の保存読込と、35手順の圧力診断は形式と構文の検査に成功した。
+最新の通常テスト454件（宗教のLua68件）と自動検証ツール212件が成功し、Luaのスキップはない。100手順・Lua63片・10回の保存読込と、35手順の圧力診断は形式と構文の検査に成功した。
 
-実機religion-10・12は圧力の診断に成功。religion-11は6段階の保存読込比較、吸収の世界7人から3人だけの変換と無宗教2人の保持、実際の科学・文化、Artifact、返還と宗教同盟まで成功した。7回目の未完了英雄予約の保存読込では、確認待ちで停止した。非表示UIを読み込み後に動かす修正と、検証設定が未登録でも止まらない処理はpush済みで、最後の通し実行を待っている。
+実機religion-10・12は圧力の診断に成功。religion-11は6段階の保存読込比較、吸収の世界7人から3人だけの変換と無宗教2人の保持、実際の科学・文化、Artifact、返還と宗教同盟まで成功した。7回目の未完了英雄予約の保存読込では、確認待ちで停止した。religion-13では非表示UIを動かす修正の実動作を確認したが、UIに存在しないUnitの直接の寿命 getter などを呼び、73/101で停止した。公式の英雄クラスと寿命プロパティの読取へ修正し、単体テストを通した。実機4回の上限のため、修正後の通し実行は次の担当が行う。
 
 第三の宗教の市民を保持する追加の実機確認は共有ToDo190に登録した。Luaでその人数を保持する検査は成功しているが、現在の実機準備には第三の宗教の市民を含めていない。マルチプレイは共有ToDo9で別途確認する。
 
@@ -185,7 +185,7 @@ religion-09のModding.logには「UserInterface components require only the .xml
 
 消去は `RemovePressureOneReligion(religion,8388607,-1)` と、最大値に残り得る小数部分を消す `RemovePressureOneReligion(religion,1,-1)` の2回へ変更した。追加の圧力量も符号付き24.8形式の上限を超えない倍率へ制限する。同じ1引数呼び出しを使っていた実機準備と再興前の喪失準備も修正した。Luaの模擬は単なる全消去から圧力量の減算へ変え、最大圧力と小数部分がある状態での変換も検査する。
 
-`religion-pressure-probe.json` は35手順の診断である。表示用Luaから圧力の一覧を読み、各候補について消去前・直後・追加による再計算後を記録する。本体解析から得た引数と通し実行の成功は、実機結果が出るまで未確認として扱う。
+`religion-pressure-probe.json` は35手順の診断である。表示用Luaから圧力の一覧を読み、各候補について消去前・直後・追加による再計算後を記録する。この診断はreligion-12で35手順を完了した。通し実行の全効果と全保存はまだ完了していない。
 
 
 英雄の未完了予約も通しシナリオで保存する。加入前に検証用コードだけでUIのUnit情報を一時的に取得不能にし、報酬が未払いの予約を確認して保存する。メニューへ戻り読み込むと表示用Luaが新しく読み込まれ、公式英雄の照合と信仰報酬が再開する。報酬を加える前の残高と予定の報酬・Unit・クラスをドライバー側に保存し、読込後の実残高とUnit・クラスを比較する。完了の再実行は拒否される。100手順・Lua63片・10回の保存読込を検査し、実機成功は結果が出てから記録する。
@@ -198,3 +198,12 @@ religion-09のModding.logには「UserInterface components require only the .xml
 religion-11は吸収に成功した。世界の信徒7人から3人だけを2都市で変換し、無宗教2人を保持して信仰500を支払った。研究・異端化・Artifactの実際の科学と文化、返還の金250.5・支持50と宗教同盟も確認した。未完了の英雄予約を7回目に保存し読み込んだが、確認完了を待つ73/101で停止した。
 
 公式 `Base/Assets/UI/InGame.lua:347-348` は追加UIを非表示の状態で読み込む。英雄の橋にはフレームごとの確認処理を登録していたが、非表示のコンテキストではその処理が動かない。読み込み画面が閉じる公式イベントで、部品も入力処理も持たない空のコンテキストを動かすようにした。画面は追加しない。非表示の間は報酬が未払いで、保存読込後のイベントから一度だけ完了することを模擬テストでも検査する。修正後の実機成功は次の実行で確認する。
+
+
+## 次の担当が再開するところ
+
+この担当の実機4回はreligion-10〜13である。10は圧力診断、11は通し実行の英雄予約読込後で停止、12は35手順の圧力診断成功、13はUIの更新再開を確認したが同じ予約の完了待ちで停止した。13のLua.logには各読込後の確認開始と、最後にHeroUI.lua:15の「function expected instead of nil」がある。公式の表示用コードと本体のAPI名を再確認し、英雄判定をクラスから、寿命を`UnitPropertyKeys.LifespanRemaining`から読むようにした。模擬から直接の寿命 getter と英雄判定 getter を取り除いた。寿命のプロパティがまだ届かない場合は報酬を払わず、値が届いた後に一度だけ完了することも検査した。
+
+残る必須シナリオは **religion-persistence.jsonの通し実行**。開始と6段階の保存比較、吸収・無宗教の保持、実産出・Artifact・返還は13でも成功したが、英雄の寿命プロパティ読取、予約の保存再開後の報酬、残る3段階の保存比較、資料の再利用、実宗教の再興、同盟の自然終了、設定初期化は未確認である。圧力診断religion-pressure-probe.jsonは12で完了しており、この担当の最後の修正では変更していない。
+
+PRはMustの実機確認が残るため未マージで保持する。実機は共有のlive作業フォルダーの`tools/civ6-autotest/artifacts/religion-10`〜`religion-13`に残した。最新の454件・自動操作212件が成功し、Luaのスキップはない。100手順・Lua63片と35手順の形式・構文を検査した。日本の史実配置との連携・自然な探索や布教は今後の連携対象で、今回の小地図の試験を日本マップの適合確認としては扱わない。終了済みCiv6の孤立した障害報告プロセスを閉じる処理は自動試験用の起動復旧で、クラッシュ報告ファイルの削除は行わない。手動の未送信報告を保持する運用は追加の確認項目として記録する。

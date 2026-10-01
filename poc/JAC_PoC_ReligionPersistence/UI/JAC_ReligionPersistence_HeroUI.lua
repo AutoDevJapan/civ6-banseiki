@@ -12,8 +12,13 @@ function Bridge.UnitInfo(playerID, unitID)
   local p = Players[playerID]
   local u = p and p:GetUnits():FindID(unitID)
   if not u then return nil end
-  return { hero = u:IsHero(), class = u:GetHeroClassType(), lifespan = u:GetLifespan(),
-    claim = Bridge.ClaimPlayer(u:GetHeroClassType()), active = p:IsTurnActive() }
+  -- HeroesPopup.lua:265-268 uses the class sentinel to identify a Hero.
+  -- UnitPanel.lua:2269 reads remaining lifespan as a unit property, not a getter.
+  local heroClass = u:GetHeroClassType()
+  local lifespan = u:GetProperty(UnitPropertyKeys.LifespanRemaining)
+  return { hero = type(heroClass) == "number" and heroClass >= 0
+      and GameInfo.HeroClasses[heroClass] ~= nil, class = heroClass, lifespan = lifespan,
+    claim = Bridge.ClaimPlayer(heroClass), active = p:IsTurnActive() }
 end
 function Bridge.Schedule(playerID)
   local key = tostring(playerID)

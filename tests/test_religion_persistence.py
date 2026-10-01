@@ -123,6 +123,7 @@ ContextPtr = {
 }
 -- Native founding is a scenario fixture only. These stubs check its call path;
 -- whether the actual engine permits it remains a live-scenario assertion.
+UnitPropertyKeys = { LifespanRemaining = "LifespanRemaining" }
 NATIVE_RELIGION = 42
 local holy = {}
 Players = {}
@@ -218,14 +219,14 @@ for id = 0, 1 do
     GetUnits = function() return {
       FindID = function(_, unit) local u = e.units[tostring(unit)]; return u and {
         GetID = function() return u.id end, GetType = function() return u.kind end,
-        IsHero = function() return u.class ~= nil end, GetHeroClassType = function() return u.class end,
-        GetLifespan = function() return u.lifespan end } end,
+        GetHeroClassType = function() return u.class or -1 end,
+        GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end } end,
       Members = function() local key; return function()
         key = next(e.units, key); if key == nil then return end
         local u = e.units[key]; return u.id, {
           GetID = function() return u.id end, GetType = function() return u.kind end,
-          IsHero = function() return u.class ~= nil end, GetHeroClassType = function() return u.class end,
-          GetLifespan = function() return u.lifespan end }
+          GetHeroClassType = function() return u.class or -1 end,
+          GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end }
       end end } end,
     AttachModifierByID = function(_, modifier)
       if FAIL_EFFECT then error('effect refused') end
@@ -968,6 +969,22 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
                 self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
 
+    def test_hero_waits_for_replicated_lifespan_property_before_reward(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].lifespan=nil")
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, 500)
+        self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
+                         "ENGINE['1'].units[tostring(h.unit)].lifespan=30")
+        self.g.HERO_UI_TICK()
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "APPLIED")
+        self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
+
     def test_hero_verification_accepts_unset_test_flag_in_manual_game(self):
         for getter in ("function() return nil end", "function() end"):
             with self.subTest(getter=getter):
@@ -1023,7 +1040,7 @@ class ReligionPersistenceTests(unittest.TestCase):
         receipt = plain(self.rp.Export())["heroes"]["1"]
         units = self.g.Players[1].GetUnits()
         unit = units.FindID(units, receipt["unit"])
-        self.assertEqual((unit.GetType(), unit.GetHeroClassType(), unit.GetLifespan()), (101, 11, 30))
+        self.assertEqual((unit.GetType(), unit.GetHeroClassType(), unit.GetProperty(unit, self.g.UnitPropertyKeys.LifespanRemaining)), (101, 11, 30))
         self.assertEqual(self.g.ENGINE["0"].heroClaims["11"], 1)
         self.reload()
 

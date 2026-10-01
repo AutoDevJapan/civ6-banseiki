@@ -424,7 +424,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=h and Players[0]:GetUnits():FindID(h.unit); if not u or not u:IsHero() or u:GetHeroClassType()~=h.heroClass or u:GetLifespan()<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 then error('official hero and faith reward not verified') end; return 'official hero class, lifespan, claim and ten times faith yield verified'"
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local h=R.Export().heroes['0']; local u=h and Players[0]:GetUnits():FindID(h.unit); local lifespan=u and u:GetProperty(UnitPropertyKeys.LifespanRemaining); if not u or not GameInfo.HeroClasses[u:GetHeroClassType()] or u:GetHeroClassType()~=h.heroClass or type(lifespan)~='number' or lifespan<=0 or Game.GetHeroesManager():GetHeroClaimPlayer(h.heroClass)~=0 then error('official hero and faith reward not verified') end; return 'official hero class, lifespan, claim and ten times faith yield verified'"
     },
     {
       "action": "ui_lua",

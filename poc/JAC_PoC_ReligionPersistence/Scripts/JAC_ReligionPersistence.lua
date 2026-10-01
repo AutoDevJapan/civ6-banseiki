@@ -787,7 +787,8 @@ function RP.CompleteHero(playerID)
   end
   if info == nil then return false end -- UI has not received the new unit yet.
   if not info.active then return false end -- pay only during the recipient's turn.
-  if not (info.hero and info.class == h.heroClass and info.lifespan > 0 and info.claim == playerID) then
+  if not (info.hero and info.class == h.heroClass and type(info.lifespan) == "number"
+    and info.lifespan > 0 and info.claim == playerID) then
     return false -- independently replicated UI fields may arrive in different frames.
   end
   local p = player(playerID)
