@@ -87,7 +87,8 @@ local function DispatchGrant()
     if AdvanceObserved(owner, flight.stage) then return; end;
     local request;
     for _, item in ipairs(queue.requests) do if item.id == flight.request then request = item; break; end; end;
-    if not request or request.status ~= 'PENDING' or not JAC_TitlePaymentRules.Valid(owner, request.leader) then
+    if not request or (request.status ~= 'PENDING' and request.status ~= 'CANCELING') or
+        (request.status == 'PENDING' and not JAC_TitlePaymentRules.Valid(owner, request.leader)) then
         Script('JAC_TitleProxyReconcile');
         return;
     end;

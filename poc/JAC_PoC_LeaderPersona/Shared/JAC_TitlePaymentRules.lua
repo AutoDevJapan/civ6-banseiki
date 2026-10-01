@@ -42,7 +42,9 @@ local function Save(owner, queue) Game:SetProperty(QUEUE .. owner, queue); end;
 local function Outstanding(queue)
     local reserved = 0;
     for _, request in ipairs(queue.requests) do
-        if request.status == 'PENDING' then reserved = reserved + request.cost - #request.payments; end;
+        if request.status == 'PENDING' or request.status == 'CANCELING' then
+            reserved = reserved + request.cost - #request.payments;
+        end;
     end;
     return reserved;
 end;
@@ -93,7 +95,8 @@ function Rules.Next(owner)
     if queue.flight then
         for _, request in ipairs(queue.requests) do
             if request.id == queue.flight.request then
-                if request.status ~= 'PENDING' or not Rules.Valid(owner, request.leader) then return nil; end;
+                if request.status ~= 'CANCELING' and
+                    (request.status ~= 'PENDING' or not Rules.Valid(owner, request.leader)) then return nil; end;
                 if not Funded(owner, queue, request) then return nil; end;
                 return {request=request.id, leader=request.leader, stage=queue.flight.stage,
                     action=queue.flight.stage == 0 and 'APPOINT' or 'PROMOTE'};
@@ -130,8 +133,9 @@ function Rules.Begin(owner)
     return 'STARTED';
 end;
 
--- Only gameplay calls this transition. A cancelled request keeps the receipts
--- already consumed for it; its unspent reservation is released for later people.
+-- Only gameplay calls this transition. Preparation is cancellable without
+-- spending. An authorized stage is committed: keep its reservation and finish
+-- only that exact stage before releasing the remaining, unissued payments.
 function Rules.Reconcile(owner)
     local queue = Rules.Queue(owner);
     if not queue or not Players[owner] then return 'NO_REQUEST'; end;
@@ -151,12 +155,22 @@ function Rules.Reconcile(owner)
         if request.status == 'PENDING' then
             local valid, reason = Rules.Valid(owner, request.leader);
             if not valid then
-                request.status, request.reason = 'CANCELLED', reason;
+                local flight = queue.flight;
+                request.status = flight and flight.request == request.id and flight.state == 'AUTHORIZED'
+                    and 'CANCELING' or 'CANCELLED';
+                request.reason = reason;
                 changed = true;
                 cancelled = true;
             end;
         end;
         local flight = queue.flight;
+        if request.status == 'CANCELLED' and flight and flight.request == request.id and
+            flight.state == 'AUTHORIZED' then
+            -- Old saves released the reservation too early. Finish only this
+            -- committed native stage before releasing the remaining cost.
+            request.status = 'CANCELING';
+            changed = true;
+        end;
         if request.status == 'CANCELLED' and flight and flight.request == request.id and
             flight.state == 'PREPARED' then
             local paid = Receipt(owner, flight.stage);
@@ -228,7 +242,8 @@ function Rules.Advance(owner)
             queue.cursor = flight.stage + 1;
             queue.spentFloor = spent;
             queue.flight = nil;
-            if request.status ~= 'CANCELLED' and #request.payments == request.cost then request.status = 'PAID'; end;
+            if request.status == 'CANCELING' then request.status = 'CANCELLED';
+            elseif #request.payments == request.cost then request.status = 'PAID'; end;
             Save(owner, queue);
             if request.status == 'CANCELLED' then return 'CANCELLED_PAYMENT'; end;
             return request.status == 'PAID' and 'PAID' or 'PARTIAL';
