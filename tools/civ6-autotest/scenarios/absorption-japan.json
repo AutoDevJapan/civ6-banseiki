@@ -782,7 +782,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local e=Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1');if not e then return false end;local u=Players[e.Owner]:GetUnits():FindID(e.ID);return u~=nil and u:GetReligionType()==e.Religion and u:GetSpreadCharges()==e.SpreadCharges"
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1');if not e then return false end\nlocal u\nfor _,candidate in Players[e.Owner]:GetUnits():Members() do if candidate:GetID()==e.ID then u=candidate;break end end\nlocal religion=u and u:GetReligionType();local charges=u and u:GetSpreadCharges()\nlocal actual='unit='..tostring(e.ID)..' visible='..tostring(u~=nil)..' religion='..tostring(religion)..' expected_religion='..tostring(e.Religion)..' charges='..tostring(charges)..' expected_charges='..tostring(e.SpreadCharges)\nif JAC_ABSORPTION_CONTROL_DIAG~=actual then print('[JAC_ABSORPTION_AUDIT] control publication '..actual);JAC_ABSORPTION_CONTROL_DIAG=actual end\nreturn u~=nil and religion==e.Religion and charges==e.SpreadCharges"
       }
     },
     {

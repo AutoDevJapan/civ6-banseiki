@@ -1860,10 +1860,10 @@ class AbsorptionPackageTests(unittest.TestCase):
           CONTROL={Owner=2,ID=19,Religion=5,SpreadCharges=3}
           UI_RELIGION=5;UI_CHARGES=3;UI_VISIBLE=true
           Game={GetProperty=function() return CONTROL end}
-          local unit={GetReligionType=function() return UI_RELIGION end,
+          local unit={GetID=function() return 19 end,GetReligionType=function() return UI_RELIGION end,
             GetSpreadCharges=function() return UI_CHARGES end}
-          Players={[2]={GetUnits=function() return {FindID=function(_,id)
-            assert(id==19);if UI_VISIBLE then return unit end end} end}}
+          Players={[2]={GetUnits=function() return {FindID=function() error('UI lookup must enumerate IDs') end,
+            Members=function() local pending=UI_VISIBLE;return function() if pending then pending=false;return 1,unit end end end} end}}
         ''')
         self.assertTrue(vm.execute(conditions[0]))
         vm.execute("UI_VISIBLE=false")
