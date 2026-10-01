@@ -148,6 +148,21 @@ INSERT INTO Modifiers (ModifierId, ModifierType) SELECT ModifierId, ModifierType
 INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'Amount', Amount FROM JAC_PersonaSkills;
 INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'YieldType', YieldType FROM JAC_PersonaSkills WHERE YieldType IS NOT NULL;
 INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId) SELECT GovernorPromotionType, ModifierId FROM JAC_PersonaSkills;
+-- Candidate gameplay-side settlement marker. The native base promotion owns it,
+-- so assignment/establishment/neutralization should govern its active city.
+-- City:GetProperty visibility and removal still require a live Civ6 probe.
+INSERT INTO Modifiers (ModifierId, ModifierType)
+SELECT 'JAC_PERSONA_SETTLED_' || LeaderType, 'MODIFIER_SINGLE_CITY_ADJUST_PROPERTY'
+FROM JAC_LeaderPersonas;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_PERSONA_SETTLED_' || LeaderType, 'Key', 'JAC_PERSONA_SETTLED_' || LeaderType
+FROM JAC_LeaderPersonas;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT 'JAC_PERSONA_SETTLED_' || LeaderType, 'Amount', 1
+FROM JAC_LeaderPersonas;
+INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId)
+SELECT BasePromotionType, 'JAC_PERSONA_SETTLED_' || LeaderType
+FROM JAC_LeaderPersonas;
 UPDATE GlobalParameters SET Value=MAX(CAST(Value AS INTEGER), 30) WHERE Name='MAX_GOVERNOR_APPOINTMENTS';
 
 -- This map-scoped component disables only the eight standard official governors.

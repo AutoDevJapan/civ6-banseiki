@@ -22,6 +22,7 @@ end
 Game = { GetLocalPlayer=function() return LOCAL end, GetCurrentGameTurn=function() return TURN end }
 Game.GetProperty, Game.SetProperty = store()
 LOCAL, TURN, SPAWNS, DESTROYS, FAIL_SPAWN, FAIL_DESTROY = 0, 1, 0, 0, false, false
+PROPERTY_READS = true
 function collection(rows, key)
     local t = {}
     for _,r in ipairs(rows) do t[r[key]]=r; if r.Index then t[r.Index]=r end end
@@ -77,7 +78,20 @@ for i,row in ipairs(ROWS) do
     for j=1,2 do
         local cityid=id*10+j
         CITIES[id][cityid]={GetID=function() return cityid end, GetOwner=function() return id end,
-            GetX=function() return j end, GetY=function() return id end}
+            GetX=function() return j end, GetY=function() return id end,
+            GetProperty=function(_,key)
+                if not PROPERTY_READS then return nil end
+                for personIndex,person in ipairs(ROWS) do
+                    if key == 'JAC_PERSONA_SETTLED_'..person.LeaderType then
+                        local def = GOVDEFS[personIndex]
+                        local governor = NATIVE_GOVS[id][def.Hash]
+                        local base = PROMOS[personIndex].Hash
+                        if governor and governor.city == CITIES[id][cityid] and governor.established and
+                           governor.neutralized == 0 and governor.promotions[base] then return 1 end
+                    end
+                end
+                return nil
+            end}
     end
     p.GetCities=function() return {GetCapitalCity=function() return CITIES[id][id*10+1] end,
         Members=function() return members(CITIES[id]) end} end
@@ -399,14 +413,14 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.prop("MERIT"), 0)
         governor.neutralized = 0
         self.g.FIRE("PlayerTurnStarted", 0)
-        self.assertEqual((self.prop("MERIT"), self.prop("GOVERN_LAST_TURN")), (2, 1))
+        self.assertEqual((self.prop("MERIT"), self.prop("GOVERN_LAST_TURN")), (0, None))
         self.g.RESET_CONTEXTS(); self.load_contexts(); self.g.FIRE("PlayerTurnStarted", 0)
-        self.assertEqual(self.prop("MERIT"), 2)
+        self.assertEqual(self.prop("MERIT"), 0)
         self.g.TURN = 2; self.g.FIRE("PlayerTurnStarted", 0)
-        self.assertEqual(self.prop("MERIT"), 4)
+        self.assertEqual(self.prop("MERIT"), 2)
         governor.city = None
         self.g.TURN = 3; self.g.FIRE("PlayerTurnStarted", 0)
-        self.assertEqual(self.prop("MERIT"), 4)
+        self.assertEqual(self.prop("MERIT"), 2)
 
     def test_personal_profiles_pay_different_amounts_and_never_share_balances(self):
         self.settled(DATE, 1); self.settled(HOJO, 2)
@@ -459,9 +473,9 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.combat(loser_id=902)
         self.assertEqual(self.prop("MERIT"), 4)
 
-    def test_unproven_building_and_victory_notifications_survive_reload_without_late_rewards(self):
+    def test_missing_native_marker_keeps_history_without_late_rewards(self):
         self.settled()
-        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.PROPERTY_READS = False
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.combat(x=3)
         self.assertEqual(self.prop("MERIT"), 0)
@@ -478,6 +492,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.combat(x=3)
         self.assertEqual(self.prop("MERIT"), 0)
+        self.g.PROPERTY_READS = True
         self.g.FIRE("BuildingConstructed", 0, 1, 1, 100, True)
         self.combat(loser_id=901, x=3)
         self.assertEqual(self.prop("MERIT"), 5)  # only new, observable events
@@ -490,10 +505,11 @@ class LeaderPersonaLuaTests(unittest.TestCase):
                 if change == "assignment": governor.city = self.g.CITIES[0][2]
                 if change == "establishment": governor.established = False
                 if change == "neutralization": governor.neutralized = 2
-                self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+                self.g.PROPERTY_READS = False
                 self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
                 governor.city = self.g.CITIES[0][1]
                 governor.established, governor.neutralized = True, 0
+                self.g.PROPERTY_READS = True
                 self.g.RESET_CONTEXTS(); self.load_contexts()
                 self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
                 self.assertEqual(self.prop("MERIT"), 0)
@@ -501,42 +517,83 @@ class LeaderPersonaLuaTests(unittest.TestCase):
                 self.g.FIRE("BuildingConstructed", 0, 1, 1, 100, True)
                 self.assertEqual(self.prop("MERIT"), 3)
 
-    def test_ai_turn_dispatch_uses_committed_state_when_ui_reader_is_missing(self):
+    def test_ai_merit_boundary_is_identical_with_or_without_ui_reader(self):
         outcomes = []
         for reader_present in (False, True):
             self.setUp()
-            self.settled(); self.set_merit(100)
+            self.settled(); self.set_merit(6)
             self.g.Players[0].human = False
-            self.g.Players[0].allies[2] = True
             if not reader_present:
                 self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
             self.api.OnPlayerTurnStarted(0)
             outcomes.append((self.prop("CATEGORY"), self.prop("AI_LAST_TURN"),
-                self.prop("NODE_"+DATE+"_ENVOYS_1"), self.prop("ALLY_SEEN_2")))
-            self.assertEqual(self.prop("MERIT"), 92 if not reader_present else 94)
-            self.assertEqual(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_NATIVE_HISTORY"), 1)
+                self.prop("NODE_"+DATE+"_ENVOYS_1"), self.prop("MERIT")))
+            self.assertEqual(self.prop("MERIT"), 0)
+            self.assertIsNone(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_NATIVE_HISTORY"))
             self.g.RESET_CONTEXTS(); self.load_contexts()
             self.api.OnPlayerTurnStarted(0)
             self.assertEqual(self.prop("AI_LAST_TURN"), 1)
         self.assertEqual(outcomes[0], outcomes[1])
-        self.assertEqual(outcomes[0], ("CONTACT", 1, 1, 1))
+        self.assertEqual(outcomes[0], ("CONTACT", 1, 1, 0))
+
+    def test_gameplay_marker_pays_governance_building_and_victory_without_ui_reader(self):
+        self.settled()
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+        self.combat(x=3)
+        self.assertEqual(self.prop("MERIT"), 7)
+        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_NATIVE_HISTORY"))
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+        self.combat(x=3)
+        self.assertEqual(self.prop("MERIT"), 7)
+
+    def test_reassignment_and_neutralization_use_the_event_time_city_marker(self):
+        governor = self.settled()
+        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+        self.assertEqual(self.prop("MERIT"), 3)
+        governor.city = self.g.CITIES[0][2]
+        self.g.FIRE("BuildingConstructed", 0, 1, 1, 101, True)
+        self.assertEqual(self.prop("MERIT"), 3)
+        self.g.FIRE("BuildingConstructed", 0, 2, 2, 102, True)
+        self.assertEqual(self.prop("MERIT"), 6)
+        governor.neutralized = 1
+        self.g.FIRE("BuildingConstructed", 0, 2, 3, 103, True)
+        self.assertEqual(self.prop("MERIT"), 6)
+        governor.neutralized = 0
+        self.g.TURN = 2
+        self.g.FIRE("BuildingConstructed", 0, 2, 4, 104, True)
+        self.assertEqual(self.prop("MERIT"), 9)
+
+    def test_two_marked_cities_never_select_an_arbitrary_merit_recipient(self):
+        self.settled()
+        self.lua.execute("CITIES[0][2].GetProperty=function(_,key) if key=='JAC_PERSONA_SETTLED_'..ROWS[2].LeaderType then return 1 end end")
+        self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+        self.g.FIRE("PlayerTurnStarted", 0)
+        self.assertEqual(self.prop("MERIT"), 0)
+        self.assertEqual(len(list(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS").keys())), 2)
 
     def test_unproven_deeds_cannot_pay_again_on_later_turns(self):
         self.settled()
-        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.PROPERTY_READS = False
         for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.assertEqual(self.prop("MERIT"), 0)
         self.g.TURN = 2
         for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
         self.assertEqual(self.prop("MERIT"), 0)
+        self.g.PROPERTY_READS = True
         self.g.FIRE("BuildingConstructed", 0, 1, 3, 100, True)
         self.assertEqual(self.prop("MERIT"), 3)
 
     def test_deferred_events_preserve_ai_turn_before_later_construction(self):
         self.settled(); self.set_merit(5)
         self.g.Players[0].human = False
-        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.PROPERTY_READS = False
         self.api.OnPlayerTurnStarted(0)
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.g.RESET_CONTEXTS(); self.load_contexts()
@@ -547,7 +604,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def test_historical_pending_deed_is_kept_without_inventing_eligibility(self):
         self.settled()
-        self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+        self.g.PROPERTY_READS = False
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.g.Game.SetProperty(None, "JAC_PERSONA_PENDING_NATIVE_HISTORY", None)  # older saved form
         self.g.TURN = 2

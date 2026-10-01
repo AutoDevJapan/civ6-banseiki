@@ -183,13 +183,20 @@ end
 local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
 local function SettledCity(owner, row)
     if Get(row.LeaderType, "STATE") ~= "GOVERNOR" then return nil, true; end
-    local governor = NativeGovernor(owner, row);
-    if not governor then return nil, false; end
-    if not governor.appointed or not governor.base or
-       not governor.established or governor.neutralized > 0 or governor.cityOwner ~= owner then return nil, true; end
-    local city = governor.cityID and CityManager.GetCity(owner, governor.cityID);
-    if city and city:GetOwner() == owner then return city, true; end
-    return nil, true;
+    local p = Player(owner, true);
+    if not p then return nil, true; end
+    -- The base promotion is configured with a unique native city-property modifier. Read it
+    -- only in GameCore, at the event, so UI initialization cannot alter merit/AI.
+    -- No marker (or two markers) is unproven, never a reason to pay later.
+    local marker = "JAC_PERSONA_SETTLED_" .. row.LeaderType;
+    local settled = nil;
+    for _,city in p:GetCities():Members() do
+        if city:GetOwner() == owner and city:GetProperty(marker) == 1 then
+            if settled then return nil, false; end
+            settled = city;
+        end
+    end
+    return settled, settled ~= nil;
 end
 
 -- Flag all owned city centres, so native reassignment immediately carries purchased skills.

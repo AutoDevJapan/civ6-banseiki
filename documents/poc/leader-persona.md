@@ -445,3 +445,62 @@ leaderperson-16は75ba428で3/111手順まで成功し、ゲーム開始の処�
 最新の全体レビュー20261001-154211-rev-leaderpersonも、同盟功績・UI依存の功績とAI・加入からの実機未確認のMust 3件を残した。Suggestionの技能費用の境界も、実コードのLuaで再現した。功績6点から開始し、UI読取りなしでは6点のまま技能未取得、読取りありでは統治2点を得て8点の技能を買い、残高0になる。再現はD:/CC/Work/pr86-shepherd-next/ai-boundary-reproduction.py。100点の試験で同じ技能を買えたことを、AI全体の端末非依存性の証明には使わない。MPでの不一致は未観測だが、同じ残高で判断が分かれるLua再現がある。
 
 **未完走の指定シナリオはleader-persona-15km.jsonの1本。** 起動の停止を解消した後に、同期加入と本物の偉人生成、称号費用1・2・3、偉人除去、配置・定着・転任、功績・永久固定・都市効果、6回の保存・読込、保留通知と履歴不足ゼロ、称号を使える21AIの未加入総督不存在を完走する。適格な同盟の加算と、ゲーム側だけで功績を確定するMustも別に解決する。共有ToDo #150・#218・#234・#244・#262と人物化の作業フォルダを保持し、開始の比較を行った#286は完了とする。保留通知の実セーブ#181、AI自身の技能取得#158、MP#9も未確認である。
+
+### 功績判定の再設計調査（fix/pr86-merit、実機未確認）
+
+今回の作業は、定着状態をゲームプレイ側で行為発生時に読み、そこで功績を確定する設計を試す。公式の `Base/Assets/Gameplay/Data/Modifiers.xml:2284-2287` は `MODIFIER_SINGLE_CITY_ADJUST_PROPERTY` の対象を `COLLECTION_OWNER`、効果を `EFFECT_ADJUST_CITY_PROPERTY` と定義し、`DLC/Babylon/Data/Babylon_Heroes_MODE.xml:1143-1144` は `Key` と `Amount` の指定例を示す。公式シナリオの `DLC/PiratesScenario/Scripts/PiratesScenario_StartScript.lua:1346` にはゲームプレイLuaから `City:GetProperty` を読む例がある。ただし、この組合せで総督の基礎昇進が付けた値を読めるか、未定着・活動不能・転任で値が消えるかは、これらのファイルだけでは分からない。模擬テストの成功を実機確認と扱わない。
+
+同盟については、公式 `DLC/Expansion1/UI/Loaders/TutorialLoader_Expansion1.lua:148-159` の `Events.AllianceAvailable/Ended` はUIイベントで、成立通知のゲームプレイ側実例ではない。公式Lua内で同盟成立を購読する `GameEvents` の使用例は見つからなかった。`HasAllied` のターン走査は成立時点を復元できないため、適格な同盟への加点を実装済みとは扱わない。旧保存の履歴不足にも発生時の定着状態がない。後の状態で再精算すると誤加算し得るので、履歴不足は区別して保持する。
+
+候補実装では22人の基礎昇進に `JAC_PERSONA_SETTLED_<LeaderType>` をKeyとする都市プロパティModifierを接続した。ゲームプレイLuaは所有都市の同じKeyを行為発生時に読み、値が1の都市が**ちょうど1つ**のときだけ統治・建物・勝利を数える。0件または複数件なら、その時点の適格性を確定できない通知として保存し、後日の状態で加点しない。Luaの模擬テストはUI読取りを外した6点→統治2点→8点のAI技能購入と、建物・勝利・再通知を通した。模擬環境はModifierの付与・解除を仮定しており、実機での動作を証明しない。進化の任命と基礎昇進の確認には従来のUI読取りが残るが、`STATE=GOVERNOR`の確定後の功績とAI購入はUI読取りを使わない。
+
+`python -m unittest discover -s tests -t .` は532件成功し、Luaテストのスキップはない。これはSQLの接続と、仮定した都市プロパティ状態に対するLuaの判定を検証した結果である。Civ6本体のModifier動作と同盟成立通知は未確認。
+
+主担当が起動停止を解消した後、GameCoreのLua診断で次を行う。例の人物IDは、実際に進化させた人物へ置き換える。各段階で同じ式を実行し、ターン・都市ID・値をLua.logに残す。
+
+```lua
+local leader = "LEADER_JAC_DATE_TANEMUNE"
+local owner = Game:GetProperty("JAC_PERSONA_" .. leader .. "_OWNER")
+local key = "JAC_PERSONA_SETTLED_" .. leader
+print("JAC_MERIT_PROBE", Game.GetCurrentGameTurn(), leader, owner,
+      Game:GetProperty("JAC_PERSONA_" .. leader .. "_STATE"))
+if owner and Players[owner] then
+  for _, city in Players[owner]:GetCities():Members() do
+    print("JAC_MERIT_CITY", city:GetID(), city:GetOwner(), city:GetX(), city:GetY(),
+          tostring(city:GetProperty(key)))
+  end
+end
+```
+
+合格条件は、基礎昇進の取得後でも未配置・赴任中は全都市で1がなく、定着後は配置先だけ1、活動不能中は1がなく、回復後は同都市に1が戻ること。転任直後は旧都市から1が消え、新都市の定着後だけ1が現れること。各段階で建物完成・戦勝を1件ずつ起こし、適格な時点だけ人物別の功績が増えること。保存・読込後も同じ結果で、AIの6点境界がUIの読取り準備に左右されないこと。1つでも外れれば、このModifierを功績の根拠に使えない。特に旧都市へ1が残る場合は誤加算の危険がある。
+
+同盟は**ゲームプレイ側で成立時に呼ばれるイベント**を先に特定する。次のLuaをGameCoreで一度だけ実行し、候補イベントの有無と、発生時の引数・外交状態・都市プロパティをLua.logへ記録する。`leader`は実際に進化させた人物へ置き換える。これらのイベント名は候補であり、公式ファイルからゲームプレイ側で使えるとは確認できていない。
+
+```lua
+local leader = "LEADER_JAC_DATE_TANEMUNE"
+local owner = Game:GetProperty("JAC_PERSONA_" .. leader .. "_OWNER")
+local key = "JAC_PERSONA_SETTLED_" .. leader
+for _, candidate in ipairs({"DiplomacyRelationshipChanged", "DiplomacyDealEnacted", "AllianceAvailable"}) do
+  local eventName = candidate
+  local event = GameEvents[eventName]
+  print("JAC_ALLIANCE_EVENT_AVAILABLE", eventName, tostring(event ~= nil),
+        tostring(event and event.Add ~= nil))
+  if event and event.Add then
+    event.Add(function(...)
+      local a, b = ...
+      print("JAC_ALLIANCE_EVENT", eventName, Game.GetCurrentGameTurn(),
+            select("#", ...), tostring(a), tostring(b))
+      if type(a) == "number" and type(b) == "number" and Players[a] and Players[b] then
+        print("JAC_ALLIANCE_STATE", a, b, tostring(Players[a]:GetDiplomacy():HasAllied(b)))
+      end
+      if owner and Players[owner] then
+        for _, city in Players[owner]:GetCities():Members() do
+          print("JAC_ALLIANCE_CITY", city:GetID(), tostring(city:GetProperty(key)))
+        end
+      end
+    end)
+  end
+end
+```
+
+人間とAIが結ぶ新同盟、進化前からの同盟、未配置・赴任中・活動不能中の成立、同じ手番での回復と転任、再同盟、保存・読込を比較する。合格条件は、適格な新同盟の成立時にゲームプレイ側で1回通知され、そこで `HasAllied` が真かつ対象都市のプロパティが1と判定できること。未配置などの成立でもその時点で通知され、プロパティは1ではないこと。実装後は適格な新同盟だけ8点、同じ相手の再同盟は0点を確かめる。これらが確認できるまで、同盟功績のMustは未解決とする。候補イベントが使えない場合、公式SDK/APIの別のゲームプレイ成立通知を探す必要がある。ターン走査だけで加点する変更はしない。
