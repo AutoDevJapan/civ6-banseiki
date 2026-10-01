@@ -5,6 +5,7 @@ import argparse
 from collections import Counter, defaultdict
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 
@@ -37,6 +38,8 @@ def summarize(artifact: Path) -> dict:
                 issues.append(f"duplicate request cost on turn {turn}")
             costs[turn] = dict(player=int(f["player"]), pair=tuple(sorted(map(int, f["pair"].split("-")))),
                                source=f["by"], gold=int(f["gold"]), legitimacy=int(f["legitimacy"]),
+                               gold_before=float(f["gold_before"]) if "gold_before" in f else None,
+                               legitimacy_before=int(f["legitimacy_before"]) if "legitimacy_before" in f else None,
                                gold_after=float(f["gold_after"]), legitimacy_after=int(f["legitimacy_after"]))
         elif event.startswith("ai request "):
             turn = int(f["turn"])
@@ -82,6 +85,12 @@ def summarize(artifact: Path) -> dict:
         expected = ((100 + request["power"] - 1) // request["power"], (5 + request["power"] - 1) // request["power"])
         if (cost["gold"], cost["legitimacy"]) != expected or cost["gold_after"] < 0 or cost["legitimacy_after"] < 0:
             issues.append(f"request cost violates recorded power or balance on turn {turn}")
+        if (cost["gold_before"] is None or cost["legitimacy_before"] is None
+                or not math.isfinite(cost["gold_before"]) or not math.isfinite(cost["gold_after"])
+                or not math.isclose(cost["gold_before"] - cost["gold_after"], cost["gold"], rel_tol=0, abs_tol=1e-6)
+                or cost["legitimacy_before"] - cost["legitimacy_after"] != cost["legitimacy"]
+                or not 30 <= cost["legitimacy_before"] <= 100):
+            issues.append(f"actual request balance delta missing or mismatched on turn {turn}")
         if source.startswith("ai_"):
             decision = ai.get(turn)
             if not decision or (decision["player"], decision["pair"], decision["source"]) != (request["player"], request["pair"], source):
@@ -108,7 +117,9 @@ def summarize(artifact: Path) -> dict:
                 or not request or request["pair"] != row["pair"]
                 or row["intended"] != 15 * request["power"]):
             issues.append(f"refusal cost missing or mismatched respondent {key}")
-        if row["legitimacy_before"] - row["legitimacy_after"] != row["applied"] or not 0 <= row["applied"] <= row["intended"]:
+        if (row["legitimacy_before"] - row["legitimacy_after"] != row["applied"]
+                or not 0 <= row["legitimacy_before"] <= 100
+                or row["applied"] != min(row["intended"], row["legitimacy_before"])):
             issues.append(f"invalid applied refusal loss on turn {row['turn']}")
     if set(refusal_keys) != set(refused_players) or any(count != 1 for count in refusal_keys.values()):
         issues.append("refusal costs must match each respondent exactly once")

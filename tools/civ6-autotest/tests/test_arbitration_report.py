@@ -20,12 +20,12 @@ builder = module("build_arbitration_ai_scenario")
 
 LOG = """[JAC_ARB] loaded shogunate_end_turn=120
 [JAC_ARB] request player=0 pair=0-1 turn=2 power=1
-[JAC_ARB] cost player=0 pair=0-1 turn=2 gold=100 legitimacy=5 gold_after=400.00 legitimacy_after=35 by=ai_party
+[JAC_ARB] cost player=0 pair=0-1 turn=2 gold=100 legitimacy=5 gold_before=500.00 gold_after=400.00 legitimacy_before=40 legitimacy_after=35 by=ai_party
 [JAC_ARB] ai request player=0 pair=0-1 turn=2 by=ai_party score=6 duration=5 weariness=0 weariness_cities=0 army_loss=3 city_loss=0 low_legitimacy=2
 [JAC_ARB] decision player=1 accept=true by=ai
 [JAC_ARB] accepted pair=0-1 turn=3 truce_turns=10 power=1 peace=true
 [JAC_ARB] request player=2 pair=1-3 turn=14 power=3
-[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_after=466.00 legitimacy_after=75 by=ai_shogun
+[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_before=500.00 gold_after=466.00 legitimacy_before=77 legitimacy_after=75 by=ai_shogun
 [JAC_ARB] ai request player=2 pair=1-3 turn=14 by=ai_shogun score=3 duration=12 ally=false capital=false long_war=true
 [JAC_ARB] decision player=1 accept=false by=ai
 [JAC_ARB] decision player=3 accept=false by=ai
@@ -65,7 +65,7 @@ class ArbitrationReportTests(unittest.TestCase):
 
     def test_missing_or_duplicate_cost_prevents_complete_measurement(self):
         for log in (LOG.replace(next(line for line in LOG.splitlines(True) if line.startswith("[JAC_ARB] cost ")), ""),
-                    LOG + "[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_after=466.00 legitimacy_after=75 by=ai_shogun\n"):
+                    LOG + "[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_before=500.00 gold_after=466.00 legitimacy_before=77 legitimacy_after=75 by=ai_shogun\n"):
             with self.subTest(log=log[-100:]):
                 self.assertFalse(self.summary(log)["measurement_complete"])
 
@@ -82,7 +82,7 @@ class ArbitrationReportTests(unittest.TestCase):
 
     def test_pending_final_turn_is_counted_without_claiming_a_ruling(self):
         tail = """[JAC_ARB] request player=0 pair=0-3 turn=201 power=1
-[JAC_ARB] cost player=0 pair=0-3 turn=201 gold=100 legitimacy=5 gold_after=300.00 legitimacy_after=60 by=ai_party
+[JAC_ARB] cost player=0 pair=0-3 turn=201 gold=100 legitimacy=5 gold_before=400.00 gold_after=300.00 legitimacy_before=65 legitimacy_after=60 by=ai_party
 [JAC_ARB] ai request player=0 pair=0-3 turn=201 by=ai_party score=6 duration=24
 """
         data = self.summary(LOG + tail)
@@ -108,6 +108,19 @@ class ArbitrationReportTests(unittest.TestCase):
         for result in (None, False):
             with self.subTest(result=result):
                 self.assertFalse(self.summary(result=result)["measurement_complete"])
+
+    def test_nominal_cost_must_match_actual_balance_delta(self):
+        for changed in (
+            LOG.replace("gold_after=400.00", "gold_after=399.00"),
+            LOG.replace("legitimacy_after=35", "legitimacy_after=34"),
+            LOG.replace("gold_before=500.00 ", ""),
+            LOG.replace("legitimacy_before=40 ", ""),
+            LOG.replace("legitimacy_before=40", "legitimacy_before=29").replace("legitimacy_after=35", "legitimacy_after=24"),
+            LOG.replace("player=3 pair=1-3 turn=15 legitimacy=15", "player=3 pair=1-3 turn=15 legitimacy=30")
+               .replace("applied=45 legitimacy_before=60 legitimacy_after=15", "applied=30 legitimacy_before=60 legitimacy_after=30"),
+        ):
+            with self.subTest(changed=changed):
+                self.assertFalse(self.summary(changed)["measurement_complete"])
 
     def test_refusal_cost_must_match_each_respondent_and_pair(self):
         for changed in (

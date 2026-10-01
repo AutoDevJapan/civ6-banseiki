@@ -202,8 +202,9 @@ local function Request(requester, a, b, source)
 		Game:SetProperty(R.AiPairKey(a, b), turn)
 	end
 	Log(string.format("request player=%d pair=%d-%d turn=%d power=%d", requester, a, b, turn, power))
-	Log(string.format("cost player=%d pair=%d-%d turn=%d gold=%d legitimacy=%d gold_after=%.2f legitimacy_after=%d by=%s",
-		requester, a, b, turn, gold, legitimacy, player:GetTreasury():GetGoldBalance(), R.Legitimacy(requester), source))
+	Log(string.format("cost player=%d pair=%d-%d turn=%d gold=%d legitimacy=%d gold_before=%.2f gold_after=%.2f legitimacy_before=%d legitimacy_after=%d by=%s",
+		requester, a, b, turn, gold, legitimacy, goldBefore, player:GetTreasury():GetGoldBalance(),
+		legitimacyBefore, R.Legitimacy(requester), source))
 	local respondents = {}
 	for _, id in ipairs({ a, b }) do
 		if R.AnswerKey(pending, id) then table.insert(respondents, id) end
