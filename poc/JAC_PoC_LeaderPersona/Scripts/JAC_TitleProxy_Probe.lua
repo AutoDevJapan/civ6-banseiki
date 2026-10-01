@@ -47,10 +47,9 @@ GameEvents.JAC_TitleProxyFixture.Add(function(owner)
 end);
 GameEvents.JAC_TitleProxyRequest.Add(function(owner, params)
     local leader = type(params) == 'table' and params.Leader;
-    local row = type(leader) == 'string' and GameInfo.JAC_LeaderPersonas[leader];
-    local count = 0;
-    if row then local person; person, count = FindPerson(owner, row); end;
-    local result = count == 1 and Payments.Request(owner, leader) or 'PERSON_MISSING';
+    -- Request reconciles all reservations and looks up persisted outcomes
+    -- before validating the current person, including CANCELLED replays.
+    local result = Payments.Request(owner, leader);
     if Players[owner] then
         Players[owner]:SetProperty('JAC_PROXY_REQUEST_RESULT', result);
         local serial = type(params) == 'table' and params.RequestSerial;
@@ -61,13 +60,20 @@ GameEvents.JAC_TitleProxyRequest.Add(function(owner, params)
     print('JAC_PROXY_REQUEST ' .. tostring(owner) .. ':' .. result);
 end);
 GameEvents.JAC_TitleProxyAdvance.Add(function(owner)
-    local reconciled = Payments.Reconcile(owner);
     local result = Payments.Advance(owner);
     if Players[owner] then Players[owner]:SetProperty('JAC_PROXY_ADVANCE_RESULT', result); end;
     print('JAC_PROXY_ADVANCE ' .. tostring(owner) .. ':' .. result);
 end);
 GameEvents.JAC_TitleProxyBegin.Add(function(owner)
-    Payments.Begin(owner);
+    local result = Payments.Begin(owner);
+    if Players[owner] then Players[owner]:SetProperty('JAC_PROXY_BEGIN_RESULT', result); end;
+end);
+GameEvents.JAC_TitleProxyAuthorize.Add(function(owner, params)
+    if type(params) ~= 'table' or not Players[owner] then return; end;
+    local result = Payments.Authorize(owner, params.Flight, params.Request, params.Stage, params.Attempt);
+    Players[owner]:SetProperty('JAC_PROXY_AUTHORIZE_RESULT', {flight=params.Flight,
+        request=params.Request, stage=params.Stage, attempt=params.Attempt,
+        serial=params.DispatchSerial, result=result});
 end);
 GameEvents.JAC_TitleProxyReconcile.Add(function(owner)
     Payments.Reconcile(owner);

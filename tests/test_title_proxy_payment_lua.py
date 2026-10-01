@@ -8,9 +8,15 @@ RULES = (Path(__file__).resolve().parents[1] / "poc/JAC_PoC_LeaderPersona/Shared
 GAMEPLAY = (Path(__file__).resolve().parents[1] / "poc/JAC_PoC_LeaderPersona/Scripts/JAC_TitleProxy_Probe.lua").read_text(encoding="utf-8")
 SETUP = """
 properties, receipts = {}, {[0]={}, [1]={}}
+TURN=10
+function copy(value)
+ if type(value)~='table' then return value end
+ local result={}; for key,item in pairs(value) do result[key]=copy(item) end; return result
+end
 Game = {
- GetProperty=function(_,key) return properties[key] end,
- SetProperty=function(_,key,value) properties[key]=value end
+ GetProperty=function(_,key) return copy(properties[key]) end,
+ SetProperty=function(_,key,value) properties[key]=copy(value) end,
+ GetCurrentGameTurn=function() return TURN end
 }
 GameInfo = {JAC_LeaderPersonas={A={EvolutionCost=2},B={EvolutionCost=3},C={EvolutionCost=1}}}
 GameInfo.GreatPersonIndividuals={}
@@ -50,8 +56,15 @@ for _,leader in ipairs({'A','B','C'}) do
  properties['JAC_PERSONA_'..leader..'_OWNER']=0
  properties['JAC_PERSONA_'..leader..'_STATE']='GREAT_PERSON'
 end
+function authorize(owner)
+ local r=JAC_TitlePaymentRules; local f=r.Queue(owner).flight
+ return r.Authorize(owner,f.id,f.request,f.stage,f.attempt)
+end
 function native_payment(owner,stage)
- if JAC_TitlePaymentRules and JAC_TitlePaymentRules.Queue(owner) and not JAC_TitlePaymentRules.Queue(owner).flight then JAC_TitlePaymentRules.Begin(owner) end
+ if JAC_TitlePaymentRules and JAC_TitlePaymentRules.Queue(owner) then
+  if not JAC_TitlePaymentRules.Queue(owner).flight then JAC_TitlePaymentRules.Begin(owner) end
+  assert(authorize(owner)=='AUTHORIZED')
+ end
  receipts[owner]['JAC_PROXY_NATIVE_PAID_'..stage]=1
  Players[owner].spent=Players[owner].spent+1
 end
@@ -91,6 +104,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
     def test_native_receipt_without_official_spending_is_not_payment(self):
         self.rules.Request(0, "C")
         self.rules.Begin(0)
+        self.assertEqual(self.lua.globals().authorize(0), "AUTHORIZED")
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_0']=1")
         self.assertEqual(self.rules.Advance(0), "ACCOUNTING_PENDING")
         self.assertFalse(self.rules.Paid(0, "C"))
@@ -178,6 +192,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
             self.lua.globals().native_payment(0, stage)
             self.rules.Advance(0)
         self.rules.Begin(0)
+        self.assertEqual(self.lua.globals().authorize(0), "AUTHORIZED")
         self.lua.execute("receipts[0]['JAC_PROXY_NATIVE_PAID_3']=1")
         self.assertEqual(self.rules.Advance(0), "ACCOUNTING_PENDING")
         self.assertEqual(self.rules.Queue(0)["cursor"], 3)
@@ -188,6 +203,7 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules.Request(0, "A")
         self.rules.Request(0, "C")
         self.assertEqual(self.rules.Begin(0), "STARTED")
+        self.assertEqual(self.lua.globals().authorize(0), "AUTHORIZED")
         self.lua.execute("Players[0].spent=1; PERSON_EXISTS.A=false")
         self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
         self.assertIsNone(self.rules.Next(0))
@@ -209,7 +225,6 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules.Request(0, "A")
         self.lua.execute("PERSON_EXISTS.A=false")
         self.rules.Reconcile(0)
-        self.lua.execute("PERSON_EXISTS.A=true")
         self.assertEqual(self.rules.Request(0, "A"), "CANCELLED")
 
     def test_lost_person_releases_unpaid_reservation_and_keeps_consumed_stages(self):
@@ -219,8 +234,8 @@ class TitleProxyPaymentTests(unittest.TestCase):
         self.rules.Advance(0)
         self.lua.execute("PERSON_EXISTS.B=false")
         self.assertIsNone(self.rules.Next(0))
-        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         self.assertEqual(self.rules.Reconcile(0), "CANCELLED")
+        self.assertEqual(self.rules.Advance(0), "NO_STARTED_STAGE")
         old = self.rules.Queue(0)["requests"][1]
         self.assertEqual(old["status"], "CANCELLED")
         self.assertEqual(list(old["payments"].values()), [0])
