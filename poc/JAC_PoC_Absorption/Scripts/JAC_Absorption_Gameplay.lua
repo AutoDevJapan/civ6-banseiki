@@ -116,6 +116,18 @@ local function CityAssets(city)
 end
 A.CityAssets = CityAssets
 
+-- Older Version 1 transactions did not capture districts (or captured one
+-- location per type). Validate only their recorded coverage; never backfill
+-- unknown historical districts from today's city and claim they were saved.
+local function RecordedDistricts(assets)
+  local result = {}
+  for key, position in pairs(assets.Districts or {}) do
+    local location = { Type = position.Type or key, X = position.X, Y = position.Y }
+    result[location.Type .. ":" .. location.X .. ":" .. location.Y] = location
+  end
+  return result
+end
+
 -- Palace buildings are engine-controlled, but their works are still historical assets.
 local function PalaceWorks(city)
   local result, buildings = {}, city:GetBuildings()
@@ -600,7 +612,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   end
   for _, city in source:GetCities():Members() do
     tx.Cities[#tx.Cities + 1] = { X = city:GetX(), Y = city:GetY(), Population = city:GetPopulation(),
-      Faith = Religion(city), Assets = CityAssets(city), PalaceWorks = PalaceWorks(city),
+      Faith = Religion(city), Assets = CityAssets(city), AssetCoverageVersion = 2, PalaceWorks = PalaceWorks(city),
       Governance = R.Copy(city:GetProperty(R.GOVERNANCE_KEY)), Properties = Properties(city, cityKeys),
       PropertyKeys = R.Copy(cityKeys), RebindKeys = RebindKeys(cityRebinders), Name = city:GetName() }
   end
@@ -1038,19 +1050,23 @@ local function Verify(tx, state, exactUnits)
     local city = CityManager.GetCityAt(snap.X, snap.Y)
     assert(city and city:GetOwner() == tx.To, "city transfer failed")
     assert(R.Equal(Properties(city, snap.PropertyKeys), snap.TransferredProperties), "city properties changed")
+    local current = CityAssets(city)
+    assert(snap.AssetCoverageVersion == nil or snap.AssetCoverageVersion == 2, "unsupported city asset coverage version")
+    if snap.AssetCoverageVersion == 2 then
+      assert(type(snap.Assets.Districts) == "table", "district snapshot missing from current asset coverage")
+    end
+    for key, position in pairs(RecordedDistricts(snap.Assets)) do
+      assert(R.Equal(current.Districts[key], position), "transferred city district lost/moved: " .. key)
+    end
     if exactUnits then
       assert(city:GetName() == snap.Name, "city name changed")
-      assert(R.Equal(CityAssets(city), snap.Assets), "city buildings/Great Works changed")
+      local expected = R.Copy(snap.Assets)
+      if snap.AssetCoverageVersion == 2 then expected.Districts = RecordedDistricts(snap.Assets)
+      else current.Districts, expected.Districts = nil, nil end
+      assert(R.Equal(current, expected), "city buildings/Great Works changed")
     else
-      local current = CityAssets(city)
       for buildingType, original in pairs(snap.Assets) do
         assert(current[buildingType], "transferred city building lost: " .. buildingType)
-        if buildingType == "Districts" then
-          for districtType, position in pairs(original) do
-            assert(R.Equal(current.Districts[districtType], position),
-              "transferred city district lost/moved: " .. districtType)
-          end
-        end
         for _, work in pairs(original.Works or {}) do
           if work and work >= 0 then assert(greatWorks[work], "transferred Great Work lost: " .. work) end
         end

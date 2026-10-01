@@ -1893,7 +1893,7 @@ class AbsorptionTests(unittest.TestCase):
         self.apply()
         self.assertTrue(self.verify('test-absorption', True))
         self.run_lua('CITIES[4].districts[1]=nil')
-        with self.assertRaisesRegex(Exception, 'city buildings/Great Works changed'):
+        with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE'):
             self.verify('test-absorption', True)
         with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE'):
             self.verify('test-absorption', False)
@@ -1903,6 +1903,31 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('CITIES[4].districts[1]={X=5,Y=0}')
         self.load_scripts()
         self.assertTrue(self.verify('test-absorption', True))
+
+    def test_legacy_city_assets_keep_recorded_checks_without_inventing_district_coverage(self):
+        self.apply()
+        self.run_lua('''local tx=Game:GetProperty('JAC_ABSORPTION_STATE_V1').Transactions['test-absorption']
+          assert(tx.Cities[1].X==4)
+          tx.Cities[1].AssetCoverageVersion=nil;tx.Cities[1].Assets.Districts=nil''')
+        self.load_scripts()
+        self.assertTrue(self.verify('test-absorption', True))
+        self.run_lua('CITIES[4].monument=false')
+        with self.assertRaisesRegex(Exception, 'city buildings/Great Works changed'):
+            self.verify('test-absorption', True)
+        self.run_lua('''CITIES[4].monument=true;CITIES[4].districts[1]={X=5,Y=0}
+          local tx=Game:GetProperty('JAC_ABSORPTION_STATE_V1').Transactions['test-absorption']
+          tx.Cities[1].Assets.Districts={DISTRICT_HOLY_SITE={X=5,Y=0}}''')
+        self.assertTrue(self.verify('test-absorption', True))
+        self.run_lua('CITIES[4].districts[1]=nil')
+        with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE:5:0'):
+            self.verify('test-absorption', True)
+
+    def test_new_city_asset_coverage_rejects_missing_district_snapshot(self):
+        self.apply()
+        self.run_lua('''local tx=Game:GetProperty('JAC_ABSORPTION_STATE_V1').Transactions['test-absorption']
+          assert(tx.Cities[1].AssetCoverageVersion==2);tx.Cities[1].Assets.Districts=nil''')
+        with self.assertRaisesRegex(Exception, 'district snapshot missing from current asset coverage'):
+            self.verify('test-absorption', True)
 
     def test_multiple_same_type_districts_and_ui_only_enumeration_are_preserved(self):
         self.run_lua('CITIES[4].districts[1]={X=5,Y=0};CITIES[4].districts[2]={Type=1,X=6,Y=0}')
