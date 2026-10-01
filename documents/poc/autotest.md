@@ -5,7 +5,7 @@
 ## 準備と実行
 
 1. 対象 MOD を Civ6 の `Mods` フォルダから参照できる状態にする。ドライバは `.modinfo` の UUID で対象を探し、ジャンクションの参照先を走査する。`bundle0-load-save.json` は `JAC_PoC_Bundle0`、クランと手帳のシナリオは `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を使う。`banseiki-ruleset.json` はこの3 MOD と `JAC_PoC_BanseikiRuleset` を使う。実際に Civ6 が参照する `Mods` の配置先を確認する。
-2. Civ6 は**ウィンドウ表示**で起動できる設定にする。停止中ならドライバが Steam 経由で起動する。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
+2. Civ6 は**ウィンドウ表示**で起動できる設定にする。停止中ならドライバが Steam 経由で DX11 版を起動する。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
 3. PowerShell でリポジトリのルートから実行する。Python 3.12 で確認済み。追加パッケージは不要。
 
 ```powershell
@@ -21,6 +21,14 @@ python -m unittest discover -s tools/civ6-autotest/tests -v
 オーナーが PC の前にいるとき（確認モード）は `--owner-start` を付ける。`start_game` で自動開始せず、設定済みの「ゲームの作成」画面を開いて、オーナーが「ゲーム開始」を押すまで最大1時間待つ。以降の手順は自動で進む。
 
 `states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
+
+### DX11 での起動
+
+再起動は `steam://launch/289070/option2` を `os.startfile` に渡す。2026-10-01 にこの PC の Steam 起動情報（`appcache/appinfo.vdf`）を読み、Windows の `option2` が `Base/Binaries/Win64Steam/CivilizationVI.exe`（DX11）、`option1` が DX12 版であることを確認した。ゲーム番号だけを渡す旧 URI は Steam 側の選択に依存していた。[2K の公式説明](https://support.2k.com/hc/en-us/articles/34845053169939-2K-Launcher-Complete-Sunset)でも、Steam の起動メニューとプロパティで版を選べることが案内されている。
+
+URI の送信でコンソールは開かず、起動中の Steam の `localconfig.vdf` は書き換えない。起動後はウィンドウの実行ファイル名を検査し、DX11 でなければキー・クリック入力の前に失敗する。起動情報の変更や実行ファイルを差し替える Steam の起動設定で DX12 が選ばれても、そのままテストを進めない。起動済みのゲームの検出・終了・入力先の照合は、両方の実行ファイルに対応する。
+
+この PC で他の実機テストと並行して確認するときは、push 後に共用ロックを持つ `python D:/CC/Tools/civ6-live/live_chain.py <ブランチ>:bundle0-load-save.json` を使う。ゲームの起動・終了はこの処理を通す。
 
 ### FireTuner の一時的なタイムアウト
 
@@ -38,7 +46,7 @@ python -m unittest discover -s tools/civ6-autotest/tests -v
 
 実行開始時、全 `enable_mods.ids` に対応する `.modinfo` を `Mods` 直下の各 MOD フォルダで探し、ジャンクションを解決した参照先の全ファイルから最も新しい更新時刻を取得する。起動中の `CivilizationVI.exe` または `CivilizationVI_DX12.exe` の開始時刻よりその時刻が**新しい**場合、またはゲームが起動していない場合は、`steps.jsonl` の `auto_restart` に理由を記録して再起動する。MOD が見つからない、同じ UUID が複数ある、Civ6 プロセスが複数ある場合は失敗として止める。更新時刻が等しい場合は再起動しない。`--no-auto-restart` はデバッグ時のみ鮮度確認を省略する。
 
-再起動はまず FireTuner の `FrontEnd` / `InGame` UI 状態から `Events.UserConfirmedClose()` を呼ぶ。接続できなければ、実行ファイル名とタイトルを照合した Civ6 ウィンドウに閉じる要求を送る。15 秒待っても元のプロセスが残る場合は PID と開始時刻を再確認してから終了させる。旧 EXE の終了後も Steam が旧セッションを解放するまで 8 秒待ち、`steam://rungameid/289070` で再起動する。新しいゲームが現れなければ 45 秒間隔で最大 4 回起動を試す。確認済みの Civ6 ウィンドウを左クリックしてオープニングを飛ばす。動画が続いて `FrontEnd` が応答しなければ、安全な位置を 12 秒間隔で再度左クリックし、`UI.IsInFrontEnd()` が `true` を返すまで待つ（the opening can be skipped with a left click）。起動直後にこの読み取り専用照会の応答が欠けた場合だけ再接続して再試行する。再起動後に MOD の更新時刻を再確認し、まだ新しければ手順を始めず失敗する。ログの開始位置も取り直すため、古いゲームのログを判定に混ぜない。
+再起動はまず FireTuner の `FrontEnd` / `InGame` UI 状態から `Events.UserConfirmedClose()` を呼ぶ。接続できなければ、実行ファイル名とタイトルを照合した Civ6 ウィンドウに閉じる要求を送る。15 秒待っても元のプロセスが残る場合は PID と開始時刻を再確認してから終了させる。旧 EXE の終了後も Steam が旧セッションを解放するまで 8 秒待ち、`steam://launch/289070/option2` で DX11 版を再起動する。新しいゲームが現れなければ 45 秒間隔で最大 4 回起動を試す。確認済みの Civ6 ウィンドウを左クリックしてオープニングを飛ばす。動画が続いて `FrontEnd` が応答しなければ、安全な位置を 12 秒間隔で再度左クリックし、`UI.IsInFrontEnd()` が `true` を返すまで待つ（the opening can be skipped with a left click）。起動直後にこの読み取り専用照会の応答が欠けた場合だけ再接続して再試行する。再起動後に MOD の更新時刻を再確認し、まだ新しければ手順を始めず失敗する。ログの開始位置も取り直すため、古いゲームのログを判定に混ぜない。
 
 Civ6 がまったく起動していないときも、`restart_game`（自動再起動を含む）は「閉じる」手順を飛ばして Steam の起動経路でそのまま起動し、以後は通常の再起動と同じく（ウィンドウ待ち、オープニングのスキップ、FrontEnd 応答待ち）進む。最初の手順が `restart_game` 以外で `--no-auto-restart` のときも、Civ6 が無ければ同じ起動を先に行う。ドライバが起動していないプロセスは終了させず、待っても複数プロセスが残れば従来どおり拒否する。
 
