@@ -1,5 +1,5 @@
 {
-  "name": "15 km Japan: the same 22 factions without Leader Persona, to compare game-core readiness",
+  "name": "15 km Japan: Leader Persona native data only, without its Gameplay or UI scripts",
   "judge_profile": "generic",
   "steps": [
     {
@@ -9,12 +9,12 @@
         "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
         "7696e937-2044-4f3c-8e13-4e27632e2710",
         "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
-        "403be889-1455-4de7-967b-ad54c0ff3431"
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2"
       ],
       "disable_ids": [
         "dfa0717e-4d0b-4370-b693-27fc6758571b",
         "f6398d3b-707c-4d0a-8b19-e68333efa200",
-        "91cf7b65-54bb-4f69-a452-19a65527cde2",
         "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
         "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
         "57a3af09-fb38-41da-b367-818de11a995c",
@@ -150,11 +150,11 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "if Game.GetLocalPlayer()~=0 or not Players[0]:IsHuman() or UI.IsGameCoreBusy() then error('baseline is not ready for human operations') end; local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do n=n+1 end; if n~=22 then error('baseline needs the same 22 factions') end; return 'baseline has 22 factions and idle game core'"
+      "code": "if Game.GetLocalPlayer()~=0 or not Players[0]:IsHuman() or UI.IsGameCoreBusy() then error('baseline is not ready for human operations') end; local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do n=n+1 end; if n~=22 then error('baseline needs the same 22 factions') end; local n=0; if not GameInfo.JAC_LeaderPersonas then error('persona data missing') end; for r in GameInfo.JAC_LeaderPersonas() do n=n+1 end; if n~=22 then error('persona definitions missing') end; if ExposedMembers.JAC_LeaderPersona then error('persona gameplay script was loaded') end; return '22 factions with 22 persona definitions, idle core, no persona gameplay'"
     },
     {
       "action": "screenshot",
-      "path": "leader-persona-baseline-ready.png"
+      "path": "leader-persona-data-only-ready.png"
     }
   ]
 }
