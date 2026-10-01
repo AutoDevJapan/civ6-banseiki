@@ -49,7 +49,7 @@ end
 -- 手番の前（読み込み直後など）は送らず、画面を開いたままにする（ボタンは押し直せる）
 function JAC_ChooseDarkPolicy(policyType)
 	local l = Ledger()
-	if l == nil or PendingHouse() == nil or POLICY_BY_TYPE[policyType] == nil or not TurnActive() then return false end
+	if l == nil or PendingHouse() == nil or POLICY_BY_TYPE[policyType] == nil or JAC_AgesView_PendingOath(l, Game.GetLocalPlayer()) or not TurnActive() then return false end
 	UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT,
 		{ OnStart = "JAC_SengokuDarkPolicyChoose", PolicyType = policyType, Reign = l.reign })
 	OnClose()
@@ -58,10 +58,17 @@ end
 
 -- 改元の画面（UI/JAC_SengokuReignPopup.lua）が出ている間は出さず、閉じたら出す（下の LuaEvents）。
 local m_ReignPopupOpen = false
+local m_AfterOaths = false
 
 -- automatic = true は改元の画面を閉じたときだけ。通知からは同じターン中に開き直せる。
 local function ShowChoice(automatic)
 	if m_ReignPopupOpen then return false end
+	if JAC_AgesView_PendingOath(Ledger(), Game.GetLocalPlayer()) then
+		m_AfterOaths = true
+		OnClose()
+		LuaEvents.JAC_SengokuOaths_Open()
+		return false
+	end
 	local house = PendingHouse()
 	if house == nil then
 		OnClose()
@@ -82,6 +89,7 @@ local function ShowChoice(automatic)
 	Controls.Rows:CalculateSize()
 	Controls.Panel:DoAutoSize()
 	m_ShownReign = l.reign
+	m_AfterOaths = false
 	JAC_DARK_POLICY_SHOW_COUNT = JAC_DARK_POLICY_SHOW_COUNT + 1
 	ContextPtr:SetHide(false)
 	return true
@@ -131,4 +139,14 @@ end)
 LuaEvents.JAC_SengokuReignPopup_Closed.Add(function(showChoice)
 	m_ReignPopupOpen = false
 	if showChoice then ShowChoice(true) end
+end)
+
+LuaEvents.JAC_SengokuOaths_Shown.Add(OnClose)
+LuaEvents.JAC_SengokuOaths_Closed.Add(function()
+	if PendingHouse() then m_AfterOaths = true end
+	if m_AfterOaths and TurnActive() and not JAC_AgesView_PendingOath(Ledger(), Game.GetLocalPlayer()) then ShowChoice(false) end
+end)
+-- EXECUTE_SCRIPT may publish after the oath popup closes. Wait for the saved choice.
+Events.GameCoreEventPublishComplete.Add(function()
+	if m_AfterOaths and TurnActive() and not JAC_AgesView_PendingOath(Ledger(), Game.GetLocalPlayer()) then ShowChoice(false) end
 end)
