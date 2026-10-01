@@ -1588,6 +1588,46 @@ class AbsorptionTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "transferred unit properties changed"):
             self.run_lua(steps[5]["code"])
 
+    def test_live_transfer_rejects_missing_cleric_before_ai_turn(self):
+        steps = self.live_scenario_fixture()
+        self.run_lua(steps[0]['code'])
+        self.run_lua(steps[1]['code'])
+        self.run_lua('''for id,u in pairs(Players[2].units) do
+          if GameInfo.Units[u:GetType()].UnitType=='UNIT_MISSIONARY' then
+            Players[2].units[id]=nil
+          end
+        end''')
+        with self.assertRaisesRegex(Exception, 'transferred unit missing/type/owner mismatch'):
+            self.run_lua(steps[2]['code'])
+
+    def test_live_ai_turn_allows_cleric_consumption_but_checks_current_save_snapshot(self):
+        steps = self.live_scenario_fixture()
+        self.run_lua(steps[0]['code'])
+        self.run_lua(steps[1]['code'])
+        self.run_lua(steps[2]['code'])
+        self.g.CURRENT_TURN = 6
+        self.run_lua('''for id,u in pairs(Players[2].units) do
+          if u:IsHero() then u:SetProperty(UnitPropertyKeys.LifespanRemaining,
+            u:GetProperty(UnitPropertyKeys.LifespanRemaining)-1) end
+          if GameInfo.Units[u:GetType()].UnitType=='UNIT_MISSIONARY' then
+            Players[2].units[id]=nil
+          end
+        end
+        local current=UNIT(2,777,'UNIT_MISSIONARY');current.religion=5;current.spread=2
+        ''')
+        after = self.run_lua(steps[4]['code'])
+        self.load_scripts()
+        self.assertEqual(self.run_lua(steps[5]['code']), after)
+        self.run_lua('Players[2].units[777].spread=1')
+        self.assertNotEqual(self.run_lua(steps[5]['code']), after)
+        self.run_lua('''for id,u in pairs(Players[2].units) do
+          if GameInfo.Units[u:GetType()].UnitType=='UNIT_GREAT_GENERAL' then
+            Players[2].units[id]=nil
+          end
+        end''')
+        with self.assertRaisesRegex(Exception, 'transferred unit lost after AI turn'):
+            self.run_lua(steps[5]['code'])
+
     def test_live_recall_probes_execute_native_eligibility_checks_and_detect_wrong_owner(self):
         steps = self.live_scenario_fixture()
         self.run_lua(steps[0]['code'])
