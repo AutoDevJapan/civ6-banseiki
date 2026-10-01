@@ -153,6 +153,54 @@
       </Properties>
       <File>Scripts/JAC_TitleProxy_Probe.lua</File>
     </AddGameplayScripts>
+    <ImportFiles id="JAC_TitleProxy_Shared_0" criteria="JAC_Persona_Map_0">
+      <File>Shared/JAC_TitlePaymentRules.lua</File>
+      <File>UI/JAC_TitleProxy_View.lua</File>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </ImportFiles>
+    <ImportFiles id="JAC_TitleProxy_Shared_1" criteria="JAC_Persona_Map_1">
+      <File>Shared/JAC_TitlePaymentRules.lua</File>
+      <File>UI/JAC_TitleProxy_View.lua</File>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </ImportFiles>
+    <ImportFiles id="JAC_TitleProxy_Shared_2" criteria="JAC_Persona_Map_2">
+      <File>Shared/JAC_TitlePaymentRules.lua</File>
+      <File>UI/JAC_TitleProxy_View.lua</File>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </ImportFiles>
+    <ImportFiles id="JAC_TitleProxy_Shared_3" criteria="JAC_Persona_Map_3">
+      <File>Shared/JAC_TitlePaymentRules.lua</File>
+      <File>UI/JAC_TitleProxy_View.lua</File>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </ImportFiles>
+    <AddUserInterfaces id="JAC_TitleProxy_View_0" criteria="JAC_Persona_Map_0">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </AddUserInterfaces>
+    <AddUserInterfaces id="JAC_TitleProxy_View_1" criteria="JAC_Persona_Map_1">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </AddUserInterfaces>
+    <AddUserInterfaces id="JAC_TitleProxy_View_2" criteria="JAC_Persona_Map_2">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </AddUserInterfaces>
+    <AddUserInterfaces id="JAC_TitleProxy_View_3" criteria="JAC_Persona_Map_3">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+        <Context>InGame</Context>
+      </Properties>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </AddUserInterfaces>
   </InGameActions>
   <Files>
     <File>JAC_PoC_LeaderPersona.dep</File>
@@ -172,5 +220,8 @@
     <File>UI/JAC_LeaderPersona_Tree.lua</File>
     <File>Data/JAC_TitleProxy_Probe.sql</File>
     <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    <File>Shared/JAC_TitlePaymentRules.lua</File>
+    <File>UI/JAC_TitleProxy_View.lua</File>
+    <File>UI/JAC_TitleProxy_View.xml</File>
   </Files>
 </Mod>

@@ -28,3 +28,23 @@ SELECT 'GOVERNOR_JAC_TITLE_PROXY', PromotionType FROM JAC_TitleProxyPayments;
 INSERT INTO GovernorPromotionPrereqs (GovernorPromotionType, PrereqGovernorPromotion)
 SELECT PromotionType, CASE WHEN Step=1 THEN 'GOVERNOR_PROMOTION_JAC_TITLE_PROXY_BASE'
  ELSE 'GOVERNOR_PROMOTION_JAC_TITLE_PROXY_' || (Step-1) END FROM JAC_TitleProxyPayments;
+
+-- Candidate native receipt. MODIFIER_PLAYER_ADJUST_PROPERTY is registered in
+-- the official GS schema (COLLECTION_OWNER / EFFECT_ADJUST_PLAYER_PROPERTY).
+-- Ethiopia_SecretSocieties_MODE.xml:198,714 applies player effects from a
+-- cannot-assign Governor promotion. Receipt activation must be observed live.
+CREATE TABLE JAC_TitleProxyReceipts (Step INTEGER PRIMARY KEY, PromotionType TEXT NOT NULL UNIQUE,
+ ModifierId TEXT NOT NULL UNIQUE, PropertyKey TEXT NOT NULL UNIQUE);
+INSERT INTO JAC_TitleProxyReceipts VALUES (0, 'GOVERNOR_PROMOTION_JAC_TITLE_PROXY_BASE',
+ 'JAC_PROXY_RECEIPT_0', 'JAC_PROXY_NATIVE_PAID_0');
+INSERT INTO JAC_TitleProxyReceipts
+SELECT Step, PromotionType, 'JAC_PROXY_RECEIPT_' || Step, 'JAC_PROXY_NATIVE_PAID_' || Step
+FROM JAC_TitleProxyPayments;
+INSERT INTO Modifiers (ModifierId, ModifierType)
+SELECT ModifierId, 'MODIFIER_PLAYER_ADJUST_PROPERTY' FROM JAC_TitleProxyReceipts;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT ModifierId, 'Key', PropertyKey FROM JAC_TitleProxyReceipts;
+INSERT INTO ModifierArguments (ModifierId, Name, Value)
+SELECT ModifierId, 'Amount', 1 FROM JAC_TitleProxyReceipts;
+INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId)
+SELECT PromotionType, ModifierId FROM JAC_TitleProxyReceipts;
