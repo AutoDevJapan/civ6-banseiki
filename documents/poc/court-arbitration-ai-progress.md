@@ -8,6 +8,8 @@
 - 作業ブランチ：`feat/arbitration-ai`。開始時の本流：`5cc9d19`。
 - 共有ToDo：230。自分の項目の状態はスケジューラが更新する。
 - 元のスケジューラ作業フォルダは保持する。新しい作業は上記のフォルダで続ける。
+- PR：[91](https://github.com/AutoDevJapan/civ6-banseiki/pull/91)。実機と計測を終えるまでDraftを保つ。
+- 別モデルのレビュー：共有ToDo 242、GPT-6.1-Luna。結果は `D:/CC/Work/arbitration-ai/review-initial.md`。
 
 ## 終えたこと
 
@@ -20,10 +22,20 @@
 - 実機用の50手順と5回の保存復元を作った。軍3体の純減は実際に部隊を消して作る。過去の疲弊と1573年の境界は制御した準備状態で、通常進行の計測には含めない。
 - 請求経路・成立/拒否・実際の費用と拒否の控除・間隔を照合する集計を追加した。記録の欠損・重複・早送りは完全な200ターン計測と扱わない。
 - 通常テスト404件、自動操作テスト202件が成功した。Luaのテスト省略なし。実機用JSONの形式とLua構文も確認した。
+- 全50手順のゲームプレイ処理をlupaでも実行し、5回の保存復元と請求3件（当事者1件・将軍家2件）が成功した。集計・シナリオのテストは10件になった。
+- 実機の短いシナリオを共有ロックの待ち行列へ入れた。200ターンは短いシナリオが成功してから実行する。
 
 ## 途中のコミット
 
 - `2821e93`：AIの両請求経路、SSOT、lupaの検証を保存し、pushした。
+- `bb7fe0c`：実機シナリオと費用の集計を保存し、pushした。
+- `5811c04`：シナリオの全処理と保存復元をlupaで実行するテストを保存し、pushした。
+
+## 進行中の実行
+
+- 短い実機：`live_chain.py feat/arbitration-ai:court-arbitration-ai.json --stop-on-failure`。現時点では待ち行列。Pythonの実行PIDは184624、実行ツールのセッションは73652。
+- コンソールを出さないため、`D:/CC/Work/arbitration-ai/hidden_run.py`から実行する。子プロセスにも`CREATE_NO_WINDOW`を付ける。
+- 実機の成果物は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/arbitration-ai-<番号>`。先行の他PRの成果物は今回の結果と混ぜない。
 
 ## 残ること
 
