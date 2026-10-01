@@ -98,6 +98,7 @@ GameInfo = {
   StartEras = { ERA_ANCIENT = { Year = tables.StartYear } },
   GameSpeeds = { [0] = { GameSpeedType = "GAMESPEED_STANDARD", GameSpeedTurnCollection = speedTurns } },
   Yields = { YIELD_GOLD = { Index = 2 }, YIELD_CULTURE = { Index = 4 } },
+  Units = { [0] = { Combat = 10, RangedCombat = 0 }, [1] = { Combat = 0, RangedCombat = 0 } },
 }
 CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
@@ -107,7 +108,7 @@ local function properties()
 end
 Game = { GetCurrentGameTurn = function() return CURRENT_TURN end }
 Game.GetProperty, Game.SetProperty = properties()
-WAR, WAR_CHANGED = {}, {}
+WAR, WAR_CHANGED, ALLIED = {}, {}, {}
 -- The engine's minimum war length (DIPLOMACY_WAR_MIN_TURNS): MakePeaceWith(b) silently does nothing before it
 -- (court-arbitration-05); MakePeaceWith(b, true) makes peace at once (probe-make-peace, court-arbitration-06).
 -- 0 = peace is always possible. FORCE_IGNORED simulates an engine where the second argument does nothing,
@@ -124,6 +125,8 @@ local function plot(x)
   if p == nil then
     p = {}
     p.GetIndex = function() return x end
+    p.GetX = function() return x end
+    p.GetY = function() return 0 end
     p.GetOwner = function() return PLOT_OWNER[x] or math.floor(x / 100) end
     p.GetProperty, p.SetProperty = properties()
     PLOTS[x] = p
@@ -142,7 +145,7 @@ function FLAG(x, key) return plot(x):GetProperty(key) end
 Players, PlayerConfigurations, MAJORS = {}, {}, {}
 for i, civ in ipairs(civs) do
   local id = i - 1
-  local p = { gold = 500, cities = 2, human = false }
+  local p = { gold = 500, cities = 2, units = 4, weariness = 0, human = false }
   p.GetID = function() return id end
   p.IsMajor = function() return true end
   p.IsAlive = function() return true end
@@ -159,7 +162,8 @@ for i, civ in ipairs(civs) do
       local function yield()
         return 10 * (1 + 0.1 * ((plot(x):GetProperty("JAC_ARB_LEGITIMACY_HIGH") or 0) - (plot(x):GetProperty("JAC_ARB_LEGITIMACY_LOW") or 0)))
       end
-      list[k] = { GetX = function() return x end, GetY = function() return 0 end, GetYield = yield }
+      list[k] = { GetX = function() return x end, GetY = function() return 0 end, GetYield = yield,
+        GetGrowth = function() return {GetAmenitiesLostFromWarWeariness = function() return p.weariness end} end }
     end
     return list
   end
@@ -168,8 +172,16 @@ for i, civ in ipairs(civs) do
     Members = function() return ipairs(cityList()) end,
     GetCapitalCity = function() return cityList()[1] end,
   } end
+  p.GetUnits = function() return { Members = function()
+    local list = {}
+    for k = 1, p.units do list[k] = {GetType = function() return 0 end} end
+    -- Civilians must not contribute to the military count or its contraction.
+    list[#list + 1] = {GetType = function() return 1 end}
+    return ipairs(list)
+  end } end
   p.GetDiplomacy = function() return {
     IsAtWarWith = function(_, o) return WAR[math.min(id, o) .. "_" .. math.max(id, o)] == true end,
+    HasAllied = function(_, o) return ALLIED[pair(id, o)] == true end,
     DeclareWarOn = function(_, o) SET_WAR(id, o, true) end,
     MakePeaceWith = function(_, o, force)
       if (force == true and not FORCE_IGNORED) or canPeace(id, o) then SET_WAR(id, o, false) end
@@ -195,7 +207,9 @@ ExposedMembers = {}
 unpack = unpack or table.unpack
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
-function include(name) dofile(rulesPath) end
+function include(name)
+  dofile(string.gsub(rulesPath, "JAC_CourtArbitration_Rules.lua$", name .. ".lua"))
+end
 local handlers = {}
 GameEvents = setmetatable({}, { __index = function(t, name)
   local list = {}
@@ -242,6 +256,9 @@ class ArbitrationTurnTests(unittest.TestCase):
                          START_TURN, rules)
         self.lua.execute((MOD / "Scripts/JAC_CourtArbitration.lua").read_text(encoding="utf-8"))
         self.g = self.lua.globals()
+        # These tests isolate manual requests/answers. Autonomous behavior has its own suite below.
+        self.g.JAC_ARB.AI_EXHAUSTION_THRESHOLD = 9999
+        self.g.JAC_ARB.AI_SHOGUN_THRESHOLD = 9999
         self.g.SET_WAR(self.OUCHI, self.OTOMO, True)  # R01, at war from 1534
         self.turn = 1
         self.g.START_TURN(1)
@@ -684,6 +701,216 @@ class SubjugationOrderTests(unittest.TestCase):
 
 
 UI_ONLY_STATES = {"InGame", "DiplomacyActionView", "DiplomacyDealView"}
+
+
+@unittest.skipIf(lupa is None, "lupa is not installed")
+class ArbitrationAiTests(unittest.TestCase):
+    OUCHI, OTOMO, ASHIKAGA, MORI = 0, 1, 2, 3
+    next_turn, at_war = ArbitrationTurnTests.next_turn, ArbitrationTurnTests.at_war
+    game, player, log = ArbitrationTurnTests.game, ArbitrationTurnTests.player, ArbitrationTurnTests.log
+    legitimacy = ArbitrationTurnTests.legitimacy
+
+    def setUp(self):
+        ArbitrationTurnTests.setUp(self)
+        self.g.JAC_ARB.AI_EXHAUSTION_THRESHOLD = 6
+        self.g.JAC_ARB.AI_SHOGUN_THRESHOLD = 3
+
+    def exhaust(self, pid=0):
+        self.g.Players[pid].cities = 1  # 3 points for one city less than the observed peak
+        self.g.Players[pid].units = 1   # 3 points for three military units fewer
+
+    def test_exhausted_party_requests_pays_and_waits_until_the_following_turn(self):
+        self.exhaust()
+        self.next_turn()
+        pending = self.game("JAC_ARB_PENDING")
+        self.assertEqual((pending.Requester, pending.A, pending.B, pending.Turn, pending.Power, pending.Source),
+                         (0, 0, 1, 2, 1, "ai_party"))
+        self.assertEqual((self.g.Players[0].gold, self.legitimacy(0)), (400, 51))
+        self.assertEqual(self.game("JAC_ARB_AI_PAIR_REQUEST_0_1"), 2)
+        self.assertEqual(self.player(0, "JAC_ARB_AI_LAST_REQUEST"), 2)
+        self.assertTrue(self.at_war(0, 1))
+        self.assertIsNone(self.game("JAC_ARB_LAST_EVENT"))  # no fabricated human EXECUTE_SCRIPT
+        self.assertIn("[JAC_ARB] ai request player=0 pair=0-1 turn=2 by=ai_party score=6 "
+                      "duration=1 weariness=0 weariness_cities=1 army_loss=3 city_loss=1 low_legitimacy=0", self.log())
+        self.next_turn()
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        # The stronger respondent refuses (2 cities > 1.5 * 1); a paid request does not force acceptance.
+        self.assertTrue(self.at_war(0, 1))
+        self.assertEqual(self.legitimacy(1), 44)
+        self.assertEqual(self.player(1, "JAC_ARB_OUTLAW_UNTIL"), 13)
+
+    def test_duration_alone_can_prompt_a_party_after_1573_with_normal_cost_and_power(self):
+        self.next_turn(120)
+        p = self.game("JAC_ARB_PENDING")
+        self.assertEqual((p.Requester, p.Source, p.Power), (0, "ai_party", 1))
+        self.next_turn(121)
+        self.assertFalse(self.at_war(0, 1))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 131)
+
+    def test_weariness_and_low_legitimacy_are_independent_score_components(self):
+        self.g.Players[0].weariness = 2  # two cities: 4, capped to 3 points
+        self.g.Players[0].units = 3      # one lost unit
+        self.lua.execute("Players[0]:SetProperty('JAC_LEGITIMACY', 35)")
+        self.next_turn()
+        self.assertEqual(self.game("JAC_ARB_PENDING").Requester, 0)
+        self.assertEqual(self.legitimacy(0), 33)
+        self.assertIn("score=6 duration=1 weariness=4 weariness_cities=2 army_loss=1 city_loss=0 low_legitimacy=2",
+                      "\n".join(self.log()))
+
+    def test_unavailable_weariness_api_uses_duration_and_keeps_coverage_visible(self):
+        self.lua.execute("Players[0].weariness=nil")
+        self.g.Players[2].human = True  # isolate duration from third-party long-war proposals
+        self.next_turn(24)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.next_turn(25)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Requester, 0)
+        self.assertIn("duration=24 weariness=0 weariness_cities=0", "\n".join(self.log()))
+
+    def test_unexhausted_and_human_parties_do_not_request(self):
+        self.next_turn(2)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.g.Players[0].human = True
+        self.exhaust()
+        self.next_turn(3)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual(self.g.Players[0].gold, 500)
+
+    def test_insufficient_gold_or_legitimacy_does_not_charge_or_start_an_interval(self):
+        self.exhaust()
+        self.g.Players[0].gold = 99
+        self.next_turn(2)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual(self.g.Players[0].gold, 99)
+        self.assertIsNone(self.player(0, "JAC_ARB_AI_LAST_REQUEST"))
+        self.g.Players[0].gold = 500
+        self.lua.execute("Players[0]:SetProperty('JAC_LEGITIMACY', 20)")
+        self.next_turn(3)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual(self.g.Players[0].gold, 500)
+        self.assertIn("gold=1 legitimacy=0 interval=0", "\n".join(self.log()))
+        self.assertIn("gold=0 legitimacy=1 interval=0", "\n".join(self.log()))
+
+    def test_more_exhausted_unaffordable_candidate_does_not_starve_another_party(self):
+        self.exhaust(0)
+        self.g.Players[0].gold = 0
+        self.g.Players[1].weariness = 3
+        self.g.Players[1].units = 1
+        self.next_turn(2)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Requester, 1)
+        self.assertEqual((self.g.Players[0].gold, self.g.Players[1].gold), (0, 400))
+
+    def test_shogun_proposes_for_an_ally_and_both_parties_answer(self):
+        self.lua.execute("ALLIED['0_2']=true")
+        self.next_turn(2)
+        p = self.game("JAC_ARB_PENDING")
+        self.assertEqual((p.Requester, p.A, p.B, p.Power, p.Source), (2, 0, 1, 3, "ai_shogun"))
+        self.assertEqual((self.g.Players[2].gold, self.legitimacy(2)), (466, 74))
+        self.next_turn(3)
+        self.assertFalse(self.at_war(0, 1))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 33)
+        self.assertEqual((self.legitimacy(0), self.legitimacy(1)), (64, 64))
+
+    def test_shogun_proposes_for_the_capital_region_and_for_long_wars(self):
+        self.lua.execute("NEAR['0_2']=true")
+        self.next_turn(2)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Source, "ai_shogun")
+        self.assertIn("capital=true", "\n".join(self.log()))
+        self.setUp()
+        self.next_turn(12)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.next_turn(13)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Source, "ai_shogun")
+        self.assertIn("long_war=true", "\n".join(self.log()))
+
+    def test_shogun_stops_at_the_exact_calendar_cutoff_but_may_request_its_own_war(self):
+        self.g.JAC_ARB.AI_EXHAUSTION_THRESHOLD = 9999
+        self.lua.execute("ALLIED['0_2']=true")
+        self.next_turn(119)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Source, "ai_shogun")
+        # This was issued before the cutoff: its recorded power stays 3 when resolved at 120.
+        self.next_turn(120)
+        self.assertFalse(self.at_war(0, 1))
+        self.assertEqual(self.game("JAC_ARB_TRUCE_0_1"), 150)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.g.SET_WAR(0, 3, True)  # a fresh pair avoids forcing war on the peace turn
+        self.next_turn(131)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.g.SET_WAR(2, 3, True)
+        self.next_turn(132)
+        self.g.JAC_ARB.AI_EXHAUSTION_THRESHOLD = 6
+        self.exhaust(2)
+        self.next_turn(133)
+        p = self.game("JAC_ARB_PENDING")
+        self.assertEqual((p.Requester, p.Power, p.Source), (2, 1, "ai_party"))
+        self.assertEqual(self.g.Players[2].gold, 366)
+
+    def test_human_shogun_never_automatically_proposes(self):
+        self.g.Players[2].human = True
+        self.lua.execute("ALLIED['0_2']=true; NEAR['0_2']=true")
+        self.next_turn(13)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+
+    def test_party_and_pair_intervals_survive_lua_reload_and_prevent_alternating_requesters(self):
+        self.exhaust(0)
+        self.next_turn(2)
+        self.next_turn(3)  # refused; war continues
+        self.g.Players[1].units = 1
+        self.g.Players[1].weariness = 3
+        # Re-read the real AI include as a save/load recreates Lua locals; no gameplay handler duplication.
+        self.lua.execute((MOD / "Scripts/JAC_CourtArbitration_AI.lua").read_text(encoding="utf-8"))
+        self.next_turn(11)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual((self.g.Players[0].gold, self.g.Players[1].gold), (400, 500))
+        self.next_turn(12)
+        self.assertIsNotNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual(self.game("JAC_ARB_AI_PAIR_REQUEST_0_1"), 12)
+
+    def test_requester_interval_applies_across_different_wars(self):
+        self.exhaust(0)
+        self.next_turn(2)
+        self.next_turn(3)
+        self.g.SET_WAR(0, 3, True)
+        self.next_turn(4)
+        self.g.Players[0].weariness = 3
+        self.lua.execute("Players[0]:SetProperty('JAC_LEGITIMACY',35)")
+        self.next_turn(11)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertEqual(self.g.Players[0].gold, 400)
+
+    def test_shogun_interval_applies_to_other_pairs(self):
+        self.lua.execute("ALLIED['0_2']=true; ALLIED['2_3']=true")
+        self.next_turn(2)
+        self.next_turn(3)
+        self.g.SET_WAR(1, 3, True)
+        self.next_turn(11)
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.next_turn(12)
+        self.assertEqual((self.game("JAC_ARB_PENDING").Requester, self.game("JAC_ARB_PENDING").Source), (2, "ai_shogun"))
+
+    def test_existing_pending_and_one_per_turn_limit_take_priority_over_ai(self):
+        self.g.REQUEST(2, 0, 1)
+        self.exhaust(0)
+        self.g.START_TURN(1)  # duplicate same-turn event must not resolve a newly created request
+        self.assertEqual(self.game("JAC_ARB_PENDING").Requester, 2)
+        self.assertEqual(self.g.Players[0].gold, 500)
+        self.next_turn(2)
+        self.assertTrue(self.at_war(0, 1))  # Ouchi accepts; Otomo now refuses a weaker Ouchi
+        pending = self.game("JAC_ARB_PENDING")  # a new turn may receive one new request after the previous ruling
+        self.assertEqual((pending.Requester, pending.Turn, pending.Source), (0, 2, "ai_party"))
+        self.g.START_TURN(2)
+        self.assertEqual(self.game("JAC_ARB_PENDING").Turn, 2)
+        self.assertEqual(sum(line.startswith("[JAC_ARB] request ") for line in self.log()), 2)
+
+    def test_peace_removes_observations_and_new_wars_start_without_old_losses(self):
+        self.g.SET_WAR(0, 1, False)
+        self.next_turn(2)
+        self.assertIsNone(self.game("JAC_ARB_AI_WARS")["p0_1"])
+        self.exhaust(0)
+        self.g.SET_WAR(0, 1, True)
+        self.next_turn(3)
+        war = self.game("JAC_ARB_AI_WARS")["p0_1"]
+        self.assertEqual((war.Since, war.CitiesA, war.ArmyA), (3, 1, 1))
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
 
 
 @unittest.skipIf(lupa is None, "lupa is not installed")
