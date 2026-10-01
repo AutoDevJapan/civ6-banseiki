@@ -534,6 +534,11 @@ function R.Tick()
         for _,u in Players[id]:GetUnits():Members() do
           if not had[u:GetID()] and want and u:GetType()==want.Index then unit=u end
         end
+        if unit and (unit:GetX()<0 or unit:GetY()<0) then
+          -- An ID can exist without a map placement (-9999 in the native UI).
+          -- Remove the failed spawn and retry training without starting the lock.
+          UnitManager.Kill(unit); unit=nil
+        end
         if unit then
           s.LastCompletion=turn; s.ProductionUnlock=turn+R.Scale(R.PRODUCTION_LOCK)
           s.LastProducedUnit=unit:GetID(); s.Production=nil

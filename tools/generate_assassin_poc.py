@@ -152,15 +152,27 @@ def build_scenario():
       local ok,why=R.TestRevealTile(owner,x,y)
       assert(ok,'fixture reveal failed: '..tostring(why))
     end; local function Grant(owner,kind,city)
-      local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end
-      UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)
-      local found; for _,u in Players[owner]:GetUnits():Members() do
-        if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then found=u end
+      assert(Game:GetProperty(R.TEST)==1,'fixture grant requires test mode')
+      local x,y=city:GetX(),city:GetY()
+      assert(x>=0 and y>=0,'fixture anchor has invalid coordinates: '..x..','..y)
+      local found
+      for radius=1,6 do
+        local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end
+        UnitManager.InitUnitValidAdjacentHex(owner,kind,x,y,radius)
+        for _,u in Players[owner]:GetUnits():Members() do
+          if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then
+            if u:GetX()>=0 and u:GetY()>=0 and Map.GetPlotDistance(x,y,u:GetX(),u:GetY())<=6 then found=u
+            else
+              print('[JAC_ASN_FIXTURE] unplaced unit owner='..owner..' kind='..kind..' radius='..radius..
+                ' xy='..u:GetX()..','..u:GetY())
+              UnitManager.Kill(u)
+            end
+          end
+        end
+        if found then break end
       end
-      assert(found,'unit grant failed')
-      if R.IsAssassin(found) then
-        FixtureReveal(owner,city:GetX(),city:GetY()); FixtureReveal(owner,found:GetX(),found:GetY())
-      end
+      assert(found,'fixture unit has no valid placement within six tiles: '..kind..' owner='..owner)
+      if R.IsAssassin(found) then FixtureReveal(owner,x,y); FixtureReveal(owner,found:GetX(),found:GetY()) end
       return found
     end; """
     equality="""local function Same(a,b)
@@ -328,7 +340,8 @@ def build_scenario():
           local s=R.State(t.Actor); assert(s.Mission==nil and R.CanCommand(s,R.Turn()),'branch wait not expired')
           Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=1,Detected=0,Branch='"""+branch+"""'})
           assert(R.StartAttempt(t.Actor,u:GetID(),b,'LEADER')); local m=R.State(t.Actor).Mission
-          assert(m.Due==R.Turn()+5,'grant is outside the near-distance band')
+          local distance=Map.GetPlotDistance(u:GetX(),u:GetY(),city:GetX(),city:GetY())
+          assert(m.Due==R.Turn()+(distance<=1 and 5 or distance<=3 and 8 or 10),'leader mission distance rule')
           t.BranchTarget=b; t.BranchPlan=m.PostDeathPlan; t.BranchSnapshot=m.Snapshot
           t.BranchAssets={}; for _,c in Players[b]:GetCities():Members() do t.BranchAssets[#t.BranchAssets+1]={X=c:GetX(),Y=c:GetY()} end
         """+("""
@@ -390,13 +403,14 @@ def build_scenario():
             advance()
         check("""
           local b=t.LossTarget; local city=Players[b]:GetCities():GetCapitalCity(); assert(city,'loss-test capital')
-          local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,city)
+          local victim=Grant(b,'UNIT_WARRIOR',city); local u=Grant(t.Actor,R.UNIT,victim)
           local s=R.State(t.Actor); assert(s.Mission==nil and R.CanCommand(s,R.Turn()),'loss command wait')
           Players[t.Actor]:SetProperty('JAC_ASN_FORCE_NEXT',{Success="""+str(success)+",Detected="+str(detected)+"""})
           FixtureReveal(t.Actor,victim:GetX(),victim:GetY())
           assert(R.StartAttempt(t.Actor,u:GetID(),b,'UNIT',victim:GetID()))
           local m=R.State(t.Actor).Mission; local ledger=Players[b]:GetProperty('JAC_ASN_DIPLOMACY_V1') or {}
-          assert(m.Due==R.Turn()+2,'unit targets are too far apart')
+          local distance=Map.GetPlotDistance(u:GetX(),u:GetY(),victim:GetX(),victim:GetY())
+          assert(m.Due==R.Turn()+(distance<=1 and 2 or distance<=3 and 3 or 4),'unit mission distance rule')
           t.LossMission=m; t.LossVictim=victim:GetID(); t.LossGrievances=(ledger.Grievances or {})[tostring(t.Actor)] or 0
           t.LossCommandUnlock=R.State(t.Actor).CommandUnlock
           t.LossFriendship=(ledger.Friendship or {})[tostring(t.Actor)] or 0

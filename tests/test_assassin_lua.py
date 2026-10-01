@@ -180,6 +180,25 @@ class AssassinLuaTests(unittest.TestCase):
           end
         """)
 
+    def test_unplaced_spawn_keeps_training_pending_without_starting_nationwide_lock(self):
+        self.run_lua("""
+          assert(A.StartProduction(0,10))
+          local spawn=UnitManager.InitUnitValidAdjacentHex
+          UnitManager.InitUnitValidAdjacentHex=function(id,kind,x,y)
+            BAD_UNIT=GRANT(id,GameInfo.Units[kind].Index,-9999,-9999):GetID()
+          end
+          ADVANCE(100)
+          local s=A.State(0)
+          assert(s.Production and s.Production.Due==1100)
+          assert(s.LastCompletion==nil and s.LastProducedUnit==nil and (s.ProductionUnlock or 0)<=NOW)
+          assert(Players[0]:GetUnits():FindID(BAD_UNIT)==nil and #KILLS==1)
+          UnitManager.InitUnitValidAdjacentHex=spawn; ADVANCE(1)
+          s=A.State(0)
+          assert(s.Production==nil and s.LastCompletion==1101 and s.ProductionUnlock==1111)
+          local unit=Players[0]:GetUnits():FindID(s.LastProducedUnit)
+          assert(unit and unit:GetX()>=0 and unit:GetY()>=0)
+        """)
+
     def test_every_factor_and_security_direction(self):
         self.run_lua("""
           for _,k in ipairs({'Building','District','Policy','Government','Trait','Job'}) do
@@ -1007,6 +1026,25 @@ class AssassinLuaTests(unittest.TestCase):
           assert(R.StartAttempt(0,U,1,'UNIT',VICTIM))
           local target=R.State(0).Mission.Target
           assert(target.Kind=='UNIT' and target.Owner==1 and target.ID==VICTIM and target.X==3 and target.Y==1)
+        """)
+
+    def test_live_fixture_retries_unplaced_unit_without_killing_existing_units(self):
+        from tools.generate_assassin_poc import build_scenario
+        code=next(s['code'] for s in build_scenario()['steps'] if s['action']=='ui_lua')
+        helper=code[code.index('local function FixtureReveal'):code.index('local function Same')]
+        self.run_lua("""
+          Game:SetProperty(A.TEST,1); GRANT_CALLS=0
+          UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,radius)
+            GRANT_CALLS=GRANT_CALLS+1; assert(radius==GRANT_CALLS)
+            local u=GRANT(owner,GameInfo.Units[kind].Index,radius==1 and -9999 or x,y)
+            if radius==1 then BAD_GRANT=u:GetID() end
+          end
+        """)
+        self.run_lua("local R=A; "+helper+"""
+          local u=Grant(0,R.UNIT,Players[1]:GetCities():GetCapitalCity())
+          assert(GRANT_CALLS==2 and u:GetX()==2 and u:GetY()==0)
+          assert(Players[0]:GetUnits():FindID(BAD_GRANT)==nil and #KILLS==1)
+          assert(Players[0]:GetUnits():FindID(U) and Players[0]:GetUnits():FindID(U2))
         """)
 
     def test_full_generated_live_sequence_resolves_in_16_real_ticks_and_round_trips(self):
