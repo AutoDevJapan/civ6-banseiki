@@ -51,6 +51,13 @@ local function PublishHeroKeys()
           rows[#rows + 1] = { Religion = row.Religion, Followers = row.Followers }
         end
         return rows
+      elseif method == "DISTRICTS" then
+        local locations = {}
+        for _, district in city:GetDistricts():Members() do
+          locations[#locations + 1] = { Type = GameInfo.Districts[district:GetType()].DistrictType,
+            X = district:GetX(), Y = district:GetY() }
+        end
+        return locations
       elseif method == "SLOTS" then return city:GetBuildings():GetNumGreatWorkSlots(building)
       elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot)
       elseif method == "PURCHASE_COST" then

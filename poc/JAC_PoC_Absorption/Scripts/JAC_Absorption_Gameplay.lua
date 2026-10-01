@@ -88,11 +88,19 @@ local function CityAssets(city)
   local result, buildings = {}, city:GetBuildings()
   local districts = assert(city:GetDistricts(), "city district collection unavailable")
   result.Districts = {}
-  for info in GameInfo.Districts() do
-    local x, y = districts:GetDistrictLocation(info.Index)
-    if x ~= nil and y ~= nil and x >= 0 and y >= 0 then
-      result.Districts[info.DistrictType] = { X = x, Y = y }
+  local locations = {}
+  if districts.Members then
+    for _, district in districts:Members() do
+      locations[#locations + 1] = { Type = GameInfo.Districts[district:GetType()].DistrictType,
+        X = district:GetX(), Y = district:GetY() }
     end
+  else
+    locations = CityRead(city, "DISTRICTS")
+  end
+  for _, location in ipairs(locations) do
+    local key = location.Type .. ":" .. location.X .. ":" .. location.Y
+    assert(not result.Districts[key], "duplicate district position")
+    result.Districts[key] = location
   end
   for info in GameInfo.Buildings() do
     -- The engine controls capital palaces; historical belongings are separate roster/Great Work records.
@@ -408,6 +416,7 @@ end
 local function CityNeedsUI(city)
   local religion, buildings = city:GetReligion(), city:GetBuildings()
   return not religion.GetReligionsInCity or not buildings.GetNumGreatWorkSlots or not buildings.GetGreatWorkInSlot
+    or not city:GetDistricts().Members
 end
 
 local function Prepare(plan, state, sourceReads, sourceReadyToken)

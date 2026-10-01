@@ -14,8 +14,8 @@ ENGINE = r'''
 local outcomes = ...
 local function rows(list) local i=0;return function() i=i+1;return list[i] end end
 GameInfo = {
-  Districts = function() return rows({{Index=0,DistrictType='DISTRICT_CITY_CENTER'},
-    {Index=1,DistrictType='DISTRICT_HOLY_SITE'}}) end,
+  Districts = {[0]={Index=0,DistrictType='DISTRICT_CITY_CENTER'},
+    [1]={Index=1,DistrictType='DISTRICT_HOLY_SITE'}},
   JAC_AbsorptionOutcomes = function() return rows(outcomes) end,
   UnitPromotions = function() return rows({{Index=7},{Index=9}}) end,
   Buildings = setmetatable({BUILDING_PALACE={Index=0,BuildingType='BUILDING_PALACE'}},
@@ -127,7 +127,14 @@ function CITY(owner,x,pop,faith)
       BUILDING_CREATIONS=(BUILDING_CREATIONS or 0)+1;self.monument=true
     end} end
   city.districts={[0]={X=x,Y=0}}
-  city.GetDistricts=function() return {GetDistrictLocation=function(_,id)
+  city.GetDistricts=function() return {Members=function()
+    local list={};for id,d in pairs(city.districts) do
+      local kind,position=id,d
+      list[#list+1]={GetType=function() return position.Type or kind end,
+        GetX=function() return position.X end,GetY=function() return position.Y end}
+    end
+    return ipairs(list)
+  end,GetDistrictLocation=function(_,id)
     local d=city.districts[id];if d then return d.X,d.Y end
   end} end
   city.GetBuildings=function() return {
@@ -1896,6 +1903,33 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('CITIES[4].districts[1]={X=5,Y=0}')
         self.load_scripts()
         self.assertTrue(self.verify('test-absorption', True))
+
+    def test_multiple_same_type_districts_and_ui_only_enumeration_are_preserved(self):
+        self.run_lua('CITIES[4].districts[1]={X=5,Y=0};CITIES[4].districts[2]={Type=1,X=6,Y=0}')
+        self.split_unit_contexts()
+        self.run_lua('''
+          UI_DISTRICT_HANDLES={}
+          for x,c in pairs(CITIES) do UI_DISTRICT_HANDLES[x]=c.GetDistricts end
+          for _,p in pairs(UI_PLAYERS) do
+            local get=p.GetCities
+            p.GetCities=function()
+              local cities=get()
+              return {FindID=function(_,id)
+                local c=cities:FindID(id)
+                return c and setmetatable({GetDistricts=UI_DISTRICT_HANDLES[c:GetX()]},{__index=c})
+              end}
+            end
+          end
+          for _,c in pairs(CITIES) do c.GetDistricts=function() return {} end end
+        ''')
+        tx = self.apply()
+        self.assertEqual(tx.Status, 'WAITING_UI')
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.finish_spread_publications()
+        self.assertTrue(self.verify('test-absorption', True))
+        self.run_lua('CITIES[4].districts[2]=nil')
+        with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE:6:0'):
+            self.verify('test-absorption', False)
 
     def test_palace_work_loss_is_detected_even_when_the_palace_building_is_exempt(self):
         self.run_lua('''
