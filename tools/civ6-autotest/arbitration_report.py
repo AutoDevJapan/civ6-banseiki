@@ -135,9 +135,15 @@ def summarize(artifact: Path) -> dict:
         issues.append("reloaded or missing gameplay log is not an uninterrupted measurement")
     if (artifact / "result.json").exists():
         result = json.loads((artifact / "result.json").read_text(encoding="utf-8"))
+        if result.get("passed") is not True:
+            full = False
+            issues.append("scenario result does not confirm success")
         if result.get("test_mode"):
             full = False
             issues.append("controlled clock/test mode is not an uninterrupted balance measurement")
+    else:
+        full = False
+        issues.append("scenario result is missing")
     outcome_counts = Counter(outcomes.values())
     refused_rows = sum(event.startswith("refused ") for event in events)
     if refused_rows != len(refusals):

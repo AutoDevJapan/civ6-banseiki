@@ -38,7 +38,7 @@ LOG = """[JAC_ARB] loaded shogunate_end_turn=120
 
 
 class ArbitrationReportTests(unittest.TestCase):
-    def summary(self, log=LOG, test_mode=None):
+    def summary(self, log=LOG, test_mode=None, result=True):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "Lua.log").write_text(log, encoding="utf-8")
@@ -46,8 +46,8 @@ class ArbitrationReportTests(unittest.TestCase):
             steps += [dict(status="OK", action="18/18 ui_lua", detail="return=T+201 surviving majors=22"),
                       dict(status="OK", action="judge", detail="8/8 PASS")]
             (root / "steps.jsonl").write_text("\n".join(json.dumps(s) for s in steps), encoding="utf-8")
-            if test_mode:
-                (root / "result.json").write_text(json.dumps(dict(test_mode=test_mode)), encoding="utf-8")
+            if result is not None:
+                (root / "result.json").write_text(json.dumps(dict(passed=result, test_mode=test_mode)), encoding="utf-8")
             return report.summarize(root)
 
     def test_outcomes_costs_clamping_and_sources(self):
@@ -103,6 +103,11 @@ class ArbitrationReportTests(unittest.TestCase):
     def test_reloaded_log_is_not_an_uninterrupted_measurement(self):
         data = self.summary(LOG + "[JAC_ARB] loaded shogunate_end_turn=120\n")
         self.assertFalse(data["measurement_complete"])
+
+    def test_missing_or_failed_result_is_not_complete(self):
+        for result in (None, False):
+            with self.subTest(result=result):
+                self.assertFalse(self.summary(result=result)["measurement_complete"])
 
     def test_refusal_cost_must_match_each_respondent_and_pair(self):
         for changed in (
