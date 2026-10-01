@@ -67,6 +67,7 @@
       </Properties>
       <File>Data/JAC_LeaderPersona.sql</File>
       <File>Data/JAC_LeaderPersona_Trees.sql</File>
+      <File>Data/JAC_TitleProxy_Probe.sql</File>
     </UpdateDatabase>
     <UpdateText id="JAC_Persona_UpdateText_0" criteria="JAC_Persona_Map_0">
       <Properties>
@@ -74,62 +75,13 @@
       </Properties>
       <File>Text/JAC_LeaderPersona_Text.xml</File>
     </UpdateText>
-    <UpdateIcons id="JAC_Persona_UpdateIcons_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Data/JAC_LeaderPersona_Icons.xml</File>
-    </UpdateIcons>
-    <AddGameplayScripts id="JAC_Persona_AddGameplayScripts_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Scripts/JAC_LeaderPersona_Gameplay.lua</File>
-    </AddGameplayScripts>
-    <AddUserInterfaces id="JAC_Persona_AddUserInterfaces_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-    </AddUserInterfaces>
-    <ReplaceUIScript id="JAC_Persona_GovernorPanel_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_GovernorDetailsPanel_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorDetailsPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorDetails.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_UnitPanel_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>UnitPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ImportFiles id="JAC_Persona_UIFiles_0" criteria="JAC_Persona_Map_0">
-      <File>UI/JAC_LeaderPersona_View.lua</File>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-      <File>UI/JAC_LeaderPersona_GovernorPanel.lua</File>
-      <File>UI/JAC_LeaderPersona_GovernorDetails.lua</File>
-      <File>UI/JAC_LeaderPersona_UnitPanel.lua</File>
-      <File>Shared/JAC_PersonaTreeRules.lua</File>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-      <File>UI/JAC_LeaderPersona_Tree.lua</File>
-    </ImportFiles>
     <UpdateDatabase id="JAC_Persona_UpdateDatabase_1" criteria="JAC_Persona_Map_1">
       <Properties>
         <LoadOrder>400</LoadOrder>
       </Properties>
       <File>Data/JAC_LeaderPersona.sql</File>
       <File>Data/JAC_LeaderPersona_Trees.sql</File>
+      <File>Data/JAC_TitleProxy_Probe.sql</File>
     </UpdateDatabase>
     <UpdateText id="JAC_Persona_UpdateText_1" criteria="JAC_Persona_Map_1">
       <Properties>
@@ -137,62 +89,13 @@
       </Properties>
       <File>Text/JAC_LeaderPersona_Text.xml</File>
     </UpdateText>
-    <UpdateIcons id="JAC_Persona_UpdateIcons_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Data/JAC_LeaderPersona_Icons.xml</File>
-    </UpdateIcons>
-    <AddGameplayScripts id="JAC_Persona_AddGameplayScripts_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Scripts/JAC_LeaderPersona_Gameplay.lua</File>
-    </AddGameplayScripts>
-    <AddUserInterfaces id="JAC_Persona_AddUserInterfaces_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-    </AddUserInterfaces>
-    <ReplaceUIScript id="JAC_Persona_GovernorPanel_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_GovernorDetailsPanel_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorDetailsPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorDetails.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_UnitPanel_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>UnitPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ImportFiles id="JAC_Persona_UIFiles_1" criteria="JAC_Persona_Map_1">
-      <File>UI/JAC_LeaderPersona_View.lua</File>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-      <File>UI/JAC_LeaderPersona_GovernorPanel.lua</File>
-      <File>UI/JAC_LeaderPersona_GovernorDetails.lua</File>
-      <File>UI/JAC_LeaderPersona_UnitPanel.lua</File>
-      <File>Shared/JAC_PersonaTreeRules.lua</File>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-      <File>UI/JAC_LeaderPersona_Tree.lua</File>
-    </ImportFiles>
     <UpdateDatabase id="JAC_Persona_UpdateDatabase_2" criteria="JAC_Persona_Map_2">
       <Properties>
         <LoadOrder>400</LoadOrder>
       </Properties>
       <File>Data/JAC_LeaderPersona.sql</File>
       <File>Data/JAC_LeaderPersona_Trees.sql</File>
+      <File>Data/JAC_TitleProxy_Probe.sql</File>
     </UpdateDatabase>
     <UpdateText id="JAC_Persona_UpdateText_2" criteria="JAC_Persona_Map_2">
       <Properties>
@@ -200,62 +103,13 @@
       </Properties>
       <File>Text/JAC_LeaderPersona_Text.xml</File>
     </UpdateText>
-    <UpdateIcons id="JAC_Persona_UpdateIcons_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Data/JAC_LeaderPersona_Icons.xml</File>
-    </UpdateIcons>
-    <AddGameplayScripts id="JAC_Persona_AddGameplayScripts_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Scripts/JAC_LeaderPersona_Gameplay.lua</File>
-    </AddGameplayScripts>
-    <AddUserInterfaces id="JAC_Persona_AddUserInterfaces_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-    </AddUserInterfaces>
-    <ReplaceUIScript id="JAC_Persona_GovernorPanel_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_GovernorDetailsPanel_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorDetailsPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorDetails.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_UnitPanel_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>UnitPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ImportFiles id="JAC_Persona_UIFiles_2" criteria="JAC_Persona_Map_2">
-      <File>UI/JAC_LeaderPersona_View.lua</File>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-      <File>UI/JAC_LeaderPersona_GovernorPanel.lua</File>
-      <File>UI/JAC_LeaderPersona_GovernorDetails.lua</File>
-      <File>UI/JAC_LeaderPersona_UnitPanel.lua</File>
-      <File>Shared/JAC_PersonaTreeRules.lua</File>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-      <File>UI/JAC_LeaderPersona_Tree.lua</File>
-    </ImportFiles>
     <UpdateDatabase id="JAC_Persona_UpdateDatabase_3" criteria="JAC_Persona_Map_3">
       <Properties>
         <LoadOrder>400</LoadOrder>
       </Properties>
       <File>Data/JAC_LeaderPersona.sql</File>
       <File>Data/JAC_LeaderPersona_Trees.sql</File>
+      <File>Data/JAC_TitleProxy_Probe.sql</File>
     </UpdateDatabase>
     <UpdateText id="JAC_Persona_UpdateText_3" criteria="JAC_Persona_Map_3">
       <Properties>
@@ -263,84 +117,6 @@
       </Properties>
       <File>Text/JAC_LeaderPersona_Text.xml</File>
     </UpdateText>
-    <UpdateIcons id="JAC_Persona_UpdateIcons_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Data/JAC_LeaderPersona_Icons.xml</File>
-    </UpdateIcons>
-    <AddGameplayScripts id="JAC_Persona_AddGameplayScripts_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-      </Properties>
-      <File>Scripts/JAC_LeaderPersona_Gameplay.lua</File>
-    </AddGameplayScripts>
-    <AddUserInterfaces id="JAC_Persona_AddUserInterfaces_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-    </AddUserInterfaces>
-    <ReplaceUIScript id="JAC_Persona_GovernorPanel_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_GovernorDetailsPanel_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>GovernorDetailsPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_GovernorDetails.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_Persona_UnitPanel_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <LuaContext>UnitPanel</LuaContext>
-        <LuaReplace>UI/JAC_LeaderPersona_UnitPanel.lua</LuaReplace>
-      </Properties>
-    </ReplaceUIScript>
-    <ImportFiles id="JAC_Persona_UIFiles_3" criteria="JAC_Persona_Map_3">
-      <File>UI/JAC_LeaderPersona_View.lua</File>
-      <File>UI/JAC_LeaderPersona_View.xml</File>
-      <File>UI/JAC_LeaderPersona_GovernorPanel.lua</File>
-      <File>UI/JAC_LeaderPersona_GovernorDetails.lua</File>
-      <File>UI/JAC_LeaderPersona_UnitPanel.lua</File>
-      <File>Shared/JAC_PersonaTreeRules.lua</File>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-      <File>UI/JAC_LeaderPersona_Tree.lua</File>
-    </ImportFiles>
-    <AddUserInterfaces id="JAC_Persona_Tree_0" criteria="JAC_Persona_Map_0">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-    </AddUserInterfaces>
-    <AddUserInterfaces id="JAC_Persona_Tree_1" criteria="JAC_Persona_Map_1">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-    </AddUserInterfaces>
-    <AddUserInterfaces id="JAC_Persona_Tree_2" criteria="JAC_Persona_Map_2">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-    </AddUserInterfaces>
-    <AddUserInterfaces id="JAC_Persona_Tree_3" criteria="JAC_Persona_Map_3">
-      <Properties>
-        <LoadOrder>400</LoadOrder>
-        <Context>InGame</Context>
-      </Properties>
-      <File>UI/JAC_LeaderPersona_Tree.xml</File>
-    </AddUserInterfaces>
     <UpdateArt id="JAC_Persona_Art_0" criteria="JAC_Persona_Map_0">
       <File>JAC_PoC_LeaderPersona.dep</File>
     </UpdateArt>
@@ -353,6 +129,30 @@
     <UpdateArt id="JAC_Persona_Art_3" criteria="JAC_Persona_Map_3">
       <File>JAC_PoC_LeaderPersona.dep</File>
     </UpdateArt>
+    <AddGameplayScripts id="JAC_TitleProxy_Probe_0" criteria="JAC_Persona_Map_0">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_TitleProxy_Probe_1" criteria="JAC_Persona_Map_1">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_TitleProxy_Probe_2" criteria="JAC_Persona_Map_2">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    </AddGameplayScripts>
+    <AddGameplayScripts id="JAC_TitleProxy_Probe_3" criteria="JAC_Persona_Map_3">
+      <Properties>
+        <LoadOrder>400</LoadOrder>
+      </Properties>
+      <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    </AddGameplayScripts>
   </InGameActions>
   <Files>
     <File>JAC_PoC_LeaderPersona.dep</File>
@@ -370,5 +170,7 @@
     <File>Shared/JAC_PersonaTreeRules.lua</File>
     <File>UI/JAC_LeaderPersona_Tree.xml</File>
     <File>UI/JAC_LeaderPersona_Tree.lua</File>
+    <File>Data/JAC_TitleProxy_Probe.sql</File>
+    <File>Scripts/JAC_TitleProxy_Probe.lua</File>
   </Files>
 </Mod>

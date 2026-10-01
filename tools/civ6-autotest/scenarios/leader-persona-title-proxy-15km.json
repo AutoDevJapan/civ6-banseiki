@@ -1,0 +1,318 @@
+{
+  "name": "PR86 alternative payment diagnostic: cannot-assign governor, official accounting, 21 real AI turns",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 or not Players[0]:IsHuman() or UI.IsGameCoreBusy() then error('baseline is not ready for human operations') end; local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do n=n+1 end; if n~=22 then error('baseline needs the same 22 factions') end; return 'baseline has 22 factions and idle game core'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local count=0; for row in GameInfo.JAC_LeaderPersonas() do if GameInfo.Governors[row.GovernorType] then error('persona remains an engine candidate: '..row.LeaderType) end; count=count+1 end; if count~=22 then error('missing persona definitions') end; local r=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; if not r or not GameInfo.GovernorsCannotAssign[r.GovernorType].CannotAssign then error('payment governor is assignable') end; return '22 personas excluded from native candidates; payment governor cannot be assigned'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local ai=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local gs=p:GetGovernors(); local culture=p:GetCulture(); local earned=0; for row in GameInfo.JAC_PersonaTitleCivics() do if earned<3 then local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then local before=gs:GetGovernorPoints(); culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); if gs:GetGovernorPoints()~=before+1 then error('civic must grant one official title') end; earned=earned+1 end end end; if earned~=3 or gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<3 then error('three title budget missing') end; Game:SetProperty('JAC_PROXY_TOTAL_'..p:GetID(),gs:GetGovernorPoints()); Game:SetProperty('JAC_PROXY_SPENT_'..p:GetID(),gs:GetGovernorPointsSpent()); if not p:IsHuman() then ai=ai+1 end end; if ai~=21 then error('21 AI houses required') end; return 'all 22 players earned three official titles'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local n=0; local def=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then n=n+1; local gs=p:GetGovernors(); if gs:HasGovernor(def.Hash) or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_'..p:GetID()) then error('native AI spent a title on the payment proxy: '..p:GetID()) end; if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<3 then error('AI title budget vanished') end end end; if n~=21 then error('AI house inventory changed') end; return '21 AI native turns completed without proxy appointment or spending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); local def=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; if not gs:CanAppointGovernor(def.Hash) then error('legitimate native payment appointment denied') end; UI.RequestPlayerOperation(0,PlayerOperations.APPOINT_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index}); return 'requested official one-title payment'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetGovernors():HasGovernor(GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY'].Hash)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('official accounting differs after 1 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 1'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-After-Appointment"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-After-Appointment"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('official accounting differs after 1 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 1'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); local d=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local promotion=GameInfo.GovernorPromotions['GOVERNOR_PROMOTION_JAC_TITLE_PROXY_1']; if not gs:CanPromoteGovernor(d.Hash) then error('official payment promotion denied') end; UI.RequestPlayerOperation(0,PlayerOperations.PROMOTE_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=d.Index,[PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=promotion.Index}); return 'requested payment promotion 1'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetGovernors():GetGovernor(GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY'].Hash):HasPromotion(GameInfo.GovernorPromotions['GOVERNOR_PROMOTION_JAC_TITLE_PROXY_1'].Hash)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+2 then error('official accounting differs after 2 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 2'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-Partial-Payment"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-Partial-Payment"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+2 then error('official accounting differs after 2 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 2'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); local d=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local promotion=GameInfo.GovernorPromotions['GOVERNOR_PROMOTION_JAC_TITLE_PROXY_2']; if not gs:CanPromoteGovernor(d.Hash) then error('official payment promotion denied') end; UI.RequestPlayerOperation(0,PlayerOperations.PROMOTE_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=d.Index,[PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=promotion.Index}); return 'requested payment promotion 2'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetGovernors():GetGovernor(GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY'].Hash):HasPromotion(GameInfo.GovernorPromotions['GOVERNOR_PROMOTION_JAC_TITLE_PROXY_2'].Hash)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+3 then error('official accounting differs after 3 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 3'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local n=0; local def=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then n=n+1; local gs=p:GetGovernors(); if gs:HasGovernor(def.Hash) or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_'..p:GetID()) then error('native AI spent a title on the payment proxy: '..p:GetID()) end; if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<3 then error('AI title budget vanished') end end end; if n~=21 then error('AI house inventory changed') end; return '21 AI native turns completed without proxy appointment or spending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors(); if gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+3 then error('official accounting differs after 3 payments') end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end; return 'official earned total unchanged and spent increased by 3'"
+    }
+  ]
+}
