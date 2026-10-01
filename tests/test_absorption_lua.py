@@ -77,7 +77,8 @@ end
 function UNIT(owner,id,kind,x)
   local u=prop({owner=owner,id=id,kind=TYPE[kind],x=x or 4,y=0,damage=0,moves=2,xp=0,individual=-1,
     promotions={},formation=0,gpcharges=2,build=kind=="UNIT_BUILDER" and 3 or 0,spread=kind=="UNIT_MISSIONARY" and 3 or 0,religion=-1,
-    heroClass=kind=='UNIT_HERO_JAC_WARLORD_A' and 0 or kind=='UNIT_HERO_JAC_WARLORD_B' and 1 or -1,lifespan=30,charges=6,renown=0})
+    heroClass=kind=='UNIT_HERO_JAC_WARLORD_A' and 0 or kind=='UNIT_HERO_JAC_WARLORD_B' and 1 or -1,lifespan=30,
+    charges=kind:match('^UNIT_HERO_') and 6 or 0,renown=0})
   u.GetOwner=function(self) return self.owner end
   u.GetID=function(self) return self.id end
   u.GetType=function(self) return self.kind end
@@ -1959,7 +1960,7 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual((self.g.KILLS, self.g.TRANSFERS), (0, 0))
 
     def test_unsupported_charge_types_stop_before_source_assets_are_changed(self):
-        for counter in ('ReligiousHealCharges', 'DisasterCharges'):
+        for counter in ('ReligiousHealCharges', 'DisasterCharges', 'ParkCharges', 'ActionCharges'):
             with self.subTest(counter=counter):
                 self.g.UNSUPPORTED_COUNTER = counter
                 self.run_lua('GameInfo.Units.UNIT_MISSIONARY[UNSUPPORTED_COUNTER]=3')
@@ -1976,22 +1977,80 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
         self.assertEqual(self.g.Players[1].units[10].owner, 1)
 
+    def test_spent_park_charge_cannot_be_reset_by_absorption(self):
+        self.run_lua('''GameInfo.Units.UNIT_WARRIOR.ParkCharges=2
+          Players[1].units[3].GetParkCharges=function() return 1 end
+          local create=UNIT
+          UNIT=function(...)
+            local u=create(...)
+            if u:GetType()==0 then u.GetParkCharges=function() return 2 end end
+            return u
+          end''')
+        with self.assertRaisesRegex(Exception, 'unsupported unit charge counter: ParkCharges'):
+            self.apply()
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        source = self.g.Players[1].units[3]
+        self.assertEqual(source.GetParkCharges(source), 1)
+
+    def test_runtime_park_and_nonhero_action_charges_are_rejected_before_changes(self):
+        for counter in ('ParkCharges', 'ActionCharges'):
+            with self.subTest(counter=counter):
+                self.setUp()
+                self.g.UNSUPPORTED_COUNTER = counter
+                self.run_lua("Players[1].units[3]['Get'..UNSUPPORTED_COUNTER]=function() return 1 end")
+                with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: '+counter):
+                    self.apply()
+                self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+                self.assertEqual(self.g.Players[1].units[3].owner, 1)
+
+    def test_nonhero_action_charges_declared_in_mode_table_are_rejected(self):
+        self.run_lua("GameInfo.Units_MODE={UNIT_WARRIOR={ActionCharges=3}}")
+        with self.assertRaisesRegex(Exception, 'unsupported unit charge counter: ActionCharges'):
+            self.apply()
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+
+    def test_rock_band_state_is_rejected_by_type_class_or_tag_before_changes(self):
+        for definition in (
+            "GameInfo.Units.UNIT_WARRIOR.UnitType='UNIT_ROCK_BAND'",
+            "GameInfo.Units.UNIT_WARRIOR.PromotionClass='PROMOTION_CLASS_ROCK_BAND'",
+            "GameInfo.TypeTags=function() local sent=false;return function() if not sent then sent=true;"
+            "return {Type='UNIT_WARRIOR',Tag='CLASS_ROCK_BAND'} end end end",
+        ):
+            with self.subTest(definition=definition):
+                self.setUp()
+                self.run_lua(definition)
+                self.run_lua('''Players[1].units[3].GetRockBand=function() return {
+                  GetAlbumSales=function() return 150 end,GetRockBandLevel=function() return 3 end} end''')
+                with self.assertRaisesRegex(Exception, 'unsupported unit state: RockBand'):
+                    self.apply()
+                self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+                self.assertEqual(self.g.Players[1].units[3].owner, 1)
+
     def test_candidate_special_charge_blocks_and_reuses_the_candidate_on_resume(self):
+        for counter in ('DisasterCharges', 'ParkCharges', 'ActionCharges'):
+            with self.subTest(counter=counter):
+                self.setUp()
+                self.g.CANDIDATE_COUNTER = counter
+                self.assert_candidate_counter_blocks_and_resumes(counter)
+
+    def assert_candidate_counter_blocks_and_resumes(self, counter):
         self.run_lua('''local create=UNIT
           UNIT=function(...)
             local u=create(...)
-            if u:GetOwner()==2 then u.GetDisasterCharges=function() return CANDIDATE_CHARGES end end
+            if u:GetOwner()==2 and not u:IsHero() then
+              u['Get'..CANDIDATE_COUNTER]=function() return CANDIDATE_CHARGES end
+            end
             return u
           end
           CANDIDATE_CHARGES=1''')
-        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: DisasterCharges'):
+        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: '+counter):
             self.apply()
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
         self.assertEqual(self.g.Players[1].units[3].owner, 1)
         candidate = self.a.FindUnit(2, 'test-absorption:unit:3')
         candidate_id = candidate.GetID(candidate)
         self.load_scripts()
-        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: DisasterCharges'):
+        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: '+counter):
             self.a.Resume('test-absorption')
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
         self.g.CANDIDATE_CHARGES = 0

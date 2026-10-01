@@ -301,23 +301,49 @@ local function SourceSpreadReads(id, owner, turn, serial)
   return result
 end
 
--- There is no verified setter for these counters. Reject their unit types
--- before staging or deleting any source asset rather than silently reset them.
-local function AssertSupportedCharges(unit)
+-- Audit the complete charge inventory from Units and Units_MODE, rather than
+-- extending an exception list one lost counter at a time. Only the snapshot
+-- adapters below preserve counters; everything else must be zero even when
+-- a modifier adds charges that the unit definition does not declare.
+local unitCounterPolicies = {
+  { Field = "BuildCharges", Adapter = "SNAPSHOT" },
+  { Field = "SpreadCharges", Adapter = "SNAPSHOT" },
+  { Field = "ActionCharges", Adapter = "HERO" },
+  { Field = "ReligiousHealCharges" },
+  { Field = "DisasterCharges" },
+  { Field = "ParkCharges" },
+}
+local function AssertSupportedUnitState(unit)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
-  for _, name in ipairs({ "ReligiousHealCharges", "DisasterCharges" }) do
-    assert((info[name] or 0) == 0, "unsupported unit charge counter: " .. name .. ":" .. info.UnitType)
-    local getter = unit["Get" .. name]
-    if getter then
-      local value = getter(unit)
-      assert(type(value) == "number" and value == 0,
-        "unsupported remaining unit charges: " .. name .. ":" .. info.UnitType)
+  local nativeHero = unit.IsHero and unit:IsHero()
+  for _, policy in ipairs(unitCounterPolicies) do
+    if policy.Adapter ~= "SNAPSHOT" and not (policy.Adapter == "HERO" and nativeHero) then
+      local name = policy.Field
+      local mode = name == "ActionCharges" and GameInfo.Units_MODE and GameInfo.Units_MODE[info.UnitType]
+      assert((info[name] or 0) == 0 and (not mode or (mode[name] or 0) == 0),
+        "unsupported unit charge counter: " .. name .. ":" .. info.UnitType)
+      local getter = unit["Get" .. name]
+      if getter then
+        local value = getter(unit)
+        assert(type(value) == "number" and value == 0,
+          "unsupported remaining unit charges: " .. name .. ":" .. info.UnitType)
+      end
     end
   end
+  -- RockBand level and album sales are separate native state, not XP or
+  -- charges. No verified restoration adapter exists, including for a band
+  -- that has not played yet. Cover custom definitions using its class/tag.
+  local rockBand = info.UnitType == "UNIT_ROCK_BAND" or info.PromotionClass == "PROMOTION_CLASS_ROCK_BAND"
+  if not rockBand and GameInfo.TypeTags then
+    for row in GameInfo.TypeTags() do
+      if row.Type == info.UnitType and row.Tag == "CLASS_ROCK_BAND" then rockBand = true; break end
+    end
+  end
+  assert(not rockBand, "unsupported unit state: RockBand:" .. info.UnitType)
 end
 
 local function SnapshotUnit(unit, publishedSpread)
-  AssertSupportedCharges(unit)
+  AssertSupportedUnitState(unit)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
   local hero = SnapshotHero(unit, info)
   local greatPerson = unit:GetGreatPerson()
@@ -754,7 +780,7 @@ end
 local function VerifyUnit(unit, snap, coreOnly)
   assert(unit and unit:GetOwner() == snap.Destination and GameInfo.Units[unit:GetType()].UnitType == snap.Type,
     "transferred unit missing/type/owner mismatch: " .. snap.Token)
-  AssertSupportedCharges(unit)
+  AssertSupportedUnitState(unit)
   assert(unit:GetX() >= 0 and unit:GetY() >= 0 and Map.GetPlot(unit:GetX(), unit:GetY()),
     "transferred unit is off-map: " .. snap.Token)
   assert(unit:GetProperty(R.TOKEN_KEY) == snap.Token, "unit token mismatch")
