@@ -32,6 +32,26 @@ def scenario(name):
 
 
 class VerificationScenarioTests(unittest.TestCase):
+    def test_persona_boundary_scenarios_validate_without_operating_the_game(self):
+        compiler = lupa.LuaRuntime().eval("function(code) local f,err=load(code); assert(f,err); return true end")
+        for name in ("leader-persona-city-loss-15km.json", "leader-persona-spy-access-15km.json",
+                     "leader-persona-spy-recovery.json"):
+            with self.subTest(scenario=name):
+                data = scenario(name)
+                validate_scenario(data)
+                self.assertTrue(data["strict_lua_errors"])
+                self.assertFalse(any(s["action"] in ("restart_game", "autoplay") for s in data["steps"]))
+                for step in data["steps"]:
+                    code = step.get("code") or step.get("condition", {}).get("code")
+                    if code:
+                        self.assertTrue(compiler(code))
+        recovery = scenario("leader-persona-spy-recovery.json")["steps"]
+        self.assertIn("Check('NEUTRALIZED')", recovery[0]["code"])
+        self.assertEqual(recovery[0]["capture_as"], recovery[6]["equals_capture"])
+        self.assertEqual(sum(s["action"] == "end_turn" for s in recovery), 13)
+        self.assertIn("Check('SETTLED')", recovery[-1]["code"])
+        self.assertFalse(any(s["action"] in ("configure", "start_game", "enable_mods") for s in recovery))
+
     def test_persona_native_eligibility_diagnostic_validates_without_operating_the_game(self):
         data = scenario("leader-persona-native-eligibility-15km.json")
         validate_scenario(data)

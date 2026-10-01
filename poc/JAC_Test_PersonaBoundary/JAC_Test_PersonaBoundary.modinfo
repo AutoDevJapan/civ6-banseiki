@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="4a72b1c0-958b-4bd5-81e4-a094f86ce643" version="1">
+  <Properties>
+    <Name>JAC Test: Persona native boundaries</Name>
+    <Description>Opt-in diagnostics for native spy neutralization, recovery and city loss. Unobserved results never count as success.</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="Gathering Storm" />
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="JAC PoC: Leader Persona" />
+  </Dependencies>
+  <InGameActions>
+    <ImportFiles id="BoundaryImports">
+      <File>Shared/JAC_PersonaBoundaryRules.lua</File>
+      <File>UI/JAC_PersonaBoundary_View.lua</File>
+      <File>UI/JAC_PersonaBoundary_View.xml</File>
+    </ImportFiles>
+    <AddGameplayScripts id="BoundaryFixture">
+      <Properties><LoadOrder>900</LoadOrder></Properties>
+      <File>Scripts/JAC_PersonaBoundary_Fixture.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="BoundaryObserver">
+      <Properties><LoadOrder>900</LoadOrder><Context>InGame</Context></Properties>
+      <File>UI/JAC_PersonaBoundary_View.xml</File>
+    </AddUserInterfaces>
+  </InGameActions>
+  <Files>
+    <File>Shared/JAC_PersonaBoundaryRules.lua</File>
+    <File>Scripts/JAC_PersonaBoundary_Fixture.lua</File>
+    <File>UI/JAC_PersonaBoundary_View.lua</File>
+    <File>UI/JAC_PersonaBoundary_View.xml</File>
+  </Files>
+</Mod>
