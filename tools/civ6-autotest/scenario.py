@@ -613,9 +613,12 @@ class Runner:
             if skip_opening and time.monotonic() >= next_click:
                 try:
                     click_fraction(0.5, 0.15)
-                except InputError:
-                    skip_opening = False  # focus refused: let the opening play to the end
-                next_click = time.monotonic() + 12
+                except InputError as exc:
+                    if os.environ.get("JAC_DIAGNOSTIC_STARTUP_DELAY", "0") != "0":
+                        self._log("startup_focus_retry", "OBSERVATION", str(exc))
+                    else:
+                        skip_opening = False  # focus refused: let the opening play to the end
+                next_click = time.monotonic() + (30 if os.environ.get("JAC_DIAGNOSTIC_STARTUP_DELAY", "0") != "0" else 12)
             try:
                 value = self._lua("FrontEnd", "return UI.IsInFrontEnd()",
                                   min(5, _remaining(deadline)))
