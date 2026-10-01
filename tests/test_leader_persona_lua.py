@@ -459,7 +459,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.combat(loser_id=902)
         self.assertEqual(self.prop("MERIT"), 4)
 
-    def test_deferred_building_and_victory_notifications_survive_reload_and_pay_once(self):
+    def test_unproven_building_and_victory_notifications_survive_reload_without_late_rewards(self):
         self.settled()
         self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
@@ -472,12 +472,36 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.FIREUI("LoadScreenClose")
         self.assertEqual(len(self.g.REQUESTS), 1)
         self.g.DRAIN()
-        self.assertEqual(self.prop("MERIT"), 5)  # original building 3 + nearby victory 2
-        self.assertIsNone(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS"))
+        self.assertEqual(self.prop("MERIT"), 0)
+        self.assertEqual(len(list(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS").keys())), 2)
+        self.assertEqual(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_NATIVE_HISTORY"), 1)
         self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.combat(x=3)
-        self.assertEqual(self.prop("MERIT"), 5)
+        self.assertEqual(self.prop("MERIT"), 0)
+        self.g.FIRE("BuildingConstructed", 0, 1, 1, 100, True)
+        self.combat(loser_id=901, x=3)
+        self.assertEqual(self.prop("MERIT"), 5)  # only new, observable events
+
+    def test_same_turn_assignment_establishment_or_recovery_cannot_make_old_construction_eligible(self):
+        for change in ("assignment", "establishment", "neutralization"):
+            with self.subTest(change=change):
+                self.setUp()
+                governor = self.settled()
+                if change == "assignment": governor.city = self.g.CITIES[0][2]
+                if change == "establishment": governor.established = False
+                if change == "neutralization": governor.neutralized = 2
+                self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
+                self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+                governor.city = self.g.CITIES[0][1]
+                governor.established, governor.neutralized = True, 0
+                self.g.RESET_CONTEXTS(); self.load_contexts()
+                self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
+                self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
+                self.assertEqual(self.prop("MERIT"), 0)
+                self.assertEqual(len(list(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS").keys())), 1)
+                self.g.FIRE("BuildingConstructed", 0, 1, 1, 100, True)
+                self.assertEqual(self.prop("MERIT"), 3)
 
     def test_unready_native_reads_do_not_finalize_alliance_or_ai_turn(self):
         self.settled(); self.set_merit(100)
@@ -490,24 +514,32 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             self.assertIsNone(self.prop(field))
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
-        self.assertEqual(self.prop("MERIT"), 102)  # govern 2 + alliance 8 - first skill 8
-        self.assertEqual(self.prop("NODE_"+DATE+"_ENVOYS_1"), 1)
-        self.assertEqual(self.prop("ALLY_SEEN_2"), 1)
-        self.assertEqual(self.prop("AI_LAST_TURN"), 1)
+        self.assertEqual(self.prop("MERIT"), 100)
+        self.assertIsNone(self.prop("NODE_"+DATE+"_ENVOYS_1"))
+        self.assertIsNone(self.prop("ALLY_SEEN_2"))
+        self.assertIsNone(self.prop("AI_LAST_TURN"))
         self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
         self.api.OnPlayerTurnStarted(0)
-        self.assertEqual(self.prop("MERIT"), 102)
+        self.assertEqual(self.prop("MERIT"), 100)
+        self.g.TURN = 2
+        self.api.OnPlayerTurnStarted(0)
+        self.assertEqual(self.prop("MERIT"), 94)  # new governance 2 - skill 8, no old alliance reward
+        self.assertEqual(self.prop("NODE_"+DATE+"_ENVOYS_1"), 1)
+        self.assertEqual(self.prop("ALLY_SEEN_2"), 1)
+        self.assertEqual(self.prop("AI_LAST_TURN"), 2)
 
-    def test_deferred_deeds_keep_original_turn_caps_and_duplicate_records(self):
+    def test_unproven_deeds_cannot_pay_again_on_later_turns(self):
         self.settled()
         self.g.ExposedMembers.JAC_LeaderPersonaNativeRead = None
         for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
-        self.assertEqual(self.prop("MERIT"), 6)
+        self.assertEqual(self.prop("MERIT"), 0)
         self.g.TURN = 2
         for building in range(3): self.g.FIRE("BuildingConstructed", 0, 1, building, 100, True)
-        self.assertEqual(self.prop("MERIT"), 6)
+        self.assertEqual(self.prop("MERIT"), 0)
+        self.g.FIRE("BuildingConstructed", 0, 1, 3, 100, True)
+        self.assertEqual(self.prop("MERIT"), 3)
 
     def test_deferred_events_preserve_ai_turn_before_later_construction(self):
         self.settled(); self.set_merit(5)
@@ -517,9 +549,10 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.FIRE("BuildingConstructed", 0, 1, 0, 100, True)
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.g.FIRE("JAC_LeaderPersonaNativeReady", 0)
-        self.assertEqual(self.prop("MERIT"), 10)  # 5 + govern 2, then building 3
-        self.assertIsNone(self.prop("CATEGORY"))  # only 7 at AI's original decision point
-        self.assertEqual(self.prop("AI_LAST_TURN"), 1)
+        self.assertEqual(self.prop("MERIT"), 5)
+        self.assertIsNone(self.prop("CATEGORY"))
+        self.assertIsNone(self.prop("AI_LAST_TURN"))
+        self.assertEqual(len(list(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS").keys())), 2)
 
     def test_historical_pending_deed_is_kept_without_inventing_eligibility(self):
         self.settled()

@@ -230,6 +230,10 @@ end
 local function Award(row, deed, identity)
     local leader = row.LeaderType;
     local owner = Get(leader, "OWNER");
+    -- A repeated notification cannot turn an unproven historical deed into a
+    -- current eligible one, even after reassignment or reload in the same turn.
+    local pending = Game:GetProperty(PENDING) or {};
+    if pending[leader .. "_" .. deed .. "_" .. identity] then return false; end
     if not Player(owner, true) or not SettledCity(owner, row) then return false; end
     local design = GameInfo.JAC_PersonaTreePeople[leader];
     local rule = GameInfo.JAC_PersonaMeritRules[design.MeritProfile];
@@ -248,7 +252,7 @@ local function Award(row, deed, identity)
 end
 
 -- Pending notifications are immutable gameplay identities, not UI-provided eligibility.
--- Keep them through save/load; never mark a deed/ally/AI turn done before a native read.
+-- Keep them through save/load. A later read cannot establish event-time eligibility.
 local function Defer(row, deed, identity, cityID, x, y)
     local pending = Game:GetProperty(PENDING) or {};
     local key = row.LeaderType .. "_" .. deed .. "_" .. identity;
@@ -256,7 +260,8 @@ local function Defer(row, deed, identity, cityID, x, y)
         local sequence = (Game:GetProperty("JAC_PERSONA_PENDING_SEQUENCE") or 0) + 1;
         Game:SetProperty("JAC_PERSONA_PENDING_SEQUENCE", sequence);
         pending[key] = {sequence=sequence, leader=row.LeaderType, owner=Get(row.LeaderType, "OWNER"),
-            deed=deed, identity=identity, turn=Game.GetCurrentGameTurn(), cityID=cityID, x=x, y=y};
+            deed=deed, identity=identity, turn=Game.GetCurrentGameTurn(), cityID=cityID, x=x, y=y,
+            eligibilityUnknown=true};
         Game:SetProperty(PENDING, pending);
     end
 end
@@ -282,17 +287,10 @@ local function FlushPending()
         local event = pending[key];
         local row = Definition(event.leader);
         if row and Get(event.leader, "OWNER") == event.owner and NativeGovernor(event.owner, row) then
-            if event.turn == Game.GetCurrentGameTurn() then
-                if event.deed == "TURN" then OnPlayerTurnStarted(event.owner);
-                else HandleDeed(row, event.deed, event.identity, event.cityID, event.x, event.y); end
-                -- Reload after processing, so another person's deferred event is not overwritten.
-                local remaining = Game:GetProperty(PENDING) or {};
-                remaining[key] = nil;
-                Game:SetProperty(PENDING, next(remaining) and remaining or nil);
-            else
-                -- Current assignment cannot prove historical eligibility. Preserve evidence.
-                Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
-            end
+            -- Same-turn assignment, establishment and neutralization may change
+            -- while the reader is unavailable too. Preserve the original event;
+            -- do not pay, buy AI skills or consume it from a later UI snapshot.
+            Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
         end
     end
 end
@@ -345,8 +343,17 @@ OnPlayerTurnStarted = function(owner)
     for row in GameInfo.JAC_LeaderPersonas() do
         local leader = row.LeaderType;
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
-            if not NativeGovernor(owner, row) then
+            local pending = Game:GetProperty(PENDING) or {};
+            if not NativeGovernor(owner, row) or pending[leader .. "_TURN_" .. tostring(turn)] then
                 Defer(row, "TURN", tostring(turn));
+                -- Diplomacy is readable in gameplay. Remember partners first
+                -- seen during this uncertainty, so a later turn cannot pay for
+                -- their earlier alliance using its new assignment state.
+                for _,other in ipairs(MajorIDs()) do
+                    if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
+                        Defer(row, "ALLIANCE", tostring(other));
+                    end
+                end
             else
                 SnapshotAlliances(owner, leader);
                 local settled = SettledCity(owner, row);

@@ -175,15 +175,15 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_LeaderPersona_View",
-      "code": "print('JAC_PERSONA_REQUEST turn='..Game.GetCurrentGameTurn()..' active='..tostring(Players[0]:IsTurnActive())..' human='..tostring(Players[0]:IsHuman())..' paused='..tostring(GameConfiguration.IsPaused())..' busy='..tostring(UI.IsGameCoreBusy()));\nfor _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end; JAC_RequestLeaderJoin(source);\nend; return 'three synchronized gameplay joins requested'"
+      "code": "JAC_PERSONA_TUNER_JOIN_STATE='queued';\nContextPtr:SetUpdate(function()\n ContextPtr:ClearUpdate(); JAC_PERSONA_TUNER_JOIN_STATE='running';\n print('JAC_PERSONA_FRAME busy='..tostring(UI.IsGameCoreBusy())..' paused='..tostring(GameConfiguration.IsPaused()));\n for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end; JAC_RequestLeaderJoin(source);\nend;\n JAC_PERSONA_TUNER_JOIN_STATE='submitted';\nend); return 'joins deferred to the real UI frame'"
     },
     {
       "action": "wait_for",
       "timeout": 60,
       "condition": {
         "type": "lua",
-        "state_name": "InGame",
-        "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do if Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then return false end end; return true"
+        "state_name": "JAC_LeaderPersona_View",
+        "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do if Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then return 'frame='..tostring(JAC_PERSONA_TUNER_JOIN_STATE)..' busy='..tostring(UI.IsGameCoreBusy()) end end; return true"
       }
     },
     {
@@ -323,6 +323,11 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=0, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nreturn 'actual active city effects verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then\n local gs=p:GetGovernors(); local before=gs:GetGovernorPoints()-gs:GetGovernorPointsSpent();\n if before<1 then local culture=p:GetCulture(); local added=false; for row in GameInfo.JAC_PersonaTitleCivics() do local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); added=true; break end end; if not added then error('AI title civic unavailable') end end;\n if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<1 then error('AI has no usable title: '..p:GetID()) end; count=count+1;\nend end; if count~=21 then error('21 AI budgets required') end; Game:SetProperty('JAC_PERSONA_SCENARIO_AI_TITLE_BUDGETS',count); return 'all 21 AI can spend a title before native turns'"
     },
     {
       "action": "end_turn",
@@ -753,7 +758,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS'); if pending and next(pending) then error('native deed notifications remain unprocessed') end; if Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY') then error('native initialization crossed a deed turn; history needs verification') end; local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then count=count+1; local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do if gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then error('AI appointed an unjoined persona: '..p:GetID()..'/'..row.LeaderType) end end end end; if count~=21 then error('all 21 AI houses required') end; return 'no pending notifications or unjoined AI Governors'"
+      "code": "if Game:GetProperty('JAC_PERSONA_SCENARIO_AI_TITLE_BUDGETS')~=21 then error('AI appointment test had no title budgets') end; local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS'); if pending and next(pending) then error('native deed notifications remain unprocessed') end; if Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY') then error('native initialization crossed a deed turn; history needs verification') end; local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then count=count+1; local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do if gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then error('AI appointed an unjoined persona: '..p:GetID()..'/'..row.LeaderType) end end end end; if count~=21 then error('all 21 AI houses required') end; return 'no pending notifications or unjoined AI Governors'"
     }
   ]
 }
