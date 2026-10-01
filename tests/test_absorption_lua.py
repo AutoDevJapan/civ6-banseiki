@@ -1835,6 +1835,33 @@ class AbsorptionPackageTests(unittest.TestCase):
         end = next(step for step in steps if step["action"] == "end_turn")
         self.assertEqual(end["turns"], 1)
 
+    def test_control_missionary_wait_uses_ui_religion_api_and_rejects_stale_values(self):
+        data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json")
+                          .read_text(encoding="utf-8"))
+        conditions = [step["condition"]["code"] for step in data["steps"]
+                      if step["action"] == "wait_for"
+                      and "JAC_ABSORPTION_CONTROL_PRIEST_V1" in step["condition"]["code"]]
+        self.assertEqual(len(conditions), 1)
+        vm = LuaRuntime()
+        # UI has Unit:GetReligionType(), while core has Unit:GetReligion().
+        # Do not give this UI facade the core getter that hid the live failure.
+        vm.execute('''
+          CONTROL={Owner=2,ID=19,Religion=5,SpreadCharges=3}
+          UI_RELIGION=5;UI_CHARGES=3;UI_VISIBLE=true
+          Game={GetProperty=function() return CONTROL end}
+          local unit={GetReligionType=function() return UI_RELIGION end,
+            GetSpreadCharges=function() return UI_CHARGES end}
+          Players={[2]={GetUnits=function() return {FindID=function(_,id)
+            assert(id==19);if UI_VISIBLE then return unit end end} end}}
+        ''')
+        self.assertTrue(vm.execute(conditions[0]))
+        vm.execute("UI_VISIBLE=false")
+        self.assertFalse(vm.execute(conditions[0]))
+        vm.execute("UI_VISIBLE=true;UI_RELIGION=4")
+        self.assertFalse(vm.execute(conditions[0]))
+        vm.execute("UI_RELIGION=5;UI_CHARGES=2")
+        self.assertFalse(vm.execute(conditions[0]))
+
     def test_human_recall_scenario_uses_custom_native_classes_and_real_purchase(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-hero-recall.json")
                           .read_text(encoding="utf-8"))
