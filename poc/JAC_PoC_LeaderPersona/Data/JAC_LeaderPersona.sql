@@ -73,27 +73,8 @@ UPDATE JAC_LeaderPersonas SET EvolutionCost = MIN(
     CASE WHEN Role1534='REPRESENTATIVE'
          THEN (SELECT Value FROM JAC_PersonaCostParameters WHERE Name='REPRESENTATIVE_TITLE_SURCHARGE') ELSE 0 END));
 
-INSERT INTO Types (Type, Kind) VALUES ('GREAT_PERSON_CLASS_JAC_PERSONA', 'KIND_GREAT_PERSON_CLASS');
-INSERT INTO Types (Type, Kind) SELECT PersonType, 'KIND_GREAT_PERSON_INDIVIDUAL' FROM JAC_LeaderPersonas;
 INSERT INTO Types (Type, Kind) SELECT GovernorType, 'KIND_GOVERNOR' FROM JAC_LeaderPersonas;
--- Native Great People resolve their class from the unit type. Keep a dedicated
--- type, as all nine official classes do (GreatPeople.xml:20-28).
-INSERT INTO Types (Type, Kind) VALUES ('UNIT_JAC_PERSONA', 'KIND_UNIT');
-INSERT INTO Units (UnitType, Name, Description, Cost, BaseMoves, BaseSightRange,
-                   ZoneOfControl, Domain, FormationClass, CanCapture,
-                   CanRetreatWhenCaptured, CanTrain)
-SELECT 'UNIT_JAC_PERSONA', 'LOC_JAC_PERSONA_CLASS', Description, Cost, BaseMoves,
-       BaseSightRange, ZoneOfControl, Domain, FormationClass, CanCapture,
-       CanRetreatWhenCaptured, CanTrain FROM Units WHERE UnitType='UNIT_GREAT_GENERAL';
-INSERT INTO TypeTags (Type, Tag) VALUES ('UNIT_JAC_PERSONA', 'CLASS_LANDCIVILIAN');
-INSERT INTO GreatPersonClasses
-    (GreatPersonClassType, Name, UnitType, DistrictType, IconString, ActionIcon, AvailableInTimeline)
-VALUES ('GREAT_PERSON_CLASS_JAC_PERSONA', 'LOC_JAC_PERSONA_CLASS', 'UNIT_JAC_PERSONA',
-        'DISTRICT_CITY_CENTER', '[ICON_GreatGeneral]', 'ICON_UNITOPERATION_GENERAL_ACTION', 0);
-INSERT INTO GreatPersonIndividuals
-    (GreatPersonIndividualType, Name, GreatPersonClassType, EraType, ActionCharges, Gender)
-SELECT PersonType, Name, 'GREAT_PERSON_CLASS_JAC_PERSONA', 'ERA_ANCIENT', 0, 'M' FROM JAC_LeaderPersonas;
-
+-- Diagnostic: omit persona Great People and their unit; preserve Governors and trees.
 -- Native governors own assignment, establishment and the base ability. Custom promotions use merit.
 -- Expansion1_Governors.xml:69-75: TransitionStrength 100; IdentityPressure 8.
 INSERT INTO Governors
