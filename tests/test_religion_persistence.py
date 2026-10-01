@@ -1460,6 +1460,31 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.assertEqual(self.state()["revivalCount"], 1)
         self.assertEqual(self.state()["state"], "PUBLIC")
 
+    def test_manual_new_game_flag_reset_handles_zero_lua_return_values(self):
+        scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/religion-persistence.json")
+                              .read_text(encoding="utf-8"))
+        step = scenario["steps"][-1]
+        self.assertEqual((step["action"], step["state_name"]), ("ui_lua", "FrontEnd"))
+        for clear in (True, False):
+            with self.subTest(clear=clear):
+                lua = LuaRuntime(unpack_returned_tuples=True)
+                lua.globals().CLEAR_DEFAULTS = clear
+                lua.execute("""
+                  local values = {}
+                  GameConfiguration = {
+                    SetValue = function(key, value) values[key] = value end,
+                    GetValue = function(key)
+                      if values[key] ~= nil then return values[key] end
+                    end,
+                    SetToDefaults = function() if CLEAR_DEFAULTS then values = {} end end,
+                  }
+                """)
+                if clear:
+                    self.assertEqual(lua.execute(step["code"]), "manual new-game setup clears test deadlines")
+                else:
+                    with self.assertRaisesRegex(LuaError, "test deadlines leaked into new game defaults"):
+                        lua.execute(step["code"])
+
     def test_all_scenario_lua_chunks_compile_including_ui_and_waits(self):
         scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/religion-persistence.json")
                               .read_text(encoding="utf-8"))
