@@ -243,7 +243,7 @@ ModifierのID・Active・対象一覧の公式根拠はG/Debug/Modifiers.ltp:233
 
 ## 自動検証と範囲
 
-tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQLで22人・762個の展開済み独自ノード・15称号獲得源・公式総督の定義除外・外部キー・3言語・前提と排他群を調べる。XMLのInsertOrIgnoreを監査ローダーが読み落としていた点も修正し、公式のKIND_TRAITを読み込む。65件の人物化検査（Lua52件）で功績の人物別獲得・消費・再読込・重複と上限・取消・専攻固定・分岐固定・9昇進・AI・キーボード操作を確認する。全シナリオLuaもlupaで構文検査する。生成APIは戻り値なし、IndexとHashは別値とした。実機効果の代替ではない。
+tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQLで22人・762個の展開済み独自ノード・15称号獲得源・公式総督の定義除外・外部キー・3言語・前提と排他群を調べる。XMLのInsertOrIgnoreを監査ローダーが読み落としていた点も修正し、公式のKIND_TRAITを読み込む。67件の人物化検査（Lua52件）で功績の人物別獲得・消費・再読込・重複と上限・取消・専攻固定・分岐固定・9昇進・AI・キーボード操作を確認する。全シナリオLuaもlupaで構文検査する。生成APIは戻り値なし、IndexとHashは別値とした。実機効果の代替ではない。
 
 指定のunittest discoverコマンドをこの作業フォルダから実行する。6785219の検証は全体455件・実機ドライバー200件が成功し、Lua検査のスキップはない。人物化67件は全体の内数。105ステップの実機シナリオは形式・Lua構文検査に成功した。修正後の実機合格を別途確認する。
 
@@ -339,7 +339,7 @@ python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json
 
 leaderperson-08は先端3025765（mainの更新を統合済み）で実行した。独自人物の加入前に、公式GREAT_PERSON_CLASS_GENERALの個人Indexを選び、同じ首都座標へCreatePersonで生成する比較を追加した。9/107で30秒後も応答がなく、Lua.logの最後はofficial-create-beforeだった。独自人物の個人データだけが停止の条件とは断定できない。
 
-呼出し元はGameCore_Tuner。公式のBase/Assets/UI/Tuner/TunerMapPanel.lua:183-190は専用TunerMapPanelコンテキストの配置処理でCreatePersonを呼び、Debug/Map.ltp:564-579は個人のIndexを渡す。Map.ltp:20-24のCompatibleStates/LoadStatesはTunerMapPanelを指定しており、通常のGameCore_Tunerやゲームプレイスクリプトからの使用例ではない。現行PoCの引数形式はこれに一致する。公式GreatPeople.xml:20-28では各クラスが別のユニット型を使うが、PoCは公式GENERALと同じUNIT_GREAT_GENERALへ別クラスを対応させている。この差と、AvailableInTimeline=false、PseudoYieldTypeなしの影響は未確定で、エンジン内部の根因として断定しない。
+呼出し元はGameCore_Tuner。公式のBase/Assets/UI/Tuner/TunerMapPanel.lua:183-190は専用TunerMapPanelコンテキストの配置処理でCreatePersonを呼び、Debug/Map.ltp:564-579は個人のIndexを渡す。Map.ltp:17-22のCompatibleStates/LoadStatesはTunerMapPanelを指定しており、通常のGameCore_Tunerやゲームプレイスクリプトからの使用例ではない。現行PoCの引数形式はこれに一致する。公式GreatPeople.xml:20-28では各クラスが別のユニット型を使うが、PoCは公式GENERALと同じUNIT_GREAT_GENERALへ別クラスを対応させている。この差と、AvailableInTimeline=false、PseudoYieldTypeなしの影響は未確定で、エンジン内部の根因として断定しない。
 
 次の比較では、加入要求をUIのEXECUTE_SCRIPTからゲームプレイスクリプトのJAC_LeaderPersonaJoinへ送る。これにより生成の実行コンテキストを変え、FireTunerからExposedMembers.Joinを直接呼ぶ方法との差を検査する。要求の前には人物を作らず、無効な発生元を拒否し、同じ要求の再送で重複しないことをLuaで検査した。実機の成功は結果が出てから記録する。
 
