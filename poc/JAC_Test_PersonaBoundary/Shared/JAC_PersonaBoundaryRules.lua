@@ -73,6 +73,13 @@ function R.Check(s, phase, merit)
         local expected = active and key == s.targetKey and 1 or 0;
         assert(city.settled == expected, "settlement marker disagrees at " .. key);
         local gameplay = assert(s.gameplay.cities[key], "Gameplay city observation missing: " .. key);
+        assert(type(city.id)=="number" and type(city.owner)=="number" and
+            gameplay.id==city.id and gameplay.owner==city.owner,
+            "UI/Gameplay city identity disagreement at " .. key);
+        if key==s.targetKey then
+            assert(gameplay.id==s.target.id and gameplay.owner==s.target.owner,
+                "Gameplay target city identity disagreement");
+        end;
         assert(gameplay.settled == city.settled, "UI/Gameplay marker disagreement at " .. key);
         for modifier,subjects in pairs(city.effects) do
             assert(subjects == expected, "native city effect remains/missing: " .. key .. "/" .. modifier);

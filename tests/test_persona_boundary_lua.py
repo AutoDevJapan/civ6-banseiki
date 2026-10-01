@@ -364,6 +364,22 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
         with self.assertRaisesRegex(LuaError,"identity"):
             self.b.Check("LOST",12)
 
+    def test_independent_gameplay_city_identity_missing_or_changed_cannot_pass(self):
+        for field, value in (("id", "78"), ("owner", "0"), ("id", "nil"), ("owner", "nil")):
+            with self.subTest(field=field, value=value):
+                self.setUp()
+                self.lua.execute("""
+                    lose()
+                    local read=ExposedMembers.JAC_PersonaBoundaryGameplayRead
+                    ExposedMembers.JAC_PersonaBoundaryGameplayRead=function()
+                        local result=read()
+                        result.cities['2/0'].FIELD=VALUE
+                        return result
+                    end
+                """.replace("FIELD", field).replace("VALUE", value))
+                with self.assertRaisesRegex(LuaError,"city identity disagreement"):
+                    self.b.Check("LOST",12)
+
     def prepare_inputs(self, title_delta):
         self.lua.execute((MOD / "Scripts/JAC_PersonaBoundary_Fixture.lua").read_text(encoding="utf-8"))
         self.lua.execute("""
