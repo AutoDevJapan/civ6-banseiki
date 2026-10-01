@@ -1888,6 +1888,31 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
         self.assertEqual(self.g.Players[1].units[10].owner, 1)
 
+    def test_candidate_special_charge_blocks_and_reuses_the_candidate_on_resume(self):
+        self.run_lua('''local create=UNIT
+          UNIT=function(...)
+            local u=create(...)
+            if u:GetOwner()==2 then u.GetDisasterCharges=function() return CANDIDATE_CHARGES end end
+            return u
+          end
+          CANDIDATE_CHARGES=1''')
+        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: DisasterCharges'):
+            self.apply()
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
+        self.assertEqual(self.g.Players[1].units[3].owner, 1)
+        candidate = self.a.FindUnit(2, 'test-absorption:unit:3')
+        candidate_id = candidate.GetID(candidate)
+        self.load_scripts()
+        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: DisasterCharges'):
+            self.a.Resume('test-absorption')
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
+        self.g.CANDIDATE_CHARGES = 0
+        self.a.Resume('test-absorption')
+        candidate = self.a.FindUnit(2, 'test-absorption:unit:3')
+        self.assertEqual(candidate.GetID(candidate), candidate_id)
+        self.assertEqual(self.g.SPAWNS, 6)
+        self.assertTrue(self.verify('test-absorption', True))
+
     def test_city_district_loss_is_detected_with_buildings_and_territory_intact(self):
         self.run_lua('CITIES[4].districts[1]={X=5,Y=0}')
         self.apply()
@@ -1955,6 +1980,42 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua('CITIES[4].districts[2]=nil')
         with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE:6:0'):
             self.verify('test-absorption', False)
+
+    def test_district_only_ui_cache_waits_after_transfer_and_across_resume(self):
+        self.run_lua('''CORE_PLAYERS=Players;UI_PLAYERS={};PUBLISHED_TRANSFERS=0
+          UI_DISTRICT_HANDLES={}
+          for x,c in pairs(CITIES) do UI_DISTRICT_HANDLES[x]=c.GetDistricts end
+          for owner,p in pairs(Players) do
+            local source,playerID=p,owner
+            UI_PLAYERS[owner]={GetCities=function() return {FindID=function(_,id)
+              if playerID==2 and PUBLISHED_TRANSFERS<TRANSFERS then return nil end
+              local c=source:GetCities():FindID(id)
+              return c and setmetatable({GetDistricts=UI_DISTRICT_HANDLES[c:GetX()]},{__index=c})
+            end} end,GetUnits=function() return source:GetUnits() end}
+          end
+          Players=UI_PLAYERS
+          Events={LoadScreenClose={Add=function() end},
+            GameCoreEventPublishComplete={Add=function(f) PUBLISH_CITY_UI=f end}}
+        ''')
+        self.run_lua((MOD / 'UI/JAC_Absorption_HeroKeys.lua').read_text(encoding='utf-8'))
+        self.run_lua('''Players=CORE_PLAYERS
+          for _,c in pairs(CITIES) do c.GetDistricts=function() return {} end end
+          UI_PUBLISH=function() PUBLISHED_TRANSFERS=TRANSFERS;PUBLISH_CITY_UI() end''')
+        tx = self.apply()
+        self.assertEqual(tx.Status, 'WAITING_UI')
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.run_lua('UI_PUBLISH()')
+        tx = self.a.Resume('test-absorption')
+        self.assertEqual(tx.Status, 'WAITING_UI')
+        self.assertTrue(tx.AwaitingFinalUI)
+        self.assertEqual(self.g.TRANSFERS, 2)
+        counts = (self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS)
+        self.load_scripts()
+        self.assertEqual(self.a.Resume('test-absorption').Status, 'WAITING_UI')
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), counts)
+        self.run_lua('UI_PUBLISH()')
+        self.assertEqual(self.a.Resume('test-absorption').Status, 'COMPLETE')
+        self.assertTrue(self.verify('test-absorption', True))
 
     def test_palace_work_loss_is_detected_even_when_the_palace_building_is_exempt(self):
         self.run_lua('''

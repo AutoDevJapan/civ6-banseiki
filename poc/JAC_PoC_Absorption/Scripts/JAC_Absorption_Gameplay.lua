@@ -1214,11 +1214,12 @@ local function Execute(state, tx)
     end
   end
   if not ready then error("JAC_ABSORPTION_WAITING_UI", 0) end
-  -- Finish all city mutations, then let UI-only citizen/work caches catch up.
-  if tx.Cities[1] then
-    local first = CityManager.GetCityAt(tx.Cities[1].X, tx.Cities[1].Y)
-    if not first:GetReligion().GetReligionsInCity or not first:GetBuildings().GetNumGreatWorkSlots
-      or not first:GetBuildings().GetGreatWorkInSlot then
+  -- Source and recipient use the same capability test for every city.
+  local needsCityUI = false
+  for _, snap in ipairs(tx.Cities) do
+    if CityNeedsUI(assert(CityManager.GetCityAt(snap.X, snap.Y))) then needsCityUI = true; break end
+  end
+  if needsCityUI then
       local reads = ExposedMembers.JAC_HeroReadAPI
       if not reads or not reads.GetObservation or not reads.GetObservation(tx.ID .. ":final") then
         tx.AwaitingFinalUI = true
@@ -1226,7 +1227,6 @@ local function Execute(state, tx)
         error("JAC_ABSORPTION_WAITING_UI", 0)
       end
       tx.AwaitingFinalUI = nil
-    end
   end
   local rosters, archive = MovedAssets(tx)
   for _, owner in ipairs(R.Keys(rosters)) do Players[owner]:SetProperty(R.ROSTER_KEY, R.Copy(rosters[owner])) end
