@@ -771,11 +771,19 @@ function RP.ResolveDiscovery(id, discoveryID, outcome, options)
   perform(state, id, plan)
 end
 
+local heroObservations = {} -- diagnostic only; never saved or used for decisions
 function RP.CompleteHero(playerID)
   local state = read()
   local h = state.heroes[tostring(playerID)]
   check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
   local info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
+  if tonumber(GameConfiguration.GetValue("JAC_AUTOTEST")) == 1 then
+    local observed = "unit=" .. h.unit .. " expectedClass=" .. h.heroClass .. " actual=" .. encode(info)
+    if heroObservations[playerID] ~= observed then
+      heroObservations[playerID] = observed
+      print("[JAC_RP] hero verification " .. observed)
+    end
+  end
   if info == nil then return false end -- UI has not received the new unit yet.
   if not info.active then return false end -- pay only during the recipient's turn.
   if not (info.hero and info.class == h.heroClass and info.lifespan > 0 and info.claim == playerID) then
