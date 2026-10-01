@@ -358,13 +358,19 @@ local function convertCitizens(entry)
   local union = copy(entry.after)
   union["-1"] = nil
   local low, high, scale = 0, nil, 1024
-  local ceiling = math.floor(2147483647 / city:GetPopulation())
+  -- Native pressure uses signed 24.8 fixed point (Lua integers shift left 8).
+  local ceiling = math.floor(8388607 / city:GetPopulation())
+  check(ceiling >= 1, "population exceeds native pressure precision")
+  scale = math.min(scale, ceiling)
   local lastAfter
   for attempt = 1, 64 do
-    -- Gameplay exposes clearing one religion's pressure, not pressure reads.
+    -- RemovePressureOneReligion(religion, pressure, responsiblePlayer)
+    -- subtracts an amount, not a percentage. Omitting the amount removes zero.
+    -- Two bounded subtractions clear even a maximum fixed-point pressure.
     -- Never clear the engine-owned unaffiliated/pantheon pressure.
     for _, key in ipairs(keys(union)) do
-      cr:RemovePressureOneReligion(tonumber(key))
+      cr:RemovePressureOneReligion(tonumber(key), 8388607, -1)
+      cr:RemovePressureOneReligion(tonumber(key), 1, -1)
     end
     if attempt == 1 and GameConfiguration.GetValue("JAC_AUTOTEST") == 1 then
       print("[JAC_RP] after pressure clearing=" .. encode(cityFollowers(city)))

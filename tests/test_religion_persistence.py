@@ -140,13 +140,15 @@ for id = 0, 1 do
           for _, row in ipairs(nativeRows(c)) do if row.Religion == r then return row.Followers end end
           return 0
         end,
-        RemovePressureOneReligion = function(_, r)
+        RemovePressureOneReligion = function(_, r, amount, responsible)
           assert(r > 0)
+          assert(amount >= 0 and amount <= 8388607 and responsible == -1)
           if FAIL_EFFECT then error('conversion refused') end
-          if not BAD_CONVERSION then c.pressure[tostring(r)] = 0 end
+          if not BAD_CONVERSION then c.pressure[tostring(r)] = math.max(0, (c.pressure[tostring(r)] or 0) - amount) end
         end,
         AddReligiousPressure = function(_, source, r, delta, unit)
           assert(source == 0 and unit == -1)
+          assert(delta >= 0 and delta <= 8388607, 'native fixed point pressure must not overflow')
           assert(r > 0, 'unaffiliated pressure must remain engine-owned')
           if FAIL_EFFECT then error('conversion refused') end
           if BAD_CONVERSION then return end
@@ -793,6 +795,18 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.rp.BindEngineReligion(R2, 44)
         self.rejected(self.rp.ResolveDiscovery, R1, "d", "ABSORB", self.options())
         self.rejected(self.rp.BindEngineReligion, R2, 43)
+
+    def test_absorption_clears_maximum_fixed_point_pressure_including_fraction(self):
+        self.found()
+        self.lost()
+        self.found(R2)
+        self.discovery()
+        self.bind_absorption()
+        self.lua.execute("ENGINE['0'].cities['0'].pressure={['42']=8388607+255/256}; "
+                         "ENGINE['1'].cities['0'].pressure={['43']=1024}")
+        self.rp.ResolveDiscovery(R1, "d", "ABSORB", self.options())
+        self.assertEqual((self.rp.NativeFollowers(R1), self.rp.NativeFollowers(R2)), (4, 7))
+        self.assertEqual(self.g.ENGINE["1"].faith, 0)
 
     def test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted(self):
         for omitted, sentinel in ((False, -1), (True, -1), (False, 0), (True, 0)):
