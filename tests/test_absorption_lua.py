@@ -1820,7 +1820,7 @@ class AbsorptionTests(unittest.TestCase):
 
     def test_exact_verification_detects_city_rename_but_later_turns_allow_it(self):
         self.apply()
-        self.run_lua("CITIES[12].GetName=function() return 'RENAMED_CITY' end")
+        self.run_lua("CITIES[4].GetName=function() return 'RENAMED_CITY' end")
         with self.assertRaisesRegex(Exception, 'city name changed'):
             self.a.Verify('test-absorption', True)
         self.a.Verify('test-absorption', False)
