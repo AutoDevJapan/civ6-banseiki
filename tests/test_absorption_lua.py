@@ -585,6 +585,28 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual((self.g.KILLS, self.g.TRANSFERS), (0, 0))
         self.assertEqual(self.g.Players[1].units[10].spread, 1)
 
+    def test_rejected_preparation_releases_factions_and_corrected_request_waits_for_new_publication(self):
+        self.split_unit_contexts()
+        self.run_lua("PLAN.Units['1:3']=nil")
+        tx = self.apply()
+        previous_token = tx.SourceSpreadReads[10].Token
+        self.assertTrue(tx.AwaitingPreparation)
+        self.run_lua("UI_PUBLISH()")
+        with self.assertRaisesRegex(Exception, "explicit disposition required"):
+            self.a.Resume("test-absorption")
+        self.assertIsNone(self.a.GetState().Transactions["test-absorption"])
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.run_lua("PLAN.Units['1:3']='INCORPORATE';Players[1].units[10].spread=1")
+        tx = self.apply()
+        self.assertTrue(tx.AwaitingPreparation)
+        self.assertNotEqual(tx.SourceSpreadReads[10].Token, previous_token)
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.run_lua("UI_PUBLISH()")
+        tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertEqual(next(s.SpreadCharges for _, s in tx.Units.items() if s.ID == 10), 1)
+
     def test_native_hero_ui_only_spread_wait_never_becomes_suicide(self):
         self.add_native_hero()
         self.split_unit_contexts()

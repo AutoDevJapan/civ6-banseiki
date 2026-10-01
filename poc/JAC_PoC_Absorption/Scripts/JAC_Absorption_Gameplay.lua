@@ -242,12 +242,12 @@ local function SpreadCharges(unit)
   return charges
 end
 
-local function SourceSpreadReads(id, owner, turn)
+local function SourceSpreadReads(id, owner, turn, serial)
   local result = {}
   for _, unit in ipairs(Units(owner)) do
     if not unit.GetSpreadCharges then
       local unitID = unit:GetID()
-      result[unitID] = { Token = id .. ":source-spread:" .. unitID, Owner = owner,
+      result[unitID] = { Token = id .. ":source-spread:" .. serial .. ":" .. unitID, Owner = owner,
         ID = unitID, Turn = turn, AwaitingUI = true }
     end
   end
@@ -1237,7 +1237,8 @@ function A.Resume(id)
   assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
   if tx.AwaitingPreparation then
     if not tx.SourceSpreadReads then
-      tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn)
+      state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
+      tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
       Save(state)
       return R.Copy(tx)
     end
@@ -1247,6 +1248,10 @@ function A.Resume(id)
     state.Transactions[id] = tx
     if not ready then
       if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" then return R.Copy(tx) end
+      -- Prepare is read-only. An invalid request must not reserve the factions
+      -- or prevent a corrected request with the same ID from being submitted.
+      state.Transactions[id] = nil
+      Save(state)
       error(prepared)
     end
     tx = prepared
@@ -1282,7 +1287,8 @@ function A.Apply(plan)
     if tostring(tx) ~= "JAC_ABSORPTION_WAITING_UI" then error(tx) end
     tx = { ID = plan.ID, From = plan.From, To = plan.To, Turn = Game.GetCurrentGameTurn(),
       Request = R.Copy(plan), Status = "WAITING_UI", AwaitingPreparation = true, Units = {}, Adapters = {} }
-    tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn)
+    state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
+    tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
     state.Transactions[plan.ID] = tx
     Save(state)
     return R.Copy(tx)
