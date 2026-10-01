@@ -806,11 +806,14 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
             with self.subTest(screen=source.name):
                 self.lua.execute("""
                     local function control()
-                        local c = setmetatable({hidden=false}, {__index=function()
+                        local c = setmetatable({hidden=false, sizeY=34}, {__index=function()
                             return function() end
                         end})
                         function c:SetHide(value) self.hidden=value end
                         function c:IsHidden() return self.hidden end
+                        function c:SetText(value) self.text=value; self.sizeY=64 end
+                        function c:GetSizeY() return self.sizeY end
+                        function c:SetSizeY(value) self.sizeY=value end
                         function c:RegisterCallback(_, callback) self.callback=callback end
                         function c:DoLeftClick()
                             assert(not ContextPtr:IsHidden() and not self:IsHidden(), 'unreachable control')
@@ -823,10 +826,17 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
                         local c=control(); rawset(t, key, c); return c
                     end})
                     Controls.Panel:SetHide(true); Controls.PactPanel:SetHide(true)
-                    InstanceManager={new=function() return {ResetInstances=function() end,
-                        GetInstance=function() return setmetatable({}, {__index=function(t, key)
-                            local c=control(); rawset(t, key, c); return c
-                        end}) end} end}
+                    InstanceManager={new=function(_, template, root, stack)
+                        stack.instances={}
+                        return {ResetInstances=function() stack.instances={} end,
+                            GetInstance=function()
+                                local row=setmetatable({}, {__index=function(t, key)
+                                    local c=control(); rawset(t, key, c); return c
+                                end})
+                                table.insert(stack.instances,row)
+                                return row
+                            end}
+                    end}
                     Events=setmetatable({}, {__index=function() return {Add=function() end} end})
                     Mouse={eLClick=1}
                     include=function() end
@@ -841,6 +851,12 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
                 self.assertIs(self.g.ContextPtr.IsHidden(self.g.ContextPtr), False)
                 self.g.Controls[toggle].DoLeftClick(self.g.Controls[toggle])
                 self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), False)
+                if panel == "Panel":
+                    # A four-line label must fit its own row, rather than
+                    # overlap another row or escape the scrollable area.
+                    rows = self.g.Controls.Rows.instances
+                    self.assertEqual(len(rows), 1)
+                    self.assertEqual(rows[1].Root.GetSizeY(rows[1].Root), 76)
                 self.g.Controls[close].DoLeftClick(self.g.Controls[close])
                 self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), True)
 

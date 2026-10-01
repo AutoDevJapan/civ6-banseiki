@@ -173,7 +173,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "screenshot",
@@ -227,7 +227,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "ui_lua",
@@ -305,7 +305,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "ui_lua",
@@ -411,7 +411,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "screenshot",
@@ -465,7 +465,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "ui_lua",
@@ -543,7 +543,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nreturn 'human arbitration panel open; row text fits'"
     },
     {
       "action": "ui_lua",
@@ -626,7 +626,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nlocal checked=0\nfor _,row in ipairs(Controls.Rows:GetChildren() or {}) do\n  if not row:IsHidden() then\n    local text\n    for _,child in ipairs(row:GetChildren() or {}) do\n      if child:GetID()=='Text' then text=child end\n    end\n    if not text or row:GetSizeY()<math.max(34,text:GetSizeY()+12) then\n      error('court text exceeds its scrollable row')\n    end\n    checked=checked+1\n  end\nend\nif checked==0 then error('no visible court rows checked') end\nControls.Scroll:SetScrollValue(1)\nreturn 'human arbitration panel open; row text fits; scrolled to order'"
     },
     {
       "action": "screenshot",
