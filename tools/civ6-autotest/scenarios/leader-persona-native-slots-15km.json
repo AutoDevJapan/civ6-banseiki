@@ -1,0 +1,343 @@
+{
+  "name": "PR86 native slot: fail at first AI turn or missing unassigned receipt; five-turn establishment and two saves",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "diagnostic_expense": {
+    "slot_appointment": 1,
+    "proxy_comparison_appointment": 1,
+    "persona_evolution_complete": false
+  },
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2",
+        "a1faab65-5371-4e25-9a46-7522075f865d"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsPrepare()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsGiveTitles()"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsAssertAI(true)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsAppoint('GOVERNOR_JAC_TITLE_PROXY')"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; return r and Players[0]:GetGovernors():HasGovernor(r.Hash) and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsAppoint('GOVERNOR_JAC_NATIVE_SLOT')"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.Governors['GOVERNOR_JAC_NATIVE_SLOT']; return r and Players[0]:GetGovernors():HasGovernor(r.Hash) and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsUnassigned('UNASSIGNED',2)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsRequireUnassignedReceipt()"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-NativeSlot-Unassigned"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-NativeSlot-Unassigned"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsCheckReload('UNASSIGNED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsAssign()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.Governors['GOVERNOR_JAC_NATIVE_SLOT']; local g=Players[0]:GetGovernors():GetGovernor(r.Hash); return g and g:GetAssignedCity()~=nil and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsCheckCity('ASSIGNED',0)"
+    },
+    {
+      "action": "end_turn",
+      "turns": 4,
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsCheckCity('TURN_FOUR',4)"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsCheckCity('SETTLED',5)"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-NativeSlot-Settled"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-NativeSlot-Settled"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsCheckReload('SETTLED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
+      "code": "JAC_SlotsRequireUnassignedReceipt(); return 'NATIVE SLOT DIAGNOSTIC ONLY: AI gate, unassigned GameCore receipts, placement, five turns, two saves; two official diagnostic appointment expenses; persona mapping and spy integration remain outside this test'"
+    }
+  ]
+}
