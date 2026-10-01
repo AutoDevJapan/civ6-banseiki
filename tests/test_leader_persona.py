@@ -67,12 +67,21 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE GreatPersonIndividualType IN "
                                              "(SELECT PersonType FROM JAC_LeaderPersonas)").fetchone()[0], 0)
 
-    def test_only_native_bases_are_registered_and_all_custom_nodes_have_gated_effects(self):
-        people = self.db.execute("SELECT GovernorType,BasePromotionType FROM JAC_LeaderPersonas").fetchall()
+    def test_native_bases_and_cost_only_payment_promotions_are_registered(self):
+        people = self.db.execute("SELECT GovernorType,BasePromotionType,EvolutionCost FROM JAC_LeaderPersonas").fetchall()
         self.assertEqual(len(people), 22)
-        for governor,base in people:
-            self.assertEqual(self.db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType=?", (governor,)).fetchall(), [(base,)])
+        for governor,base,cost in people:
+            expected = [(base,)] + [(base+f"_TITLE_{step}",) for step in range(1,cost)]
+            self.assertEqual(self.db.execute("SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType=?", (governor,)).fetchall(), expected)
             self.assertEqual(self.db.execute("SELECT BaseAbility,Level FROM GovernorPromotions WHERE GovernorPromotionType=?", (base,)).fetchone(), (1,0))
+            for step in range(1,cost):
+                payment = base+f"_TITLE_{step}"
+                self.assertEqual(self.db.execute("SELECT BaseAbility,Level,\"Column\" FROM GovernorPromotions WHERE GovernorPromotionType=?", (payment,)).fetchone(), (0,step,1))
+                self.assertEqual(self.db.execute("SELECT PrereqGovernorPromotion FROM GovernorPromotionPrereqs WHERE GovernorPromotionType=?", (payment,)).fetchall(),
+                                 [(base if step==1 else base+f"_TITLE_{step-1}",)])
+                self.assertEqual(self.db.execute("SELECT ModifierId FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?", (payment,)).fetchall(), [])
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM JAC_PersonaTitlePayments").fetchone()[0],
+                         sum(cost-1 for _,_,cost in people))
         for leader,base in self.db.execute("SELECT LeaderType,BasePromotionType FROM JAC_LeaderPersonas"):
             marker = "JAC_PERSONA_SETTLED_" + leader
             self.assertEqual(self.db.execute("SELECT ModifierType FROM Modifiers WHERE ModifierId=?", (marker,)).fetchone(),
@@ -214,7 +223,7 @@ class LeaderPersonaStaticTests(unittest.TestCase):
             self.assertNotIn(lang, translations.setdefault(tag, set()))
             translations[tag].add(lang)
             self.assertTrue(row.findtext("Text"))
-        self.assertEqual(len(translations), 291)
+        self.assertEqual(len(translations), 293)
         self.assertTrue(all(langs == {"ja_JP", "en_US", "ru_RU"} for langs in translations.values()))
 
     def test_governor_icons_reference_the_correct_existing_leader_and_unique_pk(self):

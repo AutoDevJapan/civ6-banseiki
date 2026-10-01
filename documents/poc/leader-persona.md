@@ -131,13 +131,13 @@
 
 伊達は1＋名声1＝**2**、織田は1＋名声0＝**1**。上杉は暫定11歳を入力し1＋名声1＋年少1＝**3**。長尾・タリコナの年齢不詳には年少加算なし。タリコナは全域代表加算で**2**。島津の継承抗争は史料の留保であり、全域代表加算を適用しない。
 
-使える称号は公式画面のGetGovernorPoints()−GetGovernorPointsSpent()（G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:54-61）。進化前に全額を確認し、追加の費用−1をChangeGovernorPoints(-追加分)で確保する。**公式の獲得数を減らすことで称号残数を消費**し、使用済み数は独自に書き換えない。APPOINT_GOVERNORが残る1個を消費する。公式のPROMOTE_GOVERNORも同じ称号を消費する（同:570-577）ため、人物の昇進では呼ばない。独自ツリーの購入要求で功績だけを減らす。
+使える称号は公式画面のGetGovernorPoints()−GetGovernorPointsSpent()（G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:54-61）。進化前に全額を確認する。APPOINT_GOVERNORが1個を消費し、追加分は人物総督の効果なしの昇進をPROMOTE_GOVERNORで1個ずつ取得して消費する（同:547-577）。公式の使用済み数が費用分だけ増え、獲得数は変えない。独自ツリーの技能は昇進操作を使わず、功績だけを減らす。
 
-正数の付与例はG/Debug/Player.ltp:289-295、獲得数・使用済み数は同:654,676。**負数の受理は正数例だけでは証明できず、要実機確認**。減算直後の残数が追加費用分だけ減らなければ、実際に変わった差分を戻し、TITLE_PAYMENT_FAILEDで任命を止める。部分減算後の復元と再試行をLuaテストで検証する。シナリオが追加1〜2個の減算、任命の会計、功績による昇進で称号が変わらないこと、保存後の残高を断言する。
+正数の付与例はG/Debug/Player.ltp:289-295、獲得数・使用済み数は同:654,676。実機ではChangeGovernorPoints(-1)が称号2/0を変えず、進化がTITLE_PAYMENT_FAILEDで止まった。負数のMODIFIER_PLAYER_ADJUST_GOVERNOR_POINTSも公式データに使用例がなく、動的付与の再送・返金をエンジン状態から確定しにくいため採用しない。公式GovernorPromotionSets・GovernorPromotionPrereqsの形（G/DLC/Expansion1/Data/Expansion1_Governors.xml:77-229）に従い、費用2・3の人物だけに支払い用昇進を登録する。未払いの称号数を本物の任命状態とHasPromotionから算出し、部分的に支払った状態で止まっても再読込後に残りだけを要求する。実機シナリオは費用1・2・3の使用済み数、昇進の取得、功績による技能購入で称号が変わらないこと、保存後の残高を断言する。新しい公式昇進の実機成功は親の確認待ち。
 
 ## 戦国社会制度からの進化用称号
 
-称号は公式の共有プールで、公式実装では任命と昇進の両方が消費する。このPoCは任命による進化にだけ使う。公式GSの `G/DLC/Expansion2/Data/Expansion1_Civics.xml:64-66,77-80,90-140` は、MODIFIER_PLAYER_ADJUST_GOVERNOR_POINTS／Delta=1を13社会制度に接続する。本機にある公式ファイルでは13件であり、約15件という目安に合わせた戦国版は15件とした。開始時の共通知識3件は対象にしない。
+称号は公式の共有プールで、公式実装では任命と昇進の両方が消費する。このPoCは人物の進化にだけ使う。公式GSの `G/DLC/Expansion2/Data/Expansion1_Civics.xml:64-66,77-80,90-140` は、MODIFIER_PLAYER_ADJUST_GOVERNOR_POINTS／Delta=1を13社会制度に接続する。本機にある公式ファイルでは13件であり、約15件という目安に合わせた戦国版は15件とした。開始時の共通知識3件は対象にしない。
 
 | 戦国社会制度（C番号） | 称号を付ける理由 |
 |---|---|
@@ -203,7 +203,7 @@ G/は下のインストールディレクトリ。
 | 公式任命の費用／独自昇進との区別 | `G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:219-223,547-577`: ボタンと `APPOINT_GOVERNOR`・`PROMOTE_GOVERNOR` の要求。昇進ボタンの値も `G/DLC/Expansion2/UI/Additions/GovernorDetailsPanel.lua:197-199` で確認できる。要求の総督ID・昇進IDは **Index**。任命はエンジンが1称号を消費。独自技能はこの昇進操作を使わない |
 | 都市へ配置・再配置する | `G/DLC/Expansion1/UI/Additions/GovernorAssignmentChooser.lua:372-382`: `ASSIGN_GOVERNOR` に総督Index・都市の所有者・都市IDを渡す。`:180` の `CanAssignGovernor(hash, city)` で派遣可否を調べる |
 | 実際の総督と昇進・定着を確認する | `G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:58,536`: `GetGovernorList()` と `GetGovernor(hash)`。`G/DLC/Expansion1/UI/Additions/GovernorSupport.lua:75-86`: `GetAssignedCity()`・`IsEstablished()`・`GetTurnsOnSite()`。`G/DLC/Expansion1/UI/Additions/GovernorAssignmentChooser.lua:90,126`: `GetAssignedGovernor(city)`・`HasPromotion(promotionHash)` |
-| 公式の称号ポイントAPI | `G/Debug/Player.ltp:289-295`: `player:GetGovernors():ChangeGovernorPoints(1)`。同ファイル`:654,676`に取得済み・使用済みの称号を読む処理がある。任命の追加費用を減算するAPIの根拠。MODには称号の検証用付与APIを公開しない。Lua試験がモックの残高を直接用意し、実機シナリオは社会制度の研究だけで称号を得る |
+| 公式の称号ポイントAPI | `G/Debug/Player.ltp:289-295`: `player:GetGovernors():ChangeGovernorPoints(1)`。同ファイル`:654,676`に取得済み・使用済みの称号を読む処理がある。負数の減算は実機で反映しなかった。MODには称号の検証用付与APIを公開しない。Lua試験がモックの残高を直接用意し、実機シナリオは社会制度の研究だけで称号を得る |
 | 総督数の上限 | `G/DLC/Expansion2/Data/Expansion2_GlobalParameters.xml:200`: GSの上限は8。PoC対象地図で22人物＋8枠の30へ広げる。22人同時任命は要実機確認 |
 | UIからゲーム側への変更要求 | `G/DLC/BlackDeathScenario/UI/BlackDeathScenario_PopupHandler.lua:21-28` の `EXECUTE_SCRIPT` と `OnStart`。同 `Scripts/BlackDeathScenario.lua:66` と `BlackDeathScenario_Support.lua:116`: ゲーム側はエンジンが渡す要求元プレイヤーを受け取る。要求のパラメータに所有者を指定させない |
 | 人物の独自状態を記録する | `G/DLC/WarMachineScenario/Scripts/WarMachineScenario.lua:39-42`: Gameプロパティを読み、未初期化のときだけ設定する。PoCは同じAPIで人物の記録を保持する。セーブ後の復元は本シナリオで要実機確認 |
@@ -218,7 +218,7 @@ G/は下のインストールディレクトリ。
 
 加入は既存の加入機能が成立を決めた後のJoin(owner, source, personality, trait)で行う。所有者・指導者・文明を検査し、本物の偉人の個人IDが一致したときだけ記録する。性格指定を省けば設計値を使い、固定特性を別の値に差し替える新規加入は拒否する。世界で人物の所有者は1人。再加入で増殖や固定特性の変更は起きない。元の勢力の都市・外交・存亡はこの接続口では変えない。
 
-未加入 → GREAT_PERSON → EVOLVING → GOVERNORの順に進む。名前・肖像・性格・固定特性・費用はGameプロパティへ保存する。初期費用は加入時に保存し、保存後の初期データ調整や性格変更では変えない。全額の残数を確認して追加費用とEVOLVINGを保存する。遅延や別操作が残る1個を使った場合、人物と予約済み追加費用を保持して称号を得た次の手番で再試行し、追加費用は取り直さない。
+未加入 → GREAT_PERSON → EVOLVING → GOVERNORの順に進む。名前・肖像・性格・固定特性・費用はGameプロパティへ保存する。初期費用は加入時に保存し、保存後の初期データ調整や性格変更では変えない。全額の残数を確認してEVOLVINGを保存する。任命と追加の支払い用昇進は一段階ずつ要求し、次の段階へ進む前にエンジンの取得状態を読む。遅延や別操作で残額が不足した場合は人物と公式の支払済み状態を保持する。保存・読込後も取得済み昇進を買い直さない。
 
 同名のエンジン総督を確認した後だけ偉人を除去し、除去も確認してからGOVERNORにする。除去失敗で再徴収しない。定着・配置・基礎技能は公式総督から読み、独自技能は人物IDの取得記録から読む。UNITや未設定はnilで保存し、空文字が保存をまたいで残らないという実機確認済み事実に従う。InitUnitValidAdjacentHexの戻り値をUnitにせず、偉人の個人IDで所有ユニットを探す。
 
@@ -250,12 +250,12 @@ tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQ
 指定のunittest discoverコマンドをこの作業フォルダから実行する。生成処理と過去の功績判定を修正した今回の検証は全体456件・実機ドライバー201件が成功し、Lua検査のスキップはない。人物化68件は全体の内数。画面からの同期加入に戻した現行110ステップの実機シナリオは形式・Lua構文検査に成功した。修正後の実機合格を別途確認する。
 
 - 加入条件・吸収・後継者・AIの加入／進化・他国都市派遣は範囲外。AIの人物総督の技能選択は今回実装した。全員AssignCityState=0。
-- 非同期任命の取消は設けず、人物と予約した追加費用を保持して再試行する。
+- 非同期任命の取消は設けず、人物と公式に支払済みの称号を保持して残額だけ再試行する。
 - 外部Luaによる人物の直接任命まで禁止する機構ではない。未加入の人物は公式画面の任命候補に出さない。AIのエンジンによる直接任命、マルチプレイ、途中導入、旧2昇進PoCのセーブからの移行は未検証。このシナリオは新規ゲーム用。
 - 公式の称号獲得源は削除したまま。戦国社会制度の新しい付与だけが通常の獲得源。検証用の残高はLua試験のモックで用意し、MOD側の付与機能は撤去した。
 - 偉人の地図モデルは公式大将軍、肖像は既存指導者画像。22 px都市表示だけ汎用fill/slotを借りる。[画像資料](leader-portraits.md)参照。
 - 偉人を失った場合はPERSON_MISSINGで進化を拒否し、自動復活しない。
-- 負数による称号減算、定義除外による公式任命禁止、基礎に接続した条件付き技能の発効／解除、3言語の改行・画面のキー操作、保存後のエンジン状態は要実機確認。近隣戦勝・建物完成・新しい同盟のイベント連携はLuaで検査済みだが、今回の実機シナリオは統治による獲得を検査する。22人同時任命・残る19人の効果・全ルートの実機収益は未検証。
+- 公式昇進による追加称号の消費、定義除外による公式任命禁止、基礎に接続した条件付き技能の発効／解除、3言語の改行・画面のキー操作、保存後のエンジン状態は要実機確認。近隣戦勝・建物完成・新しい同盟のイベント連携はLuaで検査済みだが、今回の実機シナリオは統治による獲得を検査する。22人同時任命・残る19人の効果・全ルートの実機収益は未検証。
 
 別モデル（gpt-6-luna、読み取り専用）から指摘された検証用称号APIの公開と古い結果表示は修正した。検証用の称号は配布スクリプトに存在せず、購入の結果は人物・技能・連番が一致するときだけ表示する。追跡する結果を開き直しで消し、読込後も保存した連番から続ける。再レビューで指定範囲に新しいコードのMustはなかった。総督APIがゲーム側で使えることと、条件付き技能が定着先だけで発効・解除することは、レビューでも実機確認待ちとして残っている。
 
