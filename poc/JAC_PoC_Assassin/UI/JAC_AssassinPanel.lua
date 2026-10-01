@@ -54,7 +54,8 @@ local function Refresh()
   -- One row per eligible nearby person/unit. A player chooses an actual map unit; no teleport command.
   local assassin=UI.GetHeadSelectedUnit()
   if assassin and assassin:GetOwner()==id and R.IsAssassin(assassin) then
-    local targets={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+    -- Include minor/free-city/barbarian units too (official Debug/Player.ltp:731).
+    local targets={}; for _,p in ipairs(PlayerManager.GetAlive()) do
       if p:GetID()~=id then targets[#targets+1]=p:GetID() end
     end; table.sort(targets)
     for _,target in ipairs(targets) do
@@ -75,12 +76,14 @@ local function Refresh()
         Add(Locale.Lookup("LOC_JAC_ASN_TARGET",Name(target),label,R.CHANCES[kind],missionTurns,actual),
           "LOC_JAC_ASN_ATTEMPT",ok,function() JAC_AssassinAttempt(assassin:GetID(),target,kind,object) end,reason)
       end
-      local nation=R.Nation(target)
-      Candidate("LEADER",nil,Locale.Lookup(nation and nation.CurrentLeaderName or PlayerConfigurations[target]:GetLeaderName()))
-      local governors=R.Input(Players[target]).Governors or {}
-      local keys={}; for key in pairs(governors) do keys[#keys+1]=key end; table.sort(keys)
-      for _,key in ipairs(keys) do
-        Candidate("GOVERNOR",tonumber(key),Locale.Lookup(governors[key].Name or "LOC_JAC_ASN_GOVERNOR"))
+      if Players[target]:IsMajor() then
+        local nation=R.Nation(target)
+        Candidate("LEADER",nil,Locale.Lookup(nation and nation.CurrentLeaderName or PlayerConfigurations[target]:GetLeaderName()))
+        local governors=R.Input(Players[target]).Governors or {}
+        local keys={}; for key in pairs(governors) do keys[#keys+1]=key end; table.sort(keys)
+        for _,key in ipairs(keys) do
+          Candidate("GOVERNOR",tonumber(key),Locale.Lookup(governors[key].Name or "LOC_JAC_ASN_GOVERNOR"))
+        end
       end
       local units={}; for _,u in Players[target]:GetUnits():Members() do units[#units+1]=u end
       table.sort(units,function(a,b) return a:GetID()<b:GetID() end)

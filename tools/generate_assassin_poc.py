@@ -527,12 +527,16 @@ def build_scenario():
       local watch={Owner=t.Actor,Rows={}}
       for _,id in ipairs({t.LockState.LastProducedUnit,R.State(t.Actor).LastProducedUnit}) do
         local u=TrainedUnit(t.Actor,id)
-        watch.Rows[tostring(id)]={Type=u:GetType(),MaxDamage=u:GetMaxDamage(),Damage=u:GetDamage(),Removed=false}
+        watch.Rows[tostring(id)]={Type=u:GetType(),X=u:GetX(),Y=u:GetY(),MaxDamage=u:GetMaxDamage(),
+          InitialDamage=u:GetDamage(),Damage=u:GetDamage(),DamageChanged=false,Removed=false}
       end
       JAC_ASN_LIVE_WATCH=watch
       JAC_ASN_LIVE_DAMAGE=function(owner,id,damage)
         local row=owner==watch.Owner and watch.Rows[tostring(id)]
-        if row then row.Damage=damage; print('[JAC_ASN_FIXTURE] trained damage id='..id..' damage='..damage) end
+        if row then
+          row.Damage=damage; row.DamageChanged=row.DamageChanged or damage~=row.InitialDamage
+          print('[JAC_ASN_FIXTURE] trained damage id='..id..' damage='..damage)
+        end
       end
       JAC_ASN_LIVE_REMOVED=function(owner,id)
         local row=owner==watch.Owner and watch.Rows[tostring(id)]
@@ -560,14 +564,13 @@ def build_scenario():
       for key,row in pairs(watch.Rows) do
         local u=Players[watch.Owner]:GetUnits():FindID(tonumber(key))
         if tonumber(key)==t.ExpectedNativeDeath then
-          assert(not u and row.Removed and row.Damage>=row.MaxDamage,'native damage/removal fixture not observed')
-        end
-        if u then
-          assert(not row.Removed and u:GetType()==row.Type and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,
-            'trained individual replaced or unplaced after next turn')
-        else
-          assert(row.Removed and row.Damage>=row.MaxDamage,'trained unit vanished without lethal native damage')
+          assert(not u and row.Removed and row.Damage>=row.MaxDamage,'trained native damage/removal fixture not observed')
           print('[JAC_ASN_FIXTURE] trained native death confirmed id='..key)
+        else
+          assert(u and not row.Removed and u:GetType()==row.Type and R.IsAssassin(u) and
+            u:GetX()==row.X and u:GetY()==row.Y and u:GetDamage()==row.InitialDamage and
+            not row.DamageChanged and row.Damage==row.InitialDamage,
+            'surviving trained individual changed after native fixture')
         end
       end
       end)
@@ -575,7 +578,7 @@ def build_scenario():
       if JAC_ASN_LIVE_REMOVED then Events.UnitRemovedFromMap.Remove(JAC_ASN_LIVE_REMOVED) end
       JAC_ASN_LIVE_WATCH=nil; JAC_ASN_LIVE_DAMAGE=nil; JAC_ASN_LIVE_REMOVED=nil
       assert(ok,why)
-      return 'trained individuals remain placed or have witnessed native lethal damage and removal'
+      return 'first trained individual has witnessed native lethal damage and removal; second remains unchanged'
     """, "JAC_AssassinPanel")
     check("""
       assert(Same(Game:GetProperty(R.NATIONS),t.FinalNations),'next turn changed national histories')

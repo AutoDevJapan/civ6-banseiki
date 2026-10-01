@@ -73,7 +73,7 @@ function memberCollection(items,make)
     end}
 end
 function makeUnit(d)
-  local u={GetID=function() return d.ID end, GetType=function() return d.Type end,
+  local u={GetID=function() return d.ID end, GetType=function() return d.Type end,GetName=function() return 'UNIT_'..d.Type end,
     GetOwner=function() return d.Owner end, GetX=function() return d.X end,GetY=function() return d.Y end,
     GetDamage=function() return d.Damage or 0 end,GetMaxDamage=function() return 100 end,
     ChangeDamage=function(_,delta)
@@ -83,7 +83,7 @@ function makeUnit(d)
   props(u,d); return u
 end
 function makeCity(d)
-  local c={GetID=function() return d.ID end,GetOwner=function() return d.Owner end,
+  local c={GetID=function() return d.ID end,GetOwner=function() return d.Owner end,GetName=function() return 'CITY_'..d.ID end,
     GetX=function() return d.X end,GetY=function() return d.Y end}
   props(c,d); return c
 end
@@ -93,7 +93,7 @@ function rebuild()
     local cities=memberCollection(d.Cities,makeCity)
     cities.GetCapitalCity=function() return cities:FindID(d.Capital) end
     local p={GetID=function() return id end,IsAlive=function() return d.Alive end,
-      IsHuman=function() return id==0 end,IsTurnActive=function() return d.Alive end,
+      IsHuman=function() return id==0 end,IsTurnActive=function() return d.Alive end,IsMajor=function() return id<=MAX_MAJOR end,
       GetCities=function() return cities end,GetUnits=function() return memberCollection(d.Units,makeUnit) end,
       GetStats=function() return {GetMilitaryStrength=function() return d.Military end} end,
       GetReligion=function() return {GetReligionInMajorityOfCities=function() return d.Religion end} end,
@@ -102,6 +102,8 @@ function rebuild()
         GetFavor=function() return d.Favor end,ChangeFavor=function(_,n) d.Favor=d.Favor+n end} end}
     props(p,d); Players[id]=p
     PlayerConfigurations[id]={GetLeaderTypeName=function() return 'LEADER_'..id end,
+      GetLeaderName=function() assert(id<=MAX_MAJOR,'non-major has no leader'); return 'LEADER_'..id end,
+      GetCivilizationDescription=function() return 'CIV_'..id end,
       GetCivilizationTypeName=function() return d.Civilization or ({[0]='CIVILIZATION_JAC_ODA',[1]='CIVILIZATION_JAC_MATSUDAIRA',[2]='CIVILIZATION_JAC_AINU'})[id] end}
   end
 end
@@ -114,6 +116,8 @@ end
 rebuild()
 PlayerManager={GetFreeCitiesPlayerID=function() return MAX_MAJOR+1 end,GetAliveMajors=function()
   local t={}; for id=MAX_MAJOR,0,-1 do if DATA[id].Alive then t[#t+1]=Players[id] end end; return t
+end,GetAlive=function()
+  local t={}; for id=MAX_MAJOR+1,0,-1 do if DATA[id].Alive then t[#t+1]=Players[id] end end; return t
 end}
 NEXT_UNIT=1
 function GRANT(owner,unitType,x,y)
@@ -1116,11 +1120,11 @@ class AssassinLuaTests(unittest.TestCase):
         from tools.generate_assassin_poc import build_scenario
         steps=build_scenario()['steps']
         setup=next(s['code'] for s in steps if 'JAC_ASN_LIVE_WATCH=watch' in s.get('code',''))
-        check=next(s['code'] for s in steps if 'trained unit vanished without lethal native damage' in s.get('code',''))
+        check=next(s['code'] for s in steps if 'surviving trained individual changed after native fixture' in s.get('code',''))
         self.run_lua("""
           Game.GetLocalPlayer=function() return 0 end; Game:SetProperty(A.TEST,1)
           Players[0]:SetProperty(A.STATE,{LastProducedUnit=U2})
-          Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,LockState={LastProducedUnit=U}})
+          Game:SetProperty('JAC_ASN_LIVE_TEST',{Actor=0,LockState={LastProducedUnit=U},ExpectedNativeDeath=U})
         """)
         self.run_lua(setup)
         return check
@@ -1155,6 +1159,80 @@ class AssassinLuaTests(unittest.TestCase):
                 with self.assertRaisesRegex(Exception,'trained'):
                     self.run_lua(check)
                 self.run_lua("assert(JAC_ASN_LIVE_WATCH==nil and UI_HANDLERS.UnitDamageChanged==nil and UI_HANDLERS.UnitRemovedFromMap==nil)")
+
+    def test_live_unit_watch_rejects_survivor_damage_movement_and_loss(self):
+        for change in (
+            "UI_HANDLERS.UnitDamageChanged(0,U2,25,0)",
+            "UI_HANDLERS.UnitDamageChanged(0,U2,25,0); UI_HANDLERS.UnitDamageChanged(0,U2,0,25)",
+            "DATA[0].Units[U2].Damage=25",
+            "DATA[0].Units[U2].X=DATA[0].Units[U2].X+1",
+            "DATA[0].Units[U2].Y=DATA[0].Units[U2].Y+1",
+            "DATA[0].Units[U2].Type=1",
+            "UI_HANDLERS.UnitDamageChanged(0,U2,100,0); UI_HANDLERS.UnitRemovedFromMap(0,U2); DATA[0].Units[U2]=nil",
+        ):
+            with self.subTest(change=change):
+                self.setUp()
+                check=self._start_live_trained_unit_watch()
+                self.run_lua("UI_HANDLERS.UnitDamageChanged(0,U,100,0); UI_HANDLERS.UnitRemovedFromMap(0,U); DATA[0].Units[U]=nil; "+change)
+                with self.assertRaisesRegex(Exception,'surviving trained individual changed'):
+                    self.run_lua(check)
+                self.run_lua("assert(JAC_ASN_LIVE_WATCH==nil and UI_HANDLERS.UnitDamageChanged==nil and UI_HANDLERS.UnitRemovedFromMap==nil)")
+
+    def _load_panel(self):
+        self.run_lua("""
+          Game.GetLocalPlayer=function() return 0 end
+          Mouse={eLClick=1}; PlayerOperations={EXECUTE_SCRIPT=1}; UI_CALLS={}
+          UI={GetHeadSelectedUnit=function() return Players[0]:GetUnits():FindID(U) end,
+            RequestPlayerOperation=function(id,kind,params) UI_CALLS[#UI_CALLS+1]={ID=id,Kind=kind,Params=clone(params)} end}
+          function Control()
+            return {SetText=function(self,v) self.Text=v end,SetDisabled=function(self,v) self.Disabled=v end,
+              SetToolTipString=function(self,v) self.Tooltip=v end,SetHide=function(self,v) self.Hidden=v end,
+              IsHidden=function(self) return self.Hidden end,RegisterCallback=function(self,event,f) self.Callback=f end,
+              CalculateSize=function() end,CalculateInternalSize=function() end}
+          end
+          Controls={}; for _,name in ipairs({'OpenButton','CloseButton','Panel','Rows','Status','Result','Scroll'}) do
+            Controls[name]=Control()
+          end
+          Controls.Panel:SetHide(true)
+          UI_ROWS={}
+          InstanceManager={new=function() return {
+            ResetInstances=function() UI_ROWS={} end,
+            GetInstance=function() local row={Text=Control(),Action=Control()}; UI_ROWS[#UI_ROWS+1]=row; return row end} end}
+        """)
+        self.run_lua((MOD/'UI/JAC_AssassinPanel.lua').read_text(encoding='utf-8'))
+
+    def test_panel_open_close_produce_cancel_refresh_and_inactive_buttons(self):
+        self._load_panel()
+        self.run_lua("""
+          assert(Controls.Panel:IsHidden()); Controls.OpenButton.Callback(); assert(not Controls.Panel:IsHidden())
+          local action=UI_ROWS[1].Action; assert(action.Text=='LOC_JAC_ASN_PRODUCE' and not action.Disabled)
+          action.Callback(); local call=UI_CALLS[1]
+          assert(call.ID==0 and call.Kind==PlayerOperations.EXECUTE_SCRIPT and call.Params.City==10)
+          EVENTS.JAC_AssassinOperation(0,call.Params); UI_HANDLERS.GameCoreEventPublishComplete()
+          assert(UI_ROWS[1].Action.Text=='LOC_JAC_ASN_CANCEL'); UI_ROWS[1].Action.Callback()
+          EVENTS.JAC_AssassinOperation(0,UI_CALLS[2].Params); UI_HANDLERS.GameCoreEventPublishComplete()
+          assert(UI_ROWS[1].Action.Text=='LOC_JAC_ASN_PRODUCE')
+          Controls.CloseButton.Callback(); assert(Controls.Panel:IsHidden())
+          Players[0].IsTurnActive=function() return false end; UI_HANDLERS.LocalPlayerTurnBegin()
+          for _,row in ipairs(UI_ROWS) do assert(row.Action.Disabled) end
+          local before=#UI_CALLS; UI_ROWS[1].Action.Callback(); assert(#UI_CALLS==before)
+        """)
+
+    def test_panel_lists_visible_non_major_units_without_leader_candidates(self):
+        self.run_lua("DATA[3].Alive=true; V=GRANT(3,4,2,0):GetID(); rebuild()")
+        self._load_panel()
+        self.run_lua("""
+          for _,row in ipairs(UI_ROWS) do if row.Action.Text=='LOC_JAC_ASN_ATTEMPT' then row.Action.Callback() end end
+          local found=false
+          for _,call in ipairs(UI_CALLS) do if call.Params.Target==3 then
+            assert(call.Params.Action=='ATTEMPT' and call.Params.Kind=='UNIT' and call.Params.Object==V)
+            found=true
+          end end
+          assert(found,'visible non-major unit missing from panel')
+          HIDDEN_UNIT=true; UI_CALLS={}; UI_HANDLERS.UnitSelectionChanged()
+          for _,row in ipairs(UI_ROWS) do if row.Action.Text=='LOC_JAC_ASN_ATTEMPT' then row.Action.Callback() end end
+          for _,call in ipairs(UI_CALLS) do assert(call.Params.Target~=3,'hidden non-major unit leaked') end
+        """)
 
     def test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips(self):
         from tools.generate_assassin_poc import build_scenario
