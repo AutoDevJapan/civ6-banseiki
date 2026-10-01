@@ -1223,6 +1223,19 @@ class Runner:
             print(f"Closed orphan Civ VI helpers: {closed}", flush=True)
             time.sleep(min(8, _remaining(deadline)))  # Steam releases its running-app entry.
         self._launch_steam_and_wait(deadline)
+        # Isolated startup experiment for PR87; the normal driver remains immediate.
+        probe_delay = float(os.environ.get("JAC_DIAGNOSTIC_STARTUP_DELAY", "0"))
+        if not math.isfinite(probe_delay) or not 0 <= probe_delay <= 120:
+            raise ScenarioError("Startup diagnostic delay must be between 0 and 120 seconds")
+        if probe_delay:
+            self._log("startup_probe_delay", "START", f"{probe_delay}s without a FireTuner connection")
+            time.sleep(min(probe_delay, _remaining(deadline)))
+            _remaining(deadline)
+            try:
+                capture_civ_window(self.output / "startup-before-tuner.png", deadline=deadline)
+                self._log("startup_probe_delay", "OK", "captured game before the initial FireTuner connection")
+            except CaptureError as exc:
+                self._log("startup_probe_delay", "OBSERVATION", f"game capture unavailable: {exc}")
         if self.owner_start:
             # The owner is using the PC: Windows refuses to move focus, so let the opening finish.
             self._disconnect()
