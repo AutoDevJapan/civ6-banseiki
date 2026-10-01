@@ -739,9 +739,33 @@
       "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.PreRecallEra,'global era boundary not processed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'global era advanced through test-mode autoplay; recall intent saved'"
     },
     {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1');return e~=nil and Players[e.To]:GetReligion():GetFaithBalance()>=1000000"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "capture_as": "JAC_ABSORPTION_SYNC_RECALL_COST",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class));local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal native=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType])\nlocal cost=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,native.Hash)\nlocal balance=A.PlayerFaithBalance(e.To)\nassert(type(cost)=='number' and cost>0 and type(balance)=='number' and balance>=cost,'recall snapshot faith/cost invalid')\nGame:SetProperty('JAC_ABSORPTION_RECALL_COST_V1',{CostBefore=cost,FaithBefore=balance})\nreturn 'recall cost and faith snapshot saved in gameplay'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1');local saved=Game:GetProperty('JAC_ABSORPTION_RECALL_COST_V1')\nif not e or not saved then return false end\nlocal origin=Game.GetHeroesManager():GetHeroOriginCityID(e.Class);if not origin then return false end\nlocal city=Players[e.To]:GetCities():FindID(origin.id);if not city then return false end\nlocal native=GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType]\nreturn Players[e.To]:GetReligion():GetFaithBalance()==saved.FaithBefore and city:GetGold():GetPurchaseCost(GameInfo.Yields['YIELD_FAITH'].Index,native.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)==saved.CostBefore"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(e.To==Game.GetLocalPlayer(),'only human Oda can issue the recall purchase')\nlocal manager=assert(Game.GetHeroesManager())\nlocal origin=assert(manager:GetHeroOriginCityID(e.Class))\nassert(manager:GetHeroClaimPlayer(e.Class)==e.To and origin.player==e.To,'recall claim owner changed')\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal def=assert(GameInfo.HeroClasses[e.Class]);local unit=assert(GameInfo.Units[def.UnitType])\nlocal faith=GameInfo.Yields['YIELD_FAITH'].Index\nlocal parameters={[CityCommandTypes.PARAM_UNIT_TYPE]=unit.Hash,\n [CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE]=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION,\n [CityCommandTypes.PARAM_YIELD_TYPE]=faith}\nlocal allowed,results=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,false,parameters,true)\nlocal reasons={}\nif results and results[CityCommandResults.FAILURE_REASONS] then\n for _,reason in ipairs(results[CityCommandResults.FAILURE_REASONS]) do reasons[#reasons+1]=tostring(reason) end\nend\nassert(allowed,'native recall purchase denied: '..table.concat(reasons,','))\nlocal cost=city:GetGold():GetPurchaseCost(faith,unit.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)\nlocal balance=Players[e.To]:GetReligion():GetFaithBalance()\nassert(type(cost)=='number' and cost>0 and type(balance)=='number' and balance>=cost,'native recall faith/cost invalid')\nGame:SetProperty('JAC_ABSORPTION_RECALL_COST_V1',{CostBefore=cost,FaithBefore=balance})\nCityManager.RequestCommand(city,CityCommandTypes.PURCHASE,parameters)\nreturn 'real native Hero purchase requested; faith cost before='..cost"
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(e.To==Game.GetLocalPlayer(),'only human Oda can issue the recall purchase')\nlocal manager=assert(Game.GetHeroesManager())\nlocal origin=assert(manager:GetHeroOriginCityID(e.Class))\nassert(manager:GetHeroClaimPlayer(e.Class)==e.To and origin.player==e.To,'recall claim owner changed')\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal def=assert(GameInfo.HeroClasses[e.Class]);local unit=assert(GameInfo.Units[def.UnitType])\nlocal faith=GameInfo.Yields['YIELD_FAITH'].Index\nlocal parameters={[CityCommandTypes.PARAM_UNIT_TYPE]=unit.Hash,\n [CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE]=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION,\n [CityCommandTypes.PARAM_YIELD_TYPE]=faith}\nlocal allowed,results=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,false,parameters,true)\nlocal reasons={}\nif results and results[CityCommandResults.FAILURE_REASONS] then\n for _,reason in ipairs(results[CityCommandResults.FAILURE_REASONS]) do reasons[#reasons+1]=tostring(reason) end\nend\nassert(allowed,'native recall purchase denied: '..table.concat(reasons,','))\nlocal cost=city:GetGold():GetPurchaseCost(faith,unit.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)\nlocal balance=Players[e.To]:GetReligion():GetFaithBalance()\nassert(type(cost)=='number' and cost>0 and type(balance)=='number' and balance>=cost,'native recall faith/cost invalid')\nlocal saved=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_COST_V1'),'recall cost snapshot not published')\nassert(saved.CostBefore==cost and saved.FaithBefore==balance,'recall cost snapshot changed before purchase')\nCityManager.RequestCommand(city,CityCommandTypes.PURCHASE,parameters)\nreturn 'real native Hero purchase requested; faith cost before='..cost"
     },
     {
       "action": "wait_for",

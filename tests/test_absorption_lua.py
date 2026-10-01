@@ -1640,7 +1640,7 @@ class AbsorptionTests(unittest.TestCase):
         steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                            .read_text(encoding='utf-8'))['steps']
         steps = [step for step in steps if 'recall spawn blockers relocated' not in step.get('code', '') and step['action'] != 'autoplay' and not step.get('capture_as', '').startswith('JAC_ABSORPTION_SYNC_')
-                 and not any(key in step.get('condition', {}).get('code', '') for key in ('JAC_ABSORPTION_FIXTURE_UI_WAIT', 'GetUIPhase'))]
+                 and not any(key in step.get('condition', {}).get('code', '') for key in ('JAC_ABSORPTION_FIXTURE_UI_WAIT', 'GetUIPhase', 'GetFaithBalance()>=1000000', 'JAC_ABSORPTION_RECALL_COST_V1'))]
         self.run_lua('''
           Game.GetLocalPlayer=function() return 0 end
           for id=4,21 do
@@ -1694,7 +1694,22 @@ class AbsorptionTests(unittest.TestCase):
             self.run_lua(steps[15]['code'])
         self.g.GLOBAL_ERA = 1
         self.run_lua(steps[15]['code'])
+        current_steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
+                                   .read_text(encoding='utf-8'))['steps']
+        funding = next(s for s in current_steps if 'GetFaithBalance()>=1000000' in s.get('condition', {}).get('code', ''))
+        preparation = next(s for s in current_steps if s.get('capture_as') == 'JAC_ABSORPTION_SYNC_RECALL_COST')
+        published = next(s for s in current_steps if 'JAC_ABSORPTION_RECALL_COST_V1' in s.get('condition', {}).get('code', ''))
+        self.assertTrue(self.run_lua(funding['condition']['code']))
+        self.run_lua(preparation['code'])
+        self.assertTrue(self.run_lua(published['condition']['code']))
+        self.run_lua("Game:GetProperty('JAC_ABSORPTION_RECALL_COST_V1').CostBefore=999")
+        self.assertFalse(self.run_lua(published['condition']['code']))
+        with self.assertRaisesRegex(Exception, 'recall cost snapshot changed'):
+            self.run_lua(steps[16]['code'])
+        self.run_lua(preparation['code'])
+        self.run_lua('GAME_SET_PROPERTY=Game.SetProperty;Game.SetProperty=nil')
         self.run_lua(steps[16]['code'])
+        self.run_lua('Game.SetProperty=GAME_SET_PROPERTY')
         all_steps = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')
                                .read_text(encoding='utf-8'))['steps']
         binding = next(s for s in all_steps if s.get('capture_as') == 'JAC_ABSORPTION_SYNC_VERIFY_2')
