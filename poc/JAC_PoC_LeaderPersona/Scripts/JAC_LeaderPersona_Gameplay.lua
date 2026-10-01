@@ -130,9 +130,10 @@ local function PrepareEvolution(owner, leader)
     local cost = EvolutionCost(leader);
     -- Pending native operations reserve their still-unpaid titles, even across
     -- save/load. Both APPOINT and PROMOTE debit the engine's spent-title count.
-    if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost or not native.canAppoint then
+    if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost then
         return Finish(owner, "NO_TITLE");
     end
+    if not native.canAppoint then return Finish(owner, "NATIVE_NOT_APPOINTABLE"); end
     -- The surcharge is the required count, not a synthetic balance deduction.
     -- Its paid portion is read from the engine's own Governor promotions.
     Set(leader, "EVOLUTION_SURCHARGE", cost - 1);

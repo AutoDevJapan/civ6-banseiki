@@ -57,7 +57,7 @@ GameInfo={ Eras=collection({{EraType="ERA_ANCIENT",Hash=5000}},"EraType"),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
     Governors=collection(GOVDEFS,'GovernorType'), GovernorPromotions=collection(PROMOS,'GovernorPromotionType') }
 PlayerConfigurations, Players = {}, {}
-NATIVE_UNITS, NATIVE_GOVS, CITIES, GRANTS = {}, {}, {}, {}
+NATIVE_UNITS, NATIVE_GOVS, CITIES, GRANTS, NATIVE_APPOINTABLE = {}, {}, {}, {}, {}
 function members(rows)
     local list={}; for _,v in pairs(rows) do list[#list+1]=v end
     table.sort(list,function(a,b) return a:GetID()<b:GetID() end)
@@ -70,6 +70,7 @@ for i,row in ipairs(ROWS) do
     config.GetCivilizationTypeName=function() return config.civ end
     PlayerConfigurations[id]=config
     NATIVE_UNITS[id], NATIVE_GOVS[id], GRANTS[id], CITIES[id]={},{},{},{}
+    NATIVE_APPOINTABLE[id]={}
     local p={points=0,spent=0,alive=true,major=true,active=true,human=true,allies={}}
     p.GetID=function() return id end
     p.IsAlive=function() return p.alive end; p.IsMajor=function() return p.major end
@@ -96,6 +97,14 @@ for i,row in ipairs(ROWS) do
         GetGovernor=function(_,hash) return NATIVE_GOVS[id][hash] end,
         HasGovernor=function(_,hash) return NATIVE_GOVS[id][hash]~=nil end,
         CanAppoint=function() return p.points>p.spent end,
+        CanEverAppointGovernor=function(_,hash)
+            assert(hash>=1000, 'per-type getter expects a governor Hash')
+            return NATIVE_APPOINTABLE[id][hash]~=false
+        end,
+        CanAppointGovernor=function(_,hash)
+            assert(hash>=1000, 'per-type getter expects a governor Hash')
+            return NATIVE_APPOINTABLE[id][hash]~=false and NATIVE_GOVS[id][hash]==nil and p.points>p.spent
+        end,
         CanPromoteGovernor=function(_,hash) return NATIVE_GOVS[id][hash]~=nil and p.points>p.spent end,
         CanAssignGovernor=function(_,hash,city) return NATIVE_GOVS[id][hash]~=nil and city:GetOwner()==id end,
         ChangeGovernorPoints=function(_,delta) GRANTS[id][#GRANTS[id]+1]=delta; p.points=p.points+delta end,
@@ -1225,6 +1234,68 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.grant_titles(0, DATE)
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "PERSON_MISSING")
         self.assertEqual(self.g.DESTROYS, 0)
+
+    def test_native_type_rejection_keeps_person_and_titles_without_reserving_evolution(self):
+        self.join()
+        self.grant_titles(0, DATE)
+        governor = self.g.GameInfo.Governors[self.g.GameInfo.JAC_LeaderPersonas[DATE].GovernorType]
+        self.g.NATIVE_APPOINTABLE[0][governor.Hash] = False
+        self.assertTrue(self.g.Players[0].GetGovernors().CanAppoint())
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "NATIVE_NOT_APPOINTABLE")
+        self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"),
+                          self.g.Players[0].points, self.g.Players[0].spent, self.g.DESTROYS),
+                         ("GREAT_PERSON", None, 2, 0, 0))
+        self.g.JAC_RefreshPersonas()
+        self.assertTrue(self.g.VIEWS[1].disabled)
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "NATIVE_NOT_APPOINTABLE")
+        # A fresh native read for the owner allows the existing cost-2 payment.
+        self.g.NATIVE_APPOINTABLE[0][governor.Hash] = True
+        self.g.JAC_RefreshPersonas()
+        self.assertFalse(self.g.VIEWS[1].disabled)
+        self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].points,
+                          self.g.Players[0].spent, self.g.DESTROYS), ("GOVERNOR", 2, 2, 1))
+
+    def test_pending_evolution_rechecks_native_type_before_requesting_appointment(self):
+        self.join()
+        self.grant_titles(0, DATE)
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
+        governor = self.g.GameInfo.Governors[self.g.GameInfo.JAC_LeaderPersonas[DATE].GovernorType]
+        self.g.NATIVE_APPOINTABLE[0][governor.Hash] = False
+        self.assertFalse(self.g.JAC_AppointLeader(DATE))
+        self.assertEqual(len(self.g.REQUESTS), 0)
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].spent, self.g.DESTROYS),
+                         ("EVOLVING", 0, 0))
+        self.g.NATIVE_APPOINTABLE[0][governor.Hash] = True
+        self.assertTrue(self.g.JAC_AppointLeader(DATE))
+        self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].spent), ("GOVERNOR", 2))
+
+    def test_native_reader_uses_requested_owner_and_target_type_independently_of_pool(self):
+        definition = self.g.GameInfo.Governors[self.g.GameInfo.JAC_LeaderPersonas[DATE].GovernorType]
+        self.g.Players[0].points = 3
+        self.g.Players[2].points = 3
+        self.g.NATIVE_APPOINTABLE[0][definition.Hash] = False
+        read = self.g.ExposedMembers.JAC_LeaderPersonaNativeRead
+        self.assertFalse(read(0, DATE).canAppoint)
+        self.assertTrue(read(2, DATE).canAppoint)
+        self.assertTrue(read(0, HOJO).canAppoint)
+
+    def test_missing_type_getter_is_unavailable_and_never_uses_pool_as_eligibility(self):
+        self.join()
+        self.grant_titles(0, DATE)
+        self.lua.execute('''
+            local original=Players[0].GetGovernors
+            Players[0].GetGovernors=function()
+                local g=original(); g.CanAppointGovernor=nil; return g
+            end
+        ''')
+        self.assertEqual(self.api.PrepareEvolution(0, DATE), "NATIVE_UNAVAILABLE")
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].spent, self.g.DESTROYS),
+                         ("GREAT_PERSON", 0, 0))
+        self.g.JAC_RefreshPersonas()
+        self.assertTrue(self.g.VIEWS[1].disabled)
 
     def test_pending_appointment_keeps_unit_until_native_success(self):
         self.join()

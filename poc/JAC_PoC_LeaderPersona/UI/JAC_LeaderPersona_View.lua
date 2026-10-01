@@ -13,7 +13,12 @@ ExposedMembers.JAC_LeaderPersonaNativeRead = function(owner, leader)
     local def = row and GameInfo.Governors[row.GovernorType];
     if not p or not def then return nil; end
     local governors = p:GetGovernors();
-    local result = { appointed=governors:HasGovernor(def.Hash), canAppoint=governors:CanAppoint() };
+    if not governors or type(governors.CanAppointGovernor) ~= "function" then return nil; end
+    -- CanAppoint() checks the shared title pool, not this person's eligibility.
+    -- Both native per-type getters accept the same governor Hash/Index conversion
+    -- in the official XP2 UI cache. Evidence: documents/poc/leader-persona.md.
+    local result = { appointed=governors:HasGovernor(def.Hash),
+                     canAppoint=governors:CanAppointGovernor(def.Hash) };
     if result.appointed then
         local governor = governors:GetGovernor(def.Hash);
         if not governor then return nil; end
@@ -151,7 +156,9 @@ function JAC_RefreshPersonas()
             local governors = Players[owner]:GetGovernors();
             local available = math.max(0, governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() -
                 JAC_PersonaTreeRules.ReservedAppointments(owner));
-            local noTitle = state == "GREAT_PERSON" and (available < cost or not governors:CanAppoint());
+            local native = state == "GREAT_PERSON" and JAC_PersonaTreeRules.NativeGovernor(owner, leader);
+            local noTitle = state == "GREAT_PERSON" and
+                (available < cost or not native or not native.canAppoint);
             view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost));
             view.Evolve:SetDisabled(not Active() or noTitle or state == "EVOLVING");
             view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost, available));

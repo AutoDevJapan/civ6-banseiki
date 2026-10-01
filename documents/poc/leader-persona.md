@@ -527,3 +527,27 @@ leaderperson-21は人物化なしの開始比較で全6手順と3判定に成功
 自動検査はb52a5c6で通常642件・ドライバー247件成功、Luaスキップなし。23は検証モードで早送り0手番、実際の手番を14回進めた。22は早送り0手番、実手番9回。20・21は手番進行前に終了した。23は最後の断言で停止したため、共通ログ判定は未実行である。成果は共有live作業フォルダの各実機IDにLua.log、Modding.log、steps.jsonl、result.jsonと隣の.logを保存した。
 
 共有ToDoの称号修正365と功績実装325は完了した。主項目324とAI任命の修正407を未完了で保持する。修正用の2作業フォルダは、コミットのpushと未コミットなしを確認して整理した。未マージの人物化作業フォルダと実機成果は保持する。
+
+### 人物別の本体判定と、加入による資格変更の調査（2026-10-01）
+
+**共有称号だけで進化を許す判定を、人物別の本体判定へ直した。本体AIが未加入人物を任命する根因は未解決である。** この修正を任命資格の開閉機構として扱わない。22人の登録・生成・費用・所有者・他MODの総督は変えていない。
+
+UI側で取得する本体状態は、従来の `CanAppoint()` から `CanAppointGovernor(governorHash)` へ変更した。前者は共有称号と任命上限の可否で、対象人物を引数に取らない。後者は対象人物の資格を含む。Gameplayはこの新しい読取値が拒否なら、全額があっても `NATIVE_NOT_APPOINTABLE` を返し、進化の予約・称号支払い・人物除去を行わない。既に予約した人物も、公式任命の要求前にUIで同じ本体判定を読み直す。人物一覧の進化ボタンにもこの判定を反映する。
+
+#### 一次資料と採用できなかった方式
+
+`G` は本機の `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI`。表中のDLLは `G/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` である。SHA-256は `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`。実行・注入・ゲーム操作は行わず、配布ファイルを静的に読んだ。
+
+| 調査対象 | 確認できた根拠と限界 |
+|---|---|
+| 任命資格の読取 | 公式UIは `G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:73-100` で総督Hashを `CanEverAppointGovernor` に渡す。DLLのUI用 `Cache_Lua_IPlayerGovernors` は両方の人物別getterを登録する。RVA `0x710030` と `0x7102D0` のLua関数は同じ引数2の変換を使い、同じRVA `0x1B0810` でIndexまたはHashを総督Indexへ変換する。後者の変換は、既知の小さいIndexをそのまま通し、その他のHashを総督定義から解決する。今回の呼出しは既存のHash方式に合わせた |
+| 本体での追加条件 | DLLのUI用 `CanAppointGovernor` はRVA `0xBA2C0` から本体RVA `0x2DD820` を読む。この本体関数は共有の任命可否と未任命を確認し、`CanEverAppointGovernor` に対応するRVA `0x2DDDD0` を呼ぶ。ここにLuaの加入台帳を読む接続は確認できない。新getterを呼ぶだけでは、加入条件を本体へ追加できない |
+| 静的な特性制限 | `G/DLC/Expansion2/Data/Expansion2_Schema.sql:337-352` の `Governors.TraitType` は `Traits` への外部キー。公式Ibrahimは `Expansion2_Governors.xml:16` の特性を、`Expansion2_Leaders_Major.xml:91,287` でSuleimanに割り当てる。本体の資格関数も指導者／文明の特性集合との照合を行うと読める。これは配布データと静的解析からの判断であり、未割当の新特性の実機成功を意味しない |
+| 動的な特性付与 | `G/Base/Assets/Gameplay/Data/Modifiers.xml:8` の `MODIFIER_ALL_PLAYERS_GRANT_TRAIT` は型宣言だけ。Base・Expansion1/2のDynamicModifiers定義と全DLCのXML/SQLに使用例を確認できず、XP2のRelease／FinalRelease DLLにも対応する特性付与Effect名を確認できない。型宣言だけから動作すると扱わない |
+| AttachModifierと条件 | `G/DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1204-1205` の `Player:AttachModifierByID` は実在する。`G/DLC/CivRoyaleScenario/Data/CivRoyaleScenario_Civilizations.xml:392-405` のPlotプロパティ条件とRequirementSetsも実在する。ただし、条件が制御するのは接続先のEffectである。総督資格や特性付与を変更するEffectは確認できない。加入プロパティへ任意の名前を付けても、資格条件にはならない |
+| GameplayとUI | DLLの `Cache_Lua_IPlayerGovernors.cpp` 側には人物別のgetterと総督状態getterがある。Gameplayの `Lua_IPlayerGovernors.cpp` 側で確認できる変更APIは `ChangeGovernorPoints`。資格を変更するsetterは確認できない。今回も読取はUI、費用・台帳の確定はGameplayとする |
+| 正規の操作入口 | `G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:547-577` は `APPOINT_GOVERNOR` と `PROMOTE_GOVERNOR` に総督Indexを渡す。ここから新しい特性を付与できるという資料はない。今回も既存の公式操作と使用済み称号数による会計を保つ |
+
+特性の付与、総督資格のsetter、PlayerOperationsの拒否フックなどの名称を新しく作って呼ばない。秘密結社の発見は別の本体機構で、公式では一つの結社への加入が固定される。複数の人物を通常総督として配置する本仕様の代用品には採用していない。新しい加入資格の開閉方式は、実在する接続をさらに確認できるまで未実装とする。
+
+この段階の人物化検査は83件成功した。新しい4検査は、称号が足りても本体が対象人物を拒む場合、予約後に資格が変わった場合、要求された所有者・人物が違う場合、人物別getterが利用できない場合を実行する。再読込相当のLua再初期化後も人物・費用を保持し、資格が有効になれば既存の費用2の公式任命と追加支払いが完了する。これらはMODの要求処理の検査であり、本体AIの資格を閉じた証拠ではない。
