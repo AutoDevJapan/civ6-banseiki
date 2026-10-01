@@ -242,6 +242,8 @@ class JudgeTests(unittest.TestCase):
             "court-arbitration.json", "court-arbitration-human.json", "court-arbitration-ai.json", "probe-make-peace.json",
             "probe-era-timing-standard.json", "probe-era-timing-quick.json",
             "sengoku-era-reigns.json",
+            "absorption-japan.json",
+            "absorption-hero-recall.json", "absorption-priest-diagnostic.json",
             "sengoku-oaths-oda.json",
             "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
             "sengoku-era-reigns-epic.json", "sengoku-era-reigns-marathon.json",

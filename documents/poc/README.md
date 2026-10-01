@@ -32,6 +32,21 @@ SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状�
 New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments'))\My Games\Sid Meier's Civilization VI\Mods\JAC_PoC_Bundle0" -Target "<リポジトリ>\poc\JAC_PoC_Bundle0"
 ```
 
+## JAC_PoC_BanseikiRuleset：英傑武将の本体
+
+万世紀では公式の「英雄と伝説」モードを必須とし、公式の既存英雄12種は発見・召喚・購入の対象から外す。仕組みの検証には、独自の「無名の英傑（歩兵）」「無名の英傑（騎兵）」を使う。実装は `Data/JAC_Banseiki_Heroes.sql` にあり、適用条件は万世紀ルールセットかつ英雄モード有効の場合だけである。
+
+この2種は吸収・寿命・再召喚を検証するための定義であり、歴史上の武将の名簿や固有能力、効果量の最終仕様を決めない。吸収と自害の記録は [吸収PoC](absorption.md) で検証する。旧英雄を含む過去のセーブへの移行は未検証なので、新規ゲームから試す。同じ定義での保存・読み込みは吸収シナリオの検査対象である。
+
+### 画像と外見
+
+| 用途 | 作品 | 作者と年 | 所蔵と出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 英傑武将の地図上の外見 | Civ6の通常の戦士・騎乗兵 | Firaxis Games、2016 | 導入済みCiv6の `Base/ArtDefs/Units.artdef` の戦士・騎乗兵の定義 | ゲーム本体の素材。モデル・画像の実体は複製せず、既存素材を参照する定義だけを収録 | `ArtDefs/Units.artdef` の独自Unit名2件 |
+| 英傑武将のアイコン・肖像 | Civ6の通常の戦士・騎乗兵のアイコン | Firaxis Games、2016 | `Base/Assets/UI/Icons/Icons_Units.xml` の `ICON_UNIT_WARRIOR` と `ICON_UNIT_HORSEMAN` | ゲーム本体の素材。画像画素を複製せず、既存アトラスの位置を参照 | `Data/JAC_Banseiki_Hero_Icons.sql` |
+
+寿命・所有者・人物記録の保存を先に検証するため、PoCでは通常部隊の外見を共用する。公式英雄のキャラクターモデルや肖像は流用しない。独自の武将の外見は、人物の顔ぶれが決まってから制作する。
+
 ## JAC_PoC_JapanMapScale：1534年開始状態（現行）
 
 万世紀ルールセット用の開始状態。基準日は **天文3年5月12日**。日本列島の22勢力をそれぞれ専用の指導者・文明で登録した。島津は貴久を1勢力の代表とし、アイヌはタリコナを全域代表とするゲーム上の扱い。長尾の文明 ID は `CIVILIZATION_JAC_NAGAO` のまま維持する。人間と AI の指導者候補は、地図を選択すると `MapLeaders` に登録した22人に限定され、同じ指導者は重複できない。万世紀の通常の「人間は2人から選ぶ」フィルタは日本地図では適用しない。`MapSizes` で22人・都市国家0を固定する。
