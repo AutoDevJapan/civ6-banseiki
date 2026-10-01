@@ -95,6 +95,21 @@ GameEvents.JAC_BoundaryLoseCity.Add(function(owner)
     -- Official Debug/City.ltp:275-278. Do not simulate owner/property changes.
     print("JAC_BOUNDARY TRANSFER_REQUEST owner=" .. owner .. " city=" .. c.cityID);
     CityManager.TransferCityToFreeCities(city);
+    local freeOwner=PlayerManager.GetFreeCitiesPlayerID();
+    local transferred;
+    for _,candidate in Players[freeOwner]:GetCities():Members() do
+        if candidate:GetX()==c.x and candidate:GetY()==c.y then
+            assert(not transferred, "ambiguous native transfer result");
+            transferred=candidate;
+        end;
+    end;
+    assert(transferred, "native transfer result city missing");
+    -- Record native source/result IDs in the same synchronized operation.
+    -- City IDs can be scoped to their owner; do not infer the new ID from a
+    -- later city occupying this plot or require an unsupported ID invariant.
+    c.transfer={fromOwner=owner, fromCityID=c.cityID, toOwner=freeOwner,
+        toCityID=transferred:GetID(), x=c.x, y=c.y};
+    Game:SetProperty(CONFIG,c);
     print("JAC_BOUNDARY TRANSFER_RETURN " .. R.Serialize(ReadGameplay()));
 end);
 

@@ -58,6 +58,10 @@ function R.Check(s, phase, merit)
     end
     assert(s.native.established == active, "unexpected native establishment state");
     if phase == "LOST" then
+        assert(type(s.transfer)=="table" and s.transfer.fromOwner==s.owner and
+            s.transfer.fromCityID==s.fixtureCityID and s.transfer.toOwner==s.freeCitiesOwner and
+            s.target.id==s.transfer.toCityID and s.target.x==s.transfer.x and s.target.y==s.transfer.y,
+            "native transfer city identity was not recorded");
         assert(s.target.owner == s.freeCitiesOwner and s.target.owner ~= s.owner,
             "native city ownership transfer was not observed");
     else

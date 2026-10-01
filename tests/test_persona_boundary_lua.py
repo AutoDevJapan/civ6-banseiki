@@ -143,6 +143,10 @@ end
 function stop(remaining)
  GOV.assigned=nil; GOV.established=false; GOV.neutralized=remaining; TARGET.marker=0; EFFECT_TARGET=false
 end
+function lose()
+ stop(0); TARGET.owner=62
+ props.JAC_BOUNDARY_CONFIG.transfer={fromOwner=0,fromCityID=11,toOwner=62,toCityID=11,x=2,y=0}
+end
 '''
 
 
@@ -200,7 +204,7 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
         self.assertIn("unavailable", self.b.Read().missions["1/unavailable"])
         with self.assertRaisesRegex(LuaError, "mission history was not observed"):
             self.b.Check("NEUTRALIZED")
-        self.lua.execute("stop(0); TARGET.owner=62")
+        self.lua.execute("lose()")
         self.b.Check("LOST", 12)  # City loss does not depend on enemy history.
 
     def test_recovery_is_unassigned_and_never_an_automatic_return(self):
@@ -215,7 +219,7 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
             self.b.Check("ESTABLISHING")
 
     def test_stale_settlement_active_skill_or_merit_is_rejected_after_loss(self):
-        self.lua.execute("stop(0); TARGET.owner=62")
+        self.lua.execute("lose()")
         self.b.Check("LOST", 12)
         # Acquisition selectors are logged separately; an old selector is not an active effect.
         self.g.TARGET.marker = 1
@@ -240,7 +244,7 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
 
     def test_orphaned_native_subject_after_transfer_is_recorded_and_rejected(self):
         self.lua.execute("""
-            stop(0); TARGET.owner=62; EFFECT_TARGET=true
+            lose(); EFFECT_TARGET=true
             GameEffects.GetModifierSubjects=function() return {{owner=0,name='Old cached city name'}} end
         """)
         self.assertEqual(len(self.b.Read().unmatchedEffects),3)
@@ -257,7 +261,7 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
             GameEffects.GetModifierSubjects=function(id) return id==200 and {FOREIGN} or subjects(id) end
         """)
         self.b.Check("SETTLED")
-        self.lua.execute("stop(0); TARGET.owner=62; GameEffects.GetModifierActive=function(id) return id==200 end")
+        self.lua.execute("lose(); GameEffects.GetModifierActive=function(id) return id==200 end")
         self.b.Check("LOST",12)
 
     def test_native_state_is_read_again_after_context_reload(self):
@@ -327,6 +331,39 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
         with self.assertRaisesRegex(LuaError, "neutralization was not observed"):
             self.b.Check("NEUTRALIZED")
 
+    def test_missing_or_unidentified_modifier_definition_cannot_report_zero_effects(self):
+        for missing in ("nil", "{}", "{Id=false}", "{Id=''}"):
+            with self.subTest(definition=missing):
+                self.setUp()
+                self.lua.execute("lose(); GameEffects.GetModifierDefinition=function() return " + missing + " end")
+                with self.assertRaisesRegex(LuaError, "definition unavailable"):
+                    self.b.Check("LOST", 12)
+                self.assertEqual(len(self.g.WRITES), 0)
+
+    def test_loss_rejects_replacement_city_and_missing_or_wrong_transfer_identity(self):
+        for replacement, reason in (("TARGET.id=77", "identity"), ("TARGET.x=3", "original plot missing"),
+                                   ("Game:GetProperty('JAC_BOUNDARY_CONFIG').transfer=nil", "identity"),
+                                   ("Game:GetProperty('JAC_BOUNDARY_CONFIG').transfer.fromCityID=77", "identity")):
+            with self.subTest(replacement=replacement):
+                self.setUp()
+                self.lua.execute("lose(); " + replacement)
+                with self.assertRaisesRegex(LuaError, reason):
+                    self.b.Check("LOST", 12)
+
+    def test_transfer_result_id_is_read_from_native_operation_not_inferred_later(self):
+        self.lua.execute((MOD / "Scripts/JAC_PersonaBoundary_Fixture.lua").read_text(encoding="utf-8"))
+        self.lua.execute("""
+            local transfer=CityManager.TransferCityToFreeCities
+            CityManager.TransferCityToFreeCities=function(c) transfer(c); c.id=77 end
+            fire(GameEvents.JAC_BoundaryLoseCity,0)
+        """)
+        record=self.g.Game.GetProperty(None,"JAC_BOUNDARY_CONFIG").transfer
+        self.assertEqual((record.fromOwner,record.fromCityID,record.toOwner,record.toCityID),(0,11,62,77))
+        self.b.Check("LOST",12)
+        self.g.TARGET.id=78
+        with self.assertRaisesRegex(LuaError,"identity"):
+            self.b.Check("LOST",12)
+
     def prepare_inputs(self, title_delta):
         self.lua.execute((MOD / "Scripts/JAC_PersonaBoundary_Fixture.lua").read_text(encoding="utf-8"))
         self.lua.execute("""
@@ -371,10 +408,10 @@ class PersonaBoundaryLuaTests(unittest.TestCase):
         self.lua.execute("fire(GameEvents.JAC_BoundaryLoseCity,0)")
         self.assertEqual((self.g.TRANSFERRED.id, self.g.TARGET.owner), (11, 62))
         self.b.Check("LOST", 12)
-        self.assertEqual(len(self.g.WRITES), 0)
+        self.assertEqual(list(self.g.WRITES.values()), ["JAC_BOUNDARY_CONFIG"])
         self.lua.execute("fire(GameEvents.JAC_BoundarySpawnSpy,0)")
         self.assertEqual(self.g.Game.GetProperty(None, "JAC_BOUNDARY_SPY").id, 15)
-        self.assertEqual(list(self.g.WRITES.values()), ["JAC_BOUNDARY_SPY"])
+        self.assertEqual(list(self.g.WRITES.values()), ["JAC_BOUNDARY_CONFIG", "JAC_BOUNDARY_SPY"])
 
     def test_real_persona_gameplay_stops_all_four_merit_sources_at_each_boundary(self):
         production_support.LeaderPersonaLuaTests.setUpClass()

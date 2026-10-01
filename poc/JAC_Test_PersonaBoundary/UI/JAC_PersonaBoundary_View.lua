@@ -53,7 +53,7 @@ function B.Read()
         personOwner=R.Property(c.leader,"OWNER"), state=R.Property(c.leader,"STATE"),
         merit=R.Property(c.leader,"MERIT") or 0, skillOwned=R.Property(c.leader,"NODE_"..c.skill) or 0,
         greatPeople=0, cities={}, unmatchedEffects={}, targetKey=c.x .. "/" .. c.y,
-        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(),
+        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(), fixtureCityID=c.cityID, transfer=c.transfer,
         native={type=governor:GetType(), hash=def.Hash, established=governor:IsEstablished(),
             neutralized=governor:GetNeutralizedTurns(),
             base=governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash),
@@ -81,8 +81,12 @@ function B.Read()
     local observed = {};
     for _,city in player:GetCities():Members() do observed[CityKey(city)]=city; end
     local oldCity = assert(Cities.GetPlotPurchaseCity(Map.GetPlot(c.x,c.y)), "fixture city at original plot missing");
+    assert(oldCity:GetX()==c.x and oldCity:GetY()==c.y, "fixture city center identity changed");
+    local expectedID=c.transfer and c.transfer.toCityID or c.cityID;
+    assert(oldCity:GetID()==expectedID, "fixture city identity changed");
     observed[CityKey(oldCity)] = oldCity;
-    s.target = {id=oldCity:GetID(), owner=oldCity:GetOwner(), plot=Map.GetPlot(c.x,c.y):GetIndex()};
+    s.target = {id=oldCity:GetID(), owner=oldCity:GetOwner(), x=oldCity:GetX(), y=oldCity:GetY(),
+        plot=Map.GetPlot(c.x,c.y):GetIndex()};
     local names = {};
     for key,city in pairs(observed) do
         local nameKey = city:GetOwner() .. "/" .. Locale.Lookup(city:GetName());
@@ -102,7 +106,9 @@ function B.Read()
     assert(type(inventory)=="table", "native modifier inventory unavailable");
     for _,id in ipairs(inventory) do
         local definition = GameEffects.GetModifierDefinition(id);
-        if definition and modifiers[definition.Id] then
+        assert(type(definition)=="table" and type(definition.Id)=="string" and #definition.Id>0,
+            "native modifier definition unavailable");
+        if modifiers[definition.Id] then
             -- Official Debug/Diplomacy.ltp:397-398 reads the modifier OWNER's
             -- player independently. Other players' same-type governors are not ours.
             local modifierOwner=GameEffects.GetModifierOwner(id);
