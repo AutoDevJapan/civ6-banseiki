@@ -51,7 +51,10 @@ Modding = {
         if #sources > 0 then return 'MissingDependencies', {}, sources end
         return 'OK'
     end,
-    CanEnableMod = function() return 'OK' end,
+    CanEnableMod = function(handle)
+        if REFUSE_ENABLE_REASON == handle then return 'OwnershipRequired' end
+        return 'OK'
+    end,
 }
 Modding.DisableMod = function(handle)
     -- Civ6 refuses to disable a prerequisite of an enabled mod.
@@ -67,6 +70,7 @@ Modding.EnableMod = function(handle, dependencies)
             if not MODS[dependency].Enabled then Modding.EnableMod(dependency, true) end
         end
     end
+    if FAIL_AFTER_DEPENDENCIES == handle then error('engine enable failed') end
     MODS[handle].Enabled = true
     ENABLED[#ENABLED + 1] = handle
 end
@@ -178,6 +182,37 @@ class EnableModsTests(unittest.TestCase):
             lua.execute(_enable_mods_code([KEEP], [BASE]))
         self.assertFalse(lua.globals().MODS[LEAF].Enabled)
         self.assertTrue(lua.globals().MODS[BASE].Enabled)
+
+    def test_late_enable_failure_restores_disabled_and_newly_enabled_mods(self):
+        lua = self.graph({BASE: [], LEAF: [BASE], KEEP: [], SIBLING: [], OFF: []},
+                         disabled=[KEEP, SIBLING, OFF])
+        lua.globals().REFUSE_ENABLE_REASON = KEEP
+        with self.assertRaisesRegex(LuaError, "cannot enable mod: " + KEEP):
+            lua.execute(_enable_mods_code([SIBLING, KEEP], [BASE]))
+        self.assertEqual({id: lua.globals().MODS[id].Enabled for id in
+                          [BASE, LEAF, KEEP, SIBLING, OFF]},
+                         {BASE: True, LEAF: True, KEEP: False, SIBLING: False, OFF: False})
+        self.assertEqual(lua.globals().UPDATES, 1)
+
+    def test_implicitly_enabled_prerequisite_is_restored_when_enable_throws(self):
+        lua = self.graph({BASE: [], LEAF: [BASE], KEEP: [OFF], OFF: []}, disabled=[KEEP, OFF])
+        lua.globals().FAIL_AFTER_DEPENDENCIES = KEEP
+        with self.assertRaisesRegex(LuaError, "engine enable failed"):
+            lua.execute(_enable_mods_code([KEEP], [BASE]))
+        self.assertEqual(list(lua.globals().DISABLED.values()), [LEAF, BASE, OFF])
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+        self.assertTrue(lua.globals().MODS[LEAF].Enabled)
+        self.assertFalse(lua.globals().MODS[KEEP].Enabled)
+        self.assertFalse(lua.globals().MODS[OFF].Enabled)
+
+    def test_enable_failure_without_disable_targets_restores_the_selection(self):
+        lua = self.graph({BASE: [], KEEP: [], SIBLING: []}, disabled=[KEEP, SIBLING])
+        lua.globals().REFUSE_ENABLE_REASON = KEEP
+        with self.assertRaisesRegex(LuaError, "cannot enable mod: " + KEEP):
+            lua.execute(_enable_mods_code([SIBLING, KEEP]))
+        self.assertTrue(lua.globals().MODS[BASE].Enabled)
+        self.assertFalse(lua.globals().MODS[KEEP].Enabled)
+        self.assertFalse(lua.globals().MODS[SIBLING].Enabled)
 
     def test_enable_and_disable_overlap_is_case_insensitive(self):
         with self.assertRaisesRegex(ScenarioError, "invalid disable_ids"):

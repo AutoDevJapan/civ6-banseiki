@@ -235,20 +235,22 @@ def _enable_mods_code(ids: list[str], disable_ids: list[str] | None = None) -> s
         "local disableIDs = {" + ", ".join(_lua_string(i) for i in disable_ids or []) + "}",
         """local keep, disabled = {}, {}
 for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
-if #disableIDs > 0 then
-  local handles, dependents = {}, {}
-  for _, installed in ipairs(Modding.GetInstalledMods()) do
+local handles, dependents, original = {}, {}, {}
+for _, installed in ipairs(Modding.GetInstalledMods()) do
     local info = Modding.GetModInfo(installed.Handle)
     local id = string.lower(info.Id)
     handles[id] = installed.Handle
+    original[id] = info.Enabled
     local dependencies = Modding.GetModAssociations(installed.Handle)
     for _, dependency in ipairs(dependencies or {}) do
       local target = string.lower(dependency.Id)
       dependents[target] = dependents[target] or {}
       table.insert(dependents[target], id)
     end
-  end
-  local visiting, visited, order = {}, {}, {}
+end
+local order = {}
+if #disableIDs > 0 then
+  local visiting, visited = {}, {}
   local function visit(id)
     if visiting[id] then error('mod dependency cycle: ' .. id) end
     if visited[id] then return end
@@ -281,10 +283,11 @@ if #disableIDs > 0 then
       error('cannot disable mod: ' .. id .. ' (' .. tostring(reason) .. ')')
     end
   end
-  for _, id in ipairs(enableIDs) do
-    if not Modding.GetModHandle(id) then error('mod is not installed: ' .. id) end
-  end
-  local ok, failure = pcall(function()
+end
+for _, id in ipairs(enableIDs) do
+  if not Modding.GetModHandle(id) then error('mod is not installed: ' .. id) end
+end
+local ok, failure = pcall(function()
     for _, id in ipairs(order) do
       local handle = handles[id]
       local reason = Modding.CanDisableMod(handle)
@@ -293,24 +296,6 @@ if #disableIDs > 0 then
       if Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
       table.insert(disabled, id)
     end
-  end)
-  if not ok then
-    local failures = {}
-    for i = #disabled, 1, -1 do
-      local id = disabled[i]
-      -- Do not re-enable dependencies: some intermediates were disabled even
-      -- before this scenario. Restore only mods this operation turned off.
-      local restored, err = pcall(Modding.EnableMod, handles[id], false)
-      if not restored or not Modding.GetModInfo(handles[id]).Enabled then
-        table.insert(failures, id .. ': ' .. tostring(err))
-      end
-    end
-    if #failures > 0 then
-      error(tostring(failure) .. '; restoration failed: ' .. table.concat(failures, ', '))
-    end
-    error(failure)
-  end
-end
 for _, id in ipairs(enableIDs) do
   local handle = Modding.GetModHandle(id)
   if not handle then error('mod is not installed: ' .. id) end
@@ -328,6 +313,63 @@ for _, id in ipairs(disableIDs) do
   if handle and Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
 end
 GameConfiguration.UpdateEnabledMods()
+end)
+if not ok then
+  -- Restore the complete original selection, including prerequisites enabled
+  -- implicitly by EnableMod(..., true), on failure in EITHER direction.
+  local all, visited, restoreOrder = {}, {}, {}
+  for id in pairs(handles) do table.insert(all, id) end
+  table.sort(all)
+  local function visit(id)
+    if visited[id] then return end
+    visited[id] = true
+    local children = dependents[id] or {}
+    table.sort(children)
+    for _, child in ipairs(children) do visit(child) end
+    if handles[id] then table.insert(restoreOrder, id) end
+  end
+  for _, id in ipairs(all) do visit(id) end
+  local turnOff, changed = {}, false
+  local function mark(id)
+    if turnOff[id] then return end
+    turnOff[id] = true
+    for _, child in ipairs(dependents[id] or {}) do mark(child) end
+  end
+  for _, id in ipairs(all) do
+    if Modding.GetModInfo(handles[id]).Enabled ~= original[id] then changed = true end
+    if not original[id] and Modding.GetModInfo(handles[id]).Enabled then mark(id) end
+  end
+  local failures = {}
+  for _, id in ipairs(restoreOrder) do
+    if turnOff[id] and Modding.GetModInfo(handles[id]).Enabled then
+      local restored, err = pcall(Modding.DisableMod, handles[id])
+      if not restored or Modding.GetModInfo(handles[id]).Enabled then
+        table.insert(failures, id .. ': ' .. tostring(err))
+      end
+    end
+  end
+  for i = #restoreOrder, 1, -1 do
+    local id = restoreOrder[i]
+    if original[id] and not Modding.GetModInfo(handles[id]).Enabled then
+      -- False preserves an initially disabled intermediate prerequisite.
+      local restored, err = pcall(Modding.EnableMod, handles[id], false)
+      if not restored or not Modding.GetModInfo(handles[id]).Enabled then
+        table.insert(failures, id .. ': ' .. tostring(err))
+      end
+    end
+  end
+  for _, id in ipairs(all) do
+    if Modding.GetModInfo(handles[id]).Enabled ~= original[id] then
+      table.insert(failures, id .. ': selection differs from original')
+    end
+  end
+  if changed then
+    local updated, err = pcall(GameConfiguration.UpdateEnabledMods)
+    if not updated then table.insert(failures, 'configuration: ' .. tostring(err)) end
+  end
+  if #failures > 0 then error(tostring(failure) .. '; restoration failed: ' .. table.concat(failures, ', ')) end
+  error(failure)
+end
 return table.concat(disabled, ', ')""",
     ])
 
