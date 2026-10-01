@@ -1194,6 +1194,14 @@ class AbsorptionTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, 'manager owner changed'):
             self.verify('test-absorption', False)
 
+    def test_gameplay_scenario_checks_use_the_context_aware_spread_snapshot(self):
+        for name in ('absorption-japan.json', 'absorption-hero-recall.json'):
+            data = json.loads((ROOT / 'tools/civ6-autotest/scenarios' / name).read_text(encoding='utf-8'))
+            chunks = [s['code'] for s in data['steps'] if s.get('state_name') == 'GameCore_Tuner']
+            self.assertGreater(len(chunks), 0)
+            for code in chunks:
+                self.assertNotIn(':GetSpreadCharges(', code)
+
     def test_all_gameplay_scenario_chunks_use_shared_lifespan_key(self):
         for name in ('absorption-japan.json', 'absorption-hero-recall.json'):
             data = json.loads((ROOT / 'tools/civ6-autotest/scenarios' / name).read_text(encoding='utf-8'))
