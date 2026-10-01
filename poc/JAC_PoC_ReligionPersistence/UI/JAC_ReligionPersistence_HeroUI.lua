@@ -41,3 +41,12 @@ ContextPtr:SetUpdate(function(dt)
     end
   end
 end)
+
+
+-- InGame.lua loads every add-in hidden. A hidden context receives no frame
+-- updates, even when it has a SetUpdate callback. This empty context has no
+-- visual controls or input handler; activate it after the load screen closes.
+Events.LoadScreenClose.Add(function()
+  pending, elapsed, timedOut = true, {}, {}
+  ContextPtr:SetHide(false)
+end)

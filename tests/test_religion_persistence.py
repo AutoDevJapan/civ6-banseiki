@@ -112,7 +112,15 @@ local function nativeRows(c)
   return rows
 end
 NativeRows = nativeRows
-ContextPtr = { SetUpdate = function(_, fn) HERO_UI_TICK = fn end }
+HERO_UI_HIDDEN = true
+Events = { LoadScreenClose = { Add = function(fn) HERO_UI_LOAD_CLOSE = fn end } }
+ContextPtr = {
+  SetHide = function(_, hidden) HERO_UI_HIDDEN = hidden end,
+  SetUpdate = function(_, fn)
+    HERO_UI_TICK = fn
+    HERO_UI_FRAME = function(dt) if not HERO_UI_HIDDEN then fn(dt) end end
+  end,
+}
 -- Native founding is a scenario fixture only. These stubs check its call path;
 -- whether the actual engine permits it remains a live-scenario assertion.
 NATIVE_RELIGION = 42
@@ -959,6 +967,25 @@ class ReligionPersistenceTests(unittest.TestCase):
                 self.reload()
                 self.assertTrue(self.rp.CanPersecute(0, R1, 1, R2))
                 self.assertTrue(self.rp.CanPersecute(1, R2, 0, R1))
+
+    def test_hidden_addin_activates_after_load_and_completes_pending_hero_once(self):
+        self.found()
+        self.lost()
+        self.discovery()
+        self.rp.ResolveDiscovery(R1, "d", "HERO", self.options())
+        self.reload()
+        before = self.g.ENGINE["1"].faith
+        self.g.HERO_UI_FRAME(0)
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
+        self.assertEqual(self.g.ENGINE["1"].faith, before)
+        self.g.HERO_UI_LOAD_CLOSE()
+        self.g.HERO_UI_FRAME(0)
+        self.assertFalse(self.g.HERO_UI_HIDDEN)
+        self.assertEqual(self.rp.Export().heroes["1"].verification, "APPLIED")
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
+        self.g.HERO_UI_LOAD_CLOSE()
+        self.g.HERO_UI_FRAME(0)
+        self.assertEqual(self.g.ENGINE["1"].faith, before + 32.5)
 
     def test_official_hero_requires_mode_origin_building_and_unclaimed_hero(self):
         self.found()
