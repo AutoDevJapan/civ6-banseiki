@@ -224,6 +224,7 @@ class JudgeTests(unittest.TestCase):
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",
             "ages-probe.json", "sengoku-ages.json", "sengoku-dark-policy.json", "sengoku-ages-screens.json",
             "historical-events-15km.json", "religion-persistence.json", "religion-pressure-probe.json",
+            "religion-hero-delay.json",
             "house-crests.json",
             "japan-map-20km.json", "japan-map-15km.json",
             "japan-map-20km-takeda.json", "japan-map-15km-takeda.json",
