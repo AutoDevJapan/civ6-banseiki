@@ -23,6 +23,7 @@ end
 Game = { GetLocalPlayer=function() return LOCAL end, GetCurrentGameTurn=function() return TURN end }
 Game.GetProperty, Game.SetProperty = store()
 LOCAL, TURN, SPAWNS, DESTROYS, FAIL_SPAWN, FAIL_DESTROY = 0, 1, 0, 0, false, false
+REJECT_PROMOTION_STEP = nil
 function collection(rows, key)
     local t = {}
     for _,r in ipairs(rows) do t[r[key]]=r; if r.Index then t[r.Index]=r end end
@@ -45,6 +46,10 @@ for i,n in ipairs(names) do
     INDIVIDUALS[i]={GreatPersonIndividualType=row.PersonType, GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA", Index=i+10, Hash=3000+i, EraType="ERA_ANCIENT", Name=row.Name}
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
+    for step=1,2 do
+        PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType..'_TITLE_'..step,
+            Index=40+i*2+step, Hash=2100+i*2+step}
+    end
 end
 GameInfo={ Eras=collection({{EraType="ERA_ANCIENT",Hash=5000}},"EraType"),
     GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_JAC_PERSONA",Hash=4000}},"GreatPersonClassType"),
@@ -86,6 +91,7 @@ for i,row in ipairs(ROWS) do
         GetGovernor=function(_,hash) return NATIVE_GOVS[id][hash] end,
         HasGovernor=function(_,hash) return NATIVE_GOVS[id][hash]~=nil end,
         CanAppoint=function() return p.points>p.spent end,
+        CanPromoteGovernor=function(_,hash) return NATIVE_GOVS[id][hash]~=nil and p.points>p.spent end,
         CanAssignGovernor=function(_,hash,city) return NATIVE_GOVS[id][hash]~=nil and city:GetOwner()==id end,
         ChangeGovernorPoints=function(_,delta) GRANTS[id][#GRANTS[id]+1]=delta; p.points=p.points+delta end,
         GetGovernorPoints=function() return p.points end, GetGovernorPointsSpent=function() return p.spent end
@@ -118,10 +124,16 @@ Game.GetGreatPeople=function() return { CreatePerson=function() error('Tuner-onl
     NATIVE_UNITS[owner][id]=u
     -- Deliberately NO return: neither creation nor removal is used as an object-returning API.
 end } end
-function NEWGOV(owner,leader)
+function NEWGOV(owner,leader,paid)
     local row=GameInfo.JAC_LeaderPersonas[leader]; local def=GameInfo.Governors[row.GovernorType]
     local g={promotions={},established=true,neutralized=0}
     g.promotions[GameInfo.GovernorPromotions[row.BasePromotionType].Hash]=true
+    if paid~=false then
+        local surcharge=(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_SURCHARGE') or 0)
+        for step=1,surcharge do
+            g.promotions[GameInfo.GovernorPromotions[row.BasePromotionType..'_TITLE_'..step].Hash]=true
+        end
+    end
     g.GetType=function() return def.Index end
     g.IsEstablished=function() return g.established end
     g.GetNeutralizedTurns=function() return g.neutralized end
@@ -199,14 +211,27 @@ function STEP()
         assert(p.points>p.spent)
         local leader
         for _,r in ipairs(ROWS) do if r.GovernorType==def.GovernorType then leader=r.LeaderType end end
-        NEWGOV(owner,leader); p.spent=p.spent+1; FIREUI('GovernorChanged',owner,def.Index)
+        NEWGOV(owner,leader,false); p.spent=p.spent+1; FIREUI('GovernorChanged',owner,def.Index)
     elseif req.op==3 then
         local def=assert(GameInfo.Governors[params.governor])
         assert(params.cityowner==owner and CITIES[owner][params.city])
         NATIVE_GOVS[owner][def.Hash].city=CITIES[owner][params.city]
     elseif req.op==4 then
         local def=assert(GameInfo.Governors[params.governor]); local promo=assert(GameInfo.GovernorPromotions[params.promotion])
-        if p.points>p.spent then NATIVE_GOVS[owner][def.Hash].promotions[promo.Hash]=true; p.spent=p.spent+1 end
+        local native=NATIVE_GOVS[owner][def.Hash]
+        local leader
+        for _,r in ipairs(ROWS) do if r.GovernorType==def.GovernorType then leader=r.LeaderType end end
+        if p.points>p.spent and native and not native.promotions[promo.Hash] then
+            local prior=promo.GovernorPromotionType:match('_TITLE_(%d)$')
+            if prior then
+                prior=tonumber(prior)
+                assert(promo.GovernorPromotionType==GameInfo.JAC_LeaderPersonas[leader].BasePromotionType..'_TITLE_'..prior)
+                if prior~=REJECT_PROMOTION_STEP and (prior==1 or native.promotions[GameInfo.GovernorPromotions[
+                    GameInfo.JAC_LeaderPersonas[leader].BasePromotionType..'_TITLE_'..(prior-1)].Hash]) then
+                    native.promotions[promo.Hash]=true; p.spent=p.spent+1
+                end
+            end
+        end
     end
     FIREUI('GameCoreEventPublishComplete'); return true
 end
@@ -403,6 +428,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             PANEL_CALLS={}
             AddGovernorCandidate=function(def,can) PANEL_CALLS[#PANEL_CALLS+1]='candidate:'..def.GovernorType..':'..tostring(can) end
             AddGovernorShared=function() return {GovernorPortrait=control(),GovernorTitle=control()} end
+            AddGovernorAppointed=function(_,_,def) PANEL_CALLS[#PANEL_CALLS+1]='appointed:'..def.GovernorType end
             OnAppointGovernor=function(id) PANEL_CALLS[#PANEL_CALLS+1]='appoint:'..id end
             OnNameButton=function(id) PANEL_CALLS[#PANEL_CALLS+1]='name:'..id end
             OnPromoteGovernor=function(id,promotion) PANEL_CALLS[#PANEL_CALLS+1]='promote:'..id..':'..promotion end
@@ -415,9 +441,18 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             OnAppointGovernor(91); OnPromoteGovernor(91,77)
             AddGovernorCandidate(GameInfo.Governors[22],true)
             OnAppointGovernor(22)
+            AddGovernorAppointed(nil,nil,GameInfo.Governors[22],true)
         """)
         self.assertEqual(list(self.g.PANEL_CALLS.values()),
                          ["candidate:GOVERNOR_OTHER_MOD:true", "appoint:90", "promote:90:77", "name:90"])
+        self.join()
+        self.grant_titles(0, DATE)
+        self.api.PrepareEvolution(0, DATE)
+        self.g.AddGovernorAppointed(None,None,self.g.GameInfo.Governors[22],True)
+        self.assertEqual(len(self.g.PANEL_CALLS), 4)
+        self.g.Game.SetProperty(None, f"JAC_PERSONA_{DATE}_STATE", "GOVERNOR")
+        self.g.AddGovernorAppointed(None,None,self.g.GameInfo.Governors[22],False)
+        self.assertEqual(self.g.PANEL_CALLS[5], "appointed:GOVERNOR_JAC_PERSONA_DATE_TANEMUNE")
 
     def test_only_established_unneutralized_city_governance_earns_once_across_reload(self):
         governor = self.settled()
@@ -713,7 +748,8 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         for x in (1,2): self.assertEqual(self.g.Map.GetPlot(x,0).GetProperty(None,modifier),1)
         self.g.JAC_AssignLeader(DATE,2); self.g.DRAIN()
         self.assertEqual(governor.city.GetID(),2)
-        self.assertEqual(list(governor.promotions.values()),[True])  # no native promotion or title added
+        self.assertEqual(sum(1 for owned in governor.promotions.values() if owned), 2)
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 2))
         self.lua.execute("CITIES[0][3]={GetID=function() return 3 end,GetOwner=function() return 0 end,GetX=function() return 3 end,GetY=function() return 0 end}")
         self.g.FIRE("CityBuilt",0,3,3,0)
         self.assertEqual(self.g.Map.GetPlot(3,0).GetProperty(None,modifier),1)
@@ -758,7 +794,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.DRAIN()
         self.assertEqual(self.prop("MERIT"),22)
         self.assertEqual(self.prop("NODE_"+node),1)
-        self.assertEqual((self.g.Players[0].points,self.g.Players[0].spent),(1,1))
+        self.assertEqual((self.g.Players[0].points,self.g.Players[0].spent),(2,2))
 
     def test_queued_conflicting_confirmations_cannot_buy_sibling_or_other_category(self):
         self.settled(); self.set_merit(40)
@@ -895,17 +931,20 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.join()
         self.g.Players[0].points = 2
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
-        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (1, 1))
-        self.g.Players[0].spent = 1  # another native operation took the remaining title
+        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (2, 1))
+        self.assertTrue(self.g.JAC_AppointLeader(DATE))
+        self.g.STEP()  # native appointment spends the first title
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 1))
+        self.g.Players[0].spent = 2  # another native operation took the remaining title
         self.assertFalse(self.g.JAC_AppointLeader(DATE))
-        self.assertEqual(self.api.CompleteEvolution(0, DATE), "APPOINTMENT_PENDING")
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "TITLE_PAYMENT_PENDING")
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
-        self.assertEqual((self.g.Players[0].points, self.g.DESTROYS), (1, 0))
-        self.g.Players[0].points = 2  # replenished with one new earned title
+        self.assertEqual((self.g.Players[0].points, self.g.DESTROYS), (2, 0))
+        self.g.Players[0].points = 3  # replenished with one new earned title
         self.g.JAC_AppointLeader(DATE); self.g.DRAIN()
-        self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.Players[0].spent), ("GOVERNOR", 2, 2))
-        self.assertEqual(list(self.g.GRANTS[0].values()), [-1])
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.Players[0].spent), ("GOVERNOR", 3, 3))
+        self.assertEqual(list(self.g.GRANTS[0].values()), [])
 
     def test_two_pending_evolutions_cannot_share_the_native_appointment_title(self):
         self.join()
@@ -913,7 +952,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.Players[0].points = 3
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "EVOLVING")
         self.assertEqual(self.api.PrepareEvolution(0, HOJO), "NO_TITLE")
-        self.assertEqual((self.prop("STATE", HOJO), self.g.Players[0].points), ("GREAT_PERSON", 2))
+        self.assertEqual((self.prop("STATE", HOJO), self.g.Players[0].points), ("GREAT_PERSON", 3))
         self.assertIsNone(self.prop("EVOLUTION_SURCHARGE", HOJO))
         self.g.JAC_RefreshPersonas()
         self.assertTrue(self.g.VIEWS[1].disabled)
@@ -927,10 +966,10 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.api.PrepareEvolution(0, HOJO), "EVOLVING")
         self.g.JAC_AppointLeader(HOJO); self.g.DRAIN()
         self.assertEqual(self.prop("STATE", HOJO), "GOVERNOR")
-        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 2))
-        self.assertEqual(list(self.g.GRANTS[0].values()), [-1, -1])
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (4, 4))
+        self.assertEqual(list(self.g.GRANTS[0].values()), [])
 
-    def test_native_rejection_of_negative_delta_never_allows_cheaper_evolution(self):
+    def test_negative_point_change_is_not_required_for_native_payment(self):
         self.join()
         self.g.Players[0].points = 2
         self.lua.execute("""
@@ -942,34 +981,29 @@ class LeaderPersonaLuaTests(unittest.TestCase):
             end
         """)
         self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
-        self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "TITLE_PAYMENT_FAILED")
+        self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "EVOLVED")
         self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"), self.g.DESTROYS),
-                         ("GREAT_PERSON", None, 0))
-        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 0))
+                         ("GOVERNOR", 1, 1))
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (2, 2))
 
-    def test_partial_native_payment_restores_balance_without_appointing_or_recharging(self):
+    def test_rejected_second_native_payment_waits_and_resumes_without_double_charge(self):
         self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
         self.join()
         self.g.Players[0].points = 3
-        self.lua.execute("""
-            local original=Players[0].GetGovernors
-            Players[0].GetGovernors=function()
-                local g=original()
-                local change=g.ChangeGovernorPoints
-                g.ChangeGovernorPoints=function(_,delta)
-                    change(g, delta < 0 and -1 or delta)
-                end
-                return g
-            end
-        """)
-        for _ in range(2):
-            self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
-            self.assertEqual(self.g.Players[0].GetProperty(None, "JAC_PERSONA_RESULT"), "TITLE_PAYMENT_FAILED")
-            self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"), self.g.DESTROYS),
-                             ("GREAT_PERSON", None, 0))
-            self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (3, 0))
-            self.assertIsNone(self.g.NATIVE_GOVS[0][1002])
-        self.assertEqual(list(self.g.GRANTS[0].values()), [-1, 1, -1, 1])
+        self.g.REJECT_PROMOTION_STEP = 2
+        self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_SURCHARGE"), self.g.DESTROYS),
+                         ("EVOLVING", 2, 0))
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (3, 2))
+        self.assertEqual(self.api.CompleteEvolution(0, DATE), "TITLE_PAYMENT_PENDING")
+        self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()  # same-turn replay cannot spend again
+        self.assertEqual((self.g.Players[0].spent, self.g.DESTROYS), (2, 0))
+        self.g.RESET_CONTEXTS(); self.load_contexts()
+        self.g.REJECT_PROMOTION_STEP = None
+        self.assertTrue(self.g.JAC_AppointLeader(DATE))
+        self.g.DRAIN()
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].points, self.g.Players[0].spent,
+                          self.g.DESTROYS), ("GOVERNOR", 3, 3, 1))
 
     def test_upper_cost_consumes_two_extra_titles_and_one_native_once(self):
         self.g.GameInfo.JAC_LeaderPersonas[DATE].EvolutionCost = 3
@@ -978,12 +1012,12 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
         self.assertEqual((self.prop("STATE"), self.prop("EVOLUTION_COST"), self.prop("EVOLUTION_SURCHARGE")),
                          ("GOVERNOR", 3, 2))
-        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (1, 1))
+        self.assertEqual((self.g.Players[0].points, self.g.Players[0].spent), (3, 3))
         self.g.RESET_CONTEXTS(); self.load_contexts()
         self.assertEqual(self.api.PrepareEvolution(0, DATE), "ALREADY_EVOLVED")
         self.assertIsNone(self.api.GrantTestTitle)
-        self.assertEqual(list(self.g.GRANTS[0].values()), [3, -2])
-        self.assertEqual((self.g.DESTROYS, self.g.Players[0].points, self.g.Players[0].spent), (1, 1, 1))
+        self.assertEqual(list(self.g.GRANTS[0].values()), [3])
+        self.assertEqual((self.g.DESTROYS, self.g.Players[0].points, self.g.Players[0].spent), (1, 3, 3))
 
     def test_joined_cost_is_fixed_even_if_balance_data_changes(self):
         self.join()
@@ -1103,11 +1137,14 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.STEP()  # gameplay prepares, UI queues appointment
         self.assertEqual((self.g.REQUESTS[1].op, self.g.REQUESTS[1].params.governor), (2, 22))
         self.assertEqual(self.g.DESTROYS, 0)
+        self.g.STEP()  # native appointment queues the extra title promotion
+        self.assertEqual((self.g.REQUESTS[1].op, self.g.REQUESTS[1].params.governor,
+                          self.g.REQUESTS[1].params.promotion), (4, 22, 45))
         self.g.DRAIN()
-        self.assertEqual((self.prop("STATE"), self.g.Players[0].spent), ("GOVERNOR", 1))
-        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (1, 1))
+        self.assertEqual((self.prop("STATE"), self.g.Players[0].spent), ("GOVERNOR", 2))
+        self.assertEqual((self.g.Players[0].points, self.prop("EVOLUTION_SURCHARGE")), (2, 1))
         self.g.JAC_EvolveLeader(DATE); self.g.DRAIN()
-        self.assertEqual((self.g.DESTROYS, self.g.Players[0].spent), (1, 1))
+        self.assertEqual((self.g.DESTROYS, self.g.Players[0].spent), (1, 2))
 
     def test_ui_rejects_inactive_turn_and_unowned_governor(self):
         self.join()
@@ -1153,12 +1190,21 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.lua.execute(f'''
             REFRESHES=0
             Refresh=function() REFRESHES=REFRESHES+1 end
+            BASE_PROMOTES=0
+            ApplyPromotion=function() BASE_PROMOTES=BASE_PROMOTES+1 end
             Controls.GovernorNameLabel=control(); Controls.GovernorNameLabel.GetText=function() return 'LOC_{DATE}_NAME' end
             Controls.GovernorPortrait={{SetIcon=function(_,icon,size) ICON,ICON_SIZE=icon,size end}}
+            TREE_OPENS={{}}
+            LuaEvents.JAC_PersonaTree_Open.Add(function(leader) TREE_OPENS[#TREE_OPENS+1]=leader end)
         ''')
         self.lua.execute((MOD / "UI/JAC_LeaderPersona_GovernorDetails.lua").read_text(encoding="utf-8"))
         self.g.Refresh()
         self.assertEqual((self.g.REFRESHES, self.g.ICON, self.g.ICON_SIZE), (1, f"ICON_{DATE}", 256))
+        self.g.ApplyPromotion()
+        self.assertEqual((list(self.g.TREE_OPENS.values()), self.g.BASE_PROMOTES), ([DATE], 0))
+        self.lua.execute("Controls.GovernorNameLabel.GetText=function() return 'OTHER GOVERNOR' end")
+        self.g.ApplyPromotion()
+        self.assertEqual(self.g.BASE_PROMOTES, 1)
 
 
 if __name__ == "__main__":

@@ -21,13 +21,25 @@ ExposedMembers.JAC_LeaderPersonaNativeRead = function(owner, leader)
         result.established = governor:IsEstablished();
         result.neutralized = governor:GetNeutralizedTurns();
         result.base = governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash);
+        local cost = Game:GetProperty("JAC_PERSONA_" .. leader .. "_EVOLUTION_COST") or row.EvolutionCost;
+        result.surchargePaid = 0;
+        for step = 1, cost - 1 do
+            local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
+            if not payment then return nil; end
+            if governor:HasPromotion(payment.Hash) then
+                result.surchargePaid = result.surchargePaid + 1;
+            else
+                break;
+            end
+        end
+        result.canPromote = governors:CanPromoteGovernor(def.Hash);
         if city then result.cityOwner, result.cityID = city:GetOwner(), city:GetID(); end
     end
     return result;
 end;
 
 local m_Rows = InstanceManager:new("PersonaRow", "Root", Controls.Rows);
-local m_Attempts, m_Finalize = {}, {};
+local m_Attempts = {};
 local function Get(leader, field) return Game:GetProperty("JAC_PERSONA_" .. leader .. "_" .. field); end
 local function Active()
     local p = Players[Game.GetLocalPlayer()];
@@ -44,12 +56,13 @@ function JAC_EvolveLeader(leader)
     if not Active() then error("leader evolution requires the local active turn"); end
     local row = GameInfo.JAC_LeaderPersonas[leader];
     if not row or Get(leader, "OWNER") ~= Game.GetLocalPlayer() then error("leader not owned"); end
-    m_Attempts[leader], m_Finalize[leader] = nil, nil;
+    if Get(leader, "STATE") ~= "EVOLVING" then m_Attempts[leader] = nil; end
     UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT,
                               { OnStart="JAC_LeaderPersonaEvolve", Leader=leader });
 end
 
--- Repeating after a rejected appointment is safe: native HasGovernor is checked first.
+-- A native appointment costs one title; each effect-free payment promotion costs
+-- one more. Read the engine after every operation before requesting the next.
 function JAC_AppointLeader(leader)
     if not Active() then return false; end
     local row = GameInfo.JAC_LeaderPersonas[leader];
@@ -57,14 +70,39 @@ function JAC_AppointLeader(leader)
     if not row or Get(leader, "OWNER") ~= owner or Get(leader, "STATE") ~= "EVOLVING" then return false; end
     local governor = GameInfo.Governors[row.GovernorType];
     local governors = Players[owner]:GetGovernors();
-    if governors:HasGovernor(governor.Hash) then
+    local native = JAC_PersonaTreeRules.NativeGovernor(owner, leader);
+    if not native then return false; end
+    local surcharge = Get(leader, "EVOLUTION_SURCHARGE");
+    if type(surcharge) ~= "number" or surcharge < 0 then return false; end
+    local stage = not native.appointed and "APPOINT" or
+        (native.surchargePaid == surcharge and "FINALIZE" or
+         "PROMOTE_" .. tostring(native.surchargePaid));
+    local attempt = tostring(Game.GetCurrentGameTurn()) .. ":" .. stage;
+    if m_Attempts[leader] == attempt then return false; end
+    local remaining = surcharge + (native.appointed and 0 or 1) - (native.surchargePaid or 0);
+    if native.appointed and native.surchargePaid == surcharge then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT,
                                   { OnStart="JAC_LeaderPersonaFinalize", Leader=leader });
+        m_Attempts[leader] = attempt;
+        return true;
+    end
+    -- Other evolving people retain their unpaid reservations. A missing title
+    -- delays this step without recording payment or destroying the Great Person.
+    local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
+    if available - (JAC_PersonaTreeRules.ReservedAppointments(owner) - remaining) < 1 then return false; end
+    if native.appointed then
+        if not native.canPromote or native.surchargePaid >= surcharge then return false; end
+        local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. (native.surchargePaid + 1)];
+        if not payment then return false; end
+        UI.RequestPlayerOperation(owner, PlayerOperations.PROMOTE_GOVERNOR,
+            { [PlayerOperations.PARAM_GOVERNOR_TYPE]=governor.Index,
+              [PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=payment.Index });
     else
-        if not governors:CanAppoint() then return false; end
+        if not native.canAppoint then return false; end
         UI.RequestPlayerOperation(owner, PlayerOperations.APPOINT_GOVERNOR,
                                   { [PlayerOperations.PARAM_GOVERNOR_TYPE]=governor.Index });
     end
+    m_Attempts[leader] = attempt;
     return true;
 end
 
@@ -134,16 +172,10 @@ end
 local function Update()
     if Active() then
         local owner = Game.GetLocalPlayer();
-        local turn = Game.GetCurrentGameTurn();
         for row in GameInfo.JAC_LeaderPersonas() do
             local leader = row.LeaderType;
             if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "EVOLVING" then
-                local hasGovernor = Players[owner]:GetGovernors():HasGovernor(GameInfo.Governors[row.GovernorType].Hash);
-                if hasGovernor and m_Finalize[leader] ~= turn then
-                    m_Finalize[leader] = turn; JAC_AppointLeader(leader);
-                elseif not hasGovernor and m_Attempts[leader] ~= turn then
-                    m_Attempts[leader] = turn; JAC_AppointLeader(leader);
-                end
+                JAC_AppointLeader(leader);
             end
         end
     end

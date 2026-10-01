@@ -8,7 +8,10 @@ function Rules.ReservedAppointments(owner)
     local reserved = 0;
     for person in GameInfo.JAC_LeaderPersonas() do
         if Rules.Get(person.LeaderType, "OWNER") == owner and Rules.Get(person.LeaderType, "STATE") == "EVOLVING" then
-            reserved = reserved + 1;
+            local cost = Rules.Get(person.LeaderType, "EVOLUTION_COST") or person.EvolutionCost;
+            local native = Rules.NativeGovernor(owner, person.LeaderType);
+            local paid = native and native.appointed and (1 + (native.surchargePaid or 0)) or 0;
+            reserved = reserved + math.max(0, cost - paid);
         end
     end
     return reserved;

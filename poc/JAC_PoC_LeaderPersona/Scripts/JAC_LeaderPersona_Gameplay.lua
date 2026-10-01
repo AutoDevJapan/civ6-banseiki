@@ -128,26 +128,14 @@ local function PrepareEvolution(owner, leader)
     if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
     if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
     local cost = EvolutionCost(leader);
-    -- Each pending appointment still needs one native title. Its persisted state
-    -- reserves that title until completion, so another person cannot count it again.
+    -- Pending native operations reserve their still-unpaid titles, even across
+    -- save/load. Both APPOINT and PROMOTE debit the engine's spent-title count.
     if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost or not native.canAppoint then
         return Finish(owner, "NO_TITLE");
     end
-    -- Reserve the surcharge. Native APPOINT_GOVERNOR spends the remaining ONE title.
-    -- Debug/Player.ltp:295,654,676; Expansion2/UI/Additions/GovernorPanel.lua:547-562.
-    local surcharge = cost - 1;
-    if surcharge > 0 then
-        local before = AvailableTitles(p);
-        p:GetGovernors():ChangeGovernorPoints(-surcharge);
-        -- Negative deltas have no official example: never appoint for a cheaper price if rejected.
-        local after = AvailableTitles(p);
-        if after ~= before - surcharge then
-            -- A rejected/partial payment must not consume titles or reserve an appointment.
-            if after ~= before then p:GetGovernors():ChangeGovernorPoints(before - after); end
-            return Finish(owner, "TITLE_PAYMENT_FAILED");
-        end
-    end
-    Set(leader, "EVOLUTION_SURCHARGE", surcharge);
+    -- The surcharge is the required count, not a synthetic balance deduction.
+    -- Its paid portion is read from the engine's own Governor promotions.
+    Set(leader, "EVOLUTION_SURCHARGE", cost - 1);
     Set(leader, "STATE", "EVOLVING");
     return Finish(owner, "EVOLVING");
 end
@@ -159,6 +147,9 @@ local function CompleteEvolution(owner, leader)
     if Get(leader, "STATE") ~= "EVOLVING" then return Finish(owner, "NOT_EVOLVING"); end
     local native = NativeGovernor(owner, row);
     if not native or not native.appointed or not native.base then return Finish(owner, "APPOINTMENT_PENDING"); end
+    if native.surchargePaid ~= (Get(leader, "EVOLUTION_SURCHARGE") or 0) then
+        return Finish(owner, "TITLE_PAYMENT_PENDING");
+    end
     -- Retain the Great Person until the engine has really appointed its Governor.
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "REMOVAL_PENDING"); end

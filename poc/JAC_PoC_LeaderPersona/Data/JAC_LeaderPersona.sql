@@ -152,6 +152,34 @@ INSERT INTO Modifiers (ModifierId, ModifierType) SELECT ModifierId, ModifierType
 INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'Amount', Amount FROM JAC_PersonaSkills;
 INSERT INTO ModifierArguments (ModifierId, Name, Value) SELECT ModifierId, 'YieldType', YieldType FROM JAC_PersonaSkills WHERE YieldType IS NOT NULL;
 INSERT INTO GovernorPromotionModifiers (GovernorPromotionType, ModifierId) SELECT GovernorPromotionType, ModifierId FROM JAC_PersonaSkills;
+-- APPOINT_GOVERNOR spends the first title. These effect-free native promotions
+-- spend only the additional evolution titles (no custom skill uses them).
+-- Expansion1_Governors.xml:128-178,179-229 supplies the promotion/prerequisite shape.
+CREATE TABLE JAC_PersonaTitlePayments (
+    LeaderType TEXT NOT NULL REFERENCES JAC_LeaderPersonas(LeaderType),
+    Step INTEGER NOT NULL CHECK (Step IN (1, 2)),
+    GovernorPromotionType TEXT NOT NULL UNIQUE,
+    PRIMARY KEY (LeaderType, Step)
+);
+INSERT INTO JAC_PersonaTitlePayments
+SELECT LeaderType, 1, BasePromotionType || '_TITLE_1'
+FROM JAC_LeaderPersonas WHERE EvolutionCost >= 2;
+INSERT INTO JAC_PersonaTitlePayments
+SELECT LeaderType, 2, BasePromotionType || '_TITLE_2'
+FROM JAC_LeaderPersonas WHERE EvolutionCost >= 3;
+INSERT INTO Types (Type, Kind)
+SELECT GovernorPromotionType, 'KIND_GOVERNOR_PROMOTION' FROM JAC_PersonaTitlePayments;
+INSERT INTO GovernorPromotions (GovernorPromotionType, Name, Description, Level, "Column", BaseAbility)
+SELECT GovernorPromotionType, 'LOC_JAC_PERSONA_TITLE_PAYMENT_NAME',
+       'LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION', Step, 1, 0
+FROM JAC_PersonaTitlePayments;
+INSERT INTO GovernorPromotionSets (GovernorType, GovernorPromotion)
+SELECT p.GovernorType, t.GovernorPromotionType
+FROM JAC_PersonaTitlePayments t JOIN JAC_LeaderPersonas p USING (LeaderType);
+INSERT INTO GovernorPromotionPrereqs (GovernorPromotionType, PrereqGovernorPromotion)
+SELECT t.GovernorPromotionType,
+       CASE WHEN t.Step = 1 THEN p.BasePromotionType ELSE p.BasePromotionType || '_TITLE_1' END
+FROM JAC_PersonaTitlePayments t JOIN JAC_LeaderPersonas p USING (LeaderType);
 UPDATE GlobalParameters SET Value=MAX(CAST(Value AS INTEGER), 30) WHERE Name='MAX_GOVERNOR_APPOINTMENTS';
 
 -- This map-scoped component disables only the eight standard official governors.

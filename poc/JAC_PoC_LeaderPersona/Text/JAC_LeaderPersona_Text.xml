@@ -37,6 +37,12 @@
     <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ru_RU">
       <Text>Комендант</Text>
     </Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="ja_JP"><Text>進化の追加称号</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="en_US"><Text>Additional evolution title</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="ru_RU"><Text>Дополнительное звание для превращения</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="ja_JP"><Text>人物の進化費用として公式の総督称号を1個消費する。</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="en_US"><Text>Spends one native Governor title toward this person's evolution cost.</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="ru_RU"><Text>Тратит одно звание губернатора на превращение персонажа.</Text></Row>
     <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ja_JP">
       <Text>仲間の指導者</Text>
     </Row>
