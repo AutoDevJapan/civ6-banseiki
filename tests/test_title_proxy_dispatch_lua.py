@@ -298,6 +298,55 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(self.rules.Request(0, "B"), "PENDING")
         self.assertEqual([r["cost"] for r in self.rules.Queue(0)["requests"].values()], [3, 1, 2])
 
+    def test_canceling_middle_and_final_promotions_cannot_pay_any_later_stage_for_lost_person(self):
+        for stage in (1, 2):
+            with self.subTest(cancelled_promotion=stage):
+                self.setUp()
+                self.run_lua("Players[0].points=4; GameInfo.JAC_LeaderPersonas.A.EvolutionCost=3; NATIVE_SUCCESS=true")
+                self.reserve_begin()
+                self.rules.Request(0, "C")
+                for previous in range(stage):
+                    self.pay()
+                    self.pay()
+                    self.assertEqual(self.rules.Begin(0), "STARTED")
+                self.ui.JAC_ProxyPayNext()
+                self.lua.globals().core_step()
+                self.run_lua("PERSON_EXISTS.A=false")
+                self.drain()
+                self.assertEqual(self.rules.Queue(0)["requests"][1]["status"], "CANCELING")
+                self.reload_save()
+                self.run_lua("TURN=11")
+                self.pay()
+                self.pay()
+                self.assertEqual(self.payments(), [list(range(stage + 1)), []])
+                self.assertEqual(self.rules.Queue(0)["requests"][1]["status"], "CANCELLED")
+                self.assertFalse(self.rules.Paid(0, "A"))
+                self.assertEqual(len(self.lua.globals().NATIVE_CALLS), 1)
+                self.assertEqual(self.lua.globals().NATIVE_CALLS[1]["params"]["promotion"], 300 + stage)
+                self.assertEqual(self.rules.Begin(0), "STARTED")
+                self.pay()
+                self.pay()
+                self.assertEqual(self.payments(), [list(range(stage + 1)), [stage + 1]])
+                self.assertEqual(self.lua.eval("Players[0].spent"), stage + 2)
+                self.assertTrue(self.rules.Paid(0, "C"))
+
+    def test_old_cancelled_authorized_save_restores_reservation_until_original_stage_is_settled(self):
+        self.run_lua("Players[0].points=4; GameInfo.JAC_LeaderPersonas.A.EvolutionCost=3")
+        self.reserve_begin()
+        self.rules.Request(0, "C")
+        self.ui.JAC_ProxyPayNext()
+        self.lua.globals().core_step()
+        self.run_lua("PERSON_EXISTS.A=false; properties.JAC_PROXY_PAYMENT_QUEUE_0.requests[1].status='CANCELLED'")
+        self.reload_save()
+        self.assertEqual(self.rules.Request(0, "B"), "NO_TITLE")
+        self.assertEqual(self.rules.Queue(0)["requests"][1]["status"], "CANCELING")
+        self.run_lua("TURN=11; NATIVE_SUCCESS=true")
+        self.pay()
+        self.pay()
+        self.assertEqual(self.payments(), [[0], []])
+        self.assertEqual(self.rules.Queue(0)["requests"][1]["status"], "CANCELLED")
+        self.assertEqual(self.rules.Begin(0), "STARTED")
+
     def test_old_denial_cannot_complete_a_new_transport_callback_before_core_runs(self):
         self.reserve_begin("C")
         self.pay()  # Failed Native, attempt 1
