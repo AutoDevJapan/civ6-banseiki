@@ -1537,7 +1537,8 @@ class AbsorptionTests(unittest.TestCase):
           for id,p in pairs(Players) do local n=id;p.GetReligion=function() return {
             GetReligionTypeCreated=function() return founder[n] or -1 end,
             SetHolyCity=function(_,city) holyCities[n]=city:GetID() end,
-            ChangeFaithBalance=function(_,v) FAITH[n]=FAITH[n]+v end} end end
+            ChangeFaithBalance=function(_,v) FAITH[n]=FAITH[n]+v end,
+            GetFaithBalance=function() return FAITH[n] end} end end
           Game.GetReligion=function() return {FoundReligion=function(_,owner,id) assert(holyCities[owner]);founder[owner]=id;beliefs[owner]={} end,
             AddBelief=function(_,owner,id) table.insert(beliefs[owner],id) end,
             GetReligions=function() local list={};for owner,id in pairs(founder) do list[#list+1]={Religion=id,Founder=owner,Beliefs=beliefs[owner]} end;return list end} end
@@ -1659,7 +1660,8 @@ class AbsorptionTests(unittest.TestCase):
           end
         ''')
         data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json').read_text(encoding='utf-8'))
-        recall = data['steps'][-5:]
+        recall = [step for step in data['steps'][-6:]
+                  if 'recall spawn blockers relocated' not in step.get('code', '')]
         self.assertIn('duplicate recall denied', self.run_lua(recall[0]['code']))
         self.run_lua('HERO_CLAIMS[0]=1')
         with self.assertRaisesRegex(Exception, 'recall rights retained by donor'):
@@ -2003,6 +2005,10 @@ class AbsorptionPackageTests(unittest.TestCase):
                           .read_text(encoding='utf-8'))
         code = next(s['code'] for s in data['steps']
                     if 'recall spawn blockers relocated' in s.get('code', ''))
+        ai_data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json')
+                             .read_text(encoding='utf-8'))
+        ai_code = next(s['code'] for s in ai_data['steps']
+                       if 'recall spawn blockers relocated' in s.get('code', ''))
         vm = LuaRuntime()
         vm.execute('''
           FREE=true;UNITS={}
@@ -2019,7 +2025,7 @@ class AbsorptionPackageTests(unittest.TestCase):
           end
           GameInfo={HeroClasses={[0]={UnitType='Hero'}},Units={Hero={FormationClass='LAND'},
             Warrior={FormationClass='LAND'},Civilian={FormationClass='CIVILIAN'}}}
-          Game={GetProperty=function() return {To=2,Class=0} end}
+          Game={GetProperty=function() return {To=2,Owner=2,Class=0} end}
           ExposedMembers={JAC_Absorption={GetHeroesManager=function() return {
             GetHeroOriginCityID=function() return {player=2,id=7} end} end}}
           Players={[2]={GetCities=function() return {FindID=function(_,id)
@@ -2044,6 +2050,12 @@ class AbsorptionPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, 'no empty owned plot'):
             vm.execute(code)
         vm.execute('assert(#UNITS==3 and UNITS[1].x==20 and UNITS[1].y==20)')
+        vm.execute('FREE=true;for _,u in ipairs(UNITS) do u.x=20;u.y=20 end')
+        self.assertIn('without deletion: 2', vm.execute(ai_code))
+        vm.execute('''assert(UNITS[1].x==14 and UNITS[1].y==16)
+          assert(UNITS[3].x==14 and UNITS[3].y==17)
+          assert(UNITS[2].x==20 and UNITS[2].y==20)
+          for _,u in ipairs(UNITS) do assert(u.damage==5 and u.moves==2) end''')
 
     def test_human_recall_scenario_uses_custom_native_classes_and_real_purchase(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-hero-recall.json")
