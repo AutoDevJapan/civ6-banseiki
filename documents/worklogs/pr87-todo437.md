@@ -1,6 +1,6 @@
 # PR #87 実機検証とマージの再開記録
 
-2026-10-02 07:57 JST。PR #87は未マージ。担当ジョブは `20261002-075213-todo-437`。
+2026-10-02 08:09 JST。PR #87は未マージ。担当ジョブは `20261002-075213-todo-437`。
 
 ## 確認済み
 
@@ -23,6 +23,16 @@ D:/CC/Tools/civ6-live/live_chain.exe --test-mode --stop-on-failure feat/absorb:a
 - 標準エラー: `D:/CC/Work/pr87-todo437-20261002/live-chain-1.stderr.txt`
 - コマンドの子プロセスはCreateNoWindowで起動。ゲームの起動・終了はロックを持つ標準ツールに任せる。
 - 調査時の `live_chain --help` は待機予約になったため、自分のPID80972とその待機ファイルだけ終了・削除した。ゲームは起動しておらず、実機試行には数えない。
+
+### 最初の起動失敗
+
+- `absorb-33-try1` はrestart_gameの420秒の期限で失敗。完了手順0/128、判定未実施。標準ツールが最初に追加する再起動1手順を含む。
+- 画面は「Loading, Please Wait...」。DX11のゲーム自体は起動したが、FrontEndが応答しない。Lua.logはGameDebugの初期化1行で止まった。
+- Modding.logでは13 MODを発見し、吸収MODと戦国ツリーの認識を確認。以前の吸収MODのリンク切れは今回解消している。
+- 接続一覧で観測したクライアントは標準ドライバーだけ。他担当との接続競合は観測していない。
+- 失敗の6ファイルを `D:/CC/Work/pr87-todo437-20261002/absorb-33-try1/` に保全。画面は `C:/Users/makhmeto/AppData/Local/Temp/pr87-civ6-1790895730397493500.png`。
+- 標準ツールが同じシナリオを再起動。2回目は08:05:22 JSTから応答待ち。この再起動も実機の上限4回に数える。
+- 読み取り専用の原因調査を共有ToDo572へspec付きで登録。GPU・実機起動・接続・入力・Lua送信を禁止し、親の実機と重複させない。指示は `D:/CC/Work/pr87-todo437-20261002/startup-diagnosis-spec.md`。
 
 ## 残作業
 
