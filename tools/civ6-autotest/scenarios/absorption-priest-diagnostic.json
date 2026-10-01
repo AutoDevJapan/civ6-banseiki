@@ -1,0 +1,213 @@
+{
+  "name": "JAC Absorption: missionary creation and official purchase diagnostic",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroLifespanKey~=nil and ExposedMembers.JAC_HeroReadAPI~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local owner\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_DATE' then owner=p:GetID() end end\nlocal p=assert(Players[owner]);local c=assert(p:GetCities():GetCapitalCity());local r=GameInfo.Religions.RELIGION_CUSTOM_1\np:GetReligion():SetHolyCity(c);Game.GetReligion():FoundReligion(owner,r.Index)\nfor _,kind in ipairs({'BELIEF_DIVINE_INSPIRATION','BELIEF_CATHEDRAL'}) do Game.GetReligion():AddBelief(owner,GameInfo.Beliefs[kind].Index) end\nc:GetReligion():SetAllCityToReligion(r.Index)\nlocal plot=Map.GetPlot(c:GetX(),c:GetY());local site\nfor dir=0,5 do local q=Map.GetAdjacentPlot(c:GetX(),c:GetY(),dir);if q and q:GetOwner()==owner and not q:IsWater() and not q:IsMountain() and q:GetDistrictType()<0 then site=q;break end end\nassert(site,'no fixture Holy Site plot');c:GetBuildQueue():CreateIncompleteDistrict(GameInfo.Districts.DISTRICT_HOLY_SITE.Index,site:GetIndex(),100)\nc:GetBuildQueue():CreateIncompleteBuilding(GameInfo.Buildings.BUILDING_SHRINE.Index,site:GetIndex(),100)\nassert(c:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_SHRINE.Index),'fixture shrine absent')\np:GetReligion():ChangeFaithBalance(100000)\nlocal before={};for _,u in p:GetUnits():Members() do before[tostring(u:GetID())]=true end\nUnitManager.InitUnitValidAdjacentHex(owner,'UNIT_MISSIONARY',c:GetX(),c:GetY(),8)\nlocal id;for _,u in p:GetUnits():Members() do if not before[tostring(u:GetID())] then assert(not id,'ambiguous debug missionary');id=u:GetID();u:GetReligion():SetReligionType(r.ReligionType) end end\nassert(id,'no debug missionary');before[tostring(id)]=true\nGame:SetProperty('JAC_ABSORPTION_PRIEST_DIAG',{Owner=owner,CityID=c:GetID(),Religion=r.Index,DebugID=id,Before=before})\nreturn 'official purchase prepared; debug='..id..' city majority='..c:GetReligion():GetMajorityReligion()\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');if not e then return false end;local c=Players[e.Owner]:GetCities():FindID(e.CityID);return c and c:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_SHRINE.Index) and c:GetReligion():GetMajorityReligion()==e.Religion"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG'));local c=assert(Players[e.Owner]:GetCities():FindID(e.CityID))\nlocal t={};t[CityCommandTypes.PARAM_UNIT_TYPE]=GameInfo.Units.UNIT_MISSIONARY.Hash;t[CityCommandTypes.PARAM_YIELD_TYPE]=GameInfo.Yields.YIELD_FAITH.Index;t[CityCommandTypes.PARAM_MILITARY_FORMATION_TYPE]=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION\nlocal ok,reasons=CityManager.CanStartCommand(c,CityCommandTypes.PURCHASE,false,t,true)\nassert(ok,'official missionary purchase unavailable: '..tostring(reasons))\nCityManager.RequestCommand(c,CityCommandTypes.PURCHASE,t)\nreturn 'official missionary purchase requested for AI owner '..e.Owner\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');for _,u in Players[e.Owner]:GetUnits():Members() do if not e.Before[tostring(u:GetID())] and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index then return u:GetReligionType()==e.Religion and u:GetSpreadCharges()==3 end end;return false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');local found\nfor _,u in Players[e.Owner]:GetUnits():Members() do if not e.Before[tostring(u:GetID())] and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index then assert(not found,'ambiguous purchased missionary');found=u;print('[JAC_ABSORPTION_PRIEST_DIAG] purchased core religion='..u:GetReligion():GetReligionType()) end end\nassert(found,'purchased missionary absent');e.PurchasedID=found:GetID();Game:SetProperty('JAC_ABSORPTION_PRIEST_DIAG',e);return 'purchased missionary='..e.PurchasedID\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');for _,u in Players[e.Owner]:GetUnits():Members() do if u:GetID()==e.DebugID or u:GetID()==e.PurchasedID then print('[JAC_ABSORPTION_PRIEST_DIAG] id='..u:GetID()..' UI religion='..u:GetReligionType()..' charges='..u:GetSpreadCharges()) end end;return 'both generation paths recorded'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local e=Game:GetProperty('JAC_ABSORPTION_PRIEST_DIAG');local debugAlive,purchasedAlive=false,false\nfor _,u in Players[e.Owner]:GetUnits():Members() do if u:GetID()==e.DebugID then debugAlive=true end;if u:GetID()==e.PurchasedID then purchasedAlive=true end end\nprint('[JAC_ABSORPTION_PRIEST_DIAG] debug_alive='..tostring(debugAlive)..' purchased_alive='..tostring(purchasedAlive))\nassert(purchasedAlive,'officially purchased missionary lost after AI turn')\nreturn 'purchased missionary survived; debug_alive='..tostring(debugAlive)\n"
+    }
+  ],
+  "test_mode": {
+    "skipped_turns": 0,
+    "continuous_performance_valid": false
+  }
+}
