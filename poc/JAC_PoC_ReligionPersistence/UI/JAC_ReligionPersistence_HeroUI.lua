@@ -1,7 +1,13 @@
 -- Read-only Heroes APIs live in UI, not Gameplay. No visible screen is added.
 local pending = true -- resume verification once after loading a saved game.
 local elapsed, timedOut = {}, {}
+local frameChecks, publishedChecks = {}, {} -- read-only diagnostics, not saved
 local Bridge = {}
+function Bridge.VerificationDiagnostics(playerID)
+  local key = tostring(playerID)
+  return { elapsed = elapsed[key] or 0, timedOut = timedOut[key] == true,
+    frameChecks = frameChecks[key] or 0, publishedChecks = publishedChecks[key] or 0 }
+end
 function Bridge.OriginBuilding(playerID)
   return Game.GetHeroesManager():GetPlayerHeroOriginBuildingType(playerID)
 end
@@ -40,6 +46,7 @@ ContextPtr:SetUpdate(function(dt)
         timedOut[playerID] = true
         print("[JAC_RP] hero verification timed out for player=" .. playerID .. "; reservation retained")
       else
+        frameChecks[playerID] = (frameChecks[playerID] or 0) + 1
         local ok, applied = pcall(rp.CompleteHero, tonumber(playerID))
         if not ok then print("[JAC_RP] hero verification pending: " .. tostring(applied))
         elseif not applied then pending = true end
@@ -54,6 +61,7 @@ end)
 -- visual controls or input handler; activate it after the load screen closes.
 Events.LoadScreenClose.Add(function()
   pending, elapsed, timedOut = true, {}, {}
+  frameChecks, publishedChecks = {}, {}
   ContextPtr:SetHide(false)
   local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
   if tonumber(testFlag) == 1 then
@@ -75,6 +83,7 @@ Events.GameCoreEventPublishComplete.Add(function()
       if not h or h.verification ~= "PENDING" then
         timedOut[playerID] = nil
       else
+        publishedChecks[playerID] = (publishedChecks[playerID] or 0) + 1
         local ok, applied = pcall(rp.CompleteHero, tonumber(playerID))
         if ok and applied then timedOut[playerID] = nil
         elseif not ok then print("[JAC_RP] hero verification on published state pending: " .. tostring(applied)) end

@@ -558,7 +558,7 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; if Players[0]:GetDiplomacy():HasAllied(1) then error('diplomatic alliance has not naturally ended') end;\nR.RefreshReligiousAlliances(); if not R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or not R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('expired alliance restrictions remain') end;\nlocal found=false; for _,a in pairs(R.Export().religiousAlliances) do if a.religion==id then found=true; if a.active or a.endedTurn==nil then error('alliance expiry not recorded') end end end; if not found then error('alliance history missing') end; return 'natural alliance expiry checked'"
+      "code": "local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_03'; if Players[0]:GetDiplomacy():HasAllied(1) then error('diplomatic alliance has not naturally ended') end;\nlocal found=false; for _,a in pairs(R.Export().religiousAlliances) do if a.religion==id then found=true; if a.active or a.endedTurn==nil then error('turn-start handler did not expire religious alliance') end end end; if not found then error('alliance history missing') end;\nR.RefreshReligiousAlliances(); if not R.CanPersecute(1,id,0,'JAC_RP_PLACEHOLDER_02') or not R.CanPersecute(0,'JAC_RP_PLACEHOLDER_02',1,id) then error('expired alliance restrictions remain') end; return 'natural alliance expiry checked'"
     },
     {
       "action": "exit_to_menu",

@@ -152,7 +152,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local B=ExposedMembers.JAC_RP_HeroUI; B.AutotestReadsAtDeadline=B.AutotestReads; if B.AutotestReadsAtDeadline<1 then error('hero verifier never ran') end; return 'read counter recorded after the deadline'"
+      "code": "local B=ExposedMembers.JAC_RP_HeroUI; local d=B.VerificationDiagnostics(0); if not d.timedOut or d.elapsed<=30 or d.frameChecks<1 then error('hero verifier did not reach its deadline') end; B.AutotestFramesAtDeadline=d.frameChecks; B.AutotestElapsedAtDeadline=d.elapsed; return 'deadline='..tostring(d.elapsed)..' frameChecks='..tostring(d.frameChecks)..' publishedChecks='..tostring(d.publishedChecks)"
     },
     {
       "action": "pause",
@@ -162,7 +162,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local B=ExposedMembers.JAC_RP_HeroUI; if B.AutotestReads~=B.AutotestReadsAtDeadline then error('per-frame verification did not stop at the deadline') end; B.UnitInfo=B.AutotestOriginal; B.AutotestOriginal=nil; return 'real lifespan reads restored after per-frame verification stopped'"
+      "code": "local B=ExposedMembers.JAC_RP_HeroUI; local d=B.VerificationDiagnostics(0); if not d.timedOut or d.frameChecks~=B.AutotestFramesAtDeadline or d.elapsed~=B.AutotestElapsedAtDeadline then error('per-frame verification did not stop at the deadline') end; B.UnitInfo=B.AutotestOriginal; B.AutotestOriginal=nil; return 'real lifespan restored; stopped frameChecks='..tostring(d.frameChecks)..' publishedChecks='..tostring(d.publishedChecks)"
     },
     {
       "action": "ui_lua",

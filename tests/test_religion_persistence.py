@@ -981,6 +981,12 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.g.HERO_UI_PUBLISH()
         self.assertEqual(self.rp.Export().heroes["1"].verification, "PENDING")
         self.assertEqual(self.g.ENGINE["1"].faith, 500)
+        diagnostics = self.g.ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)
+        self.assertTrue(diagnostics.timedOut)
+        self.assertEqual((diagnostics.elapsed, diagnostics.frameChecks, diagnostics.publishedChecks), (31, 0, 1))
+        self.g.HERO_UI_TICK(1)
+        after_frame = self.g.ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)
+        self.assertEqual((after_frame.elapsed, after_frame.frameChecks, after_frame.publishedChecks), (31, 0, 1))
         self.lua.execute("local h=ExposedMembers.JAC_ReligionPersistence.Export().heroes['1']; "
                          "ENGINE['1'].units[tostring(h.unit)].lifespan=30")
         self.g.ENGINE["1"].active = False
@@ -994,6 +1000,9 @@ class ReligionPersistenceTests(unittest.TestCase):
         self.g.HERO_UI_PUBLISH()
         self.g.HERO_UI_TICK(1)
         self.assertEqual(self.g.ENGINE["1"].faith, 532.5)
+        completed = self.g.ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)
+        self.assertFalse(completed.timedOut)
+        self.assertEqual((completed.frameChecks, completed.publishedChecks), (0, 2))
 
     def test_hero_waits_for_valid_class_without_querying_negative_claim(self):
         self.found()
