@@ -1818,6 +1818,14 @@ class AbsorptionTests(unittest.TestCase):
         self.assertTrue(self.verify("test-absorption", True))
 
 
+    def test_exact_verification_detects_city_rename_but_later_turns_allow_it(self):
+        self.apply()
+        self.run_lua("CITIES[12].GetName=function() return 'RENAMED_CITY' end")
+        with self.assertRaisesRegex(Exception, 'city name changed'):
+            self.a.Verify('test-absorption', True)
+        self.a.Verify('test-absorption', False)
+
+
 class AbsorptionPackageTests(unittest.TestCase):
     def test_scenario_lua_compiles_and_both_snapshots_have_round_trip_comparisons(self):
         data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json").read_text(encoding="utf-8"))
@@ -1872,6 +1880,7 @@ class AbsorptionPackageTests(unittest.TestCase):
         self.assertFalse(vm.execute(conditions[0]))
         vm.execute("UI_RELIGION=5;UI_CHARGES=2")
         self.assertFalse(vm.execute(conditions[0]))
+
 
     def test_recall_spawn_preparation_moves_only_blockers_and_preserves_them(self):
         data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')

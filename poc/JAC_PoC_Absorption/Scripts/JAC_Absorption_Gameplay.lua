@@ -1005,6 +1005,7 @@ local function Verify(tx, state, exactUnits)
     assert(city and city:GetOwner() == tx.To, "city transfer failed")
     assert(R.Equal(Properties(city, snap.PropertyKeys), snap.TransferredProperties), "city properties changed")
     if exactUnits then
+      assert(city:GetName() == snap.Name, "city name changed")
       assert(R.Equal(CityAssets(city), snap.Assets), "city buildings/Great Works changed")
     else
       local current = CityAssets(city)
