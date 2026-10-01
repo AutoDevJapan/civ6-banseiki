@@ -59,7 +59,7 @@ def ages_tables() -> dict:
     db = sqlite3.connect(":memory:")
     db.row_factory = lambda cursor, row: {c[0]: v for c, v in zip(cursor.description, row)}
     lines = []
-    for name in ("Data/JAC_Sengoku_Ages.sql", "Data/JAC_Sengoku_Reigns.sql"):  # the modinfo's order
+    for name in ("Data/JAC_Sengoku_Ages.sql", "Data/JAC_Sengoku_Reigns.sql", "Data/JAC_Sengoku_Oaths.sql"):
         lines += (MOD / name).read_text(encoding="utf-8").splitlines()
     sql = "\n".join(line.split("--")[0] for line in lines)
     for statement in sql.split(";"):
@@ -67,12 +67,13 @@ def ages_tables() -> dict:
             db.execute(statement)
     out = {name: db.execute(f"SELECT * FROM {name}").fetchall()
            for name in ("JAC_SengokuReigns", "JAC_SengokuDarkAgePolicies", "JAC_SengokuAgeEventScores",
-                        "JAC_SengokuDarkAgePolicyDefaults")}
+                        "JAC_SengokuDarkAgePolicyDefaults", "JAC_SengokuOaths", "JAC_SengokuOathAges")}
     # The engine eras of Data/JAC_Sengoku_Eras.sql, in the official Index order (renamed first, then added).
     out["Eras"] = [{"EraType": e["EraType"], "ChronologyIndex": e["ChronologyIndex"]} for e in REIGNS_GEN.eras()]
     out["Eras_XP1"] = [{"EraType": e["EraType"], "GameEraMaximumTurns": e["length"]} for e in REIGNS_GEN.eras()]
     out["Multiplier"] = REIGNS_GEN.MULTIPLIER
     out["StartYear"] = REIGNS_GEN.calendar()[0]  # the screens show 天文's year
+    out["OathLua"] = (MOD / "Scripts/JAC_Sengoku_Oaths.lua").read_text(encoding="utf-8")
     return out
 
 
@@ -242,6 +243,8 @@ class AgesDataTests(unittest.TestCase):
                                      "UNION SELECT Announcement FROM JAC_SengokuDarkAgePolicies")}
         keys |= {"LOC_JAC_AGE_GOLDEN_ANNOUNCEMENT", "LOC_JAC_AGE_HEROIC_ANNOUNCEMENT", "LOC_JAC_AGE_NORMAL_ANNOUNCEMENT"}
         keys |= {r[0] for r in self.q("SELECT Name FROM Eras UNION SELECT Description FROM Eras")}  # the reigns' eras
+        keys |= {r[0] for r in self.q("SELECT Name FROM JAC_SengokuOaths UNION SELECT GoldenDescription FROM JAC_SengokuOaths "
+                                     "UNION SELECT QuestDescription FROM JAC_SengokuOaths")}
         # The choice screen (UI/JAC_SengokuDarkPolicy.lua / .xml).
         ui = "".join((MOD / f"UI/JAC_SengokuDarkPolicy.{ext}").read_text(encoding="utf-8") for ext in ("lua", "xml"))
         ui_keys = set(re.findall(r"LOC_JAC_AGE_DARK_CHOICE_[A-Z]+", ui))
@@ -252,13 +255,14 @@ class AgesDataTests(unittest.TestCase):
         # UI/JAC_EraProgressPanel_Sengoku.lua, UI/JAC_SengokuAgesView.lua) and the notification heading.
         screens = "".join((MOD / name).read_text(encoding="utf-8") for name in (
             "UI/JAC_SengokuReignPopup.lua", "UI/JAC_SengokuReignPopup.xml", "UI/JAC_EraProgressPanel_Sengoku.lua",
-            "UI/JAC_SengokuAgesView.lua", "UI/JAC_ActionPanel_Sengoku.lua", "Scripts/JAC_Sengoku_Ages.lua"))
+            "UI/JAC_SengokuAgesView.lua", "UI/JAC_ActionPanel_Sengoku.lua", "Scripts/JAC_Sengoku_Ages.lua",
+            "UI/JAC_DedicationPopup_Sengoku.lua"))
         screen_keys = {k for k in re.findall(r"LOC_JAC_[A-Z0-9_]+", screens) if not k.endswith("_")}
         screen_keys |= {f"LOC_JAC_AGE_PART_{part}" for part in ("HOME", "REGAIN", "CASTLE", "KO", "ALLY", "RESEARCH", "EVENT")}
         self.assertLessEqual({"LOC_JAC_AGE_ERA_NAME", "LOC_JAC_AGE_ERA_ENDS_IN", "LOC_JAC_REIGN_TENBUN_NAME"}, screen_keys)
         keys |= screen_keys
         text = {}
-        for name in ("Text/JAC_Sengoku_Ages_Text.xml", "Text/JAC_Sengoku_Reigns_Text.xml"):
+        for name in ("Text/JAC_Sengoku_Ages_Text.xml", "Text/JAC_Sengoku_Reigns_Text.xml", "Text/JAC_Sengoku_Oaths_Text.xml"):
             for row in ET.parse(MOD / name).getroot().findall("./LocalizedText/Row"):
                 text.setdefault(row.get("Tag"), set()).add(row.get("Language"))
         self.assertEqual(set(text), keys)
@@ -311,6 +315,10 @@ CIVS = ["CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_TAKEDA", "CIVILIZATION_JAC_HOJ
 
 STUBS = r"""
 local tables, civs, startTurn, speed = ...
+function include(name)
+  assert(name == "JAC_Sengoku_Oaths", name)
+  assert(load(tables.OathLua, name))()
+end
 local function gameInfoTable(rows, key)
   local t = {}
   for i, row in ipairs(rows) do row.Index = i - 1; if key then t[row[key]] = row end end
@@ -333,6 +341,8 @@ GameInfo = {
   JAC_SengokuDarkAgePolicies = gameInfoTable(tables.JAC_SengokuDarkAgePolicies),
   JAC_SengokuAgeEventScores = gameInfoTable(tables.JAC_SengokuAgeEventScores),
   JAC_SengokuDarkAgePolicyDefaults = gameInfoTable(tables.JAC_SengokuDarkAgePolicyDefaults),
+  JAC_SengokuOaths = gameInfoTable(tables.JAC_SengokuOaths, "OathType"),
+  JAC_SengokuOathAges = gameInfoTable(tables.JAC_SengokuOathAges),
 }
 CURRENT_TURN = startTurn
 GameConfiguration = { GetGameSpeedType = function() return 0 end, GetStartTurn = function() return startTurn end }
@@ -348,7 +358,8 @@ PLOTS = {}
 Map = { GetPlot = function(x, y)
   local index = y * 100 + x
   if not PLOTS[index] then
-    local p = { GetIndex = function() return index end, GetX = function() return x end, GetY = function() return y end }
+    local p = { GetIndex = function() return index end, GetX = function() return x end, GetY = function() return y end,
+      IsCoastalLand = function() return COASTAL and COASTAL[index] == true end }
     p.GetProperty, p.SetProperty = properties()
     PLOTS[index] = p
   end
@@ -356,7 +367,7 @@ Map = { GetPlot = function(x, y)
 end }
 CITIES = {}          -- list of {owner, x, y, capital}
 ALLIED, FRIENDS, TEAM, ALIVE = {}, {}, {}, {}
-HUMAN = { [1] = true, [3] = true }
+HUMAN, WAR, GOLD, COASTAL = {[1]=true,[3]=true}, {}, {}, {}
 NO_FRIENDSHIP_API = false  -- true: the gameplay diplomacy object has no HasDeclaredFriendship
 Players, PlayerConfigurations = {}, {}
 local function citiesOf(id)
@@ -370,8 +381,9 @@ local function makePlayer(id, civ)
   ALIVE[id], TEAM[id] = true, id
   local p = { research = { techs = {}, civics = {} } }
   p.GetID = function() return id end
-  p.GetTeam = function() return TEAM[id] end
   p.IsHuman = function() return HUMAN[id] == true end
+  p.GetTreasury = function() return {GetGoldBalance = function() return GOLD[id] or 100 end} end
+  p.GetTeam = function() return TEAM[id] end
   p.GetCities = function() return {
     Members = function()
       local list, n = citiesOf(id), 0
@@ -386,7 +398,8 @@ local function makePlayer(id, civ)
   p.GetCulture = function() return { HasCivic = function(_, c) return p.research.civics[c] == true end } end
   p.GetDiplomacy = function()
     local d = { HasAllied = function(_, b)
-      local a, bb = math.min(id, b), math.max(id, b); return ALLIED[a .. "-" .. bb] == true end }
+      local a, bb = math.min(id, b), math.max(id, b); return ALLIED[a .. "-" .. bb] == true end,
+      IsAtWarWith = function(_, b) return WAR[id .. "-" .. b] == true end }
     if not NO_FRIENDSHIP_API then d.HasDeclaredFriendship = function(_, b)
       local a, bb = math.min(id, b), math.max(id, b); return FRIENDS[a .. "-" .. bb] == true end end
     return d
@@ -452,14 +465,18 @@ NotificationManager.GetAllEndTurnBlocking = function(id)
 end
 LOG = {}
 function print(line) LOG[#LOG + 1] = line end
-local handlers = { turn = {}, conquered = {}, built = {}, choose = {} }
-function RESET_HANDLERS() handlers = { turn = {}, conquered = {}, built = {}, choose = {} } end
+local handlers = { turn = {}, conquered = {}, built = {}, choose = {}, oaths = {} }
+function RESET_HANDLERS() handlers = { turn = {}, conquered = {}, built = {}, choose = {}, oaths = {} } end
 GameEvents = {
   OnGameTurnStarted = { Add = function(f) table.insert(handlers.turn, f) end },
   CityConquered = { Add = function(f) table.insert(handlers.conquered, f) end },
   CityBuilt = { Add = function(f) table.insert(handlers.built, f) end },
   JAC_SengokuDarkPolicyChoose = { Add = function(f) table.insert(handlers.choose, f) end },
+  JAC_SengokuOathsChoose = { Add = function(f) table.insert(handlers.oaths, f) end },
 }
+function CHOOSE_OATHS(playerID, params)
+  for _, f in ipairs(handlers.oaths) do f(playerID, params) end
+end
 -- EXECUTE_SCRIPT from the choice screen: the engine passes the requesting player and the parameter table.
 function CHOOSE(playerID, params)
   for _, f in ipairs(handlers.choose) do f(playerID, params) end
@@ -502,6 +519,7 @@ class LedgerTests(unittest.TestCase):
         self.load_script()
 
     def load_script(self):
+        self.g.include = lambda name: self.lua.execute((MOD / f"Scripts/{name}.lua").read_text(encoding="utf-8"))
         self.lua.execute((MOD / "Scripts/JAC_Sengoku_Ages.lua").read_text(encoding="utf-8"))
 
     def turns(self, first: int, last: int | None = None) -> None:
@@ -1113,6 +1131,8 @@ local function control()
   function c:RegisterCallback(_, f) self.click = f end
   function c:SetTexture(t) self.texture = t end
   function c:SetToolTipString(t) self.tooltip = t end
+  function c:SetSelected(v) self.selected = v end
+  function c:IsSelected() return self.selected == true end
   function c:SetRefreshHandler(f) self.refresh = f end
   function c:SetInputHandler(f) self.input = f end
   function c:RequestRefresh() if self.refresh then self.refresh() end end
@@ -1135,10 +1155,13 @@ function include(name)
   else assert(name == "InstanceManager") end
 end
 InstanceManager = { new = function() return {
-  ResetInstances = function() ROWS = {} end,
-  GetInstance = function()
-    local row = { Name = control(), Description = control(), Choose = control() }
-    table.insert(ROWS, row)
+  m_AllocatedInstances = {},
+  ResetInstances = function(self) self.m_AllocatedInstances = {}; ROWS = self.m_AllocatedInstances end,
+  GetInstance = function(self)
+    local row = { Name = control(), Description = control(), Choose = control(), SelectCheck = control(),
+      CommemorationIcon = control(), MomentCategory = control(), MomentBonuses = control() }
+    table.insert(self.m_AllocatedInstances, row)
+    ROWS = self.m_AllocatedInstances
     return row
   end,
 } end }
@@ -1157,10 +1180,13 @@ Events = {
 function LOCAL_TURN_BEGIN() for _, f in ipairs(uiEvents.turn) do f() end end
 function LOCAL_TURN_END() for _, f in ipairs(uiEvents.turnEnd) do f() end end
 function LOAD_SCREEN_CLOSE() for _, f in ipairs(uiEvents.load) do f() end end
-function PUBLISH() for _, f in ipairs(uiEvents.publish) do f() end end
+function GAME_CORE_PUBLISH() for _, f in ipairs(uiEvents.publish) do f() end end
+PUBLISH = GAME_CORE_PUBLISH
 UI = { RequestPlayerOperation = function(id, op, params)
   table.insert(REQUESTS, { id = id, op = op, OnStart = params.OnStart })
-  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params); PUBLISH() end
+  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuDarkPolicyChoose" then CHOOSE(id, params) end
+  if op == "EXECUTE_SCRIPT" and params.OnStart == "JAC_SengokuOathsChoose" then CHOOSE_OATHS(id, params) end
+  GAME_CORE_PUBLISH()
 end }
 """
 
@@ -1169,8 +1195,18 @@ end }
 class DarkPolicyScreenTests(unittest.TestCase):
     """UI/JAC_SengokuDarkPolicy.lua on top of the ledger; Takeda (player 1) is the local human."""
 
-    load_script, turns, house, plot, policy_flags = (LedgerTests.load_script, LedgerTests.turns, LedgerTests.house,
+    load_script, house, plot, policy_flags = (LedgerTests.load_script, LedgerTests.house,
                                                      LedgerTests.plot, LedgerTests.policy_flags)
+
+    def turns(self, *args):
+        LedgerTests.turns(self, *args)
+        # This screen is the step AFTER the oath screen; simulate confirming Takeda's first oath.
+        l = self.g.LEDGER()
+        h = l.houses.p1
+        if l.reign > 0 and h.oathChosen != l.reign:
+            choices = self.g.JAC_Oaths_Choices(h)
+            picked = {f"Oath{i}": r.OathType for i, r in choices.items() if i == 1 or h.age == "HEROIC"}
+            self.g.CHOOSE_OATHS(1, self.lua.table_from({"Reign": l.reign, **picked}))
 
     def setUp(self):
         LedgerTests.setUp(self)

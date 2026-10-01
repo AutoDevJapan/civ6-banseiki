@@ -242,7 +242,7 @@ class JudgeTests(unittest.TestCase):
             "sengoku-era-reigns.json",
             "absorption-japan.json",
             "absorption-hero-recall.json",
-
+            "sengoku-oaths-oda.json",
             "japan-15km-20turn-full-metrics.json", "japan-15km-300turn-full-metrics.json",
             "sengoku-era-reigns-epic.json", "sengoku-era-reigns-marathon.json",
             "sengoku-era-reigns-beyond-nine.json", "great-people-zero-musicians.json",

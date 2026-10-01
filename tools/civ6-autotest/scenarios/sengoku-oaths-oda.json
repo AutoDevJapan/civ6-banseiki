@@ -1,0 +1,283 @@
+{
+  "name": "織田の誓約：最初の改元で自家の3候補、天下布武の確定と実効果、保存直後の復元、次の改元での失効を検査",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_ODA' then error('setup changed Oda in human slot 0') end; HideGameSetup(); return 'Oda setup built'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local diplomacy=Players[0]:GetDiplomacy(); if type(diplomacy.HasDeclaredFriendship)~='function' then error('gameplay friendship API unavailable') end; local friendship=diplomacy:HasDeclaredFriendship(1); if type(friendship)~='boolean' then error('gameplay friendship API did not return boolean') end; local l=Game:GetProperty('JAC_AGES_LEDGER'); if type(l)~='table' or l.reign~=0 then error('no starting Tenbun ledger') end; local h=l.houses.p0; if h.civ~='CIVILIZATION_JAC_ODA' or not Players[0]:IsHuman() then error('not human Oda') end; local n=0; for _ in pairs(h.oaths or {}) do n=n+1 end; if n~=0 or h.oathChosen~=nil then error('starting oaths before first reign') end; local choices={}; for row in GameInfo.JAC_SengokuOaths() do choices[row.CivilizationType]=(choices[row.CivilizationType] or 0)+1 end; local houses=0; for _,count in pairs(choices) do if count~=3 then error('house has '..count..' oaths') end; houses=houses+1 end; if houses~=22 then error('oaths for '..houses..' houses') end; local old=0; for _ in GameInfo.CommemorationTypes() do old=old+1 end; if old~=0 then error('official commemorations remain') end; return 'Tenbun: 22 houses with 3 unique oaths, Oda has none before Koji, official choices removed'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 64,
+      "timeout": 7200
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn~=65 then error('fixture must run on turn 65, got '..turn) end; local l=Game:GetProperty('JAC_AGES_LEDGER'); if l.reign~=0 or not Players[0]:IsAlive() or Players[0]:GetCities():GetCount()==0 then error('Oda missing before first reign') end; l.houses.p0.score=1000; Game:SetProperty('JAC_AGES_LEDGER',l); return 'TEST FIXTURE: score 1000 for a guaranteed golden Oda at first reign; not a natural balance sample'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "end_turn",
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn~=66 or l.reign~=1 or l.history.r1.turn~=66 or l.houses.p0.age~='GOLDEN' then error('first Koji golden judgement failed') end; return 'Koji on turn 66, human Oda golden in the ledger'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuReignPopup",
+      "code": "if not ContextPtr:IsHidden() then OnClose() end; return 'reign popup closed to offer oaths'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if ContextPtr:IsHidden() then error('Oda oaths did not automatically open after closing reign popup') end; local expected={'JAC_OATH_ODA_TENKA_FUBU','JAC_OATH_ODA_TSUSHIMA','JAC_OATH_ODA_AZUCHI'}; local rows=JAC_GetOfferedOaths(); if #rows~=3 then error('rendered '..#rows..' choices, expected 3') end; for i,row in ipairs(rows) do if row.type~=expected[i] then error('foreign/missing choice '..tostring(row.type)) end; local data; for info in GameInfo.JAC_SengokuOaths() do if info.OathType==row.type then data=info end end; if data==nil then error('rendered oath lacks data') end; if row.name~=Locale.Lookup(data.Name) or row.description~=Locale.Lookup(data.GoldenDescription) then error('wrong rendered text for '..row.type) end; if row.name==data.Name then error('missing translation '..row.name) end end; if JAC_OATH_POPUP_LAST.allowed~=1 or JAC_OATH_POPUP_LAST.age~='GOLDEN' then error('wrong choice age/count') end; return 'exactly Oda 3 rendered rows: '..rows[1].name..', '..rows[2].name..', '..rows[3].name"
+    },
+    {
+      "action": "screenshot",
+      "path": "01-oda-oaths.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if not JAC_ChooseOath('JAC_OATH_ODA_TENKA_FUBU') then error('Tenka Fubu request not sent during active turn') end; return 'Tenka Fubu confirmed through the real UI selection and EXECUTE_SCRIPT path'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); return l~=nil and l.houses.p0.oathChosen==1 and l.houses.p0.oaths.JAC_OATH_ODA_TENKA_FUBU==true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; if not h or l.reign~=1 or h.age~='GOLDEN' or h.oathReign~=1 or h.oathChosen~=1 then error('wrong saved oath/reign/age') end; local selected=0; for k,v in pairs(h.oaths) do if v then selected=selected+1; if k~='JAC_OATH_ODA_TENKA_FUBU' then error('extra oath '..k) end end end; if selected~=1 then error('selected '..selected..' oaths') end; local marks={'r'..l.reign,h.age,'chosen'..h.oathChosen}; local cities={}; for _,city in Players[0]:GetCities():Members() do cities[#cities+1]=city end; table.sort(cities,function(a,b) return Map.GetPlot(a:GetX(),a:GetY()):GetIndex()<Map.GetPlot(b:GetX(),b:GetY()):GetIndex() end); if #cities==0 then error('Oda has no castles') end; local compared=0; local culture=GameInfo.Yields.YIELD_CULTURE.Index; for _,city in ipairs(cities) do local plot=Map.GetPlot(city:GetX(),city:GetY()); if plot:GetProperty('JAC_OATH_ODA_TENKA_FUBU_ON')~=1 or plot:GetProperty('JAC_OATH_ODA_TSUSHIMA_ON')~=0 or plot:GetProperty('JAC_OATH_ODA_AZUCHI_ON')~=0 then error('wrong oath flags on castle '..plot:GetIndex()) end; marks[#marks+1]=tostring(plot:GetIndex())..':1,0,0'; local on=city:GetYield(culture); plot:SetProperty('JAC_OATH_ODA_TENKA_FUBU_ON',0); local off=city:GetYield(culture); plot:SetProperty('JAC_OATH_ODA_TENKA_FUBU_ON',1); local back=city:GetYield(culture); if on>0 then if not (on>off and math.abs(back-on)<0.01) then error(string.format('Tenka culture modifier inactive: on %.3f off %.3f back %.3f',on,off,back)) end; compared=compared+1 end end; if compared==0 then error('no castle with culture to compare') end; local snapshot=table.concat(marks,'|'); Game:SetProperty('JAC_OATH_TEST_SNAPSHOT',snapshot); return 'Tenka Fubu culture modifier active by on/off comparison in '..compared..' castles; snapshot '..snapshot"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local eras=Game.GetEras(); if eras:HasGoldenAge(0) or eras:HasDarkAge(0) or eras:HasHeroicGoldenAge(0) then error('official age re-enabled') end; if eras:GetPlayerNumAllowedCommemorations(0)~=0 or #eras:GetPlayerCommemorateChoices(0)~=0 then error('official dedication choices re-enabled') end; return 'official ages and commemorations remain off'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-SengokuOaths-Oda",
+      "timeout": 180
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 180
+    },
+    {
+      "action": "load",
+      "name": "JAC-SengokuOaths-Oda",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; if not h or l.reign~=1 or h.age~='GOLDEN' or h.oathReign~=1 or h.oathChosen~=1 then error('wrong saved oath/reign/age') end; local selected=0; for k,v in pairs(h.oaths) do if v then selected=selected+1; if k~='JAC_OATH_ODA_TENKA_FUBU' then error('extra oath '..k) end end end; if selected~=1 then error('selected '..selected..' oaths') end; local marks={'r'..l.reign,h.age,'chosen'..h.oathChosen}; local cities={}; for _,city in Players[0]:GetCities():Members() do cities[#cities+1]=city end; table.sort(cities,function(a,b) return Map.GetPlot(a:GetX(),a:GetY()):GetIndex()<Map.GetPlot(b:GetX(),b:GetY()):GetIndex() end); if #cities==0 then error('Oda has no castles') end; local compared=0; local culture=GameInfo.Yields.YIELD_CULTURE.Index; for _,city in ipairs(cities) do local plot=Map.GetPlot(city:GetX(),city:GetY()); if plot:GetProperty('JAC_OATH_ODA_TENKA_FUBU_ON')~=1 or plot:GetProperty('JAC_OATH_ODA_TSUSHIMA_ON')~=0 or plot:GetProperty('JAC_OATH_ODA_AZUCHI_ON')~=0 then error('wrong oath flags on castle '..plot:GetIndex()) end; marks[#marks+1]=tostring(plot:GetIndex())..':1,0,0'; local on=city:GetYield(culture); plot:SetProperty('JAC_OATH_ODA_TENKA_FUBU_ON',0); local off=city:GetYield(culture); plot:SetProperty('JAC_OATH_ODA_TENKA_FUBU_ON',1); local back=city:GetYield(culture); if on>0 then if not (on>off and math.abs(back-on)<0.01) then error(string.format('Tenka culture modifier inactive: on %.3f off %.3f back %.3f',on,off,back)) end; compared=compared+1 end end; if compared==0 then error('no castle with culture to compare') end; local snapshot=table.concat(marks,'|'); if snapshot~=Game:GetProperty('JAC_OATH_TEST_SNAPSHOT') then error('oath state/flags changed across save/load') end; local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn~=66 then error('load advanced the turn to '..turn) end; return 'after load, before a turn start: identical oath state and flags; culture modifier still active in '..compared..' castles'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if JAC_ShowOaths(true) then error('already chosen oath offered again after load') end; if JAC_ChooseOath('JAC_OATH_ODA_TSUSHIMA') then error('rechoice accepted after load') end; return 'save/load does not reopen the completed choice'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 6,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; local l=Game:GetProperty('JAC_AGES_LEDGER'); if turn~=72 or l.reign~=1 then error('expiry fixture expected turn 72') end; l.houses.p0.score=-1000; Game:SetProperty('JAC_AGES_LEDGER',l); return 'TEST FIXTURE: guarantee dark at Eiroku to check expired strong effects'"
+    },
+    {
+      "action": "autoplay",
+      "turns": 1,
+      "timeout": 1800
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn~=73 or l.reign~=2 or l.houses.p0.age~='DARK' then error('not Eiroku dark on turn 73') end; local count=0; for _,city in Players[0]:GetCities():Members() do count=count+1; local plot=Map.GetPlot(city:GetX(),city:GetY()); if plot:GetProperty('JAC_OATH_ODA_TENKA_FUBU_ON')~=0 then error('old strong oath still active after reign') end end; if count==0 then error('no castle checked for expiry') end; return 'Eiroku on turn 73: previous golden Tenka Fubu modifier expired in all '..count..' castles'"
+    }
+  ]
+}

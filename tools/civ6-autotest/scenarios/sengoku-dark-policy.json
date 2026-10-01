@@ -195,6 +195,49 @@
     },
     {
       "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if ContextPtr:IsHidden() then error('oath did not automatically open after reign popup') end; OnClose(); return 'automatic oath popup verified and closed without choosing'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local me=Game.GetLocalPlayer(); local n; for _,id in pairs(NotificationManager.GetList(me) or {}) do local row=NotificationManager.Find(me,id); if row and row:GetValue('JAC_DARK_POLICY_REIGN')==1 and not row:IsDismissed() then n=row end end; if not n then error('missing reign notification') end; LuaEvents.ActionPanel_ActivateNotification(n); return 'reign notification activated while oath is pending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_SengokuDarkPolicy",
+      "code": "if not ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT~=0 then error('notification bypassed pending oath') end; if JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE') then error('policy accepted before oath') end; return 'policy remains deferred until oath is confirmed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "ActionPanel",
+      "code": "if not JAC_IsDarkPolicyEndTurnBlocked() or AllowAutoEndTurn_Expansion() then error('pending oath can end turn') end; local turn=Game.GetCurrentGameTurn(); DoEndTurn(); OnInputHandler({GetMessageType=function() return KeyEvents.KeyUp end,GetKey=function() return Keys.VK_RETURN end,IsShiftDown=function() return true end}); if Game.GetCurrentGameTurn()~=turn then error('pending oath ended turn') end; return 'button and Shift+Enter reopen oath without ending turn'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DedicationPopup",
+      "code": "if ContextPtr:IsHidden() then error('pending oath not reopened') end; if not JAC_ChooseOath('JAC_OATH_TAKEDA_TSUTSUJIGASAKI') then error('Takeda oath not sent') end; return 'Takeda oath confirmed through UI'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses['p'..Game.GetLocalPlayer()].oathChosen==l.reign"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_SengokuDarkPolicy",
+        "code": "return not ContextPtr:IsHidden() and JAC_DARK_POLICY_SHOW_COUNT==1"
+      }
+    },
+    {
+      "action": "ui_lua",
       "state_name": "JAC_SengokuDarkPolicy",
       "code": "if ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 1 then error('policy choice not automatically shown exactly once') end; OnClose(); LuaEvents.JAC_SengokuReignPopup_Closed(true); if not ContextPtr:IsHidden() or JAC_DARK_POLICY_SHOW_COUNT ~= 1 then error('automatic policy choice repeated') end; return 'policy choice shown once; closing keeps it closed'"
     },
