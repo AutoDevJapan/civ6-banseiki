@@ -1854,33 +1854,42 @@ class AbsorptionPackageTests(unittest.TestCase):
         end = next(step for step in steps if step["action"] == "end_turn")
         self.assertEqual(end["turns"], 1)
 
-    def test_control_missionary_wait_uses_ui_religion_api_and_rejects_stale_values(self):
-        data = json.loads((ROOT / "tools/civ6-autotest/scenarios/absorption-japan.json")
-                          .read_text(encoding="utf-8"))
-        conditions = [step["condition"]["code"] for step in data["steps"]
-                      if step["action"] == "wait_for"
-                      and "JAC_ABSORPTION_CONTROL_PRIEST_V1" in step["condition"]["code"]]
-        self.assertEqual(len(conditions), 1)
+    def test_control_missionary_publication_checks_charges_then_core_religion(self):
+        data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-japan.json')
+                          .read_text(encoding='utf-8'))
+        condition = next(s['condition']['code'] for s in data['steps']
+                         if s['action']=='wait_for' and 'JAC_ABSORPTION_CONTROL_PRIEST_V1' in s['condition']['code'])
+        check = next(s['code'] for s in data['steps']
+                     if s['action']=='ui_lua' and 'missionary core religion mismatch' in s.get('code',''))
         vm = LuaRuntime()
-        # UI has Unit:GetReligionType(), while core has Unit:GetReligion().
-        # Do not give this UI facade the core getter that hid the live failure.
         vm.execute('''
-          CONTROL={Owner=2,ID=19,Religion=5,SpreadCharges=3}
-          UI_RELIGION=5;UI_CHARGES=3;UI_VISIBLE=true
+          CONTROL={Owner=2,ID=19,Religion=5,SpreadCharges=3,Baseline={Transferred={ID=20}}}
+          CORE_RELIGION=5;UI_CHARGES=3;UI_VISIBLE=true
           Game={GetProperty=function() return CONTROL end}
-          local unit={GetID=function() return 19 end,GetReligionType=function() return UI_RELIGION end,
-            GetSpreadCharges=function() return UI_CHARGES end}
-          Players={[2]={GetUnits=function() return {FindID=function() error('UI lookup must enumerate IDs') end,
-            Members=function() local pending=UI_VISIBLE;return function() if pending then pending=false;return 1,unit end end end} end}}
+          local units={}
+          for id=19,20 do local n=id;units[#units+1]={GetID=function() return n end,
+            GetOwner=function() return 2 end,GetType=function() return 0 end,
+            GetReligionType=function() return -1 end,
+            GetSpreadCharges=function() return UI_CHARGES end,
+            GetReligion=function() return {GetReligionType=function() return CORE_RELIGION end} end} end
+          Players={[2]={GetUnits=function() return {Members=function()
+            return ipairs(UI_VISIBLE and units or {}) end} end}}
+          GameInfo={Units={[0]={UnitType='UNIT_MISSIONARY'}}}
+          ExposedMembers={JAC_Absorption={SnapshotUnit=function() return {SpreadCharges=UI_CHARGES} end}}
         ''')
-        self.assertTrue(vm.execute(conditions[0]))
-        vm.execute("UI_VISIBLE=false")
-        self.assertFalse(vm.execute(conditions[0]))
-        vm.execute("UI_VISIBLE=true;UI_RELIGION=4")
-        self.assertFalse(vm.execute(conditions[0]))
-        vm.execute("UI_RELIGION=5;UI_CHARGES=2")
-        self.assertFalse(vm.execute(conditions[0]))
-
+        self.assertTrue(vm.execute(condition))
+        self.assertIn('core religion and published charges match', vm.execute(check))
+        vm.execute('UI_VISIBLE=false')
+        self.assertFalse(vm.execute(condition))
+        with self.assertRaisesRegex(Exception, 'missionary absent in core'):
+            vm.execute(check)
+        vm.execute('UI_VISIBLE=true;UI_CHARGES=2')
+        self.assertFalse(vm.execute(condition))
+        with self.assertRaisesRegex(Exception, 'published charges mismatch'):
+            vm.execute(check)
+        vm.execute('UI_CHARGES=3;CORE_RELIGION=4')
+        with self.assertRaisesRegex(Exception, 'core religion mismatch'):
+            vm.execute(check)
 
     def test_recall_spawn_preparation_moves_only_blockers_and_preserves_them(self):
         data = json.loads((ROOT / 'tools/civ6-autotest/scenarios/absorption-hero-recall.json')

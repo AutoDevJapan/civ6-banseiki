@@ -777,13 +777,24 @@
       "capture_as": "JAC_ABSORPTION_SYNC_CONTROL_PRIEST"
     },
     {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1'));local u\nfor _,candidate in Players[e.Owner]:GetUnits():Members() do if candidate:GetID()==e.ID then u=candidate;break end end\nreturn 'control unit='..e.ID..' visible='..tostring(u~=nil)..' UI religion='..tostring(u and u:GetReligionType())..' UI charges='..tostring(u and u:GetSpreadCharges())..' expected core religion='..e.Religion..' expected charges='..e.SpreadCharges"
+    },
+    {
       "action": "wait_for",
       "timeout": 45,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local e=Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1');if not e then return false end\nlocal u\nfor _,candidate in Players[e.Owner]:GetUnits():Members() do if candidate:GetID()==e.ID then u=candidate;break end end\nlocal religion=u and u:GetReligionType();local charges=u and u:GetSpreadCharges()\nlocal actual='unit='..tostring(e.ID)..' visible='..tostring(u~=nil)..' religion='..tostring(religion)..' expected_religion='..tostring(e.Religion)..' charges='..tostring(charges)..' expected_charges='..tostring(e.SpreadCharges)\nif JAC_ABSORPTION_CONTROL_DIAG~=actual then print('[JAC_ABSORPTION_AUDIT] control publication '..actual);JAC_ABSORPTION_CONTROL_DIAG=actual end\nreturn u~=nil and religion==e.Religion and charges==e.SpreadCharges"
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1');if not e then return false end\nfor _,u in Players[e.Owner]:GetUnits():Members() do if u:GetID()==e.ID then return u:GetSpreadCharges()==e.SpreadCharges end end\nreturn false"
       }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_CONTROL_PRIEST_V1'))\nlocal control,source\nfor _,u in Players[e.Owner]:GetUnits():Members() do\n if u:GetID()==e.ID then control=u end\n if u:GetID()==e.Baseline.Transferred.ID then source=u end\nend\nfor label,u in pairs({control=assert(control,'control missionary absent in core'),transferred=assert(source,'transferred missionary absent in core')}) do\n assert(u:GetOwner()==e.Owner and GameInfo.Units[u:GetType()].UnitType=='UNIT_MISSIONARY','missionary owner/type mismatch: '..label)\n assert(u:GetReligion():GetReligionType()==e.Religion,'missionary core religion mismatch: '..label)\n assert(A.SnapshotUnit(u).SpreadCharges==e.SpreadCharges,'missionary published charges mismatch: '..label)\nend\nreturn 'control and transferred missionary core religion and published charges match'",
+      "capture_as": "JAC_ABSORPTION_SYNC_CONTROL_VERIFY"
     },
     {
       "action": "ui_lua",
