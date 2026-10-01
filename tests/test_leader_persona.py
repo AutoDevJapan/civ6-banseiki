@@ -52,9 +52,9 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
                             "'CALM','MUNDANE',NULL,0,'HEAD',1")
 
     def test_no_recruitment_or_retirement_effects(self):
-        self.assertEqual(self.db.execute("SELECT UnitType,AvailableInTimeline,PseudoYieldType FROM GreatPersonClasses "
+        self.assertEqual(self.db.execute("SELECT UnitType,AvailableInTimeline,GenerateDuplicateIndividuals,PseudoYieldType FROM GreatPersonClasses "
                                          "WHERE GreatPersonClassType='GREAT_PERSON_CLASS_JAC_PERSONA'").fetchone(),
-                         ("UNIT_JAC_PERSONA", 0, None))
+                         ("UNIT_JAC_PERSONA", 0, 1, "PSEUDOYIELD_GPP_GENERAL"))
         self.assertEqual(self.db.execute("SELECT GreatPersonClassType FROM GreatPersonClasses "
                                          "WHERE UnitType='UNIT_JAC_PERSONA'").fetchall(),
                          [("GREAT_PERSON_CLASS_JAC_PERSONA",)])

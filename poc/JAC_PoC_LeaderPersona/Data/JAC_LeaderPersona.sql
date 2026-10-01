@@ -86,10 +86,14 @@ SELECT 'UNIT_JAC_PERSONA', 'LOC_JAC_PERSONA_CLASS', Description, Cost, BaseMoves
        BaseSightRange, ZoneOfControl, Domain, FormationClass, CanCapture,
        CanRetreatWhenCaptured, CanTrain FROM Units WHERE UnitType='UNIT_GREAT_GENERAL';
 INSERT INTO TypeTags (Type, Tag) VALUES ('UNIT_JAC_PERSONA', 'CLASS_LANDCIVILIAN');
+-- Match the official hidden Comandante class defaults (GranColombia_Maya_GreatPeople.xml:24).
+-- Joining still enforces world uniqueness; this class never appears in recruitment.
 INSERT INTO GreatPersonClasses
-    (GreatPersonClassType, Name, UnitType, DistrictType, IconString, ActionIcon, AvailableInTimeline)
+    (GreatPersonClassType, Name, UnitType, DistrictType, IconString, ActionIcon, AvailableInTimeline,
+     GenerateDuplicateIndividuals, PseudoYieldType)
 VALUES ('GREAT_PERSON_CLASS_JAC_PERSONA', 'LOC_JAC_PERSONA_CLASS', 'UNIT_JAC_PERSONA',
-        'DISTRICT_CITY_CENTER', '[ICON_GreatGeneral]', 'ICON_UNITOPERATION_GENERAL_ACTION', 0);
+        'DISTRICT_CITY_CENTER', '[ICON_GreatGeneral]', 'ICON_UNITOPERATION_GENERAL_ACTION', 0,
+        1, 'PSEUDOYIELD_GPP_GENERAL');
 INSERT INTO GreatPersonIndividuals
     (GreatPersonIndividualType, Name, GreatPersonClassType, EraType, ActionCharges, Gender)
 SELECT PersonType, Name, 'GREAT_PERSON_CLASS_JAC_PERSONA', 'ERA_ANCIENT', 0, 'M' FROM JAC_LeaderPersonas;
