@@ -383,7 +383,7 @@ class ReligionPersistenceTests(unittest.TestCase):
                              "INSERT INTO GlobalParameters VALUES('DIPLOMACY_ALLIANCE_TIME_LIMIT',30);")
             db.executescript((MOD / action.findtext("File")).read_text(encoding="utf-8"))
             self.assertEqual(db.execute("SELECT Value FROM JAC_RP_Rules").fetchone()[0], 1)
-            self.assertEqual(db.execute("SELECT Value FROM GlobalParameters").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT Value FROM GlobalParameters").fetchone()[0], 30)
         self.assertEqual(next(r["Value"] for r in self.tables["Rules"] if r["ID"] == "REVIVAL_COOLDOWN_TURNS"), 10)
 
     def test_all_catalog_and_state_names_have_ja_en_ru_text(self):

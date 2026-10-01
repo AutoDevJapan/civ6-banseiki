@@ -59,7 +59,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "if GameConfiguration.GetValue('JAC_AUTOTEST')==1 then if tonumber(GameInfo.GlobalParameters.DIPLOMACY_ALLIANCE_TIME_LIMIT.Value)~=1 then error('test alliance deadline SQL not loaded') end; if not ExposedMembers.JAC_ReligionPersistence or ExposedMembers.JAC_ReligionPersistence.Rules().REVIVAL_COOLDOWN_TURNS~=1 then error('test revival deadline SQL not loaded') end end; if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode required') end; if not Game.GetHeroesManager() or not GameInfo.HeroClasses then error('official Heroes data did not load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_APPLIED','LOC_JAC_RP_PENDING'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
+      "code": "if GameConfiguration.GetValue('JAC_AUTOTEST')==1 then if not ExposedMembers.JAC_ReligionPersistence or ExposedMembers.JAC_ReligionPersistence.Rules().REVIVAL_COOLDOWN_TURNS~=1 then error('test revival deadline SQL not loaded') end end; if GameConfiguration.GetValue('GAMEMODE_HEROES')~=true and GameConfiguration.GetValue('GAMEMODE_HEROES')~=1 then error('official Heroes mode required') end; if not Game.GetHeroesManager() or not GameInfo.HeroClasses then error('official Heroes data did not load') end; if GameConfiguration.GetRuleSet()~='RULESET_JAC_BANSEIKI' then error('wrong ruleset') end; local n=0; for row in GameInfo.JAC_RP_Religions() do n=n+1; for _,tag in ipairs({row.Name,'LOC_JAC_RP_PUBLIC','LOC_JAC_RP_UNDERGROUND','LOC_JAC_RP_LOST','LOC_JAC_RP_SCRIPTURE','LOC_JAC_RP_REVIVE','LOC_JAC_RP_APPLIED','LOC_JAC_RP_PENDING'}) do local t=Locale.Lookup(tag); if t==tag or t=='' then error('missing localized text '..tag) end end end; if n~=20 then error('placeholder count '..n) end; return '20 placeholders and state text localized'"
     },
     {
       "action": "wait_for",
@@ -87,7 +87,16 @@
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); for _,name in ipairs({'BUILDING_MONUMENT','BUILDING_SHRINE'}) do local b=GameInfo.Buildings[name]; if not c:GetBuildings():HasBuilding(b.Index) then c:GetBuildQueue():CreateIncompleteBuilding(b.Index,100) end; if not c:GetBuildings():HasBuilding(b.Index) then error('faith fixture building missing '..name) end end; p:GetReligion():ChangeFaithBalance(100-p:GetReligion():GetFaithBalance()); local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_01'; R.Found(id,0,'origin',1,0,'PLAYER_0'); R.SetCommunity(id,'origin',0,0,'PLAYER_0'); R.Discover(id,'delay_hero','book','SCRIPTURE','ACTOR','TRAVELER','CAVE',0); return 'lost religion, monument and positive-faith fixture prepared'"
+      "code": "local p=Players[0]; local c=p:GetCities():GetCapitalCity(); local b=GameInfo.Buildings.BUILDING_MONUMENT; if not c:GetBuildings():HasBuilding(b.Index) then c:GetBuildQueue():CreateIncompleteBuilding(b.Index,100) end; if not c:GetBuildings():HasBuilding(b.Index) then error('official hero origin building missing') end; if not GameInfo.Modifiers.GOD_KING_FAITH then error('official capital faith modifier missing') end; p:AttachModifierByID('GOD_KING_FAITH'); p:GetReligion():ChangeFaithBalance(100-p:GetReligion():GetFaithBalance()); local R=ExposedMembers.JAC_ReligionPersistence; local id='JAC_RP_PLACEHOLDER_01'; R.Found(id,0,'origin',1,0,'PLAYER_0'); R.SetCommunity(id,'origin',0,0,'PLAYER_0'); R.Discover(id,'delay_hero','book','SCRIPTURE','ACTOR','TRAVELER','CAVE',0); return 'lost religion, monument and official capital faith modifier prepared'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "return Players[0]:GetReligion():GetFaithYield()>0"
+      }
     },
     {
       "action": "ui_lua",
