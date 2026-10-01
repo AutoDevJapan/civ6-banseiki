@@ -54,7 +54,15 @@ class LeaderPersonaDatabaseTests(unittest.TestCase):
     def test_no_recruitment_or_retirement_effects(self):
         self.assertEqual(self.db.execute("SELECT UnitType,AvailableInTimeline,PseudoYieldType FROM GreatPersonClasses "
                                          "WHERE GreatPersonClassType='GREAT_PERSON_CLASS_JAC_PERSONA'").fetchone(),
-                         ("UNIT_GREAT_GENERAL", 0, None))
+                         ("UNIT_JAC_PERSONA", 0, None))
+        self.assertEqual(self.db.execute("SELECT GreatPersonClassType FROM GreatPersonClasses "
+                                         "WHERE UnitType='UNIT_JAC_PERSONA'").fetchall(),
+                         [("GREAT_PERSON_CLASS_JAC_PERSONA",)])
+        self.assertEqual(self.db.execute("SELECT CanTrain,CanCapture,CanRetreatWhenCaptured FROM Units "
+                                         "WHERE UnitType='UNIT_JAC_PERSONA'").fetchone(), (0, 0, 1))
+        self.assertEqual(self.db.execute("SELECT GreatPersonClassType FROM GreatPersonClasses "
+                                         "WHERE UnitType='UNIT_GREAT_GENERAL'").fetchall(),
+                         [("GREAT_PERSON_CLASS_GENERAL",)])
         for table in ["GreatPersonIndividualActionModifiers", "GreatPersonIndividualBirthModifiers"]:
             self.assertEqual(self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE GreatPersonIndividualType IN "
                                              "(SELECT PersonType FROM JAC_LeaderPersonas)").fetchone()[0], 0)

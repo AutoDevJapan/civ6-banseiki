@@ -31,6 +31,12 @@ local function Active()
     return p and p:IsTurnActive();
 end
 
+function JAC_RequestLeaderJoin(source)
+    if not Active() then error("leader joining requires the local active turn"); end
+    UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT,
+                              { OnStart="JAC_LeaderPersonaJoin", Source=source });
+end
+
 function JAC_EvolveLeader(leader)
     if not Active() then error("leader evolution requires the local active turn"); end
     local row = GameInfo.JAC_LeaderPersonas[leader];

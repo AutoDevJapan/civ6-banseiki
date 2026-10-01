@@ -45,8 +45,8 @@ for i,n in ipairs(names) do
     GOVDEFS[i]={GovernorType=row.GovernorType, Index=i+20, Hash=1000+i, Name=row.Name}
     PROMOS[#PROMOS+1]={GovernorPromotionType=row.BasePromotionType, Index=i+30, Hash=2000+i}
 end
-GameInfo={ GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_GREAT_GENERAL"}},"GreatPersonClassType"),
-    Units=collection({{UnitType="UNIT_GREAT_GENERAL",Index=99}},"UnitType"), JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
+GameInfo={ GreatPersonClasses=collection({{GreatPersonClassType="GREAT_PERSON_CLASS_JAC_PERSONA",UnitType="UNIT_JAC_PERSONA"}},"GreatPersonClassType"),
+    Units=collection({{UnitType="UNIT_JAC_PERSONA",Index=99}},"UnitType"), JAC_LeaderPersonas=collection(ROWS,'LeaderType'),
     GreatPersonIndividuals=collection(INDIVIDUALS,'GreatPersonIndividualType'),
     Governors=collection(GOVDEFS,'GovernorType'), GovernorPromotions=collection(PROMOS,'GovernorPromotionType') }
 PlayerConfigurations, Players = {}, {}
@@ -748,10 +748,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.assertEqual(self.g.Players[1].alive, True)
 
     def test_synchronized_join_validates_source_and_replays_only_once(self):
-        self.lua.execute('''
-            UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,
-                {OnStart='JAC_LeaderPersonaJoin',Source=1})
-        ''')
+        self.g.JAC_RequestLeaderJoin(1)
         self.assertEqual(self.g.SPAWNS, 0)
         self.assertIsNone(self.prop("OWNER"))
         self.g.DRAIN()

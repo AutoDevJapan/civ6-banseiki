@@ -169,8 +169,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end;\n UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaJoin',Source=source});\nend; return 'three synchronized gameplay joins requested'"
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end;\n JAC_RequestLeaderJoin(source);\nend; return 'three synchronized gameplay joins requested'"
     },
     {
       "action": "wait_for",

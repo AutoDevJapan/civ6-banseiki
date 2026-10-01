@@ -334,3 +334,11 @@ python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json
 ```
 
 オーナーの判断待ちはない。前回の追加検証の許可依頼は閉じ、共有ToDo #150は継続作業として残す。
+
+## 次の担当による生成処理の比較
+
+leaderperson-08は先端3025765（mainの更新を統合済み）で実行した。独自人物の加入前に、公式GREAT_PERSON_CLASS_GENERALの個人Indexを選び、同じ首都座標へCreatePersonで生成する比較を追加した。9/107で30秒後も応答がなく、Lua.logの最後はofficial-create-beforeだった。独自人物の個人データだけが停止の条件とは断定できない。
+
+呼出し元はGameCore_Tuner。公式のBase/Assets/UI/Tuner/TunerMapPanel.lua:183-190もゲーム側の配置処理でCreatePersonを呼び、Debug/Map.ltp:564-579は個人のIndexを渡す。現行PoCの引数形式はこれに一致する。公式GreatPeople.xml:20-28では各クラスが別のユニット型を使うが、PoCは公式GENERALと同じUNIT_GREAT_GENERALへ別クラスを対応させている。この差と、AvailableInTimeline=false、PseudoYieldTypeなしの影響は未確定で、エンジン内部の根因として断定しない。
+
+次の比較では、加入要求をUIのEXECUTE_SCRIPTからゲームプレイスクリプトのJAC_LeaderPersonaJoinへ送る。これにより生成の実行コンテキストを変え、FireTunerからExposedMembers.Joinを直接呼ぶ方法との差を検査する。要求の前には人物を作らず、無効な発生元を拒否し、同じ要求の再送で重複しないことをLuaで検査した。実機の成功は結果が出てから記録する。
