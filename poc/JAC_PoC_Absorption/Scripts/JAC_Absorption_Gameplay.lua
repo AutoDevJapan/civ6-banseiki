@@ -86,6 +86,14 @@ A.CityReligion = Religion
 
 local function CityAssets(city)
   local result, buildings = {}, city:GetBuildings()
+  local districts = assert(city:GetDistricts(), "city district collection unavailable")
+  result.Districts = {}
+  for info in GameInfo.Districts() do
+    local x, y = districts:GetDistrictLocation(info.Index)
+    if x ~= nil and y ~= nil and x >= 0 and y >= 0 then
+      result.Districts[info.DistrictType] = { X = x, Y = y }
+    end
+  end
   for info in GameInfo.Buildings() do
     -- The engine controls capital palaces; historical belongings are separate roster/Great Work records.
     if info.BuildingType ~= "BUILDING_PALACE" and buildings:HasBuilding(info.Index) then
@@ -273,7 +281,23 @@ local function SourceSpreadReads(id, owner, turn, serial)
   return result
 end
 
+-- There is no verified setter for these counters. Reject their unit types
+-- before staging or deleting any source asset rather than silently reset them.
+local function AssertSupportedCharges(unit)
+  local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
+  for _, name in ipairs({ "ReligiousHealCharges", "DisasterCharges" }) do
+    assert((info[name] or 0) == 0, "unsupported unit charge counter: " .. name .. ":" .. info.UnitType)
+    local getter = unit["Get" .. name]
+    if getter then
+      local value = getter(unit)
+      assert(type(value) == "number" and value == 0,
+        "unsupported remaining unit charges: " .. name .. ":" .. info.UnitType)
+    end
+  end
+end
+
 local function SnapshotUnit(unit, publishedSpread)
+  AssertSupportedCharges(unit)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
   local hero = SnapshotHero(unit, info)
   local greatPerson = unit:GetGreatPerson()
@@ -709,6 +733,7 @@ end
 local function VerifyUnit(unit, snap, coreOnly)
   assert(unit and unit:GetOwner() == snap.Destination and GameInfo.Units[unit:GetType()].UnitType == snap.Type,
     "transferred unit missing/type/owner mismatch: " .. snap.Token)
+  AssertSupportedCharges(unit)
   assert(unit:GetX() >= 0 and unit:GetY() >= 0 and Map.GetPlot(unit:GetX(), unit:GetY()),
     "transferred unit is off-map: " .. snap.Token)
   assert(unit:GetProperty(R.TOKEN_KEY) == snap.Token, "unit token mismatch")
@@ -1011,6 +1036,12 @@ local function Verify(tx, state, exactUnits)
       local current = CityAssets(city)
       for buildingType, original in pairs(snap.Assets) do
         assert(current[buildingType], "transferred city building lost: " .. buildingType)
+        if buildingType == "Districts" then
+          for districtType, position in pairs(original) do
+            assert(R.Equal(current.Districts[districtType], position),
+              "transferred city district lost/moved: " .. districtType)
+          end
+        end
         for _, work in pairs(original.Works or {}) do
           if work and work >= 0 then assert(greatWorks[work], "transferred Great Work lost: " .. work) end
         end

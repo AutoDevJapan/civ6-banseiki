@@ -14,6 +14,8 @@ ENGINE = r'''
 local outcomes = ...
 local function rows(list) local i=0;return function() i=i+1;return list[i] end end
 GameInfo = {
+  Districts = function() return rows({{Index=0,DistrictType='DISTRICT_CITY_CENTER'},
+    {Index=1,DistrictType='DISTRICT_HOLY_SITE'}}) end,
   JAC_AbsorptionOutcomes = function() return rows(outcomes) end,
   UnitPromotions = function() return rows({{Index=7},{Index=9}}) end,
   Buildings = setmetatable({BUILDING_PALACE={Index=0,BuildingType='BUILDING_PALACE'}},
@@ -124,6 +126,10 @@ function CITY(owner,x,pop,faith)
       assert(building==1 and plot==self.x and progress==100,'building needs its city plot and construction progress')
       BUILDING_CREATIONS=(BUILDING_CREATIONS or 0)+1;self.monument=true
     end} end
+  city.districts={[0]={X=x,Y=0}}
+  city.GetDistricts=function() return {GetDistrictLocation=function(_,id)
+    local d=city.districts[id];if d then return d.X,d.Y end
+  end} end
   city.GetBuildings=function() return {
     HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
     GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007 end
@@ -1856,6 +1862,40 @@ class AbsorptionTests(unittest.TestCase):
             self.a.Resume("test-absorption")
         self.assertEqual(self.a.GetRoster(1).new.Owner, 1)
         self.assertEqual((self.g.KILLS, self.g.TRANSFERS), (0, 0))
+
+    def test_unsupported_charge_types_stop_before_source_assets_are_changed(self):
+        for counter in ('ReligiousHealCharges', 'DisasterCharges'):
+            with self.subTest(counter=counter):
+                self.g.UNSUPPORTED_COUNTER = counter
+                self.run_lua('GameInfo.Units.UNIT_MISSIONARY[UNSUPPORTED_COUNTER]=3')
+                with self.assertRaisesRegex(Exception, 'unsupported unit charge counter: '+counter):
+                    self.apply()
+                self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+                self.assertEqual(self.g.Players[1].units[10].owner, 1)
+                self.run_lua('GameInfo.Units.UNIT_MISSIONARY[UNSUPPORTED_COUNTER]=nil')
+
+    def test_runtime_special_charge_without_definition_is_also_rejected(self):
+        self.run_lua('Players[1].units[10].GetDisasterCharges=function() return 1 end')
+        with self.assertRaisesRegex(Exception, 'unsupported remaining unit charges: DisasterCharges'):
+            self.apply()
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.assertEqual(self.g.Players[1].units[10].owner, 1)
+
+    def test_city_district_loss_is_detected_with_buildings_and_territory_intact(self):
+        self.run_lua('CITIES[4].districts[1]={X=5,Y=0}')
+        self.apply()
+        self.assertTrue(self.verify('test-absorption', True))
+        self.run_lua('CITIES[4].districts[1]=nil')
+        with self.assertRaisesRegex(Exception, 'city buildings/Great Works changed'):
+            self.verify('test-absorption', True)
+        with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE'):
+            self.verify('test-absorption', False)
+        self.run_lua('CITIES[4].districts[1]={X=6,Y=0}')
+        with self.assertRaisesRegex(Exception, 'transferred city district lost/moved: DISTRICT_HOLY_SITE'):
+            self.verify('test-absorption', False)
+        self.run_lua('CITIES[4].districts[1]={X=5,Y=0}')
+        self.load_scripts()
+        self.assertTrue(self.verify('test-absorption', True))
 
     def test_palace_work_loss_is_detected_even_when_the_palace_building_is_exempt(self):
         self.run_lua('''
