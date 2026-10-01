@@ -71,6 +71,9 @@ end
 local function AddRow(text)
 	local row = m_rows:GetInstance()
 	row.Text:SetText(text)
+	-- 長い勅命の参加者一覧や翻訳も、隣の行へはみ出さずスクロールできる高さにする。
+	-- 公式：DiplomacyActionView.lua の SelectionText:GetSizeY() による行の高さ計算。
+	row.Root:SetSizeY(math.max(34, row.Text:GetSizeY() + 12))
 	row.Action2:SetHide(true)
 	row.Action:SetHide(false)
 	row.Action:SetDisabled(false)
@@ -154,3 +157,7 @@ Events.DiplomacyDeclareWar.Add(Refresh)
 Events.DiplomacyMakePeace.Add(Refresh)
 Events.LoadScreenClose.Add(Refresh)
 Events.NotificationAdded.Add(Refresh) -- 請求の通知が届いたら応否の行を出す
+
+-- Base/Assets/UI/InGame.lua の Initialize は追加 UI の親を非表示で作る。
+-- 常設の入口ボタンを表示し、パネルの開閉だけを子の Hidden で管理する。
+ContextPtr:SetHide(false)
