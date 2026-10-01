@@ -636,53 +636,55 @@ class LeaderPersonaLuaTests(unittest.TestCase):
 
     def test_eligible_alliance_formation_pays_eight_once_across_update_reload_and_renewal(self):
         self.settled()
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)  # relation has not formed
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)  # relation has not formed
         self.assertIsNone(self.prop("ALLY_SEEN_2"))
         self.g.Players[0].allies[2] = True
         self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.assertEqual(self.prop("MERIT"), 0)  # script GameEvents is not the engine callback
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual((self.prop("MERIT"), self.prop("ALLY_SEEN_2")), (8, 1))
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 2, 0)  # update/duplicate
+        self.g.FIREUI("DiplomacyRelationshipChanged", 2, 0)  # update/duplicate
         self.assertEqual(self.prop("MERIT"), 8)
         self.g.RESET_CONTEXTS(); self.load_contexts()
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.g.FIRE("PlayerTurnStarted", 0)
         self.assertEqual(self.prop("MERIT"), 10)
         self.g.Players[0].allies[2] = False
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.g.Players[0].allies[2] = True
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual(self.prop("MERIT"), 10)
         self.assertIsNone(self.g.Game.GetProperty(None, "JAC_PERSONA_PENDING_DEEDS"))
 
     def test_preexisting_alliance_does_not_pay_on_relationship_updates(self):
         self.g.Players[0].allies[1] = True
         self.settled()  # evolution baselines the existing alliance
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 1)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 1)
         self.assertEqual(self.prop("MERIT"), 0)
         self.g.Players[0].allies[2] = True
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual(self.prop("MERIT"), 8)
         self.assertEqual(self.prop("ALLY_SEEN_2"), 1)
         self.g.TURN = 2
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 1)
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 1)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual(self.prop("MERIT"), 8)
 
     def test_alliance_cap_records_two_new_partners_without_next_turn_payment(self):
         self.settled()
         self.g.Players[0].allies[1] = True
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 1)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 1)
         self.g.Players[0].allies[2] = True
-        self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual((self.prop("MERIT"), self.prop("ALLY_SEEN_1"), self.prop("ALLY_SEEN_2")),
                          (8, 1, 1))
-        self.g.TURN = 2; self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+        self.g.TURN = 2; self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
         self.assertEqual(self.prop("MERIT"), 8)
 
     def test_absent_gamecore_alliance_event_keeps_turn_scan_unproven(self):
         self.settled()
         self.g.RESET_CONTEXTS()
-        self.g.GameEvents.OnDiplomacyRelationshipChanged = False
+        self.g.Events.DiplomacyRelationshipChanged = False
         self.load_contexts()  # registration must not crash when the engine has no such event
         self.g.Players[0].allies[2] = True
         self.g.FIRE("PlayerTurnStarted", 0)
@@ -772,7 +774,7 @@ class LeaderPersonaLuaTests(unittest.TestCase):
                 elif change == "establishment": governor.established = False
                 else: governor.neutralized = 2
                 self.g.Players[0].allies[2] = True
-                self.g.FIRE("OnDiplomacyRelationshipChanged", 0, 2)
+                self.g.FIREUI("DiplomacyRelationshipChanged", 0, 2)
                 governor.city = self.g.CITIES[0][1]
                 governor.established, governor.neutralized = True, 0
                 self.g.RESET_CONTEXTS(); self.load_contexts()

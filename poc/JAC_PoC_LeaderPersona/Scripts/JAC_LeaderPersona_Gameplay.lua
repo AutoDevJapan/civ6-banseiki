@@ -461,9 +461,10 @@ GameEvents.OnGameTurnStarted.Add(SyncEffects);
 GameEvents.PlayerTurnStarted.Add(OnPlayerTurnStarted);
 GameEvents.BuildingConstructed.Add(OnBuildingConstructed);
 GameEvents.OnCombatOccurred.Add(OnCombatOccurred);
--- GameCore availability and callback timing require a live Civ6 probe.
-if GameEvents.OnDiplomacyRelationshipChanged then
-    GameEvents.OnDiplomacyRelationshipChanged.Add(OnDiplomacyRelationshipChanged);
+-- leaderperson-21 observed this native Events callback in GameCore after SetHasAllied.
+-- GameEvents.OnDiplomacyRelationshipChanged did not fire in the same probe.
+if Events.DiplomacyRelationshipChanged then
+    Events.DiplomacyRelationshipChanged.Add(OnDiplomacyRelationshipChanged);
 end
 GameEvents.CityBuilt.Add(SyncEffects); -- AustraliaScenario.lua:1465.
 GameEvents.CityConquered.Add(SyncEffects); -- AlexanderScenario.lua:248.
