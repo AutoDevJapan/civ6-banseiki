@@ -155,20 +155,6 @@ Controls.PersonaToggle:RegisterCallback(Mouse.eLClick, function()
 end);
 Controls.Governors:RegisterCallback(Mouse.eLClick, function() LuaEvents.GovernorPanel_Open(); end);
 Controls.PersonaToggle:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_KEYBOARD_OPEN"));
--- Readiness is a synchronized gameplay operation; no client supplies native state.
-local m_PendingRequestTurn;
-local function RetryPending()
-    local pending = Game:GetProperty("JAC_PERSONA_PENDING_DEEDS");
-    local turn = Game.GetCurrentGameTurn();
-    if Active() and type(pending) == "table" and next(pending) and m_PendingRequestTurn ~= turn then
-        m_PendingRequestTurn = turn;
-        UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart="JAC_LeaderPersonaNativeReady"});
-    end
-end
-Events.LoadScreenClose.Add(RetryPending);
-Events.GameCoreEventPublishComplete.Add(RetryPending);
-Events.LocalPlayerTurnBegin.Add(RetryPending);
 Events.GameCoreEventPublishComplete.Add(Update);
 Events.GovernorChanged.Add(Update);
 Events.LocalPlayerTurnBegin.Add(Update);

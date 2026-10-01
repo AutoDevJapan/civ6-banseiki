@@ -263,8 +263,19 @@ local function Defer(row, deed, identity, cityID, x, y)
             deed=deed, identity=identity, turn=Game.GetCurrentGameTurn(), cityID=cityID, x=x, y=y,
             eligibilityUnknown=true};
         Game:SetProperty(PENDING, pending);
+        -- The missing event-time state cannot be recovered by a later UI read.
+        Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
     end
 end
+-- Saves made before the history flag was written may already contain unknown
+-- events. Mark them on load without asking the UI to reinterpret their state.
+local function MarkPendingHistory()
+    local pending = Game:GetProperty(PENDING);
+    if type(pending) == "table" and next(pending) and Game:GetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY") ~= 1 then
+        Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
+    end
+end
+MarkPendingHistory();
 local function HandleDeed(row, deed, identity, cityID, x, y)
     local owner = Get(row.LeaderType, "OWNER");
     if Get(row.LeaderType, "STATE") ~= "GOVERNOR" or not Player(owner, true) then return; end
@@ -275,26 +286,6 @@ local function HandleDeed(row, deed, identity, cityID, x, y)
     if deed == "VICTORY" and Map.GetPlotDistance(city:GetX(), city:GetY(), x, y) > Parameter("VICTORY_RADIUS") then return; end
     Award(row, deed, identity);
 end
-local function FlushPending()
-    local pending = Game:GetProperty(PENDING) or {};
-    local keys = {}; for key in pairs(pending) do keys[#keys+1] = key; end
-    table.sort(keys, function(a,b)
-        local first, second = pending[a].sequence or 0, pending[b].sequence or 0;
-        if first ~= second then return first < second; end
-        return a < b;
-    end);
-    for _,key in ipairs(keys) do
-        local event = pending[key];
-        local row = Definition(event.leader);
-        if row and Get(event.leader, "OWNER") == event.owner and NativeGovernor(event.owner, row) then
-            -- Same-turn assignment, establishment and neutralization may change
-            -- while the reader is unavailable too. Preserve the original event;
-            -- do not pay, buy AI skills or consume it from a later UI snapshot.
-            Game:SetProperty("JAC_PERSONA_PENDING_NATIVE_HISTORY", 1);
-        end
-    end
-end
-
 local function MajorIDs()
     local ids = PlayerManager.GetAliveMajorIDs(); -- BlackDeathScenario.lua:461.
     table.sort(ids);
@@ -307,6 +298,21 @@ SnapshotAlliances = function(owner, leader)
         if other ~= owner and diplomacy:HasAllied(other) then Set(leader, "ALLY_SEEN_" .. other, 1); end
     end
     Set(leader, "ALLIANCES_BASELINED", 1);
+end
+
+-- HasAllied reports the present relationship, not when it began. A turn scan
+-- cannot prove the governor's state at formation, even if a UI reader works
+-- now. Persist the first observation once; never pay it from a later state.
+local function ObserveAlliances(owner, row)
+    local leader = row.LeaderType;
+    if not Get(leader, "ALLIANCES_BASELINED") then SnapshotAlliances(owner, leader); end
+    local diplomacy = Players[owner]:GetDiplomacy();
+    for _,other in ipairs(MajorIDs()) do
+        if other ~= owner and diplomacy:HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
+            Set(leader, "ALLY_SEEN_" .. other, 1);
+            Defer(row, "ALLIANCE", tostring(other));
+        end
+    end
 end
 
 local function ChooseAI(owner, row)
@@ -344,34 +350,20 @@ OnPlayerTurnStarted = function(owner)
         local leader = row.LeaderType;
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
             local pending = Game:GetProperty(PENDING) or {};
-            if not NativeGovernor(owner, row) or pending[leader .. "_TURN_" .. tostring(turn)] then
+            local city, ready = SettledCity(owner, row);
+            if not ready or pending[leader .. "_TURN_" .. tostring(turn)] then
                 Defer(row, "TURN", tostring(turn));
-                -- Diplomacy is readable in gameplay. Remember partners first
-                -- seen during this uncertainty, so a later turn cannot pay for
-                -- their earlier alliance using its new assignment state.
-                for _,other in ipairs(MajorIDs()) do
-                    if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
-                        Defer(row, "ALLIANCE", tostring(other));
-                    end
-                end
             else
-                SnapshotAlliances(owner, leader);
-                local settled = SettledCity(owner, row);
-                if settled and Get(leader, "GOVERN_LAST_TURN") ~= turn then
+                if city and Get(leader, "GOVERN_LAST_TURN") ~= turn then
                     Set(leader, "GOVERN_LAST_TURN", turn);
                     Award(row, "GOVERN_TURN", tostring(turn));
                 end
-                for _,other in ipairs(MajorIDs()) do
-                    if other ~= owner and p:GetDiplomacy():HasAllied(other) and not Get(leader, "ALLY_SEEN_" .. other) then
-                        -- Count each partner once ever; renewal and save/load cannot farm merit.
-                        Set(leader, "ALLY_SEEN_" .. other, 1);
-                        if settled then Award(row, "ALLIANCE", tostring(other)); end
-                    end
-                end
-                if not p:IsHuman() and Get(leader, "AI_LAST_TURN") ~= turn then
-                    Set(leader, "AI_LAST_TURN", turn);
-                    ChooseAI(owner, row);
-                end
+            end
+            ObserveAlliances(owner, row);
+            -- AI spends only the committed gameplay state and saved merit.
+            if not p:IsHuman() and Get(leader, "AI_LAST_TURN") ~= turn then
+                Set(leader, "AI_LAST_TURN", turn);
+                ChooseAI(owner, row);
             end
         end
     end
@@ -419,9 +411,6 @@ GameEvents.JAC_LeaderPersonaEvolve.Add(function(owner, params)
 end);
 GameEvents.JAC_LeaderPersonaFinalize.Add(function(owner, params)
     CompleteEvolution(owner, type(params) == "table" and params.Leader or nil);
-end);
-GameEvents.JAC_LeaderPersonaNativeReady.Add(function(owner)
-    if Player(owner, true) then Reconcile(); FlushPending(); end
 end);
 GameEvents.OnGameTurnStarted.Add(Reconcile);
 GameEvents.OnGameTurnStarted.Add(SyncEffects);

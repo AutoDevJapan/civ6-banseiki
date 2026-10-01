@@ -52,10 +52,9 @@ function Rules.Status(owner, leader, nodeType)
     if not person or Rules.Get(leader, "OWNER") ~= owner then return "NOT_OWNED"; end
     local node = type(nodeType) == "string" and GameInfo.JAC_PersonaTreeNodes[nodeType];
     if not node or node.LeaderType ~= leader then return "INVALID_NODE"; end
-    local p = Players[owner];
-    local native = Rules.NativeGovernor(owner, leader);
-    if not p or Rules.Get(leader, "STATE") ~= "GOVERNOR" or
-       not native or not native.appointed or not native.base then return "NOT_GOVERNOR"; end
+    -- Gameplay commits GOVERNOR only after it has verified native appointment and
+    -- the base promotion. A purchase must not depend on a local UI reader later.
+    if not Players[owner] or Rules.Get(leader, "STATE") ~= "GOVERNOR" then return "NOT_GOVERNOR"; end
     if Rules.Owned(node) then return "OWNED"; end
     local category = Rules.Get(leader, "CATEGORY");
     if category and category ~= node.CategoryType then return "CATEGORY_LOCKED"; end
