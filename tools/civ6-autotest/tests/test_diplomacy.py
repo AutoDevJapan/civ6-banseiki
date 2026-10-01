@@ -65,6 +65,41 @@ class FakeGame:
 
 
 class DiplomacyDuringAutoplayTests(unittest.TestCase):
+    def test_statement_after_final_turn_retries_only_idempotent_handler_cleanup(self):
+        class CleanupGame(FakeGame):
+            cleanup_calls = 0
+            def lua(self, state, code, _timeout=5.0):
+                if state == 'InGame' and code.startswith('if JAC_AUTOTEST_AUTO_HANDLER then'):
+                    self.cleanup_calls += 1
+                    if self.cleanup_calls == 1:
+                        self.visible['DiplomacyActionView'] = True
+                        raise LuaResponseUnknown('cleanup acknowledgment lost after final turn')
+                return super().lua(state, code, _timeout)
+        game = CleanupGame(set())
+        detail, steps = self.run_autoplay(game, 2)
+        self.assertEqual(game.turn, 3)
+        self.assertEqual(game.cleanup_calls, 2)
+        self.assertEqual(self.sent(game, 'InGame', 'SetActive(true)'), 1)
+        self.assertClosed(game, ['DiplomacyActionView'])
+        self.assertIn('autoplay completed 2 turns (1->3', detail)
+        self.assertIn('closed AI diplomacy statement after an InGame timeout', steps)
+
+    def test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump(self):
+        game = FakeGame(set())
+        game.turn = 63
+        original_lua = game.lua
+        def lua(state, code, timeout=5.0):
+            if state == 'GameCore_Tuner':
+                self.assertEqual(code, 'return Game.GetCurrentGameTurn()')
+                return '63'
+            value = original_lua(state, code, timeout)
+            return '1|0' if 'return tostring(startTurn)' in code else value
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({'test_mode': {'skipped_turns': 62}}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, '_states', side_effect=game.states), patch.object(runner, '_lua', side_effect=lua), patch('scenario.time.sleep'):
+                detail = runner._autoplay(2, 30)
+        self.assertIn('autoplay completed 2 turns (63->65', detail)
+
     def run_autoplay(self, game, turns):
         clock = [0.0]
 
@@ -130,6 +165,22 @@ class DiplomacyDuringAutoplayTests(unittest.TestCase):
         self.assertClosed(game, ["JAC_SengokuDarkPolicy"])
         self.assertGreater(self.sent(game, "JAC_SengokuDarkPolicy", "OnClose()"), 0)
         self.assertIn("closed dark-age policy choice", steps)
+
+    def test_oath_choice_is_closed_after_reign_without_selecting_official_dedications(self):
+        class OathGame(FakeGame):
+            def lua(self, state, code, _timeout=5.0):
+                result = super().lua(state, code, _timeout)
+                if state == 'JAC_SengokuReignPopup' and result == 'true':
+                    self.visible['DedicationPopup'] = True
+                return result
+        game = OathGame(set())
+        game.visible['JAC_SengokuReignPopup'] = True
+        game.visible['DedicationPopup'] = False
+        detail,steps = self.run_autoplay(game,2)
+        self.assertIn('(1->3',detail)
+        self.assertClosed(game,['JAC_SengokuReignPopup','DedicationPopup'])
+        self.assertIn('closed era-name change screen, house oath choice',steps)
+        self.assertGreater(self.sent(game,'DedicationPopup','OnClose()'),0)
 
     def test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens(self):
         class ReignGame(FakeGame):

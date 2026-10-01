@@ -31,7 +31,10 @@ class MeasurementTests(unittest.TestCase):
                                  SetReturnAsPlayer=function() end,SetObserveAsPlayer=function() end,
                                  SetActive=function() end}
             """)
+            research_turns = iter((1, 95, 96, 97))
             def run_lua(state, code, timeout=5):
+                if "local rows = {}" in code:
+                    return f"{next(research_turns)}|0~LEADER_A~true~0~0~~~~"
                 value = lua.execute(code)
                 return str(value).lower() if isinstance(value, bool) else str(value)
             statuses = iter((AutoplayStatus(1, True, False, 2, -1),
@@ -44,9 +47,13 @@ class MeasurementTests(unittest.TestCase):
                     patch("scenario.single_civ_process", return_value=(123, 0)), \
                     patch("scenario.process_memory", return_value={"working_set_bytes": 80, "private_bytes": 100}), \
                     patch("scenario.time.sleep"):
-                detail = runner._autoplay(2, 10, record_metrics=True, start_turn_override=95)
+                detail = runner._autoplay(2, 10, record_metrics=True, research_metrics=True,
+                                          start_turn_override=95)
             self.assertIn("95->97", detail)
             self.assertEqual([r["turn"] for r in runner.turn_metrics[0]["recorder"].rows], [95, 96, 97])
+            research_rows = [json.loads(line) for line in (base / "autoplay-research-1.jsonl").read_text(
+                encoding="utf-8").splitlines()]
+            self.assertEqual([row["turn"] for row in research_rows], [95, 96, 97])
 
     def test_fast_forward_csv_files_warn_against_continuous_performance_comparison(self):
         with tempfile.TemporaryDirectory() as folder:
