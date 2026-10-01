@@ -481,6 +481,11 @@ class AbsorptionTests(unittest.TestCase):
         self.split_unit_contexts()
         tx = self.apply()
         self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertTrue(tx.AwaitingPreparation)
+        self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.run_lua("UI_PUBLISH()")
+        tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "WAITING_UI")
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (6, 0, 0))
         self.run_lua("""local tx=ExposedMembers.JAC_Absorption.GetState().Transactions['test-absorption']
           for _,snap in ipairs(tx.Units) do
@@ -511,6 +516,8 @@ class AbsorptionTests(unittest.TestCase):
         self.run_lua("Players[1].units[10].spread=1")  # A spent missionary charge has no setter.
         self.split_unit_contexts()
         self.assertEqual(self.apply().Status, "WAITING_UI")
+        self.run_lua("UI_PUBLISH()")
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
         self.run_lua("""local u=ExposedMembers.JAC_Absorption.FindUnit(2,'test-absorption:unit:10')
           MISSIONARY_CANDIDATE=u:GetID();assert(u.spread==3)""")
         for _ in range(16):
@@ -540,12 +547,43 @@ class AbsorptionTests(unittest.TestCase):
         self.assertEqual(tx.Status, "WAITING_UI")
         self.assertTrue(tx.AwaitingPreparation)
         self.assertEqual((self.g.SPAWNS, self.g.KILLS, self.g.TRANSFERS), (0, 0, 0))
+        self.run_lua("""local s=Game:GetProperty('JAC_ABSORPTION_STATE_V1')
+          s.Transactions['test-absorption'].SourceSpreadReads=nil;Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)""")
         self.load_scripts()
         self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
         self.run_lua("UI_SYNC()")
         self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.run_lua("PUBLISH_HERO_UI()")
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
         self.assertEqual(self.g.SPAWNS, 6)
         self.assertEqual(self.finish_spread_publications().Status, "COMPLETE")
+
+    def test_same_turn_spent_spread_is_published_before_snapshot_and_never_restored_as_unused(self):
+        self.split_unit_contexts()
+        self.run_lua("Players[1].units[10].spread=1")  # UI still shows three in the same turn.
+        tx = self.apply()
+        self.assertTrue(tx.AwaitingPreparation)
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.load_scripts()
+        self.assertEqual(self.a.Resume("test-absorption").Status, "WAITING_UI")
+        self.assertEqual(self.g.SPAWNS, 0)
+        self.run_lua("UI_PUBLISH()")
+        tx = self.a.Resume("test-absorption")
+        self.assertEqual(tx.Status, "WAITING_UI")
+        self.assertEqual(next(s.SpreadCharges for _, s in tx.Units.items() if s.ID == 10), 1)
+        for _ in range(20):
+            self.run_lua("UI_PUBLISH()")
+            try:
+                tx = self.a.Resume("test-absorption")
+            except Exception as exc:
+                self.assertIn("spent spread charges", str(exc))
+                break
+        else:
+            self.fail("spent donor was incorrectly accepted as unused")
+        self.assertEqual(self.a.GetState().Transactions["test-absorption"].Status, "BLOCKED")
+        self.assertEqual((self.g.KILLS, self.g.TRANSFERS), (0, 0))
+        self.assertEqual(self.g.Players[1].units[10].spread, 1)
 
     def test_native_hero_ui_only_spread_wait_never_becomes_suicide(self):
         self.add_native_hero()

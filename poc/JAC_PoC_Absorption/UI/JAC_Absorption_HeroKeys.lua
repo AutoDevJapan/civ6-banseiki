@@ -69,6 +69,11 @@ local function ObservePendingHeroes()
   local api = ExposedMembers.JAC_Absorption
   local state = api and api.GetState() or Game:GetProperty("JAC_ABSORPTION_STATE_V1")
   for _, tx in pairs(state and state.Transactions or {}) do
+    if tx.AwaitingPreparation then
+      for _, read in pairs(tx.SourceSpreadReads or {}) do
+        reads.ObserveUnit(read.Token, read.Owner, read.ID, read.Turn)
+      end
+    end
     if tx.AwaitingFinalUI then reads.MarkPublished(tx.ID .. ":final") end
     for _, snap in ipairs(tx.Units or {}) do
       local intent = snap.HeroSpawnIntent

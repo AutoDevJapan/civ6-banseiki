@@ -242,7 +242,19 @@ local function SpreadCharges(unit)
   return charges
 end
 
-local function SnapshotUnit(unit)
+local function SourceSpreadReads(id, owner, turn)
+  local result = {}
+  for _, unit in ipairs(Units(owner)) do
+    if not unit.GetSpreadCharges then
+      local unitID = unit:GetID()
+      result[unitID] = { Token = id .. ":source-spread:" .. unitID, Owner = owner,
+        ID = unitID, Turn = turn, AwaitingUI = true }
+    end
+  end
+  return result
+end
+
+local function SnapshotUnit(unit, publishedSpread)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
   local hero = SnapshotHero(unit, info)
   local greatPerson = unit:GetGreatPerson()
@@ -263,7 +275,7 @@ local function SnapshotUnit(unit)
     Individual = individual, Hero = hero, Damage = unit:GetDamage(), Moves = unit:GetMovesRemaining(),
     GreatPersonCharges = greatPerson and greatPerson.GetActionCharges and greatPerson:GetActionCharges() or nil,
     XP = experience and experience:GetExperiencePoints() or nil, Promotions = promotions, Formation = unit:GetMilitaryFormation(),
-    BuildCharges = unit:GetBuildCharges(), SpreadCharges = SpreadCharges(unit), Religion = religion,
+    BuildCharges = unit:GetBuildCharges(), SpreadCharges = publishedSpread ~= nil and publishedSpread or SpreadCharges(unit), Religion = religion,
     Properties = Properties(unit, unitKeys), PropertyKeys = R.Copy(unitKeys), RebindKeys = RebindKeys(unitRebinders),
     Name = unit:GetName(),
   }
@@ -350,7 +362,7 @@ local function DormantHero(manager, def, owner)
   return hero
 end
 
-local function Prepare(plan, state)
+local function Prepare(plan, state, sourceReads)
   assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "", "transaction ID required")
   assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To, "distinct factions required")
   local source, target = Players[plan.From], Players[plan.To]
@@ -372,7 +384,15 @@ local function Prepare(plan, state)
   local generatedDecisions, heroOrigins, dormant = {}, {}, {}
   tx.OriginalSourceRoster = R.Copy(tx.SourceRoster)
   for _, unit in ipairs(Units(plan.From)) do
-    local snap = SnapshotUnit(unit)
+    local publishedSpread
+    if not unit.GetSpreadCharges then
+      local request = sourceReads and sourceReads[unit:GetID()]
+      local reads = ExposedMembers.JAC_HeroReadAPI
+      if request and reads and reads.GetUnitObservation then publishedSpread = reads.GetUnitObservation(request.Token) end
+      if publishedSpread == nil then error("JAC_ABSORPTION_WAITING_UI", 0) end
+      assert(type(publishedSpread) == "number", "published donor spread charges must be a number")
+    end
+    local snap = SnapshotUnit(unit, publishedSpread)
     local decision = Decision((plan.Units or {})[R.UnitKey(plan.From, snap.ID)])
     snap.Outcome = decision.Outcome
     snap.Destination = DestinationOwner(snap.Kind, snap.Outcome, decision, tx)
@@ -1216,9 +1236,14 @@ function A.Resume(id)
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
   assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
   if tx.AwaitingPreparation then
+    if not tx.SourceSpreadReads then
+      tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn)
+      Save(state)
+      return R.Copy(tx)
+    end
     -- Preparation has no mutations. Retry its donor snapshot after the UI reaches this turn.
     state.Transactions[id] = nil
-    local ready, prepared = pcall(Prepare, tx.Request, state)
+    local ready, prepared = pcall(Prepare, tx.Request, state, tx.SourceSpreadReads)
     state.Transactions[id] = tx
     if not ready then
       if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" then return R.Copy(tx) end
@@ -1257,6 +1282,7 @@ function A.Apply(plan)
     if tostring(tx) ~= "JAC_ABSORPTION_WAITING_UI" then error(tx) end
     tx = { ID = plan.ID, From = plan.From, To = plan.To, Turn = Game.GetCurrentGameTurn(),
       Request = R.Copy(plan), Status = "WAITING_UI", AwaitingPreparation = true, Units = {}, Adapters = {} }
+    tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn)
     state.Transactions[plan.ID] = tx
     Save(state)
     return R.Copy(tx)
