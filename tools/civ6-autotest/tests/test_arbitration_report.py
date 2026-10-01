@@ -121,6 +121,13 @@ class ArbitrationReportTests(unittest.TestCase):
         self.assertEqual(generated, actual)
         self.assertEqual(len([s for s in actual["steps"] if s["action"] == "save"]), 5)
         self.assertEqual(len([s for s in actual["steps"] if s["action"] == "load"]), 5)
+        in_menu = True
+        for step in actual["steps"]:
+            if step["action"] == "exit_to_menu":
+                in_menu = True
+            elif step["action"] in ("start_game", "load"):
+                self.assertTrue(in_menu, "Network.LoadGame requires FrontEnd; gameplay alone cannot load a save")
+                in_menu = False
         self.assertEqual(sum(s["turns"] for s in actual["steps"] if s["action"] == "autoplay"), 7)
         compile_lua = LuaRuntime().eval("function(s) local _,e=load(s); return e end")
         for i, step in enumerate(actual["steps"], 1):

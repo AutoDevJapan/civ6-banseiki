@@ -79,6 +79,7 @@ Players[t.a]:GetTreasury():ChangeGoldBalance(7)
 Players[t.a]:SetProperty(R.LEGITIMACY_KEY,90)
 return 'changed saved state to prove restoration'
 """)
+        steps.append(dict(action="exit_to_menu", timeout=600))
         steps.append(dict(action="load", name="JAC-AI-" + label, timeout=600))
         steps.append(dict(action="wait_for", timeout=600, condition=dict(type="lua", state_name="InGame",
                          code="local p=Players[Game.GetLocalPlayer()]; return p~=nil and p:IsTurnActive()")))

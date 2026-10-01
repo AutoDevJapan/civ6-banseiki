@@ -33,7 +33,7 @@
 
 ## 進行中の実行
 
-- 短い実機：`live_chain.py feat/arbitration-ai:court-arbitration-ai.json --stop-on-failure`。現時点では待ち行列。Pythonの実行PIDは184624、実行ツールのセッションは73652。
+- 短い実機：`live_chain.py feat/arbitration-ai:court-arbitration-ai.json --stop-on-failure`。実行01はAI当事者の請求、金100・正当性5の支出、審理中の保存まで成功した。読込前にメニューへ戻る手順が抜けており、11/51で失敗した。5回の読込すべての前にメニューへの遷移を追加し、形式検査にも前提条件を加えた。修正後は55手順（再起動込み56手順）を実行する。
 - コンソールを出さないため、`D:/CC/Work/arbitration-ai/hidden_run.py`から実行する。子プロセスにも`CREATE_NO_WINDOW`を付ける。
 - 実機の成果物は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/arbitration-ai-<番号>`。先行の他PRの成果物は今回の結果と混ぜない。
 

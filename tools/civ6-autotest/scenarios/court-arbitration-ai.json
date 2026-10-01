@@ -179,6 +179,10 @@
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R or not R.AiCandidate then error('AI arbitration gameplay absent') end\nlocal t=Game:GetProperty('JAC_ARB_AI_TEST')\nif not t then error('AI fixture absent') end\nGame:SetProperty(R.PENDING_KEY,nil)\nGame:SetProperty(R.AI_WARS_KEY,nil)\nGame:SetProperty(R.LAST_REQUEST_KEY,nil)\nPlayers[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)\nPlayers[t.a]:SetProperty(R.AI_LAST_KEY,nil)\nGame:SetProperty(R.AiPairKey(t.a,t.b),nil)\nPlayers[t.a]:GetTreasury():ChangeGoldBalance(7)\nPlayers[t.a]:SetProperty(R.LEGITIMACY_KEY,90)\nreturn 'changed saved state to prove restoration'\n"
     },
     {
+      "action": "exit_to_menu",
+      "timeout": 600
+    },
+    {
       "action": "load",
       "name": "JAC-AI-party-pending",
       "timeout": 600
@@ -223,6 +227,10 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R or not R.AiCandidate then error('AI arbitration gameplay absent') end\nlocal t=Game:GetProperty('JAC_ARB_AI_TEST')\nif not t then error('AI fixture absent') end\nGame:SetProperty(R.PENDING_KEY,nil)\nGame:SetProperty(R.AI_WARS_KEY,nil)\nGame:SetProperty(R.LAST_REQUEST_KEY,nil)\nPlayers[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)\nPlayers[t.a]:SetProperty(R.AI_LAST_KEY,nil)\nGame:SetProperty(R.AiPairKey(t.a,t.b),nil)\nPlayers[t.a]:GetTreasury():ChangeGoldBalance(7)\nPlayers[t.a]:SetProperty(R.LEGITIMACY_KEY,90)\nreturn 'changed saved state to prove restoration'\n"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 600
     },
     {
       "action": "load",
@@ -276,6 +284,10 @@
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R or not R.AiCandidate then error('AI arbitration gameplay absent') end\nlocal t=Game:GetProperty('JAC_ARB_AI_TEST')\nif not t then error('AI fixture absent') end\nGame:SetProperty(R.PENDING_KEY,nil)\nGame:SetProperty(R.AI_WARS_KEY,nil)\nGame:SetProperty(R.LAST_REQUEST_KEY,nil)\nPlayers[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)\nPlayers[t.a]:SetProperty(R.AI_LAST_KEY,nil)\nGame:SetProperty(R.AiPairKey(t.a,t.b),nil)\nPlayers[t.a]:GetTreasury():ChangeGoldBalance(7)\nPlayers[t.a]:SetProperty(R.LEGITIMACY_KEY,90)\nreturn 'changed saved state to prove restoration'\n"
     },
     {
+      "action": "exit_to_menu",
+      "timeout": 600
+    },
+    {
       "action": "load",
       "name": "JAC-AI-shogun-pending",
       "timeout": 600
@@ -320,6 +332,10 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R or not R.AiCandidate then error('AI arbitration gameplay absent') end\nlocal t=Game:GetProperty('JAC_ARB_AI_TEST')\nif not t then error('AI fixture absent') end\nGame:SetProperty(R.PENDING_KEY,nil)\nGame:SetProperty(R.AI_WARS_KEY,nil)\nGame:SetProperty(R.LAST_REQUEST_KEY,nil)\nPlayers[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)\nPlayers[t.a]:SetProperty(R.AI_LAST_KEY,nil)\nGame:SetProperty(R.AiPairKey(t.a,t.b),nil)\nPlayers[t.a]:GetTreasury():ChangeGoldBalance(7)\nPlayers[t.a]:SetProperty(R.LEGITIMACY_KEY,90)\nreturn 'changed saved state to prove restoration'\n"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 600
     },
     {
       "action": "load",
@@ -381,6 +397,10 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R or not R.AiCandidate then error('AI arbitration gameplay absent') end\nlocal t=Game:GetProperty('JAC_ARB_AI_TEST')\nif not t then error('AI fixture absent') end\nGame:SetProperty(R.PENDING_KEY,nil)\nGame:SetProperty(R.AI_WARS_KEY,nil)\nGame:SetProperty(R.LAST_REQUEST_KEY,nil)\nPlayers[t.shogun]:SetProperty(R.AI_LAST_KEY,nil)\nPlayers[t.a]:SetProperty(R.AI_LAST_KEY,nil)\nGame:SetProperty(R.AiPairKey(t.a,t.b),nil)\nPlayers[t.a]:GetTreasury():ChangeGoldBalance(7)\nPlayers[t.a]:SetProperty(R.LEGITIMACY_KEY,90)\nreturn 'changed saved state to prove restoration'\n"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 600
     },
     {
       "action": "load",
