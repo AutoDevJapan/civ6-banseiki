@@ -23,7 +23,7 @@ from judge import (default_log_dir, judge, log_marker_replaced, print_table, rea
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, SaveLoadMetrics, TurnMetrics,
                      parse_research_sample, process_memory, research_sample_code, summarize_turns)
 from restart import (DEFAULT_MODS_DIR, close_orphaned_civ_reporters, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
-                     newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
+                     newest_mod_file, require_dx11_window, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
@@ -656,10 +656,12 @@ class Runner:
                 next_launch = now + 45
                 print(f"Steam Civ VI launch attempt {attempts}", flush=True)
             try:
-                wait_for_civ_window(min(deadline, time.monotonic() + 5))
-                return
+                hwnd = wait_for_civ_window(min(deadline, time.monotonic() + 5))
             except InputError as exc:
                 last = str(exc)
+            else:
+                require_dx11_window(hwnd)
+                return
         raise ScenarioError(f"Civ VI window did not appear after {attempts} Steam launch attempts within the deadline; last: {last}")
 
     LOADSCREEN_READY = "LoadScreen: OnLoadGameViewStateDone"

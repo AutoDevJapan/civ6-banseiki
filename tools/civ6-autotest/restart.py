@@ -10,13 +10,15 @@ from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
-from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids, _process_ids,
+from click import (InputError, PROCESS_QUERY_LIMITED_INFORMATION, _civ_process_ids, _process_ids, _process_name,
                    find_civ_window, kernel32, PROCESSENTRY32W, TH32CS_SNAPPROCESS, ERROR_NO_MORE_FILES)
 
 
 DEFAULT_MODS_DIR = (Path.home() / "Documents" / "My Games" /
                     "Sid Meier's Civilization VI" / "Mods")
-STEAM_URI = "steam://rungameid/289070"
+# Steam's Windows launch metadata maps option2 to Win64Steam/CivilizationVI.exe
+# (DX11), and option1 to CivilizationVI_DX12.exe. Do not use the saved preference.
+STEAM_URI = "steam://launch/289070/option2"
 PROCESS_TERMINATE = 0x0001
 SYNCHRONIZE = 0x100000
 EPOCH_DIFFERENCE = 11644473600
@@ -259,8 +261,17 @@ def close_orphan_civ_reporters() -> None:
 
 
 def launch_via_steam() -> None:
+    """Select DX11 without a console or edits to Steam's running configuration."""
     close_orphan_civ_reporters()
     os.startfile(STEAM_URI)
+
+
+def require_dx11_window(hwnd: int) -> None:
+    """Refuse a changed Steam launch mapping/override before sending game input."""
+    name = _process_name(hwnd)
+    if name != "civilizationvi.exe":
+        raise InputError(f"Steam DX11 launch opened {name}; expected CivilizationVI.exe")
+    print("Confirmed DX11 process: CivilizationVI.exe", flush=True)
 
 
 def wait_for_civ_window(deadline: float) -> int:

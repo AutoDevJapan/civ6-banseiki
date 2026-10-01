@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from click import InputError
 from restart import (close_orphaned_civ_reporters, close_orphan_civ_reporters, launch_via_steam,
                      enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
-                     wait_for_civ_window)
+                     require_dx11_window, wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
 
@@ -115,7 +115,7 @@ class CrashReporterTests(unittest.TestCase):
             "restart.os.startfile", side_effect=lambda uri: events.append(uri)
         ):
             launch_via_steam()
-        self.assertEqual(events, ["reporter", "steam://rungameid/289070"])
+        self.assertEqual(events, ["reporter", "steam://launch/289070/option2"])
 
     def test_close_failure_stops_steam_launch(self):
         with patch("restart._civ_process_ids", return_value=set()), patch(
@@ -131,6 +131,24 @@ class CrashReporterTests(unittest.TestCase):
                 launch_via_steam()
             start.assert_not_called()
             kernel.CloseHandle.assert_called_once_with(55)
+
+
+class DX11LaunchTests(unittest.TestCase):
+    def test_only_dx11_window_is_accepted_after_launch(self):
+        for name, accepted in (("civilizationvi.exe", True), ("civilizationvi_dx12.exe", False),
+                               ("other.exe", False)):
+            with self.subTest(name=name), patch("restart._process_name", return_value=name) as inspect:
+                if accepted:
+                    require_dx11_window(123)
+                else:
+                    with self.assertRaisesRegex(InputError, "expected CivilizationVI.exe"):
+                        require_dx11_window(123)
+                inspect.assert_called_once_with(123)
+
+    def test_unreadable_window_is_not_accepted(self):
+        with patch("restart._process_name", side_effect=InputError("Cannot read executable")):
+            with self.assertRaisesRegex(InputError, "Cannot read executable"):
+                require_dx11_window(123)
 
 
 class FreshnessTests(unittest.TestCase):
@@ -223,6 +241,25 @@ class RestartActionTests(unittest.TestCase):
         active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
         active_game.start()
         self.addCleanup(active_game.stop)
+        # These tests fake the launched window; executable validation is tested below.
+        validation = patch("scenario.require_dx11_window")
+        self.dx11_validation = validation.start()
+        self.addCleanup(validation.stop)
+
+    def test_wrong_steam_executable_stops_before_click_or_tuner(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        self.dx11_validation.side_effect = InputError("expected CivilizationVI.exe")
+        with patch("scenario.single_civ_process", return_value=None), patch(
+            "scenario.launch_via_steam"
+        ) as launch, patch("scenario.wait_for_civ_window", return_value=123), patch(
+            "scenario.click_fraction"
+        ) as click, patch.object(runner, "_wait_frontend_ready") as frontend:
+            with self.assertRaisesRegex(InputError, "expected CivilizationVI.exe"):
+                runner._restart_game(360)
+        self.dx11_validation.assert_called_once_with(123)
+        launch.assert_called_once_with()
+        click.assert_not_called()
+        frontend.assert_not_called()
 
     def test_restart_action_validation(self):
         valid = {"name": "restart", "steps": [{"action": "restart_game", "timeout": 300}]}
@@ -320,6 +357,7 @@ class RestartActionTests(unittest.TestCase):
         window.assert_called_once()
         click.assert_called_once_with(0.5, 0.15)
         wait.assert_called_once()
+        self.dx11_validation.assert_called_once_with(window.return_value)
 
     def test_frontend_probe_reconnects_after_unknown_read_only_reply(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
