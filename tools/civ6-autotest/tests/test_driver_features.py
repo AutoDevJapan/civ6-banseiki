@@ -5,6 +5,7 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+from lupa import LuaRuntime
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -18,6 +19,33 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 class DriverFeatureTests(unittest.TestCase):
+    def test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game(self):
+        lua = LuaRuntime()
+        lua.execute("Game={GetLocalPlayer=function() return 0 end}; UI={IsGameCoreBusy=function() return BUSY end}; BUSY=true")
+        reads, begins = [], []
+        def native_read(state, code, timeout):
+            if state == "LoadScreen":
+                begins.append(code)
+                return "true"
+            if "UI.IsGameCoreBusy" in code:
+                reads.append(code)
+                # The player exists throughout loading. Native work finishes
+                # only before the third independent observation.
+                lua.globals().BUSY = len(reads) < 3
+            return "true" if lua.execute(code) else "false"
+        with tempfile.TemporaryDirectory() as folder:
+            runner = Runner({}, Path(folder), Path(folder), Path(folder), 4318)
+            with patch.object(runner, "_loadscreen_count", return_value=1), \
+                 patch.object(runner, "_states", return_value=["LoadScreen", "InGame"]), \
+                 patch.object(runner, "_lua", side_effect=native_read), \
+                 patch.object(runner, "_disconnect"), \
+                 patch.object(runner, "_close_options_menu") as close, \
+                 patch.object(runner, "_dismiss_advisor"), patch("scenario.time.sleep"):
+                runner._enter_game_after_loadscreen(0, 5)
+            self.assertEqual(len(reads), 3)
+            self.assertEqual(len(begins), 1)
+            self.assertEqual(close.call_count, 3)  # modal UI is released while waiting too
+
     def test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline(self):
         step = {"action":"ui_lua", "state_name":"GameCore_Tuner", "code":"return true", "lua_timeout":30}
         validate_scenario({"name":"slow native mutation", "steps":[step]})

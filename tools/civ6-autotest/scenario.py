@@ -569,11 +569,15 @@ class Runner:
                 if "ingame" in (state.casefold() for state in self._states(min(5, _remaining(end)))):
                     if self._lua("InGame", "return Game ~= nil and Game.GetLocalPlayer() >= 0",
                                  min(5, _remaining(end))) == "true":
+                        # Modal UI can itself block native work. Release it before
+                        # waiting for idle; neither action submits gameplay writes.
                         self._close_options_menu(end)
                         self._dismiss_advisor(end)
-                        _remaining(end)
-                        return
-                    last = "InGame exists; waiting for the local player"
+                        if self._lua("InGame", "return not UI.IsGameCoreBusy()",
+                                     min(5, _remaining(end))) == "true":
+                            _remaining(end)
+                            return
+                    last = "InGame exists; waiting for the local player and an idle game core"
                 else:
                     last = "InGame state not available yet"
                     self._disconnect()

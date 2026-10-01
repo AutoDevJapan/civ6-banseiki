@@ -1,6 +1,9 @@
 -- Native appointment/assignment; custom merit purchases are reviewed in the tree screen.
 include("InstanceManager");
 include("JAC_PersonaTreeRules");
+-- AddUserInterfaces starts this context hidden. Keep the toggle and UI-frame
+-- callbacks active; only PersonaPanel is initially collapsed (leaderperson-15).
+ContextPtr:SetHide(false);
 -- Read native UI objects here; never pass userdata or client-supplied state to gameplay.
 -- leaderperson-04 verified that governor lookup/CanAppoint exist only in UI.
 -- Every invocation reads the current engine state for the requested owner (including AI).

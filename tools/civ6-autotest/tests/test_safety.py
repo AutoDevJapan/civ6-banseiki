@@ -46,21 +46,21 @@ class ScenarioSafetyTests(unittest.TestCase):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         deadline = civ_click.time.monotonic() + 1
         with patch.object(runner, "_states", return_value=["InGame"]), patch.object(
-            runner, "_lua", side_effect=["false", "true"]
+            runner, "_lua", side_effect=["false", "true", "true"]
         ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
         ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
             "scenario.press_key"
         ) as press, patch("scenario.time.sleep"):
             runner._enter_game_after_loadscreen(0, 1, deadline=deadline)
-        self.assertEqual(run_lua.call_count, 2)
+        self.assertEqual(run_lua.call_count, 3)
         press.assert_called_once_with(civ_click.VK_ESCAPE, deadline=deadline)
 
     def test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
         deadline = civ_click.time.monotonic() + 1
         with patch.object(runner, "_states", return_value=["LoadScreen", "InGame"]), patch.object(
-            runner, "_lua", side_effect=["true", "true"]
+            runner, "_lua", side_effect=["true", "true", "true"]
         ) as run_lua, patch.object(runner, "_loadscreen_count", return_value=1), patch.object(
             runner, "_close_options_menu"
         ), patch.object(runner, "_close_diplomacy", return_value=[]), patch.object(runner, "_dismiss_advisor"), patch(
