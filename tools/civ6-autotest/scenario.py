@@ -21,7 +21,7 @@ from click import (InputError, VK_ESCAPE, click_fraction, press_key, request_civ
 from judge import (default_log_dir, judge, log_marker_replaced, print_table, read_since,
                    slice_log_bytes, snapshot_logs)
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, SaveLoadMetrics, TurnMetrics,
-                     process_memory, research_sample_code, summarize_turns)
+                     parse_research_sample, process_memory, research_sample_code, summarize_turns)
 from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
                      newest_mod_file, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
                      wait_for_exit)
@@ -668,6 +668,7 @@ class Runner:
         # The pack's era-name change screen (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuReignPopup.lua): read-only, it
         # only shows the ledger. Closing it lets the dark-age policy choice open (below), so it comes first.
         ("JAC_SengokuReignPopup", "OnClose()", "era-name change screen"),
+        ("DedicationPopup", "OnClose()", "house oath choice"),
         # The pack's dark-age policy choice (poc/JAC_PoC_SengokuTrees/UI/JAC_SengokuDarkPolicy.lua): closing keeps
         # the house's default policy, as a human who never answers (documents/poc/sengoku-ages.md).
         ("JAC_SengokuDarkPolicy", "OnClose()", "dark-age policy choice"),
@@ -702,9 +703,20 @@ class Runner:
                           min(5, _remaining(deadline)))
         return _parse_autoplay_status(value)
 
-    def _research_query(self, code: str, deadline: float) -> str:
+    def _research_query(self, code: str, deadline: float, *, minimum_turn: int | None = None) -> str:
         # Read-only Lua, so a FireTuner timeout may be retried safely.
-        return self._retry_idempotent(lambda: self._lua("InGame", code, min(10, _remaining(deadline))), deadline)
+        while True:
+            value = self._retry_idempotent(lambda: self._lua("InGame", code, min(10, _remaining(deadline))), deadline)
+            if minimum_turn is None:
+                return value
+            try:
+                turn, _ = parse_research_sample(value)
+            except ValueError as exc:
+                raise ScenarioError(str(exc)) from exc
+            if turn >= minimum_turn:
+                return value
+            # Wait for the UI research snapshot itself to catch up; never relabel stale data.
+            time.sleep(min(0.1, _remaining(deadline)))
 
     def _autoplay(self, turns: int, timeout: float, *, deadline: float | None = None,
                   record_metrics: bool = False, research_metrics: bool = False,
@@ -716,9 +728,15 @@ class Runner:
                   min(5, _remaining(deadline)))
         self._close_options_menu(deadline)
         self._dismiss_advisor(deadline)
+        # SetCurrentGameTurn changes the gameplay clock before the UI publishes it (live perf-13).
+        # Test-mode autoplay must count from the authoritative clock, not a stale UI snapshot.
+        core_start = start_turn_override
+        if core_start is None and self.scenario.get("test_mode"):
+            core_start = int(self._lua("GameCore_Tuner", "return Game.GetCurrentGameTurn()",
+                                      min(5, _remaining(deadline))))
         start_code = (
             "if AutoplayManager.IsActive() then error('autoplay already active') end\n" +
-            (f"local startTurn = {start_turn_override}\n" if start_turn_override is not None
+            (f"local startTurn = {core_start}\n" if core_start is not None
              else "local startTurn = Game.GetCurrentGameTurn()\n") +
             "local human = Game.GetLocalPlayer()\n"
             "if human < 0 then error('no local human player to return to') end\n"
@@ -747,6 +765,8 @@ class Runner:
                 start_turn, human = (int(part) for part in start_value.split("|"))
             except ValueError as exc:
                 raise ScenarioError(f"Unexpected autoplay start: {start_value!r}") from exc
+            if core_start is not None:
+                start_turn = core_start
             target = start_turn + turns
             recorder = None
             research_recorder = None
@@ -760,7 +780,8 @@ class Runner:
                 recorder.start(initial_memory)
             if research_metrics:
                 research_recorder = ResearchMetrics(self.output / f"autoplay-research-{self.metrics_runs}.jsonl")
-                research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline))
+                research_recorder.sample(self._research_query(RESEARCH_SAMPLE_CODE, deadline,
+                                                              minimum_turn=start_turn))
             restarts = 0
             dedications = 0
             inactive_since = None
@@ -794,7 +815,7 @@ class Runner:
                     # of the loop and ask again. If nothing was open, the failure stops the step as before.
                     status_failure = exc
                     continue
-                if start_turn_override is not None and status.turn < start_turn:
+                if core_start is not None and status.turn < start_turn:
                     # GameCore writes are visible to UI only after its next update.
                     # Do not interpret the cached UI clock as an early stop or a measurement.
                     time.sleep(min(0.1, _remaining(deadline)))
@@ -805,7 +826,8 @@ class Runner:
                         raise ScenarioError("Civ VI process changed during metrics sampling")
                     recorder.sample(status.turn, process_memory(metrics_pid))
                 if research_recorder and status.turn != research_recorder.last_turn:
-                    research_recorder.sample(self._research_query(research_sample_code(research_recorder.slots), deadline))
+                    research_recorder.sample(self._research_query(research_sample_code(research_recorder.slots), deadline,
+                                                                  minimum_turn=status.turn))
                 _remaining(deadline)
                 if (elimination_turn is None and
                         (status.turn != last_alive_check_turn or status.local_player < 0)):
@@ -884,8 +906,20 @@ class Runner:
             except (ScenarioError, TunerError, OSError) as cleanup_error:
                 print(f"Autoplay cleanup failed: {cleanup_error}", flush=True)
             raise
-        self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
-                  "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
+        # Autoplay can finish just as a leader statement opens and starves InGame (live oaths-05).
+        # Only repeat this idempotent UI-handler cleanup; never replay the turn/start operation.
+        attempts = 0
+        while True:
+            try:
+                self._lua("InGame", "if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\n"
+                          "JAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", min(5, _remaining(deadline)))
+                break
+            except LuaExecutionError:
+                raise
+            except (TunerError, OSError):
+                if not self._unblock_ingame("InGame", deadline, attempts):
+                    raise
+                attempts += 1
         _remaining(deadline)
         detail = f"autoplay completed {turns} turns ({start_turn}->{status.turn}; event={status.event})"
         if elimination_turn is not None:

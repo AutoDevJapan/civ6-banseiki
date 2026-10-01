@@ -82,3 +82,6 @@ Controls.LeaveButton:RegisterCallback(Mouse.eLClick, function() JAC_RequestPact(
 Events.LocalPlayerTurnBegin.Add(OnRefreshIfShown) -- Base/Assets/UI/ActionPanel.lua:1334
 Events.GameCoreEventPublishComplete.Add(OnRefreshIfShown) -- 要求の処理後に更新（Base/Assets/UI/Choosers/ResearchChooser.lua:485）
 Events.LoadScreenClose.Add(OnRefreshIfShown) -- 読み込み直後にも届いている申し込みを出す（Base/Assets/UI/Popups/PlayerChange.lua:298）
+
+-- InGame.lua は追加 UI の親を非表示で作る。入口ボタンには表示された親が必要。
+ContextPtr:SetHide(false)

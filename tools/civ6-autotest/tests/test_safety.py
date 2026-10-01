@@ -17,10 +17,15 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 class ScenarioSafetyTests(unittest.TestCase):
     def setUp(self):
-        # These tests exercise a prepared game. Real process state must not launch Steam.
+        # run() probes this independently of require_single_civ_process. Without a stub,
+        # an absent real game takes the Steam-launch path in tests which only mock require.
+        # Treat the preflight process as present; tests of require() still exercise their own stubs.
         process = patch("scenario.single_civ_process", return_value=(12, 100.0))
-        self.addCleanup(process.stop)
         process.start()
+        self.addCleanup(process.stop)
+        launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted real Steam launch"))
+        launch.start()
+        self.addCleanup(launch.stop)
         launch = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
         self.addCleanup(launch.stop)
         launch.start()
@@ -391,13 +396,15 @@ class ScenarioSafetyTests(unittest.TestCase):
         condition = {"type": "lua", "state_name": "InGame", "code": "return true"}
         with patch.object(runner, "_lua", side_effect=LuaResponseUnknown("command may have run")) as run_lua, patch(
             "scenario.time.sleep"
-        ) as sleep:
+        ) as sleep, patch.object(runner, "_states", return_value=["InGame", "DiplomacyActionView"]) as states:
             with self.assertRaisesRegex(LuaResponseUnknown, "may have run"):
                 runner._wait(condition, 30)
         # The wait itself runs once; #75 may then try the popup closers in other contexts (they also fail here)
         # before giving up, but it never re-sends the InGame condition when nothing was closed.
         ingame_calls = [c for c in run_lua.call_args_list if c.args[0] == "InGame"]
         self.assertEqual(len(ingame_calls), 1)
+        states.assert_called_once()
+        self.assertEqual([c.args[0] for c in run_lua.call_args_list], ["InGame", "DiplomacyActionView"])
         sleep.assert_not_called()
 
     def test_lua_wait_confirmed_error_fails_without_reexecution(self):

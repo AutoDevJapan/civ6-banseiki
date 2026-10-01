@@ -30,6 +30,8 @@
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
+| [`poc/sengoku-oaths.md`](poc/sengoku-oaths.md) | 家ごとの誓約66件：公式Commemorationsの調査、史実資料、3言語の名前、年齢別の効果、台帳・選択画面・AI・保存と実機シナリオ |
+| [`poc/data/sengoku-oaths.json`](poc/data/sengoku-oaths.json) | 上記誓約の暫定カタログ。SQLと3言語の翻訳の生成元 |
 | [`poc/tuning-200.md`](poc/tuning-200.md) | 約200ターンで暫定値を測る手順・結果・再開記録 |
 | [poc/data/tuning-200-03.json](poc/data/tuning-200-03.json) | 完全性を確認した200ターンの年齢判定・観測・裁定・滅亡の実測 |
 | [`poc/historical-events.md`](poc/historical-events.md) | 史実の出来事（SSOT 3.2）の仕組みと61件の一覧の実装（JSON から生成）・データ形式・暦との関係・家名の段階（織田は研究による襲名）・旧領と AI の攻略目標・助言ポップアップ・実機確認項目 |
@@ -39,6 +41,7 @@
 | [`poc/house-names.md`](poc/house-names.md) | 人物・家に結びつく名前を、その家以外では一般名で表示する仕組み（SSOT 3.2）。棚卸し、取り付け先、実機確認 |
 | [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/court-arbitration.md`](poc/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定（請求・費用・拒否の不利益・将軍家の3倍と1573年・正当性・討伐の勅命）の実装、公式の根拠、実機確認 |
+| [`poc/court-arbitration-human-progress.md`](poc/court-arbitration-human-progress.md) | 人間が裁定に回答する実機検証と、保存復元・画面表示・行高の修正結果 |
 | [`poc/sengoku-starting-knowledge.md`](poc/sengoku-starting-knowledge.md) | 1534年の共通初期知識（暫定）、公式根拠、実機確認項目 |
 | [`poc/era-equals-reign.md`](poc/era-equals-reign.md) | 元号＝時代（オーナー判断 T）：エンジンの時代の長さのプローブ（テスト専用 MOD `JAC_Test_EraTiming`）の結果と本実装（元号ごとの 48 の時代、速度とのずれ、ツリーの時代、台帳の判定、実機シナリオ `sengoku-era-reigns.json`、叙事詩・マラソン・追加時代・偉人画面・資源の年の追加確認） |
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
