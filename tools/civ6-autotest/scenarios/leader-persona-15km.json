@@ -544,7 +544,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_LeaderPersona_Tree",
-      "code": "if not JAC_TreeOpen('LEADER_JAC_DATE_TANEMUNE') then error('tree reopen failed') end; if Controls.Result:GetText()~='' then error('old purchase result replayed on reopen') end; return 'tree reopened after load'"
+      "code": "if not JAC_TreeOpen('LEADER_JAC_DATE_TANEMUNE') then error('tree reopen failed') end; local text=Controls.Result:GetText(); if text~=nil and text~='' then error('old purchase result replayed on reopen: '..tostring(text)) end; return 'tree reopened after load; native result='..tostring(text)..'; values='..select('#',Controls.Result:GetText())"
     },
     {
       "action": "ui_lua",

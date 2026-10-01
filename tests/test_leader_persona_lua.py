@@ -984,6 +984,20 @@ class LeaderPersonaLuaTests(unittest.TestCase):
         self.g.DRAIN()
         self.assertEqual(self.g.Controls.Result.text,"LOC_JAC_PERSONA_NODE_STATUS_PURCHASED")
 
+    def test_live_reopen_assertion_accepts_empty_native_label_and_rejects_old_receipt(self):
+        self.settled()
+        scenario = json.loads((ROOT / "tools/civ6-autotest/scenarios/leader-persona-15km.json").read_text(encoding="utf-8"))
+        code = next(step["code"] for step in scenario["steps"]
+                    if "old purchase result replayed on reopen" in step.get("code", ""))
+        for getter in ("return ''", "return nil", "return"):
+            with self.subTest(getter=getter):
+                self.lua.execute("Controls.Result.GetText=function() " + getter + " end")
+                self.assertIn("tree reopened after load", self.lua.execute(code))
+        self.lua.execute("JAC_TreeOpen=function() return true end; "
+                         "Controls.Result.GetText=function() return 'previous purchase result' end")
+        with self.assertRaisesRegex(LuaError, "old purchase result replayed on reopen: previous purchase result"):
+            self.lua.execute(code)
+
     def test_keyboard_can_review_cancel_commit_switch_categories_and_cycle_governors(self):
         self.settled(); self.set_merit(20); self.g.JAC_TreeOpen(DATE)
         self.assertTrue(self.g.JAC_TreeInput(self.g.INPUT_KEY(13)))  # Enter reviews first preferred route
