@@ -20,6 +20,7 @@ def summarize(artifact: Path) -> dict:
     issues, requests, costs, outcomes = [], {}, {}, {}
     refusals, decisions, ai, blocked = [], Counter(), {}, Counter()
     refused_players, loads = {}, 0
+    weariness = []
     end_turns = set()
     for event in events:
         f = dict(FIELDS.findall(event))
@@ -71,6 +72,8 @@ def summarize(artifact: Path) -> dict:
         elif event.startswith("ai blocked "):
             for key in ("gold", "legitimacy", "interval"):
                 blocked[key] += int(f[key])
+        elif event.startswith("ai weariness "):
+            weariness.append({k: int(f[k]) for k in ("player", "turn", "observed", "cities")})
     sources, spending = Counter(), defaultdict(lambda: Counter())
     player_turns, pair_turns = defaultdict(list), defaultdict(list)
     for turn, request in requests.items():
@@ -169,6 +172,8 @@ def summarize(artifact: Path) -> dict:
                 blocked_candidate_visits=blocked, player_intervals=player_intervals, pair_intervals=pair_intervals,
                 shogunate_cutoff=cutoff, shogun_after_cutoff=shogun_after, costs=list(costs.values()),
                 ai_decisions=list(ai.values()), failures=failures,
+                weariness_coverage=dict(samples=len(weariness), observed_cities=sum(r["observed"] for r in weariness),
+                                       total_cities=sum(r["cities"] for r in weariness)),
                 limitations=["A single seed does not isolate the causal effect of fees, refusal penalties or cooldowns.",
                              "Blocked counts are candidate visits before selecting a request, not distinct houses.",
                              "Army and city contractions are sampled proxies, not opponent-attributed losses."])
@@ -189,6 +194,9 @@ def markdown(data: dict) -> str:
               "費用不足・正当性不足・間隔待ちで進めなかった候補の延べ観測: "
               + ", ".join(f"{k}={v}" for k, v in sorted(data["blocked_candidate_visits"].items())) + "。",
               "1つの対局では費用・不利益・間隔の因果効果を分離できない。比較の根拠が無い値は変更しない。"]
+    coverage = data["weariness_coverage"]
+    lines.append(f"戦争疲弊による快適性の読み取り: 延べ{coverage['observed_cities']}/{coverage['total_cities']}都市、"
+                 f"AI家の観測{coverage['samples']}回。")
     if data["issues"]:
         lines += ["", "計測の不足:"] + ["- " + issue for issue in data["issues"]]
     return "\n".join(lines) + "\n"

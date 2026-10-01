@@ -122,6 +122,15 @@ class ArbitrationReportTests(unittest.TestCase):
             with self.subTest(changed=changed):
                 self.assertFalse(self.summary(changed)["measurement_complete"])
 
+    def test_weariness_coverage_is_visible_even_without_requests(self):
+        data = self.summary("""[JAC_ARB] loaded shogunate_end_turn=120
+[JAC_ARB] ai weariness player=0 turn=2 total=0 observed=0 cities=2
+[JAC_ARB] ai weariness player=1 turn=2 total=0 observed=2 cities=2
+""")
+        self.assertEqual(data["requests"], 0)
+        self.assertEqual(data["weariness_coverage"], {"samples": 2, "observed_cities": 2, "total_cities": 4})
+        self.assertIn("延べ2/4都市", report.markdown(data))
+
     def test_refusal_cost_must_match_each_respondent_and_pair(self):
         for changed in (
             LOG.replace("refusal cost player=1", "refusal cost player=8"),

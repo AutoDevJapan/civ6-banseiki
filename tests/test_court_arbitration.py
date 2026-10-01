@@ -721,6 +721,14 @@ class ArbitrationAiTests(unittest.TestCase):
         self.g.Players[pid].cities = 1  # 3 points for one city less than the observed peak
         self.g.Players[pid].units = 1   # 3 points for three military units fewer
 
+    def test_weariness_coverage_is_logged_without_a_request(self):
+        self.lua.execute("Players[0].weariness=nil; Players[3].human=true")
+        self.next_turn()
+        self.assertIsNone(self.game("JAC_ARB_PENDING"))
+        self.assertIn("[JAC_ARB] ai weariness player=0 turn=2 total=0 observed=0 cities=2", self.log())
+        self.assertIn("[JAC_ARB] ai weariness player=1 turn=2 total=0 observed=2 cities=2", self.log())
+        self.assertFalse(any(line.startswith("[JAC_ARB] ai weariness player=3 turn=2 ") for line in self.log()))
+
     def test_exhausted_party_requests_pays_and_waits_until_the_following_turn(self):
         self.exhaust()
         self.next_turn()

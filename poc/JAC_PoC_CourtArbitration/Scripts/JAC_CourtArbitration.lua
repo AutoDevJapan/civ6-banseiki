@@ -231,6 +231,17 @@ local function AutoRequest(turn)
 	end
 end
 
+-- 閾値未満・費用不足・審理中でも、Gameplayで快適性を読めた都市数を残す。
+local function LogAiWeariness(turn, ids)
+	for _, id in ipairs(ids) do
+		if not Players[id]:IsHuman() then
+			local total, observed = R.AiWeariness(id)
+			Log(string.format("ai weariness player=%d turn=%d total=%g observed=%d cities=%d", id, turn,
+				total, observed, Players[id]:GetCities():GetCount()))
+		end
+	end
+end
+
 -- 人間の応否（同じく EXECUTE_SCRIPT。params.Accept = 1 / 0）。答える立場で、まだ答えていないときだけ記録する
 local function OnRespond(playerID, params)
 	Game:SetProperty(R.LAST_EVENT_KEY, string.format("respond player=%d turn=%d", playerID, R.GameTurn()))
@@ -384,6 +395,7 @@ GameEvents.OnGameTurnStarted.Add(function()
 	ExpireOrders(turn)
 	ApplyIncome(turn)
 	R.ObserveAiWars(turn, SortedMajorIDs())
+	LogAiWeariness(turn, SortedMajorIDs())
 	EnforceTruces(turn)
 	Resolve(turn)
 	AutoRequest(turn)
