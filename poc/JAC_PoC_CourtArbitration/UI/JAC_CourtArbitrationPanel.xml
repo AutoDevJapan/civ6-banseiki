@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Context Style="FontNormal16" FontStyle="Shadow">
 	<!-- 朝廷・将軍の停戦裁定（SSOT 3.2）。請求・応否と討伐の勅命の参加だけの最小の画面。枠は JAC_Notebooks.xml の人物帳と同じ形。 -->
-	<GridButton ID="OpenButton" Anchor="C,T" Offset="0,36" Size="220,30" Style="ButtonControl" String="LOC_JAC_ARB_BUTTON" Hidden="1"/>
+	<GridButton ID="OpenButton" Anchor="R,T" Offset="12,118" Size="220,30" Style="ButtonControl" String="LOC_JAC_ARB_BUTTON" Hidden="1"/>
 	<Grid ID="Panel" Anchor="C,C" Size="600,480"
 		Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22"
 		Hidden="1" ConsumeAllMouse="1">

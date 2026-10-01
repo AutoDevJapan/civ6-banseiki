@@ -795,6 +795,55 @@ class LiveScenarioOnStubsTests(unittest.TestCase):
                 with self.subTest(answer=answer, capture=step.get("capture_as", step.get("equals_capture"))):
                     self.assertEqual(self.lua.execute(step["code"]), prefix + pending + "|" + cities)
 
+    def test_overlay_buttons_can_open_and_close_from_an_initially_hidden_context(self):
+        # InGame.lua loads every AddUserInterfaces context hidden. A visible
+        # child alone is not reachable by the player while its parent is hidden.
+        for source, toggle, panel, close in (
+            (MOD / "UI/JAC_CourtArbitrationPanel.lua", "OpenButton", "Panel", "CloseButton"),
+            (ROOT / "poc/JAC_PoC_SengokuTrees/UI/JAC_UnificationPact.lua",
+             "PactToggle", "PactPanel", "PactToggle"),
+        ):
+            with self.subTest(screen=source.name):
+                self.lua.execute("""
+                    local function control()
+                        local c = setmetatable({hidden=false}, {__index=function()
+                            return function() end
+                        end})
+                        function c:SetHide(value) self.hidden=value end
+                        function c:IsHidden() return self.hidden end
+                        function c:RegisterCallback(_, callback) self.callback=callback end
+                        function c:DoLeftClick()
+                            assert(not ContextPtr:IsHidden() and not self:IsHidden(), 'unreachable control')
+                            self.callback()
+                        end
+                        return c
+                    end
+                    ContextPtr=control(); ContextPtr:SetHide(true)
+                    Controls=setmetatable({}, {__index=function(t, key)
+                        local c=control(); rawset(t, key, c); return c
+                    end})
+                    Controls.Panel:SetHide(true); Controls.PactPanel:SetHide(true)
+                    InstanceManager={new=function() return {ResetInstances=function() end,
+                        GetInstance=function() return setmetatable({}, {__index=function(t, key)
+                            local c=control(); rawset(t, key, c); return c
+                        end}) end} end}
+                    Events=setmetatable({}, {__index=function() return {Add=function() end} end})
+                    Mouse={eLClick=1}
+                    include=function() end
+                    Game.GetLocalPlayer=function() return 2 end
+                    Players[2].IsTurnActive=function() return true end
+                    local diplomacy=Players[2].GetDiplomacy
+                    Players[2].GetDiplomacy=function()
+                        local d=diplomacy(); d.HasMet=function() return false end; return d
+                    end
+                """)
+                self.lua.execute(source.read_text(encoding="utf-8"))
+                self.assertIs(self.g.ContextPtr.IsHidden(self.g.ContextPtr), False)
+                self.g.Controls[toggle].DoLeftClick(self.g.Controls[toggle])
+                self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), False)
+                self.g.Controls[close].DoLeftClick(self.g.Controls[close])
+                self.assertIs(self.g.Controls[panel].IsHidden(self.g.Controls[panel]), True)
+
 
 if __name__ == "__main__":
     unittest.main()

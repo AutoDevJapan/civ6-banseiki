@@ -154,3 +154,7 @@ Events.DiplomacyDeclareWar.Add(Refresh)
 Events.DiplomacyMakePeace.Add(Refresh)
 Events.LoadScreenClose.Add(Refresh)
 Events.NotificationAdded.Add(Refresh) -- 請求の通知が届いたら応否の行を出す
+
+-- Base/Assets/UI/InGame.lua の Initialize は追加 UI の親を非表示で作る。
+-- 常設の入口ボタンを表示し、パネルの開閉だけを子の Hidden で管理する。
+ContextPtr:SetHide(false)

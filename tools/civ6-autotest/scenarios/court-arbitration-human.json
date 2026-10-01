@@ -153,6 +153,11 @@
     },
     {
       "action": "ui_lua",
+      "state_name": "JAC_UnificationPact",
+      "code": "if ContextPtr:IsHidden() or Controls.PactToggle:IsHidden() then error('pact UI entry hidden') end\nif not Controls.PactPanel:IsHidden() then error('pact panel unexpectedly open') end\nControls.PactToggle:DoLeftClick()\nif Controls.PactPanel:IsHidden() then error('pact panel did not open') end\nControls.PactToggle:DoLeftClick()\nif not Controls.PactPanel:IsHidden() then error('pact panel did not close') end\nreturn 'visible pact entry opens and closes its panel'"
+    },
+    {
+      "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "local R=ExposedMembers.JAC_CourtArbitration\nif not R then error('arbitration gameplay not loaded') end\nlocal human\nlocal ids={}\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  if p:IsHuman() then\n    if human then error('more than one human') end\n    human=p:GetID()\n  else ids[#ids+1]=p:GetID() end\nend\nif human==nil or PlayerConfigurations[human]:GetCivilizationTypeName()~=R.ASHIKAGA then\n  error('expected Ashikaga human')\nend\nif R.GameTurn()~=1 or Game:GetProperty(R.PENDING_KEY)~=nil then\n  error('unexpected turn or pending request before accept')\nend\ntable.sort(ids)\nlocal previous=Game:GetProperty('JAC_ARB_HUMAN_TEST')\nlocal other\nfor _,id in ipairs(ids) do\n  local d=Players[human]:GetDiplomacy()\n  if other==nil and (not previous or id~=previous.other) and not d:IsAtWarWith(id)\n    and not d:HasAllied(id) and Players[id]:GetCities():GetCount()>0 then other=id end\nend\nif other==nil then error('no independent AI opponent for accept') end\nif Game:GetProperty(R.TruceKey(human,other))~=nil then error('fixture opponent already under a truce') end\nPlayers[other]:GetDiplomacy():DeclareWarOn(human,WarTypes.FORMAL_WAR,true)\nif not Players[human]:GetDiplomacy():IsAtWarWith(other) then error('fixture war not started') end\nPlayers[human]:SetProperty(R.LEGITIMACY_KEY,65)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,50)\nPlayers[other]:GetTreasury():ChangeGoldBalance(200)\nlocal ok,reason=R.CheckRequest(other,other,human)\nif not ok then error('fixture request invalid: '..tostring(reason)) end\nlocal turn=R.GameTurn()\n-- AI petitions are not implemented yet. Seed the same paid, incoming state as OnRequest;\n-- only the human answer below must travel through the actual screen and EXECUTE_SCRIPT.\nPlayers[other]:GetTreasury():ChangeGoldBalance(-100)\nPlayers[other]:SetProperty(R.LEGITIMACY_KEY,45)\nGame:SetProperty(R.PENDING_KEY,{Requester=other,A=other,B=human,Turn=turn,Power=1})\nGame:SetProperty(R.LAST_REQUEST_KEY,turn)\nGame:SetProperty('JAC_ARB_HUMAN_TEST',{case='accept',human=human,other=other,turn=turn,initial=65})\nNotificationManager.SendNotification(human,NotificationTypes.USER_DEFINED_1,{\n  [ParameterTypes.MESSAGE]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_NAME'),\n  [ParameterTypes.SUMMARY]=Locale.Lookup('LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY',\n    Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(other)),Locale.Lookup(R.NameKey(human)))})\nreturn 'accept: incoming arbitration seeded for human '..human..' from AI '..other"
     },
@@ -162,13 +167,13 @@
       "condition": {
         "type": "lua",
         "state_name": "JAC_CourtArbitrationPanel",
-        "code": "return not Controls.OpenButton:IsHidden()"
+        "code": "return not ContextPtr:IsHidden() and not Controls.OpenButton:IsHidden()"
       }
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "screenshot",
@@ -177,7 +182,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
     },
     {
       "action": "ui_lua",
@@ -222,12 +227,12 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "local p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nlocal p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
     },
     {
       "action": "wait_for",
@@ -241,17 +246,17 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "Controls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nControls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
     },
     {
       "action": "screenshot",
@@ -300,12 +305,12 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
     },
     {
       "action": "ui_lua",
@@ -400,13 +405,13 @@
       "condition": {
         "type": "lua",
         "state_name": "JAC_CourtArbitrationPanel",
-        "code": "return not Controls.OpenButton:IsHidden()"
+        "code": "return not ContextPtr:IsHidden() and not Controls.OpenButton:IsHidden()"
       }
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "screenshot",
@@ -415,7 +420,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected one enabled accept button') end\n    return 'incoming accept control present'"
     },
     {
       "action": "ui_lua",
@@ -460,12 +465,12 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "local p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nlocal p=Players[Game.GetLocalPlayer()]; if not p or not p:IsTurnActive() then error(\"local turn inactive\") end\n\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=1 or found[1]:IsDisabled() then error('expected exactly one enabled answer button') end\n    found[1]:DoLeftClick()\n    return 'human clicked the actual answer control'"
     },
     {
       "action": "wait_for",
@@ -479,17 +484,17 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "Controls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nControls.CloseButton:DoLeftClick()\nControls.OpenButton:DoLeftClick()\nreturn 'panel refreshed after gameplay acknowledged the answer'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_REFUSE') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n        if #found~=0 then error('answered arbitration still offers a response') end\n        return 'answered arbitration has no response controls'"
     },
     {
       "action": "screenshot",
@@ -538,12 +543,12 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.Panel:IsHidden() then error('arbitration panel hidden') end\nlocal found={}\nlocal function walk(c,depth)\n  if depth>8 then error('unexpected court row nesting') end\n  if c:GetID()=='Action' or c:GetID()=='Action2' then\n    if not c:IsHidden() and c:GetText()==Locale.Lookup('LOC_JAC_ARB_ACCEPT') then\n      found[#found+1]=c\n    end\n  end\n  for _,child in ipairs(c:GetChildren() or {}) do walk(child,depth+1) end\nend\nwalk(Controls.Rows,0)\n\n    if #found~=0 then error('reloaded answered arbitration allows another answer') end\n    Controls.CloseButton:DoLeftClick()\n    return 'saved answer restored without re-answering'"
     },
     {
       "action": "ui_lua",
@@ -621,7 +626,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "if Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nif Controls.OpenButton:IsHidden() then error('court button hidden for human respondent') end\nif Controls.Panel:IsHidden() then Controls.OpenButton:DoLeftClick() end\nif Controls.Panel:IsHidden() then error('court panel did not open') end\nreturn 'human arbitration panel open'"
     },
     {
       "action": "screenshot",
@@ -630,7 +635,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_CourtArbitrationPanel",
-      "code": "Controls.CloseButton:DoLeftClick(); return \"closed\""
+      "code": "if ContextPtr:IsHidden() then error('court UI parent context hidden') end\nControls.CloseButton:DoLeftClick(); return \"closed\""
     }
   ]
 }
