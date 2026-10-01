@@ -221,6 +221,8 @@ class JudgeTests(unittest.TestCase):
             "clans-house-names.json", "clans-both-ai.json", "custom-clans.json",
             "leader-portraits.json", "leader-persona-15km.json", "leader-persona-baseline-15km.json",
             "leader-persona-native-eligibility-15km.json",
+            "leader-persona-city-loss-15km.json", "leader-persona-spy-access-15km.json",
+            "leader-persona-spy-recovery.json",
             "growth-notebooks.json", "sengoku-trees.json", "sengoku-starting-knowledge.json", "sengoku-calendar.json",
             "unification-victory.json", "unification-registry-15km.json", "unification-pact.json",
             "sengoku-house-names-oda.json", "sengoku-house-names-takeda.json", "sengoku-alliances.json",

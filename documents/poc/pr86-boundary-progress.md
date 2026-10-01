@@ -27,7 +27,9 @@
 
 `git add`は`C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki/.git/worktrees/pr86-boundary-diagnostic/index.lock`を作れず、`Permission denied`で停止した。共有Git管理領域はこのセッションの書込み許可範囲外である。indexやブランチを変更していない。起点は81ccf52のままで、新しいcommit SHAはない。
 
-変更は専用worktree内に保持した。起点からの全13ファイルの差分は[受け渡し用パッチ](../../artifacts/pr86-boundary-diagnostic.diff)にまとめた。パッチの逆適用を`--check`だけで照合した。共有Git領域の権限を変更したり、別のworktreeへ書き込んだりしていない。
+変更は専用worktree内に保持し、起点からの全13ファイルの差分を受け渡し用パッチへまとめた。パッチの逆適用を`--check`だけで照合した。共有Git領域の権限を変更したり、別のworktreeへ書き込んだりしていない。
+
+子job終了後、親が変更13ファイルだけを97bf6b8へcommitし、feat/leaderpersonへf312278として統合した。親の全体677件が成功した。driver全体の実行で3シナリオの固定一覧への登録漏れを確認し、追加して再実行する。元113手順とAI断言を保持する。実機の未観測項目は未完了のままである。
 
 ## 一時フォルダの後片付け
 
