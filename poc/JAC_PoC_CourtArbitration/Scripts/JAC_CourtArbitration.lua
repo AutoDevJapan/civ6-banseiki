@@ -15,6 +15,7 @@
 -- マルチプレイ：状態はすべて Game / Player / プロットのプロパティ（セーブに残り、全員で共有）。変更は GameEvents
 -- （EXECUTE_SCRIPT・OnGameTurnStarted・CityConquered）の中だけで、乱数もローカルプレイヤーの判定も使わない。
 include "JAC_CourtArbitration_Rules"
+include "JAC_CourtArbitration_AI"
 local R = JAC_ARB
 
 local function Log(message)
@@ -174,32 +175,75 @@ local function OnCityConquered(capturerID, ownerID, cityID, x, y)
 	WriteCityFlags(turn)
 end
 
--- 請求（UI/JAC_CourtArbitrationPanel.lua → UI.RequestPlayerOperation(EXECUTE_SCRIPT)、OnStart = この名前。
--- 公式：BlackDeathScenario_PopupHandler.lua:22-28 → BlackDeathScenario.lua:66 の GameEvents.EventPopupChoice）
-local function OnRequest(requester, params)
-	Game:SetProperty(R.LAST_EVENT_KEY, string.format("request player=%d turn=%d", requester, R.GameTurn()))
-	local a, b = tonumber(params.Target), tonumber(params.Other)
+-- 人間・AIで同じ検証と支出を使う。AIだけが追加の間隔を守る。
+local function Request(requester, a, b, source)
 	local ok, reason = R.CheckRequest(requester, a, b)
 	if not ok then
 		Log(string.format("rejected request player=%d pair=%s-%s reason=%s", requester, tostring(a), tostring(b), reason))
-		return
+		return false
 	end
+	local turn = R.GameTurn()
+	if source ~= "request" and not R.AiIntervalReady(requester, a, b, turn) then return false end
 	if requester == b then a, b = b, a end -- 当事者の請求では A を請求者にそろえる
 	local player = Players[requester]
-	local turn = R.GameTurn()
 	local power = R.Power(requester, turn)
 	local gold, legitimacy = R.Costs(power) -- 将軍家の請求は3分の1（オーナー判断 O-3・R-3）
+	local goldBefore, legitimacyBefore = player:GetTreasury():GetGoldBalance(), R.Legitimacy(requester)
 	player:GetTreasury():ChangeGoldBalance(-gold) -- AustraliaScenario.lua:847
 	ChangeLegitimacy(requester, -legitimacy)
-	local pending = { Requester = requester, A = a, B = b, Turn = turn, Power = power }
+	player:SetProperty(R.COST_RECORD_KEY, { Turn = turn, A = a, B = b, Source = source, Gold = gold, Legitimacy = legitimacy,
+		GoldBefore = goldBefore, GoldAfter = player:GetTreasury():GetGoldBalance(),
+		LegitimacyBefore = legitimacyBefore, LegitimacyAfter = R.Legitimacy(requester) })
+	local pending = { Requester = requester, A = a, B = b, Turn = turn, Power = power, Source = source }
 	Game:SetProperty(R.PENDING_KEY, pending)
 	Game:SetProperty(R.LAST_REQUEST_KEY, turn)
+	if source ~= "request" then
+		player:SetProperty(R.AI_LAST_KEY, turn)
+		Game:SetProperty(R.AiPairKey(a, b), turn)
+	end
 	Log(string.format("request player=%d pair=%d-%d turn=%d power=%d", requester, a, b, turn, power))
+	Log(string.format("cost player=%d pair=%d-%d turn=%d gold=%d legitimacy=%d gold_before=%.2f gold_after=%.2f legitimacy_before=%d legitimacy_after=%d by=%s",
+		requester, a, b, turn, gold, legitimacy, goldBefore, player:GetTreasury():GetGoldBalance(),
+		legitimacyBefore, R.Legitimacy(requester), source))
 	local respondents = {}
 	for _, id in ipairs({ a, b }) do
 		if R.AnswerKey(pending, id) then table.insert(respondents, id) end
 	end
 	Notify(respondents, "LOC_JAC_ARB_NOTIFY_REQUEST_NAME", "LOC_JAC_ARB_NOTIFY_REQUEST_SUMMARY", R.NameKey(requester), R.NameKey(a), R.NameKey(b))
+	return true
+end
+
+-- UI → EXECUTE_SCRIPT（公式 BlackDeathScenario_PopupHandler.lua:22-28）。AIはこの操作を偽装せず、上の受付を呼ぶ。
+local function OnRequest(requester, params)
+	Game:SetProperty(R.LAST_EVENT_KEY, string.format("request player=%d turn=%d", requester, R.GameTurn()))
+	Request(requester, tonumber(params.Target), tonumber(params.Other), "request")
+end
+
+local function AutoRequest(turn)
+	if Game:GetProperty(R.PENDING_KEY) ~= nil or Game:GetProperty(R.LAST_REQUEST_KEY) == turn then return end
+	local candidate, blocked = R.AiCandidate(turn, SortedMajorIDs())
+	if blocked.GOLD + blocked.LEGITIMACY + blocked.INTERVAL > 0 then
+		Log(string.format("ai blocked turn=%d gold=%d legitimacy=%d interval=%d", turn, blocked.GOLD, blocked.LEGITIMACY, blocked.INTERVAL))
+	end
+	if candidate and Request(candidate.Requester, candidate.A, candidate.B, candidate.Source) then
+		Log(string.format("ai request player=%d pair=%d-%d turn=%d by=%s score=%d %s", candidate.Requester,
+			candidate.A, candidate.B, turn, candidate.Source, candidate.Score, candidate.Detail))
+	end
+end
+
+-- 閾値未満・費用不足・審理中でも、Gameplayで快適性を読めた都市数を残す。
+local function LogAiWeariness(turn, ids)
+	local roster = {}
+	for _, id in ipairs(ids) do
+		if not Players[id]:IsHuman() then
+			local total, observed = R.AiWeariness(id)
+			local cities = Players[id]:GetCities():GetCount()
+			roster[#roster + 1] = string.format("%d:%d", id, cities)
+			Log(string.format("ai weariness player=%d turn=%d total=%g observed=%d cities=%d", id, turn,
+				total, observed, cities))
+		end
+	end
+	Log(string.format("ai weariness roster turn=%d cities=%s", turn, #roster > 0 and table.concat(roster, ",") or "none"))
 end
 
 -- 人間の応否（同じく EXECUTE_SCRIPT。params.Accept = 1 / 0）。答える立場で、まだ答えていないときだけ記録する
@@ -285,7 +329,7 @@ end
 
 local function Resolve(turn)
 	local pending = Game:GetProperty(R.PENDING_KEY)
-	if pending == nil then return end
+	if pending == nil or pending.Turn >= turn then return end
 	Game:SetProperty(R.PENDING_KEY, nil)
 	local a, b = pending.A, pending.B
 	if not (Players[a]:IsAlive() and Players[b]:IsAlive() and Players[a]:GetDiplomacy():IsAtWarWith(b)) then
@@ -334,11 +378,14 @@ local function Resolve(turn)
 		-- 将軍家の裁定を拒めば不利益も3倍（オーナー判断 O-3・R-3）。勅命が続いている家は、長い方の期限にする
 		local loss, outlawTurns = R.RefusalPenalty(pending.Power)
 		for _, id in ipairs(refusers) do
+			local before = R.Legitimacy(id)
 			local legitimacy = ChangeLegitimacy(id, -loss)
 			local untilTurn = math.max(turn + outlawTurns, Players[id]:GetProperty(R.OUTLAW_KEY) or 0)
 			Players[id]:SetProperty(R.OUTLAW_KEY, untilTurn)
 			Log(string.format("refused player=%d pair=%d-%d turn=%d legitimacy=%d outlaw_until=%d power=%d", id, a, b, turn,
 				legitimacy, untilTurn, pending.Power))
+			Log(string.format("refusal cost player=%d pair=%d-%d turn=%d intended=%d applied=%d legitimacy_before=%d legitimacy_after=%d",
+				id, a, b, turn, loss, before - legitimacy, before, legitimacy))
 			Notify(everyone, "LOC_JAC_ARB_NOTIFY_REFUSED_NAME", "LOC_JAC_ARB_NOTIFY_REFUSED_SUMMARY", R.NameKey(id), R.NameKey(a),
 				R.NameKey(b), untilTurn)
 		end
@@ -351,8 +398,11 @@ GameEvents.OnGameTurnStarted.Add(function()
 	RecordHomes()
 	ExpireOrders(turn)
 	ApplyIncome(turn)
+	R.ObserveAiWars(turn, SortedMajorIDs())
+	LogAiWeariness(turn, SortedMajorIDs())
 	EnforceTruces(turn)
 	Resolve(turn)
+	AutoRequest(turn)
 	AutoJoin(turn)
 	WriteCityFlags(turn)
 end)

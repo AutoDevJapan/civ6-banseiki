@@ -36,6 +36,19 @@ R.SHOGUN_POWER = 3
 -- 正当性が LEGITIMACY_LOW 未満の AI は、相手を上回るだけで拒む（R-1「AI が拒みやすい」）
 R.AI_REFUSE_NUM, R.AI_REFUSE_DEN = 3, 2
 R.AI_REFUSE_LOW_NUM, R.AI_REFUSE_LOW_DEN = 1, 1
+-- オーナー判断 B（2026-10-01）：疲弊した当事者と、1573年までの将軍家が自分から請求する。
+-- 暫定の点数と間隔。仕様の正本は SSOT 3.2。判定はゲームプレイ側だけで行う。
+R.AI_EXHAUSTION_THRESHOLD = 6
+R.AI_WAR_TURNS_PER_POINT, R.AI_WAR_POINTS_MAX = 4, 6
+R.AI_WEARINESS_POINTS_MAX = 3
+R.AI_ARMY_LOSS_POINTS_MAX = 3
+R.AI_CITY_LOSS_POINTS, R.AI_CITY_LOSS_POINTS_MAX = 3, 6
+R.AI_LOW_LEGITIMACY_LIMIT, R.AI_LOW_LEGITIMACY_POINTS = 50, 2
+R.AI_REQUEST_INTERVAL, R.AI_PAIR_INTERVAL = 10, 10
+R.AI_SHOGUN_THRESHOLD = 3
+R.AI_SHOGUN_ALLY_POINTS, R.AI_SHOGUN_CAPITAL_POINTS = 4, 3
+R.AI_SHOGUN_CAPITAL_RADIUS = 12
+R.AI_SHOGUN_LONG_WAR_TURNS, R.AI_SHOGUN_LONG_WAR_POINTS = 12, 3
 -- 室町幕府の終わり：元亀4年7月（research/sengoku-events.md の EV_MUROMACHI_END）。和暦の月をそのまま使う
 -- （poc/historical-events.md「暦との関係」と同じ）
 R.MUROMACHI_END_YEAR, R.MUROMACHI_END_MONTH = 1573, 7
@@ -50,6 +63,10 @@ R.LAST_EVENT_KEY = "JAC_ARB_LAST_EVENT"             -- Game：最後に届いた
 R.TRUCE_PREFIX = "JAC_ARB_TRUCE_"                   -- Game：<小さいID>_<大きいID> = 停戦が続く最後のターン
 R.AWAIT_PREFIX = "JAC_ARB_AWAIT_"                   -- Game：応諾済みで講和を待つ組 = 講和した時から数える停戦のターン数
 R.PEACE_PREFIX = "JAC_ARB_PEACE_TURN_"              -- Game：スクリプトが最後に講和させたターン（検証用の記録）
+R.AI_WARS_KEY = "JAC_ARB_AI_WARS"                    -- Game：交戦中の組の初観測ターン・軍/都市数の最大値
+R.AI_LAST_KEY = "JAC_ARB_AI_LAST_REQUEST"            -- Player：AIが最後に請求したターン（両経路で共通）
+R.AI_PAIR_PREFIX = "JAC_ARB_AI_PAIR_REQUEST_"         -- Game：同じ組へAIが最後に請求したターン
+R.COST_RECORD_KEY = "JAC_ARB_LAST_COST"              -- Player：最後の請求支払の直前・直後（検証用、判断には使わない）
 -- 都市の中心のプロットに置く 0/1 の旗（Data/JAC_CourtArbitration_Legitimacy.sql の条件が読む）
 R.FLAG_HIGH = "JAC_ARB_LEGITIMACY_HIGH"
 R.FLAG_LOW = "JAC_ARB_LEGITIMACY_LOW"
@@ -171,6 +188,15 @@ end
 function R.TruceKey(a, b) return PairKey(R.TRUCE_PREFIX, a, b) end
 function R.AwaitKey(a, b) return PairKey(R.AWAIT_PREFIX, a, b) end
 function R.PeaceTurnKey(a, b) return PairKey(R.PEACE_PREFIX, a, b) end
+function R.AiWarKey(a, b) return PairKey("p", a, b) end
+function R.AiPairKey(a, b) return PairKey(R.AI_PAIR_PREFIX, a, b) end
+
+function R.AiIntervalReady(requester, a, b, turn)
+	local last = Players[requester]:GetProperty(R.AI_LAST_KEY)
+	local pairLast = Game:GetProperty(R.AiPairKey(a, b))
+	return (last == nil or turn - last >= R.AI_REQUEST_INTERVAL)
+		and (pairLast == nil or turn - pairLast >= R.AI_PAIR_INTERVAL)
+end
 
 -- 表示名の LOC キー。史実の出来事の家名切替（JAC_CIV_NAME_<文明>、CustomCivs UI/JAC_CivNameOverride.lua）を優先する
 function R.NameKey(id)
