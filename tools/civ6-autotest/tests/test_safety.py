@@ -17,18 +17,18 @@ from tuner import MAX_LUA_CODE_BYTES, LuaExecutionError, LuaResponseUnknown, Lua
 
 class ScenarioSafetyTests(unittest.TestCase):
     def setUp(self):
-        # run() probes this independently of require_single_civ_process. Without a stub,
-        # an absent real game takes the Steam-launch path in tests which only mock require.
-        # Treat the preflight process as present; tests of require() still exercise their own stubs.
-        process = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        # Safety fixtures exercise the driver, independently of whether Civ6 is
+        # running on the test machine. Never fall through to a real Steam launch.
+        process = patch("scenario.single_civ_process", return_value=(1234, 1.0))
         process.start()
         self.addCleanup(process.stop)
-        launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted real Steam launch"))
-        launch.start()
+        launch = patch("scenario.launch_via_steam", side_effect=AssertionError("unit test attempted a real Steam launch"))
+        self.steam_launch = launch.start()
         self.addCleanup(launch.stop)
-        launch = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
-        self.addCleanup(launch.stop)
-        launch.start()
+        restart = patch.object(Runner, "_restart_game", side_effect=AssertionError("unexpected real game launch"))
+        restart.start()
+        self.addCleanup(restart.stop)
+
 
     def test_owner_start_opens_setup_without_hosting_and_waits_long(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318, owner_start=True)
@@ -615,6 +615,7 @@ class ScenarioSafetyTests(unittest.TestCase):
             statuses = [(record["action"], record["status"]) for record in records]
             self.assertIn(("2/4 wait_for", "OK"), statuses)
             self.assertEqual(statuses[-1], ("4/4 wait_for", "FAIL"))
+            self.steam_launch.assert_not_called()
 
     def test_oserror_after_autoplay_start_attempts_cleanup_without_replay(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
@@ -658,6 +659,57 @@ class ScenarioSafetyTests(unittest.TestCase):
                             runner._autoplay(3, 10)
                     self.assertEqual(sum("SetActive(true)" in code for code in commands), 1)
                     self.assertFalse(any("SetActive(false)" in code for code in commands))
+
+    def test_end_turn_closes_successive_ai_statements_without_repeating_action(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        commands = []
+        closed = []
+
+        def close_diplomacy(_deadline):
+            # One view opens after each false turn predicate; InGame still answers.
+            if len(closed) < 2 and any("== 8" in code for code in commands):
+                closed.append("AI diplomacy statement")
+                return [closed[-1]]
+            return []
+
+        def run_lua(_state, code, _timeout):
+            commands.append(code)
+            if code == "return Game.GetCurrentGameTurn()":
+                return "7"
+            if "== 8" in code:
+                return "true" if len(closed) == 2 else "false"
+            return "true"
+
+        with patch.object(runner, "_lua", side_effect=run_lua), patch.object(
+            runner, "_close_diplomacy", side_effect=close_diplomacy
+        ), patch.object(runner, "_close_options_menu"), patch.object(runner, "_dismiss_advisor"), patch.object(
+            runner, "_log"
+        ), patch("scenario.time.sleep"):
+            self.assertEqual(runner._end_turn(10), "human turn 7->8")
+        self.assertEqual(closed, ["AI diplomacy statement", "AI diplomacy statement"])
+        self.assertEqual(sum("ACTION_ENDTURN" in code for code in commands), 1)
+
+    def test_end_turn_reopening_diplomacy_has_a_fixed_limit(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_close_diplomacy", return_value=["AI diplomacy statement"]), patch.object(
+            runner, "_lua", return_value="false"
+        ), patch.object(runner, "_log"), patch("scenario.time.sleep"):
+            with self.assertRaisesRegex(ScenarioError, "keep reopening"):
+                runner._wait({"type": "lua", "state_name": "InGame", "code": "return false"},
+                             10, close_diplomacy=True)
+
+    def test_end_turn_honours_turns_and_rejects_invalid_values(self):
+        # assassin-03: "turns" was silently ignored, so a 10-turn wait ended one turn and the check still passed.
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        with patch.object(runner, "_end_turn", return_value="human turn") as end_turn:
+            runner._run_step({"action": "end_turn", "turns": 3, "timeout": 60})
+            self.assertEqual(end_turn.call_count, 3)
+            runner._run_step({"action": "end_turn", "timeout": 60})
+            self.assertEqual(end_turn.call_count, 4)
+        base = {"name": "t", "steps": []}
+        for bad in (0, -1, "2", 1.5):
+            with self.assertRaisesRegex(ScenarioError, "turns must be positive"):
+                validate_scenario({**base, "steps": [{"action": "end_turn", "turns": bad}]})
 
     def test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects(self):
         runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)

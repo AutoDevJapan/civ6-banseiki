@@ -158,6 +158,7 @@ def validate_scenario(data: dict) -> None:
             if step.get("fast_forward") and not isinstance(data.get("test_mode"), dict):
                 raise ScenarioError(f"Step {number}: fast_forward requires test mode")
         elif action == "end_turn":
+            # Validate the number of turns actually executed by the driver.
             if type(step.get("turns", 1)) is not int or step.get("turns", 1) < 1:
                 raise ScenarioError(f"Step {number}: turns must be positive")
             if "test_turns" in step and (type(step["test_turns"]) is not int or step["test_turns"] < 1):
@@ -531,15 +532,23 @@ class Runner:
             raise ScenarioError(f"{name} rotated or truncated during wait; outcome undecidable")
         return slice_log_bytes(content, mark, inode)
 
-    def _wait(self, condition: dict, timeout: float) -> None:
+    def _wait(self, condition: dict, timeout: float, *, close_diplomacy: bool = False) -> None:
         end = time.monotonic() + timeout
         last = "not ready"
         log_baseline = None
         unblocked = 0
+        diplomacy_closes = 0
         if condition["type"] == "log_line":
             # Include output from the action that triggered this wait, but not older steps.
             log_baseline = self.log_step_baseline or snapshot_logs(self.logs)
         while time.monotonic() < end:
+            if close_diplomacy:
+                closed = self._close_diplomacy(end)
+                if closed:
+                    diplomacy_closes += len(closed)
+                    self._log("end_turn_diplomacy", "OK", f"closed {', '.join(closed)}; total {diplomacy_closes}")
+                    if diplomacy_closes > 25:
+                        raise ScenarioError("AI diplomacy screens keep reopening during one end_turn")
             try:
                 kind = condition["type"]
                 if kind == "state":
@@ -1155,11 +1164,12 @@ class Runner:
         self._close_options_menu(deadline)
         self._dismiss_advisor(deadline)
         start = int(self._lua("InGame", "return Game.GetCurrentGameTurn()", min(5, _remaining(deadline))))
+        self._close_diplomacy(deadline)
         self._lua("InGame", "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
                   min(5, _remaining(deadline)))
         self._wait({"type": "lua", "state_name": "InGame",
                     "code": f"return Game.GetCurrentGameTurn() == {start + 1} and Game.GetLocalPlayer() >= 0"},
-                   _remaining(deadline))
+                   _remaining(deadline), close_diplomacy=True)
         self._dismiss_advisor(deadline)
         _remaining(deadline)
         return f"human turn {start}->{start + 1}"
