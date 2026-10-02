@@ -1,0 +1,1 @@
+if not JAC_JAPAN_LOYALTY_WATCH then error('loyalty conversion watch lost') end; if #JAC_JAPAN_LOYALTY_WATCH.majorDefections~=0 then error('major cities lost by loyalty during autoplay: '..table.concat(JAC_JAPAN_LOYALTY_WATCH.majorDefections,',')) end; 

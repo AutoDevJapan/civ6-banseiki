@@ -1,0 +1,685 @@
+{
+  "seats": [
+    {
+      "slug": "ODA",
+      "ja": "織田",
+      "en": "Oda",
+      "ru": "Ода",
+      "castle": "Nagoya",
+      "lon": 136.9,
+      "lat": 35.184,
+      "leader": "LEADER_JAC_ODA_NOBUHIDE",
+      "civ": "CIVILIZATION_JAC_ODA",
+      "head_en": "Oda Nobuhide",
+      "head_ru": "Ода Нобухидэ"
+    },
+    {
+      "slug": "DATE",
+      "ja": "伊達",
+      "en": "Date",
+      "ru": "Датэ",
+      "castle": "Yonezawa",
+      "lon": 140.106,
+      "lat": 37.914,
+      "leader": "LEADER_JAC_DATE_TANEMUNE",
+      "civ": "CIVILIZATION_JAC_DATE",
+      "head_en": "Date Tanemune",
+      "head_ru": "Датэ Танэмунэ"
+    },
+    {
+      "slug": "ASHINA",
+      "ja": "蘆名",
+      "en": "Ashina",
+      "ru": "Асина",
+      "castle": "Kurokawa",
+      "lon": 139.93,
+      "lat": 37.494,
+      "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+      "civ": "CIVILIZATION_JAC_ASHINA",
+      "head_en": "Ashina Morikiyo",
+      "head_ru": "Асина Морикиё"
+    },
+    {
+      "slug": "HOJO",
+      "ja": "北条",
+      "en": "Hojo",
+      "ru": "Ходзё",
+      "castle": "Odawara",
+      "lon": 139.157,
+      "lat": 35.252,
+      "leader": "LEADER_JAC_HOJO_UJITSUNA",
+      "civ": "CIVILIZATION_JAC_HOJO",
+      "head_en": "Hojo Ujitsuna",
+      "head_ru": "Ходзё Удзицуна"
+    },
+    {
+      "slug": "YAMANOUCHI_UESUGI",
+      "ja": "山内上杉",
+      "en": "Yamanouchi Uesugi",
+      "ru": "Яманоути Уэсуги",
+      "castle": "Hirai",
+      "lon": 139.063,
+      "lat": 36.202,
+      "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+      "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+      "head_en": "Uesugi Norimasa",
+      "head_ru": "Уэсуги Норимаса"
+    },
+    {
+      "slug": "TAKEDA",
+      "ja": "武田",
+      "en": "Takeda",
+      "ru": "Такэда",
+      "castle": "Tsutsujigasaki",
+      "lon": 138.568,
+      "lat": 35.677,
+      "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+      "civ": "CIVILIZATION_JAC_TAKEDA",
+      "head_en": "Takeda Nobutora",
+      "head_ru": "Такэда Нобутора"
+    },
+    {
+      "slug": "NAGAO",
+      "ja": "長尾",
+      "en": "Nagao",
+      "ru": "Нагао",
+      "castle": "Kasugayama",
+      "lon": 138.206,
+      "lat": 37.148,
+      "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+      "civ": "CIVILIZATION_JAC_NAGAO",
+      "head_en": "Nagao Tamekage",
+      "head_ru": "Нагао Тамэкагэ"
+    },
+    {
+      "slug": "IMAGAWA",
+      "ja": "今川",
+      "en": "Imagawa",
+      "ru": "Имагава",
+      "castle": "Sunpu",
+      "lon": 138.383,
+      "lat": 34.979,
+      "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+      "civ": "CIVILIZATION_JAC_IMAGAWA",
+      "head_en": "Imagawa Ujiteru",
+      "head_ru": "Имагава Удзитэру"
+    },
+    {
+      "slug": "MATSUDAIRA",
+      "ja": "松平",
+      "en": "Matsudaira",
+      "ru": "Мацудайра",
+      "castle": "Okazaki",
+      "lon": 137.172,
+      "lat": 34.955,
+      "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+      "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+      "head_en": "Matsudaira Kiyoyasu",
+      "head_ru": "Мацудайра Киёясу"
+    },
+    {
+      "slug": "ASAKURA",
+      "ja": "朝倉",
+      "en": "Asakura",
+      "ru": "Асакура",
+      "castle": "Ichijodani",
+      "lon": 136.29,
+      "lat": 35.999,
+      "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+      "civ": "CIVILIZATION_JAC_ASAKURA",
+      "head_en": "Asakura Takakage",
+      "head_ru": "Асакура Такакагэ"
+    },
+    {
+      "slug": "ASHIKAGA",
+      "ja": "足利将軍家",
+      "en": "Ashikaga Shogunate",
+      "ru": "Сёгунат Асикага",
+      "castle": "Muromachi",
+      "lon": 135.76,
+      "lat": 35.029,
+      "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+      "civ": "CIVILIZATION_JAC_ASHIKAGA",
+      "head_en": "Ashikaga Yoshiharu",
+      "head_ru": "Асикага Ёсихару"
+    },
+    {
+      "slug": "MIYOSHI",
+      "ja": "三好",
+      "en": "Miyoshi",
+      "ru": "Миёси",
+      "castle": "Shozui",
+      "lon": 134.591,
+      "lat": 34.123,
+      "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+      "civ": "CIVILIZATION_JAC_MIYOSHI",
+      "head_en": "Miyoshi Nagayoshi",
+      "head_ru": "Миёси Нагаёси"
+    },
+    {
+      "slug": "ROKKAKU",
+      "ja": "六角",
+      "en": "Rokkaku",
+      "ru": "Роккаку",
+      "castle": "Kannonji",
+      "lon": 136.168,
+      "lat": 35.133,
+      "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+      "civ": "CIVILIZATION_JAC_ROKKAKU",
+      "head_en": "Rokkaku Sadayori",
+      "head_ru": "Роккаку Садаёри"
+    },
+    {
+      "slug": "HONGANJI",
+      "ja": "本願寺",
+      "en": "Honganji",
+      "ru": "Хонгандзи",
+      "castle": "Ishiyama",
+      "lon": 135.526,
+      "lat": 34.689,
+      "leader": "LEADER_JAC_HONGANJI_SHONYO",
+      "civ": "CIVILIZATION_JAC_HONGANJI",
+      "head_en": "Shonyo",
+      "head_ru": "Сёнё"
+    },
+    {
+      "slug": "OUCHI",
+      "ja": "大内",
+      "en": "Ouchi",
+      "ru": "Оути",
+      "castle": "Yamaguchi",
+      "lon": 131.473,
+      "lat": 34.178,
+      "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+      "civ": "CIVILIZATION_JAC_OUCHI",
+      "head_en": "Ouchi Yoshitaka",
+      "head_ru": "Оути Ёситака"
+    },
+    {
+      "slug": "AMAGO",
+      "ja": "尼子",
+      "en": "Amago",
+      "ru": "Амаго",
+      "castle": "Gassan Toda",
+      "lon": 133.242,
+      "lat": 35.418,
+      "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+      "civ": "CIVILIZATION_JAC_AMAGO",
+      "head_en": "Amago Tsunehisa",
+      "head_ru": "Амаго Цунэхиса"
+    },
+    {
+      "slug": "MORI",
+      "ja": "毛利",
+      "en": "Mori",
+      "ru": "Мори",
+      "castle": "Yoshida Koriyama",
+      "lon": 132.708,
+      "lat": 34.687,
+      "leader": "LEADER_JAC_MORI_MOTONARI",
+      "civ": "CIVILIZATION_JAC_MORI",
+      "head_en": "Mori Motonari",
+      "head_ru": "Мори Мотонари"
+    },
+    {
+      "slug": "CHOSOKABE",
+      "ja": "長宗我部",
+      "en": "Chosokabe",
+      "ru": "Тёсокабэ",
+      "castle": "Oko",
+      "lon": 133.642,
+      "lat": 33.593,
+      "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+      "civ": "CIVILIZATION_JAC_CHOSOKABE",
+      "head_en": "Chosokabe Kunichika",
+      "head_ru": "Тёсокабэ Кунитика"
+    },
+    {
+      "slug": "OTOMO",
+      "ja": "大友",
+      "en": "Otomo",
+      "ru": "Отомо",
+      "castle": "Funai",
+      "lon": 131.609,
+      "lat": 33.241,
+      "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+      "civ": "CIVILIZATION_JAC_OTOMO",
+      "head_en": "Otomo Yoshiaki",
+      "head_ru": "Отомо Ёсиаки"
+    },
+    {
+      "slug": "SHIMAZU",
+      "ja": "島津",
+      "en": "Shimazu",
+      "ru": "Симадзу",
+      "castle": "Kagoshima",
+      "lon": 130.559,
+      "lat": 31.596,
+      "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+      "civ": "CIVILIZATION_JAC_SHIMAZU",
+      "head_en": "Shimazu Takahisa",
+      "head_ru": "Симадзу Такахиса"
+    },
+    {
+      "slug": "RYUKYU",
+      "ja": "琉球王国",
+      "en": "Ryukyu Kingdom",
+      "ru": "Королевство Рюкю",
+      "castle": "Shuri",
+      "lon": 127.719,
+      "lat": 26.218,
+      "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+      "civ": "CIVILIZATION_JAC_RYUKYU",
+      "head_en": "King Sho Sei",
+      "head_ru": "Король Сё Сэй"
+    },
+    {
+      "slug": "AINU",
+      "ja": "アイヌ",
+      "en": "Ainu",
+      "ru": "Айны",
+      "castle": "Nibutani",
+      "lon": 142.149,
+      "lat": 42.633,
+      "leader": "LEADER_JAC_AINU_TARIKONA",
+      "civ": "CIVILIZATION_JAC_AINU",
+      "head_en": "Tarikona",
+      "head_ru": "Тарикона"
+    }
+  ],
+  "seat_castles": {
+    "RYUKYU": "RYUKYU_SHURI",
+    "AINU": "AINU_POROMOI",
+    "ASAKURA": "ASAKURA_ICHIJODANI",
+    "IMAGAWA": "IMAGAWA_SUNPU",
+    "YAMANOUCHI_UESUGI": "UESUGI_HIRAI",
+    "HONGANJI": "HONGANJI_ISHIYAMA",
+    "MORI": "MORI_KORIYAMA",
+    "TAKEDA": "TAKEDA_TSUTSUJI",
+    "HOJO": "HOJO_ODAWARA",
+    "OTOMO": "OTOMO_RESIDENCE",
+    "ASHINA": "ASHINA_KUROKAWA",
+    "CHOSOKABE": "CHOSOKABE_OKO",
+    "ROKKAKU": "ROKKAKU_KANNONJI",
+    "MIYOSHI": "MIYOSHI_SHOZUI",
+    "MATSUDAIRA": "MATSUDAIRA_OKAZAKI",
+    "SHIMAZU": "SHIMAZU_SHIMIZU",
+    "NAGAO": "NAGAO_KASUGAYAMA",
+    "OUCHI": "OUCHI_YAMAGUCHI",
+    "AMAGO": "AMAGO_TODA"
+  },
+  "castle_names": {
+    "IMAGAWA_KAKEGAWA": [
+      "Kakegawa",
+      "Какэгава"
+    ],
+    "ASHIKAGA_TAKAYA": [
+      "Takaya",
+      "Такая"
+    ],
+    "ASHIKAGA_MITSUISHI": [
+      "Mitsuishi",
+      "Мицуиси"
+    ],
+    "DATE_YAMAGATA": [
+      "Yamagata",
+      "Ямагата"
+    ],
+    "UESUGI_MINOWA": [
+      "Minowa",
+      "Минова"
+    ],
+    "MIYOSHI_AMAGIRI": [
+      "Amagiri",
+      "Амагири"
+    ],
+    "ASHIKAGA_SAKURABORA": [
+      "Sakurabora",
+      "Сакурабора"
+    ],
+    "UESUGI_OTA": [
+      "Ota",
+      "Ота"
+    ],
+    "SHIMAZU_OBI": [
+      "Obi",
+      "Оби"
+    ],
+    "ROKKAKU_KAMAHABA": [
+      "Kamaha",
+      "Камаха"
+    ],
+    "DATE_KOORI": [
+      "Koori Nishiyama",
+      "Коори-Нисияма"
+    ],
+    "UESUGI_OBOW": [
+      "Oyumi",
+      "Оюми"
+    ],
+    "HOJO_EDO": [
+      "Edo",
+      "Эдо"
+    ],
+    "ASHIKAGA_OKISHIO": [
+      "Okishio",
+      "Окисио"
+    ],
+    "OUCHI_TSUWANO": [
+      "Tsuwano",
+      "Цувано"
+    ],
+    "ASHIKAGA_KIRIYAMA": [
+      "Kiriyama",
+      "Кирияма"
+    ],
+    "MIYOSHI_YAGAMI": [
+      "Yakami",
+      "Яками"
+    ],
+    "MIYOSHI_SHIBAO": [
+      "Shibo",
+      "Сибо"
+    ],
+    "IMAGAWA_NAGOYA": [
+      "Nagoya",
+      "Нагоя"
+    ],
+    "ODA_SHOBATA": [
+      "Shobata",
+      "Сёбата"
+    ],
+    "SHIMAZU_IZAKU": [
+      "Izaku",
+      "Идзаку"
+    ],
+    "ASHIKAGA_BITCHU_MATSUYAMA": [
+      "Bitchu Matsuyama",
+      "Биттю-Мацуяма"
+    ],
+    "ASHIKAGA_HOJOZU": [
+      "Hojozu",
+      "Ходзёдзу"
+    ],
+    "ASHIKAGA_YUZUKI": [
+      "Yuzuki",
+      "Юдзуки"
+    ],
+    "ASHIKAGA_NANAO": [
+      "Nanao",
+      "Нанао"
+    ],
+    "OUCHI_YAMABUKI": [
+      "Yamabuki",
+      "Ямабуки"
+    ],
+    "TAKEDA_UEHARA": [
+      "Uehara",
+      "Уэхара"
+    ],
+    "ASHIKAGA_KUWANOMI": [
+      "Kuwanomi-dera",
+      "Куваноми-дэра"
+    ],
+    "UESUGI_KAWAGOE": [
+      "Kawagoe",
+      "Кавагоэ"
+    ],
+    "ASHINA_INAWASHIRO": [
+      "Inawashiro",
+      "Инавасиро"
+    ],
+    "ASHIKAGA_GOSEYAMA": [
+      "Nochiseyama",
+      "Нотисэяма"
+    ],
+    "HOJO_KOGA": [
+      "Koga",
+      "Кога"
+    ],
+    "RYUKYU_NAKAGUSUKU": [
+      "Nakagusuku",
+      "Накагусуку"
+    ],
+    "DATE_YANAGAWA": [
+      "Yanagawa",
+      "Янагава"
+    ]
+  },
+  "territory_anchors": [
+    [
+      "山城",
+      "ASHIKAGA",
+      135.76,
+      35.01
+    ],
+    [
+      "大和",
+      "ASHIKAGA",
+      135.83,
+      34.68
+    ],
+    [
+      "和泉",
+      "ASHIKAGA",
+      135.46,
+      34.58
+    ],
+    [
+      "伊賀",
+      "ASHIKAGA",
+      136.13,
+      34.77
+    ],
+    [
+      "志摩",
+      "ASHIKAGA",
+      136.85,
+      34.36
+    ],
+    [
+      "伊豆",
+      "HOJO",
+      138.94,
+      35.12
+    ],
+    [
+      "安房",
+      "HOJO",
+      139.87,
+      34.99
+    ],
+    [
+      "上総",
+      "YAMANOUCHI_UESUGI",
+      140.1,
+      35.48
+    ],
+    [
+      "美濃",
+      "ASHIKAGA",
+      136.76,
+      35.42
+    ],
+    [
+      "下野",
+      "YAMANOUCHI_UESUGI",
+      139.88,
+      36.56
+    ],
+    [
+      "加賀",
+      "HONGANJI",
+      136.66,
+      36.56
+    ],
+    [
+      "佐渡",
+      "NAGAO",
+      138.4,
+      38.0
+    ],
+    [
+      "丹後",
+      "ASHIKAGA",
+      135.2,
+      35.54
+    ],
+    [
+      "但馬",
+      "ASHIKAGA",
+      134.82,
+      35.54
+    ],
+    [
+      "因幡",
+      "ASHIKAGA",
+      134.24,
+      35.5
+    ],
+    [
+      "伯耆",
+      "AMAGO",
+      133.33,
+      35.43
+    ],
+    [
+      "隠岐",
+      "AMAGO",
+      133.3,
+      36.2
+    ],
+    [
+      "美作",
+      "AMAGO",
+      134.0,
+      35.07
+    ],
+    [
+      "備後",
+      "OUCHI",
+      133.36,
+      34.5
+    ],
+    [
+      "長門",
+      "OUCHI",
+      130.94,
+      34.0
+    ],
+    [
+      "紀伊",
+      "ASHIKAGA",
+      135.17,
+      34.22
+    ],
+    [
+      "紀伊",
+      "ASHIKAGA",
+      135.75,
+      33.75
+    ],
+    [
+      "淡路",
+      "MIYOSHI",
+      134.9,
+      34.34
+    ],
+    [
+      "筑前",
+      "OUCHI",
+      130.4,
+      33.6
+    ],
+    [
+      "筑後",
+      "OTOMO",
+      130.5,
+      33.3
+    ],
+    [
+      "豊前",
+      "OUCHI",
+      131.14,
+      33.6
+    ],
+    [
+      "肥前",
+      "OTOMO",
+      130.3,
+      33.2
+    ],
+    [
+      "肥前",
+      "OTOMO",
+      129.9,
+      32.8
+    ],
+    [
+      "肥後",
+      "OTOMO",
+      130.7,
+      32.8
+    ],
+    [
+      "肥後",
+      "OUCHI",
+      130.82,
+      33.0
+    ],
+    [
+      "大隅",
+      "SHIMAZU",
+      130.85,
+      31.4
+    ],
+    [
+      "壱岐",
+      "OTOMO",
+      129.7,
+      33.75
+    ],
+    [
+      "対馬",
+      "OUCHI",
+      129.3,
+      34.3
+    ]
+  ],
+  "importance": {
+    "IMAGAWA_KAKEGAWA": 2,
+    "ASHIKAGA_TAKAYA": 2,
+    "ASHIKAGA_MITSUISHI": 1,
+    "DATE_YAMAGATA": 1,
+    "UESUGI_MINOWA": 2,
+    "MIYOSHI_AMAGIRI": 1,
+    "ASHIKAGA_SAKURABORA": 1,
+    "UESUGI_OTA": 1,
+    "SHIMAZU_OBI": 1,
+    "ROKKAKU_KAMAHABA": 1,
+    "DATE_KOORI": 2,
+    "UESUGI_OBOW": 1,
+    "HOJO_EDO": 2,
+    "ASHIKAGA_OKISHIO": 2,
+    "OUCHI_TSUWANO": 1,
+    "ASHIKAGA_KIRIYAMA": 1,
+    "MIYOSHI_YAGAMI": 2,
+    "MIYOSHI_SHIBAO": 2,
+    "IMAGAWA_NAGOYA": 1,
+    "ODA_SHOBATA": 2,
+    "SHIMAZU_IZAKU": 1,
+    "ASHIKAGA_BITCHU_MATSUYAMA": 1,
+    "ASHIKAGA_HOJOZU": 1,
+    "ASHIKAGA_YUZUKI": 1,
+    "ASHIKAGA_NANAO": 2,
+    "OUCHI_YAMABUKI": 2,
+    "TAKEDA_UEHARA": 1,
+    "ASHIKAGA_KUWANOMI": 1,
+    "UESUGI_KAWAGOE": 2,
+    "ASHINA_INAWASHIRO": 1,
+    "ASHIKAGA_GOSEYAMA": 1,
+    "HOJO_KOGA": 1,
+    "RYUKYU_NAKAGUSUKU": 2,
+    "DATE_YANAGAWA": 1
+  }
+}

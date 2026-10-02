@@ -196,4 +196,4 @@ JSON と SSOT を機械照合し、すべて一致した。
 
 ## 再生成
 
-SSOT 14.5 によると、旧ワークスペースでの生成順は `country_ledger_build.py` → `territory_allocation_build.py` → `render_country_ledger.py` → `render_territory_model.py`。これらのスクリプトはこのリポジトリには無く、**SSOT だけからJSONを再生成する処理は未実装**。JSON を使う前に、上記の照合を再実行して SSOT との一致を確認する。
+SSOT 14.5 によると、以前は調査結果から本文と JSON を生成する作業用スクリプトを使っていた。このリポジトリにはその実行ツールは含まれず、**SSOT だけからJSONを再生成する処理は未実装**。JSON を使う前に、上記の照合を再実行して SSOT との一致を確認する。

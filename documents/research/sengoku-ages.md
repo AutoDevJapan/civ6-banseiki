@@ -1,5 +1,7 @@
 # 戦国パックの時代（黄金期・暗黒期）設計
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 > **位置づけ：設計。実装はしない。** 決定の正本は [SSOT 3.2](../spec/ssot/03-map-and-scale.md)（時代は改元ごとに判定し、時代スコアは Lua の「武功の台帳」で数える、ほか）と [3.1](../spec/ssot/03-map-and-scale.md)（日本マップでは忠誠心による離反を起こさない）。本書はそれを実装できる形に落とす。点数・閾値の数値は**暫定**で、実機で測ってから決める（SSOT 3.2 の数値の決め方に従う）。
 > 参照元は `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/`（以下「公式」）。`DLC/Expansion2` が Gathering Storm（GS）、`DLC/Expansion1` が Rise and Fall。`RULESET_JAC_BANSEIKI` のゲームコアは GS なので、**`DLC/Expansion2` 内のコピーを有効な定義として引用する**（`Expansion1_*.xml` は Expansion1 側と内容が違う。例：閾値は Expansion1 が 12/24、Expansion2 が 14/28）。テキストは `DLC/Expansion2/Text/en_US/`、UI の Lua は `DLC/Expansion2/UI/Additions/` にある。行番号は `ファイル:行`。
 
@@ -122,9 +124,9 @@ SSOT 3.2 に反映済みの決定。本書はこれを前提にし、別案は�
 | 遅代 | 令和→遅代 | 2119-05 | 1757 | ゲーム終了まで |
 
 - 天下統一まで続けるため（SSOT 3.2）、慶長の後も史実の改元で区切る（オーナー判断 L-3、2026-09-30。旧 Q38）。元和・寛永から明治・大正・昭和・平成・令和まで、史実の順に 46 回の改元（弘治から令和まで）で判定する。令和は 100 年続け（2019 年 5 月から 2119 年）、その次は架空の元号「遅代」（ちだい、Chidai、Тидай）にする。戦国時代のまま令和の後まで続くと日本が世界から遅れたままになる、という位置づけで、遅代の改元では点によらず全ての家を暗黒期にする（暗黒期の家が黄金期の点に届いても英雄期にならない。暗黒期の政策の選択は通常どおり）。遅代の期はゲーム終了まで続き、その点は次の判定が無いので画面の表示だけに残る。
-- 改元の年月の表は [`../spec/data/sengoku-reigns.json`](../spec/data/sengoku-reigns.json)（出典：Wikipedia「Japanese era name」の一覧。1582 年 10 月より前はユリウス暦、以後はグレゴリオ暦の西暦換算）。`tools/generate_sengoku_reigns.py` が表の行と ja・en・ru の名前・見出しを作る。各速度のターンは生成した SQL の各行の末尾に書く。
+- 改元の年月の表は [`../spec/data/sengoku-reigns.json`](../spec/data/sengoku-reigns.json)（出典：Wikipedia「Japanese era name」の一覧。1582 年 10 月より前はユリウス暦、以後はグレゴリオ暦の西暦換算）。`tools/civ6-data-rs/src/reigns.rs` が表の行と ja・en・ru の名前・見出しを作る。各速度のターンは生成した SQL の各行の末尾に書く。
 - 暦（`JAC_Sengoku_Calendar.xml`）の標準速度は変えない。標準以外の速度の暦は、元号＝時代の実装でエンジンの時代の始まりに合わせて作り直した（オーナー判断 U-2b、[元号＝時代](../poc/era-equals-reign.md)）。2119 年（遅代）は、オンライン 865・クイック 1159・標準 1757・エピック 2620・マラソン 5269 ターン目。令和は 715・958・1457・2170・4369 ターン目。戦国パックの目安（標準で約 200 ターン、SSOT 3.2）を大きく超えるので、遅代まで進むのは天下統一が大きく遅れたゲームだけになる。
-- **同じターンの改元（長さ 0 の期）**：一番短い期は万延（1860 年 4 月〜1861 年 3 月）で、オンラインで 1 ターン、標準で 3 ターン。今の表と暦では、どの速度でも 2 つの改元が同じターンに入ることは無い（`tests/test_sengoku_ages.py` が全速度で確かめる）。表か暦が変わって同じターンに入った場合は、そのターンの改元のうち最後のものにまとめ、1 回だけ判定する（間の改元の期は長さ 0 で、判定・通知・画面を出さない）。判定の結果には締めた期の番号（`from`）を残し、改元の画面はその期の元号を出す。
+- **同じターンの改元（長さ 0 の期）**：一番短い期は万延（1860 年 4 月〜1861 年 3 月）で、オンラインで 1 ターン、標準で 3 ターン。今の表と暦では、どの速度でも 2 つの改元が同じターンに入ることは無い（`tools/civ6-lua-tests-rs/tests/ages.rs` が全速度で確かめる）。表か暦が変わって同じターンに入った場合は、そのターンの改元のうち最後のものにまとめ、1 回だけ判定する（間の改元の期は長さ 0 で、判定・通知・画面を出さない）。判定の結果には締めた期の番号（`from`）を残し、改元の画面はその期の元号を出す。
 - 期の長さの差（弘治 7 ターン、天正 59 ターン）は、閾値を期の長さに比例させて吸収する（§5.3）。
 - 開始時の天文の期も判定する（最初の判定は弘治への改元のとき）。天文の期はそれまでの 65 ターン分の点で判定する。天文の期そのものに年齢は無い（Civ6 の最初の時代に年齢が無いのと同じ）。
 
@@ -346,7 +348,7 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 1. データ：公式の年齢・誓約を止める設定（§4.2）、`ERA_RENAISSANCE` の最長ターン（§4.3）、改元の表（名前・年・月、ja/en/ru）、年齢の効果・誓約・暗黒期の専用政策の `Modifiers` と、それを付ける共通の特性 `TRAIT_JAC_AGES`（§7）。
 2. ゲームプレイ Lua：台帳の初期化・ターン開始の差分・占領と建設のイベント・改元の判定・タイルのプロパティを書く関数・選択の受け付け（§5・§6・§7.1）。
 3. UI Lua：改元の画面と時代スコアの画面（§8）。家固有名の差し替えに足す。
-4. 自動テスト：データの断面（§4.2 の最終値：暗黒・黄金の基準値が −9999・9999、閾値の補正がすべて 0、`Eras_XP2.EraScoreThresholdShift` が全行 0、誓約の選択数・提示数が 0、`Moments.EraScore` が全行 0。型に `ERA_SCORE` を含む Modifier を参照する取り付け行（`CommemorationModifiers`・`BuildingModifiers`・`GameModifiers`・`TraitModifiers`・`PolicyModifiers` など全表）が 0 件。公式の年齢の忠誠の `TraitModifiers` 2 行が無い、`RequiresDarkAge`・`RequiresGoldenAge` の政策が 0 件。改元の表が 47 行（弘治〜令和と遅代）、Modifier がある）と、台帳の Lua を Python（lupa）で動かす単体テスト（奪取の区分、キーの重複防止、同じ城を同じターンに再奪取（A→B→A、A→B→A→B）してそのつど点になる、閾値の式、同盟の 1 期 1 回、開始時の同盟を数えない（ターン 32 の期限切れを、台帳が先に走る順と後に走る順の両方で 0 点、そのターンに外交で結び直せばどちらの順でも 2 点。プロパティが `false` になった後に残る同盟も 0 点で、エンジンが解いた後に外交で結び直せば 2 点。同じチームの組は 0 点）、出来事の点（フラグの 1 家 1 回、改元のターンのフラグは新しい期）、読み込み後に数え直さない、占領してすぐ破却した城の点と滅亡の点、占領イベントと差分で二重に数えない、移管で出る `CityBuilt` で点を付けない、開拓者から始めた家の本拠の登録、プロパティを書く関数を何度呼んでも同じで要の都市が家ごとに 1 つ）。
+4. 自動テスト：データの断面（§4.2 の最終値：暗黒・黄金の基準値が −9999・9999、閾値の補正がすべて 0、`Eras_XP2.EraScoreThresholdShift` が全行 0、誓約の選択数・提示数が 0、`Moments.EraScore` が全行 0。型に `ERA_SCORE` を含む Modifier を参照する取り付け行（`CommemorationModifiers`・`BuildingModifiers`・`GameModifiers`・`TraitModifiers`・`PolicyModifiers` など全表）が 0 件。公式の年齢の忠誠の `TraitModifiers` 2 行が無い、`RequiresDarkAge`・`RequiresGoldenAge` の政策が 0 件。改元の表が 47 行（弘治〜令和と遅代）、Modifier がある）と、台帳の Lua を Rust（mlua と Lua 5.1）で動かす単体テスト（奪取の区分、キーの重複防止、同じ城を同じターンに再奪取（A→B→A、A→B→A→B）してそのつど点になる、閾値の式、同盟の 1 期 1 回、開始時の同盟を数えない（ターン 32 の期限切れを、台帳が先に走る順と後に走る順の両方で 0 点、そのターンに外交で結び直せばどちらの順でも 2 点。プロパティが `false` になった後に残る同盟も 0 点で、エンジンが解いた後に外交で結び直せば 2 点。同じチームの組は 0 点）、出来事の点（フラグの 1 家 1 回、改元のターンのフラグは新しい期）、読み込み後に数え直さない、占領してすぐ破却した城の点と滅亡の点、占領イベントと差分で二重に数えない、移管で出る `CityBuilt` で点を付けない、開拓者から始めた家の本拠の登録、プロパティを書く関数を何度呼んでも同じで要の都市が家ごとに 1 つ）。
 5. 実機：約 200 ターンの自動進行で年齢の割合を測り、数値を決める。あわせて次を確かめる。
    - 公式の時代スコアが入らない：毎ターン全勢力で今の期の公式の点（`GetPlayerCurrentEraScoreBreakdown` の合計）が 0（§4.2 の Modifier の削除が効いていること）。
    - 公式の年齢が起きない：毎ターン全勢力で `GetPlayerDarkAgeThreshold` ≤ `GetPlayerCurrentScore` ＜ `GetPlayerGoldenAgeThreshold`、公式の時代が切り替わるたびに `HasDarkAge`・`HasGoldenAge`・`HasHeroicGoldenAge` が偽（§4.2）。
@@ -358,8 +360,8 @@ Dramatic Ages モード（`Byzantium_Gaul_DramaticAges_*_MODE.xml`）は同じ�
 `tools/civ6-autotest/scenarios/ages-probe.json`（日本 15 km、武田が人間・他は AI、**読み取りのみ**で 110 ターン）。公式の時代システムを止める前の現状と、エンジン側の期の長さを測る。実行：
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/ages-probe.json --check
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/ages-probe.json --output tools/civ6-autotest/artifacts/ages-probe-01
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/ages-probe.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/ages-probe.json --output tools/civ6-autotest/artifacts/ages-probe-01
 ```
 
 - ステップ 4 は、ルールセット・22 勢力の生存と並び・`Eras_XP1` の 4 期の行を確かめ、違えば Lua のエラーで止まる（シナリオが失敗する）。

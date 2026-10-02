@@ -1,0 +1,158 @@
+{
+  "cargo": "cargo run --manifest-path tools/Cargo.toml -p civ6-assets-rs --jobs 2 --bin <bin> -- <arguments>",
+  "root_environment": "CIV6_ASSETS_ROOT",
+  "entries": [
+    {
+      "source": "tools/japan_map_scale/generate.py",
+      "bin": "japan-map-generate",
+      "arguments": [
+        "--official <Civ6Map>",
+        "--cache <directory>",
+        "--output <Maps directory>"
+      ],
+      "module": "generate"
+    },
+    {
+      "source": "tools/japan_map_scale/prosperity.py",
+      "bin": "japan-map-prosperity",
+      "arguments": [
+        "--maps <Maps directory>",
+        "--output <JSON path>"
+      ],
+      "module": "prosperity"
+    },
+    {
+      "source": "tools/japan_map_scale/prosper_start.py",
+      "bin": "japan-map-prosper-start",
+      "arguments": [
+        "--maps <Maps directory>",
+        "--scenario <JSON path>"
+      ],
+      "module": "prosper_start"
+    },
+    {
+      "source": "tools/japan_map_scale/write_support.py",
+      "bin": "japan-map-support",
+      "subcommand": "support",
+      "arguments": [
+        "--maps <Maps directory>",
+        "--output <map mod directory>",
+        "--scenarios <directory>"
+      ],
+      "module": "write_support"
+    },
+    {
+      "source": "tools/japan_map_scale/write_custom_civs.py",
+      "bin": "japan-map-support",
+      "subcommand": "custom-civs",
+      "arguments": [
+        "--output <custom civs mod directory with ArtDefs templates>"
+      ],
+      "module": "write_custom_civs"
+    },
+    {
+      "source": "tools/japan_map_scale/write_city_names.py",
+      "bin": "japan-map-support",
+      "subcommand": "city-names",
+      "arguments": [
+        "--output <custom civs mod directory>"
+      ],
+      "module": "write_city_names"
+    },
+    {
+      "source": "tools/japan_map_scale/write_feuds.py",
+      "bin": "japan-map-support",
+      "subcommand": "feuds",
+      "arguments": [
+        "--output <XML path>"
+      ],
+      "module": "write_feuds"
+    },
+    {
+      "source": "tools/japan_map_scale/unification_test_map.py",
+      "bin": "japan-map-unification",
+      "arguments": [
+        "--official <Civ6Map>",
+        "--output <Civ6Map path>"
+      ],
+      "module": "unification_test_map"
+    },
+    {
+      "source": "tools/japan_map_scale/start_1534.py",
+      "module": "start_1534",
+      "functions": [
+        "data",
+        "heads",
+        "head_override",
+        "leader_id",
+        "civ_id"
+      ],
+      "bin": null
+    },
+    {
+      "source": "tools/jac_art/draw_crests.py",
+      "bin": "jac-draw-crests",
+      "arguments": [
+        "--output <crest originals directory>"
+      ],
+      "module": "draw_crests"
+    },
+    {
+      "source": "tools/jac_art/build_art.py",
+      "bin": "jac-build-art",
+      "arguments": [
+        "--originals <directory>",
+        "--growth-originals <directory>",
+        "--output <custom civs mod directory>",
+        "--growth-mod <directory>",
+        "--build <staging directory>",
+        "--cooker <SDK Cooker directory>",
+        "--game <game directory>"
+      ],
+      "module": "build_art"
+    },
+    {
+      "source": "tools/jac_art/generate_portraits.py",
+      "bin": "jac-generate-portraits",
+      "arguments": [
+        "--only <leader>...",
+        "--originals <directory>",
+        "--cli <official Codex executable>",
+        "--print-prompt"
+      ],
+      "module": "generate_portraits"
+    }
+  ],
+  "fixtures": {
+    "portraits": "Offline prompt/format/auth-guard tests. Actual subscription image generation is not invoked during tests.",
+    "geography": "Hash-verified Natural Earth and ETOPO rings/DEM captured in geography.zip; tests generate all four maps from these data.",
+    "blp": "Verbatim name-table prefixes of actual successfully cooked packages, with whole-file source hashes; no large texture payload included.",
+    "official": "Portable excerpts of official table definitions, valid resources/features, icon sizes and colors; original SDK remains read-only.",
+    "subprocess": "jac-process-fixture is a Rust-only offline Codex/cooker fixture; it refuses to run unless JAC_ASSETS_TEST_PROCESS=1. No image-generation service or SDK cooker is invoked by the test suite.",
+    "geography_zip_sha256": "8ed144540862f074d69a34c27b7f85c1ce0c9a525c04569d222c30d1f2435af8",
+    "source_cache": "source-cache.zip contains the three verbatim pinned downloads. Generator CLI tests extract and hash-check them, recreate the captured game schema/resource inputs and use an isolated repository; no network or installed SDK is required.",
+    "generated_lua": "mlua runs Lua 5.1 against the actual CLI-generated files for every standard output spelling: four map entry scripts, two resource tables with 17 independently captured sites, and all 19 ui_lua chunks in six generated scenarios. Civ stubs read generated SQLite state; failure cases exercise scenario assertions and event registration.",
+    "legacy_test_inventory": "legacy-test-inventory.json independently captures all 49 baseline source/class/test identities and the four source file hashes at 331c933. The parity test compares the entire fixed identity set after the original Python files are removed.",
+    "source_cache_zip_sha256": "3cba719eda6335ea7c968ed40e17b7c597d4eac7b3ec9b9f351f6f817277e6e6"
+  },
+  "validation_scope": "No Civ6/live_chain. Python is never invoked. The fixed inventory of 11 old runnable source identities remains validated after original .py files are removed. No MOD edits. Rust rendering may produce different PNG bytes while preserving alpha, dimensions, layout and glyph checks.",
+  "shared_production_dependency": {
+    "crate": "civ6-data-rs",
+    "source_commit": "ffc456527f6bf33b8cfd791f53cc3bb8f78d949d",
+    "modules": [
+      "asset_dependencies::SEATS",
+      "asset_dependencies::art::{LEADER_ORDER,SUBJECTS,filename,prompt,leaders,atlas}",
+      "asset_dependencies::city_names",
+      "asset_dependencies::feuds"
+    ],
+    "atlas_adapter": "Alpha-aware Lanczos resizing prepares cells; the shared data helper performs inventory checks, atlas layout and composition.",
+    "asset_dependencies_git_blob": "ee4e75f80268216642554bb233f76b300cb8ffe2"
+  },
+  "cli_compatibility": {
+    "long_option_abbreviations": "Every root parser and support subcommand accepts unambiguous long-option prefixes; all 27 tool options are exercised.",
+    "portrait_only": "Choices come from shared SUBJECTS. Unknown subjects exit 2 before runtime; legacy --o remains an alias for --only. ArgAction::Set preserves every value within only the last occurrence, including mixed exact, inferred and alias spellings.",
+    "repeated_options": "A shared command configuration enables args_override_self and infer_long_args for all root parsers and support subcommands. All 27 options accept repeated exact and inferred spellings; the last occurrence replaces earlier values.",
+    "empty_paths": "All 25 path options normalize an empty value to the current directory (.). Full and inferred --flag= forms are tested, including the three original Path options --official, --cache and --output.",
+    "normal_map_output": "Canonical paths identify the standard Maps directory for automatic support updates, including relative, absolute and dot-component forms. Unrelated exports leave standard support files alone."
+  }
+}

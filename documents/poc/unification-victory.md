@@ -1,12 +1,14 @@
 # 天下統一 PoC
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 SSOT 3.1 の「登録した全城を支配すると天下統一」「破却された登録城は条件から外れる」「開拓者から始める版では全勢力の本拠（最初の首都）の支配で天下統一」（PR #38 のオーナー判断）と、3.2 の「時間切れ・スコア勝利なし」を対象とする。2026-09-30 の実機で、検証地図での勝利の成立（unify-15）と 15 km 地図の登録城56（unify-16）を確認した。開拓者開始・通常地図の本拠の条件、チーム・同盟での合算、マルチプレイは未確認（「未確認・要実機確認」）。
 
 ## 登録と勝利条件
 
-- 史実開始の 15 km・20 km `.Civ6Map` の `Cities` 行（都市の中心タイル）を登録城の正本にする。現在は各地図 56 都市で、琉球とアイヌを含む。`tools/generate_unification_victory.py` が各地図の `Cities` 行から、そのタイルの X・Y を並べた SQL（`poc/JAC_PoC_JapanMapScale/Data/JAC_Japan_20km_Castles.sql`・`JAC_Japan_15km_Castles.sql`）を生成する。modinfo の条件で、その地図を選んだときだけ読み込む（`LoadOrder` 300 で勝利の SQL の後）。開拓者開始地図には登録城がない。
+- 史実開始の 15 km・20 km `.Civ6Map` の `Cities` 行（都市の中心タイル）を登録城の正本にする。現在は各地図 56 都市で、琉球とアイヌを含む。`tools/civ6-data-rs/src/unification.rs` が各地図の `Cities` 行から、そのタイルの X・Y を並べた SQL（`poc/JAC_PoC_JapanMapScale/Data/JAC_Japan_20km_Castles.sql`・`JAC_Japan_15km_Castles.sql`）を生成する。modinfo の条件で、その地図を選んだときだけ読み込む（`LoadOrder` 300 で勝利の SQL の後）。開拓者開始地図には登録城がない。
 - 登録城は「そのタイルに立っている都市」で判定する。公式の WarMachine シナリオがパリを座標で判定するのと同じ `REQUIREMENT_CITY_LOCATION_MATCHES` を使う。占領・割譲・`TransferCity` で所有者が変わってもタイルは変わらないので、登録城のまま数える。旧設計の内部マーカー建物（`BUILDING_JAC_REGISTERED_CASTLE`）は廃止した。都市の中心区域は `CaptureRemovesBuildings=true` で、中心区域の建物は占領時に取り除かれるため、占領された城が条件から黙って外れるおそれがあった（公式データの調査で判明）。
-- `VICTORY_JAC_SENGOKU_UNIFICATION` は `JAC_Sengoku_Victories` に登録する。条件に城の数を書かない。`tools/generate_unification_victory.py` が SQL を生成し、ネイティブ要件エンジンが次のどちらかでチームの勝利を判定する。
+- `VICTORY_JAC_SENGOKU_UNIFICATION` は `JAC_Sengoku_Victories` に登録する。条件に城の数を書かない。`tools/civ6-data-rs/src/unification.rs` が SQL を生成し、ネイティブ要件エンジンが次のどちらかでチームの勝利を判定する。
   1. **登録城の条件**：登録城のタイルに立つ都市がゲーム内に1つ以上あり、それらがすべてそのチームの所有である。所有者は主要勢力・都市国家・自由都市を区別しない。
   2. **本拠の条件**：登録城のタイルに立つ都市がゲーム内に1つもなく、公式の制覇勝利と同じ `REQUIREMENT_TEAM_DOMINATION_VICTORY`（全勢力の最初の首都を支配）を満たす。登録城の SQL を読み込まない地図では、登録城の集合には座標 (-1, -1) の番兵だけが残り、どの都市にも一致しない。
 - 破却された登録城はタイルに都市がなくなるので、残りの登録城だけが条件になる。史実開始地図では各勢力の最初の首都も登録城であり、公式ルールでは最初の首都を破却できないため、登録城が0件になって本拠の条件へ切り替わることはない。開拓者開始地図と通常の Gathering Storm 地図は登録城が0件なので、本拠の条件で判定する。
@@ -64,7 +66,7 @@ SSOT 3.1 の「登録した全城を支配すると天下統一」「破却さ�
 
 ### 検証地図での勝利確認（`unification-victory.json`）
 
-テスト専用 MOD `poc/JAC_Test_UnificationMap`（`5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85`）に 32×20 の検証地図を置く。`tools/japan_map_scale/unification_test_map.py` が、本番の地図と同じ `generate.create_schema()`・`insert_historical_state()` で作るので、登録城（`Cities` 行）は本番と同じく地図データから入る。登録城の座標 SQL（`Data/JAC_Unification_Test_Castles.sql`）もこの MOD に置き、検証地図を選んだときだけ読み込む。勢力は織田（人間）・伊達・蘆名の3つ。登録城は4つで、織田が本拠と1城、伊達が本拠と1城を持つ。蘆名は城を持たず、開拓者から始める。
+テスト専用 MOD `poc/JAC_Test_UnificationMap`（`5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85`）に 32×20 の検証地図を置く。`tools/civ6-assets-rs/src/unification_test_map.rs` が、本番の地図と同じ `generate.create_schema()`・`insert_historical_state()` で作るので、登録城（`Cities` 行）は本番と同じく地図データから入る。登録城の座標 SQL（`Data/JAC_Unification_Test_Castles.sql`）もこの MOD に置き、検証地図を選んだときだけ読み込む。勢力は織田（人間）・伊達・蘆名の3つ。登録城は4つで、織田が本拠と1城、伊達が本拠と1城を持つ。蘆名は城を持たず、開拓者から始める。
 
 地図の登録は日本マップと同じ `Maps:JAC_Banseiki`・`MapSizes`・`MapDomainOverrides`・`MapLeaders` の形だが、別 MOD にしたので、この MOD を有効にしたときだけ地図一覧に出る。MOD 名と地図名には「テスト専用」を付けた。プレイ用の地図 MOD（`JAC_PoC_JapanMapScale`）の一覧には入れない。
 
@@ -97,11 +99,11 @@ SSOT 3.1 の「登録した全城を支配すると天下統一」「破却さ�
 ### 実行コマンド
 
 ```
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/unification-victory.json
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/unification-registry-15km.json
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/unification-victory.json
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/unification-registry-15km.json
 ```
 
-生成は `python tools/generate_unification_victory.py`（勝利の SQL・地図ごとの登録城の SQL・検証地図・2本のシナリオ）。静的検査は `python -m unittest discover -s tests -t .`。要件の行を Python で模擬評価し、1城不足で勝たない、全城で勝つ、破却後は残りの城で勝つ、登録城のタイル以外に建てた都市は数えない、破却した登録城のタイルに建て直した都市（印の建物あり）は数えない、占領・移管した登録城は新しい所有者の城として数える、読み込み順に依存しない、史実開始地図では本拠だけでは勝たない、登録城のない地図では本拠の条件で勝つ、を確かめる。
+生成は `cargo run --locked --manifest-path tools/Cargo.toml --bin generate-unification-victory --`（勝利の SQL・地図ごとの登録城の SQL・検証地図・2本のシナリオ）。静的検査は `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`。要件の行を Rust で模擬評価し、1城不足で勝たない、全城で勝つ、破却後は残りの城で勝つ、登録城のタイル以外に建てた都市は数えない、破却した登録城のタイルに建て直した都市（印の建物あり）は数えない、占領・移管した登録城は新しい所有者の城として数える、読み込み順に依存しない、史実開始地図では本拠だけでは勝たない、登録城のない地図では本拠の条件で勝つ、を確かめる。
 
 ### 未確認・要実機確認
 

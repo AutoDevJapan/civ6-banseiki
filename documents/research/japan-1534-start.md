@@ -7,7 +7,7 @@
 | フィールド | 意味 |
 |---|---|
 | factions[].head | 1534年の当主候補、生没年、異説と人物出典。証明できない年は null。 |
-| factions[].seat / current_map_seat | 史料上の本拠候補と、現行 [generate.py](../../tools/japan_map_scale/generate.py) の SEATS をそれぞれ保持。 |
+| factions[].seat / current_map_seat | 史料上の本拠候補と、現行 [generate.rs](../../tools/civ6-assets-rs/src/generate.rs) の SEATS をそれぞれ保持。 |
 | castles[].owner_faction_1534_draft / historical_holder | 22勢力へ強制配分したゲーム所有者と、当時の在地主体。両者の相違は事実認定でなくゲーム上の処理。 |
 | province_allocations[].parts[] | 旧国68国の郡・例外域別の暫定所有者。judgement=true は史実から一意に決まらない判断。 |
 | extra_regions[] | 蝦夷島・奄美・琉球など、1534年に令制国でない地域。 |

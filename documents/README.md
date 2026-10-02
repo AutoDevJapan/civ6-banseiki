@@ -15,15 +15,15 @@
 | [`spec/data/japan-1534-start.json`](spec/data/japan-1534-start.json) | 史料上の留保を含む開始データ。53拠点・勢力割当を日本地図の生成器が参照 |
 | [`research/japan-1534-relations.md`](research/japan-1534-relations.md) | 1534年の22勢力間の同盟・婚姻・主従・敵対の出典付き調査草案 |
 | [`spec/data/japan-1534-relations.json`](spec/data/japan-1534-relations.json) | 上記の機械可読データ。開始時に反映する関係の元データ |
-| [`spec/data/japan-city-name-pools.json`](spec/data/japan-city-name-pools.json) | 22勢力の都市名の一覧（漢字・読み・旧国・種別・出典）。生成は `tools/japan_map_scale/write_city_names.py` |
+| [`spec/data/japan-city-name-pools.json`](spec/data/japan-city-name-pools.json) | 22勢力の都市名の一覧（漢字・読み・旧国・種別・出典）。生成は `tools/civ6-assets-rs/src/write_city_names.rs` |
 | [`research/japan-map-resources.md`](research/japan-map-resources.md) | 日本マップの資源・河川・湖沼・植生・火山の調査と出典 |
 | [`spec/data/japan-map-resources.json`](spec/data/japan-map-resources.json) | 上記調査の機械可読な候補・配置規則 |
 | [`research/japan-1534-prosperity.md`](research/japan-1534-prosperity.md) | 1534年開始時の各家の規模（石高・動員力の推定）と、Civ6 の開始状態（人口・建物・区域・部隊）への写像。#48 の実装の元になった調査で、決定は SSOT 3.1 |
-| [`spec/data/japan-1534-prosperity.json`](spec/data/japan-1534-prosperity.json) | 上記の機械可読データ（22勢力・56都市）。生成は `tools/japan_map_scale/prosperity.py`、地図への反映は `prosper_start.py` |
+| [`spec/data/japan-1534-prosperity.json`](spec/data/japan-1534-prosperity.json) | 上記の機械可読データ（22勢力・56都市）。生成は `tools/civ6-assets-rs/src/prosperity.rs`、地図への反映は `tools/civ6-assets-rs/src/prosper_start.rs` |
 | [`research/player-grouping-candidates.md`](research/player-grouping-candidates.md) | 世界マップのプレイヤー枠を国際組織でまとめる候補と組み合わせ例 |
 | [`research/sengoku-tech-civic-tree.md`](research/sengoku-tech-civic-tree.md) | 戦国パックの技術ツリー（32）と社会制度ツリー（30）の設計案。オーナー確認前の下書き |
 | [`research/sengoku-ages.md`](research/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）設計。公式の時代システム調査、改元ごとの判定、Lua の武功の台帳（点・判定・保存・マルチプレイ同期）、家ごとの誓約と暗黒期の専用政策、画面の見せ方、現状を測る実機シナリオ |
-| [`spec/data/sengoku-reigns.json`](spec/data/sengoku-reigns.json) | 戦国パックの改元の表（弘治から令和までの史実の元号の年月と ja・en・ru の名前、令和の100年後の遅代）。`tools/generate_sengoku_reigns.py` が PoC の表と文を作る |
+| [`spec/data/sengoku-reigns.json`](spec/data/sengoku-reigns.json) | 戦国パックの改元の表（弘治から令和までの史実の元号の年月と ja・en・ru の名前、令和の100年後の遅代）。`tools/civ6-data-rs/src/reigns.rs` が PoC の表と文を作る |
 | [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント61件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
@@ -62,6 +62,7 @@
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
 | [`rust-migration.md`](rust-migration.md) | 実行ツール・生成ツール・テストを Rust へ移す手順 |
 | [`rust-migration-test-inventory.json`](rust-migration-test-inventory.json) | 移行前の全テスト名と、Rust で対応する workspace の区分 |
+| [`rust-migration-incremental-inventory.json`](rust-migration-incremental-inventory.json) | 移行中に main へ追加された吸収・英雄・再起動の137項目 |
 | [`tooling/civ6-live-rust-driver.md`](tooling/civ6-live-rust-driver.md) | 共有の実機実行ツールを Rust 実行器へ接続する処理と変更差分 |
 | [`rust-driver/README.md`](rust-driver/README.md) | 実機ドライバーの214テストの対応、レビュー指摘への修正、統合するコミットの順序 |
 

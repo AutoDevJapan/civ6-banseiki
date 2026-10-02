@@ -1,5 +1,7 @@
 # 家固有名の表示切替（SSOT 3.2）
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では一般的な名前で表示する」の実装メモ。2026-09-29 時点は**静的検査と Lua の模擬実行まで完了、実機確認待ち**（`Locale` 表へ書き込む最初の版は実機で失敗し、グローバル変数の差し替えへ作り直した）。
 
 ## オーナー判断
@@ -14,7 +16,7 @@ SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では
 
 | 対象 | 一般名（既定・DB が指す） | 家固有名 | 表示する家 | 理由 |
 |---|---|---|---|---|
-| （削除）時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 | 天下布武と広域戦 | 織田 | オーナー判断 T（元号＝時代）でツリーの4期が元号に置き換わり、期の名前ごと無くなった（[元号＝時代](era-equals-reign.md)）。「天下布武」はオーナー判断 U-1 で織田家の誓約の名前になる。今、戦国パックに登録した家固有名は無い。仕組みの検査は `tests/test_house_names_lua.py` の検査用の登録で行う |
+| （削除）時代3の名前と説明 `LOC_JAC_SENGOKU_ERA_3_NAME` `_DESCRIPTION` | 統一への広域戦 | 天下布武と広域戦 | 織田 | オーナー判断 T（元号＝時代）でツリーの4期が元号に置き換わり、期の名前ごと無くなった（[元号＝時代](era-equals-reign.md)）。「天下布武」はオーナー判断 U-1 で織田家の誓約の名前になる。今、戦国パックに登録した家固有名は無い。仕組みの検査は `tools/civ6-lua-tests-rs/tests/house.rs` の検査用の登録で行う |
 
 対象外にしたもの：C25 太閤検地（オーナー判断 Q31。研究したすべての家に同じ名前で出す）。一般的な制度名・史実の出来事で、特定の人物・家の名ではないもの：C27 刀狩、C17 楽市楽座（楽市は織田以前から各地にある）、C10 軍役帳、C26 朱印状、C08 寺内町自治、C28 兵農分離、T12 鉄砲伝来、T32 惣構、T27 安宅船。オーナーが「家固有にする」と決めたものは、後述の手順で1行足すだけで切り替えられる。
 
@@ -31,7 +33,7 @@ SSOT 3.2「特定の人物・家に結びつく名前は、その家以外では
   - グローバル変数はコンテキストごとにある。公式 UI は各コンテキストで同じ名前のグローバル関数（`Initialize` など）を定義し、`include` した元ファイルのグローバル関数を後から定義し直している（例：`DLC/Expansion1/UI/Replacements/NewTurnPanel_Expansion1.lua:7` で NewTurnPanel を読んでから `ShowEraCountdownPanel` などを定義）。差し替えはそのコンテキストの中だけに効き、同じコンテキストで後から読まれるファイルも差し替え後の `Locale` を見る
   - 公式 UI（Base・DLC）に `Locale` をローカル変数へ取り込む書き方（`local Locale = Locale` など）や `Locale:` のメソッド呼び出しは無い。どれも呼び出しのたびにグローバルの `Locale.Lookup` を引くので、差し替え後の表を通る
   - 1つのコンテキストに `ToolTipHelper` が複数の経路で読まれる（実機の `Lua.log` で WorldInput・CityPanel などに取り付けが複数回出た）。2回目以降は `already_installed` で二重に包まない
-- 家固有名が一般名を含むと、置き換え済みの文をもう一度通したとき（`TechTree.lua:1013` は `Locale.Lookup` を入れ子で呼ぶ）に二重になる。この組は実行時に使わず、`tests/test_house_names.py` でも禁止している
+- 家固有名が一般名を含むと、置き換え済みの文をもう一度通したとき（`TechTree.lua:1013` は `Locale.Lookup` を入れ子で呼ぶ）に二重になる。この組は実行時に使わず、`tools/civ6-data-rs/src/data_tests.rs` でも禁止している
 - 家固有名を持たない家（武田など）と、操作中のプレイヤーがいない画面では何も置き換えない。シヴィロペディアの部品の差し替えも、家固有名を持つ家が見ているときだけ動く
 - 画面ごとの上書きは最小にする。公式 UI の名前の多くは `Locale.Lookup` を通るため、その関数を包む方が上書き箇所が少なく、公式の書式文（`LOC_UI_CIVIC_PROGRESS_COMPLETE_BLURB` など）にも効く
 - 文明ID は長尾→上杉の改名（SSOT 3.1）でも変わらないため、切替の判定にそのまま使える
@@ -78,9 +80,9 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 
 1. `<一般名キー>` の日英露と `<一般名キー>_HOUSE` の日英露をテキスト XML に足す（一般名が既存の Name なら Name は変えない）。家固有名の文に一般名の文を含めない
 2. 所有 MOD の `UI/JAC_HouseNamesData_<名前>.lua` に `JAC_RegisterHouseName("<一般名キー>", "<一般名キー>_HOUSE", "CIVILIZATION_JAC_XXX")` を足す（複数の家に見せるなら家の数だけ行を足す）。ファイルを新設する場合は modinfo の `ImportFiles` と `Files` に載せる
-3. `python -m unittest discover -s tests -t .` を通す。`tests/test_house_names.py` が、全キーの3言語そろい・一般名と家固有名の差・家固有名の混入・家固有名への一般名の混入・登録の重複と文明IDの実在・取り付けの配線を確かめる。Lua の振る舞いは `uv run --no-project --with lupa python -m unittest discover -s tests -t .` で `tests/test_house_names_lua.py` も走らせる（`lupa` が無いと飛ばされる）。模擬の `Locale` はゲームと同じく読み取り専用で、`Locale` 表へ書き込むとテストが落ちる
+3. `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` を通す。`tools/civ6-data-rs/src/data_tests.rs` が、全キーの3言語そろい・一般名と家固有名の差・家固有名の混入・家固有名への一般名の混入・登録の重複と文明IDの実在・取り付けの配線を確かめる。Lua の振る舞いは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` で `tools/civ6-lua-tests-rs/tests/house.rs` も走らせる（Lua 5.1 を組み込み、毎回実行する）。模擬の `Locale` はゲームと同じく読み取り専用で、`Locale` 表へ書き込むとテストが落ちる
 
-戦国ツリーの登録は `tools/generate_sengoku_trees.py` の `HOUSE_NAMES` から `poc/JAC_PoC_SengokuTrees/UI/JAC_HouseNamesData_Sengoku.lua` とテキスト XML を生成する。
+戦国ツリーの登録は `tools/civ6-data-rs/src/trees.rs` の `HOUSE_NAMES` から `poc/JAC_PoC_SengokuTrees/UI/JAC_HouseNamesData_Sengoku.lua` とテキスト XML を生成する。
 
 ## 実機確認（メインセッション）
 
@@ -93,7 +95,7 @@ Locale の包みは各 Lua コンテキストごとに要る。以下のパス�
 | 上のコンテキストと EraProgressPanel・EraCompletePopup・EraReviewPopup・DedicationPopup・NewTurnPanel・HistoricMoments の `ERA_MEDIEVAL` の名前 | 織田・武田とも永禄の世（元号＝時代。時代3の家固有名は削除）。HistoricMoments では記録済みの瞬間の説明に LOC キーが残らないことも確かめる |
 | 社会制度ツリーのツールチップ（TechTree・CivicsTree の `ToolTipHelper.GetToolTip`） | 織田・武田とも C25 の名前（太閤検地）を含む |
 | シヴィロペディアの C25 のページ（`Civilopedia` で `NavigateTo`） | ページの見出しと `page.Title`：織田・武田とも太閤検地。`JAC_LocalHouseHasNames()` は織田・武田とも偽で、`JAC_HOUSE_NAMES` は空（戦国パックに家固有名の登録が無い。実機 `era-equals-reign-05` は織田を真と見ていたため失敗し、期待を直した） |
-| **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文と、表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田・武田とも太閤検地を含む。家固有名の通知での切り替えは、実機のシナリオでは確かめていない（`tests/test_house_names_lua.py` の模擬実行で時代3の名前を使って確かめる）。`house-names-*-notification.png` に記録 |
+| **通知の本文**：`GameCore_Tuner` で C25 をプレイヤー0に与え（`SetCivic`）、NotificationPanel で C25 の名前を含む通知を探す | エンジンの文と、表示される文（`Locale.Lookup` を通した見出しと本文、通知パネルの `TitleInfo`・`Summary` の表示文字列）は、織田・武田とも太閤検地を含む。家固有名の通知での切り替えは、実機のシナリオでは確かめていない（`tools/civ6-lua-tests-rs/tests/house.rs` の模擬実行で時代3の名前を使って確かめる）。`house-names-*-notification.png` に記録 |
 | `house-names-*-civics-tree.png`・`-tech-tree.png` | ツリーの見た目の記録。C25 が未公開だと「???」で、名前はスクリーンショットでは見えない（名前の判定は `ui_lua`） |
 
 要実機確認：
