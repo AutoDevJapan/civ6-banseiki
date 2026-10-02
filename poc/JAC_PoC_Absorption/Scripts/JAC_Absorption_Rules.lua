@@ -8,8 +8,15 @@ R.CITY_FAITH_KEY = "JAC_ABSORPTION_CITY_FAITH_V1"
 R.GOVERNANCE_KEY = "JAC_ABSORPTION_GOVERNANCE_V1"
 R.TOKEN_KEY = "JAC_ABSORPTION_UNIT_TOKEN_V1"
 R.REQUIRE_EXPLICIT_DISPOSITIONS_POC = true
-R.CITY_LOYALTY_DELTA_POC = 0
-R.CULTURAL_FRICTION_TURNS_POC = 0
+-- Provisional magnitudes. The official Expansion1_GlobalParameters.xml uses
+-- 50 after combat transfer and 100 after cultural-identity transfer; espionage
+-- foment unrest is -15 (-5 per promotion level). Friction is a separate,
+-- once-per-turn loyalty change, never a culture/science yield from a person.
+R.CITY_POLICY = {
+  CONQUEST = { Immediate = -15, Friction = -2, Turns = 3 },
+  SMALL_STATE = { Immediate = -5, Friction = -1, Turns = 2 },
+  MERGER = { Immediate = 0, Friction = 0, Turns = 0 },
+}
 R.UNIT_SEARCH_RADIUS_POC = 8
 R.LEADER_UNIT_TYPE_POC = "UNIT_GREAT_GENERAL"
 R.LEADER_REPRESENTATION_POC = "PERSISTENT_PERSON_WITH_GENERAL_PROXY"
@@ -74,7 +81,8 @@ function R.Equal(a, b) return R.Canonical(a) == R.Canonical(b) end
 function R.UnitKey(owner, id) return tostring(owner) .. ":" .. tostring(id) end
 function R.KeepUnit(kind, outcome)
   return (kind == "UNIT" and (outcome == "SURRENDER" or outcome == "INCORPORATE"))
-    or (kind == "PERSON" and (outcome == "CAPTURE" or outcome == "RECRUIT" or outcome == "SUBMIT"))
+    or ((kind == "PERSON" or kind == "GOVERNOR")
+      and (outcome == "CAPTURE" or outcome == "RECRUIT" or outcome == "SUBMIT"))
     or (kind == "HERO" and (outcome == "RECRUIT" or outcome == "PROTECT" or outcome == "RECONTRACT"))
     or (kind == "GREAT_PERSON" and outcome == "RECRUIT")
 end

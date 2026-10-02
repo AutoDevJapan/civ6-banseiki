@@ -1,0 +1,788 @@
+-- Gameplay only. Load after JAC_Absorption_Gameplay.lua. UI sends
+-- EXECUTE_SCRIPT requests and reads detached snapshots; it never rolls.
+include("JAC_Absorption_Rules")
+local R = JAC_AbsorptionRules
+local A = assert(ExposedMembers.JAC_Absorption, "absorption engine must load first")
+local F = {}
+local KEY = "JAC_ABSORPTION_FLOW_V1"
+local DEBUG_KEY = "JAC_ABSORPTION_FLOW_DEBUG_V1"
+local TEST_KEY = "JAC_ABSORPTION_FLOW_TEST_MODE"
+
+-- Explicitly provisional basis points. Relationship and loyalty are clamped
+-- to 0..100; contract offsets model a protected or broken commitment.
+local FIRST = { CONQUEST = 2400, SMALL_STATE = 1400, MERGER = 700 }
+local METHOD_ACTION = { CONQUEST = -700, SMALL_STATE = 0, MERGER = 600 }
+local ACTION = {
+  CAPTURE = 8800, RECRUIT = 6800, SUBMIT = 7800, EXECUTE = 9500,
+  PROTECT = 8200, RECONTRACT = 7000, SUICIDE = 9500,
+  TRANSFER = 9400, LOOT = 8800, SEIZE = 8600, RETURN = 9000,
+  SURRENDER = 9100, INCORPORATE = 8500, DISSOLVE = 9500,
+  INHERIT = 10000, PRESERVE = 10000,
+}
+local CHOICES = {
+  UNIT = { "SURRENDER", "INCORPORATE", "DISSOLVE" },
+  PERSON = { "CAPTURE", "RECRUIT", "SUBMIT", "EXECUTE" },
+  GOVERNOR = { "CAPTURE", "RECRUIT", "SUBMIT" },
+  HERO = { "RECRUIT", "PROTECT", "RECONTRACT", "SUICIDE" },
+  GREAT_PERSON = { "RECRUIT" }, -- no conversion to yields
+  ITEM = { "TRANSFER", "LOOT", "SEIZE", "RETURN" },
+  UNLOCK = { "INHERIT", "PRESERVE" },
+  RELIGION = { "PRESERVE" },
+}
+local ESCAPE = {
+  UNIT = { "ESCAPE" },
+  PERSON = { "EXILE", "RETIRE", "DEFECT", "HIDE" },
+  GOVERNOR = { "EXILE", "RETIRE", "DEFECT", "HIDE" },
+  HERO = { "HIDE", "DEFECT" },
+  GREAT_PERSON = { "EXILE", "RETIRE", "HIDE" },
+  ITEM = { "SCATTER" },
+}
+local FALLBACK = {
+  UNIT = "SURRENDER", PERSON = "CAPTURE", GOVERNOR = "CAPTURE", HERO = "PROTECT",
+  GREAT_PERSON = "RECRUIT", ITEM = "SEIZE", UNLOCK = "PRESERVE",
+  RELIGION = "PRESERVE",
+}
+local function State()
+  local state = R.Copy(Game:GetProperty(KEY) or { Version = 1, Flows = {}, World = {} })
+  assert(state.Version == 1, "unsupported absorption flow save")
+  state.World = state.World or {}
+  return state
+end
+local function Save(state) Game:SetProperty(KEY, R.Copy(state)) end
+local function Clamp(value, lo, hi) return math.max(lo, math.min(hi, value)) end
+local function DebugAllowed()
+  return Game:GetProperty(TEST_KEY) == 1 and GameConfiguration
+    and GameConfiguration.IsAnyMultiplayer and not GameConfiguration.IsAnyMultiplayer()
+end
+local function DebugState()
+  if not DebugAllowed() then return nil end
+  return R.Copy(Game:GetProperty(DEBUG_KEY) or { Rolls = {}, Delay = 2 })
+end
+local function Roll(state, flow, entry, stage)
+  entry.Rolls = entry.Rolls or {}
+  if entry.Rolls[stage] then return entry.Rolls[stage].Used end
+  local label = "JAC absorption " .. stage .. " " .. flow.ID .. "/" .. entry.ID
+  local raw = Game.GetRandNum(10000, label)
+  local debug = DebugState()
+  local key = flow.ID .. ":" .. entry.ID .. ":" .. stage
+  local forced = debug and debug.Rolls[key]
+  local used = forced == nil and raw or forced
+  assert(type(used) == "number" and used >= 0 and used < 10000, "invalid roll")
+  entry.Rolls[stage] = { Raw = raw, Used = used, Label = label,
+    Debug = forced ~= nil, Turn = Game.GetCurrentGameTurn() }
+  Save(state) -- durably journal the call before an asset transition
+  return used
+end
+local function Attitude(entry, recipient)
+  local source = entry.Source or {}
+  local loyalty = Clamp(tonumber(source.Loyalty) or 50, 0, 100)
+  local relation = source.Relations and source.Relations[tostring(recipient)]
+    or source.Relationship
+  relation = Clamp(tonumber(relation) or 50, 0, 100)
+  local contract = source.Contract
+  local contractOffset = (contract == "PROTECT" or contract == "RECONTRACT") and -500
+    or contract == "BROKEN" and 500 or 0
+  return loyalty, relation, contractOffset
+end
+local function FirstChance(flow, entry, retry)
+  local loyalty, relation, contract = Attitude(entry, flow.To)
+  local base = FIRST[flow.Mode] + (50 - loyalty) * 22 + (50 - relation) * 12 + contract
+  if entry.Kind == "ITEM" then base = math.floor(base * 0.75) end
+  if retry then base = base + 500 end
+  return Clamp(base, 0, 9500)
+end
+local function ActionChance(flow, entry)
+  local loyalty, relation, contract = Attitude(entry, flow.To)
+  local base = assert(ACTION[entry.SelectedAction], "action chance missing")
+  if entry.Kind == "UNLOCK" or entry.Kind == "RELIGION" then return 10000 end
+  return Clamp(base + METHOD_ACTION[flow.Mode] + (loyalty - 50) * 15
+    + (relation - 50) * 10 - contract, 500, 9900)
+end
+local function ResolveEscape(state, flow, entry, prefix)
+  local roll = Roll(state, flow, entry, prefix .. "_ESCAPE")
+  local chance = FirstChance(flow, entry, prefix == "P3_RETRY")
+  entry[prefix .. "Chance"] = chance
+  Save(state)
+  if roll >= chance then return nil end
+  local options = assert(ESCAPE[entry.Kind], "escape list missing")
+  local branch = Roll(state, flow, entry, prefix .. "_BRANCH")
+  return options[math.floor(branch * #options / 10000) + 1]
+end
+local function UnitKind(unit)
+  local person = unit:GetProperty(R.PERSON_KEY)
+  if unit.IsHero and unit:IsHero() then return "HERO" end
+  if person and person.Kind then return person.Kind end
+  local gp = unit:GetGreatPerson()
+  if gp and gp:GetIndividual() >= 0 then return "GREAT_PERSON" end
+  return "UNIT"
+end
+local function NativePersonID(owner, unit)
+  local person = unit:GetProperty(R.PERSON_KEY)
+  return person and person.ID or ("native-person:" .. owner .. ":" .. unit:GetID())
+end
+local function Portrait(kind, unit, record)
+  if record and record.Portrait then return record.Portrait end
+  if unit and kind == "GREAT_PERSON" then
+    local gp = unit:GetGreatPerson()
+    local individual = gp and gp:GetIndividual() or -1
+    local row = individual >= 0 and GameInfo.GreatPersonIndividuals[individual]
+    if row and row.GreatPersonIndividualType then return "ICON_" .. row.GreatPersonIndividualType end
+  end
+  if unit then return "ICON_" .. GameInfo.Units[unit:GetType()].UnitType end
+  return nil
+end
+local function Inventory(plan)
+  -- Native Great Works cannot be removed from a city's slot by the published
+  -- gameplay API. Treating one as a scattered roster ITEM while leaving its
+  -- native work in the transferred city would duplicate it. Stop before rolls.
+  assert(next(A.OwnedGreatWorks(plan.From)) == nil,
+    "native Great Works need a lossless scatter/recovery adapter")
+  local roster, entries, linked = A.GetRoster(plan.From), {}, {}
+  for id, record in pairs(roster) do
+    if record.Unit and record.Unit.Owner == plan.From and record.Unit.ID >= 0 then
+      assert(not linked[record.Unit.ID], "multiple identities refer to the same unit")
+      linked[record.Unit.ID] = id
+    end
+  end
+  local units = {}
+  for _, unit in Players[plan.From]:GetUnits():Members() do units[#units + 1] = unit end
+  table.sort(units, function(a, b) return a:GetID() < b:GetID() end)
+  local found = {}
+  for _, unit in ipairs(units) do
+    local kind = UnitKind(unit)
+    local id = linked[unit:GetID()]
+    if kind ~= "UNIT" then id = id or NativePersonID(plan.From, unit) end
+    id = id or ("unit:" .. plan.From .. ":" .. unit:GetID())
+    local record = roster[id] or unit:GetProperty(R.PERSON_KEY)
+    if record then assert(record.Kind == kind, "linked identity/unit kind mismatch") end
+    assert(not found[id], "duplicate absorption asset ID")
+    found[id] = true
+    local info = GameInfo.Units[unit:GetType()]
+    entries[#entries + 1] = {
+      ID = id, Kind = kind, Name = record and record.Name or unit:GetName()
+        or info.Name or info.UnitType,
+      Portrait = Portrait(kind, unit, record), AllowedActions = R.Copy(assert(CHOICES[kind])),
+      Source = R.Copy(record), UnitID = unit:GetID(), UnitType = info.UnitType,
+    }
+  end
+  for _, id in ipairs(R.Keys(roster)) do
+    if not found[id] then
+      local record = roster[id]
+      assert(CHOICES[record.Kind], "unsupported absorption asset kind")
+      assert(not record.Unit or record.Unit.Owner ~= plan.From or record.Unit.ID < 0,
+        "identity points to missing source unit")
+      entries[#entries + 1] = { ID = id, Kind = record.Kind,
+        Name = record.Name or record.LeaderType or id,
+        Portrait = Portrait(record.Kind, nil, record),
+        AllowedActions = R.Copy(CHOICES[record.Kind]), Source = R.Copy(record) }
+      found[id] = true
+    end
+  end
+  -- Native claim-only Heroes can outlive their Unit. Keep the same generated
+  -- identity as A.Prepare; a linked roster record has already been listed.
+  local manager = A.GetHeroesManager()
+  for def in GameInfo.HeroClasses() do
+    assert(string.match(def.HeroClassType, "^HEROCLASS_JAC_"),
+      "official Hero class is still available in Banseiki")
+    if manager:GetHeroClaimPlayer(def.Index) == plan.From then
+      local live = false
+      for _, entry in ipairs(entries) do
+        if entry.Kind == "HERO" and entry.UnitID then
+          local unit = UnitManager.GetUnit(plan.From, entry.UnitID)
+          if unit and unit:GetHeroClassType() == def.Index then live = true end
+        elseif entry.Kind == "HERO" and entry.Source and entry.Source.NativeHero
+          and entry.Source.NativeHero.Class == def.Index then live = true end
+      end
+      if not live then
+        local id = "native-hero:" .. plan.From .. ":" .. def.HeroClassType
+        assert(not found[id], "native Hero identity collision")
+        entries[#entries + 1] = { ID = id, Kind = "HERO", Name = def.Name or def.HeroClassType,
+          Portrait = "ICON_" .. def.UnitType, AllowedActions = R.Copy(CHOICES.HERO),
+          Source = { ID = id, Kind = "HERO", Owner = plan.From,
+            HeroClassType = def.HeroClassType }, DormantClass = def.Index }
+        found[id] = true
+      end
+    end
+  end
+  local leaderID = "leader:" .. plan.From
+  assert(not found[leaderID], "leader identity collision")
+  entries[#entries + 1] = {
+    ID = leaderID, Kind = "GREAT_PERSON",
+    Name = PlayerConfigurations[plan.From]:GetLeaderTypeName(),
+    Portrait = "ICON_" .. PlayerConfigurations[plan.From]:GetLeaderTypeName(),
+    AllowedActions = R.Copy(CHOICES.GREAT_PERSON),
+    Source = { ID = leaderID, Kind = "GREAT_PERSON", Owner = plan.From,
+      Loyalty = 50 }, Leader = true,
+  }
+  table.sort(entries, function(a, b) return tostring(a.ID) < tostring(b.ID) end)
+  return entries, roster
+end
+
+local function FindEntry(flow, id)
+  for _, entry in ipairs(flow.Entries) do
+    if tostring(entry.ID) == tostring(id) then return entry end
+  end
+  return nil
+end
+local function IsAllowed(entry, action)
+  for _, candidate in ipairs(entry.AllowedActions) do
+    if candidate == action then return true end
+  end
+  return false
+end
+local function RequireActor(actor, flow)
+  assert(type(actor) == "number" and actor == flow.To, "only absorbing player can choose")
+  assert(Players[actor] and Players[actor]:IsAlive(), "absorber is no longer alive")
+end
+function F.Get(id)
+  local flow = State().Flows[id]
+  return flow and flow.Phase1Complete and R.Copy(flow) or nil
+end
+function F.GetPending(playerID)
+  local state = State()
+  for _, id in ipairs(R.Keys(state.Flows)) do
+    local flow = state.Flows[id]
+    if flow.To == playerID and flow.Phase1Complete and flow.Phase ~= "DONE" then
+      return R.Copy(flow)
+    end
+  end
+  return nil
+end
+function F.DebugSetRoll(flowID, assetID, stage, value)
+  assert(DebugAllowed(), "absorption debug rolls require explicit single-player test mode")
+  assert(type(flowID) == "string"
+    and (type(assetID) == "string" or type(assetID) == "number"),
+    "debug roll identity required")
+  assert(stage == "P1_ESCAPE" or stage == "P1_BRANCH" or stage == "P3_SUCCESS"
+    or stage == "P3_RETRY_ESCAPE" or stage == "P3_RETRY_BRANCH", "unknown debug stage")
+  assert(type(value) == "number" and value == math.floor(value)
+    and value >= 0 and value < 10000, "debug roll outside 0..9999")
+  local debug = DebugState()
+  debug.Rolls[flowID .. ":" .. tostring(assetID) .. ":" .. stage] = value
+  Game:SetProperty(DEBUG_KEY, R.Copy(debug))
+end
+function F.DebugSetSpawnDelay(turns)
+  assert(DebugAllowed(), "absorption debug delay requires explicit single-player test mode")
+  assert(turns == 0 or turns == 1 or turns == 2, "debug spawn delay outside 0..2")
+  local debug = DebugState()
+  debug.Delay = turns
+  Game:SetProperty(DEBUG_KEY, R.Copy(debug))
+end
+local function DefaultAI(entry)
+  if entry.Kind == "PERSON" or entry.Kind == "GOVERNOR" then return "RECRUIT" end
+  if entry.Kind == "HERO" then return "RECONTRACT" end
+  if entry.Kind == "GREAT_PERSON" then return "RECRUIT" end
+  if entry.Kind == "ITEM" then return "TRANSFER" end
+  if entry.Kind == "UNIT" then return "INCORPORATE" end
+  if entry.Kind == "UNLOCK" then return "INHERIT" end
+  return "PRESERVE"
+end
+function F.Begin(plan)
+  assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "",
+    "absorption flow ID required")
+  assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To,
+    "distinct absorption factions required")
+  assert(R.ENTRY_MODES[plan.Mode], "unknown absorption method")
+  local state = State()
+  local existing = state.Flows[plan.ID]
+  if existing and existing.Phase1Complete then
+    assert(R.Equal(existing.Request, plan), "absorption flow ID reused with different plan")
+    if existing.Phase == "CHOICE" and Players[plan.To]
+      and not Players[plan.To]:IsHuman() then return F.Resolve(plan.To, plan.ID) end
+    return R.Copy(existing)
+  end
+  assert(Players[plan.From] and Players[plan.From]:IsAlive()
+    and Players[plan.To] and Players[plan.To]:IsAlive(), "absorption faction unavailable")
+  assert(not Players[plan.From]:IsHuman(), "existing PoC absorbs AI sources only")
+  assert(plan.EntryConditionsMet ~= false and plan.RelationsResolved ~= false,
+    "absorption entry or relations explicitly rejected")
+  assert(GameConfiguration and GameConfiguration.GetValue
+    and (GameConfiguration.GetValue("GAMEMODE_HEROES") == true
+      or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1),
+    "official Heroes & Legends mode required")
+  local manager = A.GetHeroesManager()
+  assert(manager and manager.GetHeroClaimPlayer and GameInfo.HeroClasses,
+    "native Heroes manager unavailable")
+  if existing then
+    assert(R.Equal(existing.Request, plan), "absorption flow ID reused with different plan")
+    if not existing.Phase1Complete then
+      for _, entry in ipairs(existing.Entries) do
+        if ESCAPE[entry.Kind] then
+          entry.EscapeOutcome = ResolveEscape(state, existing, entry, "P1")
+          if entry.EscapeOutcome then entry.FinalOutcome = entry.EscapeOutcome end
+          Save(state)
+        end
+      end
+      existing.Phase1Complete = true
+      if not Players[plan.To]:IsHuman() then
+        for _, entry in ipairs(existing.Entries) do
+          if not entry.EscapeOutcome then entry.SelectedAction = DefaultAI(entry) end
+        end
+      end
+      Save(state)
+    end
+    if existing.Phase == "CHOICE" and not Players[plan.To]:IsHuman() then return F.Resolve(plan.To, plan.ID) end
+    return R.Copy(existing)
+  end
+  for _, other in pairs(state.Flows) do
+    assert(other.Phase == "DONE" or
+      (other.From ~= plan.From and other.To ~= plan.From
+        and other.From ~= plan.To and other.To ~= plan.To),
+      "another absorption flow uses a faction")
+  end
+  local entries, roster = Inventory(plan)
+  local fingerprint = {}
+  for _, entry in ipairs(entries) do
+    fingerprint[#fingerprint + 1] = { ID = entry.ID, Kind = entry.Kind,
+      UnitID = entry.UnitID, UnitType = entry.UnitType }
+  end
+  local flow = { ID = plan.ID, From = plan.From, To = plan.To, Mode = plan.Mode,
+    Turn = Game.GetCurrentGameTurn(), Phase = "CHOICE", Request = R.Copy(plan),
+    Entries = entries, RosterAtBegin = roster, Inventory = fingerprint,
+    Phase1Complete = false }
+  state.Flows[plan.ID] = flow
+  Save(state)
+  for _, entry in ipairs(flow.Entries) do
+    if ESCAPE[entry.Kind] then
+      entry.EscapeOutcome = ResolveEscape(state, flow, entry, "P1")
+      if entry.EscapeOutcome then entry.FinalOutcome = entry.EscapeOutcome end
+      Save(state)
+    end
+  end
+  flow.Phase1Complete = true
+  if not Players[plan.To]:IsHuman() then
+    for _, entry in ipairs(flow.Entries) do
+      if not entry.EscapeOutcome then entry.SelectedAction = DefaultAI(entry) end
+    end
+  end
+  Save(state)
+  if not Players[plan.To]:IsHuman() then return F.Resolve(plan.To, plan.ID) end
+  return R.Copy(flow)
+end
+function F.Select(actor, id, assetID, action, returnOwner)
+  local state = State()
+  local flow = assert(state.Flows[id], "unknown absorption flow")
+  RequireActor(actor, flow)
+  local entry = assert(FindEntry(flow, assetID), "unknown absorption asset")
+  if flow.Phase ~= "CHOICE" then
+    assert(entry.SelectedAction == action and entry.ReturnOwner == returnOwner,
+      "selection is already frozen")
+    return R.Copy(flow)
+  end
+  assert(flow.Phase1Complete, "initial rolls are incomplete")
+  assert(not entry.EscapeOutcome, "escaped asset cannot be selected")
+  assert(IsAllowed(entry, action), "action is not allowed for this asset")
+  if action == "RETURN" then
+    assert(type(returnOwner) == "number" and returnOwner ~= flow.From
+      and returnOwner ~= flow.To and Players[returnOwner]
+      and Players[returnOwner]:IsAlive()
+      and Players[returnOwner]:GetCities():GetCount() > 0,
+      "return requires a living third party with a city")
+  else assert(returnOwner == nil, "return owner only applies to RETURN") end
+  -- All checks precede the mutation; a rejected change preserves the old one.
+  entry.SelectedAction, entry.ReturnOwner = action, returnOwner
+  Save(state)
+  return R.Copy(flow)
+end
+local function InventoryStillMatches(flow)
+  if not Players[flow.From]:IsAlive() or not Players[flow.To]:IsAlive() then
+    return false, "absorption faction died before resolution"
+  end
+  local entries, roster = Inventory(flow.Request)
+  local actual = {}
+  for _, entry in ipairs(entries) do
+    actual[#actual + 1] = { ID = entry.ID, Kind = entry.Kind,
+      UnitID = entry.UnitID, UnitType = entry.UnitType }
+  end
+  if not R.Equal(actual, flow.Inventory) or not R.Equal(roster, flow.RosterAtBegin) then
+    return false, "absorption inventory changed after first rolls"
+  end
+  return true
+end
+local function BuildPlan(flow)
+  local plan = R.Copy(flow.Request)
+  plan.EntryConditionsMet = true
+  plan.RelationsResolved = true
+  plan.FlowPolicy = true
+  plan.Units, plan.Assets = {}, {}
+  for _, entry in ipairs(flow.Entries) do
+    local outcome = assert(entry.FinalOutcome, "unresolved absorption result")
+    local decision = { Outcome = outcome }
+    if outcome == "RETURN" then decision.ReturnOwner = assert(entry.ReturnOwner) end
+    if entry.Leader then plan.Leader = decision
+    else
+      if entry.UnitID then
+        plan.Units[R.UnitKey(flow.From, entry.UnitID)] = R.Copy(decision)
+      end
+      if entry.Source and entry.Source.ID and flow.RosterAtBegin[entry.ID]
+        or entry.DormantClass then
+        plan.Assets[entry.ID] = R.Copy(decision)
+      end
+    end
+  end
+  return plan
+end
+
+local function QueueEscapes(state, flow, tx)
+  local debug = DebugState()
+  local delay = debug and debug.Delay or 2
+  for _, entry in ipairs(flow.Entries) do
+    if entry.FinalOutcome and ESCAPE[entry.Kind] then
+      local escaping = false
+      for _, outcome in ipairs(ESCAPE[entry.Kind]) do
+        if entry.FinalOutcome == outcome then escaping = true; break end
+      end
+      if escaping and entry.Kind ~= "UNIT" then
+        local key = flow.ID .. ":" .. tostring(entry.ID)
+        if not state.World[key] then
+          local snapshot
+          for _, unit in ipairs(tx.Units or {}) do
+            if entry.UnitID and unit.ID == entry.UnitID or entry.Leader and unit.ID == -1 then
+              snapshot = R.Copy(unit)
+              break
+            end
+          end
+          local origin = snapshot and { X = snapshot.X, Y = snapshot.Y }
+            or tx.Cities and tx.Cities[1] and { X = tx.Cities[1].X, Y = tx.Cities[1].Y }
+          assert(origin, "escaped asset has no world origin")
+          state.World[key] = { ID = key, FlowID = flow.ID, AssetID = entry.ID,
+            Kind = entry.Kind, Outcome = entry.FinalOutcome, Origin = origin,
+            Snapshot = snapshot, DueTurn = Game.GetCurrentGameTurn() + delay,
+            Status = "WAIT_SITE", SpawnAttempts = 0 }
+          Save(state)
+        end
+        entry.WorldID = key
+      end
+    end
+  end
+end
+local function FinishApply(state, flow, tx)
+  assert(tx and tx.Status == "COMPLETE", "absorption transfer is incomplete")
+  for _, entry in ipairs(flow.Entries) do
+    local actual
+    if tx.Decisions and tx.Decisions[entry.ID] then
+      actual = tx.Decisions[entry.ID]
+    else
+      for _, snap in ipairs(tx.Units or {}) do
+        if entry.UnitID and snap.ID == entry.UnitID then actual = snap; break end
+      end
+    end
+    if actual and actual.Outcome ~= entry.FinalOutcome then
+      entry.RequestedOutcome = entry.FinalOutcome
+      entry.FinalOutcome = actual.Outcome
+      entry.TransferCause = actual.SuicideCause
+      entry.Success = false
+    end
+  end
+  QueueEscapes(state, flow, tx)
+  flow.Phase, flow.CompletedTurn = "RESULT", Game.GetCurrentGameTurn()
+  Save(state)
+  return R.Copy(flow)
+end
+function F.Resume(id)
+  local state = State()
+  local flow = assert(state.Flows[id], "unknown absorption flow")
+  if flow.Phase == "RESULT" or flow.Phase == "DONE" then return R.Copy(flow) end
+  assert(flow.Phase == "APPLYING", "absorption is not applying")
+  local tx = A.GetState().Transactions[id]
+  if tx and tx.Status == "COMPLETE" then return FinishApply(state, flow, tx) end
+  local ok, result
+  if tx then ok, result = pcall(A.Resume, id)
+  else ok, result = pcall(A.Apply, R.Copy(flow.AppliedPlan)) end
+  if not ok then
+    flow.Phase, flow.Error = "BLOCKED", tostring(result)
+    Save(state)
+    return R.Copy(flow)
+  end
+  if result.Status == "COMPLETE" then return FinishApply(state, flow, result) end
+  assert(result.Status == "WAITING_UI" or result.Status == "PREPARED"
+    or result.Status == "STAGED", "unexpected PoC transfer state")
+  flow.WaitingFor = result.Status
+  Save(state)
+  return R.Copy(flow)
+end
+function F.Resolve(actor, id)
+  local state = State()
+  local flow = assert(state.Flows[id], "unknown absorption flow")
+  RequireActor(actor, flow)
+  if flow.Phase == "APPLYING" then return F.Resume(id) end
+  if flow.Phase == "RESULT" or flow.Phase == "DONE" then return R.Copy(flow) end
+  assert(flow.Phase == "CHOICE" and flow.Phase1Complete, "absorption is not choosing")
+  for _, entry in ipairs(flow.Entries) do
+    assert(entry.EscapeOutcome or entry.SelectedAction,
+      "every remaining asset requires a decision")
+  end
+  local valid, why = InventoryStillMatches(flow)
+  if not valid then
+    flow.Phase, flow.Error = "BLOCKED", why
+    Save(state)
+    return R.Copy(flow)
+  end
+  for _, entry in ipairs(flow.Entries) do
+    if not entry.EscapeOutcome then
+      entry.ActionChance = ActionChance(flow, entry)
+      local roll = Roll(state, flow, entry, "P3_SUCCESS")
+      entry.Success = roll < entry.ActionChance
+      if entry.Success then
+        entry.FinalOutcome = entry.SelectedAction
+      else
+        entry.RetryEscapeOutcome = ResolveEscape(state, flow, entry, "P3_RETRY")
+        entry.FinalOutcome = entry.RetryEscapeOutcome or FALLBACK[entry.Kind]
+      end
+      Save(state)
+    end
+  end
+  for _, entry in ipairs(flow.Entries) do
+    if entry.UnitID and ESCAPE[entry.Kind] then
+      local escaping = false
+      for _, outcome in ipairs(ESCAPE[entry.Kind]) do
+        if entry.FinalOutcome == outcome then escaping = true; break end
+      end
+      if escaping then
+        local ok, reason = pcall(A.AssertRecoverableEscape, flow.From, entry.UnitID)
+        if not ok then
+          flow.Phase, flow.Error = "BLOCKED", tostring(reason)
+          Save(state)
+          return R.Copy(flow)
+        end
+      end
+    end
+  end
+  flow.AppliedPlan = BuildPlan(flow)
+  flow.Phase = "APPLYING"
+  Save(state) -- all rolls and outcomes precede the first PoC mutation
+  return F.Resume(id)
+end
+function F.Acknowledge(actor, id)
+  local state = State()
+  local flow = assert(state.Flows[id], "unknown absorption flow")
+  RequireActor(actor, flow)
+  assert(flow.Phase == "RESULT" or flow.Phase == "DONE",
+    "results are not ready to acknowledge")
+  if flow.Phase == "RESULT" then
+    flow.Phase, flow.AcknowledgedTurn = "DONE", Game.GetCurrentGameTurn()
+    Save(state)
+  end
+  return R.Copy(flow)
+end
+
+local function Improvement(row)
+  local info = GameInfo.Improvements[row]
+  return info and info.Index
+end
+local function Reserved(state, index, except)
+  for key, world in pairs(state.World) do
+    if key ~= except and world.Site == index
+      and world.Status ~= "COMPLETE" and world.Status ~= "SUICIDE" then return true end
+  end
+  return false
+end
+local function ChooseSite(state, world)
+  local camp = Improvement("IMPROVEMENT_BARBARIAN_CAMP")
+  local hut = Improvement("IMPROVEMENT_GOODY_HUT")
+  assert(camp and hut, "native camp and goody hut improvements required")
+  local candidates = {}
+  local occupied = {}
+  for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
+    for _, unit in Players[playerID]:GetUnits():Members() do
+      local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+      if plot then occupied[plot:GetIndex()] = true end
+    end
+  end
+  for index = 0, Map.GetPlotCount() - 1 do
+    local plot = Map.GetPlotByIndex(index)
+    local improvement = plot:GetImprovementType()
+    local existing = improvement == camp or improvement == hut
+    local empty = improvement == -1 and plot:GetOwner() == -1 and not occupied[index]
+      and not plot:IsWater() and not plot:IsMountain()
+      and (not plot.IsCity or not plot:IsCity())
+      and (not plot.GetDistrictType or plot:GetDistrictType() == -1)
+    if (existing or empty) and not Reserved(state, index, world.ID)
+      and not (world.RejectedSites or {})[index] then
+      local distance = math.abs(plot:GetX() - world.Origin.X)
+        + math.abs(plot:GetY() - world.Origin.Y)
+      local preference = existing and (improvement == camp and world.Kind ~= "ITEM" and 0
+        or improvement == hut and 1 or 2) or 3
+      candidates[#candidates + 1] = { Index = index, Distance = distance,
+        Preference = preference, Existing = existing,
+        Type = existing and improvement or hut }
+    end
+  end
+  table.sort(candidates, function(a, b)
+    if a.Preference ~= b.Preference then return a.Preference < b.Preference end
+    if a.Distance ~= b.Distance then return a.Distance < b.Distance end
+    return a.Index < b.Index
+  end)
+  return candidates[1]
+end
+local function PlaceWorld(state, world)
+  if world.Status == "WAIT_SITE" then
+    if Game.GetCurrentGameTurn() < world.DueTurn then return end
+    local choice = ChooseSite(state, world)
+    if not choice then
+      world.SpawnAttempts = world.SpawnAttempts + 1
+      Save(state)
+      return
+    end
+    world.Site, world.Improvement = choice.Index, choice.Type
+    world.CreatedSite = not choice.Existing
+    world.Status = "PLACE_INTENT"
+    Save(state)
+  end
+  if world.Status == "PLACE_INTENT" then
+    local plot = assert(Map.GetPlotByIndex(world.Site), "reward site plot missing")
+    if world.CreatedSite and plot:GetImprovementType() == -1 then
+      -- Gameplay setter is used in WarMachineScenario.lua:276. Do not erase
+      -- an occupied improvement or replace another player's installation.
+      local ok = pcall(ImprovementBuilder.SetImprovementType, plot, world.Improvement, -1)
+      if not ok or plot:GetImprovementType() ~= world.Improvement then
+        world.RejectedSites = world.RejectedSites or {}
+        world.RejectedSites[world.Site] = true
+        world.Site, world.Improvement, world.Status = nil, nil, "WAIT_SITE"
+        world.DueTurn = Game.GetCurrentGameTurn() + 1
+        world.SpawnAttempts = world.SpawnAttempts + 1
+        Save(state)
+        return
+      end
+    end
+    assert(plot:GetImprovementType() == world.Improvement,
+      "reward improvement placement failed; retry without losing identity")
+    world.Status, world.PlacedTurn = "WAIT_CLEAR", Game.GetCurrentGameTurn()
+    Save(state)
+  end
+end
+local function MajorOnPlot(plot)
+  local found
+  for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
+    local player = Players[playerID]
+    if player and player:IsMajor() and player:GetCities():GetCount() > 0 then
+      for _, unit in player:GetUnits():Members() do
+        if unit:GetX() == plot:GetX() and unit:GetY() == plot:GetY() then
+          if not found or playerID < found then found = playerID end
+        end
+      end
+    end
+  end
+  return found
+end
+local function ClaimWorld(state, world, winner)
+  assert(Players[winner] and Players[winner]:IsAlive() and Players[winner]:IsMajor()
+    and Players[winner]:GetCities():GetCount() > 0, "reward winner needs a city")
+  if world.Status == "WAIT_CLEAR" then
+    world.Status, world.Recipient = "CLAIMED", winner
+    world.ClearedTurn = Game.GetCurrentGameTurn()
+    Save(state)
+  end
+  assert(world.Status == "CLAIMED" and world.Recipient == winner,
+    "reward was already claimed by a different player")
+  local ok, result = pcall(A.RecoverArchived, world.AssetID, winner,
+    "recovery:" .. world.ID, world.Snapshot)
+  if not ok then
+    world.Status, world.Error = "BLOCKED", tostring(result)
+    Save(state)
+    return
+  end
+  world.Status = result.Status == "SUICIDE" and "SUICIDE" or "COMPLETE"
+  world.Cause = result.Cause
+  Save(state)
+end
+function F.ResumeWorld(id)
+  local state = State()
+  local world = assert(state.World[id], "unknown escaped world asset")
+  if world.Status == "BLOCKED" then world.Status, world.Error = "CLAIMED", nil; Save(state) end
+  if world.Status == "CLAIMED" then ClaimWorld(state, world, world.Recipient) end
+  return R.Copy(world)
+end
+function F.GetWorld(id)
+  local world = State().World[id]
+  return world and R.Copy(world) or nil
+end
+function F.Tick()
+  local state = State()
+  for _, id in ipairs(R.Keys(state.World)) do
+    local world = state.World[id]
+    if world.Status == "WAIT_SITE" or world.Status == "PLACE_INTENT" then
+      local ok, err = pcall(PlaceWorld, state, world)
+      if not ok then
+        world.Status, world.Error = "BLOCKED", tostring(err)
+        Save(state)
+      end
+    elseif world.Status == "WAIT_CLEAR" then
+      local plot = Map.GetPlotByIndex(world.Site)
+      if plot and plot:GetImprovementType() ~= world.Improvement then
+        local winner = MajorOnPlot(plot)
+        if winner then ClaimWorld(state, world, winner)
+        else
+          -- An improvement removed without an identifiable clearing unit is
+          -- not a reward. Place another deterministic site on a later turn.
+          world.Status, world.Site, world.Improvement = "WAIT_SITE", nil, nil
+          world.DueTurn = Game.GetCurrentGameTurn() + 1
+          Save(state)
+        end
+      end
+    elseif world.Status == "CLAIMED" then
+      ClaimWorld(state, world, world.Recipient)
+    end
+  end
+end
+local function ImprovementRemoved(x, y)
+  local plot = Map.GetPlot(x, y)
+  if not plot then return end
+  local state = State()
+  local winner = MajorOnPlot(plot)
+  if not winner then return end
+  for _, id in ipairs(R.Keys(state.World)) do
+    local world = state.World[id]
+    if world.Site == plot:GetIndex() and world.Status == "WAIT_CLEAR"
+      and plot:GetImprovementType() ~= world.Improvement then
+      ClaimWorld(state, world, winner)
+    end
+  end
+end
+local function GoodyReward(playerID, unitID)
+  local unit = UnitManager.GetUnit(playerID, unitID)
+  if not unit or not Players[playerID] or not Players[playerID]:IsMajor() then return end
+  local plot = Map.GetPlot(unit:GetX(), unit:GetY())
+  if not plot then return end
+  local state = State()
+  for _, id in ipairs(R.Keys(state.World)) do
+    local world = state.World[id]
+    if world.Site == plot:GetIndex() and world.Status == "WAIT_CLEAR"
+      and world.Improvement == Improvement("IMPROVEMENT_GOODY_HUT") then
+      ClaimWorld(state, world, playerID)
+    end
+  end
+end
+local function Operation(actor, payload)
+  local ok, result = pcall(function()
+    assert(type(payload) == "table", "operation payload required")
+    if payload.Command == "SELECT" then
+      return F.Select(actor, payload.FlowID, payload.AssetID,
+        payload.Action, payload.ReturnOwner)
+    elseif payload.Command == "RESOLVE" then
+      return F.Resolve(actor, payload.FlowID)
+    elseif payload.Command == "ACK" then
+      return F.Acknowledge(actor, payload.FlowID)
+    end
+    error("unknown absorption command")
+  end)
+  if Players[actor] then
+    local command = type(payload) == "table" and type(payload.Command) == "string"
+      and payload.Command ~= "" and payload.Command or "INVALID"
+    local flowID = type(payload) == "table" and type(payload.FlowID) == "string"
+      and payload.FlowID ~= "" and payload.FlowID or nil
+    Players[actor]:SetProperty("JAC_ABSORPTION_FLOW_LAST_OPERATION_V1",
+      { Accepted = ok, Command = command, FlowID = flowID,
+        Reason = not ok and tostring(result) or nil,
+        Turn = Game.GetCurrentGameTurn() })
+  end
+  if not ok then print("[JAC_ABSORPTION_FLOW] operation rejected: " .. tostring(result)) end
+end
+GameEvents.JAC_AbsorptionFlow_Operation.Add(Operation)
+GameEvents.OnGameTurnStarted.Add(F.Tick)
+if Events and Events.ImprovementRemovedFromMap then
+  Events.ImprovementRemovedFromMap.Add(ImprovementRemoved)
+end
+if Events and Events.GoodyHutReward then Events.GoodyHutReward.Add(GoodyReward) end
+ExposedMembers.JAC_AbsorptionFlow = F
+print("[JAC_ABSORPTION_FLOW] loaded")

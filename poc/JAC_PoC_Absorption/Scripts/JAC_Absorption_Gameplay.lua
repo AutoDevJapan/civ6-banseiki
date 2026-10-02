@@ -11,6 +11,8 @@ local function State()
   local state = R.Copy(Game:GetProperty(R.STATE_KEY) or { Version = 1, Transactions = {}, Archive = {}, Recalls = {} })
   assert(state.Version == 1, "unsupported absorption save version")
   state.Recalls = state.Recalls or {}
+  state.Recoveries = state.Recoveries or {}
+  state.RecoveryRecalls = state.RecoveryRecalls or {}
   return state
 end
 local function Save(state) Game:SetProperty(R.STATE_KEY, R.Copy(state)) end
@@ -371,6 +373,31 @@ local function SnapshotUnit(unit, publishedSpread)
 end
 A.SnapshotUnit = SnapshotUnit
 
+-- A scattered individual is recreated only after a real world reward. There
+-- is no documented setter for spent native Great Person/build/spread charges;
+-- reject that case while the donor is still intact, before A.Apply can kill it.
+function A.AssertRecoverableEscape(owner, unitID)
+  local unit = assert(UnitManager.GetUnit(owner, unitID), "escaping individual vanished")
+  AssertSupportedUnitState(unit)
+  if unit.IsHero and unit:IsHero() then return true end -- Hero action charges have a verified setter.
+  local info = assert(GameInfo.Units[unit:GetType()], "escaping unit definition missing")
+  local greatPerson = unit:GetGreatPerson()
+  local individual = greatPerson and greatPerson:GetIndividual() or -1
+  if individual >= 0 then
+    local definition = assert(GameInfo.GreatPersonIndividuals[individual],
+      "native Great Person definition missing")
+    assert(greatPerson.GetActionCharges and greatPerson:GetActionCharges() == definition.ActionCharges,
+      "spent native Great Person charges cannot be restored after escape")
+  end
+  assert((unit:GetBuildCharges() or 0) == (info.BuildCharges or 0),
+    "spent build charges cannot be restored after escape")
+  if (info.SpreadCharges or 0) > 0 then
+    assert(unit.GetSpreadCharges and unit:GetSpreadCharges() == info.SpreadCharges,
+      "spent or UI-only spread charges cannot be restored after escape")
+  end
+  return true
+end
+
 local function DestinationOwner(kind, outcome, decision, tx)
   local destination = R.Destination(kind, outcome)
   if destination == "ABSORBER" then return tx.To end
@@ -378,6 +405,9 @@ local function DestinationOwner(kind, outcome, decision, tx)
     local id = decision.ReturnOwner
     assert(type(id) == "number" and id ~= tx.From and id ~= tx.To and Players[id]
       and Players[id]:IsAlive(), "RETURN requires a surviving third-party ReturnOwner")
+    if kind == "ITEM" then
+      assert(Players[id]:GetCities():GetCount() > 0, "returned item needs a recipient city")
+    end
     return id
   end
   return -1
@@ -467,6 +497,13 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   assert(plan.EntryConditionsMet == true and plan.RelationsResolved == true,
     "entry conditions and third-party relations must be resolved by caller")
   assert(source:GetCities():GetCount() > 0 and target:GetCities():GetCount() > 0, "both factions need cities")
+  if plan.FlowPolicy and R.CITY_POLICY[plan.Mode].Immediate ~= 0 then
+    for _, city in source:GetCities():Members() do
+      local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
+      assert(identity and identity.GetLoyalty and city.ChangeLoyalty,
+        "city loyalty APIs unavailable; cannot start method effects")
+    end
+  end
   for _, previous in pairs(state.Transactions) do
     assert(previous.Status == "COMPLETE" or
       (previous.From ~= plan.From and previous.To ~= plan.From and previous.From ~= plan.To and previous.To ~= plan.To),
@@ -512,7 +549,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       if snap.KeepUnit then
         local problem = HeroTransferProblem(tx, snap, heroOrigins)
         if problem then HeroSuicide(snap, problem) end
-      else
+      elseif decision.Outcome ~= "DEFECT" and decision.Outcome ~= "HIDE" then
         HeroSuicide(snap, decision.Outcome == "SUICIDE" and "EXPLICIT_SUICIDE" or "REQUESTED_OUTCOME_UNTRANSFERABLE")
       end
     end
@@ -618,14 +655,17 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       for _, snap in ipairs(tx.Units) do
         if snap.Hero and asset.Unit and asset.Unit.Owner == tx.From and asset.Unit.ID == snap.ID then heroSnap = snap end
       end
-      if (heroSnap and heroSnap.SuicideCause) or dormant[id] then
+      if (heroSnap and heroSnap.SuicideCause)
+        or (dormant[id] and d.Outcome ~= "HIDE" and d.Outcome ~= "DEFECT") then
         if dormant[id] then
           if (plan.Assets or {})[id] then d.RequestedOutcome = d.Outcome end
         else
           d.RequestedOutcome = heroSnap.RequestedOutcome
         end
         d.Outcome, d.Owner = "SUICIDE", -1
-        d.SuicideCause = dormant[id] and "DORMANT_CLAIM" or heroSnap.SuicideCause
+        -- There is no claim-only setter in HeroesManager. A dormant right
+        -- cannot be verified as inherited by creating no native Hero unit.
+        d.SuicideCause = dormant[id] and "DORMANT_CLAIM_SETTER_UNAVAILABLE" or heroSnap.SuicideCause
       end
     end
     tx.Decisions[id] = d
@@ -1001,6 +1041,16 @@ local function MovedAssets(tx)
     local decision = tx.Decisions[id]
     record.OriginalOwner = record.OriginalOwner or tx.From
     record.Owner, record.Outcome = decision.Owner, decision.Outcome
+    if record.Kind == "ITEM" and record.City and decision.Owner ~= tx.To then
+      record.FormerCity = R.Copy(tx.SourceRoster[id].City or record.City)
+      if decision.Owner < 0 then
+        record.City = nil -- scattered: no live vault still claims this item
+      else
+        local capital = assert(Players[decision.Owner]:GetCities():GetCapitalCity(),
+          "returned item has no recipient vault city")
+        record.City = { Owner = decision.Owner, X = capital:GetX(), Y = capital:GetY() }
+      end
+    end
     if record.Kind == "HERO" and decision.Outcome == "SUICIDE" then
       record.RequestedOutcome = decision.RequestedOutcome or "SUICIDE"
       record.SuicideCause = decision.SuicideCause or "EXPLICIT_SUICIDE"
@@ -1218,10 +1268,26 @@ local function Execute(state, tx)
     WriteProperties(city, snap.TransferredProperties, snap.PropertyKeys)
     local previous = city:GetProperty(R.GOVERNANCE_KEY)
     if not previous or previous.ID ~= tx.ID then
+      local policy = tx.Request.FlowPolicy and assert(R.CITY_POLICY[tx.Mode], "unknown city policy")
+        or { Immediate = 0, Friction = 0, Turns = 0 }
+      local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
+      assert(policy.Immediate == 0 or identity and identity.GetLoyalty,
+        "city loyalty read API unavailable; cannot reconcile adjustment")
+      local before = identity and identity:GetLoyalty()
       city:SetProperty(R.GOVERNANCE_KEY, { ID = tx.ID, From = tx.From, To = tx.To, Turn = tx.Turn,
-        Mode = tx.Mode, LoyaltyDelta = R.CITY_LOYALTY_DELTA_POC,
-        FrictionTurns = R.CULTURAL_FRICTION_TURNS_POC, BalancePending = true, Previous = R.Copy(snap.Governance) })
-      if R.CITY_LOYALTY_DELTA_POC ~= 0 then city:ChangeLoyalty(R.CITY_LOYALTY_DELTA_POC) end
+        Mode = tx.Mode, LoyaltyDelta = policy.Immediate, FrictionPerTurn = policy.Friction,
+        FrictionTurns = policy.Turns, FrictionApplied = 0, ImmediateBefore = before,
+        ImmediateApplied = policy.Immediate == 0, BalancePending = true, Previous = R.Copy(snap.Governance) })
+    end
+    local governance = city:GetProperty(R.GOVERNANCE_KEY)
+    if governance.ID == tx.ID and not governance.ImmediateApplied then
+      local identity = assert(city:GetCulturalIdentity(), "city loyalty read API unavailable")
+      local current = identity:GetLoyalty()
+      local target = math.max(0, math.min(100, governance.ImmediateBefore + governance.LoyaltyDelta))
+      if current == governance.ImmediateBefore then city:ChangeLoyalty(governance.LoyaltyDelta)
+      else assert(current == target, "city loyalty changed during interrupted absorption") end
+      governance.ImmediateApplied = true
+      city:SetProperty(R.GOVERNANCE_KEY, governance)
     end
     Save(state)
   end
@@ -1485,6 +1551,323 @@ function A.Verify(id, exact)
   end
   Verify(tx, state, exact == true)
   return true
+end
+
+-- Reward recovery is a second, independently journaled transaction. The first
+-- absorption's archive remains immutable so its saved verification still works.
+local function AbortRecoveredHero(state, intent, token, cause, candidate)
+  if candidate then
+    local id = candidate:GetID()
+    assert(not intent.Before[id] and candidate:GetOwner() == intent.Owner
+      and candidate.IsHero and candidate:IsHero()
+      and (not candidate:GetProperty(R.TOKEN_KEY)
+        or candidate:GetProperty(R.TOKEN_KEY) == token),
+      "unrelated Hero at failed recovery; review before removal")
+    UnitManager.Kill(candidate)
+  end
+  intent.Status, intent.Cause = "SUICIDE", cause
+  Save(state)
+  return R.Copy(intent)
+end
+function A.RecoverArchived(id, owner, token, original)
+  assert((type(id) == "string" or type(id) == "number")
+    and type(token) == "string" and type(owner) == "number",
+    "recovery identity required")
+  assert(Players[owner] and Players[owner]:IsAlive(), "recovery recipient is not alive")
+  local state = State()
+  state.Recoveries = state.Recoveries or {}
+  local intent = state.Recoveries[token]
+  if intent then
+    assert(intent.ID == id and intent.Owner == owner, "recovery token reused")
+    if intent.Status == "COMPLETE" then
+      local record = assert(GetRoster(owner)[id], "completed recovered identity disappeared")
+      assert(record.RecoveryToken == token, "completed recovery identity changed")
+      return R.Copy(intent)
+    end
+    if intent.Status == "SUICIDE" then return R.Copy(intent) end
+  else
+    assert(state.Archive[id], "escaped asset is absent from absorption archive")
+    assert(type(original) == "nil" or type(original) == "table", "invalid unit snapshot")
+    local roster = GetRoster(owner)
+    assert(not roster[id], "recipient already has the escaped identity")
+    intent = { ID = id, Owner = owner, Status = "PREPARED", Snapshot = R.Copy(original),
+      Before = {}, Turn = Game.GetCurrentGameTurn() }
+    for _, unit in ipairs(Units(owner)) do intent.Before[unit:GetID()] = true end
+    state.Recoveries[token] = intent
+    Save(state)
+  end
+  local record = R.Copy(assert(state.Archive[id], "recovery archive lost"))
+  record.Owner, record.Outcome, record.RecoveredTurn = owner, "RECOVERED", intent.Turn
+  record.RecoveryToken = token
+  if record.Kind == "HERO" and record.NativeHero then
+    record.HistoricalNativeHero = R.Copy(record.NativeHero)
+    record.NativeHero.ClaimOwner = owner
+    if record.NativeHero.Origin then record.NativeHero.Origin.Owner = owner end
+  end
+  if record.Kind == "ITEM" then
+    local capital = assert(Players[owner]:GetCities():GetCapitalCity(),
+      "recovered item has no vault city")
+    record.City = { Owner = owner, X = capital:GetX(), Y = capital:GetY() }
+  end
+  local snap = intent.Snapshot
+  if snap then
+    snap.Destination, snap.Token = owner, token
+    local found = FindToken(owner, token)
+    if not found then
+      for _, unit in ipairs(Units(owner)) do
+        if not intent.Before[unit:GetID()] and GameInfo.Units[unit:GetType()].UnitType == snap.Type
+          and (not snap.Hero or unit.IsHero and unit:IsHero()
+            and unit:GetHeroClassType() == snap.Hero.Class) then
+          assert(not found, "ambiguous unsaved recovery candidate")
+          found = unit
+        end
+      end
+      if found then
+        assert(Game.GetCurrentGameTurn() == intent.Turn,
+          "untagged recovery candidate crossed turns; review identity")
+      end
+      if not found then
+        if snap.Hero then
+          local manager = Heroes()
+          local origin = snap.Hero.Origin
+          local city = origin and CityManager.GetCityAt(origin.X, origin.Y)
+          local collision = #HeroUnits(owner, snap.Hero.Class) > 0
+          if not city or city:GetOwner() ~= owner or collision then
+            intent.Status, intent.Cause = "SUICIDE", collision and "HERO_CLASS_COLLISION" or "ORIGIN_UNAVAILABLE"
+            Save(state)
+            return R.Copy(intent)
+          end
+          local building = manager:GetPlayerHeroOriginBuildingType(owner)
+          if not building or not city:GetBuildings():HasBuilding(building) then
+            intent.Status, intent.Cause = "SUICIDE", "ORIGIN_BUILDING_UNAVAILABLE"
+            Save(state)
+            return R.Copy(intent)
+          end
+          local discovered = pcall(manager.SetHeroDiscovered, manager, owner, snap.Hero.Class, true)
+          if not discovered then
+            return AbortRecoveredHero(state, intent, token, "HERO_DISCOVERY_ERROR")
+          end
+          local ok = pcall(manager.CreateHero, manager, owner, snap.Hero.Class, origin.X, origin.Y)
+          local matches = HeroUnits(owner, snap.Hero.Class)
+          assert(#matches <= 1, "ambiguous native Hero candidates after recovery create")
+          if not ok or #matches ~= 1 then
+            return AbortRecoveredHero(state, intent, token,
+              ok and "HERO_CREATE_NO_UNIT" or "HERO_CREATE_ERROR", matches[1])
+          end
+          found = matches[1]
+        else
+          -- The pre-spawn ID inventory is durable; a reload can adopt exactly
+          -- one newly created untagged candidate instead of creating another.
+          found = Spawn(snap)
+        end
+      end
+      assert(not found:GetProperty(R.TOKEN_KEY) or found:GetProperty(R.TOKEN_KEY) == token,
+        "recovery candidate belongs to another transaction")
+      found:SetProperty(R.TOKEN_KEY, token)
+      intent.CandidateID = found:GetID()
+      intent.Status = "STAGED"
+      Save(state)
+    end
+    assert(not intent.CandidateID or intent.CandidateID == found:GetID(), "recovery candidate changed")
+    if found:GetX() < 0 or found:GetY() < 0 then
+      local capital = assert(Players[owner]:GetCities():GetCapitalCity(), "recovery staging city missing")
+      UnitManager.PlaceUnit(found, capital:GetX(), capital:GetY())
+    end
+    record.FormerUnit = R.Copy(record.Unit)
+    record.Unit = { Owner = owner, ID = found:GetID(), Token = token }
+    snap.TransferredProperties = R.Copy(snap.Properties or {})
+    if snap.TransferredProperties[R.PERSON_KEY] then
+      snap.TransferredProperties[R.PERSON_KEY] = R.Copy(record)
+    end
+    if snap.Hero then
+      local ok, err = pcall(function()
+        RestoreUnit(found, snap)
+        VerifyUnit(found, snap)
+        if snap.SpreadCharges ~= nil then VerifySpread(found, snap) end
+      end)
+      if not ok then
+        if tostring(err) == "JAC_ABSORPTION_WAITING_UI" then error(err, 0) end
+        return AbortRecoveredHero(state, intent, token, "HERO_RESTORE_OR_VERIFY_ERROR", found)
+      end
+    else
+      RestoreUnit(found, snap)
+      VerifyUnit(found, snap)
+      if snap.SpreadCharges ~= nil then VerifySpread(found, snap) end
+    end
+  elseif record.Kind == "HERO" and record.NativeHero then
+    local native = record.NativeHero
+    local manager = Heroes()
+    local origin = native.Origin
+    local city = origin and origin.X and origin.Y and CityManager.GetCityAt(origin.X, origin.Y)
+    local building = manager:GetPlayerHeroOriginBuildingType(owner)
+    if not city or city:GetOwner() ~= owner or not building
+      or not city:GetBuildings():HasBuilding(building) then
+      intent.Status, intent.Cause = "SUICIDE", "DORMANT_ORIGIN_UNAVAILABLE"
+      Save(state)
+      return R.Copy(intent)
+    end
+    local matches = HeroUnits(owner, native.Class)
+    if #matches > 1 or #matches == 1 and intent.Before[matches[1]:GetID()] then
+      intent.Status, intent.Cause = "SUICIDE", "DORMANT_HERO_CLASS_COLLISION"
+      Save(state)
+      return R.Copy(intent)
+    end
+    local unit = matches[1]
+    if unit and not unit:GetProperty(R.TOKEN_KEY) then
+      assert(Game.GetCurrentGameTurn() == intent.Turn,
+        "untagged dormant Hero candidate crossed turns; review identity")
+    end
+    if not unit then
+      local discovered = pcall(manager.SetHeroDiscovered, manager, owner, native.Class, true)
+      if not discovered then
+        return AbortRecoveredHero(state, intent, token, "DORMANT_DISCOVERY_ERROR")
+      end
+      local ok = pcall(manager.CreateHero, manager, owner, native.Class, origin.X, origin.Y)
+      matches = HeroUnits(owner, native.Class)
+      assert(#matches <= 1, "ambiguous dormant Hero candidates after recovery create")
+      if not ok or #matches ~= 1 then
+        return AbortRecoveredHero(state, intent, token,
+          ok and "DORMANT_CREATE_NO_UNIT" or "DORMANT_CREATE_ERROR", matches[1])
+      end
+      unit = matches[1]
+    end
+    assert(not unit:GetProperty(R.TOKEN_KEY) or unit:GetProperty(R.TOKEN_KEY) == token,
+      "dormant Hero candidate belongs to another recovery")
+    unit:SetProperty(R.TOKEN_KEY, token)
+    intent.CandidateID, intent.Status = unit:GetID(), "STAGED"
+    Save(state)
+    local current = HeroOrigin(manager, native.Class)
+    if manager:GetHeroClaimPlayer(native.Class) ~= owner or current.Owner ~= owner
+      or current.X ~= origin.X or current.Y ~= origin.Y then
+      return AbortRecoveredHero(state, intent, token, "DORMANT_CLAIM_VERIFY_ERROR", unit)
+    end
+    record.FormerUnit = R.Copy(record.Unit)
+    record.Unit = { Owner = owner, ID = unit:GetID(), Token = token }
+    unit:SetProperty(R.PERSON_KEY, R.Copy(record))
+  end
+  local roster = GetRoster(owner)
+  assert(not roster[id] or R.Equal(roster[id], record), "recovery identity already used")
+  roster[id] = record
+  Players[owner]:SetProperty(R.ROSTER_KEY, roster)
+  intent.Status, intent.Record = "COMPLETE", R.Copy(record)
+  Save(state)
+  return R.Copy(intent)
+end
+
+-- A recovered native Hero follows the same official purchase/rebind boundary
+-- as an inherited Hero, but its provenance is the recovery journal rather than
+-- a live donor Unit in the original absorption transaction.
+function A.BeginRecoveredHeroRecall(id, recoveryToken)
+  assert(type(id) == "string" and id ~= "", "recovered recall ID required")
+  local state = State()
+  local previous = state.RecoveryRecalls[id]
+  if previous then
+    assert(previous.RecoveryToken == recoveryToken, "recovered recall ID reused")
+    return R.Copy(previous)
+  end
+  local recovery = assert(state.Recoveries[recoveryToken], "unknown Hero recovery")
+  assert(recovery.Status == "COMPLETE", "Hero recovery is incomplete")
+  local record = assert(GetRoster(recovery.Owner)[recovery.ID], "recovered Hero record missing")
+  assert(record.Kind == "HERO" and record.RecoveryToken == recoveryToken
+    and record.NativeHero and record.NativeHero.Class, "record has no recovered native Hero right")
+  local owner, class = recovery.Owner, record.NativeHero.Class
+  assert(#HeroUnits(owner, class) == 0, "recovered Hero is still alive")
+  local manager = Heroes()
+  local origin = HeroOrigin(manager, class)
+  assert(manager:GetHeroClaimPlayer(class) == owner and origin.Owner == owner
+    and origin.X == record.NativeHero.Origin.X and origin.Y == record.NativeHero.Origin.Y,
+    "recovered native Hero recall right changed")
+  for otherID, pending in pairs(state.RecoveryRecalls) do
+    assert(otherID == id or pending.Status ~= "PENDING" or pending.Owner ~= owner
+      or pending.Class ~= class, "recovered Hero already has a pending recall")
+  end
+  local before = {}
+  for _, unit in ipairs(Units(owner)) do before[unit:GetID()] = true end
+  local intent = { ID = id, RecoveryToken = recoveryToken, RecordID = recovery.ID,
+    Owner = owner, Class = class, Before = before, Record = R.Copy(record),
+    Token = id .. ":unit", Turn = Game.GetCurrentGameTurn(), Status = "PENDING" }
+  state.RecoveryRecalls[id] = intent
+  Save(state)
+  return R.Copy(intent)
+end
+function A.CompleteRecoveredHeroRecall(id)
+  local state = State()
+  local intent = assert(state.RecoveryRecalls[id], "unknown recovered Hero recall")
+  if intent.Status == "COMPLETE" then return R.Copy(intent.Record) end
+  local matches = HeroUnits(intent.Owner, intent.Class)
+  assert(#matches == 1 and not intent.Before[matches[1]:GetID()],
+    "expected exactly one newly purchased recovered Hero")
+  local unit = matches[1]
+  assert(not intent.CandidateID or intent.CandidateID == unit:GetID(),
+    "recovered Hero purchase candidate changed")
+  local manager = Heroes()
+  local origin = HeroOrigin(manager, intent.Class)
+  assert(manager:GetHeroClaimPlayer(intent.Class) == intent.Owner and origin.Owner == intent.Owner
+    and origin.X == intent.Record.NativeHero.Origin.X
+    and origin.Y == intent.Record.NativeHero.Origin.Y,
+    "recovered Hero claim/origin changed after purchase")
+  local token = unit:GetProperty(R.TOKEN_KEY)
+  assert(not token or token == intent.Token, "purchased Hero belongs to another transaction")
+  intent.CandidateID = unit:GetID()
+  Save(state)
+  if not token then unit:SetProperty(R.TOKEN_KEY, intent.Token) end
+  local record = R.Copy(intent.Record)
+  record.FormerUnit = R.Copy(record.Unit)
+  record.Unit = { Owner = intent.Owner, ID = unit:GetID(), Token = intent.Token }
+  record.RecallHistory = record.RecallHistory or {}
+  record.RecallHistory[#record.RecallHistory + 1] =
+    { ID = unit:GetID(), Token = intent.Token, Turn = intent.Turn }
+  local roster = GetRoster(intent.Owner)
+  assert(R.Equal(roster[intent.RecordID], intent.Record)
+    or R.Equal(roster[intent.RecordID], record),
+    "recovered Hero record changed during purchase")
+  unit:SetProperty(R.PERSON_KEY, R.Copy(record))
+  roster[intent.RecordID] = R.Copy(record)
+  Players[intent.Owner]:SetProperty(R.ROSTER_KEY, roster)
+  intent.Record, intent.Status = R.Copy(record), "COMPLETE"
+  Save(state)
+  return R.Copy(record)
+end
+
+-- Called on the real game-turn boundary. All dates and interrupted applications
+-- live on the city, so script reloads cannot extend a friction penalty.
+function A.ApplyCityFriction()
+  local turn = Game.GetCurrentGameTurn()
+  for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
+    local player = Players[playerID]
+    if player then
+      for _, city in player:GetCities():Members() do
+        local g = city:GetProperty(R.GOVERNANCE_KEY)
+        if g and g.To == playerID and g.FrictionPending then
+          local pending = g.FrictionPending
+          local identity = assert(city:GetCulturalIdentity(), "city loyalty read API unavailable")
+          local current = identity:GetLoyalty()
+          if current == pending.Before then city:ChangeLoyalty(g.FrictionPerTurn)
+          else assert(current == pending.Target, "interrupted city friction changed externally") end
+          g.FrictionApplied = (g.FrictionApplied or 0) + 1
+          g.LastFrictionTurn, g.FrictionPending = pending.Turn, nil
+          city:SetProperty(R.GOVERNANCE_KEY, g)
+        elseif g and g.To == playerID and g.FrictionPerTurn and g.FrictionPerTurn ~= 0
+          and (g.FrictionApplied or 0) < (g.FrictionTurns or 0) and turn > g.Turn
+          and (not g.LastFrictionTurn or g.LastFrictionTurn < turn) then
+          local identity = assert(city.GetCulturalIdentity and city:GetCulturalIdentity(),
+            "city loyalty read API unavailable during friction")
+          local current = identity:GetLoyalty()
+          g.FrictionPending = { Turn = turn, Before = current,
+            Target = math.max(0, math.min(100, current + g.FrictionPerTurn)) }
+          city:SetProperty(R.GOVERNANCE_KEY, g)
+          city:ChangeLoyalty(g.FrictionPerTurn)
+          g.FrictionApplied = (g.FrictionApplied or 0) + 1
+          g.LastFrictionTurn, g.FrictionPending = turn, nil
+          city:SetProperty(R.GOVERNANCE_KEY, g)
+        end
+      end
+    end
+  end
+end
+
+if GameEvents and GameEvents.OnGameTurnStarted then
+  GameEvents.OnGameTurnStarted.Add(A.ApplyCityFriction)
 end
 
 ExposedMembers.JAC_Absorption = A -- gameplay/FireTuner API; no UI mutation or automatic diplomatic hook.
