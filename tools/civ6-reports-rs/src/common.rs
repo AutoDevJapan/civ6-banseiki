@@ -51,9 +51,14 @@ pub(crate) fn truthy(value: &Value) -> bool {
 }
 
 pub(crate) fn field<'a>(row: &'a Value, key: &str) -> Result<&'a str> {
-    row.get(key)
-        .and_then(Value::as_str)
+    required(row, key)?
+        .as_str()
         .ok_or_else(|| format!("missing or invalid field: {key}").into())
+}
+
+pub(crate) fn required<'a>(row: &'a Value, key: &str) -> Result<&'a Value> {
+    row.get(key)
+        .ok_or_else(|| format!("missing field: {key}").into())
 }
 
 pub(crate) fn increment(map: &mut Map<String, Value>, key: &str, amount: i64) {

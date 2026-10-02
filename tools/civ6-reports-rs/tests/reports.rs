@@ -4,6 +4,8 @@ mod arbitration_report;
 mod cli;
 #[path = "cases/research_report.rs"]
 mod research_report;
+#[path = "cases/scenario_paths.rs"]
+mod scenario_paths;
 mod support;
 #[path = "cases/tuning_report.rs"]
 mod tuning_report;

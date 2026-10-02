@@ -1,5 +1,5 @@
 use super::{support, tuning_report};
-use civ6_reports_rs::{arbitration, scenario, tuning};
+use civ6_reports_rs::{scenario, tuning};
 use serde_json::{json, Value};
 use std::{
     fs,
@@ -23,45 +23,143 @@ fn normalized(bytes: &[u8]) -> String {
 #[test]
 fn report_clis_emit_the_original_json_and_markdown() {
     let temp = support::tempdir();
-    support::artifact(
-        temp.path(),
-        "[JAC_ARB] loaded shogunate_end_turn=120\n",
-        &support::completed_steps(),
-    );
     let output_path = temp.path().join("report.json");
-    for (bin, data, markdown) in [
+    for (bin, name) in [
         (
             env!("CARGO_BIN_EXE_civ6-arbitration-report"),
-            arbitration::summarize(temp.path()).unwrap(),
-            arbitration::markdown as fn(&Value) -> String,
+            "arbitration-cost-refusal",
         ),
         (
             env!("CARGO_BIN_EXE_civ6-tuning-report"),
-            tuning::summarize(temp.path()).unwrap(),
-            tuning::markdown as fn(&Value) -> String,
+            "tuning-six-reigns",
         ),
     ] {
+        let artifact = support::golden_artifact(temp.path(), name);
+        let expected_json = support::golden_text(name, "expected.json");
+        let expected_markdown = support::golden_text(name, "expected.md");
         let output = run(
             bin,
             &[
-                temp.path().as_os_str(),
+                artifact.as_os_str(),
                 "--json".as_ref(),
                 output_path.as_os_str(),
             ],
         );
         assert!(output.status.success(), "{}", normalized(&output.stderr));
         let text = fs::read_to_string(&output_path).unwrap();
-        assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), data);
         assert_eq!(
-            text.replace("\r\n", "\n"),
-            serde_json::to_string_pretty(&data).unwrap() + "\n"
+            serde_json::from_str::<Value>(&text).unwrap(),
+            serde_json::from_str::<Value>(&expected_json).unwrap()
         );
-        assert_eq!(normalized(&output.stdout), markdown(&data) + "\n");
+        assert_eq!(text.replace("\r\n", "\n"), expected_json);
+        assert_eq!(normalized(&output.stdout), expected_markdown + "\n");
         assert!(output.stderr.is_empty());
         assert_eq!(run(bin, &[]).status.code(), Some(2));
         let help = run(bin, &["--help".as_ref()]);
         assert!(help.status.success());
         assert!(normalized(&help.stdout).contains("--json"));
+    }
+}
+
+#[test]
+fn failure_rows_cli_write_partial_json_and_markdown() {
+    let temp = support::tempdir();
+    for (bin, name) in [
+        (
+            env!("CARGO_BIN_EXE_civ6-arbitration-report"),
+            "arbitration-cost-refusal",
+        ),
+        (
+            env!("CARGO_BIN_EXE_civ6-tuning-report"),
+            "tuning-six-reigns",
+        ),
+    ] {
+        let artifact = support::golden_artifact(temp.path(), name);
+        let fixture_steps = fs::read_to_string(artifact.join("steps.jsonl")).unwrap();
+        let golden_json: Value =
+            serde_json::from_str(&support::golden_text(name, "expected.json")).unwrap();
+        for row in [
+            json!({"status": "FAIL", "action": "run"}),
+            json!({"status": "FAIL", "action": "run", "detail": null}),
+        ] {
+            fs::write(
+                artifact.join("steps.jsonl"),
+                format!("{fixture_steps}{row}\n"),
+            )
+            .unwrap();
+            let mut expected = golden_json.clone();
+            expected["complete_200_turns"] = json!(false);
+            expected["measurement_complete"] = json!(false);
+            expected["failures"] = json!([row]);
+            let output_path = artifact.join("partial.json");
+            let output = run(
+                bin,
+                &[
+                    artifact.as_os_str(),
+                    "--json".as_ref(),
+                    output_path.as_os_str(),
+                ],
+            );
+            assert!(output.status.success(), "{}", normalized(&output.stderr));
+            assert!(output.stderr.is_empty());
+            assert_eq!(
+                serde_json::from_str::<Value>(&fs::read_to_string(&output_path).unwrap()).unwrap(),
+                expected
+            );
+            let expected_md = support::golden_text(name, "expected.md")
+                .replace("裁定計測: PASS", "裁定計測: 未達（部分集計）")
+                .replace(
+                    "200ターン完了とログ判定: PASS",
+                    "200ターン完了とログ判定: 未達",
+                )
+                .replace(
+                    "計測の完全性: PASS",
+                    "計測の完全性: 未達（以下は部分集計。数値調整の根拠にしない）",
+                );
+            assert_eq!(normalized(&output.stdout), expected_md + "\n");
+        }
+    }
+}
+
+#[test]
+fn non_success_metadata_rows_need_no_string_action_or_detail() {
+    let temp = support::tempdir();
+    for (bin, name) in [
+        (
+            env!("CARGO_BIN_EXE_civ6-arbitration-report"),
+            "arbitration-cost-refusal",
+        ),
+        (
+            env!("CARGO_BIN_EXE_civ6-tuning-report"),
+            "tuning-six-reigns",
+        ),
+    ] {
+        let artifact = support::golden_artifact(temp.path(), name);
+        let steps = fs::read_to_string(artifact.join("steps.jsonl")).unwrap();
+        for status in [Value::Null, json!(false), json!(7), json!("NOTE")] {
+            let row = json!({"status": status, "action": null});
+            fs::write(artifact.join("steps.jsonl"), format!("{steps}{row}\n")).unwrap();
+            let output_path = artifact.join("report.json");
+            let output = run(
+                bin,
+                &[
+                    artifact.as_os_str(),
+                    "--json".as_ref(),
+                    output_path.as_os_str(),
+                ],
+            );
+            assert!(output.status.success(), "{}", normalized(&output.stderr));
+            assert_eq!(
+                fs::read_to_string(output_path)
+                    .unwrap()
+                    .replace("\r\n", "\n"),
+                support::golden_text(name, "expected.json")
+            );
+            assert_eq!(
+                normalized(&output.stdout),
+                support::golden_text(name, "expected.md") + "\n"
+            );
+        }
     }
 }
 
@@ -131,11 +229,24 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
         fs::read_to_string(output_path)
             .unwrap()
             .replace("\r\n", "\n"),
-        serde_json::to_string_pretty(&scenario::scenario().unwrap()).unwrap() + "\n"
+        serde_json::to_string_pretty(
+            &serde_json::from_str::<Value>(include_str!("../fixtures/court-arbitration-ai.json"))
+                .unwrap()
+        )
+        .unwrap()
+            + "\n"
     );
     use clap::Parser;
     let default =
         civ6_reports_rs::cli::ScenarioArgs::try_parse_from(["civ6-build-arbitration-ai-scenario"])
             .unwrap();
-    assert_eq!(default.output, scenario::default_output());
+    assert!(default.output.is_none());
+    assert!(default.repo.is_none());
+    assert_eq!(
+        scenario::default_output().unwrap(),
+        support::root()
+            .canonicalize()
+            .unwrap()
+            .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
+    );
 }

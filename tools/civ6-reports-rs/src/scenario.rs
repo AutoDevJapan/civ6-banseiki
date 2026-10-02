@@ -6,12 +6,61 @@ use std::path::{Path, PathBuf};
 mod script;
 pub use script::PREAMBLE;
 
-pub fn scenario_folder() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../civ6-autotest/scenarios")
+const SCENARIO_FOLDER: &str = "tools/civ6-autotest/scenarios";
+const BASE_SCENARIO: &str = "japan-15km-200turn-full.json";
+
+fn has_base_scenario(repository: &Path) -> bool {
+    repository
+        .join(SCENARIO_FOLDER)
+        .join(BASE_SCENARIO)
+        .is_file()
 }
 
-pub fn default_output() -> PathBuf {
-    scenario_folder().join("court-arbitration-ai.json")
+fn find_repository(start: &Path) -> Option<&Path> {
+    start.ancestors().find(|path| has_base_scenario(path))
+}
+
+/// Prefer the checkout containing this executable to an unrelated working directory.
+/// Installed binaries can use the working directory or an explicit repository.
+pub fn repository_root(repository: Option<&Path>) -> Result<PathBuf> {
+    if let Some(repository) = repository {
+        let repository = repository.canonicalize()?;
+        if !has_base_scenario(&repository) {
+            return Err(format!(
+                "repository {} has no {SCENARIO_FOLDER}/{BASE_SCENARIO}",
+                repository.display()
+            )
+            .into());
+        }
+        return Ok(repository);
+    }
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(repository) = executable.parent().and_then(find_repository) {
+            return Ok(repository.canonicalize()?);
+        }
+    }
+    let working_directory = std::env::current_dir()?;
+    if let Some(repository) = find_repository(&working_directory) {
+        return Ok(repository.canonicalize()?);
+    }
+    Err(format!(
+        "cannot locate {SCENARIO_FOLDER}/{BASE_SCENARIO}; run from the checkout or use --repo"
+    )
+    .into())
+}
+
+pub fn scenario_folder() -> Result<PathBuf> {
+    Ok(repository_root(None)?.join(SCENARIO_FOLDER))
+}
+
+pub fn default_output() -> Result<PathBuf> {
+    Ok(output_in_repository(&repository_root(None)?))
+}
+
+pub fn output_in_repository(repository: &Path) -> PathBuf {
+    repository
+        .join(SCENARIO_FOLDER)
+        .join("court-arbitration-ai.json")
 }
 
 pub fn snapshot() -> String {
@@ -41,8 +90,12 @@ fn round_trip(steps: &mut Vec<Value>, label: &str) {
 }
 
 pub fn scenario() -> Result<Value> {
+    scenario_in_repository(&repository_root(None)?)
+}
+
+pub fn scenario_in_repository(repository: &Path) -> Result<Value> {
     scenario_from_base(&serde_json::from_str(&common::read_text(
-        &scenario_folder().join("japan-15km-200turn-full.json"),
+        &repository.join(SCENARIO_FOLDER).join(BASE_SCENARIO),
     )?)?)
 }
 

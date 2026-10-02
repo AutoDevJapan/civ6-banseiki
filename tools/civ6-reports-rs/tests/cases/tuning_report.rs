@@ -14,6 +14,37 @@ fn coverage(snapshots: &[String], rows: &[Value], falls: &[Value]) -> (Vec<Strin
     report::coverage(snapshots, rows, falls, &BTreeMap::new()).unwrap()
 }
 
+fn assert_failure_row_preserved(row: Value) {
+    let mut steps = support::completed_steps();
+    steps.push(row.clone());
+    let data = summarize("", &steps);
+    assert_eq!(data["complete_200_turns"], false);
+    assert_eq!(data["measurement_complete"], false);
+    assert_eq!(data["failures"], json!([row]));
+    assert_eq!(
+        data["autoplay"],
+        json!(vec!["autoplay completed 50 turns"; 4])
+    );
+    assert!(report::markdown(&data).contains("200ターン完了とログ判定: 未達。"));
+}
+
+#[test]
+fn failure_rows_missing_detail_are_preserved() {
+    assert_failure_row_preserved(json!({"status": "FAIL", "action": "run"}));
+}
+
+#[test]
+fn failure_rows_null_detail_are_preserved() {
+    assert_failure_row_preserved(json!({"status": "FAIL", "action": "run", "detail": null}));
+}
+
+#[test]
+fn failure_rows_nontext_action_are_preserved() {
+    for action in [Value::Null, json!(7), json!({"stage": "run"})] {
+        assert_failure_row_preserved(json!({"status": "FAIL", "action": action}));
+    }
+}
+
 pub(super) fn full_coverage_fixture() -> (Vec<String>, Vec<Value>) {
     let ids = (0..22).map(|i| i.to_string()).collect::<Vec<_>>().join(",");
     let snapshots = [1, 51, 101, 151, 201].map(|turn| {
