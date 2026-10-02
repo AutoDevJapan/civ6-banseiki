@@ -4,13 +4,13 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from click import InputError
-from restart import (close_orphan_civ_reporters, launch_via_steam, enabled_mod_folders,
-                     missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
+from restart import (close_orphaned_civ_reporters, close_orphan_civ_reporters, launch_via_steam,
+                     enabled_mod_folders, missing_atlas_textures, newest_mod_file, restart_reason, single_civ_process,
                      require_dx11_window, wait_for_civ_window)
 from scenario import Runner, ScenarioError, validate_scenario
 from tuner import LuaResponseUnknown
@@ -233,6 +233,14 @@ class FreshnessTests(unittest.TestCase):
 
 class RestartActionTests(unittest.TestCase):
     def setUp(self):
+        helpers = patch("scenario.close_orphaned_civ_reporters", return_value=[])
+        helpers.start()
+        self.addCleanup(helpers.stop)
+        # Runner tests default to a simulated running game. Individual lifecycle
+        # tests override this patch when testing absence or multiple processes.
+        active_game = patch("scenario.single_civ_process", return_value=(12, 100.0))
+        active_game.start()
+        self.addCleanup(active_game.stop)
         # These tests fake the launched window; executable validation is tested below.
         validation = patch("scenario.require_dx11_window")
         self.dx11_validation = validation.start()
@@ -396,6 +404,88 @@ class RestartActionTests(unittest.TestCase):
             runner._launch_steam_and_wait(120)
         self.assertEqual(launch.call_count, 2)
 
+    def test_failed_new_launch_releases_its_helper_before_next_steam_request(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock, events, orphan = [0.0], [], [False]
+
+        def cleanup():
+            if orphan[0]:
+                orphan[0] = False
+                events.append("closed failed launch helper")
+                return [99]
+            return []
+
+        def launch():
+            self.assertFalse(orphan[0], "Steam is still blocked by the crashed launch")
+            events.append("launch")
+            orphan[0] = events.count("launch") == 1
+
+        def wait(deadline):
+            clock[0] = deadline
+            if events.count("launch") < 2:
+                raise InputError("first launch crashed")
+            return 123
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.close_orphaned_civ_reporters", side_effect=cleanup), patch(
+            "scenario.launch_via_steam", side_effect=launch
+        ), patch("scenario.wait_for_civ_window", side_effect=wait), patch(
+            "scenario.time.sleep", side_effect=lambda n: clock.__setitem__(0, clock[0] + n)
+        ):
+            runner._launch_steam_and_wait(120)
+        self.assertEqual(events, ["launch", "closed failed launch helper", "launch"])
+
+    def test_helper_cleanup_exhausting_deadline_sends_no_steam_request(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.close_orphaned_civ_reporters", return_value=[99]), patch(
+            "scenario.time.sleep", side_effect=lambda n: clock.__setitem__(0, clock[0] + n)
+        ), patch("scenario.launch_via_steam") as launch, patch("scenario.wait_for_civ_window") as window:
+            with self.assertRaisesRegex(ScenarioError, "deadline expired"):
+                runner._launch_steam_and_wait(5)
+        launch.assert_not_called()
+        window.assert_not_called()
+
+    def test_four_launch_requests_still_wait_for_delayed_window_until_deadline(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def wait(short_deadline):
+            clock[0] = short_deadline
+            if clock[0] < 230:
+                raise InputError("Steam launch is still pending")
+            return 123
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.launch_via_steam") as launch, patch(
+            "scenario.wait_for_civ_window", side_effect=wait
+        ):
+            runner._launch_steam_and_wait(420)
+        self.assertEqual(launch.call_count, 4)
+        self.assertEqual(clock[0], 230)
+
+    def test_exhausted_launch_requests_fail_at_the_supplied_deadline(self):
+        runner = Runner({}, Path("unused"), Path("unused"), Path("unused"), 4318)
+        clock = [0.0]
+
+        def wait(short_deadline):
+            clock[0] = short_deadline
+            raise InputError("no window")
+
+        with patch("scenario.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "scenario.single_civ_process", return_value=None
+        ), patch("scenario.launch_via_steam") as launch, patch(
+            "scenario.wait_for_civ_window", side_effect=wait
+        ):
+            with self.assertRaisesRegex(ScenarioError, "within the deadline"):
+                runner._launch_steam_and_wait(420)
+        self.assertEqual(launch.call_count, 4)
+        self.assertEqual(clock[0], 420)
+
     def test_single_process_waits_for_exiting_process_to_disappear(self):
         with patch("restart._civ_process_ids", side_effect=[{1, 2}, {1, 2}, {2}]), patch(
             "restart.process_start_time", return_value=100.0
@@ -522,6 +612,54 @@ class RestartActionTests(unittest.TestCase):
                 runner.run()
             restart.assert_called_once_with(360)
             wait.assert_not_called()  # the restart already proved FrontEnd answers
+
+
+
+
+class OrphanReporterTests(unittest.TestCase):
+    def close(self, rows, image, processes=None):
+        def query(handle, flags, buffer, length):
+            buffer.value = image
+            return True
+        kernel = Mock()
+        kernel.OpenProcess.return_value = 200
+        kernel.QueryFullProcessImageNameW.side_effect = query
+        with patch("restart._civ_process_ids", side_effect=processes or [set(), set()]), patch(
+            "restart._process_rows", return_value=rows
+        ), patch("restart.kernel32", kernel):
+            closed = close_orphaned_civ_reporters()
+        return closed, kernel
+
+    def test_only_verified_orphan_helper_is_closed(self):
+        image = "C:/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, image)
+        self.assertEqual(closed, [42])
+        kernel.TerminateProcess.assert_called_once_with(200, 1)
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_live_game_parent_preserves_reporter(self):
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41), 41: ("civilizationvi_dx12.exe", 1)}, "unused")
+        self.assertEqual(closed, [])
+        kernel.OpenProcess.assert_not_called()
+        kernel.TerminateProcess.assert_not_called()
+
+    def test_same_named_other_program_is_preserved(self):
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, "C:/OtherApp/FiraxisBugReporter.exe")
+        self.assertEqual(closed, [])
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_game_appearing_during_inspection_preserves_reporter(self):
+        image = "C:/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe"
+        closed, kernel = self.close({42: ("firaxisbugreporter.exe", 41)}, image, [set(), {41}])
+        self.assertEqual(closed, [])
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(200)
+
+    def test_running_game_prevents_all_cleanup(self):
+        with patch("restart._civ_process_ids", return_value={41}), patch("restart._process_rows") as rows:
+            self.assertEqual(close_orphaned_civ_reporters(), [])
+        rows.assert_not_called()
 
 
 if __name__ == "__main__":
