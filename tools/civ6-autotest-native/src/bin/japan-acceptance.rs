@@ -57,6 +57,11 @@ fn prepare(source: &Value) -> Result<Value, String> {
             "same-era rejection did not report the native era restriction",
         ),
         (113, "GameCore_Tuner", "A.BeginHeroRecall"),
+        (
+            124,
+            "GameCore_Tuner",
+            "RequestVerification('japan-live-absorption')",
+        ),
     ] {
         if original[index]["action"] != "ui_lua"
             || original[index]["state_name"] != state
@@ -177,15 +182,21 @@ mod tests {
         }
     }
     #[test]
-    fn moved_rejection_retirement_or_intent_is_not_accepted() {
+    fn moved_acceptance_phases_are_not_accepted() {
         let source: Value = serde_json::from_str(include_str!(
             "../../../civ6-autotest/scenarios/absorption-japan.json"
         ))
         .unwrap();
-        for index in [106, 110, 113] {
-            let mut changed = source.clone();
-            changed["steps"][index]["code"] = json!("return 'different phase'");
-            assert!(prepare(&changed).is_err());
+        for index in [106, 110, 113, 124] {
+            for (field, value) in [
+                ("code", "return 'different phase'"),
+                ("state_name", "FrontEnd"),
+                ("action", "wait_for"),
+            ] {
+                let mut changed = source.clone();
+                changed["steps"][index][field] = json!(value);
+                assert!(prepare(&changed).is_err(), "phase {index} field {field}");
+            }
         }
     }
     #[test]
