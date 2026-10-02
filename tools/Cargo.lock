@@ -228,6 +228,7 @@ dependencies = [
  "font8x8",
  "image",
  "memmap2",
+ "mlua",
  "regex",
  "resvg",
  "rusqlite",
@@ -284,6 +285,7 @@ dependencies = [
 name = "civ6-lua-tests-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-data-rs",
  "flate2",
  "icu_properties",
  "mlua",
@@ -300,6 +302,7 @@ dependencies = [
 name = "civ6-migration-tests-rs"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "serde_json",
  "syn 2.0.119",
  "tempfile",

@@ -45,4 +45,4 @@ tools/target/release/civ6-autotest.exe tools/civ6-autotest/scenarios/bundle0-loa
 | `rust-autotest-driver-03` | `a1ddf6a` | 11/11 | 14/14 | exit 0、MOD の読み込みエラーの検査を含む |
 | `rust-autotest-driver-06` | `ce797d3` と main の `8ff592e` の統合 `9964715` | 11/11 | 14/14 | exit 0、最新の CLI と所有 MOD の検出を含む |
 
-どちらも早送りのテストモードは使っていない。実行後に Civ6 の終了を確認した。以後の変更は、MOD の UUID だけで報告されるログの検出、中断時の停止処理、Lua のテスト比較を補強するもの。実機記録のコミットと、その後の単体テストの対象を区別して記録する。
+いずれも早送りのテストモードは使っていない。実行後に Civ6 の終了を確認した。後続では、Lua のテスト比較に加え、main に入った再起動の期限と残留ヘルパーの扱いを移植した。実機記録のコミットと、その後の単体テストの対象を区別して記録する。
