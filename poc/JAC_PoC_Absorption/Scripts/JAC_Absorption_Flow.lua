@@ -48,6 +48,12 @@ end
 local function ValidReturnOwner(flow, owner)
   return owner ~= flow.From and owner ~= flow.To and HasSurvivingCity(owner)
 end
+local function NeedsReturnOwner(flow, entry)
+  -- Before P3 validate the choice; afterwards validate only the frozen result.
+  -- A failed RETURN that became SEIZE/SCATTER no longer has that recipient.
+  if flow.FinalRollsComplete or flow.AppliedPlan then return entry.FinalOutcome == "RETURN" end
+  return entry.SelectedAction == "RETURN"
+end
 local function Clamp(value, lo, hi) return math.max(lo, math.min(hi, value)) end
 local function DebugAllowed()
   return Game:GetProperty(TEST_KEY) == 1 and GameConfiguration
@@ -554,14 +560,14 @@ function F.Resume(id)
   if not tx or tx.AwaitingPreparation then
     local invalidReturn = false
     for _, entry in ipairs(flow.Entries) do
-      if entry.FinalOutcome == "RETURN" and not ValidReturnOwner(flow, entry.ReturnOwner) then
+      if NeedsReturnOwner(flow, entry) and not ValidReturnOwner(flow, entry.ReturnOwner) then
         invalidReturn = true
       end
     end
     if invalidReturn then
       A.CancelUnprepared(id, flow.AppliedPlan)
       for _, entry in ipairs(flow.Entries) do
-        if entry.FinalOutcome == "RETURN" and not ValidReturnOwner(flow, entry.ReturnOwner) then
+        if NeedsReturnOwner(flow, entry) and not ValidReturnOwner(flow, entry.ReturnOwner) then
           entry.SelectedAction, entry.ReturnOwner = nil, nil
           entry.ReturnOwnerPending = true
         end
@@ -611,7 +617,7 @@ function F.Resolve(actor, id)
   end
   local invalidReturn = false
   for _, entry in ipairs(flow.Entries) do
-    if not entry.EscapeOutcome and entry.SelectedAction == "RETURN"
+    if not entry.EscapeOutcome and NeedsReturnOwner(flow, entry)
       and not ValidReturnOwner(flow, entry.ReturnOwner) then
       entry.SelectedAction, entry.ReturnOwner = nil, nil
       if flow.FinalRollsComplete then entry.ReturnOwnerPending = true end

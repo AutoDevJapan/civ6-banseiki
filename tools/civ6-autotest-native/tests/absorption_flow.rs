@@ -1226,6 +1226,7 @@ fn return_owner_lost_after_final_rolls_reopens_only_destination_before_mutation(
         CHOOSE_ALL('waiting-return')
         F.Select(2,'waiting-return','artifact','RETURN',3)
         F.Select(2,'waiting-return','collection','RETURN',0)
+        F.DebugSetRoll('waiting-return','collection','P3_SUCCESS',9999)
         ORIGINAL_SPREAD=Players[1].units[3].GetSpreadCharges
         Players[1].units[3].GetSpreadCharges=nil
         ExposedMembers.JAC_HeroReadAPI={GetObservation=function() return nil end}
@@ -1263,6 +1264,7 @@ fn return_owner_lost_after_final_rolls_reopens_only_destination_before_mutation(
             assert(entry.ReturnOwnerPending and not entry.SelectedAction and not entry.ReturnOwner)
           elseif entry.ID=='collection' then
             assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==0)
+            assert(entry.FinalOutcome=='SEIZE' and entry.Success==false)
           end
         end
         assert(not pcall(F.Select,2,result.ID,'artifact','TRANSFER'))
@@ -1287,17 +1289,20 @@ fn return_owner_lost_after_final_rolls_reopens_only_destination_before_mutation(
             assert(entry.ReturnOwnerPending and not entry.SelectedAction and not entry.ReturnOwner,
               'a second destination loss hid the correction actions')
           end
+          if entry.ID=='collection' then
+            assert(entry.FinalOutcome=='SEIZE' and not entry.ReturnOwnerPending
+              and entry.SelectedAction=='RETURN','failed return incorrectly reopened its old recipient')
+          end
         end
         assert(#RANDOM_CALLS==SAVED_FINAL_ROLLS and A.GetState().Transactions['waiting-return']==nil)
         Game.props=A.Rules.Copy(Game.props)
         Players[0].cities=cities
         F.Select(2,'waiting-return','artifact','RETURN',0)
-        F.Select(2,'waiting-return','collection','RETURN',0)
         Players[1].units[3].GetSpreadCharges=ORIGINAL_SPREAD
         local done=F.Resolve(2,'waiting-return')
         assert(done.Phase=='RESULT',tostring(done.Error))
         assert(#RANDOM_CALLS==SAVED_FINAL_ROLLS,'destination correction rerolled outcomes')
-        assert(A.GetRoster(0).artifact and A.GetRoster(0).collection)
+        assert(A.GetRoster(0).artifact and A.GetRoster(0).collection==nil and A.GetRoster(2).collection)
         assert(A.GetRoster(3).artifact==nil)
         assert(F.Resolve(2,done.ID).Phase=='RESULT' and #RANDOM_CALLS==SAVED_FINAL_ROLLS)
     "#,
