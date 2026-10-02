@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 
 const TRACE_START: &str = r#"
 local api=assert(ExposedMembers.JAC_Absorption)
-local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))
+local e=assert(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())
 assert(not Players[e.Owner]:IsHuman(),'diagnostic requires the original AI owner')
 if JAC_NATIVE_HERO_FAITH_HANDLER then Events.FaithChanged.Remove(JAC_NATIVE_HERO_FAITH_HANDLER) end
 if JAC_NATIVE_HERO_COMMAND_HANDLER then Events.CityCommandStarted.Remove(JAC_NATIVE_HERO_COMMAND_HANDLER) end
@@ -101,7 +101,18 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
     for (index, step) in steps[102..111].iter().enumerate() {
         out.push(step.clone());
         if index == 4 {
-            out.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local e=Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1');return type(e)=='table' and type(e.Owner)=='number' and type(e.Class)=='number' and type(e.EraBefore)=='number' and type(e.CityID)=='number'"}}));
+            out.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())"}));
+            out.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local read=ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ;if type(read)~='function' then return false end;local e=read();return type(e)=='table' and type(e.Owner)=='number' and type(e.Class)=='number' and type(e.EraBefore)=='number' and type(e.CityID)=='number'"}}));
+        }
+    }
+    for step in &mut out {
+        if let Some(code) = step["code"].as_str()
+            && step["state_name"] == "InGame"
+        {
+            step["code"] = json!(code.replace(
+                "Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')",
+                "ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ()"
+            ));
         }
     }
     out.push(json!({"action":"ui_lua","state_name":"InGame","code":TRACE_START}));
@@ -154,17 +165,21 @@ mod tests {
         ))
         .unwrap();
         let d = prepare(&source, "owned-checkpoint").unwrap();
-        assert_eq!(d["steps"].as_array().unwrap().len(), 17);
+        assert_eq!(d["steps"].as_array().unwrap().len(), 18);
         assert_eq!(d["steps"][0], source["steps"][0]);
         assert_eq!(d["steps"][1]["exact_name"], true);
         for i in 0..9 {
-            assert_eq!(
-                d["steps"][4 + i + usize::from(i > 4)],
-                source["steps"][102 + i]
-            );
+            let mut expected = source["steps"][102 + i].clone();
+            if expected["state_name"] == "InGame" {
+                expected["code"] = json!(expected["code"].as_str().unwrap().replace(
+                    "Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')",
+                    "ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ()"
+                ));
+            }
+            assert_eq!(d["steps"][4 + i + 2 * usize::from(i > 4)], expected);
         }
-        assert_eq!(d["steps"][9]["action"], "wait_for");
-        assert_eq!(d["steps"][15], source["steps"][111]);
+        assert_eq!(d["steps"][10]["action"], "wait_for");
+        assert_eq!(d["steps"][16], source["steps"][111]);
     }
     #[test]
     fn observation_chunks_compile_without_executing() {

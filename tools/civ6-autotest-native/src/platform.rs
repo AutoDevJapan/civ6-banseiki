@@ -532,7 +532,7 @@ mod native {
         ))
     }
 
-    pub fn focus_and_key(vk: u16, deadline: Instant) -> Result<(), String> {
+    pub fn focus_and_key(expected: &CivProcess, vk: u16, deadline: Instant) -> Result<(), String> {
         if !(1..=255).contains(&vk) {
             return Err(format!("Invalid virtual key: {vk}"));
         }
@@ -541,6 +541,7 @@ mod native {
             WindowProbe::Ready(window) => window,
             WindowProbe::Pending(reason) => return Err(reason),
         };
+        require_identity(expected, &window.process)?;
         require_window(&window)?;
         let scan = unsafe { MapVirtualKeyW(u32::from(vk), MAPVK_VK_TO_VSC) };
         if scan == 0 {
@@ -590,7 +591,7 @@ pub fn wait_for_window(_: Instant) -> Result<(), String> {
     Err("Civ VI platform operations require Windows".into())
 }
 #[cfg(not(windows))]
-pub fn focus_and_key(_: u16, _: Instant) -> Result<(), String> {
+pub fn focus_and_key(_: &CivProcess, _: u16, _: Instant) -> Result<(), String> {
     Err("Civ VI platform operations require Windows".into())
 }
 

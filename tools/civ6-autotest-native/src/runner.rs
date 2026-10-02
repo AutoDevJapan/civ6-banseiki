@@ -20,6 +20,8 @@ pub struct RunError {
     message: String,
     unknown: bool,
     lua: bool,
+    tuner: bool,
+    connection_refused: bool,
 }
 impl RunError {
     fn new(s: impl Into<String>) -> Self {
@@ -27,6 +29,8 @@ impl RunError {
             message: s.into(),
             unknown: false,
             lua: false,
+            tuner: false,
+            connection_refused: false,
         }
     }
 }
@@ -54,10 +58,13 @@ impl From<TunerError> for RunError {
     fn from(e: TunerError) -> Self {
         let unknown = matches!(e, TunerError::Unknown(_));
         let lua = matches!(e, TunerError::Lua(_));
+        let connection_refused = matches!(&e,TunerError::Preflight(s) if s.starts_with("cannot connect to 127.0.0.1:") && (s.contains("os error 10061")||s.contains("Connection refused")||s.contains("os error 111")));
         Self {
             message: e.to_string(),
             unknown,
             lua,
+            tuner: true,
+            connection_refused,
         }
     }
 }
@@ -530,11 +537,19 @@ impl Runner {
             }
         }
     }
+    fn key(&mut self, vk: u16, deadline: Instant) -> Result<()> {
+        require_chain()?;
+        let expected = self
+            .process
+            .as_ref()
+            .ok_or_else(|| RunError::new("recorded game process required before input"))?;
+        Ok(platform::focus_and_key(expected, vk, deadline)?)
+    }
     fn idempotent(&mut self, state: &str, code: &str, deadline: Instant) -> Result<String> {
         loop {
             match self.lua(state, code, deadline) {
                 Ok(v) => return Ok(v),
-                Err(e) if !e.lua => {
+                Err(e) if e.tuner && !e.lua => {
                     self.client = None;
                     if duration(deadline, 0.5).is_err() {
                         return Err(e);
@@ -665,7 +680,7 @@ impl Runner {
                     return Ok(());
                 }
                 Ok(false) => {}
-                Err(e) if e.lua => return Err(e),
+                Err(e) if e.lua || !e.tuner => return Err(e),
                 Err(e) if e.unknown => {
                     // Only the scenario's declared read-only wait predicate may be re-polled after a diplomacy unblock.
                     if condition["state_name"]
@@ -782,6 +797,9 @@ impl Runner {
                 let states = match self.states(deadline) {
                     Ok(states) => states,
                     Err(error) => {
+                        if !error.connection_refused {
+                            return Err(error);
+                        }
                         let error = error.to_string();
                         if last_state_error.as_ref() != Some(&error) {
                             self.log("loadscreen_states", "WAIT", &error)?;
@@ -793,7 +811,7 @@ impl Runner {
                         }
                         // A new ready marker proves the load screen is ready.
                         // The established HWND-targeted ESC path needs no tuner listener.
-                        platform::focus_and_key(0x1b, deadline)?;
+                        self.key(0x1b, deadline)?;
                         begun = true;
                         self.client = None;
                         self.log("loadscreen_begin","OK","new ready marker observed; ESC posted once to the verified Civ6 window after state-query wait")?;
@@ -823,7 +841,7 @@ impl Runner {
                         sleep(deadline, 0.5)?;
                         continue;
                     }
-                    platform::focus_and_key(0x1b, deadline)?;
+                    self.key(0x1b, deadline)?;
                 }
                 begun = true;
                 self.client = None;
@@ -840,7 +858,7 @@ impl Runner {
                         return Ok(());
                     }
                     Ok(_) => {}
-                    Err(e) if e.unknown || e.lua => return Err(e),
+                    Err(e) if e.unknown || e.lua || !e.tuner => return Err(e),
                     Err(_) => {
                         self.client = None;
                     }
@@ -848,7 +866,7 @@ impl Runner {
                 Ok(_) => {
                     self.client = None;
                 }
-                Err(e) if e.lua || e.unknown => return Err(e),
+                Err(e) if e.lua || e.unknown || !e.tuner => return Err(e),
                 Err(_) => {
                     self.client = None;
                 }
@@ -1001,7 +1019,7 @@ impl Runner {
                             dedications += 1;
                             chose = true;
                             self.log("autoplay_dedication", "OK", &choices)?;
-                            platform::focus_and_key(0x1b, deadline)?;
+                            self.key(0x1b, deadline)?;
                         }
                     }
                     if !chose && resumes >= 2 && !diplomacy_since {
@@ -1422,6 +1440,21 @@ fn parse_autoplay(value: &str) -> Result<AutoplayStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_connection_refusal_can_use_loadscreen_input_fallback() {
+        let refused = RunError::from(TunerError::Preflight(
+            "cannot connect to 127.0.0.1:4318: actively refused (os error 10061)".into(),
+        ));
+        assert!(refused.connection_refused);
+        for error in [
+            RunError::new("the standard live_chain must own the game resource"),
+            RunError::new("Civ6 process changed during the scenario"),
+            RunError::from(TunerError::Preflight("LSQ returned malformed frame".into())),
+            RunError::from(TunerError::Unknown("command may have run".into())),
+        ] {
+            assert!(!error.connection_refused);
+        }
+    }
     const JAPAN: &str = include_str!("../../civ6-autotest/scenarios/absorption-japan.json");
     const HERO: &str = include_str!("../../civ6-autotest/scenarios/absorption-hero-recall.json");
     const PRIEST: &str =
