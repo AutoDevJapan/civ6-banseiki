@@ -43,6 +43,7 @@ local function prop(obj)
   return obj
 end
 Game = prop({GetCurrentGameTurn=function() return CURRENT_TURN end})
+Game.GetGreatWorkPlayer=function() return 0 end
 ExposedMembers={}
 Players, PlayerConfigurations, CITIES, PLOTS = {}, {}, {}, {}
 for owner=0,3 do
@@ -146,6 +147,11 @@ function CITY(owner,x,pop,faith)
   city.GetBuildings=function() return {
     HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
     GetNumGreatWorkSlots=function() return 1 end,
+    GetGreatWorkTypeFromIndex=function(_,index)
+      return Game.GetGreatWorkType and Game.GetGreatWorkType(index) or nil
+    end,
+    GetCreatorNameFromIndex=function() return '' end,
+    GetTurnFromIndex=function() return 2 end,
     -- Every city has its own native work index, as in a real save.
     GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007+city.x end
   } end
