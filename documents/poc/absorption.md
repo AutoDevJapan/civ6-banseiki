@@ -18,7 +18,17 @@ PR #87の実機3本は、同じ候補 `402bb309f05178d85e0e7adc591b33b612002ac1`
 
 検証モードで日本74ターン、英雄62ターンを省略したため、連続性能の証拠にはしない。旧召喚履歴と費用の完全継承、非空の英雄作品、公開待機中の実保存再開、マルチプレイ、使用済み布教回数と宗教持続PoCとの合同検証は、引き続き未保証である。後続の吸収画面と三段階処理はToDo397・116に残る。
 
-## 三段階吸収バックエンドの実装（実機未検証）
+## 三段階吸収バックエンドの実装と検証状況
+
+PR #96は、公式Great Workの物理的な散逸・第三者返還・回収が未完成のため、マージ条件を満たしていない。吸収先以外へ出す作品は、都市や部隊の変更前に停止する。同じ作品indexを保った移動と回収を実装・実証してから、この必須項目を解消する。
+
+2026-10-02の旧候補の実機`absorb-flow-12`は94/94手順とログ判定5/5が成功した。一次離脱、人間用の選択画面、強制失敗と再判定、独自品物の回収、都市忠誠と文化摩擦、各段階の保存・読込を確認した。公式作品の実体移動は、この成功に含まれない。
+
+mainのRust移行を統合した候補では、ワークスペース検査1199件と吸収専用の独立検査80件が全て成功し、省略は0件だった。旧吸収の120メソッドと117個の埋込assertを保持し、その125検査も通過した。追加シナリオ5本は固定一覧へ登録し、形式と全Lua構文を確認した。Rustの書式検査とreleaseビルド、吸収専用ツールのClippyも成功した。ワークスペース全体のClippyを追加で実行したところ、main由来の式・型などの形式指摘で停止した。必須CIは書式・全検査・releaseビルド・全シナリオ検査であり、全体のClippy成功は主張しない。
+
+公式作品の種類・作者・作成手番は、ゲーム処理側にないgetterを画面側の`CityBuildings`で呼び、数値と文字列だけを返して保持する。ゲーム処理側にgetterがない場合の回帰検査も通過した。保管用都市の診断は、公式Tuner例の座標引数を使い、通行可能な空き地と都市間距離を確認する形へ修正した。
+
+2026-10-02 21:32時点で、直接取引の実機`absorb-flow-16-try1`と`absorb-flow-16`は起動時のFrontEnd応答待ちで0/10手順に失敗した。Civ6は読み込み画面から進まず、FireTunerは有効でも接続先が現れなかった。MODの参照先は存在し、Lua.logは初期化1行だけだった。生成されたキャッシュを保存して退避した`absorb-flow-17-try1`も、同じ起動段階で0/15手順に失敗した。`absorb-flow-17`は再起動中で、作品の移動や都市生成の成否は未確認である。最新の終了結果と残るシナリオは[PR #96](https://github.com/AutoDevJapan/civ6-banseiki/pull/96)に記録する。
 
 `Scripts/JAC_Absorption_Flow.lua` は、旧 PoC の `ExposedMembers.JAC_Absorption.Apply` に全資産の確定結果を渡す前段を実装する。ゲーム側の読み取り専用公開口は `ExposedMembers.JAC_AbsorptionFlow`。画面操作は `GameEvents.JAC_AbsorptionFlow_Operation` への `EXECUTE_SCRIPT` で届け、イベントが渡す実際のプレイヤーIDを検証する。読込時も `Game` プロパティから選択・結果を復元する。旧 PoC の `WAITING_UI` は `F.Resume(id)`、または同一の `RESOLVE` 操作を画面側の値公開後に呼んで続行する。再送では保存済みの判定値を使う。
 
@@ -38,7 +48,7 @@ PR #87の実機3本は、同じ候補 `402bb309f05178d85e0e7adc591b33b612002ac1`
 
 方式別の都市効果は、この新フローからの移管だけに適用する。数値と公式忠誠値との比較は [SSOT 9.1](../spec/ssot/09-assimilation-religion.md#91-勢力吸収) に置く。ゲーム側の `ChangeLoyalty` は公式 `DLC/BlackDeathScenario/Scripts/BlackDeathScenario_UnitCommands.lua:171,235` に実例がある。
 
-検証用の強制値は明示的な `Game:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',1)`、かつ `GameConfiguration.IsAnyMultiplayer()==false` の場合だけ `F.DebugSetRoll(flowID,assetID,stage,0..9999)` と `F.DebugSetSpawnDelay(0..2)` で設定する。強制値でも本来の `Game.GetRandNum` をラベル付きで必ず呼び、生値・適用値を保存する。通常UIには検証操作を置かない。三段階フロー、再登場、方式別忠誠の実機成功はまだ主張しない。
+検証用の強制値は明示的な `Game:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',1)`、かつ `GameConfiguration.IsAnyMultiplayer()==false` の場合だけ `F.DebugSetRoll(flowID,assetID,stage,0..9999)` と `F.DebugSetSpawnDelay(0..2)` で設定する。強制値でも本来の `Game.GetRandNum` をラベル付きで必ず呼び、生値・適用値を保存する。通常UIには検証操作を置かない。旧候補の三段階フロー・独自品物の再登場・方式別忠誠は上記の実機12で確認した。現在の候補の通し実機と、公式作品の散逸・返還・回収は未完了である。
 
 ## 以前の担当の記録（Rust移植前）
 
