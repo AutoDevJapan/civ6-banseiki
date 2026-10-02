@@ -276,7 +276,7 @@ pub fn loading_evidence(
     session: &mut DiagnosticSession,
 ) -> Result<Value> {
     let _game = pinned(game, 0x1000)?;
-    let _window = own_window(game)?;
+    let window = own_window(game)?;
     if port != 4318 {
         return Err(Error::input(
             "startup recovery requires the configured FireTuner port 4318",
@@ -323,7 +323,12 @@ pub fn loading_evidence(
         }
     }
     let _remove = Remove(image_path.clone());
-    let captured = worker("loading-screen", game, &image_path, session)?;
+    let captured = worker(
+        &format!("loading-screen@{window}"),
+        game,
+        &image_path,
+        session,
+    )?;
     if captured["result"]["status"] != "ok" {
         return Err(Error::input("current loading screen could not be observed"));
     }
@@ -335,6 +340,7 @@ pub fn loading_evidence(
         return Err(Error::input("loading screen evidence exceeded size limit"));
     }
     let screen: Value = serde_json::from_slice(&bytes)?;
+    verify_capture_window(window, own_window(game)?, &screen)?;
     if screen["status"] != "recognized" {
         return Err(Error::input(
             "displayed image is not a confirmed initial loading screen",
@@ -745,9 +751,18 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
             println!("{}", crate::startup_screen::classify_png(&bytes)?);
             Ok(())
         }
-        "loading-screen" => {
+        operation if operation.starts_with("loading-screen@") => {
             let _handle = pinned(game, 0x1000)?;
-            let hwnd = own_window(game)?;
+            let hwnd: isize = operation
+                .strip_prefix("loading-screen@")
+                .unwrap()
+                .parse()
+                .map_err(|_| Error::input("invalid startup capture window"))?;
+            if hwnd == 0 || own_window(game)? != hwnd {
+                return Err(Error::input(
+                    "startup capture window changed before capture",
+                ));
+            }
             let png = path.with_extension("png");
             crate::capture::capture_owned_window(
                 &png,
@@ -759,8 +774,12 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
             File::open(&png)?
                 .take(crate::startup_screen::MAX_PNG_BYTES as u64 + 1)
                 .read_to_end(&mut bytes)?;
-            let screen = crate::startup_screen::classify_png(&bytes)?;
+            let mut screen = crate::startup_screen::classify_png(&bytes)?;
             pinned(game, 0x1000)?;
+            if own_window(game)? != hwnd {
+                return Err(Error::input("startup capture window changed after capture"));
+            }
+            screen["hwnd"] = json!(hwnd);
             let file = OpenOptions::new().write(true).create_new(true).open(path)?;
             serde_json::to_writer(file, &screen)?;
             Ok(())

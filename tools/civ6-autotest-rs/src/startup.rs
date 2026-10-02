@@ -42,6 +42,14 @@ pub fn verify_helper_identity(value: &Value) -> Result<()> {
     }
     Ok(())
 }
+pub fn verify_capture_window(expected: isize, current: isize, evidence: &Value) -> Result<()> {
+    if expected == 0 || expected != current || evidence["hwnd"].as_i64() != Some(expected as i64) {
+        return Err(Error::input(
+            "startup window changed during loading-screen capture",
+        ));
+    }
+    Ok(())
+}
 pub const LOG_LIMIT: u64 = 4 * 1024 * 1024;
 pub const STARTUP_LOGS: &[&str] = &[
     "Startup.log",

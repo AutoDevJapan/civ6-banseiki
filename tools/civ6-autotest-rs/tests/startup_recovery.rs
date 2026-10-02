@@ -60,6 +60,21 @@ fn stale_or_missing_helper_identity_cannot_pass_the_driver_protocol() {
     }
 }
 
+#[test]
+fn a_replaced_window_in_the_same_process_cannot_supply_loading_evidence() {
+    let evidence = json!({"hwnd":101,"status":"recognized"});
+    startup::verify_capture_window(101, 101, &evidence).unwrap();
+    for (expected, current, returned) in [
+        (101, 102, evidence.clone()),
+        (101, 101, json!({"hwnd":102})),
+        (101, 101, json!({"hwnd":"101"})),
+        (101, 101, json!({})),
+        (0, 0, json!({"hwnd":0})),
+    ] {
+        assert!(startup::verify_capture_window(expected, current, &returned).is_err());
+    }
+}
+
 #[derive(Default)]
 struct State {
     events: Vec<String>,
