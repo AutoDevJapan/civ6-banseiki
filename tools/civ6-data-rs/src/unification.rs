@@ -413,7 +413,7 @@ pub fn neighbours(index: i64) -> BTreeSet<i64> {
     .into_iter()
     .filter_map(|(dx, dy)| {
         let (nx, ny) = (x + dx, y + dy);
-        (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT).then_some(plot(nx, ny))
+        ((0..WIDTH).contains(&nx) && (0..HEIGHT).contains(&ny)).then_some(plot(nx, ny))
     })
     .collect()
 }

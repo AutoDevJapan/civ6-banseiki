@@ -436,7 +436,7 @@ mod sengoku_cascade_tests {
                 final_db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
             assert_eq!(after, before, "{table}");
         }
-        let mut stmt = final_db.prepare(&format!("SELECT DiplomaticActionType, InitiatorPrereqCivic || '|' || TargetPrereqCivic FROM DiplomaticActions WHERE DiplomaticActionType IN ({})",vec!["?";7].join(",")))?;
+        let mut stmt = final_db.prepare(&format!("SELECT DiplomaticActionType, InitiatorPrereqCivic || '|' || TargetPrereqCivic FROM DiplomaticActions WHERE DiplomaticActionType IN ({})",["?";7].join(",")))?;
         let actual: BTreeMap<String, String> = stmt
             .query_map(ALLIANCES, |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
