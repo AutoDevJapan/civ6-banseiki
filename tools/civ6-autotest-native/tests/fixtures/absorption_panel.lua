@@ -60,7 +60,8 @@ end
 Mouse={eLClick=1}
 KeyEvents={KeyUp=1}
 Keys={VK_ESCAPE=27,VK_TAB=9,VK_DOWN=40,VK_RIGHT=39,VK_UP=38,VK_LEFT=37,VK_RETURN=13}
-ContextPtr={hidden=false,SetInputHandler=function(self,fn) self.input=fn end,
+ContextPtr={hidden=true,SetInputHandler=function(self,fn) self.input=fn end,
+  SetHide=function(self,value) self.hidden=value end,
   IsHidden=function(self) return self.hidden end}
 PlayerOperations={EXECUTE_SCRIPT=1}
 OPERATION_CALLS={}

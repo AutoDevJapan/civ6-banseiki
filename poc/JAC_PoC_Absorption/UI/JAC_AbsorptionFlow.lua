@@ -450,6 +450,7 @@ local function Refresh(autoOpen)
 end
 
 local function Open()
+  ContextPtr:SetHide(false)
   requestPending = false
   if not Refresh(false) then return false end
   dismissed = nil
@@ -516,5 +517,9 @@ end, true)
 Events.GameCoreEventPublishComplete.Add(function() requestPending = false; Refresh(true) end)
 Events.LocalPlayerTurnBegin.Add(function() requestPending = false; Refresh(true) end)
 Events.LocalPlayerTurnEnd.Add(function() Controls.Panel:SetHide(true); rendered.visible = false end)
-Events.LoadScreenClose.Add(function() dismissed = nil; requestPending = false; Refresh(true) end)
+Events.LoadScreenClose.Add(function()
+  ContextPtr:SetHide(false)
+  dismissed = nil; requestPending = false; Refresh(true)
+end)
+ContextPtr:SetHide(false)
 Refresh(true)
