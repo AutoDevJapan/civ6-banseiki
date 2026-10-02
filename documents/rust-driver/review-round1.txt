@@ -1,0 +1,17 @@
+## Must
+
+- **Rust に研究レポート機能がありません** — `ResearchMetrics` は研究 JSONL を記録しますが、Rust の6 CLIに、研究完了ターンを集計して出力する処理が見当たりません。[metrics.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/metrics.rs:365) 旧仕様は、文明・社会制度ごとに勢力別の初回完了ターン、中央値、範囲、開始時点の保有数を集計します。[research_report.py](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest/research_report.py:11) その動作を確認する既存テストもあります。[test_driver_features.py](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest/tests/test_driver_features.py:181) **修正案:** Rust に同等の集計と `tech` / `civic` 出力を実装し、CLI から呼べるようにする。確信度: 高。
+
+- **ログの内容とファイル識別子を別々に取得しています** — [judge.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/judge.rs:84) は、開いたハンドルからサイズ・先頭・末尾を読み、その後パスを再度開いて inode/file index を取得します。待機中の読み取りも同様に、[runner.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/runner.rs:369) で内容を読み、別の呼び出しで識別子を取得しています。間にローテーションが入ると別世代の情報が混ざり、同じ先頭・末尾を持つ置換ログが古いオフセットから読まれて、新世代の行を見落とす可能性があります。旧 Python のスナップショットは `fstat` を読み取り中のハンドルに対して行っています。[judge.py](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest/judge.py:40) **修正案:** 同じ開いたハンドルから、内容・メタデータ・inode/file index を取得してください。確信度: 高。
+
+## Suggestion
+
+- **Lua 待機条件の `equals` が非文字列の場合に旧実装と結果が変わります** — [runner.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/runner.rs:439) は非文字列を JSON 表記へ変換しますが、Python は `str(value).lower()` を使います。[scenario.py](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest/scenario.py:560) たとえば `equals: null` と Lua の戻り値 `"null"` は Rust では一致し、Python では一致しません。**修正案:** 旧 Python の変換結果を再現するか、仕様に合わせて `equals` の型を検証してください。確信度: 高。
+
+- **保存・読み込み計測の合成データ判定が実行時フラグと異なります** — [runner.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/runner.rs:258) はシナリオに `test_mode` オブジェクトがあるだけで、保存・読み込み CSV を合成データ扱いにします。Python は `Runner` に渡された `test_mode` 実行フラグで判定します。シナリオに有効な `test_mode` 情報があり、`--test-mode` なしで実行すると、Rust の CSV だけ計測有効性が異なる可能性があります。**修正案:** CSV 判定を CLI の実行時フラグにそろえてください。確信度: 高。
+
+- **計測値の丸めが Python と異なります** — [metrics.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/metrics.rs:45) は中間値をゼロから遠ざけて丸めます。Python の `round(value, 3)` は異なる丸め規則を使うため、半ミリ秒境界付近で CSV/JSON の秒数が 0.001 ずれることがあります。**修正案:** Python と同じ丸め規則に合わせてください。確信度: 中。
+
+- **`.` がスクリーンショットの相対パスとして通ります** — [scenario.rs](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest-rs/src/scenario.rs:43) は `.` や `./` を受理します。Python は `Path.parts` が空になるパスを検証時に拒否します。[scenario.py](/C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/rust-driver/tools/civ6-autotest/scenario.py:80) Rust では後続の撮影処理まで進み、オプションメニューやアドバイザーを閉じた後に、出力ディレクトリを画像として開けず失敗します。**修正案:** 出力ディレクトリそのものを指す相対パスを検証時に拒否してください。確信度: 高。
+
+指定された Rust テスト・ビルドの検証済み事実と矛盾する所見はありません。今回はソースのみを読み、テスト・Python・Civ6 は実行していません。ファイル変更もありません。共有 ToDo は実行環境から `Access is denied` となり、状態を確認できませんでした。
