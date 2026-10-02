@@ -42,6 +42,7 @@
 | [`poc/japan-no-world-congress.md`](poc/japan-no-world-congress.md) | 日本マップで世界会議を無効化する実装、公式の根拠、実機確認 |
 | [`poc/court-arbitration.md`](poc/court-arbitration.md) | 日本マップの朝廷・将軍による停戦裁定（請求・費用・拒否の不利益・将軍家の3倍と1573年・正当性・討伐の勅命）の実装、公式の根拠、実機確認 |
 | [`poc/absorption.md`](poc/absorption.md) | 束2の勢力吸収（SSOT 9.1）：都市・部隊・人物・Hero・所持品・宗教の移管と保存、未マージの機能との統合口、公式根拠、自己検証する日本地図シナリオと制限 |
+| [`worklogs/pr87-recovery-20261002.md`](worklogs/pr87-recovery-20261002.md) | PR87の専任担当による実機再開、候補照合、今回の成功範囲と未達条件 |
 | [`poc/religion-persistence.md`](poc/religion-persistence.md) | 束2の宗教持続：確定した再興と8分岐、市民の宗教変換、宗教同盟、必須の公式英雄モード、公式根拠と保存・再読込シナリオ |
 | [`poc/court-arbitration-human-progress.md`](poc/court-arbitration-human-progress.md) | 人間が裁定に回答する実機検証と、保存復元・画面表示・行高の修正結果 |
 | [`poc/court-arbitration-ai-progress.md`](poc/court-arbitration-ai-progress.md) | AIの当事者請求・将軍家の仲介と1573年の境界、保存復元、200ターン計測の記録 |
