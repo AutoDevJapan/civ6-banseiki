@@ -11,7 +11,8 @@ enum Command {
 #[command(
     about = "Inspect a running local Civ VI FireTuner",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     command: Command,
@@ -67,6 +68,48 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_tuner_negative_number_strings_preserve_values_and_last_occurrences() {
+        let args = Args::try_parse_from([
+            "civ6-tuner",
+            "lua",
+            "--state",
+            "-1",
+            "--s",
+            "InGame",
+            "--code",
+            "-2.5",
+        ])
+        .unwrap();
+        assert_eq!(args.state, "InGame");
+        assert_eq!(args.code.as_deref(), Some("-2.5"));
+        let args = Args::try_parse_from([
+            "civ6-tuner",
+            "lua",
+            "--state",
+            "-1",
+            "--code",
+            "-2.5",
+            "--c",
+            "return 1",
+        ])
+        .unwrap();
+        assert_eq!(args.state, "-1");
+        assert_eq!(args.code.as_deref(), Some("return 1"));
+        for flag in ["--state", "--code"] {
+            for value in ["--unknown", "-not-a-number", "-1file"] {
+                parser_tests::assert_parse_error::<Args>(&[
+                    "civ6-tuner",
+                    "lua",
+                    flag,
+                    value,
+                    flag,
+                    "InGame",
+                ]);
+            }
+        }
+    }
 
     #[test]
     fn compat_tuner_prefixes_match_argparse() {

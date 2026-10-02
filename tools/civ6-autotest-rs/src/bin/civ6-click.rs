@@ -5,7 +5,8 @@ use clap::Parser;
 #[command(
     about = "Send verified input to the one Civ VI window",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     /// Horizontal fraction of the window (0..1).
@@ -55,6 +56,29 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_click_negative_numbers_do_not_accept_arbitrary_hyphen_values() {
+        let args = Args::try_parse_from([
+            "civ6-click",
+            "-0.5",
+            "0.5",
+            "--deadline",
+            "-1.5",
+            "--d",
+            "123",
+        ])
+        .unwrap();
+        assert_eq!((args.fx, args.fy), (Some(-0.5), Some(0.5)));
+        assert_eq!(args.deadline, Some(123.0));
+        parser_tests::assert_parse_error::<Args>(&[
+            "civ6-click",
+            "--deadline",
+            "--unknown",
+            "--d",
+            "123",
+        ]);
+    }
 
     #[test]
     fn compat_click_accepts_long_prefixes() {

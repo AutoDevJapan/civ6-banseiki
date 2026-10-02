@@ -8,7 +8,8 @@ mod support;
 #[command(
     about = "Run a Civ VI PoC scenario with automatic mod freshness checks",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     #[arg(value_parser = support::path_value_parser())]
@@ -107,6 +108,40 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_scenario_negative_number_paths_preserve_values_and_last_occurrences() {
+        let args = Args::try_parse_from([
+            "civ6-autotest",
+            "-1",
+            "--output",
+            "-2.5",
+            "--logs",
+            "-3",
+            "--saves",
+            "-4",
+            "--mods",
+            "-5",
+            "--out",
+            "out",
+        ])
+        .unwrap();
+        assert_eq!(args.scenario, PathBuf::from("-1"));
+        assert_eq!(args.output, Some(PathBuf::from("out")));
+        assert_eq!(args.logs, Some(PathBuf::from("-3")));
+        assert_eq!(args.saves, Some(PathBuf::from("-4")));
+        assert_eq!(args.mods, Some(PathBuf::from("-5")));
+        for value in ["--unknown", "-not-a-number", "-1file"] {
+            parser_tests::assert_parse_error::<Args>(&[
+                "civ6-autotest",
+                "scenario.json",
+                "--logs",
+                value,
+                "--l",
+                "logs",
+            ]);
+        }
+    }
 
     #[test]
     fn compat_scenario_prefixes_match_argparse() {

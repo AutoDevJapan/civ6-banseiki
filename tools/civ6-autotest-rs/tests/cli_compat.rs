@@ -191,3 +191,61 @@ fn compat_restart_last_seconds_still_enforces_guard_before_window_queries() {
     );
     assert!(output.stdout.is_empty());
 }
+
+#[test]
+fn compat_check_cli_reads_negative_number_paths_without_game_actions() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = repo_root().join("tools/civ6-autotest/scenarios/bundle0-load-save.json");
+    let bytes = fs::read(&fixture).unwrap();
+    fs::write(temp.path().join("-1"), &bytes).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+        .args([
+            "-1", "--check", "--ch", "--output", "-2.5", "--out=", "--logs", "-3", "--saves", "-4",
+            "--mods", "-5",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        "VALID: JAC_PoC_Bundle0 load/save (10 steps)"
+    );
+    assert!(output.stderr.is_empty());
+    let output = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+        .args(["-1", "--check", "--logs", "--unknown", "--l", "logs"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    assert_eq!(fs::read(temp.path().join("-1")).unwrap(), bytes);
+}
+
+#[test]
+fn compat_tuner_negative_number_strings_reach_invalid_port_guard_without_connecting() {
+    for args in [
+        vec![
+            "lua", "--state", "-1", "--s", "InGame", "--code", "return 1", "--port", "0",
+        ],
+        vec![
+            "lua", "--state", "-1", "--code", "-2.5", "--c", "return 1", "--port", "0",
+        ],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_civ6-tuner"))
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap().trim(),
+            "Invalid port or timeout"
+        );
+        assert!(output.stdout.is_empty());
+    }
+}

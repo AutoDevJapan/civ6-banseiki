@@ -8,7 +8,8 @@ mod support;
 #[command(
     about = "Capture the verified Civ VI window as PNG",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     #[arg(value_parser = support::path_value_parser())]
@@ -38,6 +39,41 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_capture_negative_numbers_preserve_path_and_whole_crop_override() {
+        let args = Args::try_parse_from([
+            "civ6-capture",
+            "-1",
+            "--crop",
+            "-0.1",
+            "0",
+            "1",
+            "1",
+            "--c",
+            "0",
+            "0",
+            "1",
+            "1",
+            "--deadline",
+            "-1.5",
+            "--d",
+            "123",
+        ])
+        .unwrap();
+        assert_eq!(args.path, PathBuf::from("-1"));
+        assert_eq!(args.crop, Some(vec![0.0, 0.0, 1.0, 1.0]));
+        assert_eq!(args.deadline, Some(123.0));
+        parser_tests::assert_parse_error::<Args>(&["civ6-capture", "--unknown"]);
+        parser_tests::assert_parse_error::<Args>(&[
+            "civ6-capture",
+            "shot.png",
+            "--deadline",
+            "--unknown",
+            "--d",
+            "123",
+        ]);
+    }
 
     #[test]
     fn compat_capture_accepts_long_prefixes() {
