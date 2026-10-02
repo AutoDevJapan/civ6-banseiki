@@ -164,7 +164,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local p=Players[Game.GetLocalPlayer()];local site;for i=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(i);if q:GetOwner()==p:GetID() and not q:IsWater() and not q:IsMountain() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then site={X=q:GetX(),Y=q:GetY(),Index=i};break end end;assert(site,'no empty cache plot');ExposedMembers.JAC_CustodyProbeSite=function() return site end;return 'selected native cache site '..site.Index",
+      "code": "local p=Players[Game.GetLocalPlayer()];local range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE),'city spacing unavailable');local site;for i=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(i);if q:GetOwner()==p:GetID() and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then local near=99999;for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do near=math.min(near,Map.GetPlotDistance(q:GetX(),q:GetY(),city:GetX(),city:GetY())) end end;if near>range and (not site or near>site.Distance) then site={X=q:GetX(),Y=q:GetY(),Index=i,Distance=near} end end end;assert(site,'no valid empty cache plot beyond city spacing');ExposedMembers.JAC_CustodyProbeSite=function() return site end;print('[JAC_NATIVE_CACHE_SITE] plot='..site.Index..' nearest='..site.Distance..' minimum='..range);return 'selected native cache site '..site.Index",
       "action": "ui_lua"
     },
     {
