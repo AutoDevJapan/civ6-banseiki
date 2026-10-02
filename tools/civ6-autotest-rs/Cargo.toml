@@ -18,6 +18,7 @@ crc32fast = "1"
 uuid = { version = "1", features = ["v4"] }
 ctrlc = "3"
 caseless = "0.2.2"
+png = "0.18"
 
 [build-dependencies]
 roxmltree = "0.21"

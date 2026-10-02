@@ -9,6 +9,7 @@ pub mod runner;
 pub mod scenario;
 pub mod startup;
 pub mod startup_idle;
+pub mod startup_screen;
 pub mod time;
 pub mod tuner;
 pub use error::{Error, ErrorKind, Result};
