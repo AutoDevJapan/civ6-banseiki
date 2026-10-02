@@ -110,6 +110,30 @@ fn python_subtract(left: Value, right: Value) -> mlua::Result<Value> {
     }
 }
 
+fn json_with_null(lua: &Lua, value: &Json) -> mlua::Result<Value> {
+    // Keep JSON null present without validating fields that a case never reads.
+    match value {
+        Json::Null => Ok(Value::LightUserData(mlua::LightUserData(
+            std::ptr::null_mut(),
+        ))),
+        Json::Array(values) => {
+            let table = lua.create_table()?;
+            for (i, value) in values.iter().enumerate() {
+                table.set(i + 1, json_with_null(lua, value)?)?;
+            }
+            Ok(Value::Table(table))
+        }
+        Json::Object(values) => {
+            let table = lua.create_table()?;
+            for (key, value) in values {
+                table.set(key.as_str(), json_with_null(lua, value)?)?;
+            }
+            Ok(Value::Table(table))
+        }
+        _ => Ok(json_to_lua(lua, value)),
+    }
+}
+
 fn boundaries(lua: &Lua) {
     let g = lua.globals();
     for (name, equal) in [("EQ", true), ("NE", false)] {
@@ -325,37 +349,34 @@ fn boundaries(lua: &Lua) {
         lua.create_function(|lua, args: MultiValue| {
             let source = String::from_value(argument(&args, 0)?)?;
             let json: Json = serde_json::from_str(&source).map_err(|e| failure(e.to_string()))?;
-            // Check presence before json_to_lua turns JSON null into nil.
-            for step in json
-                .get("steps")
-                .and_then(Json::as_array)
-                .ok_or_else(|| failure("scenario steps must be an array"))?
-            {
-                let object = step
-                    .as_object()
-                    .ok_or_else(|| failure("scenario step must be an object"))?;
-                for key in ["code", "capture_as", "equals_capture"] {
-                    if object.get(key).is_some_and(|value| !value.is_string()) {
-                        return Err(failure(format!("present JSON key {key} must be a string")));
-                    }
-                }
-                if let Some(condition) = object.get("condition") {
-                    let condition = condition
-                        .as_object()
-                        .ok_or_else(|| failure("condition must be an object"))?;
-                    if condition
-                        .get("code")
-                        .is_some_and(|value| !value.is_string())
-                    {
-                        return Err(failure("present condition code must be a string"));
-                    }
-                }
-            }
-            Ok(json_to_lua(lua, &json))
+            json_with_null(lua, &json)
         })
         .unwrap(),
     )
     .unwrap();
+    for name in ["JSON_GET", "JSON_REQUIRE", "JSON_TEXT"] {
+        g.set(
+            name,
+            lua.create_function(move |lua, args: MultiValue| {
+                let table = Table::from_value(argument(&args, 0)?)?;
+                let key = String::from_value(argument(&args, 1)?)?;
+                let mut value = table.get::<Value>(key.as_str())?;
+                if matches!(value, Value::Nil) {
+                    value = match name {
+                        "JSON_REQUIRE" => return Err(failure(format!("missing JSON key {key}"))),
+                        "JSON_TEXT" => Value::String(lua.create_string("")?),
+                        _ => args.get(2).cloned().unwrap_or(Value::Nil),
+                    };
+                }
+                if name == "JSON_TEXT" {
+                    String::from_value(value.clone())?;
+                }
+                Ok(value)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn outcomes() -> Vec<Json> {
@@ -516,9 +537,14 @@ fn compile_steps(lua: &Lua, data: &Json) {
                 .unwrap();
         }
         if required_json(step, "action") == "wait_for" {
-            lua.load(step["condition"]["code"].as_str().unwrap())
-                .into_function()
-                .unwrap();
+            let condition = required_json(step, "condition");
+            lua.load(
+                required_json(condition, "code")
+                    .as_str()
+                    .expect("wait condition code must be a string"),
+            )
+            .into_function()
+            .unwrap();
         }
     }
 }
@@ -993,17 +1019,65 @@ fn scenario_presence_rejects_invalid_capture_code_and_required_keys() {
     .is_err());
     let lua = new_lua();
     boundaries(&lua);
-    for source in [
-        r#"{"steps":[{"code":false}]}"#,
-        r#"{"steps":[{"capture_as":null}]}"#,
-        r#"{"steps":[{"equals_capture":42}]}"#,
-        r#"{"steps":[{"condition":{"code":0}}]}"#,
+    for (source, read) in [
+        (
+            r#"{"steps":[{"code":false}]}"#,
+            "JSON_TEXT(data.steps[1],'code')",
+        ),
+        (
+            r#"{"steps":[{"capture_as":null}]}"#,
+            "JSON_TEXT(data.steps[1],'capture_as')",
+        ),
+        (
+            r#"{"steps":[{"equals_capture":42}]}"#,
+            "JSON_TEXT(data.steps[1],'equals_capture')",
+        ),
+        (
+            r#"{"steps":[{"condition":{"code":0}}]}"#,
+            "JSON_TEXT(JSON_GET(data.steps[1],'condition',{}),'code')",
+        ),
     ] {
         let json = lua.globals().strict_get::<Function>("JSON").unwrap();
+        json.call::<MultiValue>(source)
+            .expect("JSON conversion must not validate unused fields");
+        let error = lua
+            .load(format!("local data=JSON([==[{source}]==]);{read}"))
+            .exec()
+            .expect_err("invalid field accepted at use");
         assert!(
-            json.call::<MultiValue>(source).is_err(),
-            "JSON presence lost: {source}"
+            error.to_string().contains("expected Lua string"),
+            "{source}: {error}"
         );
+    }
+    let h = Harness::create(false);
+    let mut unused = baseline.clone();
+    unused["steps"][2]["condition"] = Json::Null;
+    compile_steps(&h.lua, &unused);
+    check_capture_sets(&unused);
+    check_scenario_configuration(&unused);
+    let source = serde_json::to_string(&unused).unwrap();
+    h.lua
+        .globals()
+        .strict_get::<Function>("JSON")
+        .unwrap()
+        .call::<MultiValue>(source)
+        .unwrap();
+    h.lua.load(r#"local data=JSON('{"steps":[{"action":"ui_lua","code":false,"condition":null,"capture_as":42},{"action":"wait_for","condition":{"code":"return true"}}]}');assert(FIRST_CONDITION_STEP(data.steps,'return true',true)==data.steps[2])"#).exec().unwrap();
+    for invalid in [
+        Json::Null,
+        Json::from(false),
+        Json::from(0),
+        Json::from("invalid"),
+    ] {
+        let selected = serde_json::json!({"steps":[{"action":"wait_for","condition":invalid}]});
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| compile_steps(
+                &h.lua, &selected
+            )))
+            .is_err()
+        );
+        let source = serde_json::to_string(&selected).unwrap();
+        h.lua.load(format!("local data=JSON([==[{source}]==]);FIRST_CONDITION_STEP(data.steps,'return true',true)")).exec().expect_err("invalid selected wait condition accepted");
     }
 }
 
