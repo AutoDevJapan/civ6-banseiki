@@ -2,12 +2,23 @@
 print = function() end
 GAME_PROPERTIES = {}
 TURN = 0
+IN_UI = false
 Game = {
   GetLocalPlayer = function() return 0 end,
   GetCurrentGameTurn = function() return TURN end,
   GetProperty = function(_, key) return GAME_PROPERTIES[key] end,
-  SetProperty = function(_, key, value) GAME_PROPERTIES[key] = value end,
+  SetProperty = function(_, key, value)
+    if IN_UI then error('UI Game:SetProperty is unavailable') end
+    GAME_PROPERTIES[key] = value
+  end,
 }
+function UI_CALL(callback)
+  IN_UI = true
+  local ok, result = pcall(callback)
+  IN_UI = false
+  if not ok then error(result) end
+  return result
+end
 GameConfiguration = {IsAnyMultiplayer = function() return false end}
 ExposedMembers = {}
 Events = {}
@@ -112,13 +123,18 @@ PlayerOperations = {EXECUTE_SCRIPT='EXECUTE_SCRIPT', APPOINT_GOVERNOR='APPOINT_G
   PARAM_GOVERNOR_TYPE='governor', PARAM_PLAYER_ONE='owner',
   PARAM_CITY_DEST='city', PARAM_GOVERNOR_PROMOTION_TYPE='promotion'}
 OPERATIONS = {}
+SYNC_QUEUE = {}
 UI = {IsGameCoreBusy=function() return false end}
 function UI.RequestPlayerOperation(owner, operation, params)
   OPERATIONS[#OPERATIONS+1] = {owner=owner, operation=operation, params=params}
   if operation == PlayerOperations.EXECUTE_SCRIPT then
-    local handlers = GameEvents[params.OnStart].handlers
-    if #handlers ~= 1 then error('synchronized GameCore handler missing') end
-    return handlers[1](owner, params)
+    for key, value in pairs(params) do
+      if type(value) ~= 'number' and type(value) ~= 'string' and type(value) ~= 'boolean' then
+        error('EXECUTE_SCRIPT param is not scalar: '..key)
+      end
+    end
+    SYNC_QUEUE[#SYNC_QUEUE+1] = {owner=owner, params=params}
+    return
   end
   local row = GameInfo.Governors[params[PlayerOperations.PARAM_GOVERNOR_TYPE]]
   local gs = Players[owner]:GetGovernors()
@@ -133,4 +149,15 @@ function UI.RequestPlayerOperation(owner, operation, params)
     error('unexpected operation '..tostring(operation))
   end
   -- The engine fixture deliberately does not write Player/City receipts.
+end
+function FLUSH_ONE()
+  if #SYNC_QUEUE == 0 then error('no synchronized operation queued') end
+  local pending = table.remove(SYNC_QUEUE, 1)
+  local handlers = GameEvents[pending.params.OnStart].handlers
+  if #handlers ~= 1 then error('synchronized GameCore handler missing') end
+  if IN_UI then error('Gameplay handler ran inside UI context') end
+  handlers[1](pending.owner, pending.params)
+end
+function FLUSH_ALL()
+  while #SYNC_QUEUE > 0 do FLUSH_ONE() end
 end

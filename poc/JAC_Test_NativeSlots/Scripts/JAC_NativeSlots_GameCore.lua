@@ -1,5 +1,14 @@
--- Read-only GameCore observations. This closure reads the actual Player/City
--- properties; UI governor state and mock data cannot supply a native receipt.
+-- GameCore owns diagnostic saves. Player/City receipts are read independently
+-- here and are never written by this test MOD.
+local PREFIX = 'JAC_SLOTS_PROBE_';
+local PHASES = {BEFORE_TITLES=true, PROXY_UNASSIGNED=true, UNASSIGNED=true,
+    ASSIGNED=true, TURN_FOUR=true, SETTLED=true};
+local CAPTURE_TYPES = {hasSlot='boolean', hasProxy='boolean', assignedCity='number',
+    assignedOwner='number', established='boolean', turnsToEstablish='number',
+    turnsOnSite='number', neutralized='number', proxyAssigned='boolean'};
+local function Require(ok, message)
+    if not ok then error('JAC_NATIVE_SLOTS_FAIL ' .. message); end;
+end;
 ExposedMembers.JAC_NativeSlotsRead = function(owner)
     local player = Players[owner];
     if not player then error('native slot GameCore player missing'); end;
@@ -21,10 +30,41 @@ ExposedMembers.JAC_NativeSlotsRead = function(owner)
     table.sort(observation.cities, function(a, b) return a.id < b.id; end);
     return observation;
 end;
-print('JAC_NativeSlots_GameCore: read-only observation ready');
+GameEvents.JAC_NativeSlotsSaveObservation.Add(function(owner, params)
+    Require(owner == 0 and Players[owner] and Players[owner]:IsHuman(), 'diagnostic owner differs');
+    Require(type(params) == 'table' and PHASES[params.Phase], 'unknown observation phase');
+    Require(Game:GetProperty(PREFIX .. params.Phase) == nil, 'observation already saved: ' .. params.Phase);
+    Require(type(params.hasSlot) == 'boolean' and type(params.hasProxy) == 'boolean'
+        and type(params.proxyAssigned) == 'boolean', 'required UI capture missing');
+    local observation = ExposedMembers.JAC_NativeSlotsRead(owner);
+    for key, expected in pairs(CAPTURE_TYPES) do
+        local value = params[key];
+        Require(value == nil or type(value) == expected, 'invalid UI capture: ' .. key);
+        observation[key] = value;
+    end;
+    Require(params.hasSlot or (params.assignedCity == nil and params.assignedOwner == nil
+        and params.established == nil), 'unappointed slot has assignment fields');
+    Require((params.assignedCity == nil) == (params.assignedOwner == nil),
+        'partial UI assignment');
+    Game:SetProperty(PREFIX .. params.Phase, observation);
+end);
+GameEvents.JAC_NativeSlotsMarkAssignment.Add(function(owner, params)
+    Require(owner == 0 and Players[owner] and Players[owner]:IsHuman(), 'diagnostic owner differs');
+    Require(type(params) == 'table' and type(params.CityID) == 'number', 'assignment city missing');
+    Require(Game:GetProperty(PREFIX .. 'CITY') == nil, 'assignment marker already saved');
+    local player = Players[owner];
+    local city = player:GetCities():GetCapitalCity();
+    -- This records the intended target and clock, not evidence of appointment.
+    -- Native governor getters are UI-only. The UI checks assignment eligibility
+    -- again after this acknowledgement, before its official ASSIGN operation.
+    Require(city and city:GetOwner() == owner and city:GetID() == params.CityID,
+        'assignment target changed');
+    Game:SetProperty(PREFIX .. 'CITY', city:GetID());
+    Game:SetProperty(PREFIX .. 'ASSIGN_TURN', Game.GetCurrentGameTurn());
+end);
+print('JAC_NativeSlots_GameCore: observation read and synchronized saves ready');
 
 GameEvents.JAC_NativeSlotsGiveTitles.Add(function(owner)
-    local PREFIX = 'JAC_SLOTS_PROBE_';
     local function Require(ok,message) if not ok then error('JAC_NATIVE_SLOTS_FAIL '..message) end end;
     Require(owner==0,'diagnostic owner differs');
     local majors=PlayerManager.GetAliveMajors(); table.sort(majors,function(a,b) return a:GetID()<b:GetID() end);

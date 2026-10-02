@@ -181,7 +181,7 @@ fn persona_inventory_preserves_all_119_original_methods() {
 }
 
 #[test]
-fn persona_inventory_registers_eight_new_native_probe_methods_separately() {
+fn persona_inventory_registers_eleven_native_probe_methods_separately() {
     // The historical 119-row correspondence above remains immutable. PR86's
     // test-only candidate has its own fixed inventory and Lua 5.1 fixture.
     let path = repo_root().join("tools/civ6-lua-tests-rs/tests/persona_native_slots.rs");
@@ -190,9 +190,12 @@ fn persona_inventory_registers_eight_new_native_probe_methods_separately() {
         "test_official_sql_keeps_production_personas_until_diagnostic_mods_are_loaded",
         "test_all_six_diagnostic_lua_sources_execute_in_lua_51",
         "test_diagnostic_lua_never_publishes_engine_receipts",
+        "test_ui_capture_queues_only_scalars_and_gamecore_saves_actual_receipts",
         "test_first_real_turn_requires_three_titles_and_no_ai_spending_or_appointment",
         "test_type_specific_appointment_getter_is_independent_of_persona_ui",
         "test_unassigned_receipt_cannot_be_inferred_from_official_spending_or_diagnostic_property",
+        "test_missing_unassigned_snapshot_is_not_rewritten_by_later_mock_activation",
+        "test_native_scenarios_wait_for_synchronized_saves_and_keep_receipt_gates",
         "test_city_receipt_requires_real_five_turn_clock_and_reload_equality",
     ]
     .into_iter()

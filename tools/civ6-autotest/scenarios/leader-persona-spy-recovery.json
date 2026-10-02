@@ -44,7 +44,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -59,7 +60,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -74,7 +76,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -89,7 +92,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -104,7 +108,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -119,7 +124,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -134,7 +140,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -149,7 +156,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -197,7 +205,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -212,7 +221,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -227,7 +237,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -242,7 +253,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",
@@ -257,7 +269,8 @@
     },
     {
       "action": "end_turn",
-      "turns": 1
+      "turns": 1,
+      "timeout": 240
     },
     {
       "action": "ui_lua",

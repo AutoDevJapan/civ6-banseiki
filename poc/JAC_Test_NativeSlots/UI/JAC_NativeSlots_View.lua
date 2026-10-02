@@ -4,8 +4,17 @@ ContextPtr:SetHide(false);
 local SLOT = 'GOVERNOR_JAC_NATIVE_SLOT';
 local PROXY = 'GOVERNOR_JAC_TITLE_PROXY';
 local PREFIX = 'JAC_SLOTS_PROBE_';
+local CAPTURE_FIELDS = {'hasSlot', 'hasProxy', 'assignedCity', 'assignedOwner',
+    'established', 'turnsToEstablish', 'turnsOnSite', 'neutralized', 'proxyAssigned'};
 local function Require(ok, message)
     if not ok then error('JAC_NATIVE_SLOTS_FAIL ' .. message); end;
+end;
+local function PersistObservation(phase, seen)
+    -- EXECUTE_SCRIPT accepts scalar params only. GameCore reads actual Player
+    -- and City receipts itself when this queued operation is handled.
+    local params = {OnStart='JAC_NativeSlotsSaveObservation', Phase=phase};
+    for _, key in ipairs(CAPTURE_FIELDS) do params[key] = seen[key]; end;
+    UI.RequestPlayerOperation(Game.GetLocalPlayer(), PlayerOperations.EXECUTE_SCRIPT, params);
 end;
 local function Active()
     Require(not GameConfiguration.IsAnyMultiplayer(), 'single-player diagnostic required');
@@ -67,8 +76,6 @@ function JAC_SlotsObserve(phase)
         print('JAC_NATIVE_SLOTS_CITY ' .. phase .. ' owner=' .. city.owner .. ' id=' .. city.id
             .. ' coreProperty=' .. tostring(city.receipt));
     end;
-    -- Persist only observed facts, with a distinct prefix from native properties.
-    Game:SetProperty(PREFIX .. phase, seen);
     Require(seen.points == governors:GetGovernorPoints() and seen.spent == governors:GetGovernorPointsSpent(),
         'UI and GameCore official accounting differ');
     Require(seen.slotReceipt == Players[owner]:GetProperty('JAC_NATIVE_SLOT_PLAYER_RECEIPT')
@@ -97,6 +104,7 @@ function JAC_SlotsPrepare()
     local seen = JAC_SlotsObserve('BEFORE_TITLES');
     Require((seen.slotReceipt == nil or seen.slotReceipt == 0)
         and (seen.proxyReceipt == nil or seen.proxyReceipt == 0), 'unpaid native receipt present');
+    PersistObservation('BEFORE_TITLES', seen);
     return '22 people excluded; one ordinary anonymous slot; no people joined';
 end;
 function JAC_SlotsGiveTitles()
@@ -155,6 +163,7 @@ function JAC_SlotsUnassigned(phase, count)
     Require(seen.assignedCity == nil, 'slot already assigned before receipt observation');
     for _, city in ipairs(seen.cities) do Require(city.receipt == nil or city.receipt == 0,
         'city property active before assignment'); end;
+    PersistObservation(phase, seen);
     return 'actual GameCore receipts captured while native governors remain unassigned';
 end;
 function JAC_SlotsRequireUnassignedReceipt()
@@ -172,14 +181,26 @@ function JAC_SlotsRequireUnassignedReceipt()
     end;
     return 'unassigned native player receipts are exactly one in GameCore; no mock inference';
 end;
-function JAC_SlotsAssign()
+local function AssignmentTarget()
     local owner, governors = Active();
     local slot = Native(governors, SLOT);
     Require(slot and not slot:GetAssignedCity() and slot:GetNeutralizedTurns() == 0, 'slot is not assignable');
     local city = Players[owner]:GetCities():GetCapitalCity();
     Require(city and governors:CanAssignGovernor(GameInfo.Governors[SLOT].Hash, city), 'official capital assignment denied');
-    Game:SetProperty(PREFIX .. 'CITY', city:GetID());
-    Game:SetProperty(PREFIX .. 'ASSIGN_TURN', Game.GetCurrentGameTurn());
+    return owner, city;
+end;
+function JAC_SlotsMarkAssignment()
+    local owner, city = AssignmentTarget();
+    Require(Game:GetProperty(PREFIX .. 'CITY') == nil, 'assignment marker already saved');
+    UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT,
+        {OnStart='JAC_NativeSlotsMarkAssignment', CityID=city:GetID()});
+    return 'requested Gameplay assignment marker before native operation';
+end;
+function JAC_SlotsAssign()
+    local owner, city = AssignmentTarget();
+    Require(Game:GetProperty(PREFIX .. 'CITY') == city:GetID()
+        and Game:GetProperty(PREFIX .. 'ASSIGN_TURN') == Game.GetCurrentGameTurn(),
+        'Gameplay assignment marker missing or stale');
     UI.RequestPlayerOperation(owner, PlayerOperations.ASSIGN_GOVERNOR, {
         [PlayerOperations.PARAM_GOVERNOR_TYPE] = GameInfo.Governors[SLOT].Index,
         [PlayerOperations.PARAM_PLAYER_ONE] = owner,
@@ -217,6 +238,7 @@ function JAC_SlotsCheckCity(phase, turns)
         if city.receipt == 1 then active = active + 1; end;
     end;
     Require(cityFound and active == (turns == 5 and 1 or 0), 'city property inventory differs');
+    PersistObservation(phase, seen);
     return 'native placement and city property verified after ' .. turns .. ' real turns';
 end;
 function JAC_SlotsCheckReload(phase)

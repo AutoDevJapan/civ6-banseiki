@@ -37,28 +37,51 @@ fn run(lua: &Lua, source: &str) {
     lua.load(source).exec().unwrap();
 }
 
+fn ui(lua: &Lua, source: &str) {
+    run(lua, &format!("UI_CALL(function() {source} end)"));
+}
+
 fn reject(lua: &Lua, source: &str, reason: &str) {
     let error = lua.load(source).exec().expect_err("diagnostic must reject");
     assert!(error.to_string().contains(reason), "{error}");
 }
 
+fn reject_ui(lua: &Lua, source: &str, reason: &str) {
+    reject(lua, &format!("UI_CALL(function() {source} end)"), reason);
+}
+
 fn title_fixture(lua: &Lua) {
-    run(
-        lua,
-        "JAC_SlotsPrepare(); JAC_SlotsGiveTitles(); TURN=1; JAC_SlotsAssertAI(true)",
-    );
+    ui(lua, "JAC_SlotsPrepare()");
+    run(lua, "FLUSH_ALL()");
+    ui(lua, "JAC_SlotsGiveTitles()");
+    run(lua, "FLUSH_ALL(); TURN=1");
+    ui(lua, "JAC_SlotsAssertAI(true)");
 }
 
 fn appoint_both(lua: &Lua) {
     title_fixture(lua);
-    run(
+    ui(
         lua,
         "JAC_SlotsAppoint('GOVERNOR_JAC_TITLE_PROXY'); JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)",
     );
-    run(
+    run(lua, "FLUSH_ALL()");
+    ui(
         lua,
         "JAC_SlotsAppoint('GOVERNOR_JAC_NATIVE_SLOT'); JAC_SlotsUnassigned('UNASSIGNED',2)",
     );
+    run(lua, "FLUSH_ALL()");
+}
+
+fn appoint_both_with_mock_receipts(lua: &Lua) {
+    title_fixture(lua);
+    ui(lua, "JAC_SlotsAppoint('GOVERNOR_JAC_TITLE_PROXY')");
+    run(lua, "Players[0].props.JAC_PROXY_NATIVE_PAID_0=1");
+    ui(lua, "JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)");
+    run(lua, "FLUSH_ALL()");
+    ui(lua, "JAC_SlotsAppoint('GOVERNOR_JAC_NATIVE_SLOT')");
+    run(lua, "Players[0].props.JAC_NATIVE_SLOT_PLAYER_RECEIPT=1");
+    ui(lua, "JAC_SlotsUnassigned('UNASSIGNED',2)");
+    run(lua, "FLUSH_ALL()");
 }
 
 fn count(db: &Connection, query: &str) -> i64 {
@@ -171,8 +194,9 @@ fn test_official_sql_keeps_production_personas_until_diagnostic_mods_are_loaded(
 #[test]
 fn test_all_six_diagnostic_lua_sources_execute_in_lua_51() {
     let lua = fixture();
-    run(&lua, "assert(type(JAC_TitlePaymentRules.Request)=='function'); assert(type(JAC_SlotsPrepare)=='function'); assert(#GameEvents.JAC_TitleProxyRequest.handlers==1); assert(#GameEvents.JAC_NativeSlotsGiveTitles.handlers==1)");
-    run(&lua, "assert(JAC_ProxyRequest('LEADER_TEST_1')); assert(Players[0]:GetProperty('JAC_PROXY_REQUEST_RESULT')=='NOT_OWNED'); assert(Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0')==nil)");
+    run(&lua, "assert(type(JAC_TitlePaymentRules.Request)=='function'); assert(type(JAC_SlotsPrepare)=='function'); assert(#GameEvents.JAC_TitleProxyRequest.handlers==1); assert(#GameEvents.JAC_NativeSlotsGiveTitles.handlers==1); assert(#GameEvents.JAC_NativeSlotsSaveObservation.handlers==1)");
+    ui(&lua, "assert(JAC_ProxyRequest('LEADER_TEST_1'))");
+    run(&lua, "assert(Players[0]:GetProperty('JAC_PROXY_REQUEST_RESULT')==nil); FLUSH_ALL(); assert(Players[0]:GetProperty('JAC_PROXY_REQUEST_RESULT')=='NOT_OWNED'); assert(Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0')==nil)");
 }
 
 #[test]
@@ -188,6 +212,23 @@ fn test_diagnostic_lua_never_publishes_engine_receipts() {
     assert!(scripts.contains("player:GetProperty('JAC_NATIVE_SLOT_PLAYER_RECEIPT')"));
     assert!(scripts.contains("city:GetProperty('JAC_NATIVE_SLOT_CITY_ACTIVE')"));
     assert!(scripts.contains("player:GetProperty('JAC_PROXY_NATIVE_PAID_"));
+    let ui_source = read_repo("poc/JAC_Test_NativeSlots/UI/JAC_NativeSlots_View.lua");
+    assert!(!ui_source.contains("Game:SetProperty"));
+}
+
+#[test]
+fn test_ui_capture_queues_only_scalars_and_gamecore_saves_actual_receipts() {
+    let lua = fixture();
+    reject(
+        &lua,
+        "UI_CALL(function() Game:SetProperty('JAC_SLOTS_PROBE_FORBIDDEN',1) end)",
+        "UI Game:SetProperty is unavailable",
+    );
+    title_fixture(&lua);
+    ui(&lua, "JAC_SlotsAppoint('GOVERNOR_JAC_TITLE_PROXY')");
+    ui(&lua, "JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)");
+    run(&lua, "assert(Game:GetProperty('JAC_SLOTS_PROBE_PROXY_UNASSIGNED')==nil); assert(#SYNC_QUEUE==1); local p=SYNC_QUEUE[1].params; assert(p.OnStart=='JAC_NativeSlotsSaveObservation' and p.Phase=='PROXY_UNASSIGNED' and p.hasProxy==true); for _,v in pairs(p) do assert(type(v)~='table') end; assert(Players[0]:GetProperty('JAC_PROXY_NATIVE_PAID_0')==nil)");
+    run(&lua, "Players[0].props.JAC_PROXY_NATIVE_PAID_0=1; CAPITAL.props.JAC_NATIVE_SLOT_CITY_ACTIVE=1; FLUSH_ONE(); local s=Game:GetProperty('JAC_SLOTS_PROBE_PROXY_UNASSIGNED'); assert(s.proxyReceipt==1 and s.slotReceipt==nil and s.hasProxy==true and s.cities[1].receipt==1); assert(Players[0]:GetProperty('JAC_PROXY_NATIVE_PAID_0')==1 and CAPITAL:GetProperty('JAC_NATIVE_SLOT_CITY_ACTIVE')==1)");
 }
 
 #[test]
@@ -199,13 +240,13 @@ fn test_first_real_turn_requires_three_titles_and_no_ai_spending_or_appointment(
         "for id=1,21 do assert(Players[id].gs.points==3 and Players[id].gs.spent==0) end",
     );
     run(&lua, "Players[7].gs.spent=1");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsAssertAI(true)",
         "unauthorized spending; AI=7",
     );
     run(&lua, "Players[7].gs.spent=0; Players[7].gs.native[301]={}");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsAssertAI(true)",
         "unauthorized spending; AI=7",
@@ -214,13 +255,13 @@ fn test_first_real_turn_requires_three_titles_and_no_ai_spending_or_appointment(
         &lua,
         "Players[7].gs.native[301]=nil; Players[7].gs.points=2",
     );
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsAssertAI(true)",
         "unauthorized spending; AI=7",
     );
     run(&lua, "Players[7].gs.points=3; TURN=2");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsAssertAI(true)",
         "first native AI turn was not exactly one turn",
@@ -232,14 +273,14 @@ fn test_type_specific_appointment_getter_is_independent_of_persona_ui() {
     let lua = fixture();
     title_fixture(&lua);
     run(&lua, "Players[0].gs.CanAppoint=function() return true end; Players[0].gs.CanAppointGovernor=function(_,hash) assert(hash==301); return false end");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsAppoint('GOVERNOR_JAC_NATIVE_SLOT')",
         "native appointment denied",
     );
     run(
         &lua,
-        "assert(#OPERATIONS==1); assert(OPERATIONS[1].operation=='EXECUTE_SCRIPT')",
+        "assert(#OPERATIONS==2); assert(OPERATIONS[1].operation=='EXECUTE_SCRIPT' and OPERATIONS[2].operation=='EXECUTE_SCRIPT')",
     );
 }
 
@@ -247,13 +288,13 @@ fn test_type_specific_appointment_getter_is_independent_of_persona_ui() {
 fn test_unassigned_receipt_cannot_be_inferred_from_official_spending_or_diagnostic_property() {
     let lua = fixture();
     appoint_both(&lua);
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsRequireUnassignedReceipt()",
         "UNASSIGNED_RECEIPT_MISSING coreSlot=nil coreProxy=nil",
     );
     run(&lua, "Game:SetProperty('JAC_NATIVE_SLOT_PLAYER_RECEIPT',1); Players[0].props.JAC_NATIVE_SLOT_PLAYER_RECEIPT=1; Players[0].props.JAC_PROXY_NATIVE_PAID_0=1");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsRequireUnassignedReceipt()",
         "UNASSIGNED_RECEIPT_MISSING coreSlot=nil coreProxy=nil",
@@ -262,7 +303,7 @@ fn test_unassigned_receipt_cannot_be_inferred_from_official_spending_or_diagnost
         &lua,
         "Game:SetProperty('JAC_SLOTS_PROBE_ASSIGNED',{slotReceipt=1})",
     );
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsRequireUnassignedReceipt()",
         "SLOT_RECEIPT_AFTER_ASSIGNMENT",
@@ -270,26 +311,137 @@ fn test_unassigned_receipt_cannot_be_inferred_from_official_spending_or_diagnost
 }
 
 #[test]
-fn test_city_receipt_requires_real_five_turn_clock_and_reload_equality() {
+fn test_missing_unassigned_snapshot_is_not_rewritten_by_later_mock_activation() {
     let lua = fixture();
     appoint_both(&lua);
-    run(&lua, "Players[0].props.JAC_NATIVE_SLOT_PLAYER_RECEIPT=1; Players[0].props.JAC_PROXY_NATIVE_PAID_0=1; JAC_SlotsObserve('UNASSIGNED'); JAC_SlotsRequireUnassignedReceipt(); JAC_SlotsAssign(); JAC_SlotsCheckCity('ASSIGNED',0)");
+    run(&lua, "Players[0].props.JAC_NATIVE_SLOT_PLAYER_RECEIPT=1; Players[0].props.JAC_PROXY_NATIVE_PAID_0=1");
+    ui(&lua, "JAC_SlotsMarkAssignment()");
+    run(&lua, "FLUSH_ALL()");
+    ui(&lua, "JAC_SlotsAssign(); JAC_SlotsCheckCity('ASSIGNED',0)");
+    run(&lua, "assert(Game:GetProperty('JAC_SLOTS_PROBE_ASSIGNED')==nil); FLUSH_ALL(); local original=Game:GetProperty('JAC_SLOTS_PROBE_UNASSIGNED'); local later=Game:GetProperty('JAC_SLOTS_PROBE_ASSIGNED'); assert(original.slotReceipt==nil and original.proxyReceipt==nil); assert(later.slotReceipt==1 and later.proxyReceipt==1)");
+    reject_ui(
+        &lua,
+        "JAC_SlotsRequireUnassignedReceipt()",
+        "SLOT_RECEIPT_AFTER_ASSIGNMENT",
+    );
+    reject_ui(
+        &lua,
+        "JAC_SlotsCheckReload('UNASSIGNED')",
+        "native reload differs: slotReceipt",
+    );
+}
+
+#[test]
+fn test_native_scenarios_wait_for_synchronized_saves_and_keep_receipt_gates() {
+    for path in [
+        "tools/civ6-autotest/scenarios/leader-persona-native-slots-15km.json",
+        "tools/civ6-autotest/scenarios/leader-persona-native-slots-activation-15km.json",
+    ] {
+        let scenario: serde_json::Value = serde_json::from_str(&read_repo(path)).unwrap();
+        let steps = scenario["steps"].as_array().unwrap();
+        for (call, property) in [
+            ("JAC_SlotsPrepare()", "JAC_SLOTS_PROBE_BEFORE_TITLES"),
+            (
+                "JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)",
+                "JAC_SLOTS_PROBE_PROXY_UNASSIGNED",
+            ),
+            (
+                "JAC_SlotsUnassigned('UNASSIGNED',2)",
+                "JAC_SLOTS_PROBE_UNASSIGNED",
+            ),
+            ("JAC_SlotsMarkAssignment()", "JAC_SLOTS_PROBE_CITY"),
+            (
+                "JAC_SlotsCheckCity('ASSIGNED',0)",
+                "JAC_SLOTS_PROBE_ASSIGNED",
+            ),
+            (
+                "JAC_SlotsCheckCity('TURN_FOUR',4)",
+                "JAC_SLOTS_PROBE_TURN_FOUR",
+            ),
+            ("JAC_SlotsCheckCity('SETTLED',5)", "JAC_SLOTS_PROBE_SETTLED"),
+        ] {
+            let index = steps
+                .iter()
+                .position(|step| {
+                    step["action"] == "ui_lua" && step["code"].as_str().unwrap().contains(call)
+                })
+                .unwrap_or_else(|| panic!("{path}: missing {call}"));
+            assert_eq!(steps[index + 1]["action"], "wait_for", "{path}: {call}");
+            assert!(
+                steps[index + 1]["condition"]["code"]
+                    .as_str()
+                    .unwrap()
+                    .contains(property),
+                "{path}: {call} has no completion check"
+            );
+        }
+        let codes: Vec<_> = steps
+            .iter()
+            .filter_map(|step| step["code"].as_str())
+            .collect();
+        assert!(codes.contains(&"return JAC_SlotsAssertAI(true)"), "{path}");
+        assert!(
+            codes.contains(&"return JAC_SlotsRequireUnassignedReceipt()")
+                || codes
+                    .iter()
+                    .any(|code| code.contains("JAC_SlotsRequireUnassignedReceipt();")),
+            "{path}"
+        );
+        assert!(
+            steps
+                .iter()
+                .all(|step| !step["code"].as_str().is_some_and(|code| {
+                    code.contains("SetProperty('JAC_NATIVE_SLOT_")
+                        || code.contains("SetProperty('JAC_PROXY_NATIVE_PAID_")
+                })),
+            "{path}: scenario fabricates a receipt"
+        );
+    }
+}
+
+#[test]
+fn test_city_receipt_requires_real_five_turn_clock_and_reload_equality() {
+    let lua = fixture();
+    appoint_both_with_mock_receipts(&lua);
+    ui(
+        &lua,
+        "JAC_SlotsRequireUnassignedReceipt(); JAC_SlotsMarkAssignment()",
+    );
+    run(&lua, "assert(Game:GetProperty('JAC_SLOTS_PROBE_CITY')==nil and Game:GetProperty('JAC_SLOTS_PROBE_ASSIGN_TURN')==nil)");
+    reject_ui(
+        &lua,
+        "JAC_SlotsAssign()",
+        "Gameplay assignment marker missing or stale",
+    );
     run(
         &lua,
-        "TURN=5; Players[0].gs.native[301].site=4; JAC_SlotsCheckCity('TURN_FOUR',4)",
+        "local gs=Players[0].gs; local has,get,can=gs.HasGovernor,gs.GetGovernor,gs.CanAssignGovernor; \
+         gs.HasGovernor=nil; gs.GetGovernor=nil; gs.CanAssignGovernor=nil; \
+         FLUSH_ALL(); assert(Game:GetProperty('JAC_SLOTS_PROBE_CITY')==CAPITAL:GetID()); \
+         gs.HasGovernor=has; gs.GetGovernor=get; gs.CanAssignGovernor=can",
     );
+    ui(&lua, "JAC_SlotsAssign(); JAC_SlotsCheckCity('ASSIGNED',0)");
+    run(
+        &lua,
+        "FLUSH_ALL(); TURN=5; Players[0].gs.native[301].site=4",
+    );
+    ui(&lua, "JAC_SlotsCheckCity('TURN_FOUR',4)");
+    run(&lua, "FLUSH_ALL()");
     run(
         &lua,
         "TURN=6; Players[0].gs.native[301].site=5; Players[0].gs.native[301].established=true",
     );
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsCheckCity('SETTLED',5)",
         "city property does not agree with native establishment",
     );
-    run(&lua, "CAPITAL.props.JAC_NATIVE_SLOT_CITY_ACTIVE=1; JAC_SlotsCheckCity('SETTLED',5); JAC_SlotsCheckReload('SETTLED')");
+    run(&lua, "assert(Game:GetProperty('JAC_SLOTS_PROBE_SETTLED')==nil); CAPITAL.props.JAC_NATIVE_SLOT_CITY_ACTIVE=1");
+    ui(&lua, "JAC_SlotsCheckCity('SETTLED',5)");
+    run(&lua, "FLUSH_ALL()");
+    ui(&lua, "JAC_SlotsCheckReload('SETTLED')");
     run(&lua, "Players[0].gs.spent=3");
-    reject(
+    reject_ui(
         &lua,
         "JAC_SlotsCheckReload('SETTLED')",
         "native reload differs: spent",

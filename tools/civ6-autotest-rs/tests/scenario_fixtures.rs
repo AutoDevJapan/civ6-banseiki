@@ -107,8 +107,8 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
     let lua = Lua::new();
     for (name, expected_steps) in [
         ("leader-persona-title-proxy-15km.json", 85),
-        ("leader-persona-native-slots-15km.json", 36),
-        ("leader-persona-native-slots-activation-15km.json", 25),
+        ("leader-persona-native-slots-15km.json", 44),
+        ("leader-persona-native-slots-activation-15km.json", 33),
     ] {
         let data = scenario(name);
         validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e:?}"));
@@ -144,8 +144,8 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
     );
 
     for (name, receipt_step) in [
-        ("leader-persona-native-slots-15km.json", 15),
-        ("leader-persona-native-slots-activation-15km.json", 24),
+        ("leader-persona-native-slots-15km.json", 18),
+        ("leader-persona-native-slots-activation-15km.json", 32),
     ] {
         let data = scenario(name);
         let steps = steps(&data);
@@ -154,7 +154,7 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
             .unwrap()
             .iter()
             .any(|id| id == NATIVE_SLOTS_MOD));
-        assert_eq!(code(&steps[8]), "return JAC_SlotsAssertAI(true)", "{name}");
+        assert_eq!(code(&steps[9]), "return JAC_SlotsAssertAI(true)", "{name}");
         assert_eq!(
             code(&steps[receipt_step]),
             "return JAC_SlotsRequireUnassignedReceipt()",
@@ -172,7 +172,7 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
     }
     let main = scenario("leader-persona-native-slots-15km.json");
     let main_steps = steps(&main);
-    assert!(main_steps[..15].iter().all(|step| !action(step, "save")));
+    assert!(main_steps[..18].iter().all(|step| !action(step, "save")));
     assert_eq!(
         main_steps
             .iter()
@@ -196,6 +196,37 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
 
 fn code_if_ui(step: &Value) -> Option<&str> {
     action(step, "ui_lua").then(|| code(step))
+}
+
+#[test]
+fn persona_native_turn_observations_allow_the_15km_map_to_finish() {
+    // Real turns on this map can take about 150 seconds. Native settlement
+    // observations require every requested turn, rather than simulated markers.
+    for name in [
+        "leader-persona-15km.json",
+        "leader-persona-native-eligibility-15km.json",
+        "leader-persona-city-loss-15km.json",
+        "leader-persona-spy-access-15km.json",
+        "leader-persona-spy-recovery.json",
+        "leader-persona-title-proxy-15km.json",
+        "leader-persona-native-slots-15km.json",
+        "leader-persona-native-slots-activation-15km.json",
+    ] {
+        let data = scenario(name);
+        let turns: Vec<_> = steps(&data)
+            .iter()
+            .filter(|step| action(step, "end_turn"))
+            .collect();
+        assert!(!turns.is_empty(), "{name}");
+        for step in turns {
+            let count = step["turns"].as_u64().unwrap();
+            let budget = step["timeout"].as_f64().unwrap();
+            assert!(
+                count > 0 && budget >= 240.0 * count as f64,
+                "{name}: {step}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -162,6 +162,15 @@
       "code": "return JAC_SlotsPrepare()"
     },
     {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_BEFORE_TITLES')~=nil"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_NativeSlots_View",
       "code": "return JAC_SlotsGiveTitles()"
@@ -178,7 +187,7 @@
     {
       "action": "end_turn",
       "turns": 1,
-      "timeout": 180
+      "timeout": 240
     },
     {
       "action": "wait_for",
@@ -214,6 +223,15 @@
       "code": "return JAC_SlotsUnassigned('PROXY_UNASSIGNED',1)"
     },
     {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_PROXY_UNASSIGNED')~=nil"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_NativeSlots_View",
       "code": "return JAC_SlotsAppoint('GOVERNOR_JAC_NATIVE_SLOT')"
@@ -231,6 +249,15 @@
       "action": "ui_lua",
       "state_name": "JAC_NativeSlots_View",
       "code": "return JAC_SlotsUnassigned('UNASSIGNED',2)"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_UNASSIGNED')~=nil"
+      }
     },
     {
       "action": "ui_lua",
@@ -265,6 +292,20 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_NativeSlots_View",
+      "code": "return JAC_SlotsMarkAssignment()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_CITY')~=nil and Game:GetProperty('JAC_SLOTS_PROBE_ASSIGN_TURN')==Game.GetCurrentGameTurn()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_NativeSlots_View",
       "code": "return JAC_SlotsAssign()"
     },
     {
@@ -282,9 +323,18 @@
       "code": "return JAC_SlotsCheckCity('ASSIGNED',0)"
     },
     {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_ASSIGNED')~=nil"
+      }
+    },
+    {
       "action": "end_turn",
       "turns": 4,
-      "timeout": 240
+      "timeout": 960
     },
     {
       "action": "wait_for",
@@ -301,9 +351,18 @@
       "code": "return JAC_SlotsCheckCity('TURN_FOUR',4)"
     },
     {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_TURN_FOUR')~=nil"
+      }
+    },
+    {
       "action": "end_turn",
       "turns": 1,
-      "timeout": 180
+      "timeout": 240
     },
     {
       "action": "wait_for",
@@ -318,6 +377,15 @@
       "action": "ui_lua",
       "state_name": "JAC_NativeSlots_View",
       "code": "return JAC_SlotsCheckCity('SETTLED',5)"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 15,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_SLOTS_PROBE_SETTLED')~=nil"
+      }
     },
     {
       "action": "save",
