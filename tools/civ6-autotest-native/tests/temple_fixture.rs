@@ -138,7 +138,22 @@ fn world() -> mlua::Result<Lua> {
         "#,
     )
     .exec()?;
+    lua.load("SAVED_GAME_SETTER=Game.SetProperty;Game.SetProperty=nil")
+        .exec()?;
     lua.load(script("function F.Plan(")).exec()?;
+    lua.load(
+        r#"
+        Game.SetProperty=SAVED_GAME_SETTER
+        local function copy(v)
+          if type(v)~='table' then return v end
+          local result={};for k,value in pairs(v) do result[k]=copy(value) end;return result
+        end
+        JAC_AbsorptionGameplay={Rules={Copy=copy}}
+    "#,
+    )
+    .exec()?;
+    lua.load(script("persist detached native temple plan in Gameplay"))
+        .exec()?;
     let core: Table = lua.create_table()?;
     let metatable = lua.create_table()?;
     metatable.set("__index", lua.globals())?;
@@ -283,6 +298,15 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
     let lua = Lua::new();
     let mut checked = 0;
     for step in steps {
+        if step["state_name"].as_str() == Some("InGame") {
+            assert!(
+                !step["code"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("Game:SetProperty("),
+                "UI must not persist Gameplay state"
+            );
+        }
         for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
             .into_iter()
             .flatten()
@@ -291,7 +315,7 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
             checked += 1;
         }
     }
-    assert_eq!(checked, 45, "all scenario Lua scripts must compile");
+    assert_eq!(checked, 48, "all scenario Lua scripts must compile");
     let baseline = steps
         .iter()
         .position(|s| {
