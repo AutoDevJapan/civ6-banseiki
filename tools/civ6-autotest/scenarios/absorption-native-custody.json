@@ -164,12 +164,134 @@
     },
     {
       "state_name": "InGame",
+      "code": "-- UI owns district/slot getters; Gameplay receives detached, freshly read observations.\nlocal F={Serial=0}\nlocal function identity(city)\n return {Owner=city:GetOwner(),ID=city:GetID(),X=city:GetX(),Y=city:GetY()}\nend\nlocal function sameCity(city,target)\n return city and city:GetOwner()==target.Owner and city:GetID()==target.ID and city:GetX()==target.X and city:GetY()==target.Y\nend\nlocal holy=assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index\nlocal shrine=assert(GameInfo.Buildings.BUILDING_SHRINE).Index\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE).Index\nfunction F.Plan(city,label)\n local target=identity(city)\n local site\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and sameCity(district:GetCity(),target) then\n   assert(not site,'multiple Holy Sites for fixture city')\n   site=Map.GetPlot(district:GetX(),district:GetY())\n  end\n end\n if not site then\n  local plots=assert(Map.GetCityPlots():GetPurchasedPlots(city),'fixture purchased plots unavailable')\n  local candidates={}\n  for _,index in pairs(plots) do candidates[#candidates+1]=index end\n  table.sort(candidates)\n  for _,index in ipairs(candidates) do\n   local q=Map.GetPlotByIndex(index)\n   if q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target)\n    and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n    and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 and not q:IsCity()\n    and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,label..': no Holy Site or empty plot purchased by this exact city; carrier preparation is incomplete')\n assert(site:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(site),target),\n  label..': Holy Site plot belongs to another city')\n target.Plot=site:GetIndex()\n print('[JAC_NATIVE_TEMPLE_PLAN] fixture='..label..' owner='..target.Owner..' city='..target.ID..' plot='..target.Plot)\n return target\nend\nfunction F.Read(label,token)\n local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\n local target=assert(t.Fixtures[label],'unknown temple fixture')\n local city=CityManager.GetCityAt(target.X,target.Y)\n assert(sameCity(city,target),label..': fixture city identity changed')\n local q=assert(Map.GetPlotByIndex(target.Plot))\n assert(q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target),\n  label..': fixture plot purchase city changed')\n local complete=false\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and Map.GetPlot(district:GetX(),district:GetY()):GetIndex()==target.Plot then\n   assert(sameCity(district:GetCity(),target),label..': Holy Site belongs to another city')\n   assert(q:GetDistrictType()==holy,label..': district/plot type mismatch')\n   complete=district:IsComplete() and not district:IsPillaged()\n  end\n end\n local buildings=city:GetBuildings()\n local at={}\n for _,kind in ipairs(buildings:GetBuildingsAtLocation(target.Plot)) do\n  local row=assert(GameInfo.Buildings[kind],'unknown fixture building')\n  at[row.Index]=true\n end\n local function built(index)\n  return buildings:HasBuilding(index) and at[index]==true and not buildings:IsPillaged(index)\n end\n local shrineReady=complete and built(shrine)\n local templeReady=shrineReady and built(temple)\n local count,slotType,slotValue\n if templeReady then\n  count=buildings:GetNumGreatWorkSlots(temple)\n  if count==1 then\n   slotType=assert(GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(temple,0)]).GreatWorkSlotType\n   slotValue=buildings:GetGreatWorkInSlot(temple,0)\n  end\n  assert(count==1 and slotType=='GREATWORKSLOT_RELIC',label..': completed Temple lacks exact stock relic slot 0')\n end\n F.Serial=F.Serial+1\n return {Token=token,Read=F.Serial,Owner=target.Owner,ID=target.ID,X=target.X,Y=target.Y,Plot=target.Plot,\n  Holy=complete,Shrine=shrineReady,Temple=templeReady,SlotCount=count,SlotType=slotType,SlotValue=slotValue}\nend\nfunction F.Ready(label,stage)\n local target=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE')).Fixtures[label]\n local request=assert(target.Request,label..': temple stage not requested')\n assert(request.Stage==stage,label..': wrong temple publication stage')\n local r=F.Read(label,request.Token)\n assert(r.Token==request.Token and r.Read>request.Read,label..': stale temple observation')\n if not r[stage] then return false end\n print('[JAC_NATIVE_TEMPLE_READY] fixture='..label..' stage='..stage..' token='..r.Token..' read='..r.Read..' city='..r.ID..' plot='..r.Plot)\n return true\nend\nExposedMembers.JAC_NativeTempleFixture=F\nlocal p=Players[Game.GetLocalPlayer()]\nlocal cap=assert(p:GetCities():GetCapitalCity())\nlocal control\nfor _,city in p:GetCities():Members() do\n if city:GetID()~=cap:GetID() then\n  if not control or city:GetBuildings():HasBuilding(temple) then control=city end\n end\nend\nassert(control,'first official control requires an existing second player-owned city')\nlocal source=F.Plan(cap,'source')\nlocal destination=F.Plan(control,'control')\nGame:SetProperty('JAC_NATIVE_CUSTODY_PROBE',{Owner=p:GetID(),Source=identity(cap),Control=identity(control),\n Building=assert(GameInfo.Buildings.BUILDING_JAC_ABSORPTION_CACHE).Index,OfficialBuilding=temple,\n Fixtures={source=source,control=destination}})\nreturn 'planned exact-city source/control Temples; fresh carrier preparation follows the first physical move'",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "-- Mutations run in Gameplay; never enumerate UI-only city district members here.\nlocal function requestTemple(label,stage)\n local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\n local target=assert(t.Fixtures[label])\n local token=label..':'..stage\n local r=assert(ExposedMembers.JAC_NativeTempleFixture).Read(label,token)\n assert(r.Token==token and r.Owner==target.Owner and r.ID==target.ID and r.X==target.X and r.Y==target.Y and r.Plot==target.Plot,\n  label..': mismatched temple observation')\n assert(not target.Request or target.Request.Stage~=stage,label..': duplicate temple request')\n assert(stage=='Holy' or stage=='Shrine' or stage=='Temple','unknown temple stage')\n if stage~='Holy' then assert(r.Holy,label..': completed exact-city Holy Site not published') end\n if stage=='Temple' then assert(r.Shrine,label..': completed shrine not published') end\n local city=assert(CityManager.GetCityAt(target.X,target.Y))\n assert(city:GetOwner()==target.Owner and city:GetID()==target.ID,label..': Gameplay city identity changed')\n target.Request={Stage=stage,Token=token,Read=r.Read}\n Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t)\n if not r[stage] then\n  local queue=city:GetBuildQueue()\n  local ok,value=pcall(function()\n   if stage=='Holy' then\n    queue:CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index,target.Plot,100)\n   else\n    local kind=stage=='Shrine' and 'BUILDING_SHRINE' or 'BUILDING_TEMPLE'\n    queue:CreateIncompleteBuilding(assert(GameInfo.Buildings[kind]).Index,target.Plot,100)\n   end\n  end)\n  assert(ok,label..':'..stage..' request failed: '..tostring(value))\n end\n print('[JAC_NATIVE_TEMPLE_REQUEST] fixture='..label..' stage='..stage..' token='..token..' beforeRead='..r.Read..' city='..target.ID..' plot='..target.Plot..' alreadyComplete='..tostring(r[stage]))\n return 'requested '..label..' '..stage..'; fresh UI publication required'\nend\nExposedMembers.JAC_NativeTempleRequest=requestTemple",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('source','Holy')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('source','Holy')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('source','Shrine')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('source','Shrine')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('source','Temple')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('source','Temple')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal F=assert(ExposedMembers.JAC_NativeTempleFixture)\nassert(F.Ready('source','Temple'),'official source Temple not published')\nassert(F.Read('source','grant:source').SlotValue==-1,'source Temple slot 0 must be empty before relic grant')\nlocal p=Players[t.Owner]\nlocal before={}\nfor _,w in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(t.Owner)) do before[w.Index]=true end\nt.Before=before\nGame:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t)\np:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\nreturn 'granted actual relic after exact-city source stock Temple publication'",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal r=assert(ExposedMembers.JAC_NativeTempleFixture).Read('source','grant:publication')\nreturn r.Temple and type(r.SlotValue)=='number' and r.SlotValue>=0 and not t.Before[r.SlotValue]",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('control','Holy')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('control','Holy')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('control','Shrine')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('control','Shrine')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('control','Temple')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('control','Temple')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal M={Events=0}\nlocal function location(city,building,slot)\n return {Owner=city:GetOwner(),City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=building,Slot=slot}\nend\nfunction M.Locate(index)\n assert(type(index)=='number' and index>=0,'missing native index')\n local found={}\n local owners=PlayerManager.GetAliveIDs()\n local free=PlayerManager.GetFreeCitiesPlayerID()\n local hasFree=false;for _,owner in ipairs(owners) do if owner==free then hasFree=true end end\n if free and free>=0 and not hasFree then owners[#owners+1]=free end\n for _,owner in ipairs(owners) do\n  for _,city in Players[owner]:GetCities():Members() do\n   local buildings=city:GetBuildings()\n   for b in GameInfo.Buildings() do\n    if buildings:HasBuilding(b.Index) then\n     for slot=0,buildings:GetNumGreatWorkSlots(b.Index)-1 do\n      if buildings:GetGreatWorkInSlot(b.Index,slot)==index then found[#found+1]=location(city,b.Index,slot) end\n     end\n    end\n   end\n  end\n end\n return found\nend\nlocal function slotValue(loc)\n local city=CityManager.GetCityAt(loc.X,loc.Y)\n assert(city and city:GetOwner()==loc.Owner and city:GetID()==loc.City,'fixture city owner/ID changed')\n return city:GetBuildings():GetGreatWorkInSlot(loc.Building,loc.Slot)\nend\nlocal function same(a,b)\n return a.Owner==b.Owner and a.City==b.City and a.X==b.X and a.Y==b.Y and a.Building==b.Building and a.Slot==b.Slot\nend\nfunction M.Check(label,index,source,dest)\n local locations=M.Locate(index)\n local src=slotValue(source)\n local dst=slotValue(dest)\n print('[JAC_NATIVE_MATRIX_AFTER] case='..label..' index='..index..' source='..tostring(src)..' dest='..tostring(dst)..' count='..#locations..' events='..M.Events)\n assert(#locations==1,'same native index must occupy exactly one physical slot')\n local atSource=same(locations[1],source) and src==index and dst==-1\n local atDest=same(locations[1],dest) and dst==index and src==-1\n assert(atSource or atDest,'native index moved to an unexpected owner/city/building/slot')\n return atDest\nend\nfunction M.Expect(label,index,source,dest)\n M.Last={Label=label,Index=index,Source=source,Dest=dest}\nend\nfunction M.Verify()\n local r=assert(M.Last)\n return M.Check(r.Label,r.Index,r.Source,r.Dest)\nend\nfunction M.Request(label,actor,owner,index,source,dest)\n assert(actor==Game.GetLocalPlayer() and owner==source.Owner and owner==dest.Owner,'positive control requires local actor equal to both physical owners')\n assert(slotValue(source)==index and slotValue(dest)==-1,'move fixture source/destination changed')\n local sb=CityManager.GetCityAt(source.X,source.Y):GetBuildings()\n local db=CityManager.GetCityAt(dest.X,dest.Y):GetBuildings()\n local object=assert(GameInfo.GreatWorks[sb:GetGreatWorkTypeFromIndex(index)]).GreatWorkObjectType\n local srcSlot=assert(GameInfo.GreatWorkSlotTypes[sb:GetGreatWorkSlotType(source.Building,source.Slot)]).GreatWorkSlotType\n local dstSlot=assert(GameInfo.GreatWorkSlotTypes[db:GetGreatWorkSlotType(dest.Building,dest.Slot)]).GreatWorkSlotType\n local valid=false\n for row in GameInfo.GreatWork_ValidSubTypes() do if row.GreatWorkSlotType==dstSlot and row.GreatWorkObjectType==object then valid=true end end\n assert(object=='GREATWORKOBJECT_RELIC' and valid,'official relic fixture incompatible')\n print('[JAC_NATIVE_MATRIX_BEFORE] case='..label..' context=InGame localPlayer='..Game.GetLocalPlayer()..' actor='..actor..' playerOne='..owner..' index='..index..' sourceOwner='..source.Owner..' destOwner='..dest.Owner..' sourceSlot='..srcSlot..' destSlot='..dstSlot)\n local params={}\n params[PlayerOperations.PARAM_PLAYER_ONE]=owner\n params[PlayerOperations.PARAM_CITY_SRC]=source.City\n params[PlayerOperations.PARAM_CITY_DEST]=dest.City\n params[PlayerOperations.PARAM_BUILDING_SRC]=source.Building\n params[PlayerOperations.PARAM_BUILDING_DEST]=dest.Building\n params[PlayerOperations.PARAM_GREAT_WORK_INDEX]=index\n params[PlayerOperations.PARAM_SLOT]=dest.Slot\n M.Expect(label,index,source,dest)\n local ok,value=pcall(UI.RequestPlayerOperation,actor,PlayerOperations.MOVE_GREAT_WORK,params)\n print('[JAC_NATIVE_MATRIX_DISPATCH] case='..label..' ok='..tostring(ok)..' result='..tostring(value))\n if actor==Game.GetLocalPlayer() then assert(ok,tostring(value)) end\n return ok\nend\nEvents.GreatWorkMoved.Add(function(...)\n M.Events=M.Events+1\n local args={...};for i=1,#args do args[i]=tostring(args[i]) end\n print('[JAC_NATIVE_MATRIX_EVENT] '..table.concat(args,','))\nend)\nExposedMembers.JAC_NativeMatrix=M\nlocal found\nfor _,city in Players[t.Owner]:GetCities():Members() do\n for b in GameInfo.Buildings() do\n  if city:GetBuildings():HasBuilding(b.Index) then\n   for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do\n    local index=city:GetBuildings():GetGreatWorkInSlot(b.Index,slot)\n    if index and index>=0 and not t.Before[index] then assert(not found,'multiple granted relics');found={Index=index,Location=location(city,b.Index,slot)} end\n   end\n  end\n end\nend\nM.Work=assert(found,'granted native relic absent')\nassert(found.Location.Building~=t.Building,'baseline source must be an official building')\nlocal control=assert(CityManager.GetCityAt(t.Control.X,t.Control.Y))\nlocal cap=assert(CityManager.GetCityAt(t.Source.X,t.Source.Y))\nM.Control=location(control,t.OfficialBuilding,0)\nM.Capital=location(cap,t.OfficialBuilding,0)\nassert(GameInfo.GreatWorkSlotTypes[control:GetBuildings():GetGreatWorkSlotType(t.OfficialBuilding,0)].GreatWorkSlotType=='GREATWORKSLOT_RELIC','baseline destination is not an official relic slot')\nassert(GameInfo.GreatWorkSlotTypes[cap:GetBuildings():GetGreatWorkSlotType(t.OfficialBuilding,0)].GreatWorkSlotType=='GREATWORKSLOT_RELIC','return destination is not an official relic slot')\nfor _,other in ipairs(PlayerManager.GetAliveMajors()) do if other:GetID()~=t.Owner and not other:IsHuman() then M.ForeignActor=other:GetID();break end end\nassert(M.ForeignActor,'AI owner fixture absent')\nassert(found.Location.Owner==t.Owner and found.Location.City==cap:GetID() and found.Location.Building==t.OfficialBuilding and found.Location.Slot==0,'granted relic must occupy exact source Temple slot 0')\nlocal F=assert(ExposedMembers.JAC_NativeTempleFixture)\nlocal sourceTemple=F.Read('source','baseline:source')\nlocal controlTemple=F.Read('control','baseline:control')\nassert(sourceTemple.Temple and sourceTemple.SlotValue==found.Index,'exact source Temple slot 0 not ready')\nassert(controlTemple.Temple and controlTemple.SlotValue==-1,'exact official control Temple slot 0 not ready')\nM.Request('local-official',Game.GetLocalPlayer(),t.Owner,found.Index,found.Location,M.Control)\nreturn 'official local-player baseline submitted; physical publication required'\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeMatrix).Verify()"
+      }
+    },
+    {
+      "state_name": "InGame",
       "code": "local p=Players[Game.GetLocalPlayer()];local range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE),'city spacing unavailable');local site;for i=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(i);if q:GetOwner()==p:GetID() and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then local near=99999;for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do near=math.min(near,Map.GetPlotDistance(q:GetX(),q:GetY(),city:GetX(),city:GetY())) end end;if near>range and (not site or near>site.Distance) then site={X=q:GetX(),Y=q:GetY(),Index=i,Distance=near} end end end;assert(site,'no valid empty cache plot beyond city spacing');ExposedMembers.JAC_CustodyProbeSite=function() return site end;print('[JAC_NATIVE_CACHE_SITE] plot='..site.Index..' nearest='..site.Distance..' minimum='..range);return 'selected native cache site '..site.Index",
       "action": "ui_lua"
     },
     {
       "state_name": "JAC_Absorption_Entry",
-      "code": "\nlocal function buildTemple(city)\n local holy=assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index\n local temple=assert(GameInfo.Buildings.BUILDING_TEMPLE).Index\n if not city:GetBuildings():HasBuilding(temple) then\n  local site,empty\n  for dir=0,5 do\n   local q=Map.GetAdjacentPlot(city:GetX(),city:GetY(),dir)\n   if q and q:GetOwner()==city:GetOwner() then\n    if q:GetDistrictType()==holy then site=q;break end\n    if not empty and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 and not q:IsCity() and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() then empty=q end\n   end\n  end\n  if not site then site=assert(empty,'no legal owned Holy Site fixture plot');city:GetBuildQueue():CreateIncompleteDistrict(holy,site:GetIndex(),100) end\n  local shrine=assert(GameInfo.Buildings.BUILDING_SHRINE).Index\n  if not city:GetBuildings():HasBuilding(shrine) then city:GetBuildQueue():CreateIncompleteBuilding(shrine,site:GetIndex(),100) end\n  city:GetBuildQueue():CreateIncompleteBuilding(temple,site:GetIndex(),100)\n end\n assert(city:GetBuildings():HasBuilding(temple),'official temple fixture absent')\n return temple\nend\n\nExposedMembers.JAC_NativeBuildTemple=buildTemple\nlocal p=Players[Game.GetLocalPlayer()];local coords=assert(ExposedMembers.JAC_CustodyProbeSite());local site=Map.GetPlotByIndex(coords.Index);local before={};for _,w in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(p:GetID())) do before[w.Index]=true end;local cap=p:GetCities():GetCapitalCity();local b=assert(GameInfo.Buildings['BUILDING_JAC_ABSORPTION_CACHE']);buildTemple(cap);p:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC');local count=p:GetCities():GetCount();local ok,created=pcall(function() return p:GetCities():Create(coords.X,coords.Y) end);print('[JAC_NATIVE_CACHE_CREATE_API] ok='..tostring(ok)..' result='..tostring(created)..' current='..tostring(CityManager.GetCityAt(coords.X,coords.Y)));assert(ok,tostring(created));Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',{Owner=p:GetID(),BeforeCityCount=count,Source={X=cap:GetX(),Y=cap:GetY(),ID=cap:GetID()},Cache={X=coords.X,Y=coords.Y},Building=b.Index,Before=before});print('[JAC_NATIVE_CACHE_CREATE_REQUEST] before='..count..' after='..p:GetCities():GetCount());return 'requested native cache creation before checking publication'",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nassert(ExposedMembers.JAC_NativeMatrix.Verify(),'first official local-local control has not succeeded')\nlocal coords=assert(ExposedMembers.JAC_CustodyProbeSite())\nlocal p=Players[t.Owner]\nt.BeforeCityCount=p:GetCities():GetCount()\nt.Cache={X=coords.X,Y=coords.Y}\nGame:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t)\nlocal ok,created=pcall(function() return p:GetCities():Create(coords.X,coords.Y) end)\nprint('[JAC_NATIVE_CACHE_CREATE_API] ok='..tostring(ok)..' result='..tostring(created))\nassert(ok,tostring(created))\nreturn 'first official control succeeded; requested separate fresh carrier city'",
       "action": "ui_lua"
     },
     {
@@ -182,14 +304,70 @@
       }
     },
     {
-      "action": "ui_lua",
-      "code": "local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE');local c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y),'native cache absent after publication');assert(c:GetOwner()==t.Owner);c:GetBuildQueue():CreateIncompleteBuilding(t.Building,Map.GetPlot(t.Cache.X,t.Cache.Y):GetIndex(),100);t.OfficialBuilding=ExposedMembers.JAC_NativeBuildTemple(c);t.Cache.ID=c:GetID();Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t);return 'native cache published; granted an actual relic'",
-      "state_name": "JAC_Absorption_Entry"
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y),'fresh carrier city not published')\nassert(c:GetOwner()==t.Owner,'fresh carrier owner mismatch')\nt.Cache.ID=c:GetID()\nt.Fixtures.carrier=assert(ExposedMembers.JAC_NativeTempleFixture).Plan(c,'carrier')\nGame:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t)\nreturn 'planned separate fresh carrier Temple on a plot purchased by the carrier itself'",
+      "action": "ui_lua"
     },
     {
-      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Holy')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Holy')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Shrine')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Shrine')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Temple')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Temple')",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nassert(ExposedMembers.JAC_NativeTempleFixture.Ready('carrier','Temple'),'fresh carrier Temple not published')\nlocal c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y))\nassert(c:GetOwner()==t.Owner and c:GetID()==t.Cache.ID,'carrier identity changed')\nc:GetBuildQueue():CreateIncompleteBuilding(t.Building,Map.GetPlot(t.Cache.X,t.Cache.Y):GetIndex(),100)\nreturn 'fresh carrier stock Temple complete; requested separate custom cache building'",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 20,
+      "condition": {
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'));local c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y));assert(c:GetOwner()==t.Owner and c:GetID()==t.Cache.ID,'carrier identity changed');return c:GetBuildings():HasBuilding(t.Building) and c:GetBuildings():GetNumGreatWorkSlots(t.Building)==1",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
       "state_name": "InGame",
-      "code": "\nlocal t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal M={Events=0}\nlocal function location(city,building,slot)\n return {Owner=city:GetOwner(),City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=building,Slot=slot}\nend\nfunction M.Locate(index)\n assert(type(index)=='number' and index>=0,'missing native index')\n local found={}\n local owners=PlayerManager.GetAliveIDs()\n local free=PlayerManager.GetFreeCitiesPlayerID()\n local hasFree=false;for _,owner in ipairs(owners) do if owner==free then hasFree=true end end\n if free and free>=0 and not hasFree then owners[#owners+1]=free end\n for _,owner in ipairs(owners) do\n  for _,city in Players[owner]:GetCities():Members() do\n   local buildings=city:GetBuildings()\n   for b in GameInfo.Buildings() do\n    if buildings:HasBuilding(b.Index) then\n     for slot=0,buildings:GetNumGreatWorkSlots(b.Index)-1 do\n      if buildings:GetGreatWorkInSlot(b.Index,slot)==index then found[#found+1]=location(city,b.Index,slot) end\n     end\n    end\n   end\n  end\n end\n return found\nend\nlocal function slotValue(loc)\n local city=CityManager.GetCityAt(loc.X,loc.Y)\n assert(city and city:GetOwner()==loc.Owner and city:GetID()==loc.City,'fixture city owner/ID changed')\n return city:GetBuildings():GetGreatWorkInSlot(loc.Building,loc.Slot)\nend\nlocal function same(a,b)\n return a.Owner==b.Owner and a.City==b.City and a.X==b.X and a.Y==b.Y and a.Building==b.Building and a.Slot==b.Slot\nend\nfunction M.Check(label,index,source,dest)\n local locations=M.Locate(index)\n local src=slotValue(source)\n local dst=slotValue(dest)\n print('[JAC_NATIVE_MATRIX_AFTER] case='..label..' index='..index..' source='..tostring(src)..' dest='..tostring(dst)..' count='..#locations..' events='..M.Events)\n assert(#locations==1,'same native index must occupy exactly one physical slot')\n local atSource=same(locations[1],source) and src==index and dst==-1\n local atDest=same(locations[1],dest) and dst==index and src==-1\n assert(atSource or atDest,'native index moved to an unexpected owner/city/building/slot')\n return atDest\nend\nfunction M.Expect(label,index,source,dest)\n M.Last={Label=label,Index=index,Source=source,Dest=dest}\nend\nfunction M.Verify()\n local r=assert(M.Last)\n return M.Check(r.Label,r.Index,r.Source,r.Dest)\nend\nfunction M.Request(label,actor,owner,index,source,dest)\n assert(actor==Game.GetLocalPlayer() and owner==source.Owner and owner==dest.Owner,'positive control requires local actor equal to both physical owners')\n assert(slotValue(source)==index and slotValue(dest)==-1,'move fixture source/destination changed')\n local sb=CityManager.GetCityAt(source.X,source.Y):GetBuildings()\n local db=CityManager.GetCityAt(dest.X,dest.Y):GetBuildings()\n local object=assert(GameInfo.GreatWorks[sb:GetGreatWorkTypeFromIndex(index)]).GreatWorkObjectType\n local srcSlot=assert(GameInfo.GreatWorkSlotTypes[sb:GetGreatWorkSlotType(source.Building,source.Slot)]).GreatWorkSlotType\n local dstSlot=assert(GameInfo.GreatWorkSlotTypes[db:GetGreatWorkSlotType(dest.Building,dest.Slot)]).GreatWorkSlotType\n local valid=false\n for row in GameInfo.GreatWork_ValidSubTypes() do if row.GreatWorkSlotType==dstSlot and row.GreatWorkObjectType==object then valid=true end end\n assert(object=='GREATWORKOBJECT_RELIC' and valid,'official relic fixture incompatible')\n print('[JAC_NATIVE_MATRIX_BEFORE] case='..label..' context=InGame localPlayer='..Game.GetLocalPlayer()..' actor='..actor..' playerOne='..owner..' index='..index..' sourceOwner='..source.Owner..' destOwner='..dest.Owner..' sourceSlot='..srcSlot..' destSlot='..dstSlot)\n local params={}\n params[PlayerOperations.PARAM_PLAYER_ONE]=owner\n params[PlayerOperations.PARAM_CITY_SRC]=source.City\n params[PlayerOperations.PARAM_CITY_DEST]=dest.City\n params[PlayerOperations.PARAM_BUILDING_SRC]=source.Building\n params[PlayerOperations.PARAM_BUILDING_DEST]=dest.Building\n params[PlayerOperations.PARAM_GREAT_WORK_INDEX]=index\n params[PlayerOperations.PARAM_SLOT]=dest.Slot\n M.Expect(label,index,source,dest)\n local ok,value=pcall(UI.RequestPlayerOperation,actor,PlayerOperations.MOVE_GREAT_WORK,params)\n print('[JAC_NATIVE_MATRIX_DISPATCH] case='..label..' ok='..tostring(ok)..' result='..tostring(value))\n if actor==Game.GetLocalPlayer() then assert(ok,tostring(value)) end\n return ok\nend\nEvents.GreatWorkMoved.Add(function(...)\n M.Events=M.Events+1\n local args={...};for i=1,#args do args[i]=tostring(args[i]) end\n print('[JAC_NATIVE_MATRIX_EVENT] '..table.concat(args,','))\nend)\nExposedMembers.JAC_NativeMatrix=M\nlocal found\nfor _,city in Players[t.Owner]:GetCities():Members() do\n for b in GameInfo.Buildings() do\n  if city:GetBuildings():HasBuilding(b.Index) then\n   for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do\n    local index=city:GetBuildings():GetGreatWorkInSlot(b.Index,slot)\n    if index and index>=0 and not t.Before[index] then assert(not found,'multiple granted relics');found={Index=index,Location=location(city,b.Index,slot)} end\n   end\n  end\n end\nend\nM.Work=assert(found,'granted native relic absent')\nassert(found.Location.Building~=t.Building,'baseline source must be an official building')\nlocal cache=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y))\nlocal cap=assert(CityManager.GetCityAt(t.Source.X,t.Source.Y))\nM.Cache=location(cache,t.OfficialBuilding,0)\nM.Capital=location(cap,t.OfficialBuilding,0)\nassert(GameInfo.GreatWorkSlotTypes[cache:GetBuildings():GetGreatWorkSlotType(t.OfficialBuilding,0)].GreatWorkSlotType=='GREATWORKSLOT_RELIC','baseline destination is not an official relic slot')\nassert(GameInfo.GreatWorkSlotTypes[cap:GetBuildings():GetGreatWorkSlotType(t.OfficialBuilding,0)].GreatWorkSlotType=='GREATWORKSLOT_RELIC','return destination is not an official relic slot')\nfor _,other in ipairs(PlayerManager.GetAliveMajors()) do if other:GetID()~=t.Owner and not other:IsHuman() then M.ForeignActor=other:GetID();break end end\nassert(M.ForeignActor,'AI owner fixture absent')\nM.Request('local-official',Game.GetLocalPlayer(),t.Owner,found.Index,found.Location,M.Cache)\nreturn 'official local-player baseline submitted; physical publication required'\n"
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal M=assert(ExposedMembers.JAC_NativeMatrix)\nlocal F=assert(ExposedMembers.JAC_NativeTempleFixture)\nlocal sourceTemple=F.Read('control','carrier-move:source')\nassert(sourceTemple.Temple and sourceTemple.SlotValue==M.Work.Index,'existing control exact Temple source not ready')\nlocal r=F.Read('carrier','carrier-move:destination')\nassert(r.Temple and r.SlotValue==-1,'fresh carrier exact stock Temple slot 0 not ready')\nM.Cache={Owner=r.Owner,City=r.ID,X=r.X,Y=r.Y,Building=t.OfficialBuilding,Slot=0}\nM.Request('local-carrier-official',Game.GetLocalPlayer(),t.Owner,M.Work.Index,M.Control,M.Cache)\nreturn 'requested same baseline index from existing official control into separately prepared fresh carrier Temple'",
+      "action": "ui_lua"
     },
     {
       "action": "wait_for",
