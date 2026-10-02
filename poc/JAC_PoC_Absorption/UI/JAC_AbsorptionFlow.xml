@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Name="JAC_AbsorptionFlow" Style="FontNormal14" FontStyle="Shadow">
+  <GridButton ID="OpenButton" Anchor="R,T" Offset="12,152" Size="220,30"
+              Style="ButtonControl" String="LOC_JAC_ABS_FLOW_OPEN" Hidden="1"/>
+  <Grid ID="Panel" Anchor="C,C" Size="800,640" Texture="Controls_DropdownPanel"
+        SliceCorner="10,10" SliceTextureSize="22,22" Hidden="1" ConsumeAllMouse="1">
+    <Label ID="Title" Anchor="L,T" Offset="20,12" Style="FontFlair24"/>
+    <GridButton ID="CloseButton" Anchor="R,T" Offset="12,10" Size="104,28"
+                Style="ButtonControl" String="LOC_JAC_ABS_FLOW_CLOSE"/>
+    <Label ID="Parties" Anchor="L,T" Offset="20,51" WrapWidth="760" Style="FontNormal16"/>
+    <Label ID="Status" Anchor="L,T" Offset="20,80" WrapWidth="760" Style="FontNormal14"/>
+    <Label ID="Instructions" Anchor="L,T" Offset="20,109" WrapWidth="760" Style="FontNormal14"/>
+
+    <ScrollPanel ID="EntryScroll" Anchor="L,T" Offset="20,139" Size="760,266" Vertical="1">
+      <Stack ID="Entries" StackGrowth="Down" Padding="4"/>
+      <ScrollBar Style="Slider_Blue" Offset="-13,0" Anchor="R,T"/>
+    </ScrollPanel>
+    <Label ID="ActionHeading" Anchor="L,T" Offset="20,418" WrapWidth="760" Style="FontNormal16"/>
+    <ScrollPanel ID="ActionScroll" Anchor="L,T" Offset="20,446" Size="760,126" Vertical="1">
+      <Stack ID="Actions" StackGrowth="Down" Padding="4"/>
+      <ScrollBar Style="Slider_Blue" Offset="-13,0" Anchor="R,T"/>
+    </ScrollPanel>
+    <Label ID="Hint" Anchor="L,B" Offset="20,48" WrapWidth="565" Style="FontNormal14"/>
+    <GridButton ID="ConfirmButton" Anchor="R,B" Offset="20,17" Size="175,32"
+                Style="ButtonControl" Hidden="1"/>
+  </Grid>
+
+  <Instance Name="AbsorptionEntry">
+    <Container ID="Root" Size="730,108">
+      <Box Size="parent,parent" Color="0,0,0,110"/>
+      <Box ID="Focus" Size="parent,parent" Color="227,193,100,55" Hidden="1"/>
+      <Image ID="Portrait" Anchor="L,C" Offset="7,0" Size="50,50" Texture="Leaders55" Hidden="1"/>
+      <Label ID="Name" Anchor="L,T" Offset="66,5" WrapWidth="530" Style="FontNormal16"/>
+      <Label ID="Identity" Anchor="L,T" Offset="66,29" WrapWidth="530" Style="FontNormal14"/>
+      <Label ID="Abilities" Anchor="L,T" Offset="66,54" WrapWidth="530" Style="FontNormal14"/>
+      <Label ID="Outcome" Anchor="L,T" Offset="66,79" WrapWidth="530" Style="FontNormal14"/>
+      <GridButton ID="Choose" Anchor="R,C" Offset="9,0" Size="113,30" Style="ButtonControl"/>
+    </Container>
+  </Instance>
+
+  <Instance Name="AbsorptionAction">
+    <Container ID="Root" Size="730,36">
+      <Box Size="parent,parent" Color="0,0,0,110"/>
+      <Box ID="Focus" Size="parent,parent" Color="227,193,100,55" Hidden="1"/>
+      <Label ID="Name" Anchor="L,C" Offset="12,0" WrapWidth="560" Style="FontNormal14"/>
+      <GridButton ID="Choose" Anchor="R,C" Offset="9,0" Size="113,29"
+                  Style="ButtonControl" String="LOC_JAC_ABS_FLOW_SELECT"/>
+    </Container>
+  </Instance>
+</Context>
