@@ -1,5 +1,6 @@
 #[cfg(not(windows))]
 use civ6_autotest_rs::ErrorKind;
+mod support_driver;
 use civ6_autotest_rs::{
     restart::{self, LifecycleBackend, ProcessRow},
     Error, Result,
@@ -181,6 +182,50 @@ fn test_live_game_parent_preserves_reporter() {
         );
         assert_eq!(b.events, ["rows"]);
         assert!(b.reporter_terminated.is_empty());
+    }
+}
+
+#[test]
+fn runner_preserves_parented_reporter_through_cleanup_and_actual_uri_request() {
+    use std::sync::{Arc, Mutex};
+    use support_driver::{FakeBackend, Harness};
+
+    for full_restart in [false, true] {
+        let mut lifecycle = orphan_reporter(REPORTER);
+        lifecycle.reporters.insert(42);
+        lifecycle.process_rows.push(ProcessRow {
+            pid: 41,
+            name: "live-parent.exe".into(),
+            parent_pid: 1,
+        });
+        let lifecycle = Arc::new(Mutex::new(lifecycle));
+        let cleanup_lifecycle = lifecycle.clone();
+        let launch_lifecycle = lifecycle.clone();
+        let mut fake = FakeBackend::new().process(|_| Ok(None));
+        fake.on_close_orphans = Box::new(move || {
+            restart::close_orphaned_civ_reporters_with(&mut *cleanup_lifecycle.lock().unwrap())
+        });
+        fake.on_launch = Box::new(move || {
+            restart::request_steam_launch_with(&mut *launch_lifecycle.lock().unwrap())
+        });
+        let mut h = Harness::new(json!({}), fake);
+        if full_restart {
+            h.runner.restart_game(360.0).unwrap();
+        } else {
+            h.runner.launch_steam_and_wait(120.0).unwrap();
+        }
+        let lifecycle = lifecycle.lock().unwrap();
+        assert_eq!(lifecycle.uri, [restart::STEAM_URI]);
+        assert_eq!(lifecycle.reporters, BTreeSet::from([42]));
+        assert!(lifecycle.reporter_terminated.is_empty());
+        assert_eq!(
+            lifecycle.events,
+            if full_restart {
+                vec!["rows", "rows", "launch"]
+            } else {
+                vec!["rows", "launch"]
+            }
+        );
     }
 }
 

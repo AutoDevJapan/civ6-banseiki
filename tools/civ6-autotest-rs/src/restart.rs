@@ -427,6 +427,11 @@ pub fn close_orphaned_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -
 
 pub fn launch_via_steam_with<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
     close_orphan_civ_reporters_with(backend)?;
+    request_steam_launch_with(backend)
+}
+
+/// Send the URI after the caller has completed its own helper cleanup.
+pub fn request_steam_launch_with<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
     backend.launch_uri(STEAM_URI)
 }
 
@@ -692,6 +697,9 @@ mod win {
     pub fn launch_via_steam() -> Result<()> {
         launch_via_steam_with(&mut WindowsLifecycle)
     }
+    pub fn request_steam_launch() -> Result<()> {
+        request_steam_launch_with(&mut WindowsLifecycle)
+    }
     pub fn require_dx11_window(hwnd: isize) -> Result<()> {
         require_dx11_window_with(&mut WindowsLifecycle, hwnd)
     }
@@ -702,8 +710,8 @@ mod win {
 #[cfg(windows)]
 pub use win::{
     close_orphan_civ_reporters, close_orphaned_civ_reporters, launch_via_steam,
-    require_dx11_window, single_civ_process, terminate_civ_process, wait_for_civ_window,
-    wait_for_exit,
+    request_steam_launch, require_dx11_window, single_civ_process, terminate_civ_process,
+    wait_for_civ_window, wait_for_exit,
 };
 #[cfg(not(windows))]
 fn unsupported<T>() -> Result<T> {
@@ -731,6 +739,10 @@ pub fn close_orphaned_civ_reporters() -> Result<Vec<u32>> {
 }
 #[cfg(not(windows))]
 pub fn launch_via_steam() -> Result<()> {
+    unsupported()
+}
+#[cfg(not(windows))]
+pub fn request_steam_launch() -> Result<()> {
     unsupported()
 }
 #[cfg(not(windows))]

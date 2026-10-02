@@ -145,7 +145,7 @@ impl Backend for SystemBackend {
         metrics::process_memory(pid)
     }
     fn launch(&mut self) -> Result<()> {
-        crate::restart::launch_via_steam()
+        crate::restart::request_steam_launch()
     }
     fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
         crate::restart::close_orphaned_civ_reporters()
