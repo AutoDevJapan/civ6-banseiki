@@ -22,7 +22,7 @@ end
 
 function C.merit_disagreement()
     ExposedMembers.JAC_PersonaBoundaryGameplayRead=function()
-        return {merit=13,cities={}}
+        return {merit=13,freeCitiesOwner=62,cities={}}
     end
 end
 

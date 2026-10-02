@@ -153,7 +153,10 @@ fn test_native_resolution_rejects_property_only_or_wrong_native_instance() {
 #[test]
 fn test_native_yields_effects_and_two_context_markers_are_in_same_record() {
     let h = Boundary::new();
+    // The native free-cities lookup exists in Gameplay, not in the UI context.
+    exec(&h.0, "PlayerManager.GetFreeCitiesPlayerID=nil");
     let s = h.read();
+    assert_eq!(field::<i64>(&s, "freeCitiesOwner"), 62);
     let city: Table = field::<Table>(&s, "cities").strict_get("2/0").unwrap();
     assert_eq!(
         field::<Table>(&city, "yields")
@@ -190,6 +193,13 @@ fn test_native_yields_effects_and_two_context_markers_are_in_same_record() {
     );
     h.case("merit_disagreement", ());
     h.error_check("SETTLED", None, "merit disagreement");
+    exec(
+        &h.0,
+        "local read=ExposedMembers.JAC_PersonaBoundaryGameplayRead; \
+         ExposedMembers.JAC_PersonaBoundaryGameplayRead=function() \
+         local seen=read(); seen.freeCitiesOwner=nil; return seen end",
+    );
+    h.error_check("SETTLED", None, "Gameplay free cities owner unavailable");
 }
 
 #[test]

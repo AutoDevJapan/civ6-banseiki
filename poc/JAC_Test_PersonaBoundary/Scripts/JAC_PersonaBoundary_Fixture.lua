@@ -25,7 +25,8 @@ local function GetCities(c)
 end
 local function ReadGameplay()
     local c = assert(Game:GetProperty(CONFIG), "boundary fixture not prepared");
-    local result = {merit=R.Property(c.leader, "MERIT") or 0, cities={}};
+    local result = {merit=R.Property(c.leader, "MERIT") or 0,
+        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(), cities={}};
     for key,city in pairs(GetCities(c)) do
         local value = city:GetProperty("JAC_PERSONA_SETTLED_" .. c.leader);
         local data = {id=city:GetID(), owner=city:GetOwner(), settled=value or 0, selectors={}};

@@ -102,7 +102,7 @@ GameEffects={GetModifiers=function() return {100,101,102} end,
 Locale={Lookup=function(name) return name end}
 ExposedMembers={JAC_LeaderPersonaNativeRead=function() error('persona UI bridge is not native evidence') end}
 ExposedMembers.JAC_PersonaBoundaryGameplayRead=function()
- local result={merit=props['JAC_PERSONA_'..LEADER..'_MERIT'],cities={}}
+ local result={merit=props['JAC_PERSONA_'..LEADER..'_MERIT'],freeCitiesOwner=62,cities={}}
  for _,c in ipairs(CITIES) do if c.owner==0 or c==TARGET then
   result.cities[c.x..'/'..c.y]={id=c.id,owner=c.owner,settled=c.marker,selectors={[NODE]=1}}
  end end

@@ -376,7 +376,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); local city=Cities.GetPlotPurchaseCity(Map.GetPlot(c.x,c.y)); return city and city:GetOwner()==PlayerManager.GetFreeCitiesPlayerID()"
+        "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); local city=Cities.GetPlotPurchaseCity(Map.GetPlot(c.x,c.y)); return c.transfer and city and city:GetOwner()==c.transfer.toOwner and city:GetID()==c.transfer.toCityID"
       }
     },
     {

@@ -53,7 +53,7 @@ function B.Read()
         personOwner=R.Property(c.leader,"OWNER"), state=R.Property(c.leader,"STATE"),
         merit=R.Property(c.leader,"MERIT") or 0, skillOwned=R.Property(c.leader,"NODE_"..c.skill) or 0,
         greatPeople=0, cities={}, unmatchedEffects={}, targetKey=c.x .. "/" .. c.y,
-        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(), fixtureCityID=c.cityID, transfer=c.transfer,
+        fixtureCityID=c.cityID, transfer=c.transfer,
         native={type=governor:GetType(), hash=def.Hash, established=governor:IsEstablished(),
             neutralized=governor:GetNeutralizedTurns(),
             base=governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash),
@@ -140,6 +140,9 @@ function B.Read()
     end
     table.sort(s.unmatchedEffects,function(a,b) return R.Serialize(a)<R.Serialize(b); end);
     s.gameplay = assert(ExposedMembers.JAC_PersonaBoundaryGameplayRead, "Gameplay observer unavailable")();
+    s.freeCitiesOwner = s.gameplay.freeCitiesOwner;
+    assert(type(s.freeCitiesOwner) == "number" and s.freeCitiesOwner >= 0,
+        "Gameplay free cities owner unavailable");
     s.missions, s.neutralizationMission = Missions(c);
     local spyInfo = Game:GetProperty("JAC_BOUNDARY_SPY");
     if spyInfo then
