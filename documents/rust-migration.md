@@ -23,6 +23,8 @@
 
 元の816項目を [移行前の一覧](rust-migration-test-inventory.json) に固定し、各 crate の `tests/parity.json` と照合する。データの166項目には、テスト用補助関数1件を含む。補助関数の ALL/ANY の動作も Rust で検査する。
 
+移行中に main へ入った PR #87 の追加137項目も、[追加分の一覧](rust-migration-incremental-inventory.json) に記録する。吸収の Lua 120項目、英雄のデータ8項目、再起動の9項目を、それぞれの追加対応表で照合する。当初の816項目の一覧を上書きせず、合計953項目を引き継ぐ。
+
 Lua の比較は、数値と文字列、`nil` と `false`、戻り値の数、数値キーと文字列キーを区別する。Lua テストはゲーム本体のインストールの有無によって省略しない。公式データを検査するテストには、出典とハッシュを記録した固定ファイルを使用する。
 
 ```powershell
@@ -41,5 +43,6 @@ tools/target/release/civ6-autotest.exe tools/civ6-autotest/scenarios/bundle0-loa
 |---|---|---:|---:|---|
 | `rust-autotest-driver-02` | PR #93 の実行器（コミット ID 未記録） | 11/11 | 12/12 | exit 0、保存前と復元後の値が一致 |
 | `rust-autotest-driver-03` | `a1ddf6a` | 11/11 | 14/14 | exit 0、MOD の読み込みエラーの検査を含む |
+| `rust-autotest-driver-06` | `ce797d3` と main の `8ff592e` の統合 `9964715` | 11/11 | 14/14 | exit 0、最新の CLI と所有 MOD の検出を含む |
 
 どちらも早送りのテストモードは使っていない。実行後に Civ6 の終了を確認した。以後の変更は、MOD の UUID だけで報告されるログの検出、中断時の停止処理、Lua のテスト比較を補強するもの。実機記録のコミットと、その後の単体テストの対象を区別して記録する。
