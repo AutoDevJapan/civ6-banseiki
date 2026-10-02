@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Anton Strenger (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <!-- Moments -->
+        <Row Type="MOMENT_CITY_BUILT_NEAR_FLOODABLE_RIVER" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_CITY_BUILT_NEAR_VOLCANO" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_CLIMATE_CHANGE_PHASE" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_DISTRICT_CONSTRUCTED_CANAL" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_IMPROVEMENT_CONSTRUCTED_ON_DISASTER_YIELD_TILE_FIRST" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_MITIGATED_COASTAL_FLOOD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_MITIGATED_RIVER_FLOOD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_PLAYER_EARNED_DIPLOMATIC_VICTORY_POINT" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_PROJECT_FOUNDED_EXOPLANET" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_PROJECT_FOUNDED_EXOPLANET_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_UNIT_TOURISM_BOMB" Kind="KIND_MOMENT"/>
+        <Row Type="MOMENT_UNIT_TOURISM_BOMB_FIRST_IN_WORLD" Kind="KIND_MOMENT"/>
+        <!-- Moment Outcomes -->
+        <Row Type="COMMEMORATION_AUTOMATON" Kind="KIND_MOMENT_OUTCOME"/>
+    </Types>
+    <Moments>
+        <!--When adding a new Moment here, be sure to also add it to GameCoreTypes in code-->
+        <Row MomentType="MOMENT_CITY_BUILT_NEAR_FLOODABLE_RIVER" Name="LOC_MOMENT_CITY_BUILT_NEAR_FLOODABLE_RIVER" Description="LOC_MOMENT_CITY_BUILT_NEAR_FLOODABLE_RIVER_DESCRIPTION" InstanceDescription="LOC_MOMENT_CITY_BUILT_NEAR_FLOODABLE_RIVER_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_City_Built_Near_FloodableRiver.dds" EraScore="1"/>
+        <Row MomentType="MOMENT_CITY_BUILT_NEAR_VOLCANO" Name="LOC_MOMENT_CITY_BUILT_NEAR_VOLCANO" Description="LOC_MOMENT_CITY_BUILT_NEAR_VOLCANO_DESCRIPTION" InstanceDescription="LOC_MOMENT_CITY_BUILT_NEAR_VOLCANO_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_City_Built_Near_Volcano.dds" EraScore="1"/>
+        <Row MomentType="MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST" Name="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST" Description="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_DESCRIPTION" InstanceDescription="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_Resource_FossilFuel.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_IN_WORLD" Name="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_IN_WORLD" Description="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_CITY_POWER_GENERATED_FROM_RESOURCE_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_Resource_FossilFuel.dds" EraScore="3"/>
+        <Row MomentType="MOMENT_CLIMATE_CHANGE_PHASE" Name="LOC_MOMENT_CLIMATE_CHANGE_PHASE" Description="LOC_MOMENT_CLIMATE_CHANGE_PHASE_DESCRIPTION" InstanceDescription="LOC_MOMENT_CLIMATE_CHANGE_PHASE_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_ClimateChangeAlert.dds" EraScore="0"/>
+        <Row MomentType="MOMENT_DISTRICT_CONSTRUCTED_CANAL" Name="LOC_MOMENT_DISTRICT_CONSTRUCTED_CANAL" Description="LOC_MOMENT_DISTRICT_CONSTRUCTED_CANAL_DESCRIPTION" InstanceDescription="LOC_MOMENT_DISTRICT_CONSTRUCTED_CANAL_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_BuildingTheCanal.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST" Name="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST" Description="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_DESCRIPTION" InstanceDescription="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_INSTANCE_DESCRIPTION" InterestLevel="3" MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNMENT" EraScore="2" ObsoleteEra="ERA_FUTURE"/>
+        <Row MomentType="MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_IN_WORLD" Name="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_IN_WORLD" Description="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_GOVERNMENT_ENACTED_TIER_4_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNMENT" EraScore="3" ObsoleteEra="ERA_FUTURE"/>
+        <Row MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST" Name="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST" Description="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_DESCRIPTION" InstanceDescription="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_BuildingMountainTunnel.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_IN_WORLD" Name="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_IN_WORLD" Description="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_MOUNTAIN_TUNNEL_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_BuildingMountainTunnel.dds" EraScore="3"/>
+        <Row MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_ON_DISASTER_YIELD_TILE_FIRST" Name="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_ON_DISASTER_YIELD_TILE_FIRST" Description="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_ON_DISASTER_YIELD_TILE_FIRST_DESCRIPTION" InstanceDescription="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_ON_DISASTER_YIELD_TILE_FIRST_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_ImproveNaturalDisasterYieldTile.dds" EraScore="1"/>
+        <Row MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST" Name="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST" Description="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_DESCRIPTION" InstanceDescription="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_TrainingRenewableEnergyImprovement.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_IN_WORLD" Name="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_IN_WORLD" Description="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_RENEWABLE_ENERGY_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_TrainingRenewableEnergyImprovement.dds" EraScore="3"/>
+        <Row MomentType="MOMENT_MITIGATED_COASTAL_FLOOD" Name="LOC_MOMENT_MITIGATED_COASTAL_FLOOD" Description="LOC_MOMENT_MITIGATED_COASTAL_FLOOD_DESCRIPTION" InstanceDescription="LOC_MOMENT_MITIGATED_COASTAL_FLOOD_INSTANCE_DESCRIPTION" InterestLevel="1" IconTexture="MomentSmall_City" EraScore="1"/>
+        <Row MomentType="MOMENT_MITIGATED_RIVER_FLOOD" Name="LOC_MOMENT_MITIGATED_RIVER_FLOOD" Description="LOC_MOMENT_MITIGATED_RIVER_FLOOD_DESCRIPTION" InstanceDescription="LOC_MOMENT_MITIGATED_RIVER_FLOOD_INSTANCE_DESCRIPTION" InterestLevel="1" IconTexture="MomentSmall_City" EraScore="1"/>
+        <Row MomentType="MOMENT_PLAYER_EARNED_DIPLOMATIC_VICTORY_POINT" Name="LOC_MOMENT_PLAYER_EARNED_DIPLOMATIC_VICTORY_POINT" Description="LOC_MOMENT_PLAYER_EARNED_DIPLOMATIC_VICTORY_POINT_DESCRIPTION" InstanceDescription="LOC_MOMENT_PLAYER_EARNED_DIPLOMATIC_VICTORY_POINT_INSTANCE_DESCRIPTION" InterestLevel="1" IconTexture="MomentSmall_Diplomacy" EraScore="2"/>
+        <Row MomentType="MOMENT_PROJECT_FOUNDED_EXOPLANET" Name="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET" Description="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET_DESCRIPTION" InstanceDescription="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_Project_Founded_Exoplanet.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_PROJECT_FOUNDED_EXOPLANET_FIRST_IN_WORLD" Name="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET_FIRST_IN_WORLD" Description="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_PROJECT_FOUNDED_EXOPLANET_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_Project_Founded_Exoplanet.dds" EraScore="4"/>
+        <Row MomentType="MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES" Name="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES" Description="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_DESCRIPTION" InstanceDescription="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_BuildingRailroadConnecting2Cities.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_FIRST_IN_WORLD" Name="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_FIRST_IN_WORLD" Description="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_ROUTE_CREATED_RAILROAD_CONNECTS_TWO_CITIES_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="3" BackgroundTexture="MomentXP2_BuildingRailroadConnecting2Cities.dds" EraScore="3"/>
+        <Row MomentType="MOMENT_UNIT_TOURISM_BOMB" Name="LOC_MOMENT_UNIT_TOURISM_BOMB" Description="LOC_MOMENT_UNIT_TOURISM_BOMB_DESCRIPTION" InstanceDescription="LOC_MOMENT_UNIT_TOURISM_BOMB_INSTANCE_DESCRIPTION" InterestLevel="2" BackgroundTexture="MomentXP2_TourismBomb.dds" EraScore="2"/>
+        <Row MomentType="MOMENT_UNIT_TOURISM_BOMB_FIRST_IN_WORLD" Name="LOC_MOMENT_UNIT_TOURISM_BOMB_FIRST_IN_WORLD" Description="LOC_MOMENT_UNIT_TOURISM_BOMB_FIRST_IN_WORLD_DESCRIPTION" InstanceDescription="LOC_MOMENT_UNIT_TOURISM_BOMB_FIRST_IN_WORLD_INSTANCE_DESCRIPTION" InterestLevel="2" BackgroundTexture="MomentXP2_TourismBomb.dds" EraScore="3"/>
+        <Update>
+            <Where MomentType="MOMENT_PROJECT_FOUNDED_MARS"/>
+            <Set>
+                <Name>LOC_MOMENT_PROJECT_FOUNDED_MARS_XP2</Name>
+                <Description>LOC_MOMENT_PROJECT_FOUNDED_MARS_DESCRIPTION_XP2</Description>
+                <InstanceDescription>LOC_MOMENT_PROJECT_FOUNDED_MARS_INSTANCE_DESCRIPTION_XP2</InstanceDescription>
+            </Set>
+        </Update>
+        <Update>
+            <Where MomentType="MOMENT_PROJECT_FOUNDED_MARS_FIRST_IN_WORLD"/>
+            <Set>
+                <Name>LOC_MOMENT_PROJECT_FOUNDED_MARS_FIRST_IN_WORLD_XP2</Name>
+                <Description>LOC_MOMENT_PROJECT_FOUNDED_MARS_FIRST_IN_WORLD_DESCRIPTION_XP2</Description>
+                <InstanceDescription>LOC_MOMENT_PROJECT_FOUNDED_MARS_FIRST_IN_WORLD_INSTANCE_DESCRIPTION_XP2</InstanceDescription>
+            </Set>
+        </Update>
+        <Update>
+            <Where MomentType="MOMENT_IMPROVEMENT_CONSTRUCTED_FIRST_UNIQUE"/>
+            <Set>
+                <Description>LOC_MOMENT_IMPROVEMENT_CONSTRUCTED_FIRST_UNIQUE_DESCRIPTION_XP2</Description>
+            </Set>
+        </Update>
+    </Moments>
+    <CommemorationTypes>
+        <Row CommemorationType="COMMEMORATION_AUTOMATON" CategoryDescription="LOC_MOMENT_CATEGORY_AUTOMATON" GoldenAgeBonusDescription="LOC_MOMENT_CATEGORY_AUTOMATON_BONUS_GOLDEN_AGE" NormalAgeBonusDescription="LOC_MOMENT_CATEGORY_AUTOMATON_BONUS_NORMAL_AGE" DarkAgeBonusDescription="LOC_MOMENT_CATEGORY_AUTOMATON_BONUS_DARK_AGE" MinimumGameEra="ERA_INFORMATION"/>
+    </CommemorationTypes>
+    <MomentIllustrations>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_CIVIC_ERA" MomentDataType="MOMENT_DATA_PLAYER_ERA" GameDataType="ERA_FUTURE" Texture="MomentXP2_CompleteCivic_Future.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_TECHNOLOGY_ERA" MomentDataType="MOMENT_DATA_PLAYER_ERA" GameDataType="ERA_FUTURE" Texture="MomentXP2_CompleteFirstFutureEraTech.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_AIR_UNIT_ERA" MomentDataType="MOMENT_DATA_PLAYER_ERA" GameDataType="ERA_FUTURE" Texture="Moment_FirstAirUnitLateGame.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_SEA_UNIT_ERA" MomentDataType="MOMENT_DATA_PLAYER_ERA" GameDataType="ERA_FUTURE" Texture="Moment_FirstSeaUnitMid.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_CANADA_MOUNTIE" Texture="MomentXP2_TrainingMountie.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_HUNGARY_BLACK_ARMY" Texture="MomentXP2_Training_BlackArmy.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_HUNGARY_HUSZAR" Texture="MomentXP2_TrainingHuzar.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_INCA_WARAKAQ" Texture="MomentXP2_TrainingWarakaq.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_MALI_MANDEKALU_CAVALRY" Texture="MomentXP2_TrainingMadekalu.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_MAORI_TOA" Texture="MomentXP2_Training_Toa.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_OTTOMAN_BARBARY_CORSAIR" Texture="MomentXP2_TrainingBarbaryCorsair.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_PHOENICIA_BIREME" Texture="MomentXP2_TrainingBireme.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_SULEIMAN_JANISSARY" Texture="MomentXP2_TrainingJanissary.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_UNIT" MomentDataType="MOMENT_DATA_UNIT" GameDataType="UNIT_SWEDEN_CAROLEAN" Texture="MomentXP2_TrainingCarolean.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNOR" MomentDataType="MOMENT_DATA_GOVERNOR" GameDataType="GOVERNOR_IBRAHIM" Texture="MomentXP2_PromoteGovernor_GrandVizier.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNMENT" MomentDataType="MOMENT_DATA_GOVERNMENT" GameDataType="GOVERNMENT_CORPORATE_LIBERTARIANISM" Texture="MomentXP2_Government_CorpLibertarianism.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNMENT" MomentDataType="MOMENT_DATA_GOVERNMENT" GameDataType="GOVERNMENT_DIGITAL_DEMOCRACY" Texture="MomentXP2_Gorvernment_DigitalDemocracy.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_GOVERNMENT" MomentDataType="MOMENT_DATA_GOVERNMENT" GameDataType="GOVERNMENT_SYNTHETIC_TECHNOCRACY" Texture="MomentXP2_Government_SyntheticTechnocracy.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_GAME_ERA" MomentDataType="MOMENT_DATA_PLAYER_ERA" GameDataType="ERA_FUTURE" Texture="MomentXP2_EnterFutureEra.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_BUILDING" MomentDataType="MOMENT_DATA_BUILDING" GameDataType="BUILDING_GRAND_BAZAAR" Texture="MomentXP2_BuildingTheGrandBazaar.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_BUILDING" MomentDataType="MOMENT_DATA_BUILDING" GameDataType="BUILDING_MARAE" Texture="MomentXP2_BuildingTheMarae.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_BUILDING" MomentDataType="MOMENT_DATA_BUILDING" GameDataType="BUILDING_QUEENS_BIBLIOTHEQUE" Texture="MomentXP2_BuildingBiblioteque.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_BUILDING" MomentDataType="MOMENT_DATA_BUILDING" GameDataType="BUILDING_THERMAL_BATH" Texture="MomentXP2_BuildingTheThermalBath.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_DISTRICT" MomentDataType="MOMENT_DATA_DISTRICT" GameDataType="DISTRICT_COTHON" Texture="MomentXP2_BuildingTheCothon.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_DISTRICT" MomentDataType="MOMENT_DATA_DISTRICT" GameDataType="DISTRICT_SUGUBA" Texture="MomentXP2_BuildingSuguba.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_IMPROVEMENT" MomentDataType="MOMENT_DATA_IMPROVEMENT" GameDataType="IMPROVEMENT_OPEN_AIR_MUSEUM" Texture="MomentXP2_BuildingTheOpenAirMuseum.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_IMPROVEMENT" MomentDataType="MOMENT_DATA_IMPROVEMENT" GameDataType="IMPROVEMENT_ICE_HOCKEY_RINK" Texture="MomentXP2_BuildingIceHockeyRink.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_IMPROVEMENT" MomentDataType="MOMENT_DATA_IMPROVEMENT" GameDataType="IMPROVEMENT_TERRACE_FARM" Texture="MomentXP2_BuildingTheTerraceFarm.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_IMPROVEMENT" MomentDataType="MOMENT_DATA_IMPROVEMENT" GameDataType="IMPROVEMENT_MAORI_PA" Texture="MomentXP2_BuildingThePa.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_UNIQUE_IMPROVEMENT" MomentDataType="MOMENT_DATA_IMPROVEMENT" GameDataType="IMPROVEMENT_MOUNTAIN_ROAD" Texture="MomentXP2_BuildingTheQhapaqNan.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_CHOCOLATEHILLS" Texture="MomentXP2_FindingChocolateHills.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_DEVILSTOWER" Texture="MomentXP2_FindingDevilsTower.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_GOBUSTAN" Texture="MomentXP2_FindingGobustan.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_IKKIL" Texture="MomentXP2_FindingIkKil.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_PAMUKKALE" Texture="MomentXP2_FindingPamukkale.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_VESUVIUS" Texture="MomentXP2_FindingVesuvius.dds"/>
+        <Row MomentIllustrationType="MOMENT_ILLUSTRATION_NATURAL_WONDER" MomentDataType="MOMENT_DATA_FEATURE" GameDataType="FEATURE_WHITEDESERT" Texture="MomentXP2_FindingWhiteDesert.dds"/>
+    </MomentIllustrations>
+    <CommemorationModifiers>
+        <!-- Golden Age: Powerful Bonuses -->
+        <Row CommemorationType="COMMEMORATION_AUTOMATON" ModifierId="COMMEMORATION_AUTOMATON_GA_FREE_GDR"/>
+        <Row CommemorationType="COMMEMORATION_AUTOMATON" ModifierId="COMMEMORATION_AUTOMATON_GA_FREE_URANIUM"/>
+        <Row CommemorationType="COMMEMORATION_AUTOMATON" ModifierId="COMMEMORATION_AUTOMATON_GA_URANIUM_MINES"/>
+        <!-- Normal or Dark Age: Era Score Quests -->
+        <Row CommemorationType="COMMEMORATION_AUTOMATON" ModifierId="COMMEMORATION_AUTOMATON_QUEST"/>
+    </CommemorationModifiers>
+    <Modifiers>
+        <!-- Golden Age: Powerful Bonuses -->
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_URANIUM_MINES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_EXTRA_ACCUMULATION_SPECIFIC_RESOURCE</ModifierType>
+            <OwnerRequirementSetId>PLAYER_HAS_GOLDEN_AGE</OwnerRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_GDR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_UNIT_IN_CAPITAL</ModifierType>
+            <RunOnce>true</RunOnce>
+            <OwnerRequirementSetId>PLAYER_HAS_GOLDEN_AGE</OwnerRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_URANIUM</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_FREE_RESOURCE_EXTRACTION</ModifierType>
+            <OwnerRequirementSetId>PLAYER_HAS_GOLDEN_AGE</OwnerRequirementSetId>
+        </Row>
+        <!-- Normal or Dark Age: Era Score Quests -->
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_QUEST</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_NON_BARBARIAN_UNIT_KILLED_BY_GDR</ModifierType>
+            <SubjectRequirementSetId>PLAYER_ELIGIBLE_FOR_COMMEMORATION_QUEST</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <!-- Golden Age: Powerful Bonuses -->
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_URANIUM_MINES</ModifierId>
+            <Name>ResourceType</Name>
+            <Value>RESOURCE_URANIUM</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_URANIUM_MINES</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_GDR</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_GIANT_DEATH_ROBOT</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_GDR</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_GDR</ModifierId>
+            <Name>AllowUniqueOverride</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_URANIUM</ModifierId>
+            <Name>ResourceType</Name>
+            <Value>RESOURCE_URANIUM</Value>
+        </Row>
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_GA_FREE_URANIUM</ModifierId>
+            <Name>Amount</Name>
+            <Value>3</Value>
+        </Row>
+        <!-- Normal or Dark Age: Era Score Quests -->
+        <Row>
+            <ModifierId>COMMEMORATION_AUTOMATON_QUEST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+</GameInfo>

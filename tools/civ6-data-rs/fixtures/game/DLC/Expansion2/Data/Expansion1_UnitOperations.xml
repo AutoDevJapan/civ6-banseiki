@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="UNITOPERATION_SPY_FABRICATE_SCANDAL" Kind="KIND_UNITOPERATION"/>
+        <Row Type="UNITOPERATION_SPY_FOMENT_UNREST" Kind="KIND_UNITOPERATION"/>
+        <Row Type="UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR" Kind="KIND_UNITOPERATION"/>
+    </Types>
+    <UnitOperations>
+        <Row OperationType="UNITOPERATION_SPY_FABRICATE_SCANDAL" VisibleInUI="true" HoldCycling="true" CategoryInUI="OFFENSIVESPY" Icon="ICON_UNITOPERATION_SPY_FABRICATE_SCANDAL" Description="LOC_UNITOPERATION_SPY_FABRICATE_SCANDAL_DESCRIPTION" Turns="16" BaseProbability="13" Offensive="true" LevelProbChange="1" InterfaceMode="INTERFACEMODE_SPY_CHOOSE_MISSION"/>
+        <Row OperationType="UNITOPERATION_SPY_FOMENT_UNREST" VisibleInUI="true" HoldCycling="true" CategoryInUI="OFFENSIVESPY" Icon="ICON_UNITOPERATION_SPY_FOMENT_UNREST" Description="LOC_UNITOPERATION_SPY_FOMENT_UNREST_DESCRIPTION" Turns="8" BaseProbability="13" Offensive="true" LevelProbChange="1" EnemyProbChange="3" EnemyLevelProbChange="1" InterfaceMode="INTERFACEMODE_SPY_CHOOSE_MISSION"/>
+        <Row OperationType="UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR" VisibleInUI="true" HoldCycling="true" CategoryInUI="OFFENSIVESPY" Icon="ICON_UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR" Description="LOC_UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR_DESCRIPTION" Turns="8" BaseProbability="14" Offensive="true" LevelProbChange="1" EnemyProbChange="3" EnemyLevelProbChange="1" InterfaceMode="INTERFACEMODE_SPY_CHOOSE_MISSION"/>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_DISRUPT_ROCKETRY"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_GAIN_SOURCES"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_GREAT_WORK_HEIST"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_RECRUIT_PARTISANS"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_SABOTAGE_PRODUCTION"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_SIPHON_FUNDS"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+        <Update>
+            <Where OperationType="UNITOPERATION_SPY_STEAL_TECH_BOOST"/>
+            <Set>
+                <Offensive>true</Offensive>
+            </Set>
+        </Update>
+    </UnitOperations>
+</GameInfo>

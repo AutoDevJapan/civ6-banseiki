@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Edward Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="GOSSIP_SPY_FOMENT_UNREST" Kind="KIND_GOSSIP"/>
+        <Row Type="GOSSIP_SPY_NEUTRALIZE_GOVERNOR" Kind="KIND_GOSSIP"/>
+    </Types>
+    <Gossips>
+        <Row GossipType="GOSSIP_SPY_FOMENT_UNREST" VisibilityLevel="3" Message="LOC_GOSSIP_FOMENT_UNREST" GroupType="ESPIONAGE"/>
+        <Row GossipType="GOSSIP_SPY_NEUTRALIZE_GOVERNOR" VisibilityLevel="3" Message="LOC_GOSSIP_NEUTRALIZE_GOVERNOR" GroupType="ESPIONAGE"/>
+    </Gossips>
+</GameInfo>

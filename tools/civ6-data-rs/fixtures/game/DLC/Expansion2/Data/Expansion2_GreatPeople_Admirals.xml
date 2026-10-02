@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <GreatPersonIndividuals>
+        <Update>
+            <Where GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FRANCIS_DRAKE"/>
+            <Set>
+                <ActionRequiresNoMilitaryUnit>true</ActionRequiresNoMilitaryUnit>
+            </Set>
+        </Update>
+        <Update>
+            <Where GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE"/>
+            <Set>
+                <ActionEffectTileHighlighting>true</ActionEffectTileHighlighting>
+                <ActionRequiresOwnedTile>true</ActionRequiresOwnedTile>
+                <ActionRequiresCompletedDistrictType>DISTRICT_HARBOR</ActionRequiresCompletedDistrictType>
+            </Set>
+        </Update>
+        <Update>
+            <Where GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_HORATIO_NELSON"/>
+            <Set>
+                <ActionRequiresCompletedDistrictType>DISTRICT_HARBOR</ActionRequiresCompletedDistrictType>
+                <ActionEffectTileHighlighting>true</ActionEffectTileHighlighting>
+                <ActionRequiresOwnedTile>true</ActionRequiresOwnedTile>
+            </Set>
+        </Update>
+        <Update>
+            <Where GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHESTER_NIMITZ"/>
+            <Set>
+                <ActionRequiresNoMilitaryUnit>true</ActionRequiresNoMilitaryUnit>
+            </Set>
+        </Update>
+    </GreatPersonIndividuals>
+    <GreatPersonIndividualActionModifiers>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_YI_SUN_SIN" ModifierId="GREATPERSON_GRANT_1_COAL_PER_TURN" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FRANZ_VON_HIPPER" ModifierId="GREATPERSON_GRANT_1_COAL_PER_TURN" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE" ModifierId="GREATPERSON_ZHENG_HE_GOLD_TO_INCOMING_FOREIGN_ROUTES" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE" ModifierId="GREATPERSON_ZHENG_HE_GOLD_FROM_INCOMING_FOREIGN_ROUTES" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE" ModifierId="GREATPERSON_ZHENG_HE_FREE_TRADER_UNIT" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE" ModifierId="GREATPERSON_ZHENG_HE_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_RAJENDRA_CHOLA" ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_LEIF_ERIKSON" ModifierId="GREATPERSON_LEIF_ERIKSON_SIGHT_BONUS" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHING_SHIH" ModifierId="GREATPERSON_CHING_SHIH_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHESTER_NIMITZ" ModifierId="GREATPERSON_CHESTER_NIMITZ_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHESTER_NIMITZ" ModifierId="GREATPERSON_CHESTER_NIMITZ_UNIT_PROMOTION" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHESTER_NIMITZ" ModifierId="GREATPERSON_GRANT_1_OIL_PER_TURN" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FRANCIS_DRAKE" ModifierId="GREATPERSON_FRANCIS_DRAKE_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_THEMISTOCLES" ModifierId="GREATPERSON_THEMISTOCLES_NAVAL_RANGED" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_HORATIO_NELSON" ModifierId="GREATPERSON_HORATIO_NELSON_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_HORATIO_NELSON" ModifierId="GREATPERSON_HORATIO_NELSON_LIGHTHOUSE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_HORATIO_NELSON" ModifierId="GREATPERSON_HORATIO_NELSON_SHIPYARD" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_GRACE_HOPPER" ModifierId="GREATPERSON_GRACE_HOPPER_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+    </GreatPersonIndividualActionModifiers>
+    <Modifiers>
+        <!-- Unique Action Modifiers, different for each individual -->
+        <Row>
+            <ModifierId>GREATPERSON_GRANT_1_COAL_PER_TURN</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_FREE_RESOURCE_EXTRACTION</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_RAJENDRA_CHOLA_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNITS_GRANT_ABILITY</ModifierType>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_LEIF_ERIKSON_SIGHT_BONUS</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNITS_GRANT_ABILITY</ModifierType>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_TRADE_ROUTE_CAPACITY</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_TO_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_TRADE_ROUTE_YIELD_TO_OTHERS</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_FROM_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_TRADE_ROUTE_YIELD_FROM_OTHERS</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_FREE_TRADER_UNIT</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_GRANT_UNIT_IN_CITY</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHING_SHIH_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_YIELD</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_UNIT_PROMOTION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNIT_GRANT_UNIT_WITH_EXPERIENCE</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION</ModifierType>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FRANCIS_DRAKE_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNIT_GRANT_UNIT_WITH_EXPERIENCE</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_THEMISTOCLES_NAVAL_RANGED</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION</ModifierType>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_LIGHTHOUSE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_GRANT_BUILDING_IN_CITY_IGNORE</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_SHIPYARD</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_GRANT_BUILDING_IN_CITY_IGNORE</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNITS_GRANT_ABILITY</ModifierType>
+            <SubjectRequirementSetId>GREATPERSON_HORATIO_NELSON_SEA_REQUIREMENTS</SubjectRequirementSetId>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_GRACE_HOPPER_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_RANDOM_TECHNOLOGY</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>GREATPERSON_GRANT_1_COAL_PER_TURN</ModifierId>
+            <Name>ResourceType</Name>
+            <Value>RESOURCE_COAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_GRANT_1_COAL_PER_TURN</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_RAJENDRA_CHOLA_ACTIVE</ModifierId>
+            <Name>AbilityType</Name>
+            <Value>ABILITY_CHOLA_NAVAL_COMBAT</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_LEIF_ERIKSON_SIGHT_BONUS</ModifierId>
+            <Name>AbilityType</Name>
+            <Value>ABILITY_ERIKSON_NAVAL_SIGHT</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_TO_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_TO_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_FROM_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_GOLD_FROM_INCOMING_FOREIGN_ROUTES</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_FREE_TRADER_UNIT</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_TRADER</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_FREE_TRADER_UNIT</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_ZHENG_HE_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHING_SHIH_ACTIVE</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHING_SHIH_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>500</Value>
+            <Type>ScaleByGameSpeed</Type>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_UNIT_PROMOTION</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_SUBMARINE</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_UNIT_PROMOTION</ModifierId>
+            <Name>Experience</Name>
+            <Value>-1</Value>
+        </Row>
+    <Row>
+      <ModifierId>GREATPERSON_CHESTER_NIMITZ_UNIT_PROMOTION</ModifierId>
+      <Name>UniqueOverride</Name>
+      <Value>true</Value>
+    </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_CHESTER_NIMITZ_ACTIVE</ModifierId>
+            <Name>PromotionClass</Name>
+            <Value>PROMOTION_CLASS_NAVAL_RAIDER</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FRANCIS_DRAKE_ACTIVE</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_PRIVATEER</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FRANCIS_DRAKE_ACTIVE</ModifierId>
+            <Name>Experience</Name>
+            <Value>-1</Value>
+        </Row>
+    <Row>
+      <ModifierId>GREATPERSON_FRANCIS_DRAKE_ACTIVE</ModifierId>
+      <Name>UniqueOverride</Name>
+      <Value>true</Value>
+    </Row>
+        <Row>
+            <ModifierId>GREATPERSON_THEMISTOCLES_NAVAL_RANGED</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_THEMISTOCLES_NAVAL_RANGED</ModifierId>
+            <Name>PromotionClass</Name>
+            <Value>PROMOTION_CLASS_NAVAL_RANGED</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_LIGHTHOUSE</ModifierId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_LIGHTHOUSE</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_SHIPYARD</ModifierId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_SHIPYARD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_HORATIO_NELSON_ACTIVE</ModifierId>
+            <Name>AbilityType</Name>
+            <Value>ABILITY_HORATIO_NELSON_FLANKING_BONUS</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_GRACE_HOPPER_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <Update>
+            <Set Text="LOC_GREATPERSON_YI_SUN_SIN_EXPANSION2_ACTIVE"/>
+            <Where ModifierId="GREATPERSON_YI_SUN_SIN_ACTIVE"/>
+        </Update>
+        <Update>
+            <Set Text="LOC_GREATPERSON_FRANZ_VON_HIPPER_EXPANSION2_ACTIVE"/>
+            <Where ModifierId="GREATPERSON_FRANZ_VON_HIPPER_ACTIVE"/>
+        </Update>
+        <Update>
+            <Set Text="LOC_GREATPERSON_LEIF_ERIKSON_EXPANSION2_ACTIVE"/>
+            <Where ModifierId="GREATPERSON_LEIF_ERIKSON_ACTIVE"/>
+        </Update>
+        <Update>
+            <Set Text="LOC_GREATPERSON_THEMISTOCLES_EXPANSION2_ACTIVE"/>
+            <Where ModifierId="GREATPERSON_THEMISTOCLES_ACTIVE"/>
+        </Update>
+        <Row ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_RAJENDRA_CHOLA_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_ZHENG_HE_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_ZHENG_HE_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_CHING_SHIH_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_CHING_SHIH_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_CHESTER_NIMITZ_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_CHESTER_NIMITZ_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_FRANCIS_DRAKE_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_FRANCIS_DRAKE_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_HORATIO_NELSON_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_HORATIO_NELSON_EXPANSION2_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_GRACE_HOPPER_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_GRACE_HOPPER_EXPANSION2_ACTIVE"/>
+    </ModifierStrings>
+</GameInfo>

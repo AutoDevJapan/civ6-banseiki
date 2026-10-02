@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Bradley Olson (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <!-- World Congress Turn phases-->
+        <Row Type="TURNSEG_WORLDCONGRESS_1"     Kind="KIND_TURNSEGMENT"/>
+        <Row Type="TURNSEG_WORLDCONGRESS_2"     Kind="KIND_TURNSEGMENT"/>
+        <Row Type="TURNSEG_WORLDCONGRESS_RESOLUTION"     Kind="KIND_TURNSEGMENT"/>
+    </Types>
+    <TurnSegments>
+        <!-- Turn Segment Attributes - See TurnPhases.xml. -->
+        <Row TurnSegmentType="TURNSEG_WORLDCONGRESS_1"    Name="LOC_TURNSEG_WORLDCONGRESS_1"								AllowStrategicCommands="false"  AllowTacticalCommands="false"	AllowTurnUnready="false" TimeLimit_Base ="60"  TimeLimit_PerCity="0"   TimeLimit_PerUnit="0"/>
+        <Row TurnSegmentType="TURNSEG_WORLDCONGRESS_2"    Name="LOC_TURNSEG_WORLDCONGRESS_2"								AllowStrategicCommands="false"  AllowTacticalCommands="false"	AllowTurnUnready="false" TimeLimit_Base ="60"  TimeLimit_PerCity="0"   TimeLimit_PerUnit="0"/>
+        <Row TurnSegmentType="TURNSEG_WORLDCONGRESS_RESOLUTION"    Name="LOC_TURNSEG_WORLDCONGRESS_RESOLUTION"				AllowStrategicCommands="false"  AllowTacticalCommands="false"	AllowTurnUnready="false" TimeLimit_Base ="60"  TimeLimit_PerCity="0"   TimeLimit_PerUnit="0"/>
+    </TurnSegments>
+    <TurnPhases>
+        <Row TurnPhaseType="TURNPHASE_SINGLEPLAYER" PhaseOrder="1"	TurnMode="TURNMODE_SEQUENTIAL"		ActiveSegmentType="TURNSEG_WORLDCONGRESS_1"/>
+        <Row TurnPhaseType="TURNPHASE_SINGLEPLAYER" PhaseOrder="2"	TurnMode="TURNMODE_SEQUENTIAL"		ActiveSegmentType="TURNSEG_WORLDCONGRESS_2"/>
+        <Row TurnPhaseType="TURNPHASE_SINGLEPLAYER" PhaseOrder="3"	TurnMode="TURNMODE_SEQUENTIAL"		ActiveSegmentType="TURNSEG_WORLDCONGRESS_RESOLUTION"/>
+
+        <Row TurnPhaseType="TURNPHASE_SIMULTANEOUS" PhaseOrder="1"	TurnMode="TURNMODE_SIMULTANEOUS"	ActiveSegmentType="TURNSEG_WORLDCONGRESS_1"/>
+        <Row TurnPhaseType="TURNPHASE_SIMULTANEOUS" PhaseOrder="2"	TurnMode="TURNMODE_SIMULTANEOUS"	ActiveSegmentType="TURNSEG_WORLDCONGRESS_2"/>
+        <Row TurnPhaseType="TURNPHASE_SIMULTANEOUS" PhaseOrder="3"	TurnMode="TURNMODE_SIMULTANEOUS"	ActiveSegmentType="TURNSEG_WORLDCONGRESS_RESOLUTION"/>
+
+        <Row TurnPhaseType="TURNPHASE_DYNAMIC"		PhaseOrder="1"	TurnMode="TURNMODE_DYNAMIC"			ActiveSegmentType="TURNSEG_WORLDCONGRESS_1"/>
+        <Row TurnPhaseType="TURNPHASE_DYNAMIC" 		PhaseOrder="2"	TurnMode="TURNMODE_DYNAMIC"			ActiveSegmentType="TURNSEG_WORLDCONGRESS_2"/>
+        <Row TurnPhaseType="TURNPHASE_DYNAMIC"		PhaseOrder="3"	TurnMode="TURNMODE_DYNAMIC"			ActiveSegmentType="TURNSEG_WORLDCONGRESS_RESOLUTION"/>
+    </TurnPhases>
+</GameInfo>

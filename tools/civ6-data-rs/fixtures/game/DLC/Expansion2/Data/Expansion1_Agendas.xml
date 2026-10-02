@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="TRAIT_AGENDA_CURMUDGEON" Kind="KIND_TRAIT"/>
+    <Row Type="TRAIT_AGENDA_FLIRTATIOUS" Kind="KIND_TRAIT"/>
+    <Row Type="TRAIT_AGENDA_GOSSIP" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_SYCOPHANT" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_SYMPATHIZER" Kind="KIND_TRAIT"/>
+    </Types>
+    <Traits>
+        <Row TraitType="TRAIT_AGENDA_CURMUDGEON" />
+    <Row TraitType="TRAIT_AGENDA_FLIRTATIOUS" />
+    <Row TraitType="TRAIT_AGENDA_GOSSIP" />
+        <Row TraitType="TRAIT_AGENDA_SYCOPHANT" />
+        <Row TraitType="TRAIT_AGENDA_SYMPATHIZER" />
+    </Traits>
+    <!-- Note: The traditional Historical agendas are listed in leaders.xml. These are intended as random agendas tele-->
+    <Agendas>
+    <Row AgendaType="AGENDA_CURMUDGEON" Name="LOC_AGENDA_UNKNOWN_NAME" Description="LOC_AGENDA_UNKNOWN_DESCRIPTION"/>
+    <Row AgendaType="AGENDA_FLIRTATIOUS" Name="LOC_AGENDA_UNKNOWN_NAME" Description="LOC_AGENDA_UNKNOWN_DESCRIPTION"/>
+    <Row AgendaType="AGENDA_GOSSIP" Name="LOC_AGENDA_GOSSIP_NAME" Description="LOC_AGENDA_GOSSIP_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_SYCOPHANT" Name="LOC_AGENDA_SYCOPHANT_NAME" Description="LOC_AGENDA_SYCOPHANT_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_SYMPATHIZER" Name="LOC_AGENDA_SYMPATHIZER_NAME" Description="LOC_AGENDA_SYMPATHIZER_DESCRIPTION"/>
+    </Agendas>
+    <RandomAgendas>
+        <Row AgendaType="AGENDA_GOSSIP"/>
+        <Row AgendaType="AGENDA_SYCOPHANT"/>
+        <Row AgendaType="AGENDA_SYMPATHIZER"/>
+    </RandomAgendas>
+    <AgendaPreferredLeaders>
+        <Row AgendaType="AGENDA_GOSSIP" LeaderType="LEADER_CATHERINE_DE_MEDICI" PercentageChance="15"/>
+        <Row AgendaType="AGENDA_SYCOPHANT" LeaderType="LEADER_GORGO" PercentageChance="10"/>
+        <Row AgendaType="AGENDA_SYCOPHANT" LeaderType="LEADER_PHILIP_II" PercentageChance="10"/>
+        <Row AgendaType="AGENDA_SYCOPHANT" LeaderType="LEADER_PETER_GREAT" PercentageChance="10"/>
+    </AgendaPreferredLeaders>
+    <AgendaTraits>
+        <Row AgendaType="AGENDA_GOSSIP" TraitType="TRAIT_AGENDA_GOSSIP"/>
+        <Row AgendaType="AGENDA_SYCOPHANT" TraitType="TRAIT_AGENDA_SYCOPHANT"/>
+        <Row AgendaType="AGENDA_SYMPATHIZER" TraitType="TRAIT_AGENDA_SYMPATHIZER"/>
+    </AgendaTraits>
+    <AiListTypes>
+        <!-- Random Agendas-->
+        <Row ListType="GossipFavoredDiplomacy"/>
+    </AiListTypes>
+    <AiLists>
+        <!-- Random Agendas-->
+        <Row ListType="GossipFavoredDiplomacy" AgendaType="TRAIT_AGENDA_GOSSIP" System="DiplomaticActions"/>
+    </AiLists>
+    <AiFavoredItems>
+        <!-- Random Agendas-->
+        <Row ListType="GossipFavoredDiplomacy" Item="DIPLOACTION_RESIDENT_EMBASSY" Favored="true"/>
+        <Row ListType="GossipFavoredDiplomacy" Item="DIPLOACTION_OPEN_BORDERS" Favored="true"/>
+        <Row ListType="GossipFavoredDiplomacy" Item="DIPLOACTION_DIPLOMATIC_DELEGATION" Favored="true"/>
+        <Row ListType="GossipFavoredDiplomacy" Item="DIPLOACTION_KEEP_PROMISE_DONT_SPY" Favored="false"/>
+    </AiFavoredItems>
+    <TraitModifiers>
+        <Row TraitType="TRAIT_AGENDA_GOSSIP" ModifierId="AGENDA_GOSSIP_POSITIVE"/>
+        <Row TraitType="TRAIT_AGENDA_GOSSIP" ModifierId="AGENDA_GOSSIP_NEGATIVE"/>
+        <Row TraitType="TRAIT_AGENDA_SYCOPHANT" ModifierId="AGENDA_SYCOPHANT_GOLDEN_AGE"/>
+        <Row TraitType="TRAIT_AGENDA_SYCOPHANT" ModifierId="AGENDA_SYCOPHANT_DARK_AGE"/>
+        <Row TraitType="TRAIT_AGENDA_SYMPATHIZER" ModifierId="AGENDA_SYMPATHIZER_GOLDEN_AGE"/>
+        <Row TraitType="TRAIT_AGENDA_SYMPATHIZER" ModifierId="AGENDA_SYMPATHIZER_DARK_AGE"/>
+    </TraitModifiers>
+    <Modifiers>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_POSITIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_IS_SHARING_INFO</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_NEGATIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_IS_NOT_SHARING_INFO</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_GOLDEN_AGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_GOLDEN_AGE_HAVE_MET</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_DARK_AGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_DARK_AGE_HAVE_MET</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_GOLDEN_AGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_GOLDEN_AGE_HAVE_MET</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_DARK_AGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_DARK_AGE_HAVE_MET</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_POSITIVE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_POSITIVE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_GOSSIP_POSITIVE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_POSITIVE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_POSITIVE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_GOSSIP_POSITIVE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_NEGATIVE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_NEGATIVE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_GOSSIP_NEGATIVE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_NEGATIVE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GOSSIP_NEGATIVE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_GOSSIP_NEGATIVE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_GOLDEN_AGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_GOLDEN_AGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_SYCOPHANT_GOLDEN_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_GOLDEN_AGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_GOLDEN_AGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_SYCOPHANT_GOLDEN_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_DARK_AGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_DARK_AGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_SYCOPHANT_DARK_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_DARK_AGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYCOPHANT_DARK_AGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_SYCOPHANT_DARK_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_DARK_AGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_DARK_AGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_SYMPATHIZER_DARK_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_DARK_AGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_SYMPATHIZER_DARK_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_DARK_AGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_GOLDEN_AGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_GOLDEN_AGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_SYMPATHIZER_GOLDEN_AGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_GOLDEN_AGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SYMPATHIZER_GOLDEN_AGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_SYMPATHIZER_GOLDEN_AGE</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <Row ModifierId="AGENDA_GOSSIP_POSITIVE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_GOSSIP_NEGATIVE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SYCOPHANT_GOLDEN_AGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SYCOPHANT_DARK_AGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SYMPATHIZER_GOLDEN_AGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SYMPATHIZER_DARK_AGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+    </ModifierStrings>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_NOT_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_WALLS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_WALLS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_MANY_ALLIANCES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_FEW_ALLIANCES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SAME_SEX</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_OPPOSITE_SEX</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SHARING_INFO</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_NOT_SHARING_INFO</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_AT_WAR_WITH_NEIGHBORS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_NOT_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_NOT_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_NOT_AT_WAR_WITH_NEIGHBORS</RequirementSetId>
+            <RequirementId>REQUIRES_NOT_AT_WAR_WITH_NEIGHBORS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_WALLS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_WALLS</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_WALLS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_MANY_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_MANY_ALLIANCES</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_MANY_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_MANY_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_FEW_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_FEW_ALLIANCES</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_FEW_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_FEW_ALLIANCES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_10_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SAME_SEX</RequirementSetId>
+            <RequirementId>REQUIRES_SAME_SEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SAME_SEX</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_OPPOSITE_SEX</RequirementSetId>
+            <RequirementId>REQUIRES_OPPOSITE_SEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_OPPOSITE_SEX</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SHARING_INFO</RequirementSetId>
+            <RequirementId>REQUIRES_SHARING_INFO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_SHARING_INFO</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_NOT_SHARING_INFO</RequirementSetId>
+            <RequirementId>REQUIRES_NOT_SHARING_INFO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_IS_NOT_SHARING_INFO</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_AT_WAR_WITH_NEIGHBORS</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_AT_WAR_WITH_NEIGHBOR</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_NOT_AT_WAR_WITH_NEIGHBORS</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_AT_WAR_WITH_NEIGHBOR</RequirementType>
+            <Inverse>true</Inverse>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_WALLS</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_AVERAGE_WALL_LEVEL_THRESHOLD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_WALLS</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_AVERAGE_WALL_LEVEL_THRESHOLD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_MANY_ALLIANCES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_MANY_ALLIANCES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_FEW_ALLIANCES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_MANY_ALLIANCES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_SAME_SEX</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_IS_SAME_SEX</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_OPPOSITE_SEX</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_IS_SAME_SEX</RequirementType>
+            <Inverse>true</Inverse>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_SHARING_INFO</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_IS_SHARING_INFO</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_NOT_SHARING_INFO</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_IS_SHARING_INFO</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_WALLS</RequirementId>
+            <Name>AverageWallLevelThreshold</Name>
+            <Value>1.0</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_WALLS</RequirementId>
+            <Name>AboveThreshold</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_WALLS</RequirementId>
+            <Name>AverageWallLevelThreshold</Name>
+            <Value>0.5</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_WALLS</RequirementId>
+            <Name>AboveThreshold</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_MANY_ALLIANCES</RequirementId>
+            <Name>MinOwnerAlliances</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_FEW_ALLIANCES</RequirementId>
+            <Name>MinOwnerAlliances</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_FEW_ALLIANCES</RequirementId>
+            <Name>ChecKForFewer</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_SHARING_INFO</RequirementId>
+            <Name>SharingInfoWell</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_NOT_SHARING_INFO</RequirementId>
+            <Name>SharingInfoWell</Name>
+            <Value>false</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>

@@ -1,0 +1,20 @@
+<GameInfo>
+    <Modifiers>
+        <Row>
+            <ModifierId>PAPAL_PRIMACY_PRESSURE_ON_ADOPTION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_RELIGION_ENABLE_AWARDS_ENVOY_RELIGIOUS_PRESSURE</ModifierType>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>PAPAL_PRIMACY_PRESSURE_ON_ADOPTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>200</Value>
+        </Row>
+    </ModifierArguments>
+    <BeliefModifiers>
+        <Row BeliefType="BELIEF_PAPAL_PRIMACY">
+            <ModifierId>PAPAL_PRIMACY_PRESSURE_ON_ADOPTION</ModifierId>
+        </Row>
+    </BeliefModifiers>
+</GameInfo>

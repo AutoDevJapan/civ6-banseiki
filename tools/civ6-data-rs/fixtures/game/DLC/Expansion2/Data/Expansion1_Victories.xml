@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <Types>
+    <Row Type="STRATEGY_DARKAGE" Kind="KIND_VICTORY_STRATEGY" />
+  </Types>
+  <Strategies>
+    <!-- The dark age strategy is strictly designed to try not to get two in a row -->
+    <Row StrategyType="STRATEGY_DARKAGE" NumConditionsNeeded="1"/>
+  </Strategies>
+  <StrategyConditions>
+    <Row StrategyType="STRATEGY_DARKAGE" ConditionFunction="Is Not Major" Disqualifier="true"/>
+    <Row StrategyType="STRATEGY_DARKAGE" ConditionFunction="Is In Dark Age" ThresholdValue="1"/>
+
+    <!-- Additional conditions or changes to base game strategies -->
+    <!-- Note: Forbidden is a new keyword (but integrated into base game) If the condition is met, the AI cannot adopt the strategy. -->
+    <!--   However, unlike Disqualifier, Forbidden is temporary. When the condition is no longer met, the AI can readopt the strategy -->
+    <Row StrategyType="STRATEGY_RAPID_EXPANSION" ConditionFunction="Is In Dark Age" Forbidden="true"/>
+  </StrategyConditions>
+  <Strategy_Priorities>
+    <Row StrategyType="STRATEGY_DARKAGE" ListType="AvoidDarkAges"/>
+    <Row StrategyType="STRATEGY_CLASSICAL_CHANGES" ListType="ClassicalSensitivity"/>
+    <Row StrategyType="STRATEGY_MEDIEVAL_CHANGES" ListType="MedievalSensitivity"/>
+    <Row StrategyType="STRATEGY_MODERN_CHANGES" ListType="ModernSensitivity"/>
+    <Row StrategyType="VICTORY_STRATEGY_CULTURAL_VICTORY" ListType="CultureSensitivity"/>
+    <Row StrategyType="VICTORY_STRATEGY_SCIENCE_VICTORY" ListType="ScienceSensitivity"/>
+  </Strategy_Priorities>
+  <AiListTypes>
+    <Row ListType="AvoidDarkAges" />
+    <!-- Yield Sensitivity tries to catch up to the leader in a given yield. Adding this to existing strategies from the base game -->
+    <Row ListType="ClassicalSensitivity" />
+    <Row ListType="MedievalSensitivity" />
+    <Row ListType="ModernSensitivity" />
+    <Row ListType="ScienceSensitivity" />
+    <Row ListType="CultureSensitivity" />
+  </AiListTypes>
+  <AiLists>
+    <Row ListType="AvoidDarkAges" System="PseudoYields"/>
+    <Row ListType="ClassicalSensitivity" System="YieldSensitivities"/>
+    <Row ListType="MedievalSensitivity" System="YieldSensitivities"/>
+    <Row ListType="ModernSensitivity" System="YieldSensitivities"/>
+    <Row ListType="ScienceSensitivity" System="YieldSensitivities"/>
+    <Row ListType="CultureSensitivity" System="YieldSensitivities"/>
+  </AiLists>
+  <AiFavoredItems>
+    <Row ListType="AvoidDarkAges" Item="PSEUDOYIELD_GOLDENAGE_POINT" Value="500"/>
+    <Row ListType="ClassicalSensitivity" Item="YIELD_SCIENCE" Value="10"/>
+    <Row ListType="MedievalSensitivity" Item="YIELD_CULTURE" Value="10"/>
+    <Row ListType="ModernSensitivity" Item="YIELD_SCIENCE" Value="10"/>
+    <Row ListType="ModernSensitivity" Item="YIELD_CULTURE" Value="10"/>
+    <Row ListType="ScienceSensitivity" Item="YIELD_SCIENCE" Value="25"/>
+    <Row ListType="CultureSensitivity" Item="YIELD_CULTURE" Value="25"/>
+  </AiFavoredItems>
+</GameInfo>
