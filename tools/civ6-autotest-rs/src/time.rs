@@ -89,6 +89,7 @@ mod tests {
         struct Game {
             starts: Arc<AtomicUsize>,
             stops: Arc<AtomicUsize>,
+            interrupt_at_status: bool,
         }
         impl Backend for Game {
             fn require_single_process(&mut self) -> Result<()> {
@@ -100,8 +101,15 @@ mod tests {
             fn run_lua(&mut self, _: &str, code: &str, timeout: f64) -> Result<String> {
                 if code.contains("return tostring(startTurn)") {
                     self.starts.fetch_add(1, Ordering::Relaxed);
-                    INTERRUPTED.store(true, Ordering::Relaxed);
+                    if !self.interrupt_at_status {
+                        INTERRUPTED.store(true, Ordering::Relaxed);
+                    }
                     return Ok("1|0".into());
+                }
+                if self.interrupt_at_status && code.contains("tostring(AutoplayManager.IsActive())")
+                {
+                    INTERRUPTED.store(true, Ordering::Relaxed);
+                    return Err(crate::Error::tuner("status transport failed during Ctrl-C"));
                 }
                 if code.contains("SetActive(false)") {
                     assert!(timeout > 0.0 && timeout <= 5.0);
@@ -110,43 +118,47 @@ mod tests {
                 Ok("true".into())
             }
         }
-        let root = tempfile::tempdir().unwrap();
-        let starts = Arc::new(AtomicUsize::new(0));
-        let stops = Arc::new(AtomicUsize::new(0));
-        let mut runner = Runner::with_backend(
-            serde_json::json!({}),
-            root.path().into(),
-            root.path().into(),
-            root.path().into(),
-            4318,
-            Box::new(Game {
-                starts: starts.clone(),
-                stops: stops.clone(),
-            }),
-            Arc::new(SystemClock),
-        );
-        assert_eq!(
-            runner
-                .autoplay(3, 10.0, AutoplayOptions::default())
-                .unwrap_err()
-                .kind,
-            ErrorKind::Interrupted
-        );
-        assert_eq!(starts.load(Ordering::Relaxed), 1);
-        assert_eq!(stops.load(Ordering::Relaxed), 1);
-        assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
-        // The next action still honors the original interrupt and never starts.
-        assert_eq!(
-            runner
-                .autoplay(3, 10.0, AutoplayOptions::default())
-                .unwrap_err()
-                .kind,
-            ErrorKind::Interrupted
-        );
-        assert_eq!(starts.load(Ordering::Relaxed), 1);
-        assert_eq!(stops.load(Ordering::Relaxed), 1);
-        // Panic unwinding must also restore the thread's cleanup state.
-        let _ = std::panic::catch_unwind(|| with_interrupt_cleanup(|| panic!("cleanup test")));
-        assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+        for interrupt_at_status in [false, true] {
+            INTERRUPTED.store(false, Ordering::Relaxed);
+            let root = tempfile::tempdir().unwrap();
+            let starts = Arc::new(AtomicUsize::new(0));
+            let stops = Arc::new(AtomicUsize::new(0));
+            let mut runner = Runner::with_backend(
+                serde_json::json!({}),
+                root.path().into(),
+                root.path().into(),
+                root.path().into(),
+                4318,
+                Box::new(Game {
+                    starts: starts.clone(),
+                    stops: stops.clone(),
+                    interrupt_at_status,
+                }),
+                Arc::new(SystemClock),
+            );
+            assert_eq!(
+                runner
+                    .autoplay(3, 10.0, AutoplayOptions::default())
+                    .unwrap_err()
+                    .kind,
+                ErrorKind::Interrupted
+            );
+            assert_eq!(starts.load(Ordering::Relaxed), 1);
+            assert_eq!(stops.load(Ordering::Relaxed), 1);
+            assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+            // The next action still honors the original interrupt and never starts.
+            assert_eq!(
+                runner
+                    .autoplay(3, 10.0, AutoplayOptions::default())
+                    .unwrap_err()
+                    .kind,
+                ErrorKind::Interrupted
+            );
+            assert_eq!(starts.load(Ordering::Relaxed), 1);
+            assert_eq!(stops.load(Ordering::Relaxed), 1);
+            // Panic unwinding must also restore the thread's cleanup state.
+            let _ = std::panic::catch_unwind(|| with_interrupt_cleanup(|| panic!("cleanup test")));
+            assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+        }
     }
 }

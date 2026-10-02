@@ -1698,7 +1698,9 @@ impl Runner {
         });
         let (start_turn, status, elimination, recorder_index, research) = match execution {
             Ok(v) => v,
-            Err(e) if e.kind == ErrorKind::Interrupted => {
+            Err(e)
+                if e.kind == ErrorKind::Interrupted || crate::time::check_interrupt().is_err() =>
+            {
                 if autoplay_started {
                     if let Err(cleanup) =
                         crate::time::with_interrupt_cleanup(|| self.stop_autoplay())
@@ -1706,7 +1708,11 @@ impl Runner {
                         println!("Autoplay cleanup failed: {cleanup}");
                     }
                 }
-                return Err(e);
+                return Err(if e.kind == ErrorKind::Interrupted {
+                    e
+                } else {
+                    Error::interrupted(format!("Interrupted while autoplay failed: {e}"))
+                });
             }
             Err(e)
                 if matches!(
