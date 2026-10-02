@@ -15,6 +15,7 @@ pub const LOG_NAMES: [&str; 3] = ["Lua.log", "Database.log", "Modding.log"];
 const BUNDLE0_ID: &str = "dfa0717e-4d0b-4370-b693-27fc6758571b";
 const GROWTH_ID: &str = "7696e937-2044-4f3c-8e13-4e27632e2710";
 const JAPAN_MAP_ID: &str = "403be889-1455-4de7-967b-ad54c0ff3431";
+const OWN_MOD_IDS: &[&str] = include!(concat!(env!("OUT_DIR"), "/own_mod_ids.rs"));
 fn re(s: &str) -> Regex {
     Regex::new(s).expect("constant regex")
 }
@@ -196,6 +197,9 @@ impl Check {
 }
 fn own_path(text: &str) -> bool {
     re(r"(?i)\bJAC[_\\/.-]|JAC_PoC").is_match(text)
+        || OWN_MOD_IDS
+            .iter()
+            .any(|id| text.to_ascii_lowercase().contains(id))
 }
 fn error_context(lines: &[&str], i: usize) -> String {
     let mut out = vec![lines[i]];
@@ -259,11 +263,7 @@ fn related_errors(content: &str) -> Vec<String> {
                 .copied()
                 .unwrap_or("");
             let block = error_block(&lines, *i);
-            own_path(&block)
-                || own_path(source)
-                || [BUNDLE0_ID, GROWTH_ID, JAPAN_MAP_ID].iter().any(|id| {
-                    block.to_lowercase().contains(id) || source.to_lowercase().contains(id)
-                })
+            own_path(&block) || own_path(source)
         })
         .map(|(_, l)| (*l).into())
         .collect()

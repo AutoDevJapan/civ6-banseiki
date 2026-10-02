@@ -144,6 +144,66 @@ fn database_errors_fail_the_generic_profile_too() {
         BTreeSet::from(["Generic: JAC Database.log errors".into()])
     );
 }
+
+#[test]
+fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
+    fn collect(dir: &std::path::Path, ids: &mut BTreeSet<String>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if entry.file_type().unwrap().is_dir() {
+                collect(&path, ids);
+            } else if path.extension().is_some_and(|v| v == "modinfo")
+                && entry.file_name().to_string_lossy().starts_with("JAC_")
+            {
+                let xml = fs::read_to_string(&path).unwrap();
+                let doc = roxmltree::Document::parse(xml.trim_start_matches('\u{feff}')).unwrap();
+                ids.insert(
+                    doc.root_element()
+                        .attribute("id")
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
+            }
+        }
+    }
+    let mut ids = BTreeSet::new();
+    collect(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../poc"),
+        &mut ids,
+    );
+    assert!(ids.contains("BD7A82C5-6B38-4B69-A7F5-8DC9AF534249"));
+    assert_eq!(
+        ids.len(),
+        12,
+        "update the owned MOD inventory when adding a MOD"
+    );
+    for id in ids {
+        let input = logs(
+            "",
+            &format!("ERROR: invalid schema for {id}\n"),
+            &format!("ERROR: could not load {id}\n"),
+        );
+        assert_eq!(
+            failed(&input, "generic", None),
+            BTreeSet::from([
+                "Generic: JAC Modding.log errors".into(),
+                "Generic: JAC Database.log errors".into()
+            ]),
+            "MOD {id}"
+        );
+    }
+    assert!(failed(
+        &logs(
+            "",
+            "ERROR: official mod aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n",
+            "ERROR: official mod aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n"
+        ),
+        "generic",
+        None
+    )
+    .is_empty());
+}
 #[test]
 fn restored_state_mismatch_fails() {
     let mut l = sample();
