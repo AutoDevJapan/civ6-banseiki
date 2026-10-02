@@ -108,6 +108,7 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
     for step in &mut out {
         if let Some(code) = step["code"].as_str()
             && step["state_name"] == "InGame"
+            && !code.contains("Phase='LIVING'")
         {
             step["code"] = json!(code.replace(
                 "Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')",
@@ -170,7 +171,12 @@ mod tests {
         assert_eq!(d["steps"][1]["exact_name"], true);
         for i in 0..9 {
             let mut expected = source["steps"][102 + i].clone();
-            if expected["state_name"] == "InGame" {
+            if expected["state_name"] == "InGame"
+                && !expected["code"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Phase='LIVING'")
+            {
                 expected["code"] = json!(expected["code"].as_str().unwrap().replace(
                     "Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')",
                     "ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ()"
@@ -179,6 +185,7 @@ mod tests {
             assert_eq!(d["steps"][4 + i + 2 * usize::from(i > 4)], expected);
         }
         assert_eq!(d["steps"][10]["action"], "wait_for");
+        assert_eq!(d["steps"][5], source["steps"][103]);
         assert_eq!(d["steps"][16], source["steps"][111]);
     }
     #[test]
