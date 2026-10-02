@@ -1,4 +1,5 @@
 {
+  "record_context": "このJSONは担当者が統合前に行った検査と引き継ぎの記録。現在のCargo.lockは追跡済みで、Pythonの79ファイルは削除済み。主担当の最終workspace検査は1199件成功。最新の手順と実機記録はdocuments/rust-migration.mdを参照する。",
   "scope": "tools/civ6-assets-rs",
   "adopted_uncommitted_port": true,
   "baseline": {
