@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+    </Types>
+    <Civics>
+    </Civics>
+    <CivicPrereqs>
+    </CivicPrereqs>
+    <CivicQuotes>
+    </CivicQuotes>
+    <Boosts>
+        <!-- Note: Some boosts, like craftsmanship, have an apparently superfluous unit. This is for the AI's purposes. Please leave it, or at least ask before removing. AWG -->
+        <Row CivicType="CIVIC_CRAFTSMANSHIP" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CRAFTSMANSHIP" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CRAFTSMANSHIP" BoostClass="BOOST_TRIGGER_NUM_IMPROVED_TILES" NumItems="3" Unit1Type="UNIT_BUILDER"/>
+        <Row CivicType="CIVIC_FOREIGN_TRADE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_FOREIGN_TRADE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_FOREIGN_TRADE" BoostClass="BOOST_TRIGGER_DISCOVER_CONTINENT"/>
+        <Row CivicType="CIVIC_MILITARY_TRADITION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MILITARY_TRADITION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MILITARY_TRADITION" BoostClass="BOOST_TRIGGER_CLEAR_CAMP"/>
+        <Row CivicType="CIVIC_STATE_WORKFORCE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_STATE_WORKFORCE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_STATE_WORKFORCE" BoostClass="BOOST_TRIGGER_HAVE_X_UNIQUE_SPECIALTY_DISTRICTS" NumItems="1"/>
+        <Row CivicType="CIVIC_EARLY_EMPIRE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_EARLY_EMPIRE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_EARLY_EMPIRE" BoostClass="BOOST_TRIGGER_EMPIRE_POPULATION" NumItems="6"/>
+        <Row CivicType="CIVIC_MYSTICISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MYSTICISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MYSTICISM" BoostClass="BOOST_TRIGGER_CREATE_PANTHEON"/>
+        <Row CivicType="CIVIC_GAMES_RECREATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_GAMES_RECREATION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_GAMES_RECREATION" BoostClass="BOOST_TRIGGER_RESEARCH_TECH" BoostingTechType="TECH_CONSTRUCTION"/>
+        <Row CivicType="CIVIC_POLITICAL_PHILOSOPHY" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_POLITICAL_PHILOSOPHY" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_POLITICAL_PHILOSOPHY" BoostClass="BOOST_TRIGGER_MEET_X_CITY_STATES" NumItems="3"/>
+        <Row CivicType="CIVIC_DRAMA_POETRY" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_DRAMA_POETRY" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_DRAMA_POETRY" BoostClass="BOOST_TRIGGER_HAVE_X_WONDERS" NumItems="1"/>
+        <Row CivicType="CIVIC_MILITARY_TRAINING" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MILITARY_TRAINING" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MILITARY_TRAINING" BoostClass="BOOST_TRIGGER_HAVE_X_DISTRICTS" DistrictType="DISTRICT_ENCAMPMENT" NumItems="1"/>
+        <Row CivicType="CIVIC_DEFENSIVE_TACTICS" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_DEFENSIVE_TACTICS" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_DEFENSIVE_TACTICS" BoostClass="BOOST_TRIGGER_RECEIVE_DOW"/>
+        <Row CivicType="CIVIC_RECORDED_HISTORY" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_RECORDED_HISTORY" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_RECORDED_HISTORY" BoostClass="BOOST_TRIGGER_HAVE_X_DISTRICTS" DistrictType="DISTRICT_CAMPUS" NumItems="2"/>
+        <Row CivicType="CIVIC_THEOLOGY" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_THEOLOGY" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_THEOLOGY" BoostClass="BOOST_TRIGGER_FOUND_RELIGION"/>
+        <Row CivicType="CIVIC_NAVAL_TRADITION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_NAVAL_TRADITION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_NAVAL_TRADITION" BoostClass="BOOST_TRIGGER_KILL_WITH" Unit1Type="UNIT_QUADRIREME"/>
+        <Row CivicType="CIVIC_FEUDALISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_FEUDALISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_FEUDALISM" BoostClass="BOOST_TRIGGER_HAVE_X_IMPROVEMENTS" ImprovementType="IMPROVEMENT_FARM" RequiresResource="false" NumItems="6"/>
+        <Row CivicType="CIVIC_COLONIALISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_COLONIALISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_COLONIALISM" BoostClass="BOOST_TRIGGER_RESEARCH_TECH" BoostingTechType="TECH_ASTRONOMY"/>
+        <Row CivicType="CIVIC_CIVIL_SERVICE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CIVIL_SERVICE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CIVIL_SERVICE" BoostClass="BOOST_TRIGGER_CITY_POPULATION" NumItems="10"/>
+        <Row CivicType="CIVIC_MERCENARIES" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MERCENARIES" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MERCENARIES" BoostClass="BOOST_TRIGGER_HAVE_X_LAND_UNITS" NumItems="8"/>
+        <Row CivicType="CIVIC_MEDIEVAL_FAIRES" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MEDIEVAL_FAIRES" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MEDIEVAL_FAIRES" BoostClass="BOOST_TRIGGER_MAINTAIN_X_TRADE_ROUTES" NumItems="4" Unit1Type="UNIT_TRADER"/>
+        <Row CivicType="CIVIC_GUILDS" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_GUILDS" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_GUILDS" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_MARKET" NumItems="2"/>
+        <Row CivicType="CIVIC_DIVINE_RIGHT" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_DIVINE_RIGHT" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_DIVINE_RIGHT" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_TEMPLE" NumItems="2"/>
+        <Row CivicType="CIVIC_EXPLORATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_EXPLORATION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_EXPLORATION" BoostClass="BOOST_TRIGGER_OWN_X_UNITS_OF_TYPE" Unit1Type="UNIT_CARAVEL" NumItems="2"/>
+        <Row CivicType="CIVIC_HUMANISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_HUMANISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_HUMANISM" BoostClass="BOOST_TRIGGER_TRAIN_UNIT" Unit1Type="UNIT_GREAT_ARTIST"/>
+        <Row CivicType="CIVIC_DIPLOMATIC_SERVICE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_DIPLOMATIC_SERVICE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_DIPLOMATIC_SERVICE" BoostClass="BOOST_TRIGGER_HAVE_AN_ALLIANCE"/>
+        <Row CivicType="CIVIC_REFORMED_CHURCH" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_REFORMED_CHURCH" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_REFORMED_CHURCH" BoostClass="BOOST_TRIGGER_HAVE_X_CITIES_FOLLOWING_YOUR_RELIGION" NumItems="6"/>
+        <Row CivicType="CIVIC_MERCANTILISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MERCANTILISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MERCANTILISM" BoostClass="BOOST_TRIGGER_TRAIN_UNIT" Unit1Type="UNIT_GREAT_MERCHANT"/>
+        <Row CivicType="CIVIC_THE_ENLIGHTENMENT" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_THE_ENLIGHTENMENT" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_THE_ENLIGHTENMENT" BoostClass="BOOST_TRIGGER_HAVE_X_GREAT_PEOPLE" NumItems="3"/>
+        <Row CivicType="CIVIC_CIVIL_ENGINEERING" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CIVIL_ENGINEERING" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CIVIL_ENGINEERING" BoostClass="BOOST_TRIGGER_HAVE_X_UNIQUE_SPECIALTY_DISTRICTS" NumItems="7"/>
+        <Row CivicType="CIVIC_NATIONALISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_NATIONALISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_NATIONALISM" BoostClass="BOOST_TRIGGER_DOW_CASUS_BELLI"/>
+        <Row CivicType="CIVIC_OPERA_BALLET" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_OPERA_BALLET" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_OPERA_BALLET" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_MUSEUM_ART" NumItems="1"/>
+        <Row CivicType="CIVIC_NATURAL_HISTORY" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_NATURAL_HISTORY" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_NATURAL_HISTORY" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_MUSEUM_ARTIFACT" NumItems="1"/>
+        <Row CivicType="CIVIC_URBANIZATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_URBANIZATION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_URBANIZATION" BoostClass="BOOST_TRIGGER_CITY_POPULATION" NumItems="15"/>
+        <Row CivicType="CIVIC_SCORCHED_EARTH" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_SCORCHED_EARTH" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_SCORCHED_EARTH" BoostClass="BOOST_TRIGGER_OWN_X_UNITS_OF_TYPE" Unit1Type="UNIT_FIELD_CANNON" NumItems="2"/>
+        <Row CivicType="CIVIC_CONSERVATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CONSERVATION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CONSERVATION" BoostClass="BOOST_TRIGGER_DISTRICT_APPEAL_LEVEL_MINIMUM_X" DistrictType="DISTRICT_NEIGHBORHOOD" NumItems="4"/>
+        <Row CivicType="CIVIC_MOBILIZATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MOBILIZATION" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MOBILIZATION" BoostClass="BOOST_TRIGGER_HAVE_X_CORPS" NumItems="3"/>
+        <Row CivicType="CIVIC_MASS_MEDIA" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_MASS_MEDIA" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_MASS_MEDIA" BoostClass="BOOST_TRIGGER_RESEARCH_TECH" BoostingTechType="TECH_RADIO"/>
+        <Row CivicType="CIVIC_CAPITALISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CAPITALISM_XP2" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CAPITALISM" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_STOCK_EXCHANGE" NumItems="2"/>
+        <Row CivicType="CIVIC_NUCLEAR_PROGRAM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_NUCLEAR_PROGRAM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_NUCLEAR_PROGRAM" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_RESEARCH_LAB" NumItems="1"/>
+        <Row CivicType="CIVIC_SUFFRAGE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_SUFFRAGE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_SUFFRAGE" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_SEWER" NumItems="4"/>
+        <Row CivicType="CIVIC_TOTALITARIANISM" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_TOTALITARIANISM" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_TOTALITARIANISM" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_MILITARY_ACADEMY" NumItems="3"/>
+        <Row CivicType="CIVIC_CLASS_STRUGGLE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CLASS_STRUGGLE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CLASS_STRUGGLE" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_FACTORY" NumItems="3"/>
+        <Row CivicType="CIVIC_COLD_WAR" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_COLD_WAR" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_COLD_WAR" BoostClass="BOOST_TRIGGER_RESEARCH_TECH" BoostingTechType="TECH_NUCLEAR_FISSION"/>
+        <Row CivicType="CIVIC_PROFESSIONAL_SPORTS" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_PROFESSIONAL_SPORTS_XP2" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_PROFESSIONAL_SPORTS" BoostClass="BOOST_TRIGGER_HAVE_X_DISTRICTS" DistrictType="DISTRICT_ENTERTAINMENT_COMPLEX" NumItems="2"/>
+        <Row CivicType="CIVIC_CULTURAL_HERITAGE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_CULTURAL_HERITAGE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_CULTURAL_HERITAGE" BoostClass="BOOST_TRIGGER_HAVE_X_THEMED_BUILDINGS" NumItems="1"/>
+        <Row CivicType="CIVIC_RAPID_DEPLOYMENT" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_RAPID_DEPLOYMENT" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_RAPID_DEPLOYMENT" BoostClass="BOOST_TRIGGER_AIRBASE_FOREIGN_CONTINENT" NumItems="1"/>
+        <Row CivicType="CIVIC_SPACE_RACE" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_SPACE_RACE" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_SPACE_RACE" BoostClass="BOOST_TRIGGER_HAVE_X_DISTRICTS" DistrictType="DISTRICT_SPACEPORT" NumItems="1"/>
+        <Row CivicType="CIVIC_GLOBALIZATION" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_GLOBALIZATION_XP2" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_GLOBALIZATION" BoostClass="BOOST_TRIGGER_HAVE_X_BUILDINGS" BuildingType="BUILDING_AIRPORT" NumItems="2"/>
+        <Row CivicType="CIVIC_SOCIAL_MEDIA" Boost="40" TriggerDescription="LOC_BOOST_TRIGGER_SOCIAL_MEDIA" TriggerLongDescription="LOC_BOOST_TRIGGER_LONGDESC_SOCIAL_MEDIA" BoostClass="BOOST_TRIGGER_RESEARCH_TECH" BoostingTechType="TECH_TELECOMMUNICATIONS"/>
+    </Boosts>
+    <Modifiers>
+        <!--Governors-->
+        <Row>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_GOVERNOR_POINTS</ModifierType>
+        </Row>
+        <!--Tourism-->
+        <Row>
+            <ModifierId>CONSERVATION_ARENA_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>DISTRICT_IS_ENTERTAINMENT_COMPLEX_ARENA</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <!--Governors-->
+        <Row>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+            <Name>Delta</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>CONSERVATION_ARENA_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <CivicModifiers>
+        <!--Governor Slot Unlock Civics-->
+        <Row>
+            <CivicType>CIVIC_STATE_WORKFORCE</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_EARLY_EMPIRE</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_DEFENSIVE_TACTICS</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_RECORDED_HISTORY</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_GUILDS</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_MEDIEVAL_FAIRES</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_CIVIL_ENGINEERING</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_NATIONALISM</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_MASS_MEDIA</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_MOBILIZATION</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_GLOBALIZATION</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_SOCIAL_MEDIA</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_FUTURE_CIVIC</CivicType>
+            <ModifierId>CIVIC_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+        <Row>
+            <CivicType>CIVIC_CONSERVATION</CivicType>
+            <ModifierId>CONSERVATION_ARENA_TOURISM</ModifierId>
+        </Row>
+    </CivicModifiers>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ENTERTAINMENT_COMPLEX_ARENA</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_ARENA</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_BUILDING</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_ARENA</RequirementId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_ARENA</Value>
+        </Row>
+    </RequirementArguments>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ENTERTAINMENT_COMPLEX_ARENA</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ENTERTAINMENT_COMPLEX_ARENA</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_ARENA</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+</GameInfo>

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="DISTRICT_GOVERNMENT" Kind="KIND_DISTRICT"/>
+        <Row Type="DISTRICT_WATER_ENTERTAINMENT_COMPLEX" Kind="KIND_DISTRICT"/>
+        <Row Type="DISTRICT_WATER_STREET_CARNIVAL" Kind="KIND_DISTRICT"/>
+    </Types>
+    <DistrictReplaces>
+        <Row CivUniqueDistrictType="DISTRICT_WATER_STREET_CARNIVAL" ReplacesDistrictType="DISTRICT_WATER_ENTERTAINMENT_COMPLEX"/>
+    </DistrictReplaces>
+    <MutuallyExclusiveDistricts>
+        <Row District="DISTRICT_ENTERTAINMENT_COMPLEX" MutuallyExclusiveDistrict="DISTRICT_WATER_ENTERTAINMENT_COMPLEX"/>
+        <Row District="DISTRICT_WATER_ENTERTAINMENT_COMPLEX" MutuallyExclusiveDistrict="DISTRICT_ENTERTAINMENT_COMPLEX"/>
+        <Row District="DISTRICT_STREET_CARNIVAL" MutuallyExclusiveDistrict="DISTRICT_WATER_STREET_CARNIVAL"/>
+        <Row District="DISTRICT_WATER_STREET_CARNIVAL" MutuallyExclusiveDistrict="DISTRICT_STREET_CARNIVAL"/>
+    </MutuallyExclusiveDistricts>
+    <Districts>
+        <Row DistrictType="DISTRICT_GOVERNMENT" Name="LOC_DISTRICT_GOVERNMENT_NAME" Description="LOC_DISTRICT_GOVERNMENT_DESCRIPTION" PrereqCivic="CIVIC_STATE_WORKFORCE" PlunderType="PLUNDER_CULTURE" PlunderAmount="25" AdvisorType="ADVISOR_GENERIC" Cost="30" CostProgressionModel="COST_PROGRESSION_NUM_UNDER_AVG_PLUS_TECH" CostProgressionParam1="25" Maintenance="1" RequiresPlacement="true" RequiresPopulation="true" Aqueduct="false" NoAdjacentCity="false" InternalOnly="false" ZOC="false" CaptureRemovesBuildings="false" CaptureRemovesCityDefenses="false" CaptureRemovesDistrict="true" MilitaryDomain="NO_DOMAIN" CityStrengthModifier="2" MaxPerPlayer="1"/>
+        <Row DistrictType="DISTRICT_WATER_ENTERTAINMENT_COMPLEX" Name="LOC_DISTRICT_WATER_ENTERTAINMENT_COMPLEX_NAME" Description="LOC_DISTRICT_WATER_ENTERTAINMENT_COMPLEX_DESCRIPTION" PrereqCivic="CIVIC_NATURAL_HISTORY" PlunderType="PLUNDER_HEAL" PlunderAmount="50" AdvisorType="ADVISOR_GENERIC" Cost="54" Entertainment="1" CostProgressionModel="COST_PROGRESSION_NUM_UNDER_AVG_PLUS_TECH" CostProgressionParam1="40" Maintenance="1" Coast="true" AdjacentToLand="true" RequiresPlacement="true" RequiresPopulation="true" Aqueduct="false" NoAdjacentCity="false" InternalOnly="false" ZOC="false" CaptureRemovesBuildings="false" CaptureRemovesCityDefenses="false" MilitaryDomain="NO_DOMAIN" Appeal="1" CityStrengthModifier="2"/>
+        <Row DistrictType="DISTRICT_WATER_STREET_CARNIVAL" Name="LOC_DISTRICT_WATER_STREET_CARNIVAL_EXPANSION2_NAME" Description="LOC_DISTRICT_WATER_STREET_CARNIVAL_EXPANSION2_DESCRIPTION" PrereqCivic="CIVIC_NATURAL_HISTORY" PlunderType="PLUNDER_HEAL" PlunderAmount="50" AdvisorType="ADVISOR_GENERIC" Cost="27" Entertainment="2" CostProgressionModel="COST_PROGRESSION_NUM_UNDER_AVG_PLUS_TECH" CostProgressionParam1="40" Maintenance="1" Coast="true" AdjacentToLand="true" RequiresPlacement="true" RequiresPopulation="true" Aqueduct="false" NoAdjacentCity="false" InternalOnly="false" ZOC="false" CaptureRemovesBuildings="false" CaptureRemovesCityDefenses="false" MilitaryDomain="NO_DOMAIN" Appeal="1" CityStrengthModifier="2" TraitType="TRAIT_CIVILIZATION_STREET_CARNIVAL"/>
+        <Update>
+            <Where DistrictType="DISTRICT_COMMERCIAL_HUB"/>
+            <Set>
+                <Description>LOC_DISTRICT_COMMERCIAL_HUB_EXPANSION1_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where DistrictType="DISTRICT_HARBOR"/>
+            <Set>
+                <Description>LOC_DISTRICT_HARBOR_EXPANSION1_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where DistrictType="DISTRICT_ROYAL_NAVY_DOCKYARD"/>
+            <Set>
+                <Description>LOC_DISTRICT_ROYAL_NAVY_DOCKYARD_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where DistrictType="DISTRICT_ACROPOLIS"/>
+            <Set>
+                <Description>LOC_DISTRICT_ACROPOLIS_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+    </Districts>
+    <District_Adjacencies>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="Government_Culture"/>
+        <Row DistrictType="DISTRICT_ACROPOLIS" YieldChangeId="Government_Culture"/>
+        <Row DistrictType="DISTRICT_HOLY_SITE" YieldChangeId="Government_Faith"/>
+        <Row DistrictType="DISTRICT_LAVRA" YieldChangeId="Government_Faith"/>
+        <Row DistrictType="DISTRICT_COMMERCIAL_HUB" YieldChangeId="Government_Gold"/>
+        <Row DistrictType="DISTRICT_HARBOR" YieldChangeId="Government_Gold"/>
+        <Row DistrictType="DISTRICT_ROYAL_NAVY_DOCKYARD" YieldChangeId="Government_Gold"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Government_Production"/>
+        <Row DistrictType="DISTRICT_HANSA" YieldChangeId="Government_Production"/>
+        <Row DistrictType="DISTRICT_CAMPUS" YieldChangeId="Government_Science"/>
+    </District_Adjacencies>
+    <District_TradeRouteYields>
+        <Row DistrictType="DISTRICT_GOVERNMENT" YieldType="YIELD_GOLD" YieldChangeAsOrigin="0" YieldChangeAsDomesticDestination="0" YieldChangeAsInternationalDestination="2"/>
+        <Row DistrictType="DISTRICT_GOVERNMENT" YieldType="YIELD_FOOD" YieldChangeAsOrigin="0" YieldChangeAsDomesticDestination="1" YieldChangeAsInternationalDestination="0"/>
+        <Row DistrictType="DISTRICT_GOVERNMENT" YieldType="YIELD_PRODUCTION" YieldChangeAsOrigin="0" YieldChangeAsDomesticDestination="1" YieldChangeAsInternationalDestination="0"/>
+        <Row DistrictType="DISTRICT_WATER_ENTERTAINMENT_COMPLEX" YieldType="YIELD_FOOD" YieldChangeAsOrigin="0" YieldChangeAsDomesticDestination="1" YieldChangeAsInternationalDestination="1"/>
+        <Row DistrictType="DISTRICT_WATER_STREET_CARNIVAL" YieldType="YIELD_FOOD" YieldChangeAsOrigin="0" YieldChangeAsDomesticDestination="1" YieldChangeAsInternationalDestination="1"/>
+    </District_TradeRouteYields>
+    <Adjacency_YieldChanges>
+        <Row ID="BaseDistrict_Science" Description="LOC_DISTRICT_BASE_DISTRICT_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="4" Self="true"/>
+        <Row ID="NegativeDistrict_Science" Description="LOC_DISTRICT_NEGATIVE_DISTRICT_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="-1" TilesRequired="1" OtherDistrictAdjacent="true"/>
+        <Row ID="Government_Culture" Description="LOC_DISTRICT_GOVERNMENT_CULTURE" YieldType="YIELD_CULTURE" YieldChange="1" TilesRequired="1" AdjacentDistrict="DISTRICT_GOVERNMENT"/>
+        <Row ID="Government_Faith" Description="LOC_DISTRICT_GOVERNMENT_FAITH" YieldType="YIELD_FAITH" YieldChange="1" TilesRequired="1" AdjacentDistrict="DISTRICT_GOVERNMENT"/>
+        <Row ID="Government_Gold" Description="LOC_DISTRICT_GOVERNMENT_GOLD" YieldType="YIELD_GOLD" YieldChange="1" TilesRequired="1" AdjacentDistrict="DISTRICT_GOVERNMENT"/>
+        <Row ID="Government_Production" Description="LOC_DISTRICT_GOVERNMENT_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="1" TilesRequired="1" AdjacentDistrict="DISTRICT_GOVERNMENT"/>
+        <Row ID="Government_Science" Description="LOC_DISTRICT_GOVERNMENT_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="1" TilesRequired="1" AdjacentDistrict="DISTRICT_GOVERNMENT"/>
+        <Update>
+            <Where ID="Wonder_Culture"/>
+            <Set>
+                <YieldChange>2</YieldChange>
+            </Set>
+        </Update>
+    </Adjacency_YieldChanges>
+    <Modifiers>
+        <Row>
+            <ModifierId>ROYAL_NAVY_DOCKYARD_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PER_TURN</ModifierType>
+            <SubjectRequirementSetId>DOCKYARD_FOREIGN_CONTINENT_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>GOVERNMENT_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PER_TURN</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>DISTRICT_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+            <ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_GOVERNOR_POINTS</ModifierType>
+            <Permanent>true</Permanent>
+            <SubjectRequirementSetId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <GameModifiers>
+        <Row>
+            <ModifierId>DISTRICT_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+        </Row>
+    </GameModifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>ROYAL_NAVY_DOCKYARD_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <Name>Amount</Name>
+            <Value>4</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVERNMENT_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <Name>Amount</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>DISTRICT_GRANT_PLAYER_GOVERNOR_POINTS</ModifierId>
+            <Name>Delta</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <DistrictModifiers>
+        <Row>
+            <DistrictType>DISTRICT_ROYAL_NAVY_DOCKYARD</DistrictType>
+            <ModifierId>ROYAL_NAVY_DOCKYARD_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+        </Row>
+        <Row>
+            <DistrictType>DISTRICT_GOVERNMENT</DistrictType>
+            <ModifierId>GOVERNMENT_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+        </Row>
+    </DistrictModifiers>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENTS</RequirementSetId>
+            <RequirementId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENT</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_DISTRICT</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>PLAYER_HAS_GOVERNMENT_DISTRICT_REQUIREMENT</RequirementId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_GOVERNMENT</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>

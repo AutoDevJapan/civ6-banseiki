@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Vocabularies>
+        <Row Vocabulary="FEATURE_CLASS"/>
+    </Vocabularies>
+    <Tags>
+        <Row Tag="CLASS_FLOODPLAINS" Vocabulary="FEATURE_CLASS"/>
+    </Tags>
+    <TypeTags>
+        <Row Type="FEATURE_FLOODPLAINS" Tag="CLASS_FLOODPLAINS"/>
+        <Row Type="FEATURE_FLOODPLAINS_GRASSLAND" Tag="CLASS_FLOODPLAINS"/>
+        <Row Type="FEATURE_FLOODPLAINS_PLAINS" Tag="CLASS_FLOODPLAINS"/>
+    </TypeTags>
+    <Types>
+        <Row Type="FEATURE_CHOCOLATEHILLS" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_DEVILSTOWER" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_GOBUSTAN" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_IKKIL" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_PAMUKKALE" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_VESUVIUS" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_WHITEDESERT" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_FLOODPLAINS_GRASSLAND" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_FLOODPLAINS_PLAINS" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_GEOTHERMAL_FISSURE" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_VOLCANO" Kind="KIND_FEATURE"/>
+        <Row Type="FEATURE_VOLCANIC_SOIL" Kind="KIND_FEATURE"/>
+    </Types>
+    <Features>
+        <!--New -->
+        <Row FeatureType="FEATURE_FLOODPLAINS_GRASSLAND" Name="LOC_FEATURE_FLOODPLAINS_GRASSLAND_NAME" Description="LOC_FEATURE_FLOODPLAINS_GRASSLAND_DESCRIPTION" RequiresRiver="true" DefenseModifier="-2" Appeal="-1" AntiquityPriority="1"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_PLAINS" Name="LOC_FEATURE_FLOODPLAINS_PLAINS_NAME" Description="LOC_FEATURE_FLOODPLAINS_PLAINS_DESCRIPTION" RequiresRiver="true" DefenseModifier="-2" Appeal="-1" AntiquityPriority="1"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" Name="LOC_FEATURE_GEOTHERMAL_FISSURE_NAME" Description="LOC_FEATURE_GEOTHERMAL_FISSURE_DESCRIPTION" AntiquityPriority="1"/>
+        <Row FeatureType="FEATURE_VOLCANO" Name="LOC_FEATURE_VOLCANO_NAME" Description="LOC_FEATURE_VOLCANO_DESCRIPTION"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" Name="LOC_FEATURE_VOLCANIC_SOIL_NAME" Description="LOC_FEATURE_VOLCANIC_SOIL_DESCRIPTION" AntiquityPriority="1"/>
+    .	<!--Natural Wonders -->
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" Name="LOC_FEATURE_CHOCOLATEHILLS_NAME" Description="LOC_FEATURE_CHOCOLATEHILLS_DESCRIPTION" Quote="LOC_FEATURE_CHOCOLATEHILLS_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_CHOCOLATEHILLS_QUOTE" NaturalWonder="true" Appeal="2" Tiles="4" NoRiver="true" Settlement="false" NoCoast="true" SightThroughModifier="1" MovementChange="1" DefenseModifier="3" FollowRulesInWB="false" MinDistanceNW="8"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" Name="LOC_FEATURE_DEVILSTOWER_NAME" Description="LOC_FEATURE_DEVILSTOWER_DESCRIPTION" Quote="LOC_FEATURE_DEVILSTOWER_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_DEVILSTOWER_QUOTE" NaturalWonder="true" Appeal="2" Tiles="1" NoRiver="true" Settlement="false" NoCoast="true" Impassable="true" SightThroughModifier="2" FollowRulesInWB="false" MinDistanceNW="8"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" Name="LOC_FEATURE_GOBUSTAN_NAME" Description="LOC_FEATURE_GOBUSTAN_DESCRIPTION" Quote="LOC_FEATURE_GOBUSTAN_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_GOBUSTAN_QUOTE" NaturalWonder="true" Appeal="2" Tiles="3" NoRiver="true" Settlement="false" NoCoast="true" SightThroughModifier="1" MovementChange="1" DefenseModifier="3" FollowRulesInWB="false" MinDistanceNW="8"/>
+        <Row FeatureType="FEATURE_IKKIL" Name="LOC_FEATURE_IKKIL_NAME" Description="LOC_FEATURE_IKKIL_DESCRIPTION" Quote="LOC_FEATURE_IKKIL_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_IKKIL_QUOTE" NaturalWonder="true" Appeal="2" Tiles="1" NoRiver="true" Settlement="false" NoCoast="true" Impassable="true" FollowRulesInWB="false" MinDistanceNW="8" AddsFreshWater="true"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" Name="LOC_FEATURE_PAMUKKALE_NAME" Description="LOC_FEATURE_PAMUKKALE_DESCRIPTION" Quote="LOC_FEATURE_PAMUKKALE_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_PAMUKKALE_QUOTE" NaturalWonder="true" Appeal="2" Tiles="2" NoRiver="true" Settlement="false" NoCoast="true" Impassable="true" SightThroughModifier="1" FollowRulesInWB="false" MinDistanceNW="8" AddsFreshWater="true"/>
+        <Row FeatureType="FEATURE_VESUVIUS" Name="LOC_FEATURE_VESUVIUS_NAME" Description="LOC_FEATURE_VESUVIUS_DESCRIPTION" Quote="LOC_FEATURE_VESUVIUS_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_VESUVIUS_QUOTE" NaturalWonder="true" Appeal="2" Tiles="1" NoRiver="true" Settlement="false" Impassable="true" SightThroughModifier="2" FollowRulesInWB="false" MinDistanceNW="8"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" Name="LOC_FEATURE_WHITEDESERT_NAME" Description="LOC_FEATURE_WHITEDESERT_DESCRIPTION" Quote="LOC_FEATURE_WHITEDESERT_QUOTE" QuoteAudio="PLAY_LOC_FEATURE_WHITEDESERT_QUOTE" NaturalWonder="true" Appeal="2" Tiles="4" NoRiver="true" Settlement="false" NoCoast="true" FollowRulesInWB="false" MinDistanceNW="8"/>
+    .	<!--Updates -->
+        <Update>
+            <Where FeatureType="FEATURE_CLIFFS_DOVER"/>
+            <Set>
+                <Appeal>4</Appeal>
+                <Description>LOC_FEATURE_CLIFFS_DOVER_XP2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where FeatureType="FEATURE_KILIMANJARO"/>
+            <Set>
+                <Description>LOC_FEATURE_KILIMANJARO_XP2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where FeatureType="FEATURE_FLOODPLAINS"/>
+            <Set>
+                <Name>LOC_FEATURE_FLOODPLAINS_DESERT_NAME</Name>
+                <Description>LOC_FEATURE_FLOODPLAINS_DESERT_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where FeatureType="FEATURE_YOSEMITE"/>
+            <Set>
+                <Description>LOC_FEATURE_YOSEMITE_XP2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+    </Features>
+    <Features_XP2>
+        <Row FeatureType="FEATURE_VESUVIUS" Volcano="true"/>
+        <Row FeatureType="FEATURE_KILIMANJARO" Volcano="true"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS" ValidWonderPlacement="true" ValidDistrictPlacement="true" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_GRASSLAND" ValidWonderPlacement="true" ValidDistrictPlacement="true" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_PLAINS" ValidWonderPlacement="true" ValidDistrictPlacement="true" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_VOLCANO" Volcano="true"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" Eruptable="true" ValidWonderPlacement="true" ValidDistrictPlacement="true" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_JUNGLE" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_FOREST" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_OASIS" ValidForReplacement="true"/>
+        <Row FeatureType="FEATURE_MARSH" ValidForReplacement="true"/>
+    </Features_XP2>
+    <Feature_ValidTerrains>
+        <!--Natural Wonders -->
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_GRASS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" TerrainType="TERRAIN_PLAINS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_TUNDRA"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" TerrainType="TERRAIN_TUNDRA_HILLS"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" TerrainType="TERRAIN_PLAINS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_IKKIL" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_IKKIL" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_IKKIL" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_IKKIL" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_PAMUKKALE" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_PLAINS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_GRASS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" TerrainType="TERRAIN_DESERT_MOUNTAIN"/>
+        <!--Regular Features-->
+        <Row FeatureType="FEATURE_FLOODPLAINS_GRASSLAND" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_PLAINS" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_TUNDRA"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_TUNDRA_HILLS"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_SNOW"/>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" TerrainType="TERRAIN_SNOW_HILLS"/>
+        <Row FeatureType="FEATURE_VOLCANO" TerrainType="TERRAIN_GRASS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VOLCANO" TerrainType="TERRAIN_PLAINS_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VOLCANO" TerrainType="TERRAIN_DESERT_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VOLCANO" TerrainType="TERRAIN_TUNDRA_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VOLCANO" TerrainType="TERRAIN_SNOW_MOUNTAIN"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_TUNDRA"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_TUNDRA_HILLS"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_SNOW"/>
+        <Row FeatureType="FEATURE_VOLCANIC_SOIL" TerrainType="TERRAIN_SNOW_HILLS"/>
+    </Feature_ValidTerrains>
+    <Feature_AdjacentTerrains>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_GRASS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_PLAINS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_DESERT"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_SNOW"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_SNOW_HILLS"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_TUNDRA"/>
+        <Row FeatureType="FEATURE_VESUVIUS" TerrainType="TERRAIN_TUNDRA_HILLS"/>
+    </Feature_AdjacentTerrains>
+    <Feature_AdjacentFeatures>
+        <Row FeatureType="FEATURE_IKKIL" FeatureTypeAdjacent="FEATURE_JUNGLE"/>
+    </Feature_AdjacentFeatures>
+    <Feature_YieldChanges>
+        <!--Natural Wonders -->
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" YieldType="YIELD_FOOD" YieldChange="1"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" YieldType="YIELD_PRODUCTION" YieldChange="2"/>
+        <Row FeatureType="FEATURE_CHOCOLATEHILLS" YieldType="YIELD_SCIENCE" YieldChange="1"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" YieldType="YIELD_CULTURE" YieldChange="3"/>
+        <Row FeatureType="FEATURE_GOBUSTAN" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" YieldType="YIELD_CULTURE" YieldChange="1"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" YieldType="YIELD_GOLD" YieldChange="4"/>
+        <Row FeatureType="FEATURE_WHITEDESERT" YieldType="YIELD_SCIENCE" YieldChange="1"/>
+        <!--Regular Features -->
+        <Update>
+            <Where FeatureType="FEATURE_FLOODPLAINS" YieldType="YIELD_FOOD"/>
+            <Set>
+                <YieldChange>2</YieldChange>
+            </Set>
+        </Update>
+        <Row FeatureType="FEATURE_GEOTHERMAL_FISSURE" YieldType="YIELD_SCIENCE" YieldChange="1"/>
+    </Feature_YieldChanges>
+    <Feature_AdjacentYields>
+        <Row FeatureType="FEATURE_DEVILSTOWER" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row FeatureType="FEATURE_DEVILSTOWER" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row FeatureType="FEATURE_VESUVIUS" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row FeatureType="FEATURE_YOSEMITE" YieldType="YIELD_FOOD" YieldChange="1"/>
+    </Feature_AdjacentYields>
+    <Feature_Floodplains>
+        <Row FeatureType="FEATURE_FLOODPLAINS"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+    </Feature_Floodplains>
+    <Modifiers>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_WONDER</ModifierId>
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_WONDER_ADJACENT_NATURAL_WONDER_PRODUCTION</ModifierType>
+            <OwnerRequirementSetId>IKKIL_REQUIREMENTS</OwnerRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_DISTRICT</ModifierId>
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_DISTRICT_ADJACENT_NATURAL_WONDER_PRODUCTION</ModifierType>
+            <OwnerRequirementSetId>IKKIL_REQUIREMENTS</OwnerRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>PAMUKKALE_AMENITY</ModifierId>
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_NATURAL_WONDER_AMENITY</ModifierType>
+            <OwnerRequirementSetId>PAMUKKALE_REQUIREMENTS</OwnerRequirementSetId>
+            <SubjectRequirementSetId>CITY_HAS_PAMUKKALE</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>PAMUKKALE_AMENITY_ENTERTAINMENT_COMPLEX</ModifierId>
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_NATURAL_WONDER_AMENITY</ModifierType>
+            <OwnerRequirementSetId>PAMUKKALE_REQUIREMENTS</OwnerRequirementSetId>
+            <SubjectRequirementSetId>DISTRICT_IS_ADJACENT_TO_ENTERTAINMENT_COMPLEX</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_WONDER</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_WONDER</ModifierId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_IKKIL</Value>
+        </Row>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_DISTRICT</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>IKKIL_PRODUCTION_DISTRICT</ModifierId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_IKKIL</Value>
+        </Row>
+        <Row>
+            <ModifierId>PAMUKKALE_AMENITY</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>PAMUKKALE_AMENITY_ENTERTAINMENT_COMPLEX</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <GameModifiers>
+        <Row ModifierId="IKKIL_PRODUCTION_WONDER"/>
+        <Row ModifierId="IKKIL_PRODUCTION_DISTRICT"/>
+        <Row ModifierId="PAMUKKALE_AMENITY"/>
+        <Row ModifierId="PAMUKKALE_AMENITY_ENTERTAINMENT_COMPLEX"/>
+    </GameModifiers>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>IKKIL_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PAMUKKALE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_PAMUKKALE</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <Requirements>
+        <Row>
+            <RequirementId>MAP_CONTAINS_IKKIL</RequirementId>
+            <RequirementType>REQUIREMENT_MAP_HAS_FEATURE</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>MAP_CONTAINS_PAMUKKALE</RequirementId>
+            <RequirementType>REQUIREMENT_MAP_HAS_FEATURE</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_ADJACENT_DISTRICT_TYPE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PAMUKKALE_IN_CITY</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_FEATURE</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>MAP_CONTAINS_IKKIL</RequirementId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_IKKIL</Value>
+        </Row>
+        <Row>
+            <RequirementId>MAP_CONTAINS_PAMUKKALE</RequirementId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_PAMUKKALE</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_ENTERTAINMENT_COMPLEX</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PAMUKKALE_IN_CITY</RequirementId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_PAMUKKALE</Value>
+        </Row>
+    </RequirementArguments>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>IKKIL_REQUIREMENTS</RequirementSetId>
+            <RequirementId>MAP_CONTAINS_IKKIL</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PAMUKKALE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>MAP_CONTAINS_PAMUKKALE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_ADJACENT_TO_ENTERTAINMENT_COMPLEX</RequirementSetId>
+            <RequirementId>REQUIRES_PAMUKKALE_IN_CITY</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_PAMUKKALE</RequirementSetId>
+            <RequirementId>REQUIRES_PAMUKKALE_IN_CITY</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <District_Adjacencies>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="Pamukkale_Culture"/>
+        <Row DistrictType="DISTRICT_ACROPOLIS" YieldChangeId="Pamukkale_Culture"/>
+        <Row DistrictType="DISTRICT_HOLY_SITE" YieldChangeId="Pamukkale_Faith"/>
+        <Row DistrictType="DISTRICT_LAVRA" YieldChangeId="Pamukkale_Faith"/>
+        <Row DistrictType="DISTRICT_COMMERCIAL_HUB" YieldChangeId="Pamukkale_Gold"/>
+        <Row DistrictType="DISTRICT_SUGUBA" YieldChangeId="Pamukkale_Gold"/>
+        <Row DistrictType="DISTRICT_CAMPUS" YieldChangeId="Pamukkale_Science"/>
+    </District_Adjacencies>
+    <Adjacency_YieldChanges>
+        <Row ID="Pamukkale_Culture" Description="LOC_DISTRICT_PAMUKKALE_CULTURE" YieldType="YIELD_CULTURE" YieldChange="2" TilesRequired="1" AdjacentFeature="FEATURE_PAMUKKALE"/>
+        <Row ID="Pamukkale_Faith" Description="LOC_DISTRICT_PAMUKKALE_FAITH" YieldType="YIELD_FAITH" YieldChange="1" TilesRequired="1" AdjacentFeature="FEATURE_PAMUKKALE"/>
+        <Row ID="Pamukkale_Gold" Description="LOC_DISTRICT_PAMUKKALE_GOLD" YieldType="YIELD_GOLD" YieldChange="2" TilesRequired="1" AdjacentFeature="FEATURE_PAMUKKALE"/>
+        <Row ID="Pamukkale_Science" Description="LOC_DISTRICT_PAMUKKALE_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="2" TilesRequired="1" AdjacentFeature="FEATURE_PAMUKKALE"/>
+    </Adjacency_YieldChanges>
+</GameInfo>

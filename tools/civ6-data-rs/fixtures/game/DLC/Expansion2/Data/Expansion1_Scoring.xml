@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="SCORING_ERA_SCORE" Kind="KIND_SCORING_CATEGORY"/>
+        <Row Type="LINE_ITEM_ERA_SCORE" Kind="KIND_SCORING_LINE_ITEM"/>
+    </Types>
+    <ScoringCategories>
+        <Row CategoryType="CATEGORY_ERA_SCORE" Name="LOC_CATEGORY_ERA_SCORE_NAME" Multiplier="1"/>
+    </ScoringCategories>
+    <ScoringLineItems>
+        <Update>
+            <Where LineItemType="LINE_ITEM_CIVICS"/>
+            <Set>
+                <Multiplier>3</Multiplier>
+            </Set>
+        </Update>
+        <Update>
+            <Where LineItemType="LINE_ITEM_DISTRICTS"/>
+            <Set>
+                <Multiplier>2</Multiplier>
+            </Set>
+        </Update>
+        <Update>
+            <Where LineItemType="LINE_ITEM_GREAT_PEOPLE"/>
+            <Set>
+                <Multiplier>5</Multiplier>
+            </Set>
+        </Update>
+        <Update>
+            <Where LineItemType="LINE_ITEM_RELIGION"/>
+            <Set>
+                <Multiplier>5</Multiplier>
+            </Set>
+        </Update>
+        <Update>
+            <Where LineItemType="LINE_ITEM_WONDERS"/>
+            <Set>
+                <Multiplier>15</Multiplier>
+            </Set>
+        </Update>
+        <Row LineItemType="LINE_ITEM_ERA_BUILDINGS" Name="LOC_LINE_ITEM_ERA_BUILDINGS_NAME" Category="CATEGORY_EMPIRE" Multiplier="1" Buildings="true" TieBreakerPriority="1030"/>
+        <Row LineItemType="LINE_ITEM_ERA_CONVERTED" Name="LOC_LINE_ITEM_ERA_CONVERTED_NAME" Category="CATEGORY_RELIGION" Multiplier="2" Converted="true" TieBreakerPriority="1020"/>
+        <Row LineItemType="LINE_ITEM_ERA_SCORE" Name="LOC_LINE_ITEM_ERA_SCORE_NAME" Category="CATEGORY_ERA_SCORE" Multiplier="1" EraScore="true" TieBreakerPriority="1010"/>
+    </ScoringLineItems>
+</GameInfo>

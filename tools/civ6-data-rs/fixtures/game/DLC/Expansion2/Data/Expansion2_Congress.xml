@@ -1,0 +1,677 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Kinds>
+        <Row Kind="KIND_RESOLUTION"/>
+        <Row Kind="KIND_DISCUSSION"/>
+        <Row Kind="KIND_PROPOSAL_TYPE"/>
+        <Row Kind="KIND_VOTING_BLOCKER"/>
+        <Row Kind="KIND_PROPOSAL_BLOCKER"/>
+    </Kinds>
+    <Types>
+        <!--Resolutions-->
+        <Row Type="WC_RES_DIPLOVICTORY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_LUXURY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_TRADE_TREATY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_WORLD_RELIGION" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_POWER_RESOURCE" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_MERCENARY_COMPANIES" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_ARMS_CONTROL" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_LOYAL_CITIZENS" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_HERITAGE_ORG" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_POLICY_TREATY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_WORLD_IDEOLOGY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_URBAN_DEVELOPMENT" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_BORDER_CONTROL" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_PUBLIC_WORKS" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_PATRONAGE" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_TREATY_ORGANIZATION" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_GOVERNANCE_DOCTRINE" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_GLOBAL_ENERGY_TREATY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_SOVEREIGNTY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_MIGRATION_TREATY" Kind="KIND_RESOLUTION"/>
+        <Row Type="WC_RES_DEFORESTATION_TREATY" Kind="KIND_RESOLUTION"/>
+    <Row Type="WC_RES_PUBLIC_RELATIONS" Kind="KIND_RESOLUTION"/>
+    <Row Type="WC_RES_ESPIONAGE_PACT" Kind="KIND_RESOLUTION"/>
+    <Row Type="WC_RES_MILITARY_ADVISORY" Kind="KIND_RESOLUTION"/>
+        <!--Discussions-->
+        <Row Type="WC_DENOUNCE_GRIEVANCES" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_KUDO_SPYING" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_DENOUNCE_SPYING" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_KUDO_CONVERTING" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_DENOUNCE_CONVERTING" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_KUDO_DIG_ARTIFACTS" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_DENOUNCE_DIG_ARTIFACTS" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_KUDO_SETTLE_NEAR" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_DENOUNCE_SETTLE_NEAR" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_MILITARY" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_CITY_STATE" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_RELIGIOUS" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_NUCLEAR" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_BACKSTAB" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_REQUEST_AID" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_CLIMATE_ACCORDS" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_WORLD_GAMES" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_WORLD_FAIR" Kind="KIND_DISCUSSION"/>
+        <Row Type="WC_EMERGENCY_SPACE_STATION" Kind="KIND_DISCUSSION"/>
+    <Row Type="WC_EMERGENCY_MILITARY_AID_REQUEST" Kind="KIND_DISCUSSION"/>
+        <!--ProposalTypes-->
+        <Row Type="WC_PROPOSAL_TYPE_KUDO" Kind="KIND_PROPOSAL_TYPE"/>
+        <Row Type="WC_PROPOSAL_TYPE_CASUS_BELLI" Kind="KIND_PROPOSAL_TYPE"/>
+        <Row Type="WC_PROPOSAL_TYPE_AID_REQUEST" Kind="KIND_PROPOSAL_TYPE"/>
+        <Row Type="WC_PROPOSAL_TYPE_EMERGENCY" Kind="KIND_PROPOSAL_TYPE"/>
+        <Row Type="WC_PROPOSAL_TYPE_COMPETITION" Kind="KIND_PROPOSAL_TYPE"/>
+        <!--VotingBlockers-->
+        <Row Type="WC_VOTING_BLOCKER_NOT_BLOCKING" Kind="KIND_VOTING_BLOCKER"/>
+        <Row Type="WC_VOTING_BLOCKER_AM_TARGET_OF_HOSTILE" Kind="KIND_VOTING_BLOCKER"/>
+        <Row Type="WC_VOTING_BLOCKER_AM_TARGET_OF_FRIENDLY" Kind="KIND_VOTING_BLOCKER"/>
+        <Row Type="WC_VOTING_BLOCKER_HAVENT_MET_TARGET" Kind="KIND_VOTING_BLOCKER"/>
+        <Row Type="WC_VOTING_BLOCKER_NOT_INVITED_TO_EMERGENCY" Kind="KIND_VOTING_BLOCKER"/>
+        <!-- ProposalBlockers -->
+        <Row Type="WC_PROPOSAL_BLOCKER_ALREADY_PROPOSED" Kind="KIND_PROPOSAL_BLOCKER"/>
+        <Row Type="WC_PROPOSAL_BLOCKER_CONGRESS_LOCKOUT" Kind="KIND_PROPOSAL_BLOCKER"/>
+    </Types>
+    <VotingBlockers>
+        <Row VotingBlockerType="WC_VOTING_BLOCKER_NOT_BLOCKING" Description="LOC_WC_VOTING_BLOCKER_NOT_BLOCKING_DESC"/>
+        <Row VotingBlockerType="WC_VOTING_BLOCKER_AM_TARGET_OF_HOSTILE" NoUpvote="true" Description="LOC_WC_VOTING_BLOCKER_AM_TARGET_OF_HOSTILE_DESC"/>
+        <Row VotingBlockerType="WC_VOTING_BLOCKER_AM_TARGET_OF_FRIENDLY" NoDownvote="true" Description="LOC_WC_VOTING_BLOCKER_AM_TARGET_OF_FRIENDLY_DESC"/>
+        <Row VotingBlockerType="WC_VOTING_BLOCKER_HAVENT_MET_TARGET" NoUpvote="true" NoDownvote="true" Description="LOC_WC_VOTING_BLOCKER_HAVENT_MET_TARGET_DESC"/>
+        <Row VotingBlockerType="WC_VOTING_BLOCKER_NOT_INVITED_TO_EMERGENCY" NoUpvote="true" NoDownvote="true" Description="LOC_WC_VOTING_BLOCKER_NOT_INVITED_TO_EMERGENCY_DESC"/>
+    </VotingBlockers>
+    <ProposalBlockers>
+        <Row ProposalBlockerType="WC_PROPOSAL_BLOCKER_ALREADY_PROPOSED" Description="LOC_WC_PROPOSAL_BLOCKER_ALREADY_PROPOSED_DESC"/>
+        <Row ProposalBlockerType="WC_PROPOSAL_BLOCKER_CONGRESS_LOCKOUT" Description="LOC_WC_PROPOSAL_BLOCKER_CONGRESS_LOCKOUT_DESC"/>
+    </ProposalBlockers>
+    <Resolutions>
+    <Row ResolutionType="WC_RES_DIPLOVICTORY" Name="LOC_RESOLUTION_DIPLOVICTORY_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_ADD_DIPLOVICTORY_DESC" Effect2Description="LOC_WORLD_CONGRESS_SUBTRACT_DIPLOVICTORY_DESC" ValidationLua="WC_Validate_DiploVictory" AITargetChooser="PlayerOrDiploLeader" InjectionOnly="true" EarliestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_LUXURY" Name="LOC_WC_RES_LUXURY_NAME" TargetKind="RESOURCE" Effect1Description="LOC_WORLD_CONGRESS_IMPROVE_LUXURY_DESC" Effect2Description="LOC_WORLD_CONGRESS_BAN_LUXURY_DESC" ValidationLua="WC_Validate_LuxuryBan" AITargetChooser="MostCommonLuxury"/>
+    <Row ResolutionType="WC_RES_TRADE_TREATY" Name="LOC_WC_RES_TRADE_TREATY_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_IMPROVE_TRADE_WTH_PLAYER_DESC" Effect2Description="LOC_WORLD_CONGRESS_BAN_TRADE_WITH_PLAYER_DESC" ValidationLua="WC_Validate_TradeTreaty" AITargetChooser="TradingPartners"/>
+    <Row ResolutionType="WC_RES_WORLD_RELIGION" Name="LOC_WC_RES_WORLD_RELIGION_NAME" TargetKind="RELIGION" Effect1Description="LOC_WORLD_CONGRESS_EMPOWER_RELIGION_DESC" Effect2Description="LOC_WORLD_CONGRESS_BAN_RELIGION_DESC" ValidationLua="WC_Validate_RegliousBan" AITargetChooser="ReligiousTarget" LatestEra="ERA_INDUSTRIAL"/>
+    <Row ResolutionType="WC_RES_MERCENARY_COMPANIES" Name="LOC_WC_RES_MERCENARY_COMPANIES_NAME" TargetKind="YIELD" Effect1Description="LOC_WORLD_CONGRESS_BAN_PRODUCTION_YIELD_DESC" Effect2Description="LOC_WORLD_CONGRESS_BUFF_PRODUCTION_YIELD_DESC" ValidationLua="WC_Validate_YieldBan" AITargetChooser="UnitBuildYield"/>
+    <Row ResolutionType="WC_RES_ARMS_CONTROL" Name="LOC_WC_RES_ARMS_CONTROL_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_BUFF_ARMS_CONTROL_DESC" Effect2Description="LOC_WORLD_CONGRESS_NERF_ARMS_CONTROL_DESC" ValidationLua="WC_Validate_ArmsControlTreaty" EarliestEra="ERA_ATOMIC"/>
+    <Row ResolutionType="WC_RES_HERITAGE_ORG" Name="LOC_WC_RES_HERITAGE_ORG_NAME" TargetKind="GREATWORKOBJECT" Effect1Description="LOC_WORLD_CONGRESS_BUFF_WORK_TOURISM_DESC" Effect2Description="LOC_WORLD_CONGRESS_NO_WORK_TOURISM_DESC" AITargetChooser="GreatWorkObjects" ValidationLua="WC_Validate_GreatWorkObjects" EarliestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_WORLD_IDEOLOGY" Name="LOC_WC_RES_WORLD_IDEOLOGY_NAME" TargetKind="GOVERNMENT" Effect1Description="LOC_WORLD_CONGRESS_GAIN_WILDCARD_DESC" Effect2Description="LOC_WORLD_CONGRESS_LOSE_WILDCARD_DESC" AITargetChooser="Government" ValidationLua="WC_Validate_WorldIdeology" EarliestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_URBAN_DEVELOPMENT" Name="LOC_WC_RES_URBAN_DEVELOPMENT_NAME" TargetKind="DISTRICT" Effect1Description="LOC_WORLD_CONGRESS_DISTRICT_BUILDING_PRODUCTION_DESC" Effect2Description="LOC_WORLD_CONGRESS_NO_DISTRICT_BUILDING_DESC" AITargetChooser="District" ValidationLua="WC_Validate_UrbanDevelopment" LatestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_BORDER_CONTROL" Name="LOC_WC_RES_BORDER_CONTROL_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_DISTRICTS_CULTURE_BOMB_DESC" Effect2Description="LOC_WORLD_CONGRESS_NO_CULTURE_BORDER_GROWTH_DESC" AITargetChooser="BorderControlTarget" ValidationLua="WC_Validate_BorderControl" LatestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_PUBLIC_WORKS" Name="LOC_WC_RES_PUBLIC_WORKS_NAME" TargetKind="PROJECT" Effect1Description="LOC_WORLD_CONGRESS_BUFF_PROJECT_PRODUCTION_DESC" Effect2Description="LOC_WORLD_CONGRESS_BAN_PROJECT_DESC" AITargetChooser="Project" ValidationLua="WC_Validate_PublicWorks" EarliestEra="ERA_ATOMIC" LatestEra="ERA_INFORMATION"/>
+    <Row ResolutionType="WC_RES_PATRONAGE" Name="LOC_WC_RES_PATRONAGE_NAME" TargetKind="GREATPERSONCLASS" Effect1Description="LOC_WORLD_CONGRESS_BUFF_GP_POINTS_DESC" Effect2Description="LOC_WORLD_CONGRESS_NO_GP_POINTS_DESC" ValidationLua="WC_Validate_Patronage" AITargetChooser="GreatPersonPatronage" LatestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_GLOBAL_ENERGY_TREATY" Name="LOC_WC_RES_GLOBAL_ENERGY_TREATY_NAME" TargetKind="BUILDING" Effect1Description="LOC_WORLD_CONGRESS_BAN_BUILDING_DESC" Effect2Description="LOC_WORLD_CONGRESS_BUILDING_DISCOUNT_DESC" AITargetChooser="PowerBuilding" ValidationLua="WC_Validate_PowerBuilding" EarliestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_SOVEREIGNTY" Name="LOC_WC_RES_SOVEREIGNTY_NAME" TargetKind="MINORCIVBONUS" Effect1Description="LOC_WORLD_CONGRESS_FAVOR_FROM_TRADE_AND_ENVOYS_WITH_MINORS_DESC" Effect2Description="LOC_WORLD_CONGRESS_NO_SUZERAIN_BONUS_DESC" AITargetChooser="MinorCivBonus" LatestEra="ERA_MODERN"/>
+    <Row ResolutionType="WC_RES_MIGRATION_TREATY" Name="LOC_WC_RES_MIGRATION_TREATY_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_MORE_GROWTH_LESS_LOYALTY_DESC" Effect2Description="LOC_WORLD_CONGRESS_LESS_GROWTH_MORE_LOYALTY_DESC" AITargetChooser="MigrationTarget" ValidationLua="WC_Validate_MigrationTreaty" EarliestEra="ERA_INDUSTRIAL"/>
+    <Row ResolutionType="WC_RES_DEFORESTATION_TREATY" Name="LOC_WC_RES_DEFORESTATION_TREATY_NAME" TargetKind="FEATURE" Effect1Description="LOC_WORLD_CONGRESS_DEFORESTATION_BAN_DESC" Effect2Description="LOC_WORLD_CONGRESS_DEFORESTATION_GOLD_DESC" AITargetChooser="FeatureType" ValidationLua="WC_Validate_DeforestationFeature" EarliestEra="ERA_ATOMIC" LatestEra="ERA_INFORMATION"/>
+    <Row ResolutionType="WC_RES_PUBLIC_RELATIONS" Name="LOC_WC_RES_PUBLIC_RELATIONS_NAME" TargetKind="PLAYER" Effect1Description="LOC_WORLD_CONGRESS_PUBLIC_RELATIONS_MORE_GRIEVANCES_DESC" Effect2Description="LOC_WORLD_CONGRESS_PUBLIC_RELATIONS_FEWER_GRIEVANCES_DESC" AITargetChooser="GrievancesType" ValidationLua="WC_Validate_MigrationTreaty" LatestEra="ERA_ATOMIC"/>
+    <Row ResolutionType="WC_RES_ESPIONAGE_PACT" Name="LOC_WC_RES_ESPIONAGE_PACT_NAME" TargetKind="UNITOPERATION" Effect1Description="LOC_WORLD_CONGRESS_PUBLIC_ESPIONAGE_PACT_BUFF_DESC" Effect2Description="LOC_WORLD_CONGRESS_PUBLIC_ESPIONAGE_PACT_DISABLE_DESC" AITargetChooser="SpyOperationType" EarliestEra="ERA_INDUSTRIAL" LatestEra="ERA_ATOMIC" ValidationLua="WC_Validate_ESPIONAGE_PACT"/>
+    <Row ResolutionType="WC_RES_MILITARY_ADVISORY" Name="LOC_WC_RES_MILITARY_ADVISORY_NAME" TargetKind="UNITPROMOTIONCLASS" Effect1Description="LOC_WORLD_CONGRESS_MILITARY_ADVISORY_BUFF_DESC" Effect2Description="LOC_WORLD_CONGRESS_MILITARY_ADVISORY_NERF_DESC" AITargetChooser="UnitPromotionType" LatestEra="ERA_ATOMIC" ValidationLua="WC_Validate_MILITARY_ADVISORY"/>
+  </Resolutions>
+    <ProposalTypes>
+        <Row ProposalType="WC_PROPOSAL_TYPE_CASUS_BELLI" Icon="FAVOR" Name="LOC_WC_PROPOSAL_TYPE_CASUS_BELLI_NAME" Description="LOC_WC_PROPOSAL_TYPE_CASUS_BELLI_DESC" Sort="0"/>
+        <Row ProposalType="WC_PROPOSAL_TYPE_KUDO" Icon="FAVOR" Name="LOC_WC_PROPOSAL_TYPE_KUDO_NAME" Description="LOC_WC_PROPOSAL_TYPE_KUDO_DESC" Sort="1"/>
+        <Row ProposalType="WC_PROPOSAL_TYPE_AID_REQUEST" Icon="FAVOR" Name="LOC_WC_PROPOSAL_TYPE_AID_REQUEST_NAME" Description="LOC_WC_PROPOSAL_TYPE_AID_REQUEST_DESC" Sort="2"/>
+        <Row ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Icon="FAVOR" Name="LOC_WC_PROPOSAL_TYPE_EMERGENCY_NAME" Description="LOC_WC_PROPOSAL_TYPE_EMERGENCY_DESC" Sort="3"/>
+        <Row ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Icon="FAVOR" Name="LOC_WC_PROPOSAL_TYPE_COMPETITION_NAME" Description="LOC_WC_PROPOSAL_TYPE_COMPETITION_DESC" Sort="3"/>
+    </ProposalTypes>
+    <Discussions>
+        <!-- Current Emergencies rolled into the World Congress -->
+        <Row DiscussionType="WC_EMERGENCY_MILITARY" ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Name="LOC_DISCUSSION_EMERGENCY_MILITARY_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_MILITARY" EmergencyType="EMERGENCY_MILITARY"/>
+        <Row DiscussionType="WC_EMERGENCY_CITY_STATE" ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Name="LOC_DISCUSSION_EMERGENCY_CITY_STATE_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_CITY_STATE" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE"/>
+        <Row DiscussionType="WC_EMERGENCY_RELIGIOUS" ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Name="LOC_DISCUSSION_EMERGENCY_RELIGIOUS_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_RELIGIOUS" EmergencyType="EMERGENCY_RELIGIOUS"/>
+        <Row DiscussionType="WC_EMERGENCY_NUCLEAR" ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Name="LOC_DISCUSSION_EMERGENCY_NUCLEAR_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_NUCLEAR" EmergencyType="EMERGENCY_NUCLEAR"/>
+        <Row DiscussionType="WC_EMERGENCY_BACKSTAB" ProposalType="WC_PROPOSAL_TYPE_EMERGENCY" Name="LOC_DISCUSSION_EMERGENCY_BACKSTAB_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_BACKSTAB" EmergencyType="EMERGENCY_BACKSTAB"/>
+        <Row DiscussionType="WC_EMERGENCY_REQUEST_AID" ProposalType="WC_PROPOSAL_TYPE_AID_REQUEST" Name="LOC_DISCUSSION_EMERGENCY_AID_REQUEST_TARGET_NAME" Description="LOC_EMERGENCY_FLAVOR_REQUEST_AID" EmergencyType="EMERGENCY_SEND_AID"/>
+        <Row DiscussionType="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_DISCUSSION_NOBEL_PRIZE_LITERATURE_NAME" Description="LOC_EMERGENCY_FLAVOR_GREAT_ARTISTS" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE"/>
+        <Row DiscussionType="WC_EMERGENCY_NOBEL_PRIZE_PEACE" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_DISCUSSION_EMERGENCY_NOBEL_PRIZE_PEACE_NAME" Description="LOC_EMERGENCY_FLAVOR_FAVOR" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE"/>
+        <Row DiscussionType="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_DISCUSSION_EMERGENCY_NOBEL_PRIZE_PHYSICS_NAME" Description="LOC_EMERGENCY_FLAVOR_GREAT_STEMS" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS"/>
+        <Row DiscussionType="WC_EMERGENCY_CLIMATE_ACCORDS" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_EMERGENCY_CLIMATE_ACCORDS_NAME" Description="LOC_EMERGENCY_FLAVOR_CLIMATE_ACCORDS" EmergencyType="EMERGENCY_CLIMATE_ACCORDS"/>
+        <Row DiscussionType="WC_EMERGENCY_WORLD_GAMES" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_EMERGENCY_WORLD_GAMES_NAME" Description="LOC_EMERGENCY_FLAVOR_WORLD_GAMES" EmergencyType="EMERGENCY_WORLD_GAMES"/>
+        <Row DiscussionType="WC_EMERGENCY_SPACE_STATION" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_EMERGENCY_SPACE_STATION_NAME" Description="LOC_EMERGENCY_FLAVOR_SPACE_STATION" EmergencyType="EMERGENCY_SPACE_STATION"/>
+        <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" ProposalType="WC_PROPOSAL_TYPE_COMPETITION" Name="LOC_EMERGENCY_WORLDS_FAIR_NAME" Description="LOC_EMERGENCY_FLAVOR_SCORE_COMPETITION_CULTURAL" EmergencyType="EMERGENCY_WORLDS_FAIR"/>
+        <Row DiscussionType="WC_EMERGENCY_MILITARY_AID_REQUEST" ProposalType="WC_PROPOSAL_TYPE_AID_REQUEST" Name="LOC_EMERGENCY_REQUEST_MILITARY_AID_NAME" Description="LOC_EMERGENCY_FLAVOR_REQUEST_MILITARY_AID" EmergencyType="EMERGENCY_SEND_MILITARY_AID"/>
+    </Discussions>
+    <ResolutionEffects>
+        <!-- First digit of the Effect Id is the resolution index; second digit is 0-4 for the "A" effect and 5-9 for the "B" effect -->
+        <!-- Note that the effect Id is not used, it is to help the bookkeeping in creating these. Do not use in code. AWG -->
+        <Row ResolutionEffectId="0" ResolutionType="WC_RES_DIPLOVICTORY" WhichEffect="1" ModifierId="APPLY_INCREASED_DIPLO_VP_TO_PLAYER"/>
+        <Row ResolutionEffectId="5" ResolutionType="WC_RES_DIPLOVICTORY" WhichEffect="2" ModifierId="APPLY_DECREASED_DIPLO_VP_TO_PLAYER"/>
+        <Row ResolutionEffectId="10" ResolutionType="WC_RES_LUXURY" WhichEffect="1" ModifierId="NO_CAP_LUXURY_RESOURCE"/>
+        <Row ResolutionEffectId="15" ResolutionType="WC_RES_LUXURY" WhichEffect="2" ModifierId="BAN_LUXURY_RESOURCE"/>
+        <Row ResolutionEffectId="20" ResolutionType="WC_RES_TRADE_TREATY" WhichEffect="1" ModifierId="APPLY_TARGET_FREE_TRADE_ROUTE"/>
+        <Row ResolutionEffectId="21" ResolutionType="WC_RES_TRADE_TREATY" WhichEffect="1" ModifierId="APPLY_INCREASES_TRADE_TO_GOLD_TO_PLAYER"/>
+        <Row ResolutionEffectId="25" ResolutionType="WC_RES_TRADE_TREATY" WhichEffect="2" ModifierId="APPLY_INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED"/>
+        <Row ResolutionEffectId="30" ResolutionType="WC_RES_WORLD_RELIGION" WhichEffect="1" ModifierId="WC_RES_RELIGIOUS_UNITS_STRENGTH"/>
+        <Row ResolutionEffectId="35" ResolutionType="WC_RES_WORLD_RELIGION" WhichEffect="2" ModifierId="ANYONE_CONDEMNS_FOR_FAVOR"/>
+        <Row ResolutionEffectId="40" ResolutionType="WC_RES_HERITAGE_ORG" WhichEffect="1" ModifierId="ADD_TOURISM_FROM_GREAT_WORK_OBJECT"/>
+        <Row ResolutionEffectId="45" ResolutionType="WC_RES_HERITAGE_ORG" WhichEffect="2" ModifierId="NO_TOURISM_FROM_GREAT_WORK_OBJECT"/>
+        <Row ResolutionEffectId="50" ResolutionType="WC_RES_DEFORESTATION_TREATY" WhichEffect="1" ModifierId="WC_RES_DEFORESTATION_BAN"/>
+        <Row ResolutionEffectId="55" ResolutionType="WC_RES_DEFORESTATION_TREATY" WhichEffect="2" ModifierId="WC_RES_DEFORESTATION_GOLD"/>
+        <Row ResolutionEffectId="60" ResolutionType="WC_RES_ARMS_CONTROL" WhichEffect="1" ModifierId="WC_RES_MEET_WMD_TARGET"/>
+        <Row ResolutionEffectId="65" ResolutionType="WC_RES_ARMS_CONTROL" WhichEffect="2" ModifierId="WC_RES_WMD_BAN"/>
+        <Row ResolutionEffectId="70" ResolutionType="WC_RES_WORLD_IDEOLOGY" WhichEffect="1" ModifierId="GOVT_ADD_WILDCARD_SLOT"/>
+        <Row ResolutionEffectId="75" ResolutionType="WC_RES_WORLD_IDEOLOGY" WhichEffect="2" ModifierId="GOVT_LOSE_WILDCARD_SLOT"/>
+        <Row ResolutionEffectId="80" ResolutionType="WC_RES_BORDER_CONTROL" WhichEffect="1" ModifierId="APPLY_ALL_DISTRICTS_CULTURE_BOMB_TO_PLAYER"/>
+        <Row ResolutionEffectId="85" ResolutionType="WC_RES_BORDER_CONTROL" WhichEffect="2" ModifierId="APPLY_NO_CULTURE_BORDER_EXPANSION_TO_PLAYER"/>
+        <Row ResolutionEffectId="90" ResolutionType="WC_RES_PUBLIC_WORKS" WhichEffect="1" ModifierId="INCREASE_PROJECT_PRODUCTION"/>
+        <Row ResolutionEffectId="95" ResolutionType="WC_RES_PUBLIC_WORKS" WhichEffect="2" ModifierId="DECREASE_PROJECT_PRODUCTION"/>
+        <Row ResolutionEffectId="100" ResolutionType="WC_RES_URBAN_DEVELOPMENT" WhichEffect="1" ModifierId="INCREASE_DISTRICT_BUILDING_PRODUCTION"/>
+        <Row ResolutionEffectId="105" ResolutionType="WC_RES_URBAN_DEVELOPMENT" WhichEffect="2" ModifierId="BAN_DISTRICT_BUILDING"/>
+        <Row ResolutionEffectId="120" ResolutionType="WC_RES_PATRONAGE" WhichEffect="1" ModifierId="INCREASE_GREAT_PERSON_POINTS"/>
+        <Row ResolutionEffectId="125" ResolutionType="WC_RES_PATRONAGE" WhichEffect="2" ModifierId="NO_GREAT_PERSON_POINTS"/>
+        <Row ResolutionEffectId="140" ResolutionType="WC_RES_GLOBAL_ENERGY_TREATY" WhichEffect="1" ModifierId="WC_RES_BUILDING_PRODUCTION_BAN"/>
+        <Row ResolutionEffectId="145" ResolutionType="WC_RES_GLOBAL_ENERGY_TREATY" WhichEffect="2" ModifierId="WC_RES_BUILDING_PRODUCTION_BUFF"/>
+        <Row ResolutionEffectId="150" ResolutionType="WC_RES_SOVEREIGNTY" WhichEffect="1" ModifierId="WC_RES_MODIFY_CITY_STATE_TRADE_YIELD"/>
+        <Row ResolutionEffectId="155" ResolutionType="WC_RES_SOVEREIGNTY" WhichEffect="2" ModifierId="APPLY_DISABLE_UNIQUE_SUZERAIN_BONUS_TO_MINORCIVTYPES"/>
+        <Row ResolutionEffectId="160" ResolutionType="WC_RES_MIGRATION_TREATY" WhichEffect="1" ModifierId="APPLY_GROWTH_BONUS_TO_PLAYER"/>
+        <Row ResolutionEffectId="161" ResolutionType="WC_RES_MIGRATION_TREATY" WhichEffect="1" ModifierId="APPLY_LOYALTY_PENALTY_TO_PLAYER"/>
+        <Row ResolutionEffectId="165" ResolutionType="WC_RES_MIGRATION_TREATY" WhichEffect="2" ModifierId="APPLY_GROWTH_PENALTY_TO_PLAYER"/>
+        <Row ResolutionEffectId="166" ResolutionType="WC_RES_MIGRATION_TREATY" WhichEffect="2" ModifierId="APPLY_LOYALTY_BONUS_TO_PLAYER"/>
+        <Row ResolutionEffectId="170" ResolutionType="WC_RES_MERCENARY_COMPANIES" WhichEffect="1" ModifierId="WC_RES_UNIT_PRODUCTION_YIELD_DEBUFF"/>
+        <Row ResolutionEffectId="175" ResolutionType="WC_RES_MERCENARY_COMPANIES" WhichEffect="2" ModifierId="WC_RES_UNIT_PRODUCTION_YIELD_BUFF"/>
+    <Row ResolutionEffectId="180" ResolutionType="WC_RES_PUBLIC_RELATIONS" WhichEffect="1" ModifierId="APPLY_PLAYER_GRIEVANCES_BUFF"/>
+    <Row ResolutionEffectId="185" ResolutionType="WC_RES_PUBLIC_RELATIONS" WhichEffect="2" ModifierId="APPLY_PLAYER_GRIEVANCES_DEBUFF"/>
+    <Row ResolutionEffectId="190" ResolutionType="WC_RES_ESPIONAGE_PACT" WhichEffect="1" ModifierId="WC_RES_OPERATION_CHANCE_BUFF"/>
+    <Row ResolutionEffectId="195" ResolutionType="WC_RES_ESPIONAGE_PACT" WhichEffect="2" ModifierId="WC_RES_OPERATION_REMOVE"/>
+    <Row ResolutionEffectId="200" ResolutionType="WC_RES_MILITARY_ADVISORY" WhichEffect="1" ModifierId="APPLY_RES_UNIT_COMBAT_BUFF"/>
+    <Row ResolutionEffectId="205" ResolutionType="WC_RES_MILITARY_ADVISORY" WhichEffect="2" ModifierId="APPLY_RES_UNIT_COMBAT_DEBUFF"/>
+    </ResolutionEffects>
+  <CongressAiChanges>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_GENERAL" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_ADMIRAL" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_ENGINEER" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_MERCHANT" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_SCIENTIST" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_WRITER" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_ARTIST" Value="300"/>
+    <Row DiscussionType="WC_EMERGENCY_WORLD_FAIR" PseudoYieldType="PSEUDOYIELD_GPP_MUSICIAN" Value="300"/>
+  </CongressAiChanges>
+    <Modifiers>
+        <Row ModifierId="APPLY_INCREASED_DIPLO_VP_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_DECREASED_DIPLO_VP_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="ADD_DIPLOMATIC_VICTORY_POINTS">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+        </Row>
+        <Row ModifierId="SUBTRACT_DIPLOMATIC_VICTORY_POINTS">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+        </Row>
+        <Row ModifierId="NO_CAP_LUXURY_RESOURCE">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_NO_CAP_RESOURCE</ModifierType>
+        </Row>
+        <Row ModifierId="BAN_LUXURY_RESOURCE">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_BAN_RESOURCE</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_TARGET_FREE_TRADE_ROUTE">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="TARGET_ADD_TRADE_ROUTE">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_TRADE_ROUTE_CAPACITY</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_INCREASES_TRADE_TO_GOLD_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="INCREASES_TRADE_TO_GOLD">
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_TRADE_ROUTE_YIELD_FROM_OTHERS</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED">
+            <ModifierType>MODIFIER_PLAYER_TRADE_ROUTES_DISABLE</ModifierType>
+        </Row>
+        <Row ModifierId="ADD_TOURISM_FROM_GREAT_WORK_OBJECT">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_GREAT_WORK_OBJECT_TOURISM</ModifierType>
+        </Row>
+        <Row ModifierId="NO_TOURISM_FROM_GREAT_WORK_OBJECT">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_GREAT_WORK_OBJECT_NO_TOURISM</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_DEFORESTATION_BAN">
+            <ModifierType>MODIFIER_PLAYERS_ADJUST_CHOP_BAN</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_DEFORESTATION_GOLD">
+            <ModifierType>MODIFIER_PLAYERS_ADD_CHOP_YIELD</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_RELIGIOUS_UNITS_STRENGTH">
+            <ModifierType>MODIFIER_MAJOR_PLAYERS_ADJUST_UNITS_RELIGIOUS_STRENGTH_BY_RELIGION_TYPE</ModifierType>
+        </Row>
+        <Row ModifierId="ANYONE_CONDEMNS_FOR_FAVOR">
+            <ModifierType>MODIFIER_RELIGION_ADJUST_ANYONE_CONDEMNS_FAVOR</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_MEET_WMD_TARGET">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="PLAYERS_EQUALIZE_WMD_COUNTS">
+            <ModifierType>MODIFIER_PLAYERS_ADJUST_WMD_STOCKPILE</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_WMD_BAN">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="PLAYER_TARGET_WMD_BAN">
+            <ModifierType>MODIFIER_PLAYERS_ADJUST_WMD_STOCKPILE</ModifierType>
+        </Row>
+        <Row ModifierId="GOVT_ADD_WILDCARD_SLOT">
+            <ModifierType>MODIFIER_GOVERNMENT_ADJUST_SLOTS</ModifierType>
+        </Row>
+        <Row ModifierId="GOVT_LOSE_WILDCARD_SLOT">
+            <ModifierType>MODIFIER_GOVERNMENT_ADJUST_SLOTS</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_NO_CULTURE_BORDER_EXPANSION_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="NO_CULTURE_BORDER_EXPANSION">
+            <ModifierType>MODIFIER_PLAYER_CITIES_NO_CULTURE_BORDER_EXPANSION</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_ALL_DISTRICTS_CULTURE_BOMB_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="ALL_DISTRICTS_CULTURE_BOMB">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_ALL_DISTRICTS_CULTURE_BOMB</ModifierType>
+        </Row>
+        <Row ModifierId="INCREASE_PROJECT_PRODUCTION">
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_PROJECT_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="DECREASE_PROJECT_PRODUCTION">
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_PROJECT_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="INCREASE_DISTRICT_BUILDING_PRODUCTION">
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_DISTRICT_BUILDING_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="BAN_DISTRICT_BUILDING">
+            <ModifierType>MODIFIER_MAJOR_PLAYERS_ADJUST_BANNED_CITY_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="INCREASE_GREAT_PERSON_POINTS">
+            <ModifierType>MODIFIER_MAJOR_PLAYERS_ADJUST_GREAT_PERSON_POINTS_PERCENT</ModifierType>
+        </Row>
+        <Row ModifierId="NO_GREAT_PERSON_POINTS">
+            <ModifierType>MODIFIER_MAJOR_PLAYERS_ADJUST_NO_GREAT_PERSON_POINTS</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_BUILDING_PRODUCTION_BAN">
+            <ModifierType>MODIFIER_MAJOR_PLAYERS_ADJUST_BANNED_CITY_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_BUILDING_PRODUCTION_BUFF">
+            <ModifierType>MODIFIER_ALL_CITIES_ADJUST_BUILDING_PRODUCTION</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_MODIFY_CITY_STATE_TRADE_YIELD">
+            <ModifierType>MODIFIER_MAJOR_PLAYER_TRADE_ROUTE_BY_CITY_STATE_BONUS_TYPE_MODIFIER</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_DISABLE_UNIQUE_SUZERAIN_BONUS_TO_MINORCIVTYPES">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_MINORCIVBONUSTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_DISABLE_UNIQUE_SUZERAIN_BONUS">
+            <ModifierType>MODIFIER_PLAYER_ADJUST_SUZERAIN_BONUS_DISABLED</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_GROWTH_BONUS_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_GROWTH_PENALTY_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_LOYALTY_BONUS_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="APPLY_LOYALTY_PENALTY_TO_PLAYER">
+            <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_CITY_GROWTH_BONUS">
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_CITY_LOYALTY_PENALTY">
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_CITY_GROWTH_PENALTY">
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_CITY_LOYALTY_BONUS">
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_UNIT_PRODUCTION_YIELD_DEBUFF">
+            <ModifierType>MODIFIER_PLAYERS_ADJUST_UNIT_BUFF_PRODUCTION_YIELD</ModifierType>
+        </Row>
+        <Row ModifierId="WC_RES_UNIT_PRODUCTION_YIELD_BUFF">
+            <ModifierType>MODIFIER_PLAYERS_ADJUST_UNIT_BUFF_PRODUCTION_YIELD</ModifierType>
+        </Row>
+    <Row ModifierId="WC_RES_PLAYER_GRIEVANCES_BUFF">
+      <ModifierType>MODIFIER_PLAYER_ADJUST_GRIEVANCE_MULTIPLIER</ModifierType>
+    </Row>
+    <Row ModifierId="APPLY_PLAYER_GRIEVANCES_BUFF">
+      <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+    </Row>
+    <Row ModifierId="WC_RES_PLAYER_GRIEVANCES_DEBUFF">
+      <ModifierType>MODIFIER_PLAYER_ADJUST_GRIEVANCE_MULTIPLIER</ModifierType>
+    </Row>
+    <Row ModifierId="APPLY_PLAYER_GRIEVANCES_DEBUFF">
+      <ModifierType>MODIFIER_CONGRESS_ATTACH_MODIFIER_TO_PLAYERTYPE</ModifierType>
+    </Row>
+    <Row ModifierId="WC_RES_OPERATION_CHANCE_BUFF">
+      <ModifierType>MODIFIER_ALL_UNITS_ADJUST_SPYING_EFFICIENCY</ModifierType>
+    </Row>
+    <Row ModifierId="WC_RES_OPERATION_REMOVE">
+      <ModifierType>MODIFIER_ALL_UNITS_DISABLE_OPERATION</ModifierType>
+    </Row>
+    <Row ModifierId="APPLY_RES_UNIT_COMBAT_BUFF">
+      <ModifierType>MODIFIER_ALL_UNITS_APPLY_MODIFIER_IF_PROMOTION_CLASS_MATCHES</ModifierType>
+    </Row>
+    <Row ModifierId="WC_RES_UNIT_COMBAT_BUFF">
+      <ModifierType>MODIFIER_UNIT_ADJUST_COMBAT_STRENGTH</ModifierType>
+    </Row>
+    <Row ModifierId="APPLY_RES_UNIT_COMBAT_DEBUFF">
+      <ModifierType>MODIFIER_ALL_UNITS_APPLY_MODIFIER_IF_PROMOTION_CLASS_MATCHES</ModifierType>
+    </Row>
+    <Row ModifierId="WC_RES_UNIT_COMBAT_DEBUFF">
+      <ModifierType>MODIFIER_UNIT_ADJUST_COMBAT_STRENGTH</ModifierType>
+    </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>APPLY_INCREASED_DIPLO_VP_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>ADD_DIPLOMATIC_VICTORY_POINTS</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_DECREASED_DIPLO_VP_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>SUBTRACT_DIPLOMATIC_VICTORY_POINTS</Value>
+        </Row>
+        <Row>
+            <ModifierId>ADD_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+    <Row>
+      <ModifierId>ADD_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+      <Name>Tooltip</Name>
+      <Value>LOC_DVP_TOOLTIP_DVP_RESOLUTION</Value>
+    </Row>
+    <Row>
+      <ModifierId>ADD_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+      <Name>VictoryResolution</Name>
+      <Value>true</Value>
+    </Row>
+        <Row>
+            <ModifierId>SUBTRACT_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+            <Name>Amount</Name>
+            <Value>-2</Value>
+        </Row>
+    <Row>
+      <ModifierId>SUBTRACT_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+      <Name>Tooltip</Name>
+      <Value>LOC_DVP_TOOLTIP_DVP_RESOLUTION</Value>
+    </Row>
+    <Row>
+      <ModifierId>SUBTRACT_DIPLOMATIC_VICTORY_POINTS</ModifierId>
+      <Name>VictoryResolution</Name>
+      <Value>true</Value>
+    </Row>
+        <Row>
+            <ModifierId>APPLY_TARGET_FREE_TRADE_ROUTE</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>TARGET_ADD_TRADE_ROUTE</Value>
+        </Row>
+        <Row>
+            <ModifierId>TARGET_ADD_TRADE_ROUTE</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_INCREASES_TRADE_TO_GOLD_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>INCREASES_TRADE_TO_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>INCREASES_TRADE_TO_GOLD</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>INCREASES_TRADE_TO_GOLD</ModifierId>
+            <Name>Amount</Name>
+            <Value>4</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED</Value>
+        </Row>
+        <Row>
+            <ModifierId>INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED</ModifierId>
+            <Name>InternationalMajors</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED</ModifierId>
+            <Name>InternationalMinors</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <ModifierId>INTERNATIONAL_MAJOR_TRADE_ROUTES_DISABLED</ModifierId>
+            <Name>Domestic</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <ModifierId>ANYONE_CONDEMNS_FOR_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>25</Value>
+        </Row>
+        <Row>
+            <ModifierId>ADD_TOURISM_FROM_GREAT_WORK_OBJECT</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>NO_TOURISM_FROM_GREAT_WORK_OBJECT</ModifierId>
+            <Name>NoTourism</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_DEFORESTATION_BAN</ModifierId>
+            <Name>NoRemove</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_DEFORESTATION_GOLD</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_DEFORESTATION_GOLD</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_RELIGIOUS_UNITS_STRENGTH</ModifierId>
+            <Name>Amount</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_MEET_WMD_TARGET</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>PLAYERS_EQUALIZE_WMD_COUNTS</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_WMD_BAN</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>PLAYER_TARGET_WMD_BAN</Value>
+        </Row>
+        <Row>
+            <ModifierId>PLAYER_TARGET_WMD_BAN</ModifierId>
+            <Name>TargetOnly</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>PLAYER_TARGET_WMD_BAN</ModifierId>
+            <Name>Amount</Name>
+            <Value>0</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVT_ADD_WILDCARD_SLOT</ModifierId>
+            <Name>GovernmentSlotType</Name>
+            <Value>SLOT_WILDCARD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVT_ADD_WILDCARD_SLOT</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVT_LOSE_WILDCARD_SLOT</ModifierId>
+            <Name>GovernmentSlotType</Name>
+            <Value>SLOT_WILDCARD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVT_LOSE_WILDCARD_SLOT</ModifierId>
+            <Name>Amount</Name>
+            <Value>-1</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_NO_CULTURE_BORDER_EXPANSION_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>NO_CULTURE_BORDER_EXPANSION</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_ALL_DISTRICTS_CULTURE_BOMB_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>ALL_DISTRICTS_CULTURE_BOMB</Value>
+        </Row>
+        <Row>
+            <ModifierId>DECREASE_PROJECT_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>-50</Value>
+        </Row>
+        <Row>
+            <ModifierId>INCREASE_PROJECT_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>INCREASE_DISTRICT_BUILDING_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>BAN_DISTRICT_BUILDING</ModifierId>
+            <Name>BanDistrictBuildings</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>INCREASE_GREAT_PERSON_POINTS</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_BUILDING_PRODUCTION_BUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_MODIFY_CITY_STATE_TRADE_YIELD</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_DISABLE_UNIQUE_SUZERAIN_BONUS_TO_MINORCIVTYPES</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>WC_RES_DISABLE_UNIQUE_SUZERAIN_BONUS</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_GROWTH_BONUS_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>WC_RES_CITY_GROWTH_BONUS</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_CITY_GROWTH_BONUS</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_LOYALTY_PENALTY_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>WC_RES_CITY_LOYALTY_PENALTY</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_CITY_LOYALTY_PENALTY</ModifierId>
+            <Name>Amount</Name>
+            <Value>-5</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_GROWTH_PENALTY_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>WC_RES_CITY_GROWTH_PENALTY</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_CITY_GROWTH_PENALTY</ModifierId>
+            <Name>Amount</Name>
+            <Value>-20</Value>
+        </Row>
+        <Row>
+            <ModifierId>APPLY_LOYALTY_BONUS_TO_PLAYER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>WC_RES_CITY_LOYALTY_BONUS</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_CITY_LOYALTY_BONUS</ModifierId>
+            <Name>Amount</Name>
+            <Value>5</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_UNIT_PRODUCTION_YIELD_BUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>WC_RES_UNIT_PRODUCTION_YIELD_DEBUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>-100</Value>
+        </Row>
+    <Row>
+      <ModifierId>APPLY_PLAYER_GRIEVANCES_BUFF</ModifierId>
+      <Name>ModifierId</Name>
+      <Value>WC_RES_PLAYER_GRIEVANCES_BUFF</Value>
+    </Row>
+    <Row>
+      <ModifierId>APPLY_PLAYER_GRIEVANCES_DEBUFF</ModifierId>
+      <Name>ModifierId</Name>
+      <Value>WC_RES_PLAYER_GRIEVANCES_DEBUFF</Value>
+    </Row>
+    <Row>
+      <ModifierId>WC_RES_PLAYER_GRIEVANCES_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>100</Value>
+    </Row>
+    <Row>
+      <ModifierId>WC_RES_PLAYER_GRIEVANCES_DEBUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>-50</Value>
+    </Row>
+    <Row>
+      <ModifierId>WC_RES_OPERATION_CHANCE_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>2</Value>
+    </Row>
+    <Row>
+      <ModifierId>APPLY_RES_UNIT_COMBAT_BUFF</ModifierId>
+      <Name>ModifierId</Name>
+      <Value>WC_RES_UNIT_COMBAT_BUFF</Value>
+    </Row>
+    <Row>
+      <ModifierId>APPLY_RES_UNIT_COMBAT_DEBUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>WC_RES_UNIT_COMBAT_DEBUFF</Value>
+    </Row>
+    <Row>
+      <ModifierId>WC_RES_UNIT_COMBAT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>5</Value>
+    </Row>
+    <Row>
+      <ModifierId>WC_RES_UNIT_COMBAT_DEBUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>-5</Value>
+    </Row>
+  </ModifierArguments>
+  <ModifierStrings>
+    <Row ModifierId="WC_RES_UNIT_COMBAT_BUFF" Context="Preview" Text="LOC_COMBAT_PREVIEW_MILITARY_ADVISORY_MILITARY_BUFF"/>
+    <Row ModifierId="WC_RES_UNIT_COMBAT_DEBUFF" Context="Preview" Text="LOC_COMBAT_PREVIEW_MILITARY_ADVISORY_MILITARY_DEBUFF"/>
+  </ModifierStrings>
+</GameInfo>

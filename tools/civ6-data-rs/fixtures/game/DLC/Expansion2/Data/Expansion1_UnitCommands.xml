@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <Row Type="UNITCOMMAND_PARADROP" Kind="KIND_UNITCOMMAND"/>
+        <Row Type="UNITCOMMAND_PROJECT_PRODUCTION" Kind="KIND_UNITCOMMAND"/>
+        <Row Type="UNITCOMMAND_PRIORITY_TARGET" Kind="KIND_UNITCOMMAND"/>
+    <Row Type="UNITCOMMAND_SPREAD_DISSENT" Kind="KIND_UNITCOMMAND"/>
+    </Types>
+    <UnitCommands>
+        <Row CommandType="UNITCOMMAND_PARADROP" VisibleInUI="true" HoldCycling="true" CategoryInUI="MOVE" Icon="ICON_UNITCOMMAND_PARADROP" Description="LOC_UNITCOMMAND_PARADROP_DESCRIPTION" InterfaceMode="INTERFACEMODE_PARADROP"/>
+        <Row CommandType="UNITCOMMAND_PROJECT_PRODUCTION" VisibleInUI="true" HoldCycling="true" CategoryInUI="SPECIFIC" Icon="ICON_UNITCOMMAND_WONDER_PRODUCTION" Description="LOC_UNITCOMMAND_PROJECT_PRODUCTION_DESCRIPTION"/>
+        <Row CommandType="UNITCOMMAND_PRIORITY_TARGET" VisibleInUI="true" HoldCycling="true" CategoryInUI="ATTACK" Icon="ICON_UNITCOMMAND_PRIORITY_TARGET" Description="LOC_UNITCOMMAND_PRIORITY_TARGET_DESCRIPTION" InterfaceMode="INTERFACEMODE_PRIORITY_TARGET"/>
+    <Row CommandType="UNITCOMMAND_SPREAD_DISSENT" VisibleInUI="true" HoldCycling="true" CategoryInUI="ATTACK" Icon="ICON_UNITCOMMAND_SPREAD_DISSENT" Description="LOC_UNITCOMMAND_SPREAD_DISSENT_DESCRIPTION"/>
+  </UnitCommands>
+</GameInfo>

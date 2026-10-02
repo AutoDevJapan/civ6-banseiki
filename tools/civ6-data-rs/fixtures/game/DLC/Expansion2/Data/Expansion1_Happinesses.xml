@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Anton Strenger (Firaxis Games) -->
+<GameInfo>
+    <Happinesses_XP1>
+        <Row HappinessType="HAPPINESS_REVOLT" IdentityPerTurnChange="-6"/>
+        <Row HappinessType="HAPPINESS_UNREST" IdentityPerTurnChange="-6"/>
+        <Row HappinessType="HAPPINESS_UNHAPPY" IdentityPerTurnChange="-6"/>
+        <Row HappinessType="HAPPINESS_DISPLEASED" IdentityPerTurnChange="-3"/>
+        <Row HappinessType="HAPPINESS_CONTENT"/>
+        <Row HappinessType="HAPPINESS_HAPPY" IdentityPerTurnChange="3"/>
+        <Row HappinessType="HAPPINESS_ECSTATIC" IdentityPerTurnChange="6"/>
+    </Happinesses_XP1>
+</GameInfo>

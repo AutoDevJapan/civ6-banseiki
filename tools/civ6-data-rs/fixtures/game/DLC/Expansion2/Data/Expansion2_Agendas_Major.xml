@@ -1,0 +1,561 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Edward Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="TRAIT_AGENDA_ANGEVIN_EMPIRE" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_CANADIAN_EXPEDITIONARY" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_KAITIAKITANGA" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_LAWGIVER" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_LORD_OF_MINES" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_PATRON_OF_ARTS" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_RAVEN_BANNER" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_SAPA_INCA" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_SICILIAN_WARS" Kind="KIND_TRAIT"/>
+    </Types>
+    <Traits>
+        <Row TraitType="TRAIT_AGENDA_ANGEVIN_EMPIRE"/>
+        <Row TraitType="TRAIT_AGENDA_CANADIAN_EXPEDITIONARY"/>
+        <Row TraitType="TRAIT_AGENDA_KAITIAKITANGA"/>
+        <Row TraitType="TRAIT_AGENDA_LAWGIVER"/>
+        <Row TraitType="TRAIT_AGENDA_LORD_OF_MINES"/>
+        <Row TraitType="TRAIT_AGENDA_PATRON_OF_ARTS"/>
+        <Row TraitType="TRAIT_AGENDA_RAVEN_BANNER"/>
+        <Row TraitType="TRAIT_AGENDA_SAPA_INCA"/>
+        <Row TraitType="TRAIT_AGENDA_SICILIAN_WARS"/>
+    </Traits>
+    <AgendaPreferredLeaders>
+        <Row AgendaType="AGENDA_GREAT_PERSON_ADVOCATE" LeaderType="LEADER_KRISTINA" PercentageChance="20"/>
+    </AgendaPreferredLeaders>
+    <ExclusiveAgendas>
+        <Row AgendaOne="AGENDA_ANGEVIN_EMPIRE" AgendaTwo="AGENDA_POPULOUS"/>
+            <Row AgendaOne="AGENDA_CANADIAN_EXPEDITIONARY" AgendaTwo="AGENDA_EXPLOITATIVE"/>
+        <Row AgendaOne="AGENDA_KAITIAKITANGA" AgendaTwo="AGENDA_ENVIRONMENTALIST"/>
+        <Row AgendaOne="AGENDA_KAITIAKITANGA" AgendaTwo="AGENDA_EXPLOITATIVE"/>
+        <Row AgendaOne="AGENDA_KAITIAKITANGA" AgendaTwo="AGENDA_INDUSTRIALIST"/>
+        <Row AgendaOne="AGENDA_LAWGIVER" AgendaTwo="AGENDA_FUN_LOVING"/>
+        <Row AgendaOne="AGENDA_LORD_OF_MINES" AgendaTwo="AGENDA_MONEY_GRUBBER"/>
+    </ExclusiveAgendas>
+    <AgendaTraits>
+        <Row AgendaType="AGENDA_ANGEVIN_EMPIRE" TraitType="TRAIT_AGENDA_ANGEVIN_EMPIRE"/>
+        <Row AgendaType="AGENDA_CANADIAN_EXPEDITIONARY" TraitType="TRAIT_AGENDA_CANADIAN_EXPEDITIONARY"/>
+        <Row AgendaType="AGENDA_KAITIAKITANGA" TraitType="TRAIT_AGENDA_KAITIAKITANGA"/>
+        <Row AgendaType="AGENDA_LAWGIVER" TraitType="TRAIT_AGENDA_LAWGIVER"/>
+        <Row AgendaType="AGENDA_LORD_OF_MINES" TraitType="TRAIT_AGENDA_LORD_OF_MINES"/>
+        <Row AgendaType="AGENDA_PATRON_OF_ARTS" TraitType="TRAIT_AGENDA_PATRON_OF_ARTS"/>
+        <Row AgendaType="AGENDA_RAVEN_BANNER" TraitType="TRAIT_AGENDA_RAVEN_BANNER"/>
+        <Row AgendaType="AGENDA_SAPA_INCA" TraitType="TRAIT_AGENDA_SAPA_INCA"/>
+        <Row AgendaType="AGENDA_SICILIAN_WARS" TraitType="TRAIT_AGENDA_SICILIAN_WARS"/>
+    </AgendaTraits>
+    <AiListTypes>
+        <Row ListType="LordOfMinesPseudoYields"/>
+        <Row ListType="LordOfMinesYields"/>
+    <Row ListType="MaoriSettlePreferences"/>
+    </AiListTypes>
+    <AiLists>
+        <Row ListType="LordOfMinesPseudoYields" AgendaType="TRAIT_AGENDA_LORD_OF_MINES" System="PseudoYields"/>
+        <Row ListType="LordOfMinesYields" AgendaType="TRAIT_AGENDA_LORD_OF_MINES" System="Yields"/>
+    <Row ListType="MaoriSettlePreferences" LeaderType="TRAIT_CIVILIZATION_MAORI_MANA" System="PlotEvaluations" />
+    </AiLists>
+    <AiFavoredItems>
+        <Row ListType="LordOfMinesPseudoYields" Item="PSEUDOYIELD_UNIT_TRADE" Value="50"/>
+        <Row ListType="LordOfMinesYields" Item="YIELD_GOLD" Value="25"/>
+    <Row ListType="MaoriSettlePreferences" Item="Nearest Friendly City" Favored="false" Value="8" />
+    </AiFavoredItems>
+    <TraitModifiers>
+        <Row TraitType="TRAIT_AGENDA_ANGEVIN_EMPIRE" ModifierId="AGENDA_ANGEVIN_EMPIRE"/>
+        <Row TraitType="TRAIT_AGENDA_CANADIAN_EXPEDITIONARY" ModifierId="AGENDA_CANADIAN_EXPEDITIONARY"/>
+        <Row TraitType="TRAIT_AGENDA_KAITIAKITANGA" ModifierId="AGENDA_KAITIAKITANGA"/>
+        <Row TraitType="TRAIT_AGENDA_LAWGIVER" ModifierId="AGENDA_LAWGIVER"/>
+        <Row TraitType="TRAIT_AGENDA_LORD_OF_MINES" ModifierId="AGENDA_LORD_OF_MINES"/>
+        <Row TraitType="TRAIT_AGENDA_PATRON_OF_ARTS" ModifierId="AGENDA_PATRON_OF_ARTS"/>
+        <Row TraitType="TRAIT_AGENDA_RAVEN_BANNER" ModifierId="AGENDA_RAVEN_BANNER"/>
+        <Row TraitType="TRAIT_AGENDA_SAPA_INCA" ModifierId="AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES"/>
+        <Row TraitType="TRAIT_AGENDA_SAPA_INCA" ModifierId="AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES"/>
+        <Row TraitType="TRAIT_AGENDA_SICILIAN_WARS" ModifierId="AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES"/>
+        <Row TraitType="TRAIT_AGENDA_SICILIAN_WARS" ModifierId="AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES"/>
+    </TraitModifiers>
+    <Modifiers>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_ANGEVIN_EMPIRE</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_CANADIAN_EXPEDITIONARY</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_KAITIAKITANGA</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_LAWGIVER</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_LORD_OF_MINES</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_PATRON_OF_ARTS</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_RAVEN_BANNER</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_10_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_MOUNTAIN_CITIES</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_MOUNTAIN_CITIES</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_COASTAL_CITIES</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_COASTAL_CITIES</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_ANGEVIN_EMPIRE_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <Name>HighPopulationThreshold</Name>
+            <Value>110</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <Name>LowPopulationThreshold</Name>
+            <Value>70</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ANGEVIN_EMPIRE</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_CANADIAN_EXPEDITIONARY_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_CANADIAN_EXPEDITIONARY</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_KAITIAKITANGA_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>60</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>40</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_KAITIAKITANGA</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_LAWGIVER_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LAWGIVER</ModifierId>
+            <Name>BonusIfNotOriginalOwner</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_LORD_OF_MINES_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LORD_OF_MINES</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_PATRON_OF_ARTS_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_PATRON_OF_ARTS</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_RAVEN_BANNER_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_RAVEN_BANNER</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_PACHACUTI_REASON_ANY</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_SAPA_INCA_LOW_MOUNTAIN_CITIES</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_PACHACUTI_REASON_ANY</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_SAPA_INCA_HIGH_MOUNTAIN_CITIES</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_DIDO_REASON_ANY</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_SICILIAN_WARS_LOW_COASTAL_CITES</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_DIDO_REASON_ANY</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_SICILIAN_WARS_HIGH_COASTAL_CITIES</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <Row ModifierId="AGENDA_ANGEVIN_EMPIRE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_CANADIAN_EXPEDITIONARY" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_KAITIAKITANGA" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LAWGIVER" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LORD_OF_MINES" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_PATRON_OF_ARTS" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_RAVEN_BANNER" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SAPA_INCA_LOW_MOUNTAIN_CITIES" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SAPA_INCA_HIGH_MOUNTAIN_CITIES" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SICILIAN_WARS_LOW_COASTAL_CITES" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_SICILIAN_WARS_HIGH_COASTAL_CITIES" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+    </ModifierStrings>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_COASTAL_CITIES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_COASTAL_CITIES</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_MOUNTAIN_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_COASTAL_CITIES</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_COASTAL_CITIES</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_COASTAL_CITIES</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_MOUNTAIN_CITIES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_MOUNTAIN_CITIES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_COASTAL_CITIES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_COASTAL_CITIES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_COASTAL_CITIES</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_COASTAL_CITIES</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+            <Name>MinimumCities</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+            <Name>Percentage</Name>
+            <Value>35</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+            <Name>BelowPercentage</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_MOUNTAIN_CITIES</RequirementId>
+            <Name>DistanceToMountain</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+            <Name>MinimumCities</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+            <Name>Percentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+            <Name>BelowPercentage</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_MOUNTAIN_CITIES</RequirementId>
+            <Name>DistanceToMountain</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_COASTAL_CITIES</RequirementId>
+            <Name>MinimumCities</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_COASTAL_CITIES</RequirementId>
+            <Name>Percentage</Name>
+            <Value>40</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_COASTAL_CITIES</RequirementId>
+            <Name>BelowPercentage</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_COASTAL_CITIES</RequirementId>
+            <Name>MinimumCities</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_COASTAL_CITIES</RequirementId>
+            <Name>Percentage</Name>
+            <Value>70</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_COASTAL_CITIES</RequirementId>
+            <Name>BelowPercentage</Name>
+            <Value>false</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>
