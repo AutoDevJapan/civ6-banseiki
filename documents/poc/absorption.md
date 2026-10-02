@@ -225,21 +225,18 @@ A.RegisterAdapter("their_feature", {
 静的・Lua テスト：
 
 ```text
-python -m unittest discover -s tests -t .
-python -m unittest discover -s tools/civ6-autotest/tests
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-japan.json --check
+cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/absorption-japan.json --check
 ```
 
-`tests/test_absorption_lua.py` は lupa を必須として直接 import し、スキップしない。戻り値のない生成、最後の都市で旧文明の Unit が消える模擬エンジン、ID の変更、昇進による傷・移動のリセット、都市移管でのプロパティの消失を再現する。全資産の移管・処分・知識の解放、保存プロパティの複製と Lua の再初期化、衝突・不明な分岐・失敗・復旧・重複抑止・照合エラー・他機能の統合を検査する。シナリオに埋めた照合コードも VM で実行し、改変された Hero を検出する。
+`tools/civ6-lua-tests-rs/tests/absorption.rs` は mlua の Lua 5.1 で実行し、スキップしない。戻り値のない生成、最後の都市で旧文明の Unit が消える模擬エンジン、ID の変更、昇進による傷・移動のリセット、都市移管でのプロパティの消失を再現する。全資産の移管・処分・知識の解放、保存プロパティの複製と Lua の再初期化、衝突・不明な分岐・失敗・復旧・重複抑止・照合エラー・他機能の統合を検査する。シナリオに埋めた照合コードも VM で実行し、改変された Hero を検出する。
 
 公式英雄用の模擬エンジンは、Unit の一覧と独立した管理表を持つ。寿命には本体のプロパティを使う。固有の2クラス、休眠中の権利、潜伏・離反・明示的な自害、英雄専用の生成・復元エラー、一般 Unit と都市の停止、候補 ID とトークンの衝突を検査する。購入による再召喚は新 ID を発行し、保存と再読込を挟んで人物記録への再接続までシナリオの Lua を模擬エンジンで実行する。模擬エンジンと本体の挙動が一致するかは実機で確認する。
 
 実機で検証するシナリオは3本。最新候補の完走は未確認である。以前の吸収直後の保存・読み込みや短い再召喚診断を、最新候補の通し成功とは扱わない。
 
 ```text
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-japan.json
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-hero-recall.json
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/absorption-priest-diagnostic.json
+D:/CC/Tools/civ6-live/live_chain.exe <検査対象のブランチ>:absorption-japan.json <検査対象のブランチ>:absorption-hero-recall.json <検査対象のブランチ>:absorption-priest-diagnostic.json
 ```
 
 以下は初期の吸収2本（107・101手順）の設計と試行記録である。最新シナリオの検査は先頭の記録を参照する。
