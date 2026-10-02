@@ -7,7 +7,7 @@ use civ6_assets_rs::{
 };
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use common::*;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
     ffi::OsStr,
@@ -647,11 +647,9 @@ fn generator_cli_updates_support_for_all_spellings_of_the_standard_output_direct
     assert_eq!(fs::read_to_string(text).unwrap(), "preserved text");
     assert_eq!(fs::read_to_string(scenario).unwrap(), "preserved scenario");
     assert!(repository.join("export/Maps/manifest.json").is_file());
-    assert!(
-        repository
-            .join("export/Scripts/JAC_ResourceSites.lua")
-            .is_file()
-    );
+    assert!(repository
+        .join("export/Scripts/JAC_ResourceSites.lua")
+        .is_file());
 }
 
 #[test]
@@ -744,14 +742,12 @@ fn every_old_runnable_script_has_a_working_cli_mapping() {
             String::from_utf8_lossy(&out.stdout).contains("Usage:"),
             "{name}"
         );
-        assert!(
-            !command(name, t.path())
-                .arg("--not-a-valid-option")
-                .output()
-                .unwrap()
-                .status
-                .success()
-        );
+        assert!(!command(name, t.path())
+            .arg("--not-a-valid-option")
+            .output()
+            .unwrap()
+            .status
+            .success());
     }
     for subcommand in ["support", "custom-civs", "city-names", "feuds"] {
         let out = success(command("japan-map-support", t.path()).args([subcommand, "--help"]));
@@ -816,16 +812,14 @@ fn support_cli_writes_factions_city_names_feuds_and_scenarios() {
             .arg(&maps().dir)
             .args(["--output", "map-mod", "--scenarios", "scenarios"]),
     );
-    assert!(
-        t.path()
-            .join("map-mod/Config/JAC_JapanMapScale_Config.xml")
-            .is_file()
-    );
-    assert!(
-        t.path()
-            .join("map-mod/Text/JAC_JapanMapScale_Text.xml")
-            .is_file()
-    );
+    assert!(t
+        .path()
+        .join("map-mod/Config/JAC_JapanMapScale_Config.xml")
+        .is_file());
+    assert!(t
+        .path()
+        .join("map-mod/Text/JAC_JapanMapScale_Text.xml")
+        .is_file());
     let scenarios = fs::read_dir(t.path().join("scenarios"))
         .unwrap()
         .map(|p| p.unwrap().file_name())
@@ -938,11 +932,9 @@ fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
     for stage in ["login", "exec"] {
         let record = read_json(directory.join(format!("fixture-{stage}.json"))).unwrap();
         assert!(Path::new(s(&record["cwd"])).is_absolute());
-        assert!(
-            arr(&record["environment_names"])
-                .iter()
-                .all(|name| !portraits::is_api_key_env(s(name)))
-        );
+        assert!(arr(&record["environment_names"])
+            .iter()
+            .all(|name| !portraits::is_api_key_env(s(name))));
     }
     let log = fs::read_to_string(t.path().join("generation-log.jsonl")).unwrap();
     let records: Vec<Value> = log
@@ -973,12 +965,11 @@ fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
             .unwrap();
         assert!(!out.status.success());
         assert!(String::from_utf8_lossy(&out.stderr).contains("ChatGPT OAuth login"));
-        assert!(
-            !t.path()
-                .join(name)
-                .join("oda_nobuhide/fixture-exec.json")
-                .exists()
-        );
+        assert!(!t
+            .path()
+            .join(name)
+            .join("oda_nobuhide/fixture-exec.json")
+            .exists());
     }
     let out = run("InvalidImage")
         .env("JAC_ASSETS_TEST_BAD_IMAGE", "1")
@@ -1038,14 +1029,12 @@ fn cooker_process_resolves_relative_paths_and_propagates_failure() {
         .unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("Cooker failed for Package"));
-    assert!(
-        !command("jac-build-art", t.path())
-            .args(["--originals", "absent", "--output", "mod"])
-            .output()
-            .unwrap()
-            .status
-            .success()
-    );
+    assert!(!command("jac-build-art", t.path())
+        .args(["--originals", "absent", "--output", "mod"])
+        .output()
+        .unwrap()
+        .status
+        .success());
     assert!(!t.path().join("mod").exists());
 }
 
