@@ -179,6 +179,48 @@ fn test_end_turn_rejects_invalid_counts() {
 }
 
 #[test]
+fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
+    let observations = Arc::new(Mutex::new(0_usize));
+    let seen = observations.clone();
+    let turn = Arc::new(Mutex::new(1));
+    let backend = FakeBackend::new().lua(move |_, code| {
+        if code == "return Game.GetCurrentGameTurn()" {
+            return Ok(turn.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+            *turn.lock().unwrap() = 2;
+        }
+        if code.starts_with("return Game.GetCurrentGameTurn() ==") {
+            let mut seen = seen.lock().unwrap();
+            let (active, busy) = [(false, true), (true, true), (false, false), (true, false)]
+                .get(*seen)
+                .copied()
+                .unwrap();
+            *seen += 1;
+            let lua = mlua::Lua::new();
+            lua.load(format!(
+                "Game={{GetCurrentGameTurn=function() return {} end,GetLocalPlayer=function() return 0 end}}\nPlayers={{[0]={{IsTurnActive=function() return {active} end}}}}\nUI={{IsGameCoreBusy=function() return {busy} end}}",
+                *turn.lock().unwrap()
+            ))
+            .exec()
+            .unwrap();
+            return Ok(lua.load(code).eval::<bool>().unwrap().to_string());
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), backend);
+    assert_eq!(
+        h.runner.run_step(&json!({"action":"end_turn"})).unwrap(),
+        "human turn 1->2"
+    );
+    assert_eq!(*observations.lock().unwrap(), 4);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        1
+    );
+}
+
+#[test]
 fn test_build_setup_checks_every_player_after_refresh() {
     let players = json!([{"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}, {"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false}]);
     let code = scenario::build_setup_code(players.as_array().unwrap());

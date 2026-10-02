@@ -1380,7 +1380,10 @@ impl Runner {
             "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
             self.budget(deadline, 5.0)?,
         )?;
-        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",start+1)}),self.remaining(deadline)?,true)?;
+        // A new turn number can be published before control returns to the
+        // human. Match the official ActionPanel/UnitPanel readiness checks;
+        // otherwise the next scenario action can run during AI processing.
+        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0 and Players[Game.GetLocalPlayer()] ~= nil and Players[Game.GetLocalPlayer()]:IsTurnActive() and not UI.IsGameCoreBusy()",start+1)}),self.remaining(deadline)?,true)?;
         self.dismiss_advisor(deadline)?;
         self.remaining(deadline)?;
         Ok(format!("human turn {start}->{}", start + 1))
