@@ -193,6 +193,7 @@ version = "0.1.0"
 dependencies = [
  "caseless",
  "chrono",
+ "civ6-cli-compat-rs",
  "civ6-reports-rs",
  "clap",
  "crc32fast",
@@ -209,6 +210,14 @@ dependencies = [
  "tempfile",
  "uuid",
  "windows-sys",
+]
+
+[[package]]
+name = "civ6-cli-compat-rs"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "regex",
 ]
 
 [[package]]
@@ -248,6 +257,7 @@ dependencies = [
 name = "civ6-reports-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-cli-compat-rs",
  "clap",
  "mlua",
  "regex",
