@@ -122,11 +122,21 @@ pub fn xml_escape(value: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// The migration changes the audit invocation in the generated documentation;
-/// other bytes of the legacy generated artifact remain an exact parity oracle.
+pub(crate) const SENGOKU_AUDIT_COMMAND: &str =
+    "cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit";
+pub(crate) const SENGOKU_AUDIT_TEST_REFERENCE: &str =
+    "`tools/civ6-data-rs/src/cascade.rs`、関連する静的検査は `tools/civ6-data-rs/src/data_tests.rs`";
+
+/// Only the audit command and its test references change during migration;
+/// every other byte of the legacy document remains an exact parity oracle.
 pub fn normalize_legacy_document(path: &Path, text: String) -> String {
     if path == Path::new("documents/poc/sengoku-tree-unlocks.md") {
-        text.replace("python tools/sengoku_cascade_audit.py", "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit")
+        text.replace("python tools/sengoku_cascade_audit.py", SENGOKU_AUDIT_COMMAND)
+            .replace(
+                "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit",
+                SENGOKU_AUDIT_COMMAND,
+            )
+            .replace("`tests/test_sengoku_cascade.py`", SENGOKU_AUDIT_TEST_REFERENCE)
     } else {
         text
     }
