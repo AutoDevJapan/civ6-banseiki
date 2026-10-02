@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="UNITOPERATION_BUILD_IMPROVEMENT_ADJACENT" Kind="KIND_UNITOPERATION"/>
+        <Row Type="UNITOPERATION_TOURISM_BOMB" Kind="KIND_UNITOPERATION"/>
+        <Row Type="UNITOPERATION_SPY_BREACH_DAM" Kind="KIND_UNITOPERATION"/>
+    </Types>
+    <UnitOperations>
+        <Row OperationType="UNITOPERATION_BUILD_IMPROVEMENT_ADJACENT" VisibleInUI="true" HoldCycling="true" CategoryInUI="BUILD" Icon="ICON_UNITOPERATION_BUILD_IMPROVEMENT" Description="LOC_UNITOPERATION_BUILD_IMPROVEMENT_ADJACENT_DESCRIPTION" InterfaceMode="INTERFACEMODE_BUILD_IMPROVEMENT_ADJACENT"/>
+        <Row OperationType="UNITOPERATION_TOURISM_BOMB" VisibleInUI="true" HoldCycling="true" CategoryInUI="SPECIFIC" Icon="ICON_UNITOPERATION_TOURISM_BOMB" Description="LOC_UNITOPERATION_TOURISM_BOMB_DESCRIPTION"/>
+        <Row OperationType="UNITOPERATION_SPY_BREACH_DAM" VisibleInUI="true" HoldCycling="true" CategoryInUI="OFFENSIVESPY" Icon="ICON_UNITOPERATION_SPY_BREACH_DAM" Description="LOC_UNITOPERATION_SPY_BREACH_DAM_DESCRIPTION" Turns="8" BaseProbability="15" Offensive="true" LevelProbChange="1" EnemyProbChange="3" EnemyLevelProbChange="1" TargetDistrict="DISTRICT_DAM" InterfaceMode="INTERFACEMODE_SPY_CHOOSE_MISSION"/>
+    </UnitOperations>
+</GameInfo>

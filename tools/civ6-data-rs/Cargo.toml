@@ -1,0 +1,17 @@
+[package]
+name = "civ6-data-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+image = { version = "0.25", default-features = false, features = ["png", "dds"] }
+indexmap = "2"
+# error-send lets anyhow carry Lua errors; the only selected VM is Lua 5.1.
+mlua = { version = "0.11", features = ["lua51", "vendored", "error-send"] }
+regex = "1"
+roxmltree = "0.21"
+rusqlite = { version = "0.37", features = ["bundled", "functions", "backup"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tempfile = "3"
+walkdir = "2"

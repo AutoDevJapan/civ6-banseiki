@@ -1,0 +1,52 @@
+[
+  {
+    "source": "tools/generate_assassin_poc.py",
+    "binary": "generate-assassin-poc",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-assassin-poc --",
+    "arguments": null
+  },
+  {
+    "source": "tools/generate_sengoku_events.py",
+    "binary": "generate-sengoku-events",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-sengoku-events --",
+    "arguments": [
+      "--check"
+    ]
+  },
+  {
+    "source": "tools/generate_sengoku_oaths.py",
+    "binary": "generate-sengoku-oaths",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-sengoku-oaths --",
+    "arguments": [
+      "--check"
+    ]
+  },
+  {
+    "source": "tools/generate_sengoku_reigns.py",
+    "binary": "generate-sengoku-reigns",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-sengoku-reigns --",
+    "arguments": [
+      "--check"
+    ]
+  },
+  {
+    "source": "tools/generate_sengoku_trees.py",
+    "binary": "generate-sengoku-trees",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-sengoku-trees --",
+    "arguments": [
+      "--check"
+    ]
+  },
+  {
+    "source": "tools/generate_unification_victory.py",
+    "binary": "generate-unification-victory",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-unification-victory --",
+    "arguments": null
+  },
+  {
+    "source": "tools/sengoku_cascade_audit.py",
+    "binary": "sengoku-cascade-audit",
+    "command": "cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit --",
+    "arguments": null
+  }
+]

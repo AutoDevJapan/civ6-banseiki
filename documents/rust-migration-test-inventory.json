@@ -1,0 +1,4902 @@
+{
+  "baseline_commit": "b4e7c53",
+  "count": 816,
+  "tests": [
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_base_100_and_minimum_20_for_all_speeds",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_unplaced_spawn_keeps_training_pending_without_starting_nationwide_lock",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_every_factor_and_security_direction",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_multiple_cities_reject_parallel_production",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_actual_completion_and_exact_lock_boundary",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_minimum_is_elapsed_time_even_with_extreme_bonuses",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_cancellation_cannot_transfer_elapsed_progress",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_cancel_does_not_clear_existing_completion_lock",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_lost_city_releases_only_the_production_reservation",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_blocked_spawn_lock_begins_at_actual_completion",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_production_and_command_locks_are_independent",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_training_recalculates_current_factors_and_never_rerolls",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_training_can_extend_again_and_finish_after_elapsed_reduction",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_dynamic_training_round_trip_keeps_start_speed_and_current_inputs",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_test_deadline_hook_is_inert_when_test_mode_is_off",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_test_deadlines_survive_recomputation_reload_and_resolve_on_real_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_test_deadline_hook_selects_clocks_and_never_extends_expired_locks",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_only_full_stack_reaches_wait_one",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_distances_target_periods_and_rounding",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_all_six_success_rates_and_corrections",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_builder_hero_gp_and_assassin_are_classified_by_real_unit",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_names_are_assigned_by_confirmed_country_not_whole_map",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_one_active_mission_even_after_wait_expires",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_command_wait_cannot_be_bypassed_by_unit_or_country",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_outcome_roll_is_at_start_and_not_at_resolution",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_percent_threshold_is_not_inclusive",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_forced_outcome_only_works_with_explicit_test_flag",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_ui_operation_cannot_supply_forced_outcome",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_leader_death_splits_all_cities_disbands_units_and_archives_people",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_eliminated_human_slot_cancels_saved_training_after_reload_without_retransferring",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_post_death_snapshot_and_branch_are_frozen",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_equivalent_favor_vote_is_available_without_test_mode_on_japan_map",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_unit_success_and_failure_dispositions",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_failure_and_detection_independently_share_penalty_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_missing_target_does_not_redirect_or_reroll",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_fixed_failure_detection_penalties_survive_target_disappearance",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_actor_disappearance_prevents_ghost_success",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_eliminated_country_finishes_saved_jobs_and_fixed_penalties",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_replacement_unit_with_same_id_and_type_is_not_the_target",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_diplomacy_changes_recalculate_training_with_worst_living_major",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_training_relation_survives_reload_and_completes_at_reduced_boundary",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_relation_penalty_increases_hostility_and_shortens_wait",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_notification_exception_cannot_duplicate_production_or_penalties",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_visibility_checks_do_not_disclose_or_accept_hidden_targets",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_branch_weights_use_security_unrest_strength_relations_and_candidates",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_actor_loss_cancels_all_four_outcomes_but_always_applies_fixed_penalty_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_unregistered_great_person_keeps_original_unit_id_when_archived",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_absorption_freezes_recipient_transfers_cities_disbands_and_preserves_people",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_recipient_formula_combines_strength_friendship_border_distance_religion_culture",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_recipient_alliance_is_gameplay_and_optional_closeness_does_not_reward_missing_data",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_recipient_omits_pantheon_and_missing_apis_and_prefers_supplied_culture_over_proxy",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_recipient_distance_and_border_can_change_choice_and_ties_use_player_id",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_favor_vote_weight_outvotes_more_nations_and_is_frozen_at_command",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_lost_absorption_recipient_falls_back_without_new_draw",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_successor_kin_first_and_single_role_for_gp_and_governor",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_lost_successor_falls_back_without_selecting_next_candidate",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_registered_death_overrides_present_gp_governor_or_person",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_absorption_never_recreates_dead_registered_gp_under_a_unit_token",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_persistent_person_binding_does_not_claim_same_id_replacement_gp",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_absorption_people_have_one_identity_and_dead_leaders_never_rejoin",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_later_leader_death_updates_people_registry_and_cannot_revive_predecessor",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_registered_country_name_survives_kin_succession_and_free_city_archive",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_congress_ballots_freeze_favor_weight_and_tie_goes_to_free_cities",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_registered_governor_uses_stable_identity",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_round_trip_reload_reinitializes_script_without_reroll",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_all_post_death_outcomes_round_trip_without_reapplying_assets",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_earlier_pending_save_migrates_plan_without_new_rng",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_fixture_reveals_hidden_target_without_disabling_gameplay_visibility",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_fixture_reveals_unit_tile_separately_from_known_capital",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_fixture_retries_unplaced_unit_without_killing_existing_units",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_trained_unit_check_rejects_unplaced_missing_or_wrong_type_unit",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_training_check_requires_one_new_unit_and_rejects_reused_id",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_parking_keeps_identity_requires_test_mode_and_preserves_other_assassins",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_unit_watch_accepts_witnessed_native_death_and_removes_observers",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_unit_watch_rejects_unexplained_loss_or_replacement",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_unit_watch_rejects_survivor_damage_movement_and_loss",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_panel_open_close_produce_cancel_refresh_and_inactive_buttons",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_panel_lists_visible_non_major_units_without_leader_candidates",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_non_major_person_targets_are_rejected_in_core_without_excluding_units",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinLuaTests",
+      "test": "test_live_final_check_rejects_penalty_added_during_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_mod_scope_files_and_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_data_loads_against_official_schema_after_sengoku",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_japan_name_and_no_unapproved_cultural_names",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_training_terms_in_all_three_languages",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_live_scenario_has_three_actual_round_trips_and_boundary_assertions",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_assassin_lua.py",
+      "class": "AssassinPackagingTests",
+      "test": "test_live_scenario_matches_generator_exactly",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_twenty_two_houses_have_pools",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_every_house_has_enough_own_names",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_no_names_copied_from_other_civilizations",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_no_duplicates_within_a_house",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_every_name_has_three_languages",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_houses_do_not_share_names_on_screen",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_no_clash_with_official_japan_names",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_random_depth_is_set_for_all_houses",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_city_names_load_after_both_civilization_files",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_generated_files_are_current",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_every_entry_cites_a_source",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_city_names.py",
+      "class": "CityNameTests",
+      "test": "test_romanization_matches_map_conventions",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ScopeAndTextTests",
+      "test": "test_every_action_loads_only_on_the_four_banseiki_japan_maps",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ScopeAndTextTests",
+      "test": "test_every_text_key_used_by_the_lua_exists_in_three_languages",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ScopeAndTextTests",
+      "test": "test_the_modifiers_read_the_flags_the_script_writes",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ScopeAndTextTests",
+      "test": "test_ui_script_compiles",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_muromachi_end_is_1573_month_7_on_the_sengoku_calendar",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_party_request_charges_the_cost_and_an_even_ai_accepts_next_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_every_execute_script_is_recorded_at_entry_even_when_rejected",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_the_other_party_may_be_the_requester",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_ashikaga_calls_a_ceasefire_between_others_with_triple_power_until_1573",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_refusing_a_shogun_ruling_costs_three_times_as_much",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_the_shogun_can_afford_a_ruling_at_a_third_of_the_cost",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_after_1573_ashikaga_survives_but_cannot_call_rulings_for_others",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_non_party_non_shogun_and_peace_pairs_are_rejected",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_short_gold_or_legitimacy_below_30_rejects_without_charging",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_legitimacy_starts_at_50_or_70_and_earns_one_to_three_per_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_high_and_low_legitimacy_flag_every_city",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_an_ai_below_30_legitimacy_refuses_when_merely_ahead",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_a_clearly_winning_ai_refuses_and_is_penalized",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_human_respondent_answers_or_is_counted_as_refusing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_war_during_the_truce_is_undone_and_the_truce_ends_on_time",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_forced_peace_ends_a_war_inside_the_minimum_war_length_at_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_a_war_on_the_turn_of_the_scripts_peace_is_undone_one_turn_later",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_safety_net_defers_peace_when_the_force_flag_does_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_a_pair_that_made_peace_on_its_own_while_waiting_starts_the_truce",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_safety_net_undoes_a_truce_breach_when_allowed_even_after_the_truce",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_make_peace_probe_tries_every_variant_and_never_stops",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationTurnTests",
+      "test": "test_a_request_is_void_if_the_war_ended_before_the_ruling",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "SubjugationOrderTests",
+      "test": "test_the_refuser_is_the_target_and_an_ai_at_war_with_it_joins_at_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "SubjugationOrderTests",
+      "test": "test_a_human_joins_through_execute_script_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "SubjugationOrderTests",
+      "test": "test_war_weariness_flag_is_on_the_participants_anchor_city_only_during_the_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "SubjugationOrderTests",
+      "test": "test_a_participant_that_takes_a_target_city_is_rewarded",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "SubjugationOrderTests",
+      "test": "test_refusing_a_shogun_ruling_orders_30_turns_and_a_new_refusal_never_shortens_it",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_weariness_coverage_is_logged_without_a_request",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_exhausted_party_requests_pays_and_waits_until_the_following_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_duration_alone_can_prompt_a_party_after_1573_with_normal_cost_and_power",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_weariness_and_low_legitimacy_are_independent_score_components",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_unavailable_weariness_api_uses_duration_and_keeps_coverage_visible",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_unexhausted_and_human_parties_do_not_request",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_insufficient_gold_or_legitimacy_does_not_charge_or_start_an_interval",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_more_exhausted_unaffordable_candidate_does_not_starve_another_party",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_shogun_proposes_for_an_ally_and_both_parties_answer",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_shogun_proposes_for_the_capital_region_and_for_long_wars",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_shogun_stops_at_the_exact_calendar_cutoff_but_may_request_its_own_war",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_human_shogun_never_automatically_proposes",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_party_and_pair_intervals_survive_lua_reload_and_prevent_alternating_requesters",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_requester_interval_applies_across_different_wars",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_shogun_interval_applies_to_other_pairs",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_existing_pending_and_one_per_turn_limit_take_priority_over_ai",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "ArbitrationAiTests",
+      "test": "test_peace_removes_observations_and_new_wars_start_without_old_losses",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "LiveScenarioOnStubsTests",
+      "test": "test_scenario_steps_pass_on_the_stubs",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "LiveScenarioOnStubsTests",
+      "test": "test_human_snapshots_preserve_missing_properties_and_boolean_answers",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_court_arbitration.py",
+      "class": "LiveScenarioOnStubsTests",
+      "test": "test_overlay_buttons_can_open_and_close_from_an_initially_hidden_context",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_generated_files_are_current",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_no_prerequisite_or_boost_is_starting_knowledge",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_generator_refuses_starting_knowledge_in_the_list",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_sql_loads_with_valid_references",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_rows_follow_the_event_list",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_renames_are_the_ssot_stages",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_year_to_turn_follows_the_sengoku_calendar",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_resource_events_boost_the_research_of_the_reserved_sites",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_missing_prereq_gets_a_boost_not_the_tech",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_every_text_key_has_three_languages",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_modinfo_lists_files",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_lua_reads_only_existing_tables_and_properties",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events.py",
+      "class": "HistoricalEventTests",
+      "test": "test_ages_ledger_scores_existing_events",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_teppo_boosts_every_faction_without_the_tech_on_its_due_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_any_one_of_the_prerequisites_fires_the_event_early",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_starting_knowledge_fires_no_event_on_turn_1",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_events_without_prerequisites_happen_in_their_year_for_their_targets_only",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_an_engine_error_in_one_boost_does_not_stop_the_other_factions",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_a_failed_boost_is_left_unrecorded_and_retried_next_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_resource_events_boost_the_sites_research_and_reveal_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_houses_rename_only_by_the_succession_civics",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_oda_rename_stages_keep_the_latest",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_nagao_becomes_uesugi_only_with_the_succession_civic",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_house_specific_name_only_for_its_house",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_no_double_firing_after_a_reload",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_calendar_stages_follow_the_speeds_row_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_advisor_popup_for_each_hotseat_human_on_the_same_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_advisor_popup_on_the_year_for_the_boost_and_not_again_on_research",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_no_advisor_popup_without_a_local_player",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_historical_events_lua.py",
+      "class": "HistoricalEventsTurnTests",
+      "test": "test_advisor_popup_uses_the_generic_name_for_other_houses",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_tree_periods_and_their_house_name_are_gone",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_taiko_survey_is_the_name_for_every_house",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_registry_is_well_formed",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_every_key_has_all_languages_and_a_distinct_generic_counterpart",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_house_text_never_appears_under_a_generic_tag",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_database_only_references_generic_tags",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_ui_wiring",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names.py",
+      "class": "HouseNameTests",
+      "test": "test_house_text_does_not_contain_a_generic_name",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_install_shadows_the_context_global_without_writing_the_engine_table",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_owner_sees_house_names_for_keys_arguments_and_upper_case",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_engine_built_text_is_switched_for_the_owner",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_other_houses_and_observers_keep_generic_names",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_load_screen_without_game_keeps_generic_names",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_civilopedia_parts_receive_house_text_only_for_the_owner",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_house_names_lua.py",
+      "class": "HouseNamesLuaTests",
+      "test": "test_historic_moment_descriptions_are_switched",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_factions_match_the_22_map_seats",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_relations_are_valid_unordered_pairs",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_dates_are_well_formed_and_ordered",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_apply_rule_uses_start_date_and_confidence",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_lua_copies_exactly_the_applicable_rows",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_script_and_feuds_run_on_the_two_historical_maps_only",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_feud_xml_is_generated_from_the_hostility_rows",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_every_major_starts_with_limited_access_so_reasons_are_not_unknown",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_ruleset_shares_ally_vision_by_default",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_ally_pairs_start_allied_so_they_share_vision",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_ally_houses_carry_poundmakers_shared_vision_modifier",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_ally_vision_probe_reads_both_contexts_before_and_after_a_turn",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_alliance_type_probe_sets_in_gameplay_and_reads_in_ui",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_alliance_expiry_probe_measures_raw_engine_expiry_per_renewal_variant",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_end_alliance_probe_tries_one_variant_per_pair_and_never_wars_and_makes_peace_on_one_turn",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_start_alliances_lapse_at_the_alliance_limit_and_are_not_re_made",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_sengoku_tree_keeps_the_printing_access_bonus",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations.py",
+      "class": "Japan1534RelationsTests",
+      "test": "test_feud_ui_scenario_rejects_unknown_reason_rows",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations_lua.py",
+      "class": "StartAllianceEndTests",
+      "test": "test_lapsed_start_alliances_are_not_re_made_and_turn_false",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations_lua.py",
+      "class": "StartAllianceEndTests",
+      "test": "test_an_alliance_the_pair_makes_later_is_not_a_start_alliance",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations_lua.py",
+      "class": "StartAllianceEndTests",
+      "test": "test_end_marks_the_pair_ended_and_the_alliance_lapses_at_the_limit",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_japan_1534_relations_lua.py",
+      "class": "StartAllianceEndTests",
+      "test": "test_a_war_started_elsewhere_ends_the_alliance_without_a_second_war_or_peace",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_japan_no_world_congress.py",
+      "class": "JapanNoWorldCongressTests",
+      "test": "test_congress_capability_removed_only_for_all_four_japan_maps",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_japan_no_world_congress.py",
+      "class": "JapanNoWorldCongressTests",
+      "test": "test_capability_delete_does_not_remove_other_gs_systems",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_localized_names.py",
+      "class": "LocalizedNamesTests",
+      "test": "test_every_jac_tag_has_three_languages",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_localized_names.py",
+      "class": "LocalizedNamesTests",
+      "test": "test_non_japanese_rows_have_no_cjk",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_localized_names.py",
+      "class": "LocalizedNamesTests",
+      "test": "test_map_names_are_loc_tags",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_localized_names.py",
+      "class": "LocalizedNamesTests",
+      "test": "test_no_literal_cjk_outside_japanese_text",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_lua_file_names.py",
+      "class": "LuaFileNameTests",
+      "test": "test_lua_file_names_are_unique_across_all_mods",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_portrait_art.py",
+      "class": "PortraitArtTests",
+      "test": "test_atlas_places_all_22_faces_in_eight_columns",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_portrait_art.py",
+      "class": "PortraitArtTests",
+      "test": "test_source_keys_match_frontend_leaders",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_portrait_art.py",
+      "class": "PortraitArtTests",
+      "test": "test_prompts_require_three_distinct_files_and_keyless_codex",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_catalog_has_twenty_placeholder_slots_and_ssot_sources",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_manifest_packages_every_file_and_separates_gameplay",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_every_ingame_action_requires_banseiki_and_excludes_standard_gs",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_fast_deadlines_are_gated_and_leave_production_values_intact",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_all_catalog_and_state_names_have_ja_en_ru_text",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_fresh_game_and_script_reload_do_not_write_or_found_anything",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_mechanism_accepts_a_replaced_religion_catalog",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_founder_defeat_keeps_believers_assets_and_other_faction",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_global_last_follower_is_required_for_loss",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_underground_believers_need_no_public_facility_or_item",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_loss_retains_all_assets_and_underground_evidence",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_each_of_the_four_revival_sources_survives_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_holy_site_alone_and_no_source_cannot_revive",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_item_transfer_preserves_identity_kind_and_revival_source",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_revival_is_explicit_and_duplicate_revival_is_rejected",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_revival_picks_a_free_slot_and_preserves_both_religions",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_revival_does_not_overwrite_a_slot_created_by_the_faith_callback",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_revival_free_slot_respects_the_identifier_length_limit",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_discovery_accepts_all_listed_jobs_sites_and_both_item_kinds",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_discovery_transfers_existing_item_and_rejects_wrong_site_and_replays",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_removed_discovery_source_prevents_revival_without_marking_resolution",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_direct_revival_cannot_strand_an_unresolved_discovery",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_research_requires_two_distinct_eligible_boosts_before_any_effect",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_research_eurekas_precede_science_that_finishes_a_chosen_tech",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_heresy_requires_400_faith_and_consumes_material",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_absorption_rounds_once_worldwide_and_preserves_other_religions",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_absorption_rejects_unbound_or_foreign_native_target",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_absorption_clears_maximum_fixed_point_pressure_including_fraction",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_bound_native_counts_prevent_false_loss_and_revival",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_zero_native_absorption_does_not_charge_or_reserve",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_stale_owned_community_cannot_authorize_absorption",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_actual_owned_followers_authorize_absorption_with_zero_manual_count",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_native_revival_uses_numeric_religion_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_bound_revival_creates_one_native_citizen_and_survives_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_inexact_engine_conversion_stays_pending_and_never_replays",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_restart",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_waits_for_valid_class_without_querying_negative_claim",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_waits_for_replicated_lifespan_property_before_reward",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_verification_accepts_unset_test_flag_in_manual_game",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hidden_addin_activates_after_load_and_completes_pending_hero_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_official_hero_requires_mode_origin_building_and_unclaimed_hero",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_reward_waits_for_ui_verification_and_survives_pending_save",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_unverified_hero_claim_never_pays_faith",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_reward_waits_until_recipients_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_hero_timeout_does_not_expire_another_players_inactive_reservation",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_interrupted_hero_reward_cannot_replay_after_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_invalid_inputs_and_world_overflow_do_not_mutate_saved_state",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_named_rules_and_all_eighty_modifier_definitions_match_official_types",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_revival_requires_faith_city_ownership_and_fixed_size",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_conceal_has_no_yield_and_keeps_material_after_later_paid_revivals",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_reused_material_removed_ids_and_moved_discoveries_cannot_pay_rewards",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_non_revival_limit_is_per_player_religion_and_branch",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_absorption_requires_own_living_target_and_locks_the_transferred_source",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_diplomatic_restitution_requires_foreign_founder_contact_and_peace",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_vault_and_hero_limits_apply_across_religions_after_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_engine_refusal_and_missing_spawn_leave_pending_and_block_replay",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_reservation_write_failure_has_no_engine_effect_and_receipt_failure_cannot_replay",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_legacy_v1_choices_never_pay_on_load_or_unlock_used_material",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_ai_prefers_each_job_branch_and_uses_legal_absorption_or_conceal_fallback",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_engine_write_failure_and_export_edits_leave_original_untouched",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_twenty_religions_do_not_leak_state_across_save_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_switching_save_in_same_vm_does_not_use_previous_game_cache",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_future_or_damaged_save_fails_without_overwrite",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_live_scenario_gameplay_and_external_captures_in_fresh_vms",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_manual_new_game_flag_reset_handles_zero_lua_return_values",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_religion_persistence.py",
+      "class": "ReligionPersistenceTests",
+      "test": "test_all_scenario_lua_chunks_compile_including_ui_and_waits",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "SengokuResourceGateTests",
+      "test": "test_deleted_official_techs_never_open_a_resource_early",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "SengokuResourceGateTests",
+      "test": "test_modinfo_runs_the_resource_gate_between_trees_and_unlocks",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "CustomResourceTests",
+      "test": "test_each_custom_resource_is_fully_defined_with_text_and_icons",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "CustomResourceTests",
+      "test": "test_modinfo_wires_every_new_file",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "DeferredSiteDataTests",
+      "test": "test_lua_data_is_exactly_the_reserved_sites_of_each_map",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "DeferredSiteDataTests",
+      "test": "test_named_ssot_sites_are_deferred_with_a_year_and_a_free_land_tile",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "DeferredSiteDataTests",
+      "test": "test_site_techs_exist_and_the_lua_api_and_test_hook_are_wired",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "DeferredSiteDataTests",
+      "test": "test_the_scenario_turns_reach_1542_on_the_sengoku_calendar",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "DeferredSiteDataTests",
+      "test": "test_custom_resources_are_on_the_map_at_the_start",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "ImprovementTests",
+      "test": "test_a_listed_resource_lets_a_mine_go_on_flat_land",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "ImprovementTests",
+      "test": "test_plantation_and_mine_are_buildable_under_the_sengoku_pack",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_resources.py",
+      "class": "ImprovementTests",
+      "test": "test_every_gold_lacquer_tea_silk_tile_can_take_its_improvement",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_pending_policy_notification_survives_turn_end_without_retaining_ordinary_notices",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_official_ages_and_dedications_are_off",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_no_attachment_of_an_era_score_modifier_in_any_table",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_official_age_effects_and_age_policies_are_gone",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_every_reign_is_an_engine_era_lasting_its_turns",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_reigns_policies_and_effect_modifiers",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_every_house_has_a_valid_default_dark_policy",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "AgesDataTests",
+      "test": "test_text_keys_are_translated",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "ReignFilesTests",
+      "test": "test_generated_reign_files_are_current",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "ReignFilesTests",
+      "test": "test_every_engine_era_lasts_at_least_two_standard_turns_in_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "ReignFilesTests",
+      "test": "test_the_calendar_dates_each_engine_era_with_its_reign_at_every_speed",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_capture_classes_home_regain_and_castle",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_capture_event_and_turn_start_difference_count_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_recaptures_in_one_turn_each_score",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_capture_then_raze_keeps_the_points_and_the_fall",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_transfer_scores_once_at_the_next_turn_start_not_on_city_built",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_silent_owner_change_is_scored_by_the_difference",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_settler_start_house_takes_its_first_founded_castle_as_home",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_castle_through_the_free_cities_keeps_its_history_and_regain_scores",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_home_taken_from_a_city_state_is_still_a_home",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_castle_of_a_non_major_has_no_age_flags",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_research_scores_the_difference_but_not_the_knowledge_held_at_initialization",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_event_flags_score_once_per_house_and_the_reign_turn_flag_goes_to_the_new_period",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_last",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_a_pair_that_re_forms_on_the_lapse_turn_scores_in_either_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_ended_start_alliance_lingers_without_points_then_a_new_alliance_scores",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_alliance_scores_once_per_period_and_same_team_never",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_thresholds_follow_the_period_length_cities_and_past_ages",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_reign_turns_follow_the_calendar",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_projection_for_the_era_score_screen_matches_the_next_judgement",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_new_friendship_scores_one_point_each_once_per_period",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_friendship_of_the_start_and_of_one_team_never_scores",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_friendship_existing_at_initialization_does_not_score",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_without_the_gameplay_friendship_call_nothing_scores_and_the_log_says_so",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_reign_table_from_koji_to_chidai",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_reign_turns_at_every_speed_match_the_generator_and_never_share_a_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_engine_era_change_judges_the_reign_and_the_period_ends_there",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_reigns_are_the_engine_eras_in_order",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_chidai_makes_every_house_dark_whatever_its_score_and_lasts_to_the_end",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_property_writer_is_idempotent_with_one_anchor_per_house",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_normal_house_has_no_policy_and_dark_house_flags_every_city",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_dark_houses_take_their_own_default_and_unlisted_civs_the_first_priority",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_dark_house_choice_applies_its_flags_once_per_reign",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_invalid_choices_are_dropped",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_choice_before_the_first_judgement_is_dropped",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_choice_survives_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_unselected_policy_cannot_be_changed_after_the_judgement_turn_even_after_load",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_unselected_policy_can_be_chosen_after_load_on_the_judgement_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_ai_keeps_its_default_and_only_dark_humans_get_the_reopen_notification",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "LedgerTests",
+      "test": "test_load_does_not_count_again",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_screen_lists_the_policies_and_a_click_applies_the_choice",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_later_closes_until_the_notification_and_nothing_is_sent_before_the_turn_is_active",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_turn_end_closes_and_the_next_turn_cannot_choose_even_if_unchosen",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_rejected_request_does_not_clear_the_blocker",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_cleanup_scans_past_official_notifications_and_keeps_other_houses",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_load_keeps_pending_notification_and_does_not_show_the_screen_automatically",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_cleanup_waits_for_the_notification_judgement_to_reach_the_ui",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "DarkPolicyScreenTests",
+      "test": "test_not_shown_for_a_house_that_is_not_dark",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "KojiDistributionTests",
+      "test": "test_observed_koji_scores_land_mostly_normal",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "ShortReignDistributionTests",
+      "test": "test_the_old_rule_gives_back_the_logged_ages",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages.py",
+      "class": "ShortReignDistributionTests",
+      "test": "test_short_periods_leave_most_houses_normal",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_not_shown_before_the_first_era_name_change",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_koji_turn_shows_the_house_result_once",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_autoplay_end_shows_it_when_the_turn_begin_did_not",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_dark_house_gets_the_policy_button_and_the_choice_after_closing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_turn_end_closes_without_opening_the_choice",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_heroic_after_dark_uses_the_heroic_art",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_no_local_player_shows_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_merged_period_names_the_era_it_judged",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "ReignPopupTests",
+      "test": "test_the_screen_writes_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_screen_once_then_notification_and_end_turn_button_reopen_until_chosen",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_notification_can_replace_an_open_reign_popup",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_official_notifications_keep_their_own_handler",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_ui_recreated_from_save_does_not_repeat_automatic_choice_but_notification_works",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_button_hotkey_auto_end_and_captured_refresh_use_the_saved_ledger",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "DarkPolicyNotificationTests",
+      "test": "test_guard_applies_only_to_a_pending_human_on_the_judgement_turn",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_before_the_ledger_the_official_panel_stays",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_tenbun_period_shows_the_ledger",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_after_koji_history_other_houses_ages_and_the_heroic_label",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_before_chidai_the_projection_is_dark_whatever_the_score",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_after_the_last_era_name_no_countdown_or_thresholds",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraPanelTests",
+      "test": "test_the_panel_writes_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraIndicatorTests",
+      "test": "test_before_the_ledger_the_official_tooltip_stays",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraIndicatorTests",
+      "test": "test_tenbun_then_koji_with_the_turns_to_the_next_era_name",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraIndicatorTests",
+      "test": "test_chidai_has_no_countdown",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraIndicatorTests",
+      "test": "test_the_indicator_writes_nothing",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "EraCompletePopupTests",
+      "test": "test_the_official_screen_stays_off_with_the_pack_and_on_without",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "WiringTests",
+      "test": "test_notification_extension_does_not_recursively_include_the_official_panel",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "WiringTests",
+      "test": "test_ruleset_panel_loads_the_extension_after_the_official_script",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "TitleLengthTests",
+      "test": "test_era_name_popup_title_is_two_short_lines",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_ages_screens.py",
+      "class": "TitleLengthTests",
+      "test": "test_era_score_panel_title_fits_the_header",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_sengoku_calendar.py",
+      "class": "SengokuCalendarTests",
+      "test": "test_turn_display_is_normalized",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_calendar.py",
+      "class": "SengokuCalendarTests",
+      "test": "test_calendar_action_is_pack_and_ruleset_scoped",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_calendar.py",
+      "class": "SengokuCalendarTests",
+      "test": "test_start_year_and_start_era_calendar",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_calendar.py",
+      "class": "SengokuCalendarTests",
+      "test": "test_start_era_is_restricted_to_ancient",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_calendar.py",
+      "class": "SengokuCalendarTests",
+      "test": "test_speed_curves_reach_1600_and_cover_long_games",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_no_diplomatic_action_is_lost",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_only_documented_rows_are_lost",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_no_governor_title_source_remains",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_owner_decided_gates",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_nulled_items_are_not_available",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "SengokuCascadeTests",
+      "test": "test_every_remap_matches_an_official_row_and_leaves_no_dangling_gate",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_cascade.py",
+      "class": "AllianceScenarioTests",
+      "test": "test_live_scenario_checks_every_alliance_and_the_c11_grant",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_count_and_unique_ids",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_factions_are_the_22_seats",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_earlier_by_ids_exist_in_trees",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_years_month_and_names",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_month_set_when_date_text_names_a_month",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_boost_and_advisor_popup",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_ssot_decisions",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_renames_chain_in_date_order",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_every_house_renames_by_research_only",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_rakuichi_is_two_events",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_catholicism_spreads_by_research_not_a_fixed_order",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_former_domains_are_ai_targets_only",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_house_specific_has_generic_name",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_required_events_present_and_every_faction_covered",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_no_dangling_event_references",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_scope_is_machine_readable",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_events.py",
+      "class": "SengokuEventTests",
+      "test": "test_resources_match_the_resource_placement",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_exactly_three_unique_oaths_for_each_of_the_22_registered_houses",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_all_four_ages_have_the_same_three_house_choices",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_official_commemorations_removed_without_deleting_history_or_touching_gs",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_every_effect_has_an_official_type_reversible_gate_and_attachment",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_balance_amounts_and_tenka_actual_modifiers",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_effect_arguments_resolve_to_actual_buildings_and_yields",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_every_name_and_effect_translated_and_history_sourced",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathDataTests",
+      "test": "test_generated_data_current",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_no_oath_or_effect_before_first_reign",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_each_age_offers_exactly_odas_three_and_no_other_house",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_golden_single_choice_activates_only_tenka_in_all_owned_cities",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_heroic_requires_atomic_three_distinct_choices",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_foreign_unknown_stale_wrong_count_and_forged_requester_rejected",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_dark_and_normal_capture_quest_once_per_actual_capture",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_golden_capture_does_not_add_quest_score",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_capture_from_free_city_or_city_state_earns_base_points_without_oath",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_research_quests_only_for_matching_completions_after_choice",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_relation_quest_uses_base_ledger_dedup_and_friendship_one_not_two",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_next_reign_expires_choice_and_flags_and_rejects_old_popup",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_new_and_transferred_cities_reconcile_both_owners_flags",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_selection_flags_and_quest_counts_survive_script_reload_without_rescoring",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_golden_flags_persist_before_first_turn_after_reload",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_unanswered_human_defaults_next_turn_and_locks_choice",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_ai_favours_war_or_income_and_is_deterministic",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_ai_naval_oath_requires_a_coastal_city",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_ai_heroic_gets_all_three_without_randomness",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathLedgerTests",
+      "test": "test_property_writes_use_fixed_order_for_all_66_flags",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_actual_rendered_rows_are_exactly_odas_three_in_each_age",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_click_and_confirm_uses_engine_operation_and_activates_modifier",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_heroic_confirms_three_in_one_operation",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_inactive_turn_and_foreign_row_do_not_send",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_reign_popup_defers_choice_until_closed",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_pending_choice_can_be_reopened_after_load",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_pending_load_can_show_before_activation_but_confirms_only_when_active",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_reopening_same_view_keeps_selection_but_player_change_discards_it",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_no_shared_oaths_for_unregistered_civilization",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_turn_end_closes_and_late_popup_cannot_rechoose",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_delayed_engine_reply_opens_dark_policy_only_after_oath_is_applied",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_notification_and_all_end_turn_paths_require_oath_before_dark_policy",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_oaths.py",
+      "class": "OathPopupTests",
+      "test": "test_normal_and_golden_oaths_block_until_chosen_even_without_policy_notification",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_ids_unique_and_complete",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_prerequisites_acyclic_and_all_nodes_reachable",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_positions_and_costs",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_columns_map_to_the_reigns_of_their_intended_dates",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_generated_files_current_and_all_text_keys_translated",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_every_unlock_proposal_has_explicit_proxy_or_todo",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_sql_loads_and_rewires_without_erasing_gs_sentinels",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_starting_knowledge_matches_all_era_i_roots_and_is_new_game_only",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_sengoku_trees.py",
+      "class": "SengokuTreeTests",
+      "test": "test_banseiki_sengoku_disables_official_victories_and_time_limit",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_ai_joins_only_when_allied_and_the_lead_capital_is_marked_when_the_pact_holds_all",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_human_target_must_accept_the_proposer",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_one_pact_per_player_and_no_pact_within_a_team",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_rebuilt_city_on_a_razed_castle_does_not_block_the_pact",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_a_pact_left_with_one_house_is_dissolved",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_a_member_leaves_at_once_and_the_rest_stay",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_the_lead_leaving_passes_the_pact_and_a_pact_of_two_dissolves",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_members_at_war_leave_and_the_lead_stays",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_two_warring_members_both_leave",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_a_pact_of_two_dissolves_when_they_go_to_war",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_ai_proposes_to_an_allied_ai_when_they_hold_enough_castles",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_ai_does_not_propose_to_a_house_it_is_at_war_with",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_ai_does_not_propose_below_the_share_or_without_an_alliance",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_an_active_start_alliance_pools_and_its_holder_of_more_castles_leads",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_an_ended_start_alliance_does_not_pool",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_a_start_alliance_tie_goes_to_the_lowest_id",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_a_start_alliance_inside_one_pact_is_left_to_the_pact",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_without_registered_castles_the_pact_pools_home_capitals",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_home_capitals_count_only_once_every_major_has_founded",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_lead_eliminated_passes_the_pact_to_the_member_with_most_castles",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_lead_eliminated_tie_goes_to_the_lowest_id_who_can_then_take_members",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_pact_lua.py",
+      "class": "UnificationPactTests",
+      "test": "test_pact_with_no_survivor_is_gone",
+      "crate": "civ6-lua-tests-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "RequirementModel",
+      "test": "test_set",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_map_cities_are_the_registry_and_settler_maps_have_none",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_checked_in_sql_is_generated_without_a_castle_count",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_victory_follows_owned_castles_razes_and_settler_capitals",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_captured_or_transferred_castle_still_counts",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_city_rebuilt_on_a_razed_castle_does_not_count",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_pact_marker_lets_only_the_lead_team_win",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_pact_script_and_panel_are_registered",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_rebuilt_castle_script_marks_razed_plots_and_survives_capture",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_castle_files_do_not_depend_on_load_order",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_victory_is_in_sengoku_domain_and_visible_in_official_rankings",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_test_map_registry_comes_from_map_data_and_stays_in_a_test_only_mod",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_live_scenarios_use_the_test_map_and_a_light_real_map_check",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_pact_live_scenario_forms_the_pact_through_the_panel",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tests/test_unification_victory.py",
+      "class": "UnificationVictoryTests",
+      "test": "test_live_scenarios_find_players_dead_or_alive",
+      "crate": "civ6-data-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+      "class": "AgesProbeTests",
+      "test": "test_every_chunk_is_followed_by_a_full_previous_era_record",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+      "class": "AgesProbeTests",
+      "test": "test_chunk_length_is_guarded_by_the_minimum_era_length",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+      "class": "AgesProbeTests",
+      "test": "test_api_listing_separates_not_enumerable_from_absent",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+      "class": "AgesProbeTests",
+      "test": "test_changed_since_last_boundary",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+      "class": "AgesProbeTests",
+      "test": "test_moments_cover_all_players",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_outcomes_costs_clamping_and_sources",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_missing_or_duplicate_cost_prevents_complete_measurement",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_missing_or_early_ruling_and_missing_refusal_loss_are_detected",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_empowered_third_party_request_at_120_is_detected",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_pending_final_turn_is_counted_without_claiming_a_ruling",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_requester_and_pair_interval_violations_are_detected",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_test_clock_jump_never_counts_as_uninterrupted_measurement",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_reloaded_log_is_not_an_uninterrupted_measurement",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_missing_or_failed_result_is_not_complete",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_nominal_cost_must_match_actual_balance_delta",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_weariness_coverage_is_visible_even_without_requests",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_weariness_missing_duplicate_or_mismatched_samples_prevent_completion",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_refusal_cost_must_match_each_respondent_and_pair",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_scenario_generator_matches_fixture_and_compiles_every_gameplay_step",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_saved_snapshot_preserves_nested_ai_state_and_missing_properties",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_snapshot_checks_saved_costs_instead_of_native_ai_spending_during_load",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+      "class": "ArbitrationReportTests",
+      "test": "test_all_live_gameplay_steps_run_with_save_restore_on_lupa",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+      "class": "BanseikiRulesetStaticTests",
+      "test": "test_audited_exclusion_is_exact_and_applies_to_every_banseiki_slot",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+      "class": "BanseikiRulesetStaticTests",
+      "test": "test_duplicate_policy_and_runtime_scenario_cover_same_civilization",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_dedication.py",
+      "class": "DedicationTest",
+      "test": "test_stall_with_pending_dedication_chooses_closes_and_resumes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_dedication.py",
+      "class": "DedicationTest",
+      "test": "test_repeated_dedication_is_bounded_then_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_dedication.py",
+      "class": "DedicationTest",
+      "test": "test_no_pending_dedication_keeps_old_restart_behaviour",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_statement_after_final_turn_retries_only_idempotent_handler_cleanup",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_statement_mid_autoplay_is_closed_and_autoplay_completes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_repeated_early_stops_by_statements_resume_without_using_restart_budget",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_deal_proposal_is_refused_before_the_statement_view_closes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_status_query_starved_by_statement_closes_it_and_asks_again",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_dark_age_policy_choice_is_closed_without_holding_autoplay",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_oath_choice_is_closed_after_reign_without_selecting_official_dedications",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "DiplomacyDuringAutoplayTests",
+      "test": "test_screen_that_keeps_reopening_is_bounded",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "StarvedInGameStepTests",
+      "test": "test_wait_closes_statement_and_polls_again",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "StarvedInGameStepTests",
+      "test": "test_wait_still_fails_when_nothing_was_open_or_retries_run_out",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+      "class": "StarvedInGameStepTests",
+      "test": "test_ui_lua_is_never_replayed_after_it_may_have_run",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_shortened_turns_require_explicit_test_mode",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_configuration_clears_test_mode_on_ordinary_runs",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_end_turn_honours_count_default_and_shared_deadline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_end_turn_rejects_invalid_counts",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_build_setup_checks_every_player_after_refresh",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_build_setup_defaults_on_for_banseiki_only",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_start_turn_guard",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_output_scoped_save_name_and_exact_name",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_save_dismisses_blocking_advisor_before_saving",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_flag_validation",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_allow_elimination_observes_target_and_records_turn",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_research_samples_and_report_use_first_observed_completion",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_autoplay_emits_research_jsonl_for_each_observed_turn",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_new_scenarios_check_requested_states",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_driver_features.py",
+      "class": "DriverFeatureTests",
+      "test": "test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_transitive_dependents_are_disabled_first_once_and_reported",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_traversal_includes_enabled_descendants_of_a_disabled_intermediate",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_requested_dependents_are_preserved_and_conflicts_fail_before_mutations",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_dependency_cycle_fails_before_mutations",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_disable_verifies_the_engine_state_and_names_the_failed_mod",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_no_disable_targets_leaves_unrelated_mods_enabled",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_late_disable_rejection_is_detected_before_any_settings_change",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_missing_enable_target_fails_before_disabling_other_mods",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_engine_refusal_restores_changes_without_enabling_disabled_intermediates",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_failed_restoration_identifies_the_mod_still_disabled",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_late_enable_failure_restores_disabled_and_newly_enabled_mods",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_implicitly_enabled_prerequisite_is_restored_when_enable_throws",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_enable_failure_without_disable_targets_restores_the_selection",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+      "class": "EnableModsTests",
+      "test": "test_enable_and_disable_overlap_is_case_insensitive",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraTimingProbeTests",
+      "test": "test_every_single_turn_is_logged_in_both_contexts",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraTimingProbeTests",
+      "test": "test_speeds_differ_only_in_speed",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraTimingProbeTests",
+      "test": "test_setup_guard_matches_the_test_mod_sql",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraTimingProbeTests",
+      "test": "test_other_scenarios_on_the_test_map_disable_the_probe_mod",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraTimingProbeTests",
+      "test": "test_gamecore_logger_never_raises_and_reports_changes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+      "class": "EraReignsScenarioTests",
+      "test": "test_checked_turns_are_the_generated_era_starts",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_every_scale_scenario_is_valid",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_takeda_variant_checks_selected_faction_and_full_initial_territory",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_resource_scenario_matches_the_manifest_on_the_adopted_15km_map",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_rejects_bad_map_file_and_metrics_flag",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_capture_and_compare_lua_results",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_turn_metrics_preserve_missing_samples",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_autoplay_writes_turn_and_memory_samples",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_autoplay_reports_eliminated_human_instead_of_overshoot",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_map_log_profile_detects_mod_errors",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_japan_map.py",
+      "class": "JapanMapScenarioTests",
+      "test": "test_following_file_diagnostic_belongs_to_error",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_bundle0_success_and_unrelated_database_error",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_restored_state_mismatch_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_missing_action_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_generic_errors_include_stack_and_api_error",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_missing_jac_icon_or_texture_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_missing_jac_texture_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_error_none_is_not_a_failure",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_database_error_with_mod_context_fails",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_growth_success_and_restored_mismatch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_growth_expected_two_units_in_assignment_restore_and_journal",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_growth_ignores_unrelated_game_error_and_catches_target_ui_error",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_japan_map_fails_on_congress_dependent_ui_error",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_baseline_excludes_old_lines_and_handles_truncate",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_baseline_detects_same_inode_rewrite_past_old_offset",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "JudgeTests",
+      "test": "test_shipped_scenarios_validate_offline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_judge.py",
+      "class": "AutoplayTests",
+      "test": "test_event_and_transient_inactive_state_do_not_complete_or_restart_early",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_fast_forward_uses_core_clock_and_discards_stale_ui_measurement",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_fast_forward_csv_files_warn_against_continuous_performance_comparison",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_csv_and_summary_keep_skipped_turns_and_untimed_intervals_explicit",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_first_interval_starts_before_autoplay_response",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_stdlib_memory_api_samples_a_real_process",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_save_load_measure_actual_file_and_wait_until_ready",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_result_keeps_partial_measurements_on_failed_run",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_save_load_flags_require_boolean",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_result_separates_continuous_memory_from_post_load_memory",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_interruption_is_recorded_and_summary_write_error_does_not_replace_it",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_metrics.py",
+      "class": "MeasurementTests",
+      "test": "test_metric_groups_are_validated",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_oaths.py",
+      "class": "OathScenarioTests",
+      "test": "test_scenario_is_valid_starts_as_oda_and_checks_load_before_advancing",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_oaths.py",
+      "class": "OathScenarioTests",
+      "test": "test_every_embedded_lua_step_and_wait_compiles",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_oaths.py",
+      "class": "OathScenarioTests",
+      "test": "test_automatic_popup_assertion_cannot_force_a_missing_screen_open",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_oaths.py",
+      "class": "OathScenarioTests",
+      "test": "test_fast_forward_runs_engine_jump_with_scope_checks_and_keeps_source_intact",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_only_civ6_reporter_is_closed_without_a_running_game",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_running_game_keeps_reporters",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_unreadable_reporter_is_not_terminated",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_exited_reporter_is_ignored",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_remaining_reporter_that_cannot_be_opened_stops_launch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_reporter_must_finish_exiting_before_launch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_steam_launch_clears_reporters_before_sending_uri",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "CrashReporterTests",
+      "test": "test_close_failure_stops_steam_launch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "DX11LaunchTests",
+      "test": "test_only_dx11_window_is_accepted_after_launch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "DX11LaunchTests",
+      "test": "test_unreadable_window_is_not_accepted",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "FreshnessTests",
+      "test": "test_freshness_decision_uses_strictly_newer_mod_file",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "FreshnessTests",
+      "test": "test_mod_scan_resolves_folder_and_finds_newest_file",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "FreshnessTests",
+      "test": "test_missing_or_duplicate_enabled_mod_is_rejected",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "FreshnessTests",
+      "test": "test_atlas_images_missing_from_the_mod_packages_are_reported",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "FreshnessTests",
+      "test": "test_stale_art_stops_before_restart",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_wrong_steam_executable_stops_before_click_or_tuner",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_action_validation",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_auto_restart_precedes_first_step_and_log_baseline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_no_auto_restart_skips_freshness_query",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_still_stale_after_restart_stops_before_first_step",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_action_launches_and_clicks_verified_window",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_frontend_probe_reconnects_after_unknown_read_only_reply",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_frontend_probe_clicks_again_if_movie_still_plays",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_single_process_waits_for_exiting_process_to_disappear",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_single_process_still_refuses_when_duplicates_persist",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_window_wait_ignores_transient_duplicate_processes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_steam_wait_does_not_launch_again_during_process_overlap",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_first_restart_action_can_start_stopped_game_with_auto_disabled",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_requests_ui_quit_before_steam_launch",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_forces_only_same_process_after_grace",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_without_process_launches_then_waits_for_frontend",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_restart_still_refuses_when_several_processes_persist",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_restart.py",
+      "class": "RestartActionTests",
+      "test": "test_run_launches_civ_when_not_running_and_first_step_needs_game",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_owner_start_opens_setup_without_hosting_and_waits_long",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_sends_one_escape_even_if_ingame_state_exists",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_never_sends_escape_before_load_complete_log",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_sends_begin_game_escape_only_once",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_reconnects_when_frontend_state_list_is_stale",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_load_wait_timeout_never_repeats_escape",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_lua_errors_stop_without_retrying_mutations",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_detects_lua_log_rotation_and_truncation_before_input",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_detects_lua_log_rotation_after_escape",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_rejects_same_inode_rewrite_even_if_log_grows",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_run_creates_missing_output_parents_but_rejects_existing_run",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_multiple_civ_processes_stop_run_before_tuner_access",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_failed_cold_start_is_reported_before_tuner_access",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_unreachable_tuner_reports_connection_failure",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_screenshot_paths_reject_drives_absolute_and_parent_escape",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_screenshot_rejects_resolved_path_outside_output",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_screenshot_fails_if_capture_finishes_after_deadline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_nonfinite_timeouts_are_rejected",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_scenario_validates_lua_code_before_running",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_manual_wait_has_no_step_deadline_or_timeout_option",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_wait_caps_state_and_lua_queries_to_remaining_time",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_lua_wait_unknown_reply_fails_without_reexecution",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_lua_wait_confirmed_error_fails_without_reexecution",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_pre_send_framing_error_is_logged_as_step_failure",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_pre_send_failure_is_logged_without_waiting",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_transition_waits_after_unknown_reply_without_resending",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_unknown_transition_without_read_only_confirmation_is_undecidable",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_confirmed_transition_lua_error_never_enters_wait",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_exit_to_menu_waits_for_state_before_lua_predicate",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_log_wait_requires_new_line_and_does_not_reuse_a_match",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_log_wait_stops_if_generation_changes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_later_step_cannot_reuse_previous_steps_log_line",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_oserror_after_autoplay_start_attempts_cleanup_without_replay",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_end_turn_closes_successive_ai_statements_without_repeating_action",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_end_turn_reopening_diplomacy_has_a_fixed_limit",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_end_turn_honours_turns_and_rejects_invalid_values",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "ScenarioSafetyTests",
+      "test": "test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_deadline_expiring_during_focus_sends_no_key",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_deadline_expiring_after_key_mapping_sends_no_window_key",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_deadline_expiring_after_foreground_check_sends_no_sendinput_key",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_key_before_deadline_is_sent",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_foreground_mismatch_sends_no_keys_or_clicks",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_window_key_releases_after_foreground_changes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_window_key_targets_verified_game_while_background",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_window_key_rechecks_target_before_background_input",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_sendinput_fallback_checks_foreground_and_releases_key",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_input_error_is_logged_as_step_failure",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_failed_foreground_activation_sends_no_input",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_window_must_have_unique_civ_executable",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_hidden_second_civ_process_blocks_input_before_window_scan",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_safety.py",
+      "class": "InputSafetyTests",
+      "test": "test_process_snapshot_counts_both_civ_executables",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_status_query_retries_after_timeout",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_advisor_dismissal_retries_after_timeout",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_research_query_retries_after_timeout",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_gives_up_only_after_deadline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_stale_research_snapshot_stops_at_deadline",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_lua_error_is_not_retried",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+      "class": "TransientTimeoutTests",
+      "test": "test_state_changing_lua_is_not_replayed",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_round_trip_fragmented_and_named_state",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_lua_error_is_reported",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_missing_ack_is_not_replayed",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_missing_state_fails_before_lua_send",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_send_failure_is_classified_as_unknown",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_reject_oversized_frame",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_empty_frame_is_skipped_not_fatal",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuner.py",
+      "class": "FramingTests",
+      "test": "test_send_nul_is_rejected",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_counts_ages_policies_and_case_vs_respondent_outcomes",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_duplicate_judgment_is_rejected",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_completion_requires_target_and_passed_judge",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_completion_rejects_missing_failed_synthetic_and_reloaded_results",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_observer_handles_engine_functions_returning_no_values",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_variant_preserves_original_settings_and_progression",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_coverage_checks_saved_player_rosters_for_every_reign",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_five_repeated_checkpoints_are_not_complete",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_missing_saved_rosters_do_not_prove_complete_measurement",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_missing_player_in_both_history_and_log_is_not_complete",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_survivors_are_reconciled_with_dated_elimination_events",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+      "class": "TuningReportTests",
+      "test": "test_missing_house_fields_and_era_fields_are_not_complete",
+      "crate": "civ6-reports-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_run_rejects_invalid_metadata_even_without_a_fast_forward_step",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_lost_jump_acknowledgment_marks_count_unknown_and_never_replays",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_invalid_test_mode_is_rejected_before_any_game_call",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_fast_forward_processes_every_era_boundary_before_skipping_again",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_scenario_localization_keys_exist_in_mod_text",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_all_new_chunks_validate_and_compile_as_lua",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_full_map_measurements_cover_continuous_play_and_both_reloads",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_saved_state_snapshot_uses_indexed_city_iterator_and_detects_changes",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_optional_tail_is_scoped_hidden_and_preserves_endless_last_era",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_resource_calendar_calls_actual_getter_and_rejects_wrong_year",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+      "class": "VerificationScenarioTests",
+      "test": "test_strict_judge_rejects_official_screen_errors",
+      "crate": "civ6-autotest-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "FrontEndArtTests",
+      "test": "test_house_crests_fill_all_xp2_sizes_with_distinct_white_masks",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "FrontEndArtTests",
+      "test": "test_every_player_icon_and_portrait_has_a_cooked_texture",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "FrontEndArtTests",
+      "test": "test_ingame_portraits_and_fallbacks_cover_all_players",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "IconReadabilityTests",
+      "test": "test_notebooks_glyph_matches_official_neighbours",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "IconReadabilityTests",
+      "test": "test_leader_icons_are_face_crops_framed_in_house_colour",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/jac_art/tests/test_frontend_art.py",
+      "class": "IconReadabilityTests",
+      "test": "test_house_primary_colours_are_distinct",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "ProjectionTests",
+      "test": "test_round_trip_across_japan",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "ProjectionTests",
+      "test": "test_hex_neighbours_and_odd_row_offset",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "ProjectionTests",
+      "test": "test_closest_centre",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_schema_matches_official_and_plot_inventory",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_known_land_and_removed_foreign_land",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_22_starts_unique_and_traversable",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_oda_has_a_passable_neighbouring_domain_for_initial_route_check",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_historical_players_castles_and_territory",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_settler_variant_has_no_premade_state",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_takeda_setup_slot_maps_to_static_city_and_territory_owners",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_resource_counts_deferred_candidates_and_city_exclusion",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_every_placed_resource_obeys_installed_official_rules_on_final_plot",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_rivers_are_connected_and_only_use_shared_land_edges",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_lakes_features_and_volcanoes_follow_draft_counts",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_close_castle_pairs_report",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_nudges_use_nearest_free_plot_of_the_original_owner",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_city_related_inserts_put_capitals_first",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_every_capital_and_only_capitals_have_a_palace",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_hex_distance_matches_neighbours",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_config_and_scenarios_cover_all_scales",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_leaders_unique_and_human_from_banseiki_pool",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_all_leaders_registered_with_nonmissing_icons",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_banseiki_filter_skips_japan_maps_and_settler_removal_is_scoped",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_city_range_is_limited_to_four_japan_maps",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_generate.py",
+      "class": "GeneratedMapTests",
+      "test": "test_domain_passage_and_loyalty_are_limited_to_all_four_japan_maps",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_totals_per_tier",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_every_city_has_one_garrison_of_its_owner",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_no_unit_on_invalid_terrain",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_districts_buildings_and_improvements_follow_the_rules",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_no_forest_or_marsh_is_removed",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_kyoto_and_treasury",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_settler_maps_stay_bare",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_apply_is_deterministic_and_matches_the_checked_in_maps",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_improvement_rules",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_live_scenario_is_current_and_valid",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_survivor_step_fails_on_a_death_or_a_lost_capital",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_start_check_compares_every_planned_building",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+      "class": "ProsperousMapTests",
+      "test": "test_start_state_script_runs_only_on_the_historical_maps",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosperity.py",
+      "class": "ProsperityPlanTests",
+      "test": "test_json_is_current",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosperity.py",
+      "class": "ProsperityPlanTests",
+      "test": "test_covers_22_factions_and_56_cities",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosperity.py",
+      "class": "ProsperityPlanTests",
+      "test": "test_every_city_is_garrisoned_and_capped_by_land",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosperity.py",
+      "class": "ProsperityPlanTests",
+      "test": "test_only_buildings_and_units_kept_by_the_sengoku_trees",
+      "crate": "civ6-assets-rs"
+    },
+    {
+      "source": "tools/japan_map_scale/tests/test_prosperity.py",
+      "class": "ProsperityPlanTests",
+      "test": "test_koku_shares_and_tiers",
+      "crate": "civ6-assets-rs"
+    }
+  ]
+}

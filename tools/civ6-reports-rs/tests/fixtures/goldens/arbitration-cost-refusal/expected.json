@@ -1,0 +1,134 @@
+{
+  "artifact": "arbitration-cost-refusal",
+  "lua_sha256": "02061da81cd04d39f720dbac630914d68c01d1ebf1a53b999b0e8f40765f8290",
+  "complete_200_turns": true,
+  "measurement_complete": true,
+  "issues": [],
+  "requests": 2,
+  "sources": {
+    "ai_party": 1,
+    "ai_shogun": 1
+  },
+  "outcomes": {
+    "accepted": 1,
+    "refused": 1
+  },
+  "unfinished": 0,
+  "refused_respondents": 2,
+  "decisions": {
+    "ai:true": 1,
+    "ai:false": 2
+  },
+  "spending": {
+    "ai_party": {
+      "gold": 100,
+      "legitimacy": 5
+    },
+    "ai_shogun": {
+      "gold": 34,
+      "legitimacy": 2
+    }
+  },
+  "refusal_loss_intended": 90,
+  "refusal_loss_applied": 75,
+  "blocked_candidate_visits": {
+    "gold": 1,
+    "legitimacy": 2,
+    "interval": 3
+  },
+  "player_intervals": {
+    "0": [],
+    "2": []
+  },
+  "pair_intervals": {
+    "0_1": [],
+    "1_3": []
+  },
+  "shogunate_cutoff": 120,
+  "shogun_after_cutoff": [],
+  "costs": [
+    {
+      "player": 0,
+      "pair": [
+        0,
+        1
+      ],
+      "source": "ai_party",
+      "gold": 100,
+      "legitimacy": 5,
+      "gold_before": 500.0,
+      "legitimacy_before": 40,
+      "gold_after": 400.0,
+      "legitimacy_after": 35
+    },
+    {
+      "player": 2,
+      "pair": [
+        1,
+        3
+      ],
+      "source": "ai_shogun",
+      "gold": 34,
+      "legitimacy": 2,
+      "gold_before": 500.0,
+      "legitimacy_before": 77,
+      "gold_after": 466.0,
+      "legitimacy_after": 75
+    }
+  ],
+  "ai_decisions": [
+    {
+      "player": 0,
+      "source": "ai_party",
+      "score": 6,
+      "pair": [
+        0,
+        1
+      ],
+      "detail": {
+        "player": "0",
+        "pair": "0-1",
+        "turn": "2",
+        "by": "ai_party",
+        "score": "6",
+        "duration": "5",
+        "weariness": "0",
+        "weariness_cities": "0",
+        "army_loss": "3",
+        "city_loss": "0",
+        "low_legitimacy": "2"
+      }
+    },
+    {
+      "player": 2,
+      "source": "ai_shogun",
+      "score": 3,
+      "pair": [
+        1,
+        3
+      ],
+      "detail": {
+        "player": "2",
+        "pair": "1-3",
+        "turn": "14",
+        "by": "ai_shogun",
+        "score": "3",
+        "duration": "12",
+        "ally": "false",
+        "capital": "false",
+        "long_war": "true"
+      }
+    }
+  ],
+  "failures": [],
+  "weariness_coverage": {
+    "samples": 804,
+    "observed_cities": 1608,
+    "total_cities": 1608
+  },
+  "limitations": [
+    "A single seed does not isolate the causal effect of fees, refusal penalties or cooldowns.",
+    "Blocked counts are candidate visits before selecting a request, not distinct houses.",
+    "Army and city contractions are sampled proxies, not opponent-attributed losses."
+  ]
+}

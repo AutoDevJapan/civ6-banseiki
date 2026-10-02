@@ -18,3 +18,7 @@ __pycache__/
 
 # Japan map source downloads and generated diagnostics
 /tools/japan_map_scale/cache/
+
+# Rust tools and their test artifacts
+/tools/target/
+/tools/civ6-*-rs/target/

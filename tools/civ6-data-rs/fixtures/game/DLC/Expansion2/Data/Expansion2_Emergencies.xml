@@ -1,0 +1,1033 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Edward Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="EMERGENCY_NOBEL_PRIZE_LITERATURE" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_NOBEL_PRIZE_PEACE" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_NOBEL_PRIZE_PHYSICS" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_SEND_AID" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_WORLDS_FAIR" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_SPACE_STATION" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_CLIMATE_ACCORDS" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_WORLD_GAMES" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+        <Row Type="EMERGENCY_SEND_MILITARY_AID" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    </Types>
+    <EmergencyAlliances>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="NOBEL_PRIZE_TARGET_REQUIREMENTS" MemberRequirementSet="NOBEL_PRIZE_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_NOBEL_PRIZE_LITERATURE_NAME" EmergencyText="GreatArtists" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="NOBEL_PRIZE_TARGET_REQUIREMENTS" MemberRequirementSet="NOBEL_PRIZE_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_NOBEL_PRIZE_PEACE_NAME" EmergencyText="Favor" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="NOBEL_PRIZE_TARGET_REQUIREMENTS" MemberRequirementSet="NOBEL_PRIZE_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_NOBEL_PHYSICS_NAME" EmergencyText="GreatStems" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_SEND_AID" Duration="30" LockoutTime="30" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="SEND_AID_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="SEND_AID_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_PLAYER_LOSES_POP_TO_RANDOM_EVENT" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_REQUEST_AID_NAME" EmergencyText="SendAid" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_SEND_MILITARY_AID" Duration="30" LockoutTime="30" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="SEND_AID_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="SEND_AID_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WAR_WITH_GRIEVANCES" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_REQUEST_MILITARY_AID_NAME" EmergencyText="SendMilitaryAid" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_WORLDS_FAIR" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="WORLDS_FAIR_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="WORLDS_FAIR_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_WORLDS_FAIR_NAME" EmergencyText="WorldsFair" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_SPACE_STATION" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="SPACE_STATION_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="SPACE_STATION_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_SPACE_STATION_NAME" EmergencyText="SpaceStation" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="CLIMATE_ACCORDS_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="CLIMATE_ACCORDS_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_CLIMATE_ACCORDS_NAME" EmergencyText="ClimateAccords" GoalText="NoGoal"/>
+        <Row EmergencyType="EMERGENCY_WORLD_GAMES" Duration="29" LockoutTime="60" WarOnTarget="false" KillFriendship="false" InformTarget="false" OpenBorders="False" ShareVis="False" RemovesWarState="False" TargetRequirementSet="WORLD_GAMES_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="WORLD_GAMES_EMERGENCY_MEMBER_REQUIREMENTS" Trigger="EMERGENCY_TRIGGER_WORLD_CONGRESS" GoalTrigger="EMERGENCY_TRIGGER_NONE" Name="LOC_EMERGENCY_WORLD_GAMES_NAME" EmergencyText="WorldGames" GoalText="NoGoal"/>
+    </EmergencyAlliances>
+    <Emergencies_XP2>
+        <Row EmergencyType="EMERGENCY_MILITARY" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_SETTLED_CITY" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_RELIGIOUS" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_NUCLEAR" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_BACKSTAB" Hostile="true" UIType="HOSTILE_EMERGENCY" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_SEND_AID" Hostile="false" UIType="AID_REQUEST" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_SEND_MILITARY_AID" Hostile="false" UIType="AID_REQUEST" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_WORLDS_FAIR" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_SPACE_STATION" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+        <Row EmergencyType="EMERGENCY_WORLD_GAMES" Hostile="false" NoTarget="true" UIType="COMPETITION" UIBackgroundPrefix=""/>
+    </Emergencies_XP2>
+    <EmergencyBuffs>
+        <Row ModifierID="AID_REQUEST_GRANT_PROJECT" EmergencyType="EMERGENCY_SEND_AID" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_ACCESS_TO_SEND_AID_PROJECT"/>
+        <Row ModifierID="AID_REQUEST_GRANT_PROJECT" EmergencyType="EMERGENCY_SEND_MILITARY_AID" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_ACCESS_TO_SEND_AID_PROJECT"/>
+        <Row ModifierID="ISS_GRANT_PROJECT" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_ACCESS_TO_TRAIN_ASTRONAUTS_PROJECT"/>
+        <Row ModifierID="WORLD_GAMES_GRANT_PROJECT" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_ACCESS_TO_TRAIN_ATHLETES_PROJECT"/>
+        <Row ModifierID="CLIMATE_ACCORDS_GRANT_DECOMMISSION_COAL_POWER_PLANT_PROJECT" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_ACCESS_TO_DECOMMISSION_POWER_PLANT_PROJECTS"/>
+        <Row ModifierID="CLIMATE_ACCORDS_GRANT_DECOMMISSION_OIL_POWER_PLANT_PROJECT" EmergencyType="EMERGENCY_CLIMATE_ACCORDS"/>
+        <Row ModifierID="CLIMATE_ACCORDS_GRANT_DECOMMISSION_NUCLEAR_POWER_PLANT_PROJECT" EmergencyType="EMERGENCY_CLIMATE_ACCORDS"/>
+    </EmergencyBuffs>
+    <EmergencyRewards>
+        <!-- All non-emergency scored competitions now grant at least 1 DVP to the winner: Request for Aid provides 2 -->
+        <!--<Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+    <Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/> -->
+        <Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_WORLDS_FAIR" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_SINGLE_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="AID_REQUEST_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_SEND_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="AID_REQUEST_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_SEND_MILITARY_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="CLIMATE_ACCORDS_FIRST_PLACE_VICTORY_POINT" OnSuccess="True" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_FIRST_PLACE_VICTORY_POINT_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="AID_REQUEST_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_SEND_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="AID_REQUEST_BOTTOM_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_SEND_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_BOTTOM_TIER_FAVOR_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="AID_REQUEST_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_SEND_MILITARY_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="AID_REQUEST_BOTTOM_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_SEND_MILITARY_AID" Description="LOC_EMERGENCY_REWARD_AID_REQUEST_BOTTOM_TIER_FAVOR_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="WORLD_FAIR_FIRST_PLACE_GREAT_PERSON_POINTS" OnSuccess="True" EmergencyType="EMERGENCY_WORLDS_FAIR" Description="LOC_EMERGENCY_REWARD_WORLD_FAIR_FIRST_PLACE_GREAT_PERSON_POINTS_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="WORLD_FAIR_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_WORLDS_FAIR" Description="LOC_EMERGENCY_REWARD_WORLD_FAIR_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="WORLD_FAIR_TOP_TIER_CULTURE" OnSuccess="True" EmergencyType="EMERGENCY_WORLDS_FAIR" Description="LOC_EMERGENCY_REWARD_WORLD_FAIR_TOP_TIER_CULTURE_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="WORLD_FAIR_BOTTOM_TIER_CULTURE" OnSuccess="True" EmergencyType="EMERGENCY_WORLDS_FAIR" Description="LOC_EMERGENCY_REWARD_WORLD_FAIR_BOTTOM_TIER_CULTURE_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="WORLD_GAMES_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="WORLD_GAMES_TOP_TIER_STADIUMS_TOURISM" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_TOP_TIER_STADIUMS_TOURISM_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="WORLD_GAMES_TOP_TIER_AQUATIC_CENTERS_TOURISM" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_TOP_TIER_AQUATIC_CENTERS_TOURISM_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="WORLD_GAMES_BOTTOM_TIER_STADIUMS_TOURISM" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_BOTTOM_TIER_STADIUMS_TOURISM_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTERS_TOURISM" OnSuccess="True" EmergencyType="EMERGENCY_WORLD_GAMES" Description="LOC_EMERGENCY_REWARD_WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTERS_TOURISM_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="ISS_FIRST_PLACE_SPACESHIP_SPEED_ATTACH_MODIFIER" OnSuccess="True" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_REWARD_ISS_FIRST_PLACE_SPACESHIP_SPEED_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="ISS_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_REWARD_ISS_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="ISS_TOP_TIER_SPACE_RACE_PRODUCTION" OnSuccess="True" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_REWARD_ISS_TOP_TIER_SPACE_RACE_PRODUCTION_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="ISS_BOTTOM_TIER_SPACE_RACE_PRODUCTION" OnSuccess="True" EmergencyType="EMERGENCY_SPACE_STATION" Description="LOC_EMERGENCY_REWARD_ISS_BOTTOM_TIER_SPACE_RACE_PRODUCTION_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="CLIMATE_ACCORDS_TOP_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Description="LOC_EMERGENCY_REWARD_CLIMATE_ACCORDS_TOP_TIER_FAVOR_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="CLIMATE_ACCORDS_BOTTOM_TIER_FAVOR" OnSuccess="True" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" Description="LOC_EMERGENCY_REWARD_CLIMATE_ACCORDS_BOTTOM_TIER_FAVOR_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_CHEAPER" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_CHEAPER_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_BUFF" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_BUFF_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_LIT_TOP_TIER_ROCK_BAND_BUFF" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_LIT_TOP_TIER_ROCK_BAND_BUFF_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_LIT_BOTTOM_TIER_ROCK_BAND_BUFF" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_LIT_BOTTOM_TIER_ROCK_BAND_BUFF_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PHY_FIRST_PLACE_UNIVERSITY_RESOURCES" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PHY_FIRST_PLACE_UNIVERSITY_RESOURCES_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PHY_TOP_TIER_RESEARCH_LAB_RESOURCES" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PHY_TOP_TIER_UNIVERSITY_RESOURCES_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_MUSICIAN" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_MUSICIAN_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_SCIENTIST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_SCIENTIST_DESCRIPTION" FirstPlace="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ENGINEER" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ENGINEER_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ARTIST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ARTIST_DESCRIPTION" TopTier="true"/>
+        <Row ModifierID="NOBEL_PRIZE_PEACE_BOTTOM_TIER_GREAT_ARTIST" OnSuccess="True" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" Description="LOC_EMERGENCY_REWARD_NOBEL_PRIZE_PEACE_BOTTOM_TIER_GREAT_ARTIST_DESCRIPTION" BottomTier="true"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS" OnSuccess="True" EmergencyType="EMERGENCY_MILITARY" Description="LOC_EMERGENCY_REWARD_MEMBERS_GAIN_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS" OnSuccess="True" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" Description="LOC_EMERGENCY_REWARD_MEMBERS_GAIN_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS" OnSuccess="True" EmergencyType="EMERGENCY_RELIGIOUS" Description="LOC_EMERGENCY_REWARD_MEMBERS_GAIN_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS" OnSuccess="True" EmergencyType="EMERGENCY_NUCLEAR" Description="LOC_EMERGENCY_REWARD_MEMBERS_GAIN_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS" OnSuccess="True" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_REWARD_MEMBERS_GAIN_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET" OnSuccess="False" EmergencyType="EMERGENCY_MILITARY" Description="LOC_EMERGENCY_REWARD_TARGET_GAINS_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET" OnSuccess="False" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" Description="LOC_EMERGENCY_REWARD_TARGET_GAINS_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET" OnSuccess="False" EmergencyType="EMERGENCY_RELIGIOUS" Description="LOC_EMERGENCY_REWARD_TARGET_GAINS_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET" OnSuccess="False" EmergencyType="EMERGENCY_NUCLEAR" Description="LOC_EMERGENCY_REWARD_TARGET_GAINS_FAVOR_DESCRIPTION"/>
+        <Row ModifierID="HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET" OnSuccess="False" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_REWARD_TARGET_GAINS_FAVOR_DESCRIPTION"/>
+    </EmergencyRewards>
+    <EmergencyTexts>
+        <Row Type="GreatArtists" Flavor="LOC_EMERGENCY_FLAVOR_GREAT_ARTISTS" Description="LOC_EMERGENCY_DESCRIPTION_GREAT_ARTISTS" DescriptionShorter="LOC_WORLD_CONGRESS_NOBEL_PRIZE_LITERATURE_SUMMARY"/>
+        <Row Type="GreatStems" Flavor="LOC_EMERGENCY_FLAVOR_GREAT_STEMS" Description="LOC_EMERGENCY_DESCRIPTION_GREAT_STEMS" DescriptionShorter="LOC_WORLD_CONGRESS_NOBEL_PRIZE_SCIENCE_SUMMARY"/>
+        <Row Type="Favor" Flavor="LOC_EMERGENCY_FLAVOR_FAVOR" Description="LOC_EMERGENCY_DESCRIPTION_FAVOR" DescriptionShorter="LOC_WORLD_CONGRESS_NOBEL_PRIZE_PEACE_SUMMARY"/>
+        <Row Type="SendAid" Flavor="LOC_EMERGENCY_FLAVOR_REQUEST_AID" Description="LOC_EMERGENCY_DESCRIPTION_REQUEST_AID" DescriptionShorter="LOC_WORLD_CONGRESS_AID_REQUEST_SUMMARY"/>
+        <Row Type="SendMilitaryAid" Flavor="LOC_EMERGENCY_FLAVOR_REQUEST_MILITARY_AID" Description="LOC_EMERGENCY_DESCRIPTION_REQUEST_MILITARY_AID" DescriptionShorter="LOC_WORLD_CONGRESS_MILITARY_AID_REQUEST_SUMMARY"/>
+        <Row Type="WorldsFair" Flavor="LOC_EMERGENCY_FLAVOR_SCORE_COMPETITION_CULTURAL" Description="LOC_EMERGENCY_DESCRIPTION_SCORE_COMPETITION_CULTURAL" DescriptionShorter="LOC_WORLD_CONGRESS_WORLDS_FAIR_SUMMARY"/>
+        <Row Type="SpaceStation" Flavor="LOC_EMERGENCY_FLAVOR_SPACE_STATION" Description="LOC_EMERGENCY_DESCRIPTION_SPACE_STATION" DescriptionShorter="LOC_WORLD_CONGRESS_ISS_SUMMARY"/>
+        <Row Type="ClimateAccords" Flavor="LOC_EMERGENCY_FLAVOR_CLIMATE_ACCORDS" Description="LOC_EMERGENCY_DESCRIPTION_CLIMATE_ACCORDS" DescriptionShorter="LOC_WORLD_CONGRESS_CLIMATE_ACCORD_SUMMARY"/>
+        <Row Type="WorldGames" Flavor="LOC_EMERGENCY_FLAVOR_WORLD_GAMES" Description="LOC_EMERGENCY_DESCRIPTION_WORLD_GAMES" DescriptionShorter="LOC_WORLD_CONGRESS_WORLD_GAMES_SUMMARY"/>
+    </EmergencyTexts>
+    <EmergencyGoalTexts>
+        <Row GoalType="NoGoal" GoalDescription="LOC_EMERGENCY_GOAL_COMPETE_WITH_OTHERS" ShortGoalDescription="LOC_EMERGENCY_GOAL_SHORT_COMPETE_WITH_OTHERS" TentativeGoalDescription="LOC_EMERGENCY_GOAL_TENTATIVE_COMPETE_WITH_OTHERS" ListGoal="LOC_EMERGENCY_GOAL_LIST_COMPETE_WITH_OTHERS"
+         ShortTargetGoalDescription="LOC_EMERGENCY_GOAL_SHORT_TARGET_RECEIVE_AID"/>
+    </EmergencyGoalTexts>
+    <EmergencyScoreSources>
+        <Row ScoreSourceType="NOBEL_PRIZE_LITERATURE_SCORE_FROM_ARTIST" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" FromGreatPerson="GREAT_PERSON_CLASS_ARTIST" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_GREAT_ARTISTS_DESC"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_LITERATURE_SCORE_FROM_MUSICIAN" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" FromGreatPerson="GREAT_PERSON_CLASS_MUSICIAN" ScoreAmount="1"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_LITERATURE_SCORE_FROM_WRITER" EmergencyType="EMERGENCY_NOBEL_PRIZE_LITERATURE" FromGreatPerson="GREAT_PERSON_CLASS_WRITER" ScoreAmount="1"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_PEACE_SCORE_FROM_FAVOR" EmergencyType="EMERGENCY_NOBEL_PRIZE_PEACE" FromFavor="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_FAVOR_DESC"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_PHYSICS_SCORE_FROM_ENGINEER" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" FromGreatPerson="GREAT_PERSON_CLASS_ENGINEER" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_GREAT_STEMS_DESC"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_PHYSICS_SCORE_FROM_MERCHANT" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" FromGreatPerson="GREAT_PERSON_CLASS_MERCHANT" ScoreAmount="1"/>
+        <Row ScoreSourceType="NOBEL_PRIZE_PHYSICS_SCORE_FROM_SCIENTIST" EmergencyType="EMERGENCY_NOBEL_PRIZE_PHYSICS" FromGreatPerson="GREAT_PERSON_CLASS_SCIENTIST" ScoreAmount="1"/>
+        <Row ScoreSourceType="SEND_AID_SCORE_FROM_GOLD_REQUEST_AID" EmergencyType="EMERGENCY_SEND_AID" FromGold="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_SEND_AID_GOLD_DESC"/>
+        <Row ScoreSourceType="SEND_AID_SCORE_FROM_PROJECT_REQUEST_AID" EmergencyType="EMERGENCY_SEND_AID" FromProject="PROJECT_SEND_AID" ScoreAmount="200" Description="LOC_EMERGENCY_SCORE_SEND_AID_PROJECT_DESC"/>
+        <Row ScoreSourceType="SEND_AID_SCORE_FROM_AT_WAR_REQUEST_AID" EmergencyType="EMERGENCY_SEND_AID" FromAtWar="true" ScoreAmount="-30" Description="LOC_EMERGENCY_SCORE_SEND_AID_WAR_DESC"/>
+        <Row ScoreSourceType="SEND_AID_SCORE_FROM_POLLUTION_REQUEST_AID" EmergencyType="EMERGENCY_SEND_AID" FromBadCO2Footprint="true" ScoreAmount="-400" Description="LOC_EMERGENCY_SCORE_SEND_AID_CO2_DESC"/>
+        <Row ScoreSourceType="MILITARY_EMERGENCY_SCORE_MILITARY_IN_LAND" EmergencyType="EMERGENCY_MILITARY" MilitaryInEnemyTerritory="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_MILITARY_IN_LAND_DESC"/>
+        <Row ScoreSourceType="MILITARY_EMERGENCY_SCORE_ATTACK_CITY" EmergencyType="EMERGENCY_MILITARY" AttackedEnemyCity="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_ATTACK_CITY_DESC"/>
+        <Row ScoreSourceType="MILITARY_EMERGENCY_SCORE_KILLED_ENEMY" EmergencyType="EMERGENCY_MILITARY" KilledEnemyUnit="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_KILL_ENEMY_MILITARY_DESC"/>
+        <Row ScoreSourceType="CITY_STATE_EMERGENCY_SCORE_MILITARY_IN_LAND" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" MilitaryInEnemyTerritory="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_MILITARY_IN_LAND_DESC"/>
+        <Row ScoreSourceType="CITY_STATE_EMERGENCY_SCORE_ATTACK_CITY" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" AttackedEnemyCity="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_ATTACK_CITY_DESC"/>
+        <Row ScoreSourceType="CITY_STATE_EMERGENCY_SCORE_KILLED_ENEMY" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" KilledEnemyUnit="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_KILL_ENEMY_MILITARY_DESC"/>
+        <Row ScoreSourceType="NUCLEAR_EMERGENCY_SCORE_MILITARY_IN_LAND" EmergencyType="EMERGENCY_NUCLEAR" MilitaryInEnemyTerritory="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_MILITARY_IN_LAND_DESC"/>
+        <Row ScoreSourceType="NUCLEAR_EMERGENCY_SCORE_ATTACK_CITY" EmergencyType="EMERGENCY_NUCLEAR" AttackedEnemyCity="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_ATTACK_CITY_DESC"/>
+        <Row ScoreSourceType="NUCLEAR_EMERGENCY_SCORE_KILLED_ENEMY" EmergencyType="EMERGENCY_NUCLEAR" KilledEnemyUnit="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_KILL_ENEMY_MILITARY_DESC"/>
+        <Row ScoreSourceType="BACKSTAB_EMERGENCY_SCORE_MILITARY_IN_LAND" EmergencyType="EMERGENCY_BACKSTAB" MilitaryInEnemyTerritory="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_MILITARY_IN_LAND_DESC"/>
+        <Row ScoreSourceType="BACKSTAB_EMERGENCY_SCORE_ATTACK_CITY" EmergencyType="EMERGENCY_BACKSTAB" AttackedEnemyCity="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_ATTACK_CITY_DESC"/>
+        <Row ScoreSourceType="BACKSTAB_EMERGENCY_SCORE_KILLED_ENEMY" EmergencyType="EMERGENCY_BACKSTAB" KilledEnemyUnit="true" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_KILL_ENEMY_MILITARY_DESC"/>
+        <Row ScoreSourceType="RELIGIOUS_EMERGENCY_SCORE_UNITS_IN_LAND" EmergencyType="EMERGENCY_RELIGIOUS" ReligiousInEnemyTerritory="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_RELIGION_IN_LAND_DESC"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_GENERALS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_GENERAL" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_ADMIRALS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_ADMIRAL" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_ENGINEERS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_ENGINEER" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_MERCHANTS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_MERCHANT" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_SCIENTISTS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_SCIENTIST" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_WRITERS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_WRITER" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_ARTISTS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_ARTIST" ScoreAmount="1"/>
+        <Row ScoreSourceType="WORLDS_FAIR_SCORE_GPP_MUSICIANS" EmergencyType="EMERGENCY_WORLDS_FAIR" FromGreatPerson="GREAT_PERSON_CLASS_MUSICIAN" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_GPP_DESC"/>
+        <Row ScoreSourceType="SPACE_STATION_SCORE_PROJECT" EmergencyType="EMERGENCY_SPACE_STATION" FromProject="PROJECT_TRAIN_ASTRONAUTS" ScoreAmount="30" Description="LOC_EMERGENCY_SCORE_ASTRONAUT_PROJECT_DESC"/>
+        <Row ScoreSourceType="SPACE_STATION_SCORE_SPACEPORTS" EmergencyType="EMERGENCY_SPACE_STATION" FromDistrict="DISTRICT_SPACEPORT" ScoreAmount="5" Description="LOC_EMERGENCY_SCORE_SPACEPORTS_DESC"/>
+        <Row ScoreSourceType="SPACE_STATION_SCORE_CAMPUSES" EmergencyType="EMERGENCY_SPACE_STATION" FromDistrict="DISTRICT_CAMPUS" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_CAMPUSES_DESC"/>
+        <Row ScoreSourceType="CLIMATE_ACCORDS_SCORE_CO2" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" FromCO2Footprint="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_CO2_FOOTPRINT_DESC"/>
+        <Row ScoreSourceType="CLIMATE_ACCORDS_SCORE_DECOMMISSION_COAL" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" FromProject="PROJECT_DECOMMISSION_COAL_POWER_PLANT" ScoreAmount="100" Description="LOC_EMERGENCY_SCORE_DECOMMISSION_COAL_POWER_PLANT_DESC"/>
+        <Row ScoreSourceType="CLIMATE_ACCORDS_SCORE_DECOMMISSION_OIL" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" FromProject="PROJECT_DECOMMISSION_OIL_POWER_PLANT" ScoreAmount="100" Description="LOC_EMERGENCY_SCORE_DECOMMISSION_OIL_POWER_PLANT_DESC"/>
+        <Row ScoreSourceType="CLIMATE_ACCORDS_SCORE_DECOMMISSION_NUCLEAR" EmergencyType="EMERGENCY_CLIMATE_ACCORDS" FromProject="PROJECT_DECOMMISSION_NUCLEAR_POWER_PLANT" ScoreAmount="100" Description="LOC_EMERGENCY_SCORE_DECOMMISSION_NUCLEAR_POWER_PLANT_DESC"/>
+        <Row ScoreSourceType="WORLD_GAMES_SCORE_PROJECT" EmergencyType="EMERGENCY_WORLD_GAMES" FromProject="PROJECT_TRAIN_ATHLETES" ScoreAmount="50" Description="LOC_EMERGENCY_SCORE_ATHLETE_PROJECT_DESC"/>
+        <Row ScoreSourceType="WORLD_GAMES_SCORE_STADIUMS" EmergencyType="EMERGENCY_WORLD_GAMES" FromBuilding="BUILDING_STADIUM" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_STADIUMS_DESC"/>
+        <Row ScoreSourceType="WORLD_GAMES_SCORE_AQUATICS_CENTERS" EmergencyType="EMERGENCY_WORLD_GAMES" FromBuilding="BUILDING_AQUATICS_CENTER" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_AQUATIC_CENTERS_DESC"/>
+        <Row ScoreSourceType="SEND_MILITARY_AID_SCORE_FROM_GOLD" EmergencyType="EMERGENCY_SEND_MILITARY_AID" FromGold="true" ScoreAmount="1" Description="LOC_EMERGENCY_SCORE_SEND_AID_GOLD_DESC"/>
+        <Row ScoreSourceType="SEND_MILITARY_AID_SCORE_FROM_PROJECT" EmergencyType="EMERGENCY_SEND_MILITARY_AID" FromProject="PROJECT_SEND_AID" ScoreAmount="200" Description="LOC_EMERGENCY_SCORE_SEND_AID_PROJECT_DESC"/>
+        <Row ScoreSourceType="SEND_MILITARY_AID_SCORE_FROM_AT_WAR" EmergencyType="EMERGENCY_SEND_MILITARY_AID" FromAtWar="true" ScoreAmount="-200" Description="LOC_EMERGENCY_SCORE_SEND_AID_WAR_DESC"/>
+    </EmergencyScoreSources>
+    <Modifiers>
+        <Row>
+            <ModifierId>AID_REQUEST_GRANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>ISS_GRANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_GRANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_COAL_POWER_PLANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_OIL_POWER_PLANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_NUCLEAR_POWER_PLANT_PROJECT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_MAKE_PROJECT_AVAILABLE</ModifierType>
+            <SubjectRequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>AID_REQUEST_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AID_REQUEST_TOP_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AID_REQUEST_BOTTOM_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>WORLD_FAIR_FIRST_PLACE_GREAT_PERSON_POINTS</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_GREAT_PERSON_POINTS</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_CULTURE</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RANDOM_CIVIC_BOOST_BY_ERA</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_BOTTOM_TIER_CULTURE</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RANDOM_CIVIC_BOOST_BY_ERA</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_STADIUMS_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>WORLD_GAMES_TOP_TIER_STADIUM_TOURISM_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTERS_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_BOTTOM_TIER_STADIUMS_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>WORLD_GAMES_BOTTOM_TIER_STADIUM_TOURISM_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTERS_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_DISTRICTS_ADJUST_TOURISM_CHANGE</ModifierType>
+            <SubjectRequirementSetId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>ISS_FIRST_PLACE_SPACESHIP_SPEED_ATTACH_MODIFIER</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ATTACH_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>ISS_FIRST_PLACE_SPACESHIP_SPEED</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_SCIENCE_VICTORY_POINTS_PER_TURN</ModifierType>
+            <SubjectRequirementSetId>ISS_SPACESHIP_SPEED_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>ISS_TOP_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>ISS_TOP_TIER_SPACE_RACE_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CITIES_ADJUST_SPACE_RACE_PROJECTS_PRODUCTION</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>ISS_BOTTOM_TIER_SPACE_RACE_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CITIES_ADJUST_SPACE_RACE_PROJECTS_PRODUCTION</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_TOP_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_BOTTOM_TIER_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_CHEAPER</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CITIES_ADJUST_UNIT_PURCHASE_COST</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_BUFF</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_ROCK_BAND_UNIT_ALBUM_SALES</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_TOP_TIER_ROCK_BAND_BUFF</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_ROCK_BAND_UNIT_ALBUM_SALES</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_BOTTOM_TIER_ROCK_BAND_BUFF</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_ROCK_BAND_UNIT_ALBUM_SALES</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RANDOM_TECHNOLOGY_BOOST_BY_ERA</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_UNIVERSITY_RESOURCES</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CITIES_ADJUST_EXTRA_ACCUMULATION</ModifierType>
+            <SubjectRequirementSetId>NOBEL_PRIZE_FIRST_PLACE_UNIVERSITY_RESOURCES_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RANDOM_TECHNOLOGY_BOOST_BY_ERA</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_RESEARCH_LAB_RESOURCES</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CITIES_ADJUST_EXTRA_ACCUMULATION</ModifierType>
+            <SubjectRequirementSetId>NOBEL_PRIZE_TOP_TIER_RESEARCH_LAB_RESOURCES_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RANDOM_TECHNOLOGY_BOOST_BY_ERA</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_MUSICIAN</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CAPITAL_CITIES_GRANT_GREAT_PERSON_CLASS_IN_CITY</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_SCIENTIST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CAPITAL_CITIES_GRANT_GREAT_PERSON_CLASS_IN_CITY</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ENGINEER</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CAPITAL_CITIES_GRANT_GREAT_PERSON_CLASS_IN_CITY</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ARTIST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CAPITAL_CITIES_GRANT_GREAT_PERSON_CLASS_IN_CITY</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_BOTTOM_TIER_GREAT_ARTIST</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_CAPITAL_CITIES_GRANT_GREAT_PERSON_CLASS_IN_CITY</ModifierType>
+            <SubjectRequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>HOSTILE_EMERGENCY_MEMBER_FAVOR_REWARDS_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET</ModifierId>
+            <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADD_FAVOR</ModifierType>
+            <SubjectRequirementSetId>HOSTILE_EMERGENCY_TARGET_FAVOR_REWARDS_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>AID_REQUEST_GRANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_SEND_AID</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_GRANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_TRAIN_ATHLETES</Value>
+        </Row>
+        <Row>
+            <ModifierId>ISS_GRANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_TRAIN_ASTRONAUTS</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_COAL_POWER_PLANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_DECOMMISSION_COAL_POWER_PLANT</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_OIL_POWER_PLANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_DECOMMISSION_OIL_POWER_PLANT</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_GRANT_DECOMMISSION_NUCLEAR_POWER_PLANT_PROJECT</ModifierId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_DECOMMISSION_NUCLEAR_POWER_PLANT</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NON_EMERGENCY_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Tooltip</Name>
+            <Value>LOC_DVP_TOOLTIP_SCORED_COMPETITIONS</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>AID_REQUEST_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>AID_REQUEST_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Tooltip</Name>
+            <Value>LOC_DVP_TOOLTIP_SCORED_COMPETITIONS</Value>
+        </Row>
+        <Row>
+            <ModifierId>AID_REQUEST_TOP_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>AID_REQUEST_BOTTOM_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>WORLD_FAIR_FIRST_PLACE_GREAT_PERSON_POINTS</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_CULTURE</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_CULTURE</ModifierId>
+            <Name>StartEraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_TOP_TIER_CULTURE</ModifierId>
+            <Name>EndEraType</Name>
+            <Value>ERA_INFORMATION</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_BOTTOM_TIER_CULTURE</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_BOTTOM_TIER_CULTURE</ModifierId>
+            <Name>StartEraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_FAIR_BOTTOM_TIER_CULTURE</ModifierId>
+            <Name>EndEraType</Name>
+            <Value>ERA_INFORMATION</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_STADIUMS_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTERS_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_BOTTOM_TIER_STADIUMS_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTERS_TOURISM</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>ISS_FIRST_PLACE_SPACESHIP_SPEED_ATTACH_MODIFIER</ModifierId>
+            <Name>ModifierId</Name>
+            <Value>ISS_FIRST_PLACE_SPACESHIP_SPEED</Value>
+        </Row>
+        <Row>
+            <ModifierId>ISS_FIRST_PLACE_SPACESHIP_SPEED</ModifierId>
+            <Name>Amount</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <ModifierId>ISS_TOP_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>ISS_TOP_TIER_SPACE_RACE_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>40</Value>
+        </Row>
+        <Row>
+            <ModifierId>ISS_BOTTOM_TIER_SPACE_RACE_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_FIRST_PLACE_VICTORY_POINT</ModifierId>
+            <Name>Tooltip</Name>
+            <Value>LOC_DVP_TOOLTIP_SCORED_COMPETITIONS</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_TOP_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>CLIMATE_ACCORDS_BOTTOM_TIER_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_CHEAPER</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_ROCK_BAND</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_CHEAPER</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_FIRST_PLACE_ROCK_BAND_BUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_TOP_TIER_ROCK_BAND_BUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>75</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_LIT_BOTTOM_TIER_ROCK_BAND_BUFF</ModifierId>
+            <Name>Amount</Name>
+            <Value>25</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST</ModifierId>
+            <Name>StartEraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_TECH_BOOST</ModifierId>
+            <Name>EndEraType</Name>
+            <Value>ERA_FUTURE</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_FIRST_PLACE_UNIVERSITY_RESOURCES</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST</ModifierId>
+            <Name>StartEraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_TECH_BOOST</ModifierId>
+            <Name>EndEraType</Name>
+            <Value>ERA_INFORMATION</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_TOP_TIER_RESEARCH_LAB_RESOURCES</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST</ModifierId>
+            <Name>StartEraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PHY_BOTTOM_TIER_TECH_BOOST</ModifierId>
+            <Name>EndEraType</Name>
+            <Value>ERA_INFORMATION</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_MUSICIAN</ModifierId>
+            <Name>GreatPersonClassType</Name>
+            <Value>GREAT_PERSON_CLASS_MUSICIAN</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_MUSICIAN</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_SCIENTIST</ModifierId>
+            <Name>GreatPersonClassType</Name>
+            <Value>GREAT_PERSON_CLASS_SCIENTIST</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_FIRST_PLACE_GREAT_SCIENTIST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ENGINEER</ModifierId>
+            <Name>GreatPersonClassType</Name>
+            <Value>GREAT_PERSON_CLASS_ENGINEER</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ENGINEER</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ARTIST</ModifierId>
+            <Name>GreatPersonClassType</Name>
+            <Value>GREAT_PERSON_CLASS_ARTIST</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_TOP_TIER_GREAT_ARTIST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_BOTTOM_TIER_GREAT_ARTIST</ModifierId>
+            <Name>GreatPersonClassType</Name>
+            <Value>GREAT_PERSON_CLASS_ARTIST</Value>
+        </Row>
+        <Row>
+            <ModifierId>NOBEL_PRIZE_PEACE_BOTTOM_TIER_GREAT_ARTIST</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <Row>
+            <ModifierId>HOSTILE_EMERGENCY_GRANT_FAVOR_TO_MEMBERS</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>HOSTILE_EMERGENCY_GRANT_FAVOR_TO_TARGET</ModifierId>
+            <Name>Amount</Name>
+            <Value>200</Value>
+        </Row>
+        <!-- __________________________________________________________________________________________________________  -->
+        <!-- __________________________________________________________________________________________________________  -->
+    </ModifierArguments>
+    <ModifierStrings>
+</ModifierStrings>
+    <!--REQUIREMENTS-->
+    <RequirementSets>
+        <Row RequirementSetId="NOBEL_PRIZE_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="NOBEL_PRIZE_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SEND_AID_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SEND_AID_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLDS_FAIR_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLDS_FAIR_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SPACE_STATION_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SPACE_STATION_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="CLIMATE_ACCORDS_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="CLIMATE_ACCORDS_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="NOBEL_PRIZE_TRAIT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SCORED_COMPETITION_TOP_TIER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="NOBEL_PRIZE_FIRST_PLACE_UNIVERSITY_RESOURCES_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="NOBEL_PRIZE_TOP_TIER_RESEARCH_LAB_RESOURCES_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_TOP_TIER_STADIUM_TOURISM_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_TOP_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_BOTTOM_TIER_STADIUM_TOURISM_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="ISS_SPACESHIP_SPEED_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="HOSTILE_EMERGENCY_MEMBER_FAVOR_REWARDS_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+        <Row RequirementSetId="HOSTILE_EMERGENCY_TARGET_FAVOR_REWARDS_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_TRAIT_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLDS_FAIR_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INDUSTRIAL</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLDS_FAIR_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_BEFORE_ATOMIC</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CLIMATE_ACCORDS_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_ATOMIC</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_MODERN</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>SPACE_STATION_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INFORMATION</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_RENAISSANCE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_TARGET_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_GAME_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>SCORED_COMPETITION_TOP_TIER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_TOP_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>SCORED_COMPETITION_BOTTOM_TIER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_BOTTOM_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>SCORED_COMPETITION_FIRST_PLACE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_FIRST_PLACE_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_FIRST_PLACE_UNIVERSITY_RESOURCES_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_FIRST_PLACE_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_FIRST_PLACE_UNIVERSITY_RESOURCES_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_UNIVERSITY</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_TOP_TIER_RESEARCH_LAB_RESOURCES_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_TOP_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>NOBEL_PRIZE_TOP_TIER_RESEARCH_LAB_RESOURCES_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_RESEARCH_LAB</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_FIRST_PLACE_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_FIRST_PLACE_CAMPUS_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_CAMPUS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_TOP_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_STADIUM</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_TOP_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_WATER_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_TOP_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_AQUATIC_CENTER</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_BOTTOM_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_STADIUM_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_STADIUM</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IN_BOTTOM_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_WATER_ENTERTAINMENT_COMPLEX</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>WORLD_GAMES_BOTTOM_TIER_AQUATIC_CENTER_TOURISM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_AQUATIC_CENTER</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>ISS_SPACESHIP_SPEED_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_COMPLETED_EXOPLANET_EXPEDITION</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>HOSTILE_EMERGENCY_TARGET_FAVOR_REWARDS_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>HOSTILE_EMERGENCY_MEMBER_FAVOR_REWARDS_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_CIVILIZATION_OR_LEADER_TRAIT</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_RENAISSANCE</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATLEAST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INDUSTRIAL</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATLEAST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_MODERN</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATLEAST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_ATOMIC</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATLEAST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INFORMATION</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATLEAST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_BEFORE_ATOMIC</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_ERA_ATMOST_EXPANSION</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+            <RequirementType>REQUIREMENT_GAME_HAS_CIVILIZATION_OR_LEADER_TRAIT</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_IN_TOP_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_GOT_HIGH_TIER_SCORE_IN_EMERGENCY</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_IN_BOTTOM_TIER_FOR_EMERGENCY_SCORE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_GOT_LOW_TIER_SCORE_IN_EMERGENCY</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_IN_FIRST_PLACE_FOR_EMERGENCY_SCORE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_GOT_FIRST_PLACE_IN_EMERGENCY</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_UNIVERSITY</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_BUILDING</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_AQUATIC_CENTER</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_BUILDING</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_RESEARCH_LAB</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_BUILDING</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_DISTRICT_IS_WATER_ENTERTAINMENT_COMPLEX</RequirementId>
+            <RequirementType>REQUIREMENT_DISTRICT_TYPE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_COMPLETED_EXOPLANET_EXPEDITION</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_COMPLETED_PROJECT</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+            <Name>TraitType</Name>
+            <Value>TRAIT_CIVILIZATION_NOBEL_PRIZE</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INFORMATION</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_FUTURE</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_ATOMIC</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_INFORMATION</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_MODERN</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_ATOMIC</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_INDUSTRIAL</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_MODERN</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_AFTER_RENAISSANCE</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_INDUSTRIAL</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_HAS_NOBEL_PRIZE_TRAIT</RequirementId>
+            <Name>TraitType</Name>
+            <Value>TRAIT_CIVILIZATION_NOBEL_PRIZE</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_GAME_ERA_BEFORE_ATOMIC</RequirementId>
+            <Name>EraType</Name>
+            <Value>ERA_MODERN</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_UNIVERSITY</RequirementId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_UNIVERSITY</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_RESEARCH_LAB</RequirementId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_RESEARCH_LAB</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_AQUATIC_CENTER</RequirementId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_AQUATICS_CENTER</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_DISTRICT_IS_WATER_ENTERTAINMENT_COMPLEX</RequirementId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_WATER_ENTERTAINMENT_COMPLEX</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_COMPLETED_EXOPLANET_EXPEDITION</RequirementId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_LAUNCH_EXOPLANET_EXPEDITION</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_COMPLETED_EXOPLANET_EXPEDITION</RequirementId>
+            <Name>MinimumCompletions</Name>
+            <Value>1</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>

@@ -1,0 +1,832 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Edward Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <!-- BUILDINGS -->
+        <Row Type="BUILDING_FLOOD_BARRIER" Kind="KIND_BUILDING"/>
+        <Row Type="BUILDING_HYDROELECTRIC_DAM" Kind="KIND_BUILDING"/>
+        <Row Type="BUILDING_COAL_POWER_PLANT" Kind="KIND_BUILDING"/>
+        <Row Type="BUILDING_FOSSIL_FUEL_POWER_PLANT" Kind="KIND_BUILDING"/>
+    </Types>
+    <Buildings>
+        <!-- New for XP2-->
+        <Row BuildingType="BUILDING_FLOOD_BARRIER" Name="LOC_BUILDING_FLOOD_BARRIER_NAME" Description="LOC_BUILDING_FLOOD_BARRIER_DESCRIPTION" PrereqTech="TECH_COMPUTERS" PrereqDistrict="DISTRICT_CITY_CENTER" Cost="80" AdvisorType="ADVISOR_GENERIC" Maintenance="1"/>
+        <Row BuildingType="BUILDING_HYDROELECTRIC_DAM" Name="LOC_BUILDING_HYDROELECTRIC_DAM_NAME" Description="LOC_BUILDING_HYDROELECTRIC_DAM_DESCRIPTION" PrereqTech="TECH_ELECTRICITY" PrereqDistrict="DISTRICT_DAM" PurchaseYield="YIELD_GOLD" Cost="580" AdvisorType="ADVISOR_GENERIC" Maintenance="1"/>
+        <Row BuildingType="BUILDING_COAL_POWER_PLANT" Name="LOC_BUILDING_COAL_POWER_PLANT_NAME" Description="LOC_BUILDING_COAL_POWER_PLANT_DESCRIPTION" PrereqTech="TECH_INDUSTRIALIZATION" PrereqDistrict="DISTRICT_INDUSTRIAL_ZONE" PurchaseYield="YIELD_GOLD" Cost="300" AdvisorType="ADVISOR_GENERIC" Maintenance="3" CitizenSlots="1" RegionalRange="6"/>
+        <Row BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT" Name="LOC_BUILDING_FOSSIL_FUEL_POWER_PLANT_NAME" Description="LOC_BUILDING_FOSSIL_FUEL_POWER_PLANT_DESCRIPTION" PrereqTech="TECH_ELECTRICITY" PrereqDistrict="DISTRICT_INDUSTRIAL_ZONE" PurchaseYield="YIELD_GOLD" Cost="450" AdvisorType="ADVISOR_GENERIC" Maintenance="3" CitizenSlots="1" RegionalRange="6"/>
+        <!-- Balance Changes -->
+        <Update>
+            <Where BuildingType="BUILDING_POWER_PLANT"/>
+            <Set>
+                <Name>LOC_BUILDING_POWER_PLANT_EXPANSION2_NAME</Name>
+                <Description>LOC_BUILDING_POWER_PLANT_EXPANSION2_DESCRIPTION</Description>
+                <PrereqTech>TECH_NUCLEAR_FISSION</PrereqTech>
+                <Cost>600</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STADIUM"/>
+            <Set>
+                <Entertainment>1</Entertainment>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_AQUATICS_CENTER"/>
+            <Set>
+                <Entertainment>1</Entertainment>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_BIG_BEN"/>
+            <Set>
+                <Description>LOC_BUILDING_BIG_BEN_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_HAGIA_SOPHIA"/>
+            <Set>
+                <PrereqTech>TECH_BUTTRESS</PrereqTech>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_AMUNDSEN_SCOTT_RESEARCH_STATION"/>
+            <Set>
+                <PrereqCivic>CIVIC_RAPID_DEPLOYMENT</PrereqCivic>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_BARRACKS"/>
+            <Set>
+                <Description>LOC_BUILDING_BARRACKS_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STABLE"/>
+            <Set>
+                <Description>LOC_BUILDING_STABLE_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ARMORY"/>
+            <Set>
+                <Description>LOC_BUILDING_ARMORY_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_MILITARY_ACADEMY"/>
+            <Set>
+                <Description>LOC_BUILDING_MILITARY_ACADEMY_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FACTORY"/>
+            <Set>
+                <Description>LOC_BUILDING_FACTORY_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ELECTRONICS_FACTORY"/>
+            <Set>
+                <Description>LOC_BUILDING_ELECTRONICS_FACTORY_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_MAHABODHI_TEMPLE"/>
+            <Set>
+                <Description>LOC_BUILDING_MAHABODHI_TEMPLE_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_POTALA_PALACE"/>
+            <Set>
+                <Description>LOC_BUILDING_POTALA_PALACE_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_LIGHTHOUSE"/>
+            <Set>
+                <Description>LOC_BUILDING_LIGHTHOUSE_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_SHIPYARD"/>
+            <Set>
+                <Description>LOC_BUILDING_SHIPYARD_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_PALACE"/>
+            <Set>
+                <Entertainment>2</Entertainment>
+            </Set>
+        </Update>
+        <!--Cost balance-->
+        <Update>
+            <Where BuildingType="BUILDING_CASTLE"/>
+            <Set>
+                <Cost>220</Cost>
+                <Description>LOC_BUILDING_CASTLE_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STAR_FORT"/>
+            <Set>
+                <Cost>300</Cost>
+                <Description>LOC_BUILDING_STAR_FORT_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FACTORY"/>
+            <Set>
+                <Cost>330</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ELECTRONICS_FACTORY"/>
+            <Set>
+                <Cost>330</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STOCK_EXCHANGE"/>
+            <Set>
+                <Cost>330</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_MILITARY_ACADEMY"/>
+            <Set>
+                <Cost>330</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ZOO"/>
+            <Set>
+                <Cost>360</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_AQUARIUM"/>
+            <Set>
+                <Cost>360</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT"/>
+            <Set>
+                <Cost>360</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_HANGAR"/>
+            <Set>
+                <Cost>380</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FOOD_MARKET"/>
+            <Set>
+                <Cost>380</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_SEAPORT"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_BROADCAST_CENTER"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FILM_STUDIO"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_RESEARCH_LAB"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_GOV_MILITARY"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_GOV_CULTURE"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_GOV_SCIENCE"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_SHOPPING_MALL"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_HYDROELECTRIC_DAM"/>
+            <Set>
+                <Cost>440</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_POWER_PLANT"/>
+            <Set>
+                <Cost>480</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_AIRPORT"/>
+            <Set>
+                <Cost>480</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STADIUM"/>
+            <Set>
+                <Cost>480</Cost>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_AQUATICS_CENTER"/>
+            <Set>
+                <Cost>480</Cost>
+            </Set>
+        </Update>
+        <!-- Worship -->
+        <Update>
+            <Where BuildingType="BUILDING_GURDWARA"/>
+            <Set>
+                <Housing>1</Housing>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_PAGODA"/>
+            <Set>
+                <Description>LOC_BUILDING_PAGODA_EXPANSION2_DESCRIPTION</Description>
+                <Housing>0</Housing>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_DAR_E_MEHR"/>
+            <Set>
+                <Description>LOC_BUILDING_DAR_E_MEHR_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_GOV_CITYSTATES"/>
+            <Set>
+                <Description>LOC_BUILDING_GOV_CITYSTATES_EXPANSION2_DESCRIPTION</Description>
+            </Set>
+        </Update>
+    </Buildings>
+    <Buildings_XP2>
+        <Row BuildingType="BUILDING_FACTORY" RequiredPower="2"/>
+        <Row BuildingType="BUILDING_ELECTRONICS_FACTORY" RequiredPower="2"/>
+        <Row BuildingType="BUILDING_COAL_POWER_PLANT" ResourceTypeConvertedToPower="RESOURCE_COAL"/>
+        <Row BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT" ResourceTypeConvertedToPower="RESOURCE_OIL"/>
+        <Row BuildingType="BUILDING_POWER_PLANT" ResourceTypeConvertedToPower="RESOURCE_URANIUM" NuclearReactor="true"/>
+        <Row BuildingType="BUILDING_STOCK_EXCHANGE" RequiredPower="3"/>
+        <Row BuildingType="BUILDING_RESEARCH_LAB" RequiredPower="3"/>
+        <Row BuildingType="BUILDING_STADIUM" RequiredPower="2" EntertainmentBonusWithPower="2"/>
+        <Row BuildingType="BUILDING_AQUATICS_CENTER" RequiredPower="2" EntertainmentBonusWithPower="2"/>
+        <Row BuildingType="BUILDING_BROADCAST_CENTER" RequiredPower="3"/>
+        <Row BuildingType="BUILDING_FILM_STUDIO" RequiredPower="3"/>
+        <Row BuildingType="BUILDING_FLOOD_BARRIER" BlocksCoastalFlooding="true" CostMultiplierPerTile="1" CostMultiplierPerSeaLevel="1" Pillage="false"/>
+        <Row BuildingType="BUILDING_FOOD_MARKET" RequiredPower="1"/>
+        <Row BuildingType="BUILDING_SHOPPING_MALL" RequiredPower="1" EntertainmentBonusWithPower="1"/>
+        <Row BuildingType="BUILDING_AIRPORT" RequiredPower="1"/>
+        <!-- Worship -->
+        <Row BuildingType="BUILDING_DAR_E_MEHR" Pillage="false"/>
+    </Buildings_XP2>
+    <Building_YieldChanges>
+        <Update>
+            <Where BuildingType="BUILDING_WORKSHOP" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>3</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ARMORY" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>3</YieldChange>
+            </Set>
+        </Update>
+        <Row BuildingType="BUILDING_FERRIS_WHEEL" YieldType="YIELD_CULTURE" YieldChange="3"/>
+        <Row BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT" YieldType="YIELD_PRODUCTION" YieldChange="3"/>
+        <Row BuildingType="BUILDING_POWER_PLANT" YieldType="YIELD_SCIENCE" YieldChange="3"/>
+        <Update>
+            <Where BuildingType="BUILDING_POWER_PLANT" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>4</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FACTORY" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>3</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_ELECTRONICS_FACTORY" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>3</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_STOCK_EXCHANGE" YieldType="YIELD_GOLD"/>
+            <Set>
+                <YieldChange>4</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_MILITARY_ACADEMY" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>4</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FOOD_MARKET" YieldType="YIELD_FOOD"/>
+            <Set>
+                <YieldChange>4</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_RESEARCH_LAB" YieldType="YIELD_SCIENCE"/>
+            <Set>
+                <YieldChange>3</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_BROADCAST_CENTER" YieldType="YIELD_CULTURE"/>
+            <Set>
+                <YieldChange>2</YieldChange>
+            </Set>
+        </Update>
+        <Update>
+            <Where BuildingType="BUILDING_FILM_STUDIO" YieldType="YIELD_CULTURE"/>
+            <Set>
+                <YieldChange>2</YieldChange>
+            </Set>
+        </Update>
+        <Row BuildingType="BUILDING_SHOPPING_MALL" YieldType="YIELD_GOLD" YieldChange="2"/>
+        <Update>
+            <Where BuildingType="BUILDING_AIRPORT" YieldType="YIELD_PRODUCTION"/>
+            <Set>
+                <YieldChange>4</YieldChange>
+            </Set>
+        </Update>
+        <Row BuildingType="BUILDING_GOV_FAITH" YieldType="YIELD_FAITH" YieldChange="5"/>
+    </Building_YieldChanges>
+    <Building_YieldChangesBonusWithPower>
+        <Row BuildingType="BUILDING_FACTORY" YieldType="YIELD_PRODUCTION" YieldChange="3"/>
+        <Row BuildingType="BUILDING_ELECTRONICS_FACTORY" YieldType="YIELD_PRODUCTION" YieldChange="5"/>
+        <Row BuildingType="BUILDING_STOCK_EXCHANGE" YieldType="YIELD_GOLD" YieldChange="7"/>
+        <Row BuildingType="BUILDING_FOOD_MARKET" YieldType="YIELD_FOOD" YieldChange="2"/>
+        <Row BuildingType="BUILDING_RESEARCH_LAB" YieldType="YIELD_SCIENCE" YieldChange="5"/>
+        <Row BuildingType="BUILDING_BROADCAST_CENTER" YieldType="YIELD_CULTURE" YieldChange="4"/>
+        <Row BuildingType="BUILDING_FILM_STUDIO" YieldType="YIELD_CULTURE" YieldChange="4"/>
+        <Row BuildingType="BUILDING_SHOPPING_MALL" YieldType="YIELD_GOLD" YieldChange="2"/>
+        <Row BuildingType="BUILDING_AIRPORT" YieldType="YIELD_PRODUCTION" YieldChange="2"/>
+    </Building_YieldChangesBonusWithPower>
+    <Building_YieldDistrictCopies>
+        <Row BuildingType="BUILDING_COAL_POWER_PLANT" OldYieldType="YIELD_PRODUCTION" NewYieldType="YIELD_PRODUCTION"/>
+    </Building_YieldDistrictCopies>
+    <Building_CitizenYieldChanges>
+        <Row BuildingType="BUILDING_COAL_POWER_PLANT" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row BuildingType="BUILDING_STOCK_EXCHANGE" YieldType="YIELD_GOLD" YieldChange="2"/>
+        <Row BuildingType="BUILDING_MILITARY_ACADEMY" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row BuildingType="BUILDING_SEAPORT" YieldType="YIELD_FOOD" YieldChange="1"/>
+        <Row BuildingType="BUILDING_BROADCAST_CENTER" YieldType="YIELD_CULTURE" YieldChange="1"/>
+        <Row BuildingType="BUILDING_FILM_STUDIO" YieldType="YIELD_CULTURE" YieldChange="1"/>
+        <Row BuildingType="BUILDING_RESEARCH_LAB" YieldType="YIELD_SCIENCE" YieldChange="1"/>
+        <Row BuildingType="BUILDING_POWER_PLANT" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row BuildingType="BUILDING_CATHEDRAL" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_DAR_E_MEHR" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_GURDWARA" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_MEETING_HOUSE" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_MOSQUE" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_PAGODA" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_STUPA" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_SYNAGOGUE" YieldType="YIELD_FAITH" YieldChange="1"/>
+        <Row BuildingType="BUILDING_WAT" YieldType="YIELD_FAITH" YieldChange="1"/>
+    </Building_CitizenYieldChanges>
+    <Building_TourismBombs_XP2>
+        <Row BuildingType="BUILDING_AMPHITHEATER" TourismBombValue="250"/>
+        <Row BuildingType="BUILDING_ARENA" TourismBombValue="250"/>
+        <Row BuildingType="BUILDING_FERRIS_WHEEL" TourismBombValue="250"/>
+        <Row BuildingType="BUILDING_SHIPYARD" TourismBombValue="500"/>
+        <Row BuildingType="BUILDING_UNIVERSITY" TourismBombValue="500"/>
+        <Row BuildingType="BUILDING_MADRASA" TourismBombValue="500"/>
+        <Row BuildingType="BUILDING_STADIUM" TourismBombValue="750"/>
+        <Row BuildingType="BUILDING_BROADCAST_CENTER" TourismBombValue="750"/>
+        <Row BuildingType="BUILDING_FILM_STUDIO" TourismBombValue="750"/>
+        <Row BuildingType="BUILDING_AQUATICS_CENTER" TourismBombValue="750"/>
+    </Building_TourismBombs_XP2>
+    <BuildingPrereqs>
+        <Row Building="BUILDING_COAL_POWER_PLANT" PrereqBuilding="BUILDING_FACTORY"/>
+        <Row Building="BUILDING_FOSSIL_FUEL_POWER_PLANT" PrereqBuilding="BUILDING_FACTORY"/>
+    </BuildingPrereqs>
+    <MutuallyExclusiveBuildings>
+        <Row Building="BUILDING_COAL_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_FOSSIL_FUEL_POWER_PLANT"/>
+        <Row Building="BUILDING_COAL_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_POWER_PLANT"/>
+        <Row Building="BUILDING_FOSSIL_FUEL_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_COAL_POWER_PLANT"/>
+        <Row Building="BUILDING_FOSSIL_FUEL_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_POWER_PLANT"/>
+        <Row Building="BUILDING_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_COAL_POWER_PLANT"/>
+        <Row Building="BUILDING_POWER_PLANT" MutuallyExclusiveBuilding="BUILDING_FOSSIL_FUEL_POWER_PLANT"/>
+    </MutuallyExclusiveBuildings>
+    <Building_GreatPersonPoints>
+        <Row BuildingType="BUILDING_COAL_POWER_PLANT" GreatPersonClassType="GREAT_PERSON_CLASS_ENGINEER" PointsPerTurn="1"/>
+        <Row BuildingType="BUILDING_FOSSIL_FUEL_POWER_PLANT" GreatPersonClassType="GREAT_PERSON_CLASS_ENGINEER" PointsPerTurn="1"/>
+    </Building_GreatPersonPoints>
+    <Building_RequiredFeatures>
+        <Row BuildingType="BUILDING_MONT_ST_MICHEL" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row BuildingType="BUILDING_MONT_ST_MICHEL" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+    </Building_RequiredFeatures>
+    <Building_BuildChargeProductions>
+        <Row BuildingType="BUILDING_FLOOD_BARRIER" UnitType="UNIT_MILITARY_ENGINEER" PercentProductionPerCharge="20"/>
+    </Building_BuildChargeProductions>
+    <Happinesses>
+        <Update>
+            <Where HappinessType="HAPPINESS_REVOLT"/>
+            <Set>
+                <NonFoodYieldModifier>-40</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_UNREST"/>
+            <Set>
+                <NonFoodYieldModifier>-40</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_UNREST"/>
+            <Set>
+                <NonFoodYieldModifier>-30</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_UNHAPPY"/>
+            <Set>
+                <NonFoodYieldModifier>-20</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_DISPLEASED"/>
+            <Set>
+                <NonFoodYieldModifier>-10</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_CONTENT"/>
+            <Set>
+                <MaximumAmenityScore>2</MaximumAmenityScore>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_HAPPY"/>
+            <Set>
+                <MaximumAmenityScore>4</MaximumAmenityScore>
+                <MinimumAmenityScore>3</MinimumAmenityScore>
+                <NonFoodYieldModifier>10</NonFoodYieldModifier>
+            </Set>
+        </Update>
+        <Update>
+            <Where HappinessType="HAPPINESS_ECSTATIC"/>
+            <Set>
+                <MinimumAmenityScore>5</MinimumAmenityScore>
+                <NonFoodYieldModifier>20</NonFoodYieldModifier>
+            </Set>
+        </Update>
+    </Happinesses>
+    <BuildingModifiers>
+        <Row BuildingType="BUILDING_HYDROELECTRIC_DAM" ModifierId="HYDROELECTRIC_DAM_FREE_POWER"/>
+        <Row BuildingType="BUILDING_LIGHTHOUSE" ModifierId="LIGHTHOUSE_COASTAL_CITY_HOUSING"/>
+        <Row BuildingType="BUILDING_SHIPYARD" ModifierId="SHIPYARD_UNIMPROVED_COAST_PRODUCTION"/>
+        <Row BuildingType="BUILDING_BIG_BEN" ModifierId="BIG_BEN_INCREASE_GOLD"/>
+        <Row BuildingType="BUILDING_MAHABODHI_TEMPLE" ModifierId="MAHABODHI_DIPLOVP"/>
+        <Row BuildingType="BUILDING_POTALA_PALACE" ModifierId="POTALA_DIPLOVP"/>
+        <!--Part of the Merchant's Renewable Energy Promotion-->
+        <Row BuildingType="BUILDING_HYDROELECTRIC_DAM" ModifierId="MERCHANT_RENEWABLE_ENERGY_HYDROELECTRIC_DAM_FREE_POWER"/>
+        <!--Battering Ram and Siege Tower prevention -->
+        <Row BuildingType="BUILDING_CASTLE" ModifierId="CASTLE_PREVENT_MELEE_ATTACK_OUTER_DEFENSES"/>
+        <Row BuildingType="BUILDING_STAR_FORT" ModifierId="STAR_FORT_PREVENT_MELEE_ATTACK_OUTER_DEFENSES"/>
+        <Row BuildingType="BUILDING_STAR_FORT" ModifierId="STAR_FORT_PREVENT_BYPASS_OUTER_DEFENSE"/>
+        <!--Stockpile Increases for military buildings-->
+        <Row>
+            <BuildingType>BUILDING_BARRACKS</BuildingType>
+            <ModifierId>BARRACKS_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+        </Row>
+        <Row>
+            <BuildingType>BUILDING_STABLE</BuildingType>
+            <ModifierId>STABLE_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+        </Row>
+        <Row>
+            <BuildingType>BUILDING_ARMORY</BuildingType>
+            <ModifierId>ARMORY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+        </Row>
+        <Row>
+            <BuildingType>BUILDING_MILITARY_ACADEMY</BuildingType>
+            <ModifierId>MILITARY_ACADEMY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+        </Row>
+        <Row>
+            <BuildingType>BUILDING_GOV_CITYSTATES</BuildingType>
+            <ModifierId>GOVCITYSTATES_ADJUST_FAVOR</ModifierId>
+        </Row>
+        <!-- Worship -->
+        <Row>
+            <BuildingType>BUILDING_PAGODA</BuildingType>
+            <ModifierId>PAGODA_ADJUST_FAVOR</ModifierId>
+        </Row>
+    </BuildingModifiers>
+    <Modifiers>
+        <Row>
+            <ModifierId>HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_FREE_POWER</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>BIG_BEN_INCREASE_GOLD</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_MULTIPLY_TREASURY</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>MAHABODHI_DIPLOVP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>POTALA_DIPLOVP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_DIPLOMATIC_VICTORY_POINTS</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>MERCHANT_RENEWABLE_ENERGY_HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_FREE_POWER</ModifierType>
+            <SubjectRequirementSetId>CITY_HAS_GOVERNOR_PROMOTION_MERCHANT_RENEWABLE_ENERGY</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>BARRACKS_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>STABLE_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>ARMORY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>MILITARY_ACADEMY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>CASTLE_PREVENT_MELEE_ATTACK_OUTER_DEFENSES</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_PREVENT_MELEE_ATTACK_OUTER_DEFENSES</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>STAR_FORT_PREVENT_MELEE_ATTACK_OUTER_DEFENSES</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_PREVENT_MELEE_ATTACK_OUTER_DEFENSES</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>STAR_FORT_PREVENT_BYPASS_OUTER_DEFENSE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_PREVENT_BYPASS_OUTER_DEFENSE</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>LIGHTHOUSE_COASTAL_CITY_HOUSING</ModifierId>
+            <ModifierType>MODIFIER_CITY_OWNER_ADJUST_BUILDING_HOUSING</ModifierType>
+            <SubjectRequirementSetId>PLOT_IS_ADJACENT_TO_COAST</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>SHIPYARD_UNIMPROVED_COAST_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_CITY_PLOT_YIELDS_ADJUST_PLOT_YIELD</ModifierType>
+            <SubjectRequirementSetId>PLOT_HAS_UNIMPROVED_COAST_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>GOVCITYSTATES_ADJUST_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_EXTRA_FAVOR_PER_TURN</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>PAGODA_ADJUST_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_EXTRA_FAVOR_PER_TURN</ModifierType>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <Name>Amount</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <Name>SourceType</Name>
+            <Value>FREE_POWER_SOURCE_WATER</Value>
+        </Row>
+        <Row>
+            <ModifierId>BIG_BEN_INCREASE_GOLD</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>MAHABODHI_DIPLOVP</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>MAHABODHI_DIPLOVP</ModifierId>
+            <Name>Tooltip</Name>
+            <Value>LOC_DVP_TOOLTIP_OTHER_SOURCES</Value>
+        </Row>
+        <Row>
+            <ModifierId>POTALA_DIPLOVP</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>POTALA_DIPLOVP</ModifierId>
+            <Name>Tooltip</Name>
+            <Value>LOC_DVP_TOOLTIP_OTHER_SOURCES</Value>
+        </Row>
+        <!--Updates-->
+        <Update>
+            <Where ModifierId="HANGAR_BONUS_AIR_SLOTS"/>
+            <Set>
+                <Name>Amount</Name>
+                <Value>1</Value>
+            </Set>
+        </Update>
+        <Update>
+            <Where ModifierId="AIRPORT_BONUS_AIR_SLOTS"/>
+            <Set>
+                <Name>Amount</Name>
+                <Value>1</Value>
+            </Set>
+        </Update>
+        <!--Part of the Merchant's Renewable Energy Promotion-->
+        <Row>
+            <ModifierId>MERCHANT_RENEWABLE_ENERGY_HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>MERCHANT_RENEWABLE_ENERGY_HYDROELECTRIC_DAM_FREE_POWER</ModifierId>
+            <Name>SourceType</Name>
+            <Value>FREE_POWER_SOURCE_WATER</Value>
+        </Row>
+        <Row>
+            <ModifierId>BARRACKS_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <Name>Amount</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <ModifierId>STABLE_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <Name>Amount</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <ModifierId>ARMORY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <Name>Amount</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <ModifierId>MILITARY_ACADEMY_ADJUST_RESOURCE_STOCKPILE_CAP</ModifierId>
+            <Name>Amount</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <ModifierId>LIGHTHOUSE_COASTAL_CITY_HOUSING</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>SHIPYARD_UNIMPROVED_COAST_PRODUCTION</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_PRODUCTION</Value>
+        </Row>
+        <Row>
+            <ModifierId>SHIPYARD_UNIMPROVED_COAST_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOVCITYSTATES_ADJUST_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>3</Value>
+        </Row>
+        <!--Worship-->
+        <Row>
+            <ModifierId>PAGODA_ADJUST_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_QUEENS_BIBLIOTHEQUE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_ANY_PASSABLE_FEATURE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_IS_ADJACENT_TO_COAST</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_UNIMPROVED_COAST_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <!--Wonder-->
+    </RequirementSets>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>PLAYER_HAS_QUEENS_BIBLIOTHEQUE_REQUIREMENT</RequirementId>
+            <Name>BuildingType</Name>
+            <Value>BUILDING_QUEENS_BIBLIOTHEQUE</Value>
+        </Row>
+        <Row>
+            <RequirementId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENT</RequirementId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_GEOTHERMAL_FISSURE</Value>
+        </Row>
+        <Row>
+            <RequirementId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENT</RequirementId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <!--Wonder-->
+    </RequirementArguments>
+    <Requirements>
+        <Row>
+            <RequirementId>PLAYER_HAS_QUEENS_BIBLIOTHEQUE_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_BUILDING</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_X_FEATURE_TYPE</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>PLOT_HAS_ANY_FEATURE_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_HAS_ANY_FEATURE</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>PLOT_IS_PASSABLE</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_IS_IMPASSABLE</RequirementType>
+            <Inverse>true</Inverse>
+        </Row>
+        <!--Wonder-->
+    </Requirements>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_QUEENS_BIBLIOTHEQUE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>PLAYER_HAS_QUEENS_BIBLIOTHEQUE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>CITY_HAS_1_OR_MORE_GEOTHERMALFISSURE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_ANY_PASSABLE_FEATURE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>PLOT_HAS_ANY_FEATURE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_ANY_PASSABLE_FEATURE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>PLOT_IS_PASSABLE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_IS_ADJACENT_TO_COAST</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_IS_ADJACENT_TO_COAST</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_UNIMPROVED_COAST_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_HAS_COAST</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLOT_HAS_UNIMPROVED_COAST_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_HAS_NO_IMPROVEMENT</RequirementId>
+        </Row>
+        <!--Wonder-->
+    </RequirementSetRequirements>
+</GameInfo>

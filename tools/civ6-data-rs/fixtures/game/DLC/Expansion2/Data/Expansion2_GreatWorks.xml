@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <GreatWorks>
+        <Update>
+            <Where GreatWorkType="GREATWORK_BHASA_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_BHASA_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_HOMER_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_HOMER_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_OVID_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_OVID_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_QU_YUAN_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_QU_YUAN_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CHAUCER_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CHAUCER_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_LI_BAI_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_LI_BAI_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MURASAKI_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MURASAKI_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAVENDISH_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAVENDISH_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CERVANTES_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CERVANTES_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MACHIAVELLI_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MACHIAVELLI_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHAKESPEARE_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHAKESPEARE_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_D_AULNOY_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_D_AULNOY_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_PUSHKIN_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_PUSHKIN_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_POE_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_POE_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_AUSTEN_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_AUSTEN_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_GOETHE_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_GOETHE_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHELLEY_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHELLEY_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_JOYCE_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_JOYCE_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_DICKINSON_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_DICKINSON_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TOLSTOY_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TOLSTOY_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TWAIN_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TWAIN_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_FITZGERALD_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_FITZGERALD_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_WELLS_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_WELLS_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TAGORE_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TAGORE_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAPEK_1"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAPEK_2"/>
+            <Set Tourism="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SUN_TZU"/>
+            <Set Tourism="2"/>
+        </Update>
+    </GreatWorks>
+    <GreatWork_YieldChanges>
+        <Update>
+            <Where GreatWorkType="GREATWORK_BHASA_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_BHASA_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_HOMER_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_HOMER_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_OVID_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_OVID_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_QU_YUAN_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_QU_YUAN_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CHAUCER_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CHAUCER_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_LI_BAI_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_LI_BAI_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MURASAKI_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MURASAKI_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAVENDISH_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAVENDISH_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CERVANTES_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CERVANTES_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MACHIAVELLI_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_MACHIAVELLI_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHAKESPEARE_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHAKESPEARE_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_D_AULNOY_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_D_AULNOY_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_PUSHKIN_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_PUSHKIN_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_POE_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_POE_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_AUSTEN_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_AUSTEN_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_GOETHE_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_GOETHE_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHELLEY_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SHELLEY_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_JOYCE_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_JOYCE_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_DICKINSON_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_DICKINSON_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TOLSTOY_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TOLSTOY_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TWAIN_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TWAIN_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_FITZGERALD_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_FITZGERALD_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_WELLS_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_WELLS_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TAGORE_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_TAGORE_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAPEK_1"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_CAPEK_2"/>
+            <Set YieldChange="2"/>
+        </Update>
+        <Update>
+            <Where GreatWorkType="GREATWORK_SUN_TZU"/>
+            <Set YieldChange="2"/>
+        </Update>
+    </GreatWork_YieldChanges>
+</GameInfo>

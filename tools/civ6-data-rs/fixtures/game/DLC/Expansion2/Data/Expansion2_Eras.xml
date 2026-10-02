@@ -1,0 +1,81 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Anton Strenger (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="ERA_FUTURE" Kind="KIND_ERA"/>
+    </Types>
+    <Eras>
+        <Row EraType="ERA_FUTURE" Name="LOC_ERA_FUTURE_NAME" Description="LOC_ERA_FUTURE_DESCRIPTION" ChronologyIndex="9" WarmongerPoints="24" GreatPersonBaseCost="1320" EraTechBackgroundTexture="TechTree_BGFuture" EraCivicBackgroundTexture="TechTree_BGFuture" WarmongerLevelDescription="LOC_WARMONGER_LEVEL_EGREGIOUS" EmbarkedUnitStrength="55" TechTreeLayoutMethod="Cost"/>
+    </Eras>
+    <StartEras>
+        <Update>
+            <Where EraType="ERA_INDUSTRIAL"/>
+            <Set>
+                <Faith>400</Faith>
+            </Set>
+        </Update>
+        <Update>
+            <Where EraType="ERA_MODERN"/>
+            <Set>
+                <Faith>800</Faith>
+            </Set>
+        </Update>
+        <Update>
+            <Where EraType="ERA_ATOMIC"/>
+            <Set>
+                <Faith>1600</Faith>
+            </Set>
+        </Update>
+        <Update>
+            <Where EraType="ERA_INFORMATION"/>
+            <Set>
+                <Faith>2400</Faith>
+            </Set>
+        </Update>
+    </StartEras>
+    <MajorStartingUnits>
+        <Update>
+            <Where Era="ERA_RENAISSANCE" Unit="UNIT_SCOUT"/>
+            <Set>
+                <Unit>UNIT_SKIRMISHER</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_INDUSTRIAL" Unit="UNIT_SCOUT"/>
+            <Set>
+                <Unit>UNIT_SKIRMISHER</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_ATOMIC" Unit="UNIT_INFANTRY"/>
+            <Set>
+                <Unit>UNIT_AT_CREW</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_INFORMATION" Unit="UNIT_INFANTRY"/>
+            <Set>
+                <Unit>UNIT_AT_CREW</Unit>
+            </Set>
+        </Update>
+    </MajorStartingUnits>
+    <StartingBoostedTechnologies>
+        <Row Era="ERA_MODERN" Technology="TECH_REFINING"/>
+    </StartingBoostedTechnologies>
+    <Eras_XP2>
+        <Row EraType="ERA_ANCIENT" GrievanceDecayRate="10" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="0" EraScoreThresholdShift="-3"/>
+        <Row EraType="ERA_CLASSICAL" GrievanceDecayRate="9" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="0"/>
+        <Row EraType="ERA_MEDIEVAL" GrievanceDecayRate="8" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="10"/>
+        <Row EraType="ERA_RENAISSANCE" GrievanceDecayRate="7" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="10"/>
+        <Row EraType="ERA_INDUSTRIAL" GrievanceDecayRate="6" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="20"/>
+        <Row EraType="ERA_MODERN" GrievanceDecayRate="5" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="20"/>
+        <Row EraType="ERA_ATOMIC" GrievanceDecayRate="4" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="20"/>
+        <Row EraType="ERA_INFORMATION" GrievanceDecayRate="3" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="30"/>
+        <Row EraType="ERA_FUTURE" GrievanceDecayRate="2" TensionDecayRate="10" TradeRouteMinimumEndTurnChange="30"/>
+    </Eras_XP2>
+    <StartEras_XP2>
+        <Row EraType="ERA_INDUSTRIAL" DiploVP="4"/>
+        <Row EraType="ERA_MODERN" DiploVP="6"/>
+        <Row EraType="ERA_ATOMIC" DiploVP="10"/>
+        <Row EraType="ERA_INFORMATION" DiploVP="14"/>
+    </StartEras_XP2>
+</GameInfo>

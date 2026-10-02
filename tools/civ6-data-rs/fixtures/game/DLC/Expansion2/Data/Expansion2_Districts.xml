@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <!-- DISTRICTS -->
+        <Row Type="DISTRICT_CANAL" Kind="KIND_DISTRICT"/>
+        <Row Type="DISTRICT_DAM" Kind="KIND_DISTRICT"/>
+    </Types>
+    <Districts>
+        <Update>
+            <Where DistrictType="DISTRICT_STREET_CARNIVAL"/>
+            <Set Description="LOC_DISTRICT_STREET_CARNIVAL_EXPANSION2_DESCRIPTION"/>
+        </Update>
+        <!-- DISTRICTS -->
+        <Row DistrictType="DISTRICT_CANAL" Name="LOC_DISTRICT_CANAL_NAME" Description="LOC_DISTRICT_CANAL_DESCRIPTION" PrereqTech="TECH_STEAM_POWER" PlunderType="PLUNDER_GOLD" PlunderAmount="50" AdvisorType="ADVISOR_GENERIC" Cost="81" CostProgressionModel="COST_PROGRESSION_GAME_PROGRESS" CostProgressionParam1="1000" RequiresPlacement="true" RequiresPopulation="false" OnePerCity="false" Aqueduct="false" NoAdjacentCity="false" InternalOnly="false" ZOC="false" CaptureRemovesBuildings="false" CaptureRemovesCityDefenses="false" MilitaryDomain="NO_DOMAIN" Appeal="1"/>
+        <Row DistrictType="DISTRICT_DAM" Name="LOC_DISTRICT_DAM_NAME" Description="LOC_DISTRICT_DAM_DESCRIPTION" PrereqTech="TECH_BUTTRESS" PlunderType="PLUNDER_HEAL" PlunderAmount="50" AdvisorType="ADVISOR_GENERIC" Cost="81" Entertainment="1" CostProgressionModel="COST_PROGRESSION_GAME_PROGRESS" CostProgressionParam1="1000" RequiresPlacement="true" RequiresPopulation="false" OnePerCity="false" Aqueduct="false" NoAdjacentCity="false" InternalOnly="false" ZOC="false" CaptureRemovesBuildings="false" CaptureRemovesCityDefenses="false" MilitaryDomain="NO_DOMAIN" Appeal="1" Housing="3"/>
+        <Update>
+            <Where Description="LOC_DISTRICT_BATH_DESCRIPTION"/>
+            <Set Description="LOC_DISTRICT_BATH_EXPANSION2_ALT_DESCRIPTION"/>
+        </Update>
+        <Update>
+            <Where Description="LOC_DISTRICT_AQUEDUCT_DESCRIPTION"/>
+            <Set Description="LOC_DISTRICT_AQUEDUCT_ALT_DESCRIPTION"/>
+        </Update>
+        <Update>
+            <Where DistrictType="DISTRICT_AERODROME"/>
+            <Set>
+                <Airslots>2</Airslots>
+            </Set>
+        </Update>
+        <Update>
+            <Where Description="LOC_DISTRICT_SPACEPORT_DESCRIPTION"/>
+            <Set Description="LOC_DISTRICT_SPACEPORT_DESCRIPTION_XP2"/>
+        </Update>
+        <Update>
+            <Where Description="LOC_DISTRICT_HANSA_DESCRIPTION"/>
+            <Set Description="LOC_DISTRICT_HANSA_EXPANSION2_DESCRIPTION"/>
+        </Update>
+    </Districts>
+    <Districts_XP2>
+        <Row DistrictType="DISTRICT_AQUEDUCT" PreventsDrought="true"/>
+        <Row DistrictType="DISTRICT_BATH" PreventsDrought="true"/>
+        <Row DistrictType="DISTRICT_CANAL" Canal="true"/>
+        <Row DistrictType="DISTRICT_DAM" OnePerRiver="true" PreventsFloods="true" PreventsDrought="true"/>
+        <Row DistrictType="DISTRICT_CITY_CENTER" AttackRange="2"/>
+        <Row DistrictType="DISTRICT_ENCAMPMENT" AttackRange="2"/>
+    </Districts_XP2>
+    <District_RequiredFeatures>
+        <Row DistrictType="DISTRICT_DAM" FeatureType="FEATURE_FLOODPLAINS"/>
+        <Row DistrictType="DISTRICT_DAM" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row DistrictType="DISTRICT_DAM" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+    </District_RequiredFeatures>
+    <District_ValidTerrains>
+        <Row DistrictType="DISTRICT_CANAL" TerrainType="TERRAIN_GRASS"/>
+        <Row DistrictType="DISTRICT_CANAL" TerrainType="TERRAIN_PLAINS"/>
+        <Row DistrictType="DISTRICT_CANAL" TerrainType="TERRAIN_TUNDRA"/>
+        <Row DistrictType="DISTRICT_CANAL" TerrainType="TERRAIN_SNOW"/>
+        <Row DistrictType="DISTRICT_CANAL" TerrainType="TERRAIN_DESERT"/>
+    </District_ValidTerrains>
+    <District_Adjacencies>
+        <Row DistrictType="DISTRICT_CAMPUS" YieldChangeId="Geothermal_Science"/>
+        <Row DistrictType="DISTRICT_CAMPUS" YieldChangeId="Reef_Science"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Minel_HalfProduction"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="LumberMill_HalfProduction"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Aqueduct_Production"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Bath_Production"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Canal_Production"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Dam_Production"/>
+        <Row DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Strategic_Production"/>
+        <Row DistrictType="DISTRICT_HANSA" YieldChangeId="Aqueduct_Production"/>
+        <Row DistrictType="DISTRICT_HANSA" YieldChangeId="Canal_Production"/>
+        <Row DistrictType="DISTRICT_HANSA" YieldChangeId="Dam_Production"/>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="EntertainmentComplex_Culture"/>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="WaterPark_Culture"/>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="StreetCarnival_Culture"/>
+        <Row DistrictType="DISTRICT_THEATER" YieldChangeId="Copacabana_Culture"/>
+        <Row DistrictType="DISTRICT_ACROPOLIS" YieldChangeId="EntertainmentComplex_Culture"/>
+        <Row DistrictType="DISTRICT_ACROPOLIS" YieldChangeId="WaterPark_Culture"/>
+    </District_Adjacencies>
+    <Adjacency_YieldChanges>
+        <Row ID="Geothermal_Science" Description="LOC_DISTRICT_GEOTHERMAL_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="2" TilesRequired="1" AdjacentFeature="FEATURE_GEOTHERMAL_FISSURE"/>
+        <Row ID="Reef_Science" Description="LOC_DISTRICT_REEF_SCIENCE" YieldType="YIELD_SCIENCE" YieldChange="2" TilesRequired="1" AdjacentFeature="FEATURE_REEF"/>
+        <Row ID="Minel_HalfProduction" Description="LOC_DISTRICT_MINES_HALF_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="1" TilesRequired="2" AdjacentImprovement="IMPROVEMENT_MINE"/>
+        <Row ID="LumberMill_HalfProduction" Description="LOC_DISTRICT_LUMBER_MILL_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="1" TilesRequired="2" AdjacentImprovement="IMPROVEMENT_LUMBER_MILL"/>
+        <Row ID="Aqueduct_Production" Description="LOC_DISTRICT_AQUEDUCT_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_AQUEDUCT"/>
+        <Row ID="Bath_Production" Description="LOC_DISTRICT_BATH_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_BATH"/>
+        <Row ID="Canal_Production" Description="LOC_DISTRICT_CANAL_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_CANAL"/>
+        <Row ID="Dam_Production" Description="LOC_DISTRICT_DAM_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_DAM"/>
+        <Row ID="Strategic_Production" Description="LOC_DISTRICT_STRATEGIC_PRODUCTION" YieldType="YIELD_PRODUCTION" YieldChange="1" TilesRequired="1" AdjacentResourceClass="RESOURCECLASS_STRATEGIC"/>
+        <Row ID="EntertainmentComplex_Culture" Description="LOC_DISTRICT_ENTERTAINMENT_CULTURE" YieldType="YIELD_CULTURE" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_ENTERTAINMENT_COMPLEX"/>
+        <Row ID="WaterPark_Culture" Description="LOC_DISTRICT_WATER_PARK_CULTURE" YieldType="YIELD_CULTURE" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_WATER_ENTERTAINMENT_COMPLEX"/>
+        <Row ID="StreetCarnival_Culture" Description="LOC_DISTRICT_STREET_CARNIVAL_CULTURE" YieldType="YIELD_CULTURE" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_STREET_CARNIVAL"/>
+        <Row ID="Copacabana_Culture" Description="LOC_DISTRICT_COPACABANA_CULTURE" YieldType="YIELD_CULTURE" YieldChange="2" TilesRequired="1" AdjacentDistrict="DISTRICT_WATER_STREET_CARNIVAL"/>
+    </Adjacency_YieldChanges>
+    <District_BuildChargeProductions>
+        <Row DistrictType="DISTRICT_CANAL" UnitType="UNIT_MILITARY_ENGINEER" PercentProductionPerCharge="20"/>
+        <Row DistrictType="DISTRICT_DAM" UnitType="UNIT_MILITARY_ENGINEER" PercentProductionPerCharge="20"/>
+        <Row DistrictType="DISTRICT_AQUEDUCT" UnitType="UNIT_MILITARY_ENGINEER" PercentProductionPerCharge="20"/>
+        <Row DistrictType="DISTRICT_BATH" UnitType="UNIT_MILITARY_ENGINEER" PercentProductionPerCharge="20"/>
+    </District_BuildChargeProductions>
+    <DistrictModifiers>
+        <Row DistrictType="DISTRICT_AQUEDUCT" ModifierId="AQUEDUCT_ADDAMENITIES"/>
+        <Row DistrictType="DISTRICT_BATH" ModifierId="BATH_ADDAMENITIES"/>
+    </DistrictModifiers>
+    <Modifiers>
+        <Row>
+            <ModifierId>AQUEDUCT_ADDAMENITIES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DISTRICT_ADJUST_DISTRICT_AMENITY</ModifierType>
+            <SubjectRequirementSetId>DISTRICT_IS_AQUEDUCT_ADJACENT_TO_GEOTHERMAL</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>BATH_ADDAMENITIES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DISTRICT_ADJUST_DISTRICT_AMENITY</ModifierType>
+            <SubjectRequirementSetId>DISTRICT_IS_BATH_ADJACENT_TO_GEOTHERMAL</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_HEALFRIENDLY</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_HEAL_PER_TURN</ModifierType>
+            <SubjectStackLimit>1</SubjectStackLimit>
+            <SubjectRequirementSetId>CITY_HAS_COTHON_ON_UNIT_PLOT_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_NAVAL_UNIT_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_CITY_ADJUST_UNIT_DOMAIN_PRODUCTION</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_SETTLER_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_UNIT_PRODUCTION</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_BUILDING_PURCHASE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_ALL_BUILDINGS_PURCHASE_COST</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_DISTRICT_PURCHASE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_ALL_DISTRICTS_PURCHASE_COST</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_UNIT_PURCHASE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_ALL_UNITS_PURCHASE_COST</ModifierType>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>AQUEDUCT_ADDAMENITIES</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>BATH_ADDAMENITIES</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_HEALFRIENDLY</ModifierId>
+            <Name>Amount</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_HEALFRIENDLY</ModifierId>
+            <Name>Type</Name>
+            <Value>FRIENDLY</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_NAVAL_UNIT_PRODUCTION</ModifierId>
+            <Name>Domain</Name>
+            <Value>DOMAIN_SEA</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_NAVAL_UNIT_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_SETTLER_PRODUCTION</ModifierId>
+            <Name>UnitType</Name>
+            <Value>UNIT_SETTLER</Value>
+        </Row>
+        <Row>
+            <ModifierId>COTHON_SETTLER_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>50</Value>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_BUILDING_PURCHASE</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_DISTRICT_PURCHASE</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_UNIT_PURCHASE</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <Row>
+            <ModifierId>SUGUBA_CHEAPER_UNIT_PURCHASE</ModifierId>
+            <Name>IncludeCivilian</Name>
+            <Value>True</Value>
+        </Row>
+    </ModifierArguments>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_AQUEDUCT_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_BATH_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_COTHON_ON_UNIT_PLOT_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>PLOT_ADJACENT_TO_GEOTHERMAL_FISSURE_REQUIREMENT</RequirementId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_GEOTHERMAL_FISSURE</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_DISTRICT_IS_BATH</RequirementId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_BATH</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_UNIT_CITY_HAS_COTHON_SAME_OWNER</RequirementId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_COTHON</Value>
+        </Row>
+    </RequirementArguments>
+    <Requirements>
+        <Row>
+            <RequirementId>PLOT_ADJACENT_TO_GEOTHERMAL_FISSURE_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_ADJACENT_FEATURE_TYPE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_DISTRICT_IS_BATH</RequirementId>
+            <RequirementType>REQUIREMENT_DISTRICT_TYPE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_UNIT_CITY_HAS_COTHON_SAME_OWNER</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_UNIT_CITY_HAS_DISTRICT_SAME_OWNER</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_AQUEDUCT_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_AQUEDUCT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_AQUEDUCT_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementId>PLOT_ADJACENT_TO_GEOTHERMAL_FISSURE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_BATH_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementId>REQUIRES_DISTRICT_IS_BATH</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>DISTRICT_IS_BATH_ADJACENT_TO_GEOTHERMAL</RequirementSetId>
+            <RequirementId>PLOT_ADJACENT_TO_GEOTHERMAL_FISSURE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_COTHON_ON_UNIT_PLOT_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_UNIT_CITY_HAS_COTHON_SAME_OWNER</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_COTHON_ON_UNIT_PLOT_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_SEA_DOMAIN</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+</GameInfo>

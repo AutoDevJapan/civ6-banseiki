@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <!-- Populate additional data. -->
+    <CivilopediaPageLayouts>
+        <Row PageLayoutId="EnvironmentalEffects" ScriptTemplate="Simple" />
+        <Row PageLayoutId="WorldCongress" ScriptTemplate="Simple" />
+    </CivilopediaPageLayouts>
+    <CivilopediaPageLayoutChapters>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="VOLCANOES" SortIndex="20"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="GEOTHERMAL_FISSURES" SortIndex="30"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="FLOODS" SortIndex="40"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="STORMS" SortIndex="50"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="CLIMATE_CHANGE" SortIndex="60"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="NUCLEAR_ACCIDENTS" SortIndex="70"/>
+        <Row PageLayoutId="EnvironmentalEffects" ChapterId="DROUGHTS" SortIndex="80"/>
+
+        <Row PageLayoutId="WorldCongress" ChapterId="CONGRESS" SortIndex="20"/>
+        <Row PageLayoutId="WorldCongress" ChapterId="FAVOR" SortIndex="30"/>
+        <Row PageLayoutId="WorldCongress" ChapterId="RESOLUTIONS" SortIndex="40"/>
+        <Row PageLayoutId="WorldCongress" ChapterId="DISCUSSIONS" SortIndex="50"/>
+        <Row PageLayoutId="WorldCongress" ChapterId="INTERVENTIONS" SortIndex="60"/>
+
+    </CivilopediaPageLayoutChapters>
+    <CivilopediaPageGroups>
+        <Row SectionID="CONCEPTS" PageGroupId="EXPANSION2" Name="LOC_PEDIA_CONCEPTS_PAGEGROUP_EXPANSION2_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="5"/>
+    </CivilopediaPageGroups>
+    <CivilopediaPages>
+        <Row SectionId="CONCEPTS" PageId="CONSUMEABLE_RESOURCES" PageGroupId="EXPANSION2" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_CONSUMEABLE_RESOURCES_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="1"/>
+        <Row SectionId="CONCEPTS" PageId="POWER" PageGroupId="EXPANSION2" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_POWER_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="2"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" PageGroupId="EXPANSION2" PageLayoutId="EnvironmentalEffects"  Name="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="3"/>
+        <Row SectionId="CONCEPTS" PageId="GLOBAL_TEMPERATURE" PageGroupId="EXPANSION2" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_GLOBAL_TEMPERATURE_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="4"/>
+        <Row SectionId="CONCEPTS" PageId="GRIEVANCES" PageGroupId="EXPANSION2" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_GRIEVANCES_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="5"/>
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" PageGroupId="EXPANSION2" PageLayoutId="WorldCongress"  Name="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_CONGRESS_TITLE" Tooltip="" SortIndex="6"/>
+        <Row SectionId="CONCEPTS" PageId="DIPLOMATIC_VICTORY" PageGroupId="EXPANSION2" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_DIPLOMATIC_VICTORY_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="7"/>
+
+    </CivilopediaPages>
+    <CivilopediaPageSearchTerms>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_FLOODS_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_VOLCANOES_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_GEOTHERMAL_FISSURES_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_STORMS_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_CLIMATE_CHANGE_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="ENVIRONMENTAL_EFFECTS" Term="LOC_PEDIA_CONCEPTS_PAGE_ENVIRONMENTAL_EFFECTS_CHAPTER_NUCLEAR_ACCIDENTS_TITLE"/>
+
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" Term="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_CONGRESS_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" Term="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_FAVOR_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" Term="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_RESOLUTIONS_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" Term="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_DISCUSSIONS_TITLE"/>
+        <Row SectionId="CONCEPTS" PageId="WORLD_CONGRESS" Term="LOC_PEDIA_CONCEPTS_PAGE_WORLD_CONGRESS_CHAPTER_INTERVENTIONS_TITLE"/>
+    </CivilopediaPageSearchTerms>
+</GameInfo>

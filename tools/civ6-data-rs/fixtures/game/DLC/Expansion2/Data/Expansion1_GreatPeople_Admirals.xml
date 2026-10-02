@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <Row Type="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" Kind="KIND_GREAT_PERSON_INDIVIDUAL"/>
+    </Types>
+    <GreatPersonIndividuals>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" Name="LOC_GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN_NAME" GreatPersonClassType="GREAT_PERSON_CLASS_ADMIRAL" EraType="ERA_RENAISSANCE" Gender="M" ActionCharges="1" ActionNameTextOverride="LOC_GREATPERSON_ACTION_NAME_RETIRE" AreaHighlightRadius="2" ActionRequiresOwnedTile="false" ActionRequiresVisibleLuxury="true"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" Name="LOC_GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO_NAME" GreatPersonClassType="GREAT_PERSON_CLASS_ADMIRAL" EraType="ERA_MODERN" Gender="M" ActionCharges="1" ActionNameTextOverride="LOC_GREATPERSON_ACTION_NAME_RETIRE" ActionRequiresCompletedDistrictType="DISTRICT_HARBOR" AreaHighlightRadius="2"/>
+    </GreatPersonIndividuals>
+    <GreatPersonIndividualBirthModifiers>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" ModifierId="GREATPERSON_COMBAT_STRENGTH_AOE_RENAISSANCE_SEA"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" ModifierId="GREATPERSON_MOVEMENT_AOE_RENAISSANCE_SEA"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" ModifierId="GREATPERSON_COMBAT_STRENGTH_AOE_MODERN_SEA"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" ModifierId="GREATPERSON_MOVEMENT_AOE_MODERN_SEA"/>
+    </GreatPersonIndividualBirthModifiers>
+    <GreatPersonIndividualActionModifiers>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" ModifierId="GREATPERSON_FERDINAND_MAGELLAN_GRANT_PLOT_RESOURCE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FERDINAND_MAGELLAN" ModifierId="GREATPERSON_FERDINAND_MAGELLAN_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+    </GreatPersonIndividualActionModifiers>
+    <Modifiers>
+        <!-- Unique Action Modifiers, different for each individual -->
+        <Row>
+            <ModifierId>GREATPERSON_TOGO_HEIHACHIRO_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PER_TURN</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FERDINAND_MAGELLAN_GRANT_PLOT_RESOURCE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_FREE_RESOURCE_FROM_UNIT_PLOT</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FERDINAND_MAGELLAN_ACTIVE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_YIELD</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <!-- Unique Action Modifiers, different for each individual -->
+        <Row>
+            <ModifierId>GREATPERSON_TOGO_HEIHACHIRO_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FERDINAND_MAGELLAN_ACTIVE</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_GOLD</Value>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FERDINAND_MAGELLAN_ACTIVE</ModifierId>
+            <Name>Amount</Name>
+            <Value>300</Value>
+            <Type>ScaleByGameSpeed</Type>
+        </Row>
+        <Row>
+            <ModifierId>GREATPERSON_FERDINAND_MAGELLAN_GRANT_PLOT_RESOURCE</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <!-- Unique Action Modifiers, different for each individual -->
+        <Row ModifierId="GREATPERSON_FERDINAND_MAGELLAN_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_FERDINAND_MAGELLAN_ACTIVE"/>
+        <Row ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE" Context="Summary" Text="LOC_GREATPERSON_TOGO_HEIHACHIRO_ACTIVE"/>
+    </ModifierStrings>
+</GameInfo>
