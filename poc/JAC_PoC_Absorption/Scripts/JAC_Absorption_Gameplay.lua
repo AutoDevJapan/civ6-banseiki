@@ -1596,7 +1596,8 @@ function A.RecoverArchived(id, owner, token, original)
     state.Recoveries[token] = intent
     Save(state)
   end
-  local record = R.Copy(assert(state.Archive[id], "recovery archive lost"))
+  local archived = assert(state.Archive[id], "recovery archive lost")
+  local record = R.Copy(archived)
   record.Owner, record.Outcome, record.RecoveredTurn = owner, "RECOVERED", intent.Turn
   record.RecoveryToken = token
   if record.Kind == "HERO" and record.NativeHero then
