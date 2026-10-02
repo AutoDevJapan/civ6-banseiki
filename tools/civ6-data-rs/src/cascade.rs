@@ -70,10 +70,11 @@ pub fn load_xml(db: &Connection, text: &str, tables: &BTreeSet<String>) -> Resul
             match op.tag_name().name() {
                 "Row" | "Replace" | "InsertOrIgnore" => {
                     let row = fields(op);
-                    let verb = if op.has_tag_name("Replace") {
-                        "INSERT OR REPLACE"
-                    } else {
-                        "INSERT OR IGNORE"
+                    let verb = match op.tag_name().name() {
+                        "Row" => "INSERT",
+                        "Replace" => "INSERT OR REPLACE",
+                        "InsertOrIgnore" => "INSERT OR IGNORE",
+                        _ => unreachable!("insertion operation already matched"),
                     };
                     let columns = row
                         .iter()

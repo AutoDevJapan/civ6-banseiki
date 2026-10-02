@@ -596,3 +596,30 @@ main の Rust 移行を統合した。Python の検査・実行器は復活さ�
 実機は live_chain.exe が排他を取得し、push したブランチの Rust 実行器をビルドして実行する。各テスト後に Civ6 を終了する。AI の未加入任命はまだ未解決であり、今回の移行や以前の 112/113 手順の成功から解決を推定しない。実行結果と残るシナリオは PR #86 のコメントへ記録する。
 
 統合後の指定検査は1325件成功し、失敗0件・除外0件だった。元の119件と固定対応表の検査を含む。6本のシナリオの --check と整形・差分検査も成功した。実機の結果はこの自動検査と区別し、PR #86 に記録する。
+
+## 起動修正の統合・任命境界の実証・XML監査の修正（2026-10-03）
+
+main の起動修正 #97 と移行記録 #95 を取り込み、人物化なしの開始比較に合格した。未加入人物への本体資格は制限できておらず、都市喪失の起動も再び停止したため、PR #86 は未マージである。
+
+今回の実機コードは 7eb6660 である。以下のXML監査修正はゲームのMOD・実機ドライバー・シナリオを変更しない。live_chain.exe だけで排他を取得し、すべて検証モードで実行した。各試験後に同実行器が Civ6 を終了した。自動再試行を含む4回を上限として、追加実機は行わない。
+
+| 実機ID | シナリオ | 結果 |
+| --- | --- | --- |
+| leaderperson-26 | leader-persona-baseline-15km.json | 注入した再起動を含む6/6手順、ログ判定5/5項目成功。人物化・境界診断・吸収MODを無効にし、22勢力とゲーム側の待機状態を確認した |
+| leaderperson-27 | leader-persona-native-eligibility-15km.json | 8/39手順成功。9番の加入前資格で失敗。484組すべてでCanEverAppointGovernorが真、称号付与後の21AI×22人物の462組でCanAppointGovernorも真だった。任命済みは0組で、AIの実手番・加入・正規進化・保存には未到達 |
+| leaderperson-28-try1 | leader-persona-city-loss-15km.json | 0/55手順。メニュー表示前で期限切れとなり、FireTunerの応答を得られなかった |
+| leaderperson-28 | 同上の自動再試行 | 0/55手順。同じ起動段階で停止した |
+
+26の画面と5項目の判定で開始比較の成功を確認した。27はUIの人物一覧ではなく本体getterを直接読み、HashとIndexの一致も確認した。21AIには同期されたGameplayで社会制度から正の称号残高を与えた。この結果を、AIが実手番で任命したという別の証拠へ置き換えない。旧23の112/113成功も今回の通し合格とは扱わない。
+
+28の最初の失敗画面はLOADING, PLEASE WAITだった。再試行のStartup.logはGUIInit後のSetupBinarySerializationまで進み、Renderer.logはDX11の画面設定成功を記録した。Lua.logはDebugHotloadCache初期化までで、Modding.logは独自文明と英雄のArt定義を読んでいた。MOD・描画ドライバー・外部接続のどれが根因かは確定していない。26・27で起動できた事実から、28の起動障害が解決したとは扱わない。
+
+成果は共有live作業フォルダーのtools/civ6-autotest/artifacts/各IDに保持する。各フォルダーにLua.log・Modding.log・Database.log・steps.jsonl・result.jsonがある。28-try1にはstartup-loading.png、28にはStartup.logとRenderer.logを追加した。実行器全体の戻り値や過去の成功を、個々のresult.jsonのpassedへ流用しない。
+
+全差分レビューは20261003-003421-rev-leaderpersonで実行し、既知Must3件に加え、XML監査器が通常のRowの重複を無視するMustを確認した。RowをINSERT、ReplaceをINSERT OR REPLACE、InsertOrIgnoreをINSERT OR IGNOREへ分けた。誓約の検査と公式DBの再取得で使う重複したXML読込処理も同じ監査器へ統合し、英雄の部分的な検査データでも重複を拒否する。4つの新しいRust検査で重複・必須欄欠落・無視・置換を照合した。Rowを旧処理へ戻すと重複拒否検査が失敗することを確認し、修正版へ戻した。
+
+共通化後のcargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targetsは1,335件成功、失敗・ignored・filtered outは0件だった。Luaは全件実行した。ゲーム内コードと6本のシナリオの形式は最初の1,331件成功時から変更していない。書式・差分検査と6本の形式検査も成功した。移行した119件の対応表を維持する。
+
+追加調査20261003-003211-pr86-native-20261003でも、動的なTrait付与や総督資格setterの有効接続を確認できなかった。匿名の本体総督枠へ加入人物を対応づける同等代替候補は未実装・未実証のままである。支払い用総督や匿名枠をAIが無断で使わないこと、人物費用1〜3に収まる会計、配置・忠誠・技能効果・本体スパイ中和・回復の同等性を実機で確かめる必要がある。
+
+残るシナリオは5本である。leader-persona-native-eligibility-15km.jsonは資格制御の修正後、正規進化・AI手番・保存まで完走する。leader-persona-15km.jsonは最初のAI手番と末尾の任命断言を維持して113手順を完走する。leader-persona-city-loss-15km.jsonは起動停止を直して都市所有権・効果・功績停止・保存を確認する。leader-persona-spy-access-15km.jsonは本体の生成・派遣と中和可否を観測する。leader-persona-spy-recovery.jsonは実際の中和を観測した保存状態からだけ再開する。追加実機の可否はオーナーに求めず、共有ToDo324・407を継続する。

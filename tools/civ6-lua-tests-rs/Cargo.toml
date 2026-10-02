@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+civ6-data-rs = { path = "../civ6-data-rs" }
 mlua = { version = "0.11", features = ["lua51", "vendored", "serialize"] }
 regex = "1"
 roxmltree = "0.21"
@@ -15,5 +16,4 @@ unicode-normalization = "0.1"
 icu_properties = { version = "2.3", default-features = false, features = ["compiled_data"] }
 
 [dev-dependencies]
-civ6-data-rs = { path = "../civ6-data-rs" }
 syn = { version = "2", features = ["full", "visit"] }

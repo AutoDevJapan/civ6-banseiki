@@ -590,10 +590,6 @@ mod tests {
         "JAC_OATH_ODA_AZUCHI",
     ];
 
-    fn identifiers(value: &str) -> String {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    }
-
     fn query(db: &Connection, sql: &str, args: &[&str]) -> Result<Vec<Vec<Value>>> {
         let mut statement = db.prepare(sql)?;
         let columns = statement.column_count();
@@ -634,42 +630,6 @@ mod tests {
         crate::cascade::register_audit_hash(db)
     }
 
-    fn xml_value(text: &str) -> SqlValue {
-        if text.eq_ignore_ascii_case("true") {
-            SqlValue::Integer(1)
-        } else if text.eq_ignore_ascii_case("false") {
-            SqlValue::Integer(0)
-        } else {
-            SqlValue::Text(text.to_owned())
-        }
-    }
-
-    fn xml_fields(node: Node<'_, '_>) -> IndexMap<String, SqlValue> {
-        let mut fields = IndexMap::new();
-        for attribute in node.attributes() {
-            fields.insert(attribute.name().to_owned(), xml_value(attribute.value()));
-        }
-        for child in node.children().filter(Node::is_element) {
-            fields.insert(
-                child.tag_name().name().to_owned(),
-                xml_value(child.text().unwrap_or("")),
-            );
-        }
-        fields
-    }
-
-    fn where_clause(fields: &IndexMap<String, SqlValue>) -> String {
-        if fields.is_empty() {
-            "1".to_owned()
-        } else {
-            fields
-                .keys()
-                .map(|key| format!("{}=?", identifiers(key)))
-                .collect::<Vec<_>>()
-                .join(" AND ")
-        }
-    }
-
     fn child<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Result<Node<'a, 'input>> {
         node.children()
             .find(|child| child.is_element() && child.tag_name().name() == name)
@@ -677,70 +637,7 @@ mod tests {
     }
 
     fn load_xml(db: &Connection, source: &str, tables: &BTreeSet<String>) -> Result<()> {
-        let document = Document::parse(source)?;
-        for table in document.root_element().children().filter(Node::is_element) {
-            let name = table.tag_name().name();
-            if !tables.contains(name) {
-                continue;
-            }
-            for op in table.children().filter(Node::is_element) {
-                match op.tag_name().name() {
-                    "Row" | "Replace" => {
-                        let fields = xml_fields(op);
-                        let columns = fields
-                            .keys()
-                            .map(|key| identifiers(key))
-                            .collect::<Vec<_>>();
-                        let placeholders = vec!["?"; fields.len()].join(",");
-                        let verb = if op.tag_name().name() == "Replace" {
-                            "INSERT OR REPLACE"
-                        } else {
-                            "INSERT OR IGNORE"
-                        };
-                        db.execute(
-                            &format!(
-                                "{verb} INTO {} ({}) VALUES ({placeholders})",
-                                identifiers(name),
-                                columns.join(",")
-                            ),
-                            params_from_iter(fields.values()),
-                        )?;
-                    }
-                    "Update" => {
-                        let conditions = xml_fields(child(op, "Where")?);
-                        let sets = xml_fields(child(op, "Set")?);
-                        let assignments = sets
-                            .keys()
-                            .map(|key| format!("{}=?", identifiers(key)))
-                            .collect::<Vec<_>>()
-                            .join(",");
-                        db.execute(
-                            &format!(
-                                "UPDATE {} SET {assignments} WHERE {}",
-                                identifiers(name),
-                                where_clause(&conditions)
-                            ),
-                            params_from_iter(sets.values().chain(conditions.values())),
-                        )?;
-                    }
-                    "Delete" => {
-                        let conditions = xml_fields(op);
-                        db.execute_batch("PRAGMA foreign_keys=ON")?;
-                        db.execute(
-                            &format!(
-                                "DELETE FROM {} WHERE {}",
-                                identifiers(name),
-                                where_clause(&conditions)
-                            ),
-                            params_from_iter(conditions.values()),
-                        )?;
-                        db.execute_batch("PRAGMA foreign_keys=OFF")?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
+        crate::cascade::load_xml(db, source, tables)
     }
 
     fn official_db(repo: &Repository) -> Result<Connection> {
