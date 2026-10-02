@@ -116,7 +116,8 @@ local function EligibleOwners()
   if not flow then return owners end
   for _, player in ipairs(PlayerManager.GetAlive() or {}) do
     local id = player:GetID()
-    if id ~= flow.From and id ~= flow.To and player:IsAlive() then
+    if id ~= flow.From and id ~= flow.To and player:IsAlive()
+      and player:GetCities():GetCount() > 0 then
       owners[#owners + 1] = id
     end
   end

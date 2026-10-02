@@ -979,6 +979,43 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
 }
 
 #[test]
+fn actual_panel_excludes_cityless_return_owners_and_rechecks_before_sending() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(PANEL_WORLD)
+        .set_name("absorption_panel.lua")
+        .exec()?;
+    lua.load(
+        r#"
+        Players[0].cities={}
+        Players[0].IsAlive=function() return true end
+        TEST_UI_PENDING={ID='return-flow',From=1,To=2,Mode='MERGER',Phase='CHOICE',Entries={
+          {ID='artifact:seal',Kind='ITEM',Name='Seal',AllowedActions={'TRANSFER','RETURN'}}}}
+        ExposedMembers.JAC_AbsorptionFlow={GetPending=function()
+          return JAC_AbsorptionRules.Copy(TEST_UI_PENDING)
+        end}
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua")?;
+    lua.load(
+        r#"
+        local panel=assert(JAC_AbsorptionFlow_UI)
+        assert(panel.ChooseAction('RETURN'))
+        local actions=panel.GetView().actions
+        assert(#actions==2 and actions[1].key=='owner:3', 'cityless living owner was offered')
+        assert(not panel.ChooseOwner(0) and #OPERATION_CALLS==0)
+        Players[3].cities={}
+        assert(not panel.ChooseOwner(3) and #OPERATION_CALLS==0,
+          'stale owner without a city received an operation')
+        panel.Refresh()
+        assert(not panel.ChooseAction('RETURN') and #OPERATION_CALLS==0,
+          'return offered without any eligible faction')
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn actual_panel_renders_identity_and_sends_only_a_human_choice() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(PANEL_WORLD)
@@ -1189,7 +1226,7 @@ fn ai_loyalty_wait_and_friction_resume_from_real_ui_publications() -> mlua::Resu
               return {Add=function(fn) handlers[#handlers+1]=fn end,
                 Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
             end
-            Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event()}
+            Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),LocalPlayerTurnBegin=event()}
             PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
             CORE_PLAYERS=Players;UI_PLAYERS={}
             for owner,player in pairs(Players) do
@@ -1208,8 +1245,12 @@ fn ai_loyalty_wait_and_friction_resume_from_real_ui_publications() -> mlua::Resu
             PlayerOperations={EXECUTE_SCRIPT=1};Game.GetLocalPlayer=function() return 3 end
             Players[2].IsHuman=function() return false end
             Players[3].IsHuman=function() return true end
+            HUMAN_TURN_ACTIVE=false;PUBLICATION_OPERATIONS=0
+            Players[3].IsTurnActive=function() return HUMAN_TURN_ACTIVE end
             UI={RequestPlayerOperation=function(actor,kind,payload)
               assert(actor==3 and kind==1 and payload.Command=='RECONCILE_PUBLICATIONS')
+              assert(HUMAN_TURN_ACTIVE,'publication command sent outside human turn')
+              PUBLICATION_OPERATIONS=PUBLICATION_OPERATIONS+1
               GameEvents.JAC_AbsorptionFlow_Operation.Emit(actor,payload)
             end}
             LOYALTY_CALLS=0
@@ -1245,6 +1286,10 @@ fn ai_loyalty_wait_and_friction_resume_from_real_ui_publications() -> mlua::Resu
               EntryConditionsMet=true,RelationsResolved=true})
             assert(flow.Phase=='APPLYING' and flow.WaitingFor=='WAITING_UI')
             local calls=#RANDOM_CALLS
+            Events.GameCoreEventPublishComplete.Emit()
+            assert(F.Get('ai-wait').Phase=='APPLYING' and PUBLICATION_OPERATIONS==0)
+            HUMAN_TURN_ACTIVE=true;Events.LocalPlayerTurnBegin.Emit()
+            assert(PUBLICATION_OPERATIONS==1,'turn begin did not resume deferred AI publication')
             for i=1,10 do Events.GameCoreEventPublishComplete.Emit() end
             assert(F.Get('ai-wait').Phase=='DONE',F.Get('ai-wait').Phase..':'
               ..tostring(F.Get('ai-wait').Error))

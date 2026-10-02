@@ -546,7 +546,7 @@ function print() end
           CORE_HERO_MANAGER={CreateHero=full.CreateHero,SetHeroDiscovered=full.SetHeroDiscovered,
             IsHeroDiscovered=full.IsHeroDiscovered}
           Game.GetHeroesManager=function() return UI_HERO_MANAGER end
-          Events={LoadScreenClose={Add=function() end},GameCoreEventPublishComplete={Add=function(f) PUBLISH_HERO_UI=f end}}]==],
+          Events={LocalPlayerTurnBegin={Add=function() end},LoadScreenClose={Add=function() end},GameCoreEventPublishComplete={Add=function(f) PUBLISH_HERO_UI=f end}}]==],
     -- source line 444, literal 2
     [==[UI/JAC_Absorption_HeroKeys.lua]==],
     -- source line 444, literal 3
@@ -583,7 +583,7 @@ function print() end
           end
           UI_GAME=setmetatable({GetCurrentGameTurn=function() return UI_TURN end}, {__index=CORE_GAME})
           Game,Players=UI_GAME,UI_PLAYERS
-          Events={LoadScreenClose={Add=function() end},
+          Events={LocalPlayerTurnBegin={Add=function() end},LoadScreenClose={Add=function() end},
             GameCoreEventPublishComplete={Add=function(f) PUBLISH_HERO_UI=f end}}
         ]==],
     -- source line 480, literal 2
@@ -1501,7 +1501,7 @@ function print() end
     [==[
           NATIVE_TEST_LIFE_KEY=UnitPropertyKeys.LifespanRemaining
           UnitPropertyKeys={LifespanRemaining=-1318296071}
-          Events={LoadScreenClose={Add=function(f) HERO_KEYS_ON_LOAD=f end},GameCoreEventPublishComplete={Add=function() end}}
+          Events={LocalPlayerTurnBegin={Add=function() end},LoadScreenClose={Add=function(f) HERO_KEYS_ON_LOAD=f end},GameCoreEventPublishComplete={Add=function() end}}
         ]==],
     -- source line 1239, literal 4
     [==[
@@ -2631,7 +2631,7 @@ function print() end
             end} end,GetUnits=function() return source:GetUnits() end}
           end
           Players=UI_PLAYERS
-          Events={LoadScreenClose={Add=function() end},
+          Events={LocalPlayerTurnBegin={Add=function() end},LoadScreenClose={Add=function() end},
             GameCoreEventPublishComplete={Add=function(f) PUBLISH_CITY_UI=f end}}
         ]==],
     -- source line 2147, literal 2

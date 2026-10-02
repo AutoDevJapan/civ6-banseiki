@@ -314,7 +314,7 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
           return {Add=function(fn) handlers[#handlers+1]=fn end,
             Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
         end
-        Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event()}
+        Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),LocalPlayerTurnBegin=event()}
         PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
         PlayerOperations={EXECUTE_SCRIPT=1}
         UI_REQUESTS=0

@@ -182,3 +182,4 @@ local function ObservePendingHeroes()
 end
 Events.GameCoreEventPublishComplete.Add(ObservePendingHeroes)
 Events.LoadScreenClose.Add(ObservePendingHeroes)
+Events.LocalPlayerTurnBegin.Add(ObservePendingHeroes)
