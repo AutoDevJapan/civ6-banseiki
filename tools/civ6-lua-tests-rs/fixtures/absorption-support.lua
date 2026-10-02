@@ -95,7 +95,7 @@ function LIVE()
   local result,n={},0
   for i=1,COUNT(data.steps) do
     local step=data.steps[i]
-    if JSON_REQUIRE(step,'action')=='ui_lua' and JSON_REQUIRE(step,'state_name')=='GameCore_Tuner'
+    if JSON_REQUIRE(step,'action')=='ui_lua' and JSON_REQUIRE(step,'state_name')=='JAC_Absorption_Entry'
       and JSON_TEXT(step,'capture_as'):sub(1,20)~='JAC_ABSORPTION_SYNC_' then
       n=n+1;result[n]=step
     end

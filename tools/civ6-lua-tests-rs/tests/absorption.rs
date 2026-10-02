@@ -560,7 +560,7 @@ fn context_spread() {
         let data = scenario(name);
         let chunks: Vec<_> = steps(&data)
             .iter()
-            .filter(|s| optional_json(s, "state_name").is_some_and(|v| v == "GameCore_Tuner"))
+            .filter(|s| optional_json(s, "state_name").is_some_and(|v| v == "JAC_Absorption_Entry"))
             .map(|s| s["code"].as_str().unwrap())
             .collect();
         assert!(!chunks.is_empty());
@@ -577,7 +577,7 @@ fn context_lifespan() {
 }
 fn check_context_lifespan(data: &Json, name: &str) {
     for step in steps(data) {
-        if optional_json(step, "state_name").is_some_and(|v| v == "GameCore_Tuner") {
+        if optional_json(step, "state_name").is_some_and(|v| v == "JAC_Absorption_Entry") {
             assert!(
                 !optional_text(step, "code")
                     .unwrap_or("")

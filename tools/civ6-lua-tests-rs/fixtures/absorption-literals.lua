@@ -1452,7 +1452,7 @@ function print() end
     -- source line 1215, literal 7
     [==[state_name]==],
     -- source line 1215, literal 8
-    [==[GameCore_Tuner]==],
+    [==[JAC_Absorption_Entry]==],
     -- source line 1218, literal 9
     [==[:GetSpreadCharges(]==],
   },
@@ -1470,7 +1470,7 @@ function print() end
     -- source line 1224, literal 6
     [==[state_name]==],
     -- source line 1224, literal 7
-    [==[GameCore_Tuner]==],
+    [==[JAC_Absorption_Entry]==],
     -- source line 1225, literal 8
     [==[code]==],
     -- source line 1225, literal 9
@@ -1807,7 +1807,7 @@ function print() end
     -- source line 1531, literal 6
     [==[state_name]==],
     -- source line 1531, literal 7
-    [==[GameCore_Tuner]==],
+    [==[JAC_Absorption_Entry]==],
     -- source line 1531, literal 8
     [==[capture_as]==],
     -- source line 1531, literal 9
@@ -2978,6 +2978,7 @@ function print() end
             return ipairs(UI_VISIBLE and units or {}) end} end}}
           GameInfo={Units={[0]={UnitType='UNIT_MISSIONARY'}}}
           ExposedMembers={JAC_Absorption={SnapshotUnit=function() return {SpreadCharges=UI_CHARGES} end}}
+          JAC_AbsorptionGameplay=ExposedMembers.JAC_Absorption
         ]==],
     -- source line 2327, literal 19
     [==[core religion and published charges match]==],
@@ -3090,6 +3091,7 @@ function print() end
           Game={GetProperty=function() return {To=2,Owner=2,Class=0} end}
           ExposedMembers={JAC_Absorption={GetHeroesManager=function() return {
             GetHeroOriginCityID=function() return {player=2,id=7} end} end}}
+          JAC_AbsorptionGameplay=ExposedMembers.JAC_Absorption
           Players={[2]={GetCities=function() return {FindID=function(_,id)
             assert(id==7);return {GetX=function() return 20 end,GetY=function() return 20 end} end} end,
             GetUnits=function() return {Members=function() return ipairs(UNITS) end} end}}
