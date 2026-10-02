@@ -1,0 +1,83 @@
+{
+  "definitions": {
+    "ICON_CIVILIZATION_JAPAN": {
+      "Name": "ICON_CIVILIZATION_JAPAN",
+      "Atlas": "ICON_ATLAS_CIVILIZATIONS",
+      "Index": "12"
+    }
+  },
+  "atlases": {
+    "ICON_ATLAS_CIVILIZATIONS": [
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "22",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols22.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "30",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols30.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "36",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols36.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "44",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols44.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "45",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivDefaults45.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "48",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols48.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "50",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols50.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "64",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols64.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "80",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols80.dds"
+      },
+      {
+        "Name": "ICON_ATLAS_CIVILIZATIONS",
+        "IconSize": "256",
+        "IconsPerRow": "8",
+        "IconsPerColumn": "8",
+        "Filename": "CivSymbols256.dds"
+      }
+    ]
+  }
+}

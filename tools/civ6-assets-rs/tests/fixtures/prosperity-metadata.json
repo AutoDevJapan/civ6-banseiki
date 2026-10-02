@@ -1,0 +1,27 @@
+{
+  "_schema": {
+    "status": "Q28 はオプション①に決定(SSOT 3.1)。地図への反映は prosper_start.py(documents/poc/japan-prosperous-start.md)",
+    "generated_by": "tools/japan_map_scale/prosperity.py",
+    "koku_unit": "10,000 koku (万石) on the Keichou 3 (1598) scale; koku_equivalent=true is derived from population",
+    "option1": "各家の1534年規模に合わせる案(採用)。plan[] は15km 地図の目安。実際の配置は地図ごとに prosper_start.py が決める",
+    "option2": "全勢力に同じ量を置く案(不採用)。option2_rule を参照"
+  },
+  "option2_rule": {
+    "per_city": {
+      "pop": 4,
+      "city_buildings": [
+        "BUILDING_WALLS",
+        "BUILDING_GRANARY"
+      ],
+      "garrison": [
+        "UNIT_SPEARMAN"
+      ]
+    },
+    "per_faction_extra_units": [
+      "UNIT_SPEARMAN",
+      "UNIT_ARCHER",
+      "UNIT_WARRIOR"
+    ],
+    "pop_cap": "都市の所有陸タイル数-1-山岳数(オプション1と同じ上限)"
+  }
+}

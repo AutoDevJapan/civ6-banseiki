@@ -1,0 +1,296 @@
+[
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "FrontEndArtTests",
+    "test": "test_house_crests_fill_all_xp2_sizes_with_distinct_white_masks",
+    "rust_test": "frontend_art::test_house_crests_fill_all_xp2_sizes_with_distinct_white_masks"
+  },
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "FrontEndArtTests",
+    "test": "test_every_player_icon_and_portrait_has_a_cooked_texture",
+    "rust_test": "frontend_art::test_every_player_icon_and_portrait_has_a_cooked_texture"
+  },
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "FrontEndArtTests",
+    "test": "test_ingame_portraits_and_fallbacks_cover_all_players",
+    "rust_test": "frontend_art::test_ingame_portraits_and_fallbacks_cover_all_players"
+  },
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "IconReadabilityTests",
+    "test": "test_notebooks_glyph_matches_official_neighbours",
+    "rust_test": "frontend_art::test_notebooks_glyph_matches_official_neighbours"
+  },
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "IconReadabilityTests",
+    "test": "test_leader_icons_are_face_crops_framed_in_house_colour",
+    "rust_test": "frontend_art::test_leader_icons_are_face_crops_framed_in_house_colour"
+  },
+  {
+    "source": "tools/jac_art/tests/test_frontend_art.py",
+    "class": "IconReadabilityTests",
+    "test": "test_house_primary_colours_are_distinct",
+    "rust_test": "frontend_art::test_house_primary_colours_are_distinct"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "ProjectionTests",
+    "test": "test_round_trip_across_japan",
+    "rust_test": "generate::test_round_trip_across_japan"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "ProjectionTests",
+    "test": "test_hex_neighbours_and_odd_row_offset",
+    "rust_test": "generate::test_hex_neighbours_and_odd_row_offset"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "ProjectionTests",
+    "test": "test_closest_centre",
+    "rust_test": "generate::test_closest_centre"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_schema_matches_official_and_plot_inventory",
+    "rust_test": "generate::test_schema_matches_official_and_plot_inventory"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_known_land_and_removed_foreign_land",
+    "rust_test": "generate::test_known_land_and_removed_foreign_land"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_22_starts_unique_and_traversable",
+    "rust_test": "generate::test_22_starts_unique_and_traversable"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_oda_has_a_passable_neighbouring_domain_for_initial_route_check",
+    "rust_test": "generate::test_oda_has_a_passable_neighbouring_domain_for_initial_route_check"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_historical_players_castles_and_territory",
+    "rust_test": "generate::test_historical_players_castles_and_territory"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_settler_variant_has_no_premade_state",
+    "rust_test": "generate::test_settler_variant_has_no_premade_state"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_takeda_setup_slot_maps_to_static_city_and_territory_owners",
+    "rust_test": "generate::test_takeda_setup_slot_maps_to_static_city_and_territory_owners"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_resource_counts_deferred_candidates_and_city_exclusion",
+    "rust_test": "generate::test_resource_counts_deferred_candidates_and_city_exclusion"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_every_placed_resource_obeys_installed_official_rules_on_final_plot",
+    "rust_test": "generate::test_every_placed_resource_obeys_installed_official_rules_on_final_plot"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_rivers_are_connected_and_only_use_shared_land_edges",
+    "rust_test": "generate::test_rivers_are_connected_and_only_use_shared_land_edges"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_lakes_features_and_volcanoes_follow_draft_counts",
+    "rust_test": "generate::test_lakes_features_and_volcanoes_follow_draft_counts"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_close_castle_pairs_report",
+    "rust_test": "generate::test_close_castle_pairs_report"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_nudges_use_nearest_free_plot_of_the_original_owner",
+    "rust_test": "generate::test_nudges_use_nearest_free_plot_of_the_original_owner"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_city_related_inserts_put_capitals_first",
+    "rust_test": "generate::test_city_related_inserts_put_capitals_first"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_every_capital_and_only_capitals_have_a_palace",
+    "rust_test": "generate::test_every_capital_and_only_capitals_have_a_palace"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_hex_distance_matches_neighbours",
+    "rust_test": "generate::test_hex_distance_matches_neighbours"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_config_and_scenarios_cover_all_scales",
+    "rust_test": "generate::test_config_and_scenarios_cover_all_scales"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_leaders_unique_and_human_from_banseiki_pool",
+    "rust_test": "generate::test_leaders_unique_and_human_from_banseiki_pool"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_all_leaders_registered_with_nonmissing_icons",
+    "rust_test": "generate::test_all_leaders_registered_with_nonmissing_icons"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_banseiki_filter_skips_japan_maps_and_settler_removal_is_scoped",
+    "rust_test": "generate::test_banseiki_filter_skips_japan_maps_and_settler_removal_is_scoped"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_city_range_is_limited_to_four_japan_maps",
+    "rust_test": "generate::test_city_range_is_limited_to_four_japan_maps"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_generate.py",
+    "class": "GeneratedMapTests",
+    "test": "test_domain_passage_and_loyalty_are_limited_to_all_four_japan_maps",
+    "rust_test": "generate::test_domain_passage_and_loyalty_are_limited_to_all_four_japan_maps"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_totals_per_tier",
+    "rust_test": "prosper_start::test_totals_per_tier"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_every_city_has_one_garrison_of_its_owner",
+    "rust_test": "prosper_start::test_every_city_has_one_garrison_of_its_owner"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_no_unit_on_invalid_terrain",
+    "rust_test": "prosper_start::test_no_unit_on_invalid_terrain"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_districts_buildings_and_improvements_follow_the_rules",
+    "rust_test": "prosper_start::test_districts_buildings_and_improvements_follow_the_rules"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_no_forest_or_marsh_is_removed",
+    "rust_test": "prosper_start::test_no_forest_or_marsh_is_removed"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_kyoto_and_treasury",
+    "rust_test": "prosper_start::test_kyoto_and_treasury"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_settler_maps_stay_bare",
+    "rust_test": "prosper_start::test_settler_maps_stay_bare"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_apply_is_deterministic_and_matches_the_checked_in_maps",
+    "rust_test": "prosper_start::test_apply_is_deterministic_and_matches_the_checked_in_maps"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_improvement_rules",
+    "rust_test": "prosper_start::test_improvement_rules"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_live_scenario_is_current_and_valid",
+    "rust_test": "prosper_start::test_live_scenario_is_current_and_valid"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_survivor_step_fails_on_a_death_or_a_lost_capital",
+    "rust_test": "prosper_start::test_survivor_step_fails_on_a_death_or_a_lost_capital"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_start_check_compares_every_planned_building",
+    "rust_test": "prosper_start::test_start_check_compares_every_planned_building"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosper_start.py",
+    "class": "ProsperousMapTests",
+    "test": "test_start_state_script_runs_only_on_the_historical_maps",
+    "rust_test": "prosper_start::test_start_state_script_runs_only_on_the_historical_maps"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosperity.py",
+    "class": "ProsperityPlanTests",
+    "test": "test_json_is_current",
+    "rust_test": "prosperity::test_json_is_current"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosperity.py",
+    "class": "ProsperityPlanTests",
+    "test": "test_covers_22_factions_and_56_cities",
+    "rust_test": "prosperity::test_covers_22_factions_and_56_cities"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosperity.py",
+    "class": "ProsperityPlanTests",
+    "test": "test_every_city_is_garrisoned_and_capped_by_land",
+    "rust_test": "prosperity::test_every_city_is_garrisoned_and_capped_by_land"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosperity.py",
+    "class": "ProsperityPlanTests",
+    "test": "test_only_buildings_and_units_kept_by_the_sengoku_trees",
+    "rust_test": "prosperity::test_only_buildings_and_units_kept_by_the_sengoku_trees"
+  },
+  {
+    "source": "tools/japan_map_scale/tests/test_prosperity.py",
+    "class": "ProsperityPlanTests",
+    "test": "test_koku_shares_and_tiers",
+    "rust_test": "prosperity::test_koku_shares_and_tiers"
+  }
+]

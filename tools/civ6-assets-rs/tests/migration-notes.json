@@ -1,0 +1,49 @@
+{
+  "scope": "tools/civ6-assets-rs",
+  "adopted_uncommitted_port": true,
+  "baseline": {
+    "assets_old_methods": 49,
+    "data_old_methods": 166,
+    "runnable_old_scripts": 11,
+    "production_bins": 8,
+    "start_1534": "Library module; the original has no runnable main entry point."
+  },
+  "shared_production": {
+    "dependency": "civ6-data-rs",
+    "asset_dependencies_git_blob": "ee4e75f80268216642554bb233f76b300cb8ffe2",
+    "reused": ["SEATS", "art::LEADER_ORDER", "art::SUBJECTS", "art::filename", "art::prompt", "art::leaders", "art::atlas", "city_names", "feuds"],
+    "reverse_dependency": false
+  },
+  "verified": {
+    "test_command": "cargo test --manifest-path tools/Cargo.toml -p civ6-assets-rs -p civ6-data-rs --locked --offline --jobs 2 -- --test-threads=2",
+    "assets_tests_passed": 63,
+    "data_unit_tests_passed": 183,
+    "data_cli_tests_passed": 2,
+    "total_passed": 248,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 0,
+    "format": "rustfmt --edition 2021 --check on every Rust file in this crate: passed",
+    "clippy_command": "cargo clippy --manifest-path tools/Cargo.toml -p civ6-assets-rs --locked --offline --jobs 2 --all-targets --no-deps -- -D warnings",
+    "clippy": "passed",
+    "native_map_cli": {
+      "command": "japan-map-generate --cache <isolated-cache> --output <isolated-fixture>/Maps",
+      "source_hashes_verified": true,
+      "official_schema": "Installed Civ6 WorldMapHuge.Civ6Map, opened read-only",
+      "20km": {"width": 154, "height": 67, "land_tiles": 1082, "historical_bytes": 532480, "settler_bytes": 516096},
+      "15km": {"width": 204, "height": 88, "land_tiles": 1906, "historical_bytes": 745472, "settler_bytes": 716800},
+      "outputs": "Four SQLite maps, four Lua entry points, manifest.json and JAC_ResourceSites.lua in an isolated fixture directory"
+    },
+    "portrait_cli": "Rust subprocess fixture checks ChatGPT OAuth acceptance, API-key and no-login rejection, sanitized environment, relative paths, all-image validation and existing-output recovery. It never calls an image service.",
+    "cooker": "Rust subprocess fixture checks arguments, absolute paths, output name inventory and failure propagation; real SDK output name-table prefixes are also checked by the old art assertions."
+  },
+  "main_integration": {
+    "todo_616": "Keep doing until main completes the overall migration and live gate.",
+    "unchanged_out_of_scope": ["tools/Cargo.lock (pre-existing untracked workspace lock)", "original Python tools and driver", "MOD artifacts"],
+    "remaining_checks": ["Main handles the real Civ6/live_chain gate, SDK artwork cooking, official OAuth image-generation acceptance, review and push/PR/merge."],
+    "upstream_clippy_diagnostics": [
+      {"file": "tools/civ6-data-rs/src/reigns.rs", "line": 515, "lint": "type_complexity", "suggestion": "Give the calendar return map a type alias."},
+      {"file": "tools/civ6-data-rs/src/unification.rs", "line": 416, "lint": "manual_range_contains", "diagnostics": 2, "suggestion": "Use (0..WIDTH).contains(&nx) and (0..HEIGHT).contains(&ny)."}
+    ]
+  }
+}

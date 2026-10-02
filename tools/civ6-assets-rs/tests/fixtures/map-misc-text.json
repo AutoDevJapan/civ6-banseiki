@@ -1,0 +1,92 @@
+[
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME",
+    "lang": "en_US",
+    "text": "Free passage across domains"
+  },
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME",
+    "lang": "ja_JP",
+    "text": "領土境の自由通行"
+  },
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_NAME",
+    "lang": "ru_RU",
+    "text": "Свободный проход через владения"
+  },
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION",
+    "lang": "en_US",
+    "text": "May enter another faction's territory without an Open Borders agreement."
+  },
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION",
+    "lang": "ja_JP",
+    "text": "開放国境の協定なしに他勢力の領土へ進入できる。"
+  },
+  {
+    "tag": "LOC_ABILITY_JAC_DOMAIN_CROSSING_DESCRIPTION",
+    "lang": "ru_RU",
+    "text": "Может входить во владения других держав без договора об открытых границах."
+  },
+  {
+    "tag": "LOC_JAC_DIPLO_MODIFIER_1534_FEUD",
+    "lang": "en_US",
+    "text": "Old feud from 1534"
+  },
+  {
+    "tag": "LOC_JAC_DIPLO_MODIFIER_1534_FEUD",
+    "lang": "ja_JP",
+    "text": "1534年の因縁"
+  },
+  {
+    "tag": "LOC_JAC_DIPLO_MODIFIER_1534_FEUD",
+    "lang": "ru_RU",
+    "text": "Давняя вражда 1534 года"
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_1534_ACCESS",
+    "lang": "en_US",
+    "text": "Word travels between the houses"
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_1534_ACCESS",
+    "lang": "ja_JP",
+    "text": "諸家のあいだを行き交う噂"
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_1534_ACCESS",
+    "lang": "ru_RU",
+    "text": "Слухи, ходящие между домами"
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
+    "lang": "en_US",
+    "text": "Start on the 1534 Japan map."
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
+    "lang": "ja_JP",
+    "text": "1534年の日本マップで始める。"
+  },
+  {
+    "tag": "LOC_JAC_VIZSOURCE_ACTION_1534_ACCESS",
+    "lang": "ru_RU",
+    "text": "Начать на карте Японии 1534 года."
+  },
+  {
+    "tag": "LOC_JAC_GOSSIP_SOURCE_1534_ACCESS",
+    "lang": "en_US",
+    "text": "Word going around says that"
+  },
+  {
+    "tag": "LOC_JAC_GOSSIP_SOURCE_1534_ACCESS",
+    "lang": "ja_JP",
+    "text": "諸家に伝わる噂では、"
+  },
+  {
+    "tag": "LOC_JAC_GOSSIP_SOURCE_1534_ACCESS",
+    "lang": "ru_RU",
+    "text": "Ходят слухи, что"
+  }
+]
