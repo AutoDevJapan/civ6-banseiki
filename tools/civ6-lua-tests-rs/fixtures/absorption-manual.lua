@@ -4,9 +4,10 @@ function T.test_every_spec_disposition_is_routable_and_rejects_cross_kind_outcom
   local L=STRINGS['AbsorptionTests.test_every_spec_disposition_is_routable_and_rejects_cross_kind_outcomes']
   local expected={
     UNIT={SURRENDER=true,INCORPORATE=true,DISSOLVE=true,ESCAPE=true,RESIST=true},
-    PERSON={CAPTURE=true,RECRUIT=true,SUBMIT=true,EXILE=true,EXECUTE=true,RETIRE=true,DEFECT=true},
+    PERSON={CAPTURE=true,RECRUIT=true,SUBMIT=true,EXILE=true,EXECUTE=true,RETIRE=true,DEFECT=true,HIDE=true},
     HERO={RECRUIT=true,PROTECT=true,RECONTRACT=true,DEFECT=true,HIDE=true,SUICIDE=true},
-    GREAT_PERSON={RECRUIT=true,EXILE=true,RETIRE=true},
+    GREAT_PERSON={RECRUIT=true,EXILE=true,RETIRE=true,HIDE=true},
+    GOVERNOR={CAPTURE=true,RECRUIT=true,SUBMIT=true,EXILE=true,RETIRE=true,DEFECT=true,HIDE=true},
     ITEM={TRANSFER=true,LOOT=true,SEIZE=true,RETURN=true,SCATTER=true},
     UNLOCK={INHERIT=true,PRESERVE=true},RELIGION={PRESERVE=true}
   }
@@ -75,7 +76,29 @@ function T.test_native_hero_archival_and_explicit_suicide_preserve_requested_out
   local L=STRINGS['AbsorptionTests.test_native_hero_archival_and_explicit_suicide_preserve_requested_outcome']
   local outcome=L[ARG1]
   ADD_HERO();NATIVE_OUTCOME=outcome;RUN(L[4])
-  SUICIDE(outcome==L[6] and L[5] or L[7],outcome)
+  if outcome==L[6] then
+    SUICIDE(L[5],outcome)
+    return
+  end
+  local tx=APPLY()
+  EQ(function() return tx.Status end,function() return 'COMPLETE' end)
+  local result=tx.HeroResults.native
+  EQ(function() return result.Outcome end,function() return outcome end)
+  EQ(function() return result.RequestedOutcome end,function() return outcome end)
+  IS_NIL(function() return result.Cause end,true)
+  local snap
+  for _,value in ipairs(tx.Units) do if value.ID==13 then snap=value end end
+  TRUTH(function() return snap and snap.Outcome==outcome and snap.RequestedOutcome==nil and not snap.KeepUnit end,true)
+  local record=A.GetState().Archive.native
+  TRUTH(function() return record and record.Owner==-1 and record.Outcome==outcome
+    and record.Unit==nil and record.FormerUnit.ID==13 and record.NativeHero.ClassType=='HEROCLASS_JAC_WARLORD_A'
+    and record.Contract=='RECONTRACT' and record.Loyalty==71 and record.Relations.friend==29 end,true)
+  IS_NIL(function() return A.FindUnit(2,'test-absorption:unit:13') end,true)
+  EQ(function() return HERO_CLAIMS[0] end,function() return 1 end)
+  TRUTH(function() return A.Verify('test-absorption',true) end,true)
+  local before=SNAPSHOT()
+  RELOAD();APPLY()
+  EQ(function() return SNAPSHOT() end,function() return before end)
 end
 function T.test_runtime_park_and_nonhero_action_charges_are_rejected_before_changes()
   local L=STRINGS['AbsorptionTests.test_runtime_park_and_nonhero_action_charges_are_rejected_before_changes']
