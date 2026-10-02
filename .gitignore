@@ -21,3 +21,4 @@ __pycache__/
 
 # Rust tools and their test artifacts
 /tools/target/
+/tools/civ6-*-rs/target/

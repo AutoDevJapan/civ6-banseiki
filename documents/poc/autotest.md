@@ -1,44 +1,45 @@
 # Civ6 PoC 検証ドライバ
 
-`tools/civ6-autotest/` は Steam 版 Civ6 1.0.12.68（Gathering Storm、シングルプレイ）に FireTuner で接続し、JSON の手順を順に実行する。シナリオで有効化する MOD の更新が起動中のゲームより新しい場合や、ゲームが停止している場合は、手順の開始前に Civ6 を再起動する。各ステップの成否と出力、画面 PNG、ログ判定用の開始位置を新しい成果物ディレクトリへ保存する。
+`tools/civ6-autotest-rs/` の Rust 実行器は Steam 版 Civ6 1.0.12.68（Gathering Storm、シングルプレイ）に FireTuner で接続し、JSON の手順を順に実行する。シナリオで有効化する MOD の更新が起動中のゲームより新しい場合や、ゲームが停止している場合は、手順の開始前に Civ6 を再起動する。各ステップの成否と出力、画面 PNG、ログ判定用の開始位置を新しい成果物ディレクトリへ保存する。
 
 ## 準備と実行
 
 1. 対象 MOD を Civ6 の `Mods` フォルダから参照できる状態にする。ドライバは `.modinfo` の UUID で対象を探し、ジャンクションの参照先を走査する。`bundle0-load-save.json` は `JAC_PoC_Bundle0`、クランと手帳のシナリオは `JAC_PoC_CustomCivs` と `JAC_PoC_GrowthUI` を使う。`banseiki-ruleset.json` はこの3 MOD と `JAC_PoC_BanseikiRuleset` を使う。実際に Civ6 が参照する `Mods` の配置先を確認する。
 2. Civ6 は**ウィンドウ表示**で起動できる設定にする。停止中ならドライバが Steam 経由で DX11 版を起動する。`AppOptions.txt` の `EnableTuner 1` が必要。FireTuner GUI は閉じる。同じ Tuner ポートに同時接続しない。
-3. PowerShell でリポジトリのルートから実行する。Python 3.12 で確認済み。追加パッケージは不要。
+3. Rust をインストールし、リポジトリのルートから下記の静的検査を実行する。実機検査は push 後に共有の `live_chain.exe` を使う。シナリオと成果物は従来の `tools/civ6-autotest/` に置く。
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-load-save.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/bundle0-load-save.json --check
 # 既にゲームが起動している場合の診断
-python tools/civ6-autotest/tuner.py states
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/bundle0-load-save.json --output tools/civ6-autotest/artifacts/bundle0-run-01
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/banseiki-ruleset.json --output tools/civ6-autotest/artifacts/banseiki-run-01
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/clans-notebooks.json --no-auto-restart --output tools/civ6-autotest/artifacts/debug-01
-python -m unittest discover -s tools/civ6-autotest/tests -v
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-tuner -- states
+cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+# push 後の実機検査。成果物の保存先は実行結果の RESULT 行に出る。
+D:/CC/Tools/civ6-live/live_chain.exe <ブランチ>:bundle0-load-save.json <ブランチ>:banseiki-ruleset.json <ブランチ>:clans-notebooks.json --stop-on-failure
 ```
 
 オーナーが PC の前にいるとき（確認モード）は `--owner-start` を付ける。`start_game` で自動開始せず、設定済みの「ゲームの作成」画面を開いて、オーナーが「ゲーム開始」を押すまで最大1時間待つ。以降の手順は自動で進む。
 
-`states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `scenario.py` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
+`states` は既にゲームが起動している場合の診断に使う。`FrontEnd` と `InGame` が異なる名前で現れた場合は、実際の状態名を JSON と `tools/civ6-autotest-rs/src/scenario.rs` の固定ステップに反映してから実行する。ログや保存先が標準の場所と違う場合は `--logs <Logs ディレクトリ>` と `--saves <Saves/Single ディレクトリ>`、MOD の場所が違う場合は `--mods <Mods ディレクトリ>` を指定する。
 
 ### DX11 での起動
 
-再起動は `steam://launch/289070/option2` を `os.startfile` に渡す。2026-10-01 にこの PC の Steam 起動情報（`appcache/appinfo.vdf`）を読み、Windows の `option2` が `Base/Binaries/Win64Steam/CivilizationVI.exe`（DX11）、`option1` が DX12 版であることを確認した。ゲーム番号だけを渡す旧 URI は Steam 側の選択に依存していた。[2K の公式説明](https://support.2k.com/hc/en-us/articles/34845053169939-2K-Launcher-Complete-Sunset)でも、Steam の起動メニューとプロパティで版を選べることが案内されている。
+再起動は `steam://launch/289070/option2` を Win32 の `ShellExecuteW` に渡す。2026-10-01 にこの PC の Steam 起動情報（`appcache/appinfo.vdf`）を読み、Windows の `option2` が `Base/Binaries/Win64Steam/CivilizationVI.exe`（DX11）、`option1` が DX12 版であることを確認した。ゲーム番号だけを渡す旧 URI は Steam 側の選択に依存していた。[2K の公式説明](https://support.2k.com/hc/en-us/articles/34845053169939-2K-Launcher-Complete-Sunset)でも、Steam の起動メニューとプロパティで版を選べることが案内されている。
 
 URI の送信でコンソールは開かず、起動中の Steam の `localconfig.vdf` は書き換えない。起動後はウィンドウの実行ファイル名を検査し、DX11 でなければキー・クリック入力の前に失敗する。起動情報の変更や実行ファイルを差し替える Steam の起動設定で DX12 が選ばれても、そのままテストを進めない。起動済みのゲームの検出・終了・入力先の照合は、両方の実行ファイルに対応する。
 
-この PC で他の実機テストと並行して確認するときは、push 後に共用ロックを持つ `python D:/CC/Tools/civ6-live/live_chain.py <ブランチ>:bundle0-load-save.json` を使う。ゲームの起動・終了はこの処理を通す。
+この PC で他の実機テストと並行して確認するときは、push 後に共用ロックを持つ `D:/CC/Tools/civ6-live/live_chain.exe <ブランチ>:bundle0-load-save.json` を使う。ゲームの起動・終了はこの処理を通す。
+
+共有の実行ツールは検査対象のブランチを checkout した後、そのブランチの Rust 実行器をビルドする。Cargo が報告した実行ファイルの場所を検査し、ビルド失敗や別の場所への出力ではシナリオを実行しない。Rust の実行器を含まない旧ブランチだけは、旧実行器を使う。待っている担当がいる場合は30分の期限に従ってシナリオの区切りで順番を譲り、実行後は Civ6 を終了する。
 
 ### FireTuner の一時的なタイムアウト
 
 `autoplay` が途中で止まる問題（2026-09-29、15 km 日本地図＋戦国パックで 31 ターン目に `Autoplay stopped early`）。原因は実機で確定した。人間（大内、枠 14）に AI の指導者（足利）が外交の声明（「Your people are lazy and unworthy...」と Goodbye ボタン）を出し、`DiplomacyActionView` と `LeaderScene` が表示されたまま、AI（枠 10）の手番が人間の返事を待って終わらない。そのため自動進行が途中で止まる（`active=False` で残りターンあり）か、問い合わせがタイムアウトする。`DiplomacyActionView` の Lua 状態で `OnClose()`（`Base/Assets/UI/DiplomacyActionView.lua:2883-2886`、ESC と同じ処理）を呼ぶと閉じ、次の AI（枠 11）の手番へ進んだ。
 
-ドライバは、自動進行の監視ループの各回と、状態の問い合わせが失敗したときに、表示中の外交画面を公式の処理で閉じる。AI からの取引の提案（`DiplomacyDealView`）を先に、ゲーム自身のターン終了処理 `OnLocalPlayerTurnEnd()`（`DLC/Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129`。`OnRefuseDeal(true)` で拒否してセッションを閉じ、`OnContinue` で隠す。素のゲームは `Base/Assets/UI/DiplomacyDealView.lua:3075-3085`）で断る。取引画面が出ている間は `DiplomacyActionView` が `DEAL_MODE` で `OnClose` を無視するため、この順番にしている。次に声明を `OnClose()` で閉じる。どちらも `ContextPtr:IsHidden()` で守り、閉じる途中の再呼び出しは公式の処理側でも無視されるので、タイムアウト後の再試行は冪等になる。閉じた内容はステップログ `autoplay_diplomacy` に残す（例：`closed AI diplomacy statement (turn 31, total 1)`）。外交画面が原因で自動進行が止まったときは、再開の上限（2 回）に数えずに残りターン数で再開する。1 ステップで閉じた回数が `20 + 5 × ターン数` を超えたら失敗にする。状態の問い合わせは 30 秒の枠で再試行し、失敗したときに閉じる画面が無ければ従来どおり止める。取引の拒否は実機では未確認（要実機確認）。単体テストは `tests/test_diplomacy.py`（偽の Tuner）。閉じる画面の一覧は `scenario.py` の `POPUP_CLOSERS` で、戦国パックの暗黒期の政策の選択画面（`JAC_SengokuDarkPolicy` の `OnClose()`。閉じると既定の政策のまま。[時代の PoC](sengoku-ages.md)）も同じ扱いで閉じる（ステップログは `closed dark-age policy choice`）。
+ドライバは、自動進行の監視ループの各回と、状態の問い合わせが失敗したときに、表示中の外交画面を公式の処理で閉じる。AI からの取引の提案（`DiplomacyDealView`）を先に、ゲーム自身のターン終了処理 `OnLocalPlayerTurnEnd()`（`DLC/Expansion2/UI/Replacements/DiplomacyDealView.lua:3120-3129`。`OnRefuseDeal(true)` で拒否してセッションを閉じ、`OnContinue` で隠す。素のゲームは `Base/Assets/UI/DiplomacyDealView.lua:3075-3085`）で断る。取引画面が出ている間は `DiplomacyActionView` が `DEAL_MODE` で `OnClose` を無視するため、この順番にしている。次に声明を `OnClose()` で閉じる。どちらも `ContextPtr:IsHidden()` で守り、閉じる途中の再呼び出しは公式の処理側でも無視されるので、タイムアウト後の再試行は冪等になる。閉じた内容はステップログ `autoplay_diplomacy` に残す（例：`closed AI diplomacy statement (turn 31, total 1)`）。外交画面が原因で自動進行が止まったときは、再開の上限（2 回）に数えずに残りターン数で再開する。1 ステップで閉じた回数が `20 + 5 × ターン数` を超えたら失敗にする。状態の問い合わせは 30 秒の枠で再試行し、失敗したときに閉じる画面が無ければ従来どおり止める。取引の拒否は実機では未確認（要実機確認）。単体テストは `tools/civ6-autotest-rs/tests`（偽の Tuner）。閉じる画面の一覧は `tools/civ6-autotest-rs/src/scenario.rs` の `POPUP_CLOSERS` で、戦国パックの暗黒期の政策の選択画面（`JAC_SengokuDarkPolicy` の `OnClose()`。閉じると既定の政策のまま。[時代の PoC](sengoku-ages.md)）も同じ扱いで閉じる（ステップログは `closed dark-age policy choice`）。
 
-自動進行の外でも、AI の声明が `InGame` を止めることがある（owner-o-03・05：`wait_for` の `InGame` への問い合わせが `FireTuner response timed out after 0/8 bytes`。外交画面の Lua 状態は応答を続ける）。`InGame` への `wait_for` の問い合わせ（`save` の完了待ちも含む）が応答無しで失敗したら、ドライバは同じ `POPUP_CLOSERS` で一度だけ閉じ、閉じた画面があれば待ち直す。待ちの条件は読むだけの式なので再実行してよい。1 ステップで 3 回まで、ステップログは `ingame_unblock`（例：`closed AI diplomacy statement after an InGame timeout; retry 1/3`）。閉じる画面が無ければ従来どおり止める。`ui_lua` は、送った後に応答が無かったときは実行済みかもしれないので再実行しない。送る前（状態の一覧の取得）で失敗したときだけ、同じように閉じて送り直す。単体テストは `tests/test_diplomacy.py` の `StarvedInGameStepTests`。
+自動進行の外でも、AI の声明が `InGame` を止めることがある（owner-o-03・05：`wait_for` の `InGame` への問い合わせが `FireTuner response timed out after 0/8 bytes`。外交画面の Lua 状態は応答を続ける）。`InGame` への `wait_for` の問い合わせ（`save` の完了待ちも含む）が応答無しで失敗したら、ドライバは同じ `POPUP_CLOSERS` で一度だけ閉じ、閉じた画面があれば待ち直す。待ちの条件は読むだけの式なので再実行してよい。1 ステップで 3 回まで、ステップログは `ingame_unblock`（例：`closed AI diplomacy statement after an InGame timeout; retry 1/3`）。閉じる画面が無ければ従来どおり止める。`ui_lua` は、送った後に応答が無かったときは実行済みかもしれないので再実行しない。送る前（状態の一覧の取得）で失敗したときだけ、同じように閉じて送り直す。単体テストは `tools/civ6-autotest-rs/tests` の `StarvedInGameStepTests`。
 
-時代の切り替わりで人間プレイヤーに出る奉献（Dedication、Gathering Storm）の選択も、自動進行は人間の代わりに選ばない（`DLC/Expansion2/UI/Additions/DedicationPopup.lua`）。これで止まった例は実機では確認していない。ドライバは、停止が 5 秒続いたとき、まず公式の操作 `UI.RequestPlayerOperation(human, PlayerOperations.COMMEMORATE, {[PlayerOperations.PARAM_COMMEMORATION_TYPE] = idx})` を、`Game.GetEras():GetPlayerCommemorateChoices()` の先頭から `GetPlayerNumAllowedCommemorations()` 件だけ決定的に送り、Escape でポップアップを閉じて、残りターン数で自動進行を再開する。選んだ番号はステップログ `autoplay_dedication` に残す。選択肢が無ければ従来どおり再開のみ（最大 2 回）。奉献の選択は 1 ステップ内で最大 3 回までで、その後もステップ期限内に進まなければ失敗にする。単体テストは `tests/test_dedication.py`（偽の状態列）。
+時代の切り替わりで人間プレイヤーに出る奉献（Dedication、Gathering Storm）の選択も、自動進行は人間の代わりに選ばない（`DLC/Expansion2/UI/Additions/DedicationPopup.lua`）。これで止まった例は実機では確認していない。ドライバは、停止が 5 秒続いたとき、まず公式の操作 `UI.RequestPlayerOperation(human, PlayerOperations.COMMEMORATE, {[PlayerOperations.PARAM_COMMEMORATION_TYPE] = idx})` を、`Game.GetEras():GetPlayerCommemorateChoices()` の先頭から `GetPlayerNumAllowedCommemorations()` 件だけ決定的に送り、Escape でポップアップを閉じて、残りターン数で自動進行を再開する。選んだ番号はステップログ `autoplay_dedication` に残す。選択肢が無ければ従来どおり再開のみ（最大 2 回）。奉献の選択は 1 ステップ内で最大 3 回までで、その後もステップ期限内に進まなければ失敗にする。単体テストは `tools/civ6-autotest-rs/tests`（偽の状態列）。
 
 ゲームが重いと、FireTuner が 5 秒以内に返事できず `No Lua acknowledgment ...` になることがある（2026-09-29、15 km 日本地図の 10 ターン自動進行で発生。ゲーム自体は生きていた）。`autoplay` の状態問い合わせとアドバイザーポップアップの解除は読み取り専用または冪等（`IsBlockingInput()` で守られている）なので、接続を張り直してバックオフ付きで再試行し、ステップの期限が切れたときだけ失敗にする。ゲームの状態を変えるコマンド（自動進行の開始、オプションメニューを閉じる操作など）は再送せず、従来どおり `LuaResponseUnknown` で止める。
 
@@ -54,17 +55,17 @@ Civ6 がまったく起動していないときも、`restart_game`（自動再�
 
 ゲームプレイ Lua・SQL・テキストは新しいゲームの開始またはセーブの読込で再読込される。フロントエンド設定（ルールセット、プレイヤー、パラメータ）は MOD の再適用または再起動が必要。アート（BLP、DDS、ArtDefs、テクスチャ）は完全な再起動が必要。自動判定はファイル種別を問わず新しい更新時刻で再起動するため、これらを共通に扱う。
 
-`tests/test_restart.py` は、模擬ファイル更新時刻と模擬プロセス開始時刻による鮮度判定、再起動が最初の手順より前に行われること、`restart_game` の JSON 入力検証、Steam 起動・左クリック・`FrontEnd` 待機を単体テストする。
+`tools/civ6-autotest-rs/tests` は、模擬ファイル更新時刻と模擬プロセス開始時刻による鮮度判定、再起動が最初の手順より前に行われること、`restart_game` の JSON 入力検証、Steam 起動・左クリック・`FrontEnd` 待機を単体テストする。
 
 実行先ディレクトリは**新規**にする。省略時はマイクロ秒付き日時で作り、`baseline.json`、`steps.jsonl`、PNG が入る。`save` と `load` の名前には既定で出力ディレクトリの絶対パスから作った12桁の接尾辞を付ける。同じ実行の `save` / `load` は同じ実名を使い、再実行では新しい出力ディレクトリにより別名になる。既存名のセーブは上書きせず停止する。既存の保存を読む場合や名前を固定したい場合は両ステップで `"exact_name": true` を指定する。失敗時は `steps.jsonl` の失敗ステップと `Lua.log` を確認する。Tuner の応答が途絶えた場合、操作済みの可能性があるため自動再送しない。
 
 途中で止まった実行のログだけを判定する場合:
 
 ```powershell
-python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bundle0-run-01/baseline.json --profile bundle0
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-judge -- --baseline tools/civ6-autotest/artifacts/bundle0-run-01/baseline.json --profile bundle0
 ```
 
-手作業で開始位置を作る場合は、ゲーム操作の直前に `python tools/civ6-autotest/judge.py --snapshot tools/civ6-autotest/artifacts/manual-baseline.json` を実行する。Civ6 のログ行にある角括弧内の数値は日時ではない。ドライバは各ログのバイト位置と先頭ハッシュを開始マーカーとして保存し、以降に書かれた部分だけを判定する。ログが再生成・切り詰めされた場合は新しいファイル全体を読む。
+手作業で開始位置を作る場合は、ゲーム操作の直前に `cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-judge -- --snapshot tools/civ6-autotest/artifacts/manual-baseline.json` を実行する。Civ6 のログ行にある角括弧内の数値は日時ではない。ドライバは各ログのバイト位置と先頭ハッシュを開始マーカーとして保存し、以降に書かれた部分だけを判定する。ログが再生成・切り詰めされた場合は新しいファイル全体を読む。
 
 ## JSON 手順
 
@@ -99,15 +100,15 @@ python tools/civ6-autotest/judge.py --baseline tools/civ6-autotest/artifacts/bun
 研究ログは成果物の `autoplay-research-1.jsonl` に、**観測できた**各ターンの各メジャーについて、生死、研究済み技術・社会制度の件数とID、現在の研究IDを記録する。観測できなかったターンを補間しない。ターンごとの研究状況の問い合わせは読み取りだけなので、FireTuner の一時的なタイムアウトでは再試行する。途中で止まった自動進行を再開するときは、終了フラグ `JAC_AUTOTEST_AUTO_DONE` を消してから再開し、新しい終了イベントを待つ。到達ターンの中央値と勢力間の最小・最大・幅は次のコマンドで出す。`--kind civic` で社会制度を集計する。最初の観測時点で既に完了した項目は `baseline_factions` に数え、その正確な研究完了ターンは不明である。
 
 ```powershell
-python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl
-python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl --kind civic
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-research-report -- tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-research-report -- tools/civ6-autotest/artifacts/<実行先>/autoplay-research-1.jsonl --kind civic
 ```
 
 実装の根拠、観測上の限界、主セッションで行う実機確認は [ドライバー拡張ノート](autotest-driver-extensions.md) に記す。
 
 ## 判定内容
 
-`judge.py` は `Lua.log` の `[JAC_POC]` エラーと、JAC のファイルが現れる `Runtime Error` のスタックを全シナリオで検出する。`bundle0` プロファイルは [PoC 記録](README.md) の成功条件に対応し、次も確認する。
+`tools/civ6-autotest-rs/src/judge.rs` は `Lua.log` の `[JAC_POC]` エラーと、JAC のファイルが現れる `Runtime Error` のスタックを全シナリオで検出する。`bundle0` プロファイルは [PoC 記録](README.md) の成功条件に対応し、次も確認する。
 
 - `Modding.log` に束0の MOD ID、`JAC_PoC_Bundle0_Gameplay (UpdateDatabase)`、`JAC_PoC_Bundle0_Scripts (AddGameplayScripts)` の適用がある。
 - `Database.log` に JAC 関連のエラーがない。`CurrentClickouts` など由来の無関係な重複エラーは許容する。
@@ -120,7 +121,7 @@ python tools/civ6-autotest/research_report.py tools/civ6-autotest/artifacts/<実
 
 ロード画面の完了ログが出た後の Esc は1回だけ送る。以後は `InGame` の状態と操作可能な人間プレイヤーを期限まで問い合わせ、入れなければ追加のキー入力なしで失敗する。入力先は、ウィンドウ名と実行ファイル名（`CivilizationVI.exe` / `CivilizationVI_DX12.exe`）を照合した唯一の Civ6 HWND に限定する。2026-09-29 の実機ロード画面で、その HWND への `PostMessageW` による `WM_KEYDOWN/WM_KEYUP` 1組で `InGame` への移行を確認したため、この方式を使う。送信直前に HWND を再照合し、ほかのアプリが前面でも Civ6 の HWND にだけ送る。キー押下後の確認が失敗しても、解放メッセージを送る。
 
-別の Civ6 ビルドでウィンドウ宛てメッセージが無視される場合に備え、`click.py` には `SendInput` 方式も残す。切替前にロード画面で実機確認する。この方式は送信直前と直後に前景 HWND を照合し、変化すればシナリオを中止する。ただし照合と送信は OS 上で原子的ではなく、両者の間に前景が移るごく短い競合は残る。
+別の Civ6 ビルドでウィンドウ宛てメッセージが無視される場合に備え、`tools/civ6-autotest-rs/src/click.rs` には `SendInput` 方式も残す。切替前にロード画面で実機確認する。この方式は送信直前と直後に前景 HWND を照合し、変化すればシナリオを中止する。ただし照合と送信は OS 上で原子的ではなく、両者の間に前景が移るごく短い競合は残る。
 
 既存の実機記録では、`clans-notebooks-run-18` は 17/17 ステップ・判定 2/2、`clans-both-ai-run-02` は 41/41 ステップ・判定 2/2、`growth-run-19` は 41/41 ステップ・判定 13/13、`clans-house-names-run-20` は 102/102 ステップ・判定 2/2 を通過した。2026-09-29 の先行修正では、オフライン単体テスト 53 件と実機 `clans-notebooks-run-21` の 17/17 ステップ・判定 2/2 が成功した。今回の修正後は単体テスト 68 件、実機 `clans-notebooks-run-23` の 17/17 ステップ・判定 2/2、`growth-run-24` の 41/41 ステップ・判定 13/13 が成功した。`AutoPlayEnd` がターン表示より先に届くことがあるため、自動進行の完了はイベント、実ターン数、停止、人間プレイヤーへの復帰を組み合わせて判定している。
 
@@ -171,7 +172,7 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 
 300ターン版は、最初の6区間で連続300ターン、最後の1区間でロード後の次ターンを確認する。連続300ターンの集計は metrics.groups.CONTINUOUS、ロード後は metrics.groups.POST_LOAD に分ける。各区間の metrics_group で指定し、省略すると AUTOPLAY にまとめる。全体の集計にはロード後の1ターンも含む。保存7回／ロード2回を測る。20ターン版は保存2回／ロード2回。
 
-追加パッケージは使わず、ctypesでWindowsのメモリAPIを呼ぶ。列は [Microsoftの構造体の説明](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex) の WorkingSetSize と PrivateUsage に対応する。
+Rust から Windows のメモリ API を呼ぶ。列は [Microsoftの構造体の説明](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex) の WorkingSetSize と PrivateUsage に対応する。
 
 ## 今回追加した実機シナリオ
 
@@ -191,7 +192,7 @@ FireTuner の通信は 127.0.0.1:4318 のみ。4バイト little-endian 長さ�
 | `great-people-zero-musicians.json` | 音楽家0人／偉人75人で画面を開き、現在・履歴・現在を描き直し、画像を残して閉じる |
 | `resources-calendar-epic.json` | 資源の実際の年計算が、叙事詩の1／25／41ターンで1534／1540／1543をログに出す。UIの暦とも一致する |
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/<ファイル名> --check` で静的検査し、実機では末尾の --check を外す。保存先を指定するなら --output に新しいディレクトリを渡す。
+`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/<ファイル名> --check` で静的検査し、実機では末尾の --check を外す。保存先を指定するなら --output に新しいディレクトリを渡す。
 
 追加7本は `strict_lua_errors: true` を指定し、実行中の全ての Runtime Error・UI.DataError・公式時代画面の欠損画像エラーを失敗にする。JACの名前がない公式の偉人画面のエラーも検出する。この指定がない従来シナリオの判定は維持する。
 

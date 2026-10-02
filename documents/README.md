@@ -58,6 +58,8 @@
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
 | [`rust-migration.md`](rust-migration.md) | 実行ツール・生成ツール・テストを Rust へ移す手順 |
+| [`rust-migration-test-inventory.json`](rust-migration-test-inventory.json) | 移行前の全テスト名と、Rust で対応する workspace の区分 |
+| [`tooling/civ6-live-rust-driver.md`](tooling/civ6-live-rust-driver.md) | 共有の実機実行ツールを Rust 実行器へ接続する処理と変更差分 |
 
 仕様を変える場合は `spec/ssot/` の該当ファイルを更新する。変更の経緯は Git の履歴で管理する（旧「18 更新履歴」は廃止し、18番は欠番）。節番号（3.3、14.5 など）は分割後も変えない。SSOT 以外のドキュメントと SSOT が食い違ったら SSOT が正しい。
 
