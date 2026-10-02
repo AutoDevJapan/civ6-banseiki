@@ -5,7 +5,8 @@ use clap::{Parser, Subcommand};
 #[command(
     about = "Inspect or control the verified Civ VI process",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     #[command(subcommand)]
@@ -19,6 +20,7 @@ enum Command {
     /// Close orphan Civ VI crash reporters, then launch DX11 via Steam.
     Launch,
     /// Wait for a game window and verify it is DX11.
+    #[command(allow_negative_numbers = true)]
     Wait {
         #[arg(long, default_value_t = 120.0)]
         seconds: f64,
@@ -26,6 +28,7 @@ enum Command {
     /// Ask the verified game window to close.
     Close,
     /// Force terminate only the matching process and creation time.
+    #[command(allow_negative_numbers = true)]
     Terminate { pid: u32, expected_start: f64 },
 }
 
@@ -67,6 +70,25 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_restart_negative_numbers_apply_to_subcommands_without_accepting_flags() {
+        let args = Args::try_parse_from(["civ6-restart", "wait", "--seconds", "-1.5", "--s", "0"])
+            .unwrap();
+        assert!(matches!(args.command, Command::Wait { seconds } if seconds == 0.0));
+        let args = Args::try_parse_from(["civ6-restart", "terminate", "1", "-1.5"]).unwrap();
+        assert!(
+            matches!(args.command, Command::Terminate { pid: 1, expected_start } if expected_start == -1.5)
+        );
+        parser_tests::assert_parse_error::<Args>(&[
+            "civ6-restart",
+            "wait",
+            "--seconds",
+            "--unknown",
+            "--s",
+            "0",
+        ]);
+    }
 
     #[test]
     fn compat_restart_wait_inherits_long_prefixes_and_last_value() {

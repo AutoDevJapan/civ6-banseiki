@@ -117,3 +117,58 @@ fn compat_report_choices_unknown_flags_and_missing_values_stay_strict() {
     assert_parse_error::<ScenarioArgs>(&["scenario", "--repo-extra", "repo"]);
     assert_parse_error::<ScenarioArgs>(&["scenario", "--r"]);
 }
+
+#[test]
+fn compat_report_negative_number_paths_preserve_values_and_last_occurrences() {
+    for path in ["-1", "-2.5"] {
+        let args = ArbitrationArgs::try_parse_from(["arbitration", path, "--json", path]).unwrap();
+        assert_eq!(args.artifact, PathBuf::from(path));
+        assert_eq!(args.json, Some(PathBuf::from(path)));
+        let args = TuningArgs::try_parse_from(["tuning", path, "--json", path]).unwrap();
+        assert_eq!(args.artifact, PathBuf::from(path));
+        assert_eq!(args.json, Some(PathBuf::from(path)));
+        let args = ResearchArgs::try_parse_from(["research", path]).unwrap();
+        assert_eq!(args.research_jsonl, PathBuf::from(path));
+        let args =
+            ScenarioArgs::try_parse_from(["scenario", "--output", path, "--repo", path]).unwrap();
+        assert_eq!(args.output, Some(PathBuf::from(path)));
+        assert_eq!(args.repo, Some(PathBuf::from(path)));
+        let args =
+            ArbitrationArgs::try_parse_from(["arbitration", path, "--json", path, "--j", "out"])
+                .unwrap();
+        assert_eq!(args.json, Some(PathBuf::from("out")));
+        let args =
+            TuningArgs::try_parse_from(["tuning", path, "--json", path, "--j", "out"]).unwrap();
+        assert_eq!(args.json, Some(PathBuf::from("out")));
+        let args = ScenarioArgs::try_parse_from([
+            "scenario", "--output", path, "--o", "out", "--repo", path, "--r", "repo",
+        ])
+        .unwrap();
+        assert_eq!(args.output, Some(PathBuf::from("out")));
+        assert_eq!(args.repo, Some(PathBuf::from("repo")));
+    }
+}
+
+#[test]
+fn compat_report_negative_numbers_do_not_loosen_choices_or_unknown_flags() {
+    let error =
+        ResearchArgs::try_parse_from(["research", "research.jsonl", "--kind", "-1", "--k", "tech"])
+            .err()
+            .unwrap();
+    assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+    assert_eq!(error.exit_code(), 2);
+    for value in ["--unknown", "-not-a-number", "-1file"] {
+        assert_parse_error::<ArbitrationArgs>(&[
+            "arbitration",
+            "artifact",
+            "--json",
+            value,
+            "--j",
+            "out",
+        ]);
+        assert_parse_error::<TuningArgs>(&["tuning", "artifact", "--json", value, "--j", "out"]);
+        assert_parse_error::<ResearchArgs>(&["research", value]);
+        assert_parse_error::<ScenarioArgs>(&["scenario", "--output", value, "--o", "out"]);
+        assert_parse_error::<ScenarioArgs>(&["scenario", "--repo", value, "--r", "repo"]);
+    }
+}

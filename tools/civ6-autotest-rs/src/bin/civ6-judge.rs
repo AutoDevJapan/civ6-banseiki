@@ -8,7 +8,8 @@ mod support;
 #[command(
     about = "Judge Civ VI PoC logs from a byte-offset baseline",
     infer_long_args = true,
-    args_override_self = true
+    args_override_self = true,
+    allow_negative_numbers = true
 )]
 struct Args {
     #[arg(long, value_parser = support::path_value_parser())]
@@ -75,6 +76,37 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compat_judge_negative_paths_do_not_loosen_profile_choices() {
+        let args = Args::try_parse_from([
+            "civ6-judge",
+            "--logs",
+            "-1",
+            "--baseline",
+            "-2.5",
+            "--snapshot",
+            "-3",
+            "--l",
+            "logs",
+        ])
+        .unwrap();
+        assert_eq!(args.logs, Some(PathBuf::from("logs")));
+        assert_eq!(args.baseline, Some(PathBuf::from("-2.5")));
+        assert_eq!(args.snapshot, Some(PathBuf::from("-3")));
+        let error = Args::try_parse_from(["civ6-judge", "--profile", "-1", "--p", "generic"])
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+        assert_eq!(error.exit_code(), 2);
+        parser_tests::assert_parse_error::<Args>(&[
+            "civ6-judge",
+            "--logs",
+            "--unknown",
+            "--l",
+            "logs",
+        ]);
+    }
 
     #[test]
     fn compat_judge_prefixes_match_argparse() {
