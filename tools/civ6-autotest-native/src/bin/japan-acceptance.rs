@@ -75,6 +75,9 @@ fn prepare(source: &Value) -> Result<Value, String> {
         if i == 113 {
             steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":RESTORE}));
         }
+        if i == 124 {
+            steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'"}));
+        }
         let mut s = s.clone();
         if i >= 108
             && s["state_name"] == "InGame"
@@ -138,10 +141,10 @@ mod tests {
         ))
         .unwrap();
         let native = prepare(&source).unwrap();
-        assert_eq!(native["steps"].as_array().unwrap().len(), 131);
+        assert_eq!(native["steps"].as_array().unwrap().len(), 132);
         let mut offset = 0;
         for i in 0..127 {
-            if i == 111 || i == 113 {
+            if i == 111 || i == 113 || i == 124 {
                 offset += 1;
             }
             let mut expected = source["steps"][i].clone();

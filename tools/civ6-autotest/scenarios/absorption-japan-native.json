@@ -991,6 +991,11 @@
     },
     {
       "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'",
+      "state_name": "GameCore_Tuner"
+    },
+    {
+      "action": "ui_lua",
       "code": "ExposedMembers.JAC_Absorption.RequestVerification('japan-live-absorption');return true",
       "state_name": "GameCore_Tuner"
     },
