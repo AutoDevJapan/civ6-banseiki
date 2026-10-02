@@ -962,11 +962,13 @@ local function VerifySpread(unit, snap, state, tx, phase, batch)
     return true
   end
   local owner, id = unit:GetOwner(), unit:GetID()
-  local token = snap.Token .. ":spread:" .. phase .. ":" .. id
+  local turn = Game.GetCurrentGameTurn()
+  local read = snap.SpreadReads and snap.SpreadReads[phase]
+  if read and read.Verified then return true end
+  local token = snap.Token .. ":spread:" .. phase .. ":" .. id .. ":" .. turn
   snap.SpreadReads = snap.SpreadReads or {}
-  local read = snap.SpreadReads[phase]
-  if not read or read.Token ~= token or read.Owner ~= owner or read.Turn ~= tx.Turn then
-    read = { Token = token, Owner = owner, ID = id, Turn = tx.Turn, AwaitingUI = true }
+  if not read or read.Token ~= token or read.Owner ~= owner or read.Turn ~= turn then
+    read = { Token = token, Owner = owner, ID = id, Turn = turn, AwaitingUI = true }
     snap.SpreadReads[phase] = read
     Save(state)
     if batch then return false end
@@ -1078,7 +1080,7 @@ local function VerifyDormantHeroRights(snap)
     "new native Hero requires person record reattachment")
 end
 
-local function VerifyUnit(unit, snap, coreOnly)
+local function VerifyUnit(unit, snap, coreOnly, allowEvolution)
   assert(unit and unit:GetOwner() == snap.Destination and GameInfo.Units[unit:GetType()].UnitType == snap.Type,
     "transferred unit missing/type/owner mismatch: " .. snap.Token)
   AssertSupportedUnitState(unit)
@@ -1087,19 +1089,19 @@ local function VerifyUnit(unit, snap, coreOnly)
   assert(unit:GetProperty(R.TOKEN_KEY) == snap.Token, "unit token mismatch")
   local greatPerson = unit:GetGreatPerson()
   assert((greatPerson and greatPerson:GetIndividual() or -1) == snap.Individual, "great person individual changed")
-  if snap.GreatPersonCharges then
+  if snap.GreatPersonCharges and not allowEvolution then
     assert(greatPerson:GetActionCharges() == snap.GreatPersonCharges, "great person action charges changed")
   end
-  if snap.Hero then VerifyHero(unit, snap, true) end
+  if snap.Hero then VerifyHero(unit, snap, not allowEvolution) end
   if not coreOnly then
     assert(R.Equal(Properties(unit, snap.PropertyKeys), snap.TransferredProperties), "unit properties changed: " .. snap.Token)
   end
-  if snap.Name then assert(unit:GetName() == snap.Name, "unit name changed") end
-  if snap.Damage then assert(unit:GetDamage() == snap.Damage, "unit damage changed") end
-  if snap.Moves then assert(unit:GetMovesRemaining() == snap.Moves, "unit movement changed") end
-  if snap.XP then assert(unit:GetExperience():GetExperiencePoints() == snap.XP, "unit XP changed") end
-  if snap.Formation then assert(unit:GetMilitaryFormation() == snap.Formation, "unit formation changed") end
-  if snap.Religion then
+  if snap.Name and not allowEvolution then assert(unit:GetName() == snap.Name, "unit name changed") end
+  if snap.Damage and not allowEvolution then assert(unit:GetDamage() == snap.Damage, "unit damage changed") end
+  if snap.Moves and not allowEvolution then assert(unit:GetMovesRemaining() == snap.Moves, "unit movement changed") end
+  if snap.XP and not allowEvolution then assert(unit:GetExperience():GetExperiencePoints() == snap.XP, "unit XP changed") end
+  if snap.Formation and not allowEvolution then assert(unit:GetMilitaryFormation() == snap.Formation, "unit formation changed") end
+  if snap.Religion and not allowEvolution then
     local religion = unit:GetReligion()
     assert((religion and religion:GetReligionType() or -1) == snap.Religion, "unit religion changed")
   end
@@ -1168,6 +1170,16 @@ local function StageHero(state, tx, snap)
   local key = R.UnitKey(tx.From, snap.ID)
   local unit = FindToken(snap.Destination, snap.Token)
   local intent = snap.HeroSpawnIntent
+  if unit and snap.NativeRestored then
+    assert(intent and intent.CreatedID == unit:GetID(), "staged Hero identity changed")
+    VerifyHero(unit, snap, false)
+    local ok, err = pcall(VerifySpread, unit, snap, state, tx, "hero-stage")
+    if not ok then
+      if tostring(err) == "JAC_ABSORPTION_WAITING_UI" then error(err, 0) end
+      SetHeroSuicide(state, tx, snap, "HERO_RESTORE_ERROR", unit)
+    end
+    return
+  end
   if not unit then
     assert(not tx.UnitMap[key], "staged replacement was lost; review recovery: " .. snap.Token)
     local claim = manager:GetHeroClaimPlayer(hero.Class)
@@ -1287,6 +1299,7 @@ local function StageHero(state, tx, snap)
     return
   end
   snap.NativeRestored = true
+  snap.CoreStagedTurn = Game.GetCurrentGameTurn()
   Save(state)
   -- A missing Core getter is not a Hero restoration failure. Keep the saved candidate
   -- while the UI observes it at the next game-core publication.
@@ -1465,6 +1478,30 @@ local function Verify(tx, state, exactUnits)
   end
 end
 
+local function RestoreTransferred(state, tx, unit, snap, coreOnly)
+  -- After a successful restore, later turns may legitimately change health,
+  -- movement and lifespan. Never replay the original snapshot over those changes.
+  local restoredTurn = snap.TransferRestoredTurn or snap.CoreStagedTurn
+  if restoredTurn and restoredTurn < Game.GetCurrentGameTurn() then
+    assert(unit:GetProperty(R.TOKEN_KEY) == snap.Token
+      and unit:GetOwner() == snap.Destination
+      and GameInfo.Units[unit:GetType()].UnitType == snap.Type,
+      "restored absorption candidate identity changed")
+    if not coreOnly and not snap.TransferRestoredTurn then
+      WriteProperties(unit, snap.TransferredProperties, snap.PropertyKeys)
+      snap.TransferRestoredTurn = restoredTurn
+      Save(state)
+    end
+    return
+  end
+  RestoreUnit(unit, snap, coreOnly)
+  VerifyUnit(unit, snap, coreOnly)
+  if coreOnly then snap.CoreStagedTurn = Game.GetCurrentGameTurn()
+  else
+    snap.TransferRestoredTurn = Game.GetCurrentGameTurn()
+    Save(state)
+  end
+end
 local function Execute(state, tx)
   -- Ordinary units can be staged without affecting ownership. Native heroes require their origin city.
   for _, snap in ipairs(tx.Units) do
@@ -1498,8 +1535,8 @@ local function Execute(state, tx)
     for _, snap in ipairs(tx.Units) do
       if snap.KeepUnit and not snap.Hero then
         local unit = FindToken(snap.Destination, snap.Token)
-        RestoreUnit(unit, snap, true)
-        VerifyUnit(unit, snap, true)
+        RestoreTransferred(state, tx, unit, snap, true)
+        Save(state)
         if not VerifySpread(unit, snap, state, tx, "stage", true) then ready = false end
       end
     end
@@ -1523,8 +1560,7 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit then
       local unit = FindToken(snap.Destination, snap.Token)
-      RestoreUnit(unit, snap)
-      VerifyUnit(unit, snap)
+      RestoreTransferred(state, tx, unit, snap)
       if not VerifySpread(unit, snap, state, tx, "final", true) then ready = false end
       Save(state)
     end
@@ -1589,10 +1625,16 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit then
       local unit = assert(FindToken(snap.Destination, snap.Token), "transferred unit lost before placement")
-      if unit:GetX() ~= snap.X or unit:GetY() ~= snap.Y then UnitManager.PlaceUnit(unit, snap.X, snap.Y) end
-      assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "transferred unit placement failed; saved snapshot retained")
-      RestoreUnit(unit, snap)
-      VerifyUnit(unit, snap)
+      if not snap.PlacementComplete then
+        local restoredTurn = snap.TransferRestoredTurn or snap.CoreStagedTurn
+        if not restoredTurn or restoredTurn == Game.GetCurrentGameTurn() then
+          if unit:GetX() ~= snap.X or unit:GetY() ~= snap.Y then UnitManager.PlaceUnit(unit, snap.X, snap.Y) end
+          assert(unit:GetX() == snap.X and unit:GetY() == snap.Y, "transferred unit placement failed; saved snapshot retained")
+        end
+        snap.PlacementComplete = true
+        Save(state)
+      end
+      RestoreTransferred(state, tx, unit, snap)
       if not VerifySpread(unit, snap, state, tx, "placed", true) then ready = false end
       Save(state)
     end
@@ -1629,7 +1671,7 @@ local function Execute(state, tx)
     adapters[name].Apply(R.Copy(tx), R.Copy(tx.Adapters[name]))
   end
   Save(state)
-  Verify(tx, state, true)
+  Verify(tx, state, tx.Turn == Game.GetCurrentGameTurn())
   tx.Status, tx.Error = "COMPLETE", nil
   Save(state)
   Log("complete id=" .. tx.ID .. " from=" .. tx.From .. " to=" .. tx.To
@@ -1734,14 +1776,17 @@ function A.Resume(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
-  assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
+  assert(tx.Turn == Game.GetCurrentGameTurn() or tx.Request.FlowPolicy,
+    "manual transfers require their adapter contract in the original turn")
   if tx.Status == "BLOCKED" then
     tx.FirstError = tx.FirstError or tx.Error
     tx.PreviousError = tx.Error
     Save(state)
   end
   if tx.AwaitingPreparation then
-    if not tx.SourceSpreadReads or not tx.SourceReadyToken then
+    if not tx.SourceSpreadReads or not tx.SourceReadyToken
+      or tx.Turn ~= Game.GetCurrentGameTurn() then
+      tx.Turn = Game.GetCurrentGameTurn() -- no mutation exists before Prepare
       state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
       tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
       tx.SourceReadyToken = tx.ID .. ":source-ready:" .. state.SourceReadSerial
@@ -1852,25 +1897,45 @@ end
 
 -- Reward recovery is a second, independently journaled transaction. The first
 -- absorption's archive remains immutable so its saved verification still works.
-local function AbortRecoveredHero(state, intent, token, cause, candidate)
+local function RetainRecoveryCandidate(state, intent, token, candidate)
   if candidate then
     local id = candidate:GetID()
     assert(not intent.Before[id] and candidate:GetOwner() == intent.Owner
       and candidate.IsHero and candidate:IsHero()
       and (not candidate:GetProperty(R.TOKEN_KEY)
         or candidate:GetProperty(R.TOKEN_KEY) == token),
-      "unrelated Hero at failed recovery; review before removal")
-    UnitManager.Kill(candidate)
+      "unrelated Hero at failed recovery; preserve it for review")
+    assert(not intent.CandidateID or intent.CandidateID == id, "recovery candidate changed")
+    candidate:SetProperty(R.TOKEN_KEY, token)
+    intent.CandidateID = id
   end
-  intent.Status, intent.Cause = "SUICIDE", cause
+  Save(state)
+end
+local function AbortRecoveredHero(state, intent, token, cause, candidate)
+  -- A native failure is not a person choosing death. Keep both the candidate
+  -- and any claim changed by CreateHero under the same durable recovery token.
+  RetainRecoveryCandidate(state, intent, token, candidate)
+  intent.Status, intent.Cause = "BLOCKED", cause
+  intent.FirstCause = intent.FirstCause or cause
+  intent.AwaitingUI, intent.NativeVerified = nil, nil
+  intent.ObservationAttempt = (intent.ObservationAttempt or 0) + 1
   Save(state)
   return R.Copy(intent)
+end
+local function JournalRecoveryClaim(state, intent, manager, class)
+  local claimOK, claim = pcall(manager.GetHeroClaimPlayer, manager, class)
+  local originOK, origin = pcall(HeroOrigin, manager, class)
+  intent.NativeClaimAfter = claimOK and claim or nil
+  intent.NativeOriginAfter = originOK and R.Copy(origin) or nil
+  intent.HeroClass = class
+  Save(state)
 end
 
 local function ObserveRecoveredHero(state, intent, token, class, origin)
   if intent.NativeVerified then return true end
   assert(intent.CandidateID, "recovered Hero has no candidate to observe")
   local observationToken = token .. ":created:" .. intent.CandidateID
+    .. ":" .. (intent.ObservationAttempt or 0)
   if not intent.AwaitingUI then
     intent.AwaitingUI, intent.ObservationToken, intent.HeroClass = true, observationToken, class
     intent.Status = "WAITING_UI"
@@ -1975,7 +2040,7 @@ function A.RecoverArchived(id, owner, token, original)
         end
       end
       if found then
-        assert(Game.GetCurrentGameTurn() == intent.Turn,
+        assert(Game.GetCurrentGameTurn() == (intent.SpawnTurn or intent.Turn),
           "untagged recovery candidate crossed turns; review identity")
       end
       if not found then
@@ -1985,21 +2050,22 @@ function A.RecoverArchived(id, owner, token, original)
           local city = origin and CityManager.GetCityAt(origin.X, origin.Y)
           local collision = #HeroUnits(owner, snap.Hero.Class) > 0
           if not city or city:GetOwner() ~= owner or collision then
-            intent.Status, intent.Cause = "SUICIDE", collision and "HERO_CLASS_COLLISION" or "ORIGIN_UNAVAILABLE"
-            Save(state)
-            return R.Copy(intent)
+            return AbortRecoveredHero(state, intent, token,
+              collision and "HERO_CLASS_COLLISION" or "ORIGIN_UNAVAILABLE")
           end
           local building = manager:GetPlayerHeroOriginBuildingType(owner)
           if not building or not city:GetBuildings():HasBuilding(building) then
-            intent.Status, intent.Cause = "SUICIDE", "ORIGIN_BUILDING_UNAVAILABLE"
-            Save(state)
-            return R.Copy(intent)
+            return AbortRecoveredHero(state, intent, token, "ORIGIN_BUILDING_UNAVAILABLE")
           end
           local discovered = pcall(manager.SetHeroDiscovered, manager, owner, snap.Hero.Class, true)
           if not discovered then
             return AbortRecoveredHero(state, intent, token, "HERO_DISCOVERY_ERROR")
           end
+          assert(not intent.CandidateID, "saved recovery candidate was lost; retain identity for review")
+          intent.SpawnTurn = Game.GetCurrentGameTurn()
+          Save(state)
           local ok = pcall(manager.CreateHero, manager, owner, snap.Hero.Class, origin.X, origin.Y)
+          JournalRecoveryClaim(state, intent, manager, snap.Hero.Class)
           local matches = HeroUnits(owner, snap.Hero.Class)
           assert(#matches <= 1, "ambiguous native Hero candidates after recovery create")
           if not ok or #matches ~= 1 then
@@ -2015,6 +2081,7 @@ function A.RecoverArchived(id, owner, token, original)
       end
       assert(not found:GetProperty(R.TOKEN_KEY) or found:GetProperty(R.TOKEN_KEY) == token,
         "recovery candidate belongs to another transaction")
+      assert(not intent.CandidateID or intent.CandidateID == found:GetID(), "recovery candidate changed")
       found:SetProperty(R.TOKEN_KEY, token)
       intent.CandidateID = found:GetID()
       intent.Status = "STAGED"
@@ -2040,6 +2107,7 @@ function A.RecoverArchived(id, owner, token, original)
           return AbortRecoveredHero(state, intent, token, "HERO_RESTORE_ERROR", found)
         end
         intent.CoreRestored = true
+        intent.CoreRestoredTurn = Game.GetCurrentGameTurn()
         Save(state)
       end
       local ready, cause = ObserveRecoveredHero(state, intent, token, snap.Hero.Class,
@@ -2049,7 +2117,8 @@ function A.RecoverArchived(id, owner, token, original)
     end
     if snap.Hero then
       local ok, err = pcall(function()
-        VerifyUnit(found, snap)
+        VerifyUnit(found, snap, false, intent.CoreRestoredTurn
+          and intent.CoreRestoredTurn < Game.GetCurrentGameTurn())
         if snap.SpreadCharges ~= nil then VerifySpread(found, snap) end
       end)
       if not ok then
@@ -2069,19 +2138,15 @@ function A.RecoverArchived(id, owner, token, original)
     local building = manager:GetPlayerHeroOriginBuildingType(owner)
     if not city or city:GetOwner() ~= owner or not building
       or not city:GetBuildings():HasBuilding(building) then
-      intent.Status, intent.Cause = "SUICIDE", "DORMANT_ORIGIN_UNAVAILABLE"
-      Save(state)
-      return R.Copy(intent)
+      return AbortRecoveredHero(state, intent, token, "DORMANT_ORIGIN_UNAVAILABLE")
     end
     local matches = HeroUnits(owner, native.Class)
     if #matches > 1 or #matches == 1 and intent.Before[matches[1]:GetID()] then
-      intent.Status, intent.Cause = "SUICIDE", "DORMANT_HERO_CLASS_COLLISION"
-      Save(state)
-      return R.Copy(intent)
+      return AbortRecoveredHero(state, intent, token, "DORMANT_HERO_CLASS_COLLISION")
     end
     local unit = matches[1]
     if unit and not unit:GetProperty(R.TOKEN_KEY) then
-      assert(Game.GetCurrentGameTurn() == intent.Turn,
+      assert(Game.GetCurrentGameTurn() == (intent.SpawnTurn or intent.Turn),
         "untagged dormant Hero candidate crossed turns; review identity")
     end
     if not unit then
@@ -2089,7 +2154,11 @@ function A.RecoverArchived(id, owner, token, original)
       if not discovered then
         return AbortRecoveredHero(state, intent, token, "DORMANT_DISCOVERY_ERROR")
       end
+      assert(not intent.CandidateID, "saved dormant recovery candidate was lost; retain identity for review")
+      intent.SpawnTurn = Game.GetCurrentGameTurn()
+      Save(state)
       local ok = pcall(manager.CreateHero, manager, owner, native.Class, origin.X, origin.Y)
+      JournalRecoveryClaim(state, intent, manager, native.Class)
       matches = HeroUnits(owner, native.Class)
       assert(#matches <= 1, "ambiguous dormant Hero candidates after recovery create")
       if not ok or #matches ~= 1 then
@@ -2100,6 +2169,7 @@ function A.RecoverArchived(id, owner, token, original)
     end
     assert(not unit:GetProperty(R.TOKEN_KEY) or unit:GetProperty(R.TOKEN_KEY) == token,
       "dormant Hero candidate belongs to another recovery")
+    assert(not intent.CandidateID or intent.CandidateID == unit:GetID(), "dormant recovery candidate changed")
     unit:SetProperty(R.TOKEN_KEY, token)
     intent.CandidateID, intent.Status = unit:GetID(), "STAGED"
     Save(state)
@@ -2119,7 +2189,7 @@ function A.RecoverArchived(id, owner, token, original)
   assert(not roster[id] or R.Equal(roster[id], record), "recovery identity already used")
   roster[id] = record
   Players[owner]:SetProperty(R.ROSTER_KEY, roster)
-  intent.Status, intent.Record = "COMPLETE", R.Copy(record)
+  intent.Status, intent.Record, intent.Cause = "COMPLETE", R.Copy(record), nil
   Save(state)
   return R.Copy(intent)
 end
@@ -2236,5 +2306,10 @@ if GameEvents and GameEvents.OnGameTurnStarted then
   GameEvents.OnGameTurnStarted.Add(function() A.ApplyCityFriction() end)
 end
 
-ExposedMembers.JAC_Absorption = A -- gameplay/FireTuner API; no UI mutation or automatic diplomatic hook.
+JAC_AbsorptionGameplay = A
+ExposedMembers.JAC_Absorption = {
+  GetState = A.GetState, GetRoster = A.GetRoster, GetUIPhase = A.GetUIPhase,
+  Canonical = R.Canonical,
+}
 Log("loaded version=1 explicit_dispositions=true")
+return A

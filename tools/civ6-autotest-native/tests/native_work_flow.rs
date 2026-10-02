@@ -16,7 +16,13 @@ fn path(name: &str) -> PathBuf {
 
 fn load(lua: &Lua, name: &str) -> mlua::Result<()> {
     let source = fs::read_to_string(path(name)).map_err(mlua::Error::external)?;
-    lua.load(&source).set_name(name).exec()
+    let result: mlua::Value = lua.load(&source).set_name(name).eval()?;
+    match name {
+        "JAC_Absorption_Flow.lua" => lua.globals().set("TEST_FLOW", result)?,
+        "JAC_Absorption_Gameplay.lua" => lua.globals().set("TEST_ABSORPTION", result)?,
+        _ => {}
+    }
+    Ok(())
 }
 
 fn load_hero_keys(lua: &Lua) -> mlua::Result<()> {
@@ -57,7 +63,7 @@ fn native_work_metadata_survives_ui_only_getters() -> mlua::Result<()> {
           return {Type=3,CreatorName='Original creator',TurnCreated=2,CreatedByPlayer=0}
         end}
         assert(CITIES[4]:GetBuildings().GetGreatWorkTypeFromIndex==nil)
-        local works=ExposedMembers.JAC_Absorption.OwnedGreatWorkSlots(1)
+        local works=TEST_ABSORPTION.OwnedGreatWorkSlots(1)
         assert(#works==1 and works[1].Index==1007)
         local work=works[1]
         assert(work.GreatWorkType=='GREATWORK_TEST_RELIC' and work.Name=='LOC_TEST_RELIC')
@@ -106,7 +112,7 @@ fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::
         end
         GameInfo.GreatPersonIndividuals[42].ActionEffectTextOverride=
           'LOC_TEST_NATIVE_GENERAL_ACTION'
-        local A=assert(ExposedMembers.JAC_Absorption)
+        local A=assert(TEST_ABSORPTION)
         local R=A.Rules
         assert(R.UnitKind(general)=='PERSON')
         assert(R.UnitKind(assert(UnitManager.GetUnit(1,3)))=='PERSON')
@@ -128,8 +134,8 @@ fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::
     load(&lua, "JAC_Absorption_Flow.lua")?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=assert(ExposedMembers.JAC_AbsorptionFlow)
+        local A=TEST_ABSORPTION
+        local F=assert(TEST_FLOW)
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
         local plan={ID='native-pending',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local flow=F.Begin(plan)
@@ -159,8 +165,8 @@ fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::
     load(&lua, "JAC_Absorption_Flow.lua")?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         assert(A.Canonical(F.Get('native-pending'))==NATIVE_PENDING_EXPECT.Before)
         assert(A.Canonical(F.Begin(NATIVE_PENDING_EXPECT.Plan))==NATIVE_PENDING_EXPECT.Before)
         assert(#RANDOM_CALLS==NATIVE_PENDING_EXPECT.Rolls,
@@ -180,7 +186,7 @@ fn recovered_native_hero_waits_for_published_claim_after_reload() -> mlua::Resul
     load(&lua, "JAC_Absorption_Gameplay.lua")?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local R=A.Rules
         local state=A.GetState()
         state.Archive.dormant={ID='dormant',Kind='HERO',Owner=-1,
@@ -209,7 +215,7 @@ fn recovered_native_hero_waits_for_published_claim_after_reload() -> mlua::Resul
             return {Claim=2,Origin={player=2,id=12}}
           end
         end}
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local complete=A.RecoverArchived('dormant',2,'recovery:dormant',nil)
         assert(complete.Status=='COMPLETE' and HERO_CREATIONS==1)
         assert(complete.Record.Unit.ID==NATIVE_HERO_OBSERVATION.ID)
@@ -230,7 +236,7 @@ fn live_hero_recovery_restores_native_charges_before_publication() -> mlua::Resu
     load(&lua, "JAC_Absorption_Gameplay.lua")?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local R=A.Rules
         local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
         hero.lifespan=17;hero.charges=2;hero.renown=13
@@ -280,7 +286,7 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
     load(&lua, "JAC_Absorption_Flow.lua")?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local R=A.Rules
         local state=A.GetState()
         state.Archive.dormant={ID='dormant',Kind='HERO',Owner=-1,
@@ -330,8 +336,8 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
     load_hero_keys(&lua)?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local reads=assert(ExposedMembers.JAC_HeroReadAPI)
         assert(reads.ReadCity(2,CITIES[12].id,'LOYALTY')==87)
         local cities=Players[2].GetCities
@@ -363,6 +369,16 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
           'duplicate publication made another Hero or operation')
         assert(not pcall(F.ResumeWorldFor,1,'world:dormant',world.WaitingFor),
           'another actor resumed a human reward')
+        local state=A.GetState()
+        state.Archive.manual={ID='manual',Kind='HERO',Owner=-1,
+          NativeHero={Class=1,ClassType='HEROCLASS_JAC_WARLORD_B',Origin={Owner=1,ID=12,X=12,Y=0}}}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        assert(A.RecoverArchived('manual',2,'manual:recovery',nil).Status=='WAITING_UI')
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1,'manual Tuner intent caused an automatic operation loop')
+        assert(A.GetState().Recoveries['manual:recovery'].Status=='WAITING_UI')
+        assert(A.RecoverArchived('manual',2,'manual:recovery',nil).Status=='COMPLETE',
+          'manual Tuner intent did not retain its published observation')
         "#,
     )
     .exec()

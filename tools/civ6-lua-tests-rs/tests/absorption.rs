@@ -415,7 +415,13 @@ impl Harness {
             lua.globals().set("OUTCOMES", rows.clone()).unwrap();
             lua.load(&engine).call::<MultiValue>(rows).unwrap();
         }
-        lua.load(include_str!("../fixtures/absorption-support.lua"))
+        // Frozen historical fragments expect the old game-core table name.
+        // This test-only alias is installed after loading the real module;
+        // native boundary tests inspect the unmodified product exports.
+        lua.load(include_str!("../fixtures/absorption-support.lua").replace(
+            "  A=proxy(ExposedMembers.JAC_Absorption)",
+            "  ExposedMembers.JAC_Absorption=JAC_AbsorptionGameplay\n  A=proxy(JAC_AbsorptionGameplay)",
+        ))
             .exec()
             .unwrap();
         if gameplay {
@@ -762,6 +768,7 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Rules.lua",
             "Scripts/JAC_Absorption_Gameplay.lua",
             "Scripts/JAC_Absorption_Flow.lua",
+            "Scripts/JAC_Absorption_Entry.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
@@ -899,7 +906,7 @@ fn absorption_boundaries_keep_python_values_and_raw_lua_errors_distinct() {
         IS_NIL(function() return Players[1].units[3] end,false)
         IS_NIL(function() end,true)
         ERROR(function() error('real Lua failure') end,'real Lua failure')
-        ExposedMembers.JAC_Absorption.BoundaryProbe=function() return 1,2,nil end
+        JAC_AbsorptionGameplay.BoundaryProbe=function() return 1,2,nil end
         EQ(function() return A.BoundaryProbe() end,function() return TUPLE(1,2,nil) end)
     "#).exec().unwrap();
     for (source, expected) in [
@@ -926,7 +933,7 @@ fn legacy_table_length_rejects_string_keys_and_sparse_recall_history() {
         "{[3]=record.RecallHistory[1]}",
     ] {
         let h = Harness::new();
-        h.lua.load(format!("local reload=RELOAD;RELOAD=function() reload();local api=ExposedMembers.JAC_Absorption;local complete=api.CompleteHeroRecall;api.CompleteHeroRecall=function(id) local record=complete(id);record.RecallHistory={history};return record end end;RELOAD()")).exec().unwrap();
+        h.lua.load(format!("local reload=RELOAD;RELOAD=function() reload();local api=JAC_AbsorptionGameplay;local complete=api.CompleteHeroRecall;api.CompleteHeroRecall=function(id) local record=complete(id);record.RecallHistory={history};return record end end;RELOAD()")).exec().unwrap();
         let error = h
             .lua
             .load("CASES.test_recall_resumes_after_token_write_and_does_not_duplicate_history()")

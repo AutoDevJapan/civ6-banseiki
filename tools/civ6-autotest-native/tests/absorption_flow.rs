@@ -84,7 +84,15 @@ fn load_module(lua: &Lua, path: &str) -> mlua::Result<()> {
     };
     let source = fs::read_to_string(override_path.unwrap_or_else(|| repo_path(path)))
         .map_err(mlua::Error::external)?;
-    lua.load(&source).set_name(path).exec()
+    let result: mlua::Value = lua.load(&source).set_name(path).eval()?;
+    match path {
+        FLOW => lua.globals().set("TEST_FLOW", result)?,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua" => {
+            lua.globals().set("TEST_ABSORPTION", result)?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn world() -> mlua::Result<Lua> {
@@ -132,7 +140,7 @@ fn fixture_runs_the_actual_lua_transfer_with_no_spawn_return_value() -> mlua::Re
     let lua = world()?;
     lua.load(
         r#"
-        local A = assert(ExposedMembers.JAC_Absorption)
+        local A = assert(TEST_ABSORPTION)
         local tx = A.Apply(PLAN)
         assert(tx.Status == 'COMPLETE', tx.Status)
         assert(SPAWNS == 6 and KILLS == 5 and TRANSFERS == 2)
@@ -151,8 +159,8 @@ fn actual_flow_journals_sorted_phase_one_rolls_and_reloads_without_reroll() -> m
     let lua = flow_world()?;
     lua.load(
         r#"
-        local F=assert(ExposedMembers.JAC_AbsorptionFlow)
-        local A=assert(ExposedMembers.JAC_Absorption)
+        local F=assert(TEST_FLOW)
+        local A=assert(TEST_ABSORPTION)
         local roster=A.GetRoster(1)
         roster.governor={ID='governor',Kind='PERSON',Owner=1,Name='Governor test',
           Role='GOVERNOR',Abilities={'ADMINISTRATION'},Loyalty=85}
@@ -212,8 +220,8 @@ fn actual_flow_journals_sorted_phase_one_rolls_and_reloads_without_reroll() -> m
     load_module(&lua, FLOW)?;
     lua.load(
         r#"
-        local F=ExposedMembers.JAC_AbsorptionFlow
-        local A=ExposedMembers.JAC_Absorption
+        local F=TEST_FLOW
+        local A=TEST_ABSORPTION
         assert(A.Canonical(F.Get('phase-one'))==TEST_FLOW_BEFORE,
           'saved choice phase changed on reload')
         local repeated=F.Begin(TEST_FLOW_PLAN)
@@ -240,8 +248,8 @@ fn actual_flow_forced_failure_rerolls_once_and_applies_distinct_world_actions() 
     let lua = flow_world()?;
     lua.load(
         r#"
-        local F=assert(ExposedMembers.JAC_AbsorptionFlow)
-        local A=assert(ExposedMembers.JAC_Absorption)
+        local F=assert(TEST_FLOW)
+        local A=assert(TEST_ABSORPTION)
         local roster=A.GetRoster(1)
         roster.governor={ID='governor',Kind='PERSON',Owner=1,Name='Governor test',
           Role='GOVERNOR',Abilities={'ADMINISTRATION'},Loyalty=85}
@@ -330,8 +338,8 @@ fn actual_flow_forced_failure_rerolls_once_and_applies_distinct_world_actions() 
     load_module(&lua, FLOW)?;
     lua.load(
         r#"
-        local F=ExposedMembers.JAC_AbsorptionFlow
-        local A=ExposedMembers.JAC_Absorption
+        local F=TEST_FLOW
+        local A=TEST_ABSORPTION
         assert(A.Canonical(F.Get('forced-flow'))==TEST_FORCED_RESULT,
           'saved result changed after Lua reload')
         assert(#RANDOM_CALLS==TEST_FORCED_ROLLS)
@@ -375,8 +383,8 @@ fn escaped_units_keep_native_snapshots_and_recover_once_from_p1_and_p3() -> mlua
     let lua = flow_world()?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local first=UNIT(1,20,'UNIT_WARRIOR',4)
         first.damage=19;first.moves=1;first.xp=27;first.formation=2
         local retry=UNIT(1,21,'UNIT_WARRIOR',8)
@@ -463,7 +471,7 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
         lua.globals().set("EXPECTED_TURNS", turns)?;
         lua.load(
             r#"
-            local A=ExposedMembers.JAC_Absorption
+            local A=TEST_ABSORPTION
             PLAN.Mode=TEST_MODE
             PLAN.FlowPolicy=true
             LOYALTY_CALLS={}
@@ -519,7 +527,7 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
         )?;
         lua.load(
             r#"
-            local A=ExposedMembers.JAC_Absorption
+            local A=TEST_ABSORPTION
             A.ApplyCityFriction()
             assert(#LOYALTY_CALLS==TEST_LOYALTY_CALLS,
               'reload repeated already applied friction')
@@ -548,7 +556,7 @@ fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Resu
     let lua = world()?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local R=A.Rules
         PLAN.Mode='CONQUEST';PLAN.FlowPolicy=true
         CITY_OBSERVATIONS={};LOYALTY_CALLS={}
@@ -630,7 +638,7 @@ fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Resu
     )?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
+        local A=TEST_ABSORPTION
         local R=A.Rules
         A.ApplyCityFriction()
         assert(#LOYALTY_CALLS==4,'reload repeated a completed turn')
@@ -657,7 +665,7 @@ fn official_mode_and_custom_heroes_are_required_before_any_roll_or_mutation() ->
     let lua = flow_world()?;
     lua.load(
         r#"
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local F=TEST_FLOW
         local plan={ID='hero-mode',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local configured=GameConfiguration.GetValue
         GameConfiguration.GetValue=function() return nil end
@@ -685,8 +693,8 @@ fn entry_and_relation_proofs_and_both_warlords_precede_all_rolls() -> mlua::Resu
     let lua = flow_world()?;
     lua.load(
         r#"
-        local F=ExposedMembers.JAC_AbsorptionFlow
-        local R=ExposedMembers.JAC_Absorption.Rules
+        local F=TEST_FLOW
+        local R=TEST_ABSORPTION.Rules
         local before=R.Canonical(Game.props)
         for _,flags in ipairs({{}, {RelationsResolved=true}, {EntryConditionsMet=false},
           {EntryConditionsMet=false,RelationsResolved=true}, {EntryConditionsMet=true},
@@ -747,7 +755,7 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
         r#"
         Players[1].IsHuman=function() return true end
         Players[2].IsHuman=function() return false end
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local F=TEST_FLOW
         local before=JAC_AbsorptionRules.Canonical(Game.props)
         local ok=pcall(F.Begin,{ID='human-donor',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true})
         assert(not ok and JAC_AbsorptionRules.Canonical(Game.props)==before)
@@ -763,7 +771,7 @@ fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or
     let lua = flow_world()?;
     lua.load(
         r#"
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local F=TEST_FLOW
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
         local choice=F.Begin({ID='operation-boundary',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true})
         local before=JAC_AbsorptionRules.Canonical(choice)
@@ -792,8 +800,8 @@ fn native_sengoku_hero_without_verified_claim_becomes_recorded_suicide() -> mlua
     let lua = flow_world()?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
         hero.lifespan=17;hero.charges=2;hero.renown=13
         HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
@@ -844,8 +852,8 @@ fn native_sengoku_hero_recontracts_with_lifespan_charges_and_origin() -> mlua::R
     let lua = flow_world()?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
         hero.lifespan=17;hero.charges=2;hero.renown=13;hero.damage=7;hero.moves=1
         HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
@@ -899,8 +907,8 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
     let lua = flow_world()?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
         hero.lifespan=17;hero.charges=2;hero.renown=13
         HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
@@ -951,8 +959,8 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
     load_module(&lua, FLOW)?;
     lua.load(
         r#"
-        local A=ExposedMembers.JAC_Absorption
-        local F=ExposedMembers.JAC_AbsorptionFlow
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
         local result=F.Resolve(2,'escrow-retry')
         assert(result.Phase=='RESULT',tostring(result.Error))
         assert(result.FirstError and result.PreviousError
@@ -1054,4 +1062,422 @@ fn actual_panel_renders_identity_and_sends_only_a_human_choice() -> mlua::Result
         "#,
     )
     .exec()
+}
+
+#[test]
+fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        local allowedA={GetState=true,GetRoster=true,GetUIPhase=true,Canonical=true}
+        local allowedF={Get=true,GetPending=true,GetWorld=true,GetPendingWorlds=true}
+        local countA,countF=0,0
+        for key,value in pairs(ExposedMembers.JAC_Absorption) do
+          assert(allowedA[key] and type(value)=='function',key);countA=countA+1
+        end
+        for key,value in pairs(ExposedMembers.JAC_AbsorptionFlow) do
+          assert(allowedF[key] and type(value)=='function',key);countF=countF+1
+        end
+        assert(countA==4 and countF==4)
+        assert(ExposedMembers.JAC_Absorption.Apply==nil
+          and ExposedMembers.JAC_AbsorptionFlow.Select==nil)
+        for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        local flow=F.Begin({ID='private-boundary',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true})
+        local before=A.Canonical(Game.props)
+        local detached=ExposedMembers.JAC_AbsorptionFlow.Get(flow.ID)
+        detached.Phase='DONE';detached.Entries[1].SelectedAction='EXECUTE'
+        local roster=ExposedMembers.JAC_Absorption.GetRoster(1);roster.hero.Owner=2
+        local state=ExposedMembers.JAC_Absorption.GetState();state.Archive.fake={ID='fake'}
+        ExposedMembers.JAC_AbsorptionFlow.Select=function() error('UI injection') end
+        GameEvents.JAC_AbsorptionFlow_Operation.Emit(1,{Command='SELECT',FlowID=flow.ID,
+          AssetID=flow.Entries[1].ID,Action=flow.Entries[1].AllowedActions[1]})
+        assert(A.Canonical(Game.props)==before)
+        GameEvents.JAC_AbsorptionFlow_Operation.Emit(2,{Command='SELECT',FlowID=flow.ID,
+          AssetID=flow.Entries[1].ID,Action=flow.Entries[1].AllowedActions[1]})
+        assert(Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1').Accepted)
+        assert(F.Get(flow.ID).Entries[1].SelectedAction==flow.Entries[1].AllowedActions[1])
+    "#,
+    )
+    .exec()
+}
+
+fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
+    lua.load(
+        r#"
+        function CHOOSE_ALL(id,mode)
+          local F=TEST_FLOW
+          for i=1,300 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+          local flow=F.Begin({ID=id,From=1,To=2,Mode=mode or 'MERGER',
+            EntryConditionsMet=true,RelationsResolved=true})
+          for _,entry in ipairs(flow.Entries) do
+            if not entry.EscapeOutcome then
+              local action=entry.Kind=='UNIT' and 'INCORPORATE'
+                or entry.Kind=='PERSON' and 'RECRUIT'
+                or entry.Kind=='HERO' and 'PROTECT'
+                or entry.Kind=='GREAT_PERSON' and 'RECRUIT'
+                or entry.Kind=='ITEM' and 'TRANSFER'
+                or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'
+              F.Select(2,id,entry.ID,action)
+              F.DebugSetRoll(id,entry.ID,'P3_SUCCESS',0)
+            end
+          end
+          return flow
+        end
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
+-> mlua::Result<()> {
+    let lua = flow_world()?;
+    prepare_choices(&lua)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        CHOOSE_ALL('later-choice')
+        CURRENT_TURN=6
+        FAIL_CITY=true
+        local failed=F.Resolve(2,'later-choice')
+        assert(failed.Phase=='BLOCKED' and failed.AppliedPlan)
+        local candidate=assert(A.FindUnit(2,'later-choice:unit:3'))
+        candidate.damage=35;candidate.moves=0;candidate.xp=41
+        SAVED_CANDIDATE=candidate:GetID();SAVED_ROLLS=#RANDOM_CALLS;SAVED_SPAWNS=SPAWNS
+        CURRENT_TURN=7;FAIL_CITY=false
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    load_module(&lua, FLOW)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        local result=F.Resolve(2,'later-choice')
+        assert(result.Phase=='RESULT',tostring(result.Error))
+        local unit=assert(A.FindUnit(2,'later-choice:unit:3'))
+        assert(unit:GetID()==SAVED_CANDIDATE and unit.damage==35 and unit.moves==0 and unit.xp==41,
+          'resume replayed old health, movement or experience')
+        assert(#RANDOM_CALLS==SAVED_ROLLS and SPAWNS==SAVED_SPAWNS)
+        assert(CITIES[4]:GetOwner()==2 and CITIES[8]:GetOwner()==2)
+        assert(F.Resolve(2,'later-choice').Phase=='RESULT' and SPAWNS==SAVED_SPAWNS)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn ai_loyalty_wait_and_friction_resume_from_real_ui_publications() -> mlua::Result<()> {
+    for mode in ["CONQUEST", "SMALL_STATE"] {
+        let lua = flow_world()?;
+        lua.globals().set("AI_MODE", mode)?;
+        lua.load(r#"
+            local function event()
+              local handlers={}
+              return {Add=function(fn) handlers[#handlers+1]=fn end,
+                Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
+            end
+            Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event()}
+            PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
+            CORE_PLAYERS=Players;UI_PLAYERS={}
+            for owner,player in pairs(Players) do
+              UI_PLAYERS[owner]=setmetatable({GetCities=function()
+                local function cached(city)
+                  return setmetatable({GetCulturalIdentity=function()
+                    return {GetLoyalty=function() return city.loyalty end} end},{__index=city})
+                end
+                return {Members=function()
+                  local list={};for _,city in player:GetCities():Members() do list[#list+1]=cached(city) end
+                  return ipairs(list)
+                end,FindID=function(_,id)
+                  local city=player:GetCities():FindID(id);return city and cached(city) end}
+              end},{__index=player})
+            end
+            PlayerOperations={EXECUTE_SCRIPT=1};Game.GetLocalPlayer=function() return 3 end
+            Players[2].IsHuman=function() return false end
+            Players[3].IsHuman=function() return true end
+            UI={RequestPlayerOperation=function(actor,kind,payload)
+              assert(actor==3 and kind==1 and payload.Command=='RECONCILE_PUBLICATIONS')
+              GameEvents.JAC_AbsorptionFlow_Operation.Emit(actor,payload)
+            end}
+            LOYALTY_CALLS=0
+            for _,player in pairs(Players) do
+              for _,city in player:GetCities():Members() do
+                local original=city.GetBuildings
+                city.GetBuildings=function(self)
+                  local buildings=original(self)
+                  buildings.GetGreatWorkInSlot=function() return -1 end
+                  return buildings
+                end
+              end
+            end
+            for _,city in Players[1]:GetCities():Members() do
+              city.GetCulturalIdentity=function() return {} end
+              local change=city.ChangeLoyalty
+              city.ChangeLoyalty=function(self,delta)
+                LOYALTY_CALLS=LOYALTY_CALLS+1;return change(self,delta)
+              end
+            end
+            for i=1,400 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        "#).exec()?;
+        lua.load("Players=UI_PLAYERS").exec()?;
+        load_module(
+            &lua,
+            "poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua",
+        )?;
+        lua.load("Players=CORE_PLAYERS").exec()?;
+        lua.load(
+            r#"
+            local F=TEST_FLOW
+            local flow=F.Begin({ID='ai-wait',From=1,To=2,Mode=AI_MODE,
+              EntryConditionsMet=true,RelationsResolved=true})
+            assert(flow.Phase=='APPLYING' and flow.WaitingFor=='WAITING_UI')
+            local calls=#RANDOM_CALLS
+            for i=1,10 do Events.GameCoreEventPublishComplete.Emit() end
+            assert(F.Get('ai-wait').Phase=='DONE',F.Get('ai-wait').Phase..':'
+              ..tostring(F.Get('ai-wait').Error))
+            assert(LOYALTY_CALLS==2 and #RANDOM_CALLS==calls)
+            CURRENT_TURN=6;GameEvents.OnGameTurnStarted.Emit()
+            for i=1,10 do Events.GameCoreEventPublishComplete.Emit() end
+            assert(LOYALTY_CALLS==4,'AI friction remained waiting for its own human UI')
+            for _,x in ipairs({4,8}) do
+              local g=CITIES[x]:GetProperty(TEST_ABSORPTION.Rules.GOVERNANCE_KEY)
+              assert(g.FrictionApplied==1 and g.LastFrictionTurn==6)
+            end
+            Events.GameCoreEventPublishComplete.Emit();GameEvents.OnGameTurnStarted.Emit()
+            assert(LOYALTY_CALLS==4 and #RANDOM_CALLS==calls)
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn failed_recovered_heroes_keep_claim_and_candidate_and_retry_after_reload() -> mlua::Result<()> {
+    for dormant in [false, true] {
+        for failure in ["no-unit", "throw-after-unit", "restore"] {
+            let lua = flow_world()?;
+            lua.globals().set("DORMANT", dormant)?;
+            lua.globals().set("FAILURE", failure)?;
+            lua.load(
+                r#"
+                local A,R=TEST_ABSORPTION,TEST_ABSORPTION.Rules
+                local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
+                hero.lifespan=17;hero.charges=2;hero.renown=13
+                HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=4}
+                local snap=A.SnapshotUnit(hero)
+                UnitManager.Kill(hero)
+                local state=A.GetState()
+                state.Archive.recovered={ID='recovered',Kind='HERO',Owner=-1,Loyalty=71,
+                  Equipment={'SPEAR'},NativeHero={Class=0,ClassType='HEROCLASS_JAC_WARLORD_A',
+                    Origin={Owner=1,ID=4,X=4,Y=0}}}
+                Game:SetProperty(R.STATE_KEY,state)
+                CityManager.TransferCity(CITIES[4],2)
+                SNAPSHOT=DORMANT and nil or snap
+                HERO_NO_SPAWN=FAILURE=='no-unit';HERO_THROW_AFTER_SPAWN=FAILURE=='throw-after-unit'
+                FAIL_COPY=FAILURE=='restore' and not DORMANT
+                HERO_WRONG_OWNER=FAILURE=='restore' and DORMANT
+                local intent=A.RecoverArchived('recovered',2,'recovery:retry',SNAPSHOT)
+                if FAILURE=='restore' and DORMANT then
+                  assert(intent.Status=='WAITING_UI')
+                  ExposedMembers.JAC_HeroReadAPI={GetObservation=function()
+                    return {Claim=3,Origin={player=2,id=CITIES[4].id}} end}
+                  intent=A.RecoverArchived('recovered',2,'recovery:retry',SNAPSHOT)
+                  ExposedMembers.JAC_HeroReadAPI=nil
+                end
+                assert(intent.Status=='BLOCKED' and intent.Cause,tostring(intent.Status))
+                assert(A.GetState().Archive.recovered.Loyalty==71 and A.GetRoster(2).recovered==nil)
+                assert(intent.NativeClaimAfter==HERO_CLAIMS[0]
+                  and intent.HeroClass==0,'failed native claim was not journaled')
+                SAVED_ID=intent.CandidateID;SAVED_CREATIONS=HERO_CREATIONS
+                if SAVED_ID then
+                  local candidate=assert(UnitManager.GetUnit(2,SAVED_ID))
+                  assert(candidate:GetProperty(R.TOKEN_KEY)=='recovery:retry')
+                end
+                HERO_NO_SPAWN=false;HERO_THROW_AFTER_SPAWN=false;FAIL_COPY=false
+                HERO_WRONG_OWNER=false;HERO_CLAIMS[0]=2
+                CURRENT_TURN=6;Game.props=R.Copy(Game.props)
+            "#,
+            )
+            .exec()?;
+            load_module(
+                &lua,
+                "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+            )?;
+            lua.load(r#"
+                local A=TEST_ABSORPTION
+                local waiting=A.RecoverArchived('recovered',2,'recovery:retry',SNAPSHOT)
+                assert(waiting.Status=='WAITING_UI',waiting.Status..':'..tostring(waiting.Cause))
+                assert(HERO_CREATIONS==SAVED_CREATIONS+(SAVED_ID and 0 or 1),
+                  FAILURE..':'..tostring(DORMANT)..':'..HERO_CREATIONS..':'..SAVED_CREATIONS)
+                assert(not SAVED_ID or waiting.CandidateID==SAVED_ID)
+                if not DORMANT then
+                  CURRENT_TURN=7
+                  local candidate=assert(UnitManager.GetUnit(2,waiting.CandidateID))
+                  candidate.damage=9;candidate.moves=1;candidate.lifespan=16
+                end
+                ExposedMembers.JAC_HeroReadAPI={GetObservation=function(token)
+                  if token==waiting.ObservationToken then return {Claim=2,Origin={player=2,id=CITIES[4].id}} end
+                end}
+                local done=A.RecoverArchived('recovered',2,'recovery:retry',SNAPSHOT)
+                assert(done.Status=='COMPLETE' and done.Record.Equipment[1]=='SPEAR',
+                  FAILURE..':'..tostring(DORMANT)..':'..A.Canonical(done))
+                if not DORMANT then
+                  local candidate=UnitManager.GetUnit(2,waiting.CandidateID)
+                  assert(candidate.damage==9 and candidate.moves==1 and candidate.lifespan==16)
+                end
+                assert(A.GetState().Archive.recovered.Owner==-1)
+                local count=HERO_CREATIONS
+                assert(A.RecoverArchived('recovered',2,'recovery:retry',SNAPSHOT).Status=='COMPLETE')
+                assert(HERO_CREATIONS==count)
+            "#).exec()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event() -> mlua::Result<()>
+{
+    let manifest = fs::read_to_string(repo_path(
+        "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
+    ))
+    .map_err(mlua::Error::external)?;
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
+    assert!(
+        manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
+    );
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
+    lua.load(
+        r#"
+        function COUNTED_EVENT()
+          local handlers={}
+          return {Add=function(fn) handlers[#handlers+1]=fn end,
+            Call=function(...) for _,fn in ipairs(handlers) do fn(...) end end,
+            Count=function() return #handlers end}
+        end
+        GameEvents.JAC_Absorption_TestCall=COUNTED_EVENT()
+        GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
+        GameEvents.OnGameTurnStarted=COUNTED_EVENT()
+    "#,
+    )
+    .exec()?;
+    let core = lua.create_table()?;
+    let meta = lua.create_table()?;
+    meta.set("__index", lua.globals())?;
+    core.set_metatable(Some(meta))?;
+    let include_env = core.clone();
+    let included = lua.create_table()?;
+    core.set(
+        "include",
+        lua.create_function(move |lua, name: String| {
+            if included.get::<bool>(name.as_str())? {
+                return Ok(());
+            }
+            let path = format!("poc/JAC_PoC_Absorption/Scripts/{name}.lua");
+            let source = fs::read_to_string(repo_path(&path)).map_err(mlua::Error::external)?;
+            lua.load(source)
+                .set_name(&path)
+                .set_environment(include_env.clone())
+                .exec()?;
+            included.set(name, true)
+        })?,
+    )?;
+    let entry = fs::read_to_string(repo_path(
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua",
+    ))
+    .map_err(mlua::Error::external)?;
+    for _ in 0..2 {
+        lua.load(&entry).set_environment(core.clone()).exec()?;
+    }
+    // This separate context deliberately inherits no private gameplay globals.
+    lua.load(r#"
+        assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil)
+        assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
+        assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
+        assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
+        assert(GameEvents.OnGameTurnStarted.Count()==2)
+        local event=GameEvents.JAC_Absorption_TestCall
+        GameConfiguration.IsAnyMultiplayer=function() return true end
+        event.Call('mp','ENGINE','Apply',{PLAN})
+        assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1')==nil and SPAWNS==0)
+        GameConfiguration.IsAnyMultiplayer=function() return false end
+        local config=GameConfiguration.GetValue
+        GameConfiguration.GetValue=function() return nil end
+        event.Call('ordinary','ENGINE','Apply',{PLAN})
+        assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1')==nil and SPAWNS==0)
+        GameConfiguration.GetValue=config
+        event.Call('bad','ENGINE','GetHeroesManager',{})
+        local bad=Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1')
+        assert(bad.ID=='bad' and bad.Accepted==false and bad.Error and SPAWNS==0)
+        event.Call('apply','ENGINE','Apply',{PLAN})
+        local reply=Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1')
+        assert(reply.ID=='apply' and reply.Accepted and reply.Result.Status=='COMPLETE',reply.Error)
+        assert(ExposedMembers.JAC_Absorption.GetState().Transactions[PLAN.ID].Status=='COMPLETE')
+        local count=SPAWNS
+        event.Call('retry','ENGINE','Apply',{PLAN})
+        assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1').Accepted and SPAWNS==count)
+        GameEvents.JAC_AbsorptionFlow_Operation.Call(2,{Command='TEST_CALL',
+          Domain='ENGINE',Method='Apply',Args={PLAN}})
+        assert(not Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1').Accepted)
+        assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1').ID=='retry')
+    "#).exec()
+}
+
+#[test]
+fn staged_native_hero_is_not_restored_again_after_later_city_failure() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    prepare_choices(&lua)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
+        hero.lifespan=17;hero.charges=2;hero.damage=7;hero.moves=1
+        HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=4}
+        local transfer=CityManager.TransferCity
+        CityManager.TransferCity=function(city,owner)
+          if city.x==8 then error('second city failure') end
+          return transfer(city,owner)
+        end
+        CHOOSE_ALL('staged-native')
+        local flow=F.Resolve(2,'staged-native')
+        assert(flow.Phase=='BLOCKED' and CITIES[4]:GetOwner()==2 and CITIES[8]:GetOwner()==1)
+        local unit=assert(A.FindUnit(2,'staged-native:unit:13'))
+        unit.damage=9;unit.moves=0;unit.lifespan=16
+        local id=unit:GetID();local calls=#RANDOM_CALLS
+        CURRENT_TURN=6;CityManager.TransferCity=transfer
+        flow=F.Resolve(2,'staged-native')
+        assert(flow.Phase=='RESULT',tostring(flow.Error))
+        unit=assert(A.FindUnit(2,'staged-native:unit:13'))
+        assert(unit:GetID()==id and unit.damage==9 and unit.moves==0 and unit.lifespan==16)
+        assert(HERO_CREATIONS==1 and #RANDOM_CALLS==calls)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn changed_inventory_on_a_later_turn_blocks_before_final_rolls_and_transfers() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    prepare_choices(&lua)?;
+    lua.load(r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        CHOOSE_ALL('changed-inventory')
+        local calls=#RANDOM_CALLS
+        CURRENT_TURN=6
+        UNIT(1,20,'UNIT_WARRIOR',4)
+        local flow=F.Resolve(2,'changed-inventory')
+        assert(flow.Phase=='BLOCKED' and flow.Error=='absorption inventory changed after first rolls')
+        assert(flow.AppliedPlan==nil and A.GetState().Transactions[flow.ID]==nil)
+        assert(#RANDOM_CALLS==calls and SPAWNS==0 and KILLS==0 and TRANSFERS==0)
+        assert(CITIES[4]:GetOwner()==1 and CITIES[8]:GetOwner()==1)
+    "#).exec()
 }

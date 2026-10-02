@@ -101,64 +101,79 @@ local function ObservePendingHeroes()
   if not reads or not reads.Observe then return end
   local api = ExposedMembers.JAC_Absorption
   local state = api and api.GetState() or Game:GetProperty("JAC_ABSORPTION_STATE_V1")
+  local flowAPI = ExposedMembers.JAC_AbsorptionFlow
+  local function AutomaticFlow(id)
+    local flow = flowAPI and flowAPI.Get(id)
+    return flow and flow.Phase == "APPLYING"
+  end
+  local pendingPublication = false
   for _, tx in pairs(state and state.Transactions or {}) do
+    local automatic = AutomaticFlow(tx.ID)
     if tx.AwaitingPreparation then
       for _, read in pairs(tx.SourceSpreadReads or {}) do
         reads.ObserveUnit(read.Token, read.Owner, read.ID, read.Turn)
       end
-      if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn then reads.MarkPublished(tx.SourceReadyToken) end
+      if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn then
+        reads.MarkPublished(tx.SourceReadyToken)
+        if automatic then pendingPublication = true end
+      end
     end
     local verification = tx.VerificationUI
     if verification and uiGame.GetCurrentGameTurn() == verification.Turn then reads.MarkPublished(verification.Token) end
-    if tx.AwaitingFinalUI then reads.MarkPublished(tx.ID .. ":final") end
+    if tx.AwaitingFinalUI then
+      reads.MarkPublished(tx.ID .. ":final")
+      if automatic then pendingPublication = true end
+    end
     for _, snap in ipairs(tx.Units or {}) do
       local intent = snap.HeroSpawnIntent
       if intent and intent.AwaitingUI then
         reads.Observe(snap.Token .. ":created:" .. intent.CreatedID, snap.Hero.Class)
+        local value = reads.GetObservation(snap.Token .. ":created:" .. intent.CreatedID)
+        if automatic and value and type(value.Claim) == "number" and type(value.Origin) == "table" then
+          pendingPublication = true
+        end
       end
       for _, spread in pairs(snap.SpreadReads or {}) do
         if spread.AwaitingUI then
           reads.ObserveUnit(spread.Token, spread.Owner, spread.ID, spread.Turn)
+          if automatic and reads.GetUnitObservation(spread.Token) ~= nil then pendingPublication = true end
         end
       end
     end
   end
-  for _, intent in pairs(state and state.Recoveries or {}) do
+  for token, intent in pairs(state and state.Recoveries or {}) do
     if intent.AwaitingUI and intent.ObservationToken and intent.HeroClass then
       reads.Observe(intent.ObservationToken, intent.HeroClass)
+      local value = reads.GetObservation(intent.ObservationToken)
+      local world = flowAPI and flowAPI.GetWorld((token:gsub("^recovery:", "")))
+      if world and world.Status == "CLAIMED" and world.WaitingFor == intent.ObservationToken
+        and value and type(value.Claim) == "number" and type(value.Origin) == "table" then
+        pendingPublication = true
+      end
     end
   end
   local localID = uiGame.GetLocalPlayer and uiGame.GetLocalPlayer()
-  local pendingFriction = false
   for _, player in ipairs(PlayerManager.GetAlive() or {}) do
     for _, city in player:GetCities():Members() do
       local governance = city:GetProperty("JAC_ABSORPTION_GOVERNANCE_V1")
       local request = governance and governance.LoyaltyRead
       if request then
         reads.ObserveCity(request)
-        if governance.FrictionPending and request.Owner == localID
-          and reads.GetObservation(request.Token) then pendingFriction = true end
+        if reads.GetObservation(request.Token)
+          and (governance.FrictionPending or AutomaticFlow(governance.ID)) then
+          pendingPublication = true
+        end
       end
     end
   end
   local localPlayer = localID and localID >= 0 and uiPlayers[localID]
   if localPlayer and (not localPlayer.IsTurnActive or localPlayer:IsTurnActive())
     and UI and UI.RequestPlayerOperation then
-    local flow = ExposedMembers.JAC_AbsorptionFlow
-    local worlds = flow and flow.GetPendingWorlds and flow.GetPendingWorlds(localID) or {}
-    for _, world in ipairs(worlds) do
-      local token = world.WaitingFor
-      local observedHero = reads.GetObservation(token)
-      if observedHero and type(observedHero.Claim) == "number"
-        and type(observedHero.Origin) == "table" then
-        pcall(UI.RequestPlayerOperation, localID, PlayerOperations.EXECUTE_SCRIPT,
-          { OnStart = "JAC_AbsorptionFlow_Operation", Command = "RESUME_WORLD",
-            WorldID = world.ID, ObservationToken = token })
-      end
-    end
-    if pendingFriction then
+    if pendingPublication then
+      -- The sender only announces a publication. Gameplay chooses which saved
+      -- intents are ready, including AI recipients, without trusting UI IDs.
       pcall(UI.RequestPlayerOperation, localID, PlayerOperations.EXECUTE_SCRIPT,
-        { OnStart = "JAC_AbsorptionFlow_Operation", Command = "RESUME_FRICTION" })
+        { OnStart = "JAC_AbsorptionFlow_Operation", Command = "RECONCILE_PUBLICATIONS" })
     end
   end
   local fixture = api and api.GetUIPhase() or Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")

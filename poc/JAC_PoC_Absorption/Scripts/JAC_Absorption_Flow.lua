@@ -2,7 +2,7 @@
 -- EXECUTE_SCRIPT requests and reads detached snapshots; it never rolls.
 include("JAC_Absorption_Rules")
 local R = JAC_AbsorptionRules
-local A = assert(ExposedMembers.JAC_Absorption, "absorption engine must load first")
+local A = assert(JAC_AbsorptionGameplay, "absorption engine must load first")
 local F = {}
 local KEY = "JAC_ABSORPTION_FLOW_V1"
 local DEBUG_KEY = "JAC_ABSORPTION_FLOW_DEBUG_V1"
@@ -530,8 +530,6 @@ function F.Resume(id)
   if flow.Phase == "RESULT" or flow.Phase == "DONE" then return R.Copy(flow) end
   assert(flow.Phase == "APPLYING" or
     (flow.Phase == "BLOCKED" and flow.AppliedPlan), "absorption is not applying")
-  assert(flow.Turn == Game.GetCurrentGameTurn(),
-    "resume in the original turn; later-turn recovery needs review")
   if flow.Phase == "BLOCKED" then
     flow.FirstError = flow.FirstError or flow.Error
     flow.Phase, flow.PreviousError = "APPLYING", flow.Error
@@ -749,6 +747,12 @@ local function ClaimWorld(state, world, winner)
     Save(state)
     return
   end
+  if result.Status == "BLOCKED" then
+    world.Status, world.Error = "BLOCKED", result.Cause
+    world.WaitingFor = nil
+    Save(state)
+    return
+  end
   assert(result.Status == "SUICIDE" or result.Status == "COMPLETE",
     "recovery has an unresolved native state")
   world.Status = result.Status
@@ -794,6 +798,14 @@ function F.GetPendingWorlds(owner)
   return result
 end
 function F.Tick()
+  -- Only saved gameplay intents are resumed; this never selects for a human.
+  for _, id in ipairs(R.Keys(State().Flows)) do
+    local flow = State().Flows[id]
+    if flow.Phase == "APPLYING" then F.Resume(id) end
+    flow = State().Flows[id]
+    if flow.Phase == "RESULT" and Players[flow.To]
+      and not Players[flow.To]:IsHuman() then F.Acknowledge(flow.To, id) end
+  end
   local state = State()
   for _, id in ipairs(R.Keys(state.World)) do
     local world = state.World[id]
@@ -816,6 +828,10 @@ function F.Tick()
           Save(state)
         end
       end
+    elseif world.Status == "BLOCKED" and world.Recipient ~= nil then
+      world.Status, world.Error = "CLAIMED", nil
+      Save(state)
+      ClaimWorld(state, world, world.Recipient)
     elseif world.Status == "CLAIMED" then
       ClaimWorld(state, world, world.Recipient)
     end
@@ -865,6 +881,11 @@ local function Operation(actor, payload)
       assert(Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
         "only an active human player can request published city reconciliation")
       return A.ApplyCityFriction(actor)
+    elseif payload.Command == "RECONCILE_PUBLICATIONS" then
+      assert(Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
+        "only an active human can announce UI publication")
+      F.Tick()
+      return A.ApplyCityFriction()
     end
     error("unknown absorption command")
   end)
@@ -886,5 +907,11 @@ if Events and Events.ImprovementRemovedFromMap then
   Events.ImprovementRemovedFromMap.Add(ImprovementRemoved)
 end
 if Events and Events.GoodyHutReward then Events.GoodyHutReward.Add(GoodyReward) end
-ExposedMembers.JAC_AbsorptionFlow = F
+-- Gameplay globals belong to this context; UI receives detached reads only.
+JAC_AbsorptionFlowGameplay = F
+ExposedMembers.JAC_AbsorptionFlow = {
+  Get = F.Get, GetPending = F.GetPending,
+  GetWorld = F.GetWorld, GetPendingWorlds = F.GetPendingWorlds,
+}
 print("[JAC_ABSORPTION_FLOW] loaded")
+return F
