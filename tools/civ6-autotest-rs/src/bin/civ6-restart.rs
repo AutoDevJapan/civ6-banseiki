@@ -2,7 +2,11 @@ use civ6_autotest_rs::{click, restart, time::monotonic};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(about = "Inspect or control the verified Civ VI process")]
+#[command(
+    about = "Inspect or control the verified Civ VI process",
+    infer_long_args = true,
+    args_override_self = true
+)]
 struct Args {
     #[command(subcommand)]
     command: Command,
@@ -52,6 +56,42 @@ fn main() {
         Err(error) => {
             eprintln!("{error}");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "support/parser_tests.rs"]
+mod parser_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compat_restart_wait_inherits_long_prefixes_and_last_value() {
+        parser_tests::assert_long_prefixes::<Args>(
+            &["civ6-restart", "wait"],
+            &[("--seconds", &["120"])],
+        );
+        let args =
+            Args::try_parse_from(["civ6-restart", "wait", "--seconds", "120", "--s", "0"]).unwrap();
+        assert!(matches!(args.command, Command::Wait { seconds } if seconds == 0.0));
+    }
+
+    #[test]
+    fn compat_restart_commands_and_each_numeric_occurrence_stay_strict() {
+        for args in [
+            vec!["civ6-restart", "sta"],
+            vec!["civ6-restart", "w"],
+            vec!["civ6-restart", "WAIT"],
+            vec!["civ6-restart", "wait", "--seconds", "", "--s", "120"],
+            vec!["civ6-restart", "wait", "--seconds", "bad", "--s", "120"],
+            vec!["civ6-restart", "wait", "--seconds-extra", "120"],
+            vec!["civ6-restart", "terminate", "", "1"],
+            vec!["civ6-restart", "terminate", "1", ""],
+        ] {
+            parser_tests::assert_parse_error::<Args>(&args);
         }
     }
 }

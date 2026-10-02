@@ -250,3 +250,112 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
             .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
     );
 }
+
+#[test]
+fn compat_report_clis_keep_fixture_json_with_empty_artifacts_and_repeated_json() {
+    let temp = support::tempdir();
+    for (bin, name) in [
+        (
+            env!("CARGO_BIN_EXE_civ6-arbitration-report"),
+            "arbitration-cost-refusal",
+        ),
+        (
+            env!("CARGO_BIN_EXE_civ6-tuning-report"),
+            "tuning-six-reigns",
+        ),
+    ] {
+        let artifact = support::golden_artifact(temp.path(), name);
+        let output_path = temp.path().join(format!("{name}.json"));
+        for empty_artifact in [false, true] {
+            let artifact_arg = if empty_artifact {
+                "".as_ref()
+            } else {
+                artifact.as_os_str()
+            };
+            let output = Command::new(bin)
+                .args([
+                    artifact_arg,
+                    "--json".as_ref(),
+                    "".as_ref(),
+                    "--json".as_ref(),
+                    "unused.json".as_ref(),
+                    "--j".as_ref(),
+                    output_path.as_os_str(),
+                ])
+                .current_dir(&artifact)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}", normalized(&output.stderr));
+            assert!(output.stderr.is_empty());
+            let mut expected_json = support::golden_text(name, "expected.json");
+            let mut expected_md = support::golden_text(name, "expected.md") + "\n";
+            if empty_artifact {
+                // pathlib.Path('').name is empty; the input logs and every
+                // measured field still have the same fixed expectations.
+                expected_json = expected_json
+                    .replace(&format!("\"artifact\": \"{name}\""), "\"artifact\": \"\"");
+                expected_md = expected_md.replace(&format!("実行: {name}"), "実行: ");
+            }
+            assert_eq!(normalized(&fs::read(&output_path).unwrap()), expected_json);
+            assert_eq!(normalized(&output.stdout), expected_md);
+            assert!(!artifact.join("unused.json").exists());
+        }
+    }
+}
+
+#[test]
+fn compat_research_cli_last_kind_preserves_fixture_output() {
+    let temp = support::tempdir();
+    let research = temp.path().join("research.jsonl");
+    fs::write(&research, "{\"phase\":\"start\",\"observed\":true,\"turn\":1,\"slot\":0,\"completed_techs\":[\"TECH_A\"],\"completed_civics\":[\"CIVIC_A\"]}\n").unwrap();
+    let output = run(
+        env!("CARGO_BIN_EXE_civ6-research-report"),
+        &[
+            research.as_os_str(),
+            "--kind".as_ref(),
+            "tech".as_ref(),
+            "--k".as_ref(),
+            "civic".as_ref(),
+        ],
+    );
+    assert!(output.status.success(), "{}", normalized(&output.stderr));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        normalized(&output.stdout),
+        "id\tfactions\tmedian_turn\tmin_turn\tmax_turn\tspread_turns\tbaseline_factions\nCIVIC_A\t1\t1\t1\t1\t0\t1\n"
+    );
+}
+
+#[test]
+fn compat_generator_cli_last_paths_preserve_fixture_json() {
+    let temp = support::tempdir();
+    let output_path = temp.path().join("scenario.json");
+    let unused_path = temp.path().join("unused.json");
+    let output = run(
+        env!("CARGO_BIN_EXE_civ6-build-arbitration-ai-scenario"),
+        &[
+            "--output".as_ref(),
+            "".as_ref(),
+            "--output".as_ref(),
+            unused_path.as_os_str(),
+            "--o".as_ref(),
+            output_path.as_os_str(),
+            "--repo".as_ref(),
+            "not-a-repository".as_ref(),
+            "--r=".as_ref(),
+        ],
+    );
+    assert!(output.status.success(), "{}", normalized(&output.stderr));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert!(!unused_path.exists());
+    assert_eq!(
+        normalized(&fs::read(output_path).unwrap()),
+        serde_json::to_string_pretty(
+            &serde_json::from_str::<Value>(include_str!("../fixtures/court-arbitration-ai.json"))
+                .unwrap()
+        )
+        .unwrap()
+            + "\n"
+    );
+}

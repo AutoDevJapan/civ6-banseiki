@@ -8,7 +8,11 @@ enum Command {
 }
 
 #[derive(Parser)]
-#[command(about = "Inspect a running local Civ VI FireTuner")]
+#[command(
+    about = "Inspect a running local Civ VI FireTuner",
+    infer_long_args = true,
+    args_override_self = true
+)]
 struct Args {
     command: Command,
     #[arg(long, default_value = "InGame")]
@@ -54,4 +58,63 @@ fn run(args: Args) -> civ6_autotest_rs::Result<()> {
     }
     client.close();
     Ok(())
+}
+
+#[cfg(test)]
+#[path = "support/parser_tests.rs"]
+mod parser_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compat_tuner_prefixes_match_argparse() {
+        parser_tests::assert_long_prefixes::<Args>(
+            &["civ6-tuner", "lua"],
+            &[
+                ("--state", &["InGame"]),
+                ("--code", &["return 1"]),
+                ("--port", &["4318"]),
+            ],
+        );
+    }
+
+    #[test]
+    fn compat_tuner_last_values_preserve_empty_lua_and_state() {
+        let args = Args::try_parse_from([
+            "civ6-tuner",
+            "lua",
+            "--state",
+            "InGame",
+            "--s",
+            "",
+            "--code",
+            "return 1",
+            "--c=",
+            "--port",
+            "65536",
+            "--p",
+            "4318",
+        ])
+        .unwrap();
+        assert!(matches!(args.command, Command::Lua));
+        assert_eq!(args.state, "");
+        assert_eq!(args.code.as_deref(), Some(""));
+        assert_eq!(args.port.socket_port().unwrap(), 4318);
+    }
+
+    #[test]
+    fn compat_tuner_commands_and_each_numeric_occurrence_stay_strict() {
+        for args in [
+            vec!["civ6-tuner", "sta"],
+            vec!["civ6-tuner", "lu"],
+            vec!["civ6-tuner", "LUA"],
+            vec!["civ6-tuner", "lua", "--port", "", "--p", "4318"],
+            vec!["civ6-tuner", "lua", "--port", "1.5", "--p", "4318"],
+            vec!["civ6-tuner", "lua", "--state-extra", "InGame"],
+        ] {
+            parser_tests::assert_parse_error::<Args>(&args);
+        }
+    }
 }

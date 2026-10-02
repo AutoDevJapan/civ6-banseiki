@@ -2,7 +2,11 @@ use civ6_autotest_rs::click;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(about = "Send verified input to the one Civ VI window")]
+#[command(
+    about = "Send verified input to the one Civ VI window",
+    infer_long_args = true,
+    args_override_self = true
+)]
 struct Args {
     /// Horizontal fraction of the window (0..1).
     fx: Option<f64>,
@@ -40,6 +44,65 @@ fn main() {
         Err(error) => {
             eprintln!("{error}");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "support/parser_tests.rs"]
+mod parser_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compat_click_accepts_long_prefixes() {
+        parser_tests::assert_long_prefixes::<Args>(
+            &["civ6-click"],
+            &[
+                ("--key", &["27"]),
+                ("--close", &[]),
+                ("--deadline", &["123"]),
+            ],
+        );
+    }
+
+    #[test]
+    fn compat_click_last_values_do_not_override_other_operation_flags() {
+        let args = Args::try_parse_from([
+            "civ6-click",
+            "0.5",
+            "0.6",
+            "--key",
+            "1",
+            "--k",
+            "27",
+            "--deadline",
+            "100",
+            "--d",
+            "123",
+            "--close",
+            "--cl",
+        ])
+        .unwrap();
+        assert_eq!((args.fx, args.fy), (Some(0.5), Some(0.6)));
+        assert_eq!(args.key, Some(27));
+        assert_eq!(args.deadline, Some(123.0));
+        assert!(args.close);
+    }
+
+    #[test]
+    fn compat_click_numbers_and_bool_values_stay_strict() {
+        for args in [
+            vec!["civ6-click", "--key", "", "--k", "27"],
+            vec!["civ6-click", "--key", "65536", "--k", "27"],
+            vec!["civ6-click", "--deadline", "", "--d", "123"],
+            vec!["civ6-click", "--close=true"],
+            vec!["civ6-click", "--close-extra"],
+            vec!["civ6-click", "", "0.5"],
+        ] {
+            parser_tests::assert_parse_error::<Args>(&args);
         }
     }
 }
