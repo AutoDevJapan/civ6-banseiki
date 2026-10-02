@@ -86,6 +86,30 @@ fn evaluated(function: Function) -> mlua::Result<Data> {
     }
 }
 
+fn python_subtract(left: Value, right: Value) -> mlua::Result<Value> {
+    let numeric = |value: Value| match value {
+        Value::Boolean(b) => Ok(Value::Integer(i64::from(b))),
+        value @ (Value::Integer(_) | Value::Number(_)) => Ok(value),
+        other => Err(failure(format!(
+            "Python subtraction requires a number, got {other:?}"
+        ))),
+    };
+    match (numeric(left)?, numeric(right)?) {
+        (Value::Integer(a), Value::Integer(b)) => a
+            .checked_sub(b)
+            .map(Value::Integer)
+            .ok_or_else(|| failure("Python integer subtraction overflow")),
+        (a, b) => {
+            let number = |value| match value {
+                Value::Integer(n) => n as f64,
+                Value::Number(n) => n,
+                _ => unreachable!(),
+            };
+            Ok(Value::Number(number(a) - number(b)))
+        }
+    }
+}
+
 fn boundaries(lua: &Lua) {
     let g = lua.globals();
     for (name, equal) in [("EQ", true), ("NE", false)] {
@@ -225,6 +249,30 @@ fn boundaries(lua: &Lua) {
     )
     .unwrap();
     g.set(
+        "PY_SUB",
+        lua.create_function(|_, args: MultiValue| {
+            if args.len() != 2 {
+                return Err(failure("Python subtraction requires two operands"));
+            }
+            python_subtract(argument(&args, 0)?, argument(&args, 1)?)
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    g.set(
+        "PY_LEN",
+        lua.create_function(|_, args: MultiValue| match argument(&args, 0)? {
+            // Lupa's len(LuaTable) calls Lua's length operation, not pairs().
+            Value::Table(table) => Ok(table.raw_len()),
+            Value::String(string) => Ok(string.to_str()?.chars().count()),
+            other => Err(failure(format!(
+                "len requires table or string, got {other:?}"
+            ))),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    g.set(
         "COUNT",
         lua.create_function(|_, args: MultiValue| match argument(&args, 0)? {
             Value::Table(t) => Ok(t
@@ -277,6 +325,32 @@ fn boundaries(lua: &Lua) {
         lua.create_function(|lua, args: MultiValue| {
             let source = String::from_value(argument(&args, 0)?)?;
             let json: Json = serde_json::from_str(&source).map_err(|e| failure(e.to_string()))?;
+            // Check presence before json_to_lua turns JSON null into nil.
+            for step in json
+                .get("steps")
+                .and_then(Json::as_array)
+                .ok_or_else(|| failure("scenario steps must be an array"))?
+            {
+                let object = step
+                    .as_object()
+                    .ok_or_else(|| failure("scenario step must be an object"))?;
+                for key in ["code", "capture_as", "equals_capture"] {
+                    if object.get(key).is_some_and(|value| !value.is_string()) {
+                        return Err(failure(format!("present JSON key {key} must be a string")));
+                    }
+                }
+                if let Some(condition) = object.get("condition") {
+                    let condition = condition
+                        .as_object()
+                        .ok_or_else(|| failure("condition must be an object"))?;
+                    if condition
+                        .get("code")
+                        .is_some_and(|value| !value.is_string())
+                    {
+                        return Err(failure("present condition code must be a string"));
+                    }
+                }
+            }
             Ok(json_to_lua(lua, &json))
         })
         .unwrap(),
@@ -409,22 +483,39 @@ fn scenario(name: &str) -> Json {
 }
 
 fn steps(data: &Json) -> &[Json] {
-    data["steps"].as_array().unwrap()
+    required_json(data, "steps")
+        .as_array()
+        .expect("steps must be an array")
+}
+fn optional_json<'a>(value: &'a Json, key: &str) -> Option<&'a Json> {
+    value.as_object().expect("expected JSON object").get(key)
+}
+fn required_json<'a>(value: &'a Json, key: &str) -> &'a Json {
+    optional_json(value, key).unwrap_or_else(|| panic!("missing JSON key {key}"))
+}
+fn optional_text<'a>(value: &'a Json, key: &str) -> Option<&'a str> {
+    optional_json(value, key).map(|v| {
+        v.as_str()
+            .unwrap_or_else(|| panic!("present JSON key {key} must be a string"))
+    })
 }
 fn action<'a>(data: &'a Json, name: &str) -> &'a Json {
-    steps(data).iter().find(|s| s["action"] == name).unwrap()
+    steps(data)
+        .iter()
+        .find(|s| required_json(s, "action") == name)
+        .unwrap()
 }
 fn string_set<'a>(values: impl IntoIterator<Item = &'a str>) -> BTreeSet<String> {
     values.into_iter().map(str::to_owned).collect()
 }
 fn compile_steps(lua: &Lua, data: &Json) {
     for step in steps(data) {
-        if step["action"] == "ui_lua" {
+        if required_json(step, "action") == "ui_lua" {
             lua.load(step["code"].as_str().unwrap())
                 .into_function()
                 .unwrap();
         }
-        if step["action"] == "wait_for" {
+        if required_json(step, "action") == "wait_for" {
             lua.load(step["condition"]["code"].as_str().unwrap())
                 .into_function()
                 .unwrap();
@@ -436,7 +527,7 @@ fn context_spread() {
         let data = scenario(name);
         let chunks: Vec<_> = steps(&data)
             .iter()
-            .filter(|s| s["state_name"] == "GameCore_Tuner")
+            .filter(|s| optional_json(s, "state_name").is_some_and(|v| v == "GameCore_Tuner"))
             .map(|s| s["code"].as_str().unwrap())
             .collect();
         assert!(!chunks.is_empty());
@@ -448,34 +539,40 @@ fn context_spread() {
 fn context_lifespan() {
     for name in ["absorption-japan.json", "absorption-hero-recall.json"] {
         let data = scenario(name);
-        for step in steps(&data) {
-            if step["state_name"] == "GameCore_Tuner" {
-                assert!(
-                    !step["code"]
-                        .as_str()
-                        .unwrap_or("")
-                        .replace(
-                            "(UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining)",
-                            ""
-                        )
-                        .contains("UnitPropertyKeys.LifespanRemaining"),
-                    "{name}"
-                );
-            }
-        }
-        assert!(steps(&data)
-            .iter()
-            .filter_map(|s| s["code"].as_str())
-            .collect::<String>()
-            .contains("ExposedMembers.JAC_HeroLifespanKey"));
+        check_context_lifespan(&data, name);
     }
+}
+fn check_context_lifespan(data: &Json, name: &str) {
+    for step in steps(data) {
+        if optional_json(step, "state_name").is_some_and(|v| v == "GameCore_Tuner") {
+            assert!(
+                !optional_text(step, "code")
+                    .unwrap_or("")
+                    .replace(
+                        "(UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining)",
+                        ""
+                    )
+                    .contains("UnitPropertyKeys.LifespanRemaining"),
+                "{name}"
+            );
+        }
+    }
+    assert!(steps(data)
+        .iter()
+        .map(|s| optional_text(s, "code").unwrap_or(""))
+        .collect::<String>()
+        .contains("ExposedMembers.JAC_HeroLifespanKey"));
 }
 fn scenario_round_trips(lua: &Lua) {
     let data = scenario("absorption-japan.json");
     compile_steps(lua, &data);
-    let captures: BTreeSet<_> = steps(&data)
+    check_capture_sets(&data);
+    check_scenario_configuration(&data);
+}
+fn check_capture_sets(data: &Json) {
+    let captures: BTreeSet<_> = steps(data)
         .iter()
-        .filter_map(|s| s["capture_as"].as_str())
+        .filter_map(|s| optional_text(s, "capture_as"))
         .filter(|s| !s.starts_with("JAC_ABSORPTION_SYNC_"))
         .map(str::to_owned)
         .collect();
@@ -487,33 +584,40 @@ fn scenario_round_trips(lua: &Lua) {
             "ABSORPTION_AI_RECALL"
         ])
     );
-    let comparisons: BTreeSet<_> = steps(&data)
+    let comparisons: BTreeSet<_> = steps(data)
         .iter()
-        .filter_map(|s| s["equals_capture"].as_str())
+        .filter_map(|s| optional_text(s, "equals_capture"))
         .map(str::to_owned)
         .collect();
     assert_eq!(comparisons, captures);
+}
+fn check_scenario_configuration(data: &Json) {
     for name in ["save", "load"] {
         assert_eq!(
-            steps(&data).iter().filter(|s| s["action"] == name).count(),
+            steps(data)
+                .iter()
+                .filter(|s| required_json(s, "action") == name)
+                .count(),
             3
         );
     }
-    assert!(action(&data, "enable_mods")["ids"]
+    assert!(action(data, "enable_mods")["ids"]
         .as_array()
         .unwrap()
         .iter()
         .any(|id| id == "8424840C-92EF-4426-A9B4-B4E0CB818049"));
-    let modes: Vec<_> = steps(&data)
+    let modes: Vec<_> = steps(data)
         .iter()
-        .filter(|s| s["action"] == "ui_lua" && s["state_name"] == "FrontEnd")
+        .filter(|s| {
+            required_json(s, "action") == "ui_lua" && required_json(s, "state_name") == "FrontEnd"
+        })
         .collect();
     assert_eq!(modes.len(), 1);
     assert!(modes[0]["code"]
         .as_str()
         .unwrap()
         .contains("GameConfiguration.SetValue('GAMEMODE_HEROES',true)"));
-    let configure = action(&data, "configure");
+    let configure = action(data, "configure");
     assert_eq!(
         configure["map_file"],
         "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map"
@@ -522,12 +626,12 @@ fn scenario_round_trips(lua: &Lua) {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|p| !Data::from(p["human"].clone()).python_truthy())
+        .filter(|p| !Data::from(required_json(p, "human").clone()).python_truthy())
         .map(|p| p["civ"].as_str().unwrap())
         .collect();
     assert!(BTreeSet::from(["CIVILIZATION_JAC_ASHINA", "CIVILIZATION_JAC_DATE"]).is_subset(&ai));
     strict::assert_python_eq(
-        &Data::from(action(&data, "end_turn")["turns"].clone()),
+        &Data::from(action(data, "end_turn")["turns"].clone()),
         1_i64,
     );
 }
@@ -539,20 +643,23 @@ fn human_scenario(lua: &Lua) {
     assert_eq!(
         players
             .iter()
-            .filter(|p| Data::from(p["human"].clone()).python_truthy())
+            .filter(|p| Data::from(required_json(p, "human").clone()).python_truthy())
             .map(|p| p["civ"].as_str().unwrap())
             .collect::<Vec<_>>(),
         vec!["CIVILIZATION_JAC_ODA"]
     );
     for (name, n) in [("end_turn", 1), ("save", 2), ("load", 2)] {
         assert_eq!(
-            steps(&data).iter().filter(|s| s["action"] == name).count(),
+            steps(&data)
+                .iter()
+                .filter(|s| required_json(s, "action") == name)
+                .count(),
             n
         );
     }
     let code = steps(&data)
         .iter()
-        .filter(|s| s["action"] == "ui_lua")
+        .filter(|s| required_json(s, "action") == "ui_lua")
         .map(|s| s["code"].as_str().unwrap())
         .collect::<Vec<_>>()
         .join("\n");
@@ -738,7 +845,7 @@ fn absorption_inventory_preserves_all_120_methods_and_117_embedded_assertions() 
         ])
     );
     assert_eq!(assertions, 117);
-    assert_eq!(registered.len(), 122);
+    assert_eq!(registered.len(), 125);
 }
 
 #[test]
@@ -773,6 +880,130 @@ fn absorption_boundaries_keep_python_values_and_raw_lua_errors_distinct() {
     ] {
         let error=h.lua.load(source).exec().expect_err("invalid assertion accepted");
         assert!(error.to_string().contains(expected),"{source}: {error}");
+    }
+}
+
+#[test]
+fn legacy_table_length_rejects_string_keys_and_sparse_recall_history() {
+    let h = Harness::new();
+    h.lua.load("EQ(function() return PY_LEN({saved={}}) end,function() return 0 end); local sparse={[1]={},[3]={},saved={}}; EQ(function() return PY_LEN(sparse) end,function() return #sparse end); EQ(function() return COUNT(sparse) end,function() return 3 end)").exec().unwrap();
+    for history in [
+        "{saved=record.RecallHistory[1]}",
+        "{[3]=record.RecallHistory[1]}",
+    ] {
+        let h = Harness::new();
+        h.lua.load(format!("local reload=RELOAD;RELOAD=function() reload();local api=ExposedMembers.JAC_Absorption;local complete=api.CompleteHeroRecall;api.CompleteHeroRecall=function(id) local record=complete(id);record.RecallHistory={history};return record end end;RELOAD()")).exec().unwrap();
+        let error = h
+            .lua
+            .load("CASES.test_recall_resumes_after_token_write_and_does_not_duplicate_history()")
+            .exec()
+            .expect_err("malformed history satisfied legacy len==1");
+        assert!(error.to_string().contains("EQ:"), "{history}: {error}");
+    }
+}
+
+#[test]
+fn python_subtraction_rejects_numeric_strings_and_keeps_boolean_numbers() {
+    let lua = new_lua();
+    boundaries(&lua);
+    lua.load("EQ(function() return PY_SUB(5000,4000) end,function() return 1000 end); EQ(function() return PY_SUB(true,false) end,function() return 1 end); EQ(function() return PY_SUB(1001,true) end,function() return 1000 end); EQ(function() return PY_SUB(1.5,false) end,function() return 1.5 end)").exec().unwrap();
+    for (left, right) in [
+        ("'5000'", "'4000'"),
+        ("5000", "'4000'"),
+        ("'5000'", "4000"),
+        ("nil", "1"),
+        ("true", "'0'"),
+    ] {
+        let error = lua
+            .load(format!("PY_SUB({left},{right})"))
+            .exec()
+            .expect_err("non-numeric Python operand accepted");
+        assert!(error
+            .to_string()
+            .contains("Python subtraction requires a number"));
+    }
+    assert!(matches!(
+        python_subtract(Value::Boolean(true), Value::Boolean(false)).unwrap(),
+        Value::Integer(1)
+    ));
+    assert!(
+        matches!(python_subtract(Value::Number(1.5),Value::Boolean(false)).unwrap(),Value::Number(n) if n==1.5)
+    );
+    for group in ["AbsorptionPackageTests.test_ai_purchase_receipt_rejects_interleaved_faith_or_unit_events","AbsorptionTests.test_live_recall_probes_execute_native_eligibility_checks_and_detect_wrong_owner"] {
+        let gameplay=group.starts_with("AbsorptionTests.");
+        let h=Harness::create(gameplay);
+        let literals=h.lua.globals().strict_get::<Table>("STRINGS").unwrap().strict_get::<Table>(group).unwrap();
+        let index=if gameplay {64}else{22};
+        let source=literals.strict_get::<String>(index).unwrap();
+        literals.set(index,format!("{source};JAC_ABSORPTION_AI_PURCHASE.FaithBefore='5000';JAC_ABSORPTION_AI_PURCHASE.FaithAfter='4000'")).unwrap();
+        h.lua.globals().set("ARG1",1).unwrap();
+        let name=group.split_once('.').unwrap().1;
+        let error=h.lua.load(format!("CASES.{name}()")).exec().expect_err("payment accepted numeric strings");
+        assert!(error.to_string().contains("Python subtraction requires a number"),"{group}: {error}");
+    }
+}
+
+#[test]
+fn scenario_presence_rejects_invalid_capture_code_and_required_keys() {
+    let baseline = scenario("absorption-japan.json");
+    check_capture_sets(&baseline);
+    for key in ["capture_as", "equals_capture"] {
+        for invalid in [
+            Json::from(42),
+            Json::from(false),
+            Json::from(0),
+            Json::Null,
+            Json::from(vec!["invalid"]),
+        ] {
+            let mut data = baseline.clone();
+            data["steps"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::json!({key:invalid}));
+            assert!(
+                std::panic::catch_unwind(|| check_capture_sets(&data)).is_err(),
+                "invalid present {key} ignored"
+            );
+        }
+    }
+    for invalid in [
+        Json::Null,
+        Json::from(false),
+        Json::from(0),
+        Json::from(vec!["invalid"]),
+    ] {
+        let mut data = baseline.clone();
+        data["steps"][0]["code"] = invalid.clone();
+        assert!(std::panic::catch_unwind(|| check_context_lifespan(&data, "mutation")).is_err());
+        assert!(std::panic::catch_unwind(|| optional_text(&invalid, "code")).is_err());
+        assert!(std::panic::catch_unwind(|| steps(&invalid)).is_err());
+    }
+    assert_eq!(optional_text(&serde_json::json!({}), "code"), None);
+    assert!(std::panic::catch_unwind(|| {
+        steps(&Json::from("invalid"));
+    })
+    .is_err());
+    assert_eq!(
+        optional_text(&serde_json::json!({"code":""}), "code"),
+        Some("")
+    );
+    assert!(std::panic::catch_unwind(|| {
+        required_json(&serde_json::json!({}), "human");
+    })
+    .is_err());
+    let lua = new_lua();
+    boundaries(&lua);
+    for source in [
+        r#"{"steps":[{"code":false}]}"#,
+        r#"{"steps":[{"capture_as":null}]}"#,
+        r#"{"steps":[{"equals_capture":42}]}"#,
+        r#"{"steps":[{"condition":{"code":0}}]}"#,
+    ] {
+        let json = lua.globals().strict_get::<Function>("JSON").unwrap();
+        assert!(
+            json.call::<MultiValue>(source).is_err(),
+            "JSON presence lost: {source}"
+        );
     }
 }
 

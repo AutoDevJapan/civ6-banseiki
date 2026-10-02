@@ -108,7 +108,7 @@ function T.test_ai_purchase_receipt_rejects_interleaved_faith_or_unit_events()
   if interference==L[18] then RUN(L[19]) elseif interference==L[20] then RUN(L[21]) end
   RUN(L[22])
   TRUTH(function() return JAC_ABSORPTION_AI_PURCHASE.Complete end,true)
-  EQ(function() return JAC_ABSORPTION_AI_PURCHASE.FaithBefore-JAC_ABSORPTION_AI_PURCHASE.FaithAfter end,function() return 1000 end)
+  EQ(function() return PY_SUB(JAC_ABSORPTION_AI_PURCHASE.FaithBefore,JAC_ABSORPTION_AI_PURCHASE.FaithAfter) end,function() return 1000 end)
   if interference==L[23] then RUN(L[24]) end
   if interference==L[25] then
     EQ(function() return RUN(check) end,function() return L[26] end)

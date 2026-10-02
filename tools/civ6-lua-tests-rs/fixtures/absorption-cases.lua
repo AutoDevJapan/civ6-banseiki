@@ -602,7 +602,7 @@ function T.test_native_hero_recall_binds_new_id_and_person_after_reload()
   RELOAD()
   A.CompleteHeroRecall(L[7])
   TRUTH(function() return VERIFY(L[8], false) end,true)
-  EQ(function() return COUNT(A.GetRoster(2).native.RecallHistory) end,function() return 1 end)
+  EQ(function() return PY_LEN(A.GetRoster(2).native.RecallHistory) end,function() return 1 end)
 end
 
 function T.test_recall_after_second_absorption_preserves_original_owner_and_uses_current_mapping()
@@ -617,7 +617,7 @@ function T.test_recall_after_second_absorption_preserves_original_owner_and_uses
   RUN(L[7])
   RELOAD()
   A.CompleteHeroRecall(L[8])
-  EQ(function() return COUNT(A.GetRoster(3).native.RecallHistory) end,function() return 1 end)
+  EQ(function() return PY_LEN(A.GetRoster(3).native.RecallHistory) end,function() return 1 end)
 end
 
 function T.test_recall_rejects_candidate_and_token_collisions_without_killing_them()
@@ -646,9 +646,9 @@ function T.test_recall_resumes_after_token_write_and_does_not_duplicate_history(
   end, L[2])
   RELOAD()
   record = A.CompleteHeroRecall(L[4])
-  EQ(function() return COUNT(record.RecallHistory) end,function() return 1 end)
+  EQ(function() return PY_LEN(record.RecallHistory) end,function() return 1 end)
   EQ(function() return record.Unit.Token end,function() return L[5] end)
-  EQ(function() return COUNT(A.CompleteHeroRecall(L[6]).RecallHistory) end,function() return 1 end)
+  EQ(function() return PY_LEN(A.CompleteHeroRecall(L[6]).RecallHistory) end,function() return 1 end)
   EQ(function() return HERO_CREATIONS end,function() return 2 end)
 end
 
@@ -789,7 +789,7 @@ function T.test_city_failure_retains_snapshots_and_resume_does_not_recreate_unit
     APPLY()
   end, L[1])
   EQ(function() return SPAWNS end,function() return 6 end)
-  EQ(function() return COUNT(A.GetState().Transactions[L[2]].Cities) end,function() return 2 end)
+  EQ(function() return PY_LEN(A.GetState().Transactions[L[2]].Cities) end,function() return 2 end)
   FAIL_CITY = false
   A.Resume(L[3])
   EQ(function() return SPAWNS end,function() return 6 end)
@@ -1122,7 +1122,7 @@ function T.test_live_recall_probes_execute_native_eligibility_checks_and_detect_
   EQ(function() return PURCHASE_REQUESTS end,function() return 1 end)
   proof = JAC_ABSORPTION_AI_PURCHASE
   TRUTH(function() return proof.Complete end,true)
-  EQ(function() return proof.FaithBefore - proof.FaithAfter end,function() return 1000 end)
+  EQ(function() return PY_SUB(proof.FaithBefore,proof.FaithAfter) end,function() return 1000 end)
   EQ(function() return proof.CostAfter end,function() return 1600 end)
   RUN(payment)
   RUN(complete)
