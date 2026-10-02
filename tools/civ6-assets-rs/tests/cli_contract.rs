@@ -7,7 +7,7 @@ use civ6_assets_rs::{
 };
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use common::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
     ffi::OsStr,
@@ -57,6 +57,45 @@ fn success(cmd: &mut Command) -> Output {
         String::from_utf8_lossy(&out.stderr)
     );
     out
+}
+fn install_process_fixture(destination: &Path) {
+    let source = Path::new(env!("CARGO_BIN_EXE_jac-process-fixture"));
+    // Creating writable executable copies races concurrent fork/exec on Unix:
+    // a child can retain the copy's write descriptor briefly before exec.
+    // Alias the immutable Cargo artifact instead, including across filesystems.
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(fs::canonicalize(source).unwrap(), destination).unwrap();
+    #[cfg(not(unix))]
+    fs::copy(source, destination).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
+    let t = temp();
+    let legacy = t.path().join("legacy-copy");
+    fs::copy(env!("CARGO_BIN_EXE_jac-process-fixture"), &legacy).unwrap();
+    let writer = fs::OpenOptions::new().write(true).open(&legacy).unwrap();
+    let mut legacy_command = Command::new(&legacy);
+    legacy_command
+        .arg("login")
+        .env("JAC_ASSETS_TEST_PROCESS", "1");
+    assert_eq!(
+        legacy_command.output().unwrap_err().raw_os_error(),
+        Some(26)
+    );
+    let alias = t.path().join("fixture-alias");
+    install_process_fixture(&alias);
+    let mut command = Command::new(&alias);
+    command
+        .current_dir(t.path())
+        .arg("login")
+        .env("JAC_ASSETS_TEST_PROCESS", "1");
+    let output = success(&mut command);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Logged in using ChatGPT"));
+    drop(writer);
+    legacy_command.current_dir(t.path());
+    success(&mut legacy_command);
 }
 fn normalized(e: &xmltree::Element) -> Value {
     json!({"tag":e.name,"attrs":e.attributes.iter().collect::<std::collections::BTreeMap<_,_>>(),"text":e.get_text().filter(|t|!t.trim().is_empty()),"children":civ6_assets_rs::elements(e).map(normalized).collect::<Vec<_>>()})
@@ -608,9 +647,11 @@ fn generator_cli_updates_support_for_all_spellings_of_the_standard_output_direct
     assert_eq!(fs::read_to_string(text).unwrap(), "preserved text");
     assert_eq!(fs::read_to_string(scenario).unwrap(), "preserved scenario");
     assert!(repository.join("export/Maps/manifest.json").is_file());
-    assert!(repository
-        .join("export/Scripts/JAC_ResourceSites.lua")
-        .is_file());
+    assert!(
+        repository
+            .join("export/Scripts/JAC_ResourceSites.lua")
+            .is_file()
+    );
 }
 
 #[test]
@@ -703,12 +744,14 @@ fn every_old_runnable_script_has_a_working_cli_mapping() {
             String::from_utf8_lossy(&out.stdout).contains("Usage:"),
             "{name}"
         );
-        assert!(!command(name, t.path())
-            .arg("--not-a-valid-option")
-            .output()
-            .unwrap()
-            .status
-            .success());
+        assert!(
+            !command(name, t.path())
+                .arg("--not-a-valid-option")
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
     }
     for subcommand in ["support", "custom-civs", "city-names", "feuds"] {
         let out = success(command("japan-map-support", t.path()).args([subcommand, "--help"]));
@@ -773,14 +816,16 @@ fn support_cli_writes_factions_city_names_feuds_and_scenarios() {
             .arg(&maps().dir)
             .args(["--output", "map-mod", "--scenarios", "scenarios"]),
     );
-    assert!(t
-        .path()
-        .join("map-mod/Config/JAC_JapanMapScale_Config.xml")
-        .is_file());
-    assert!(t
-        .path()
-        .join("map-mod/Text/JAC_JapanMapScale_Text.xml")
-        .is_file());
+    assert!(
+        t.path()
+            .join("map-mod/Config/JAC_JapanMapScale_Config.xml")
+            .is_file()
+    );
+    assert!(
+        t.path()
+            .join("map-mod/Text/JAC_JapanMapScale_Text.xml")
+            .is_file()
+    );
     let scenarios = fs::read_dir(t.path().join("scenarios"))
         .unwrap()
         .map(|p| p.unwrap().file_name())
@@ -870,11 +915,7 @@ fn map_clis_write_sqlite_and_prosperity_outputs() {
 #[test]
 fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
     let t = temp();
-    fs::copy(
-        env!("CARGO_BIN_EXE_jac-process-fixture"),
-        t.path().join("fixture-codex.exe"),
-    )
-    .unwrap();
+    install_process_fixture(&t.path().join("fixture-codex.exe"));
     let run = |originals: &str| {
         let mut c = command("jac-generate-portraits", t.path());
         c.args([
@@ -897,9 +938,11 @@ fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
     for stage in ["login", "exec"] {
         let record = read_json(directory.join(format!("fixture-{stage}.json"))).unwrap();
         assert!(Path::new(s(&record["cwd"])).is_absolute());
-        assert!(arr(&record["environment_names"])
-            .iter()
-            .all(|name| !portraits::is_api_key_env(s(name))));
+        assert!(
+            arr(&record["environment_names"])
+                .iter()
+                .all(|name| !portraits::is_api_key_env(s(name)))
+        );
     }
     let log = fs::read_to_string(t.path().join("generation-log.jsonl")).unwrap();
     let records: Vec<Value> = log
@@ -930,11 +973,12 @@ fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
             .unwrap();
         assert!(!out.status.success());
         assert!(String::from_utf8_lossy(&out.stderr).contains("ChatGPT OAuth login"));
-        assert!(!t
-            .path()
-            .join(name)
-            .join("oda_nobuhide/fixture-exec.json")
-            .exists());
+        assert!(
+            !t.path()
+                .join(name)
+                .join("oda_nobuhide/fixture-exec.json")
+                .exists()
+        );
     }
     let out = run("InvalidImage")
         .env("JAC_ASSETS_TEST_BAD_IMAGE", "1")
@@ -962,11 +1006,7 @@ fn cooker_process_resolves_relative_paths_and_propagates_failure() {
     let t = temp();
     fs::create_dir_all(t.path().join("cooker")).unwrap();
     fs::create_dir_all(t.path().join("build/XLPs")).unwrap();
-    fs::copy(
-        env!("CARGO_BIN_EXE_jac-process-fixture"),
-        t.path().join("cooker/Civ6AssetCooker_FinalRelease.exe"),
-    )
-    .unwrap();
+    install_process_fixture(&t.path().join("cooker/Civ6AssetCooker_FinalRelease.exe"));
     write(t.path().join("cooker/Civ6.cfg"), "fixture").unwrap();
     let names = vec!["JAC_Crests45".into(), "JAC_Leaders80".into()];
     build_art::write_xlp(&t.path().join("build"), "Package", "UITexture", &names).unwrap();
@@ -998,12 +1038,14 @@ fn cooker_process_resolves_relative_paths_and_propagates_failure() {
         .unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("Cooker failed for Package"));
-    assert!(!command("jac-build-art", t.path())
-        .args(["--originals", "absent", "--output", "mod"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        !command("jac-build-art", t.path())
+            .args(["--originals", "absent", "--output", "mod"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     assert!(!t.path().join("mod").exists());
 }
 

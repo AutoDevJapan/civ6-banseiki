@@ -467,7 +467,7 @@ fn native_matrix_oracle() -> mlua::Result<Lua> {
           local owned={}
           for _,c in ipairs(ORACLE_CITIES) do if c.owner==owner then owned[#owned+1]=c end end
           Players[owner]={GetCities=function()
-            return {Members=function() local i=0;return function() i=i+1;return owned[i] end end}
+            return {Members=function() return ipairs(owned) end}
           end}
         end
         PlayerManager={GetAliveIDs=function() return {1,2} end,GetFreeCitiesPlayerID=function() return 3 end}
