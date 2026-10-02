@@ -70,11 +70,20 @@ function FIRST_CAPTURE_STEP(steps,name)
   for i=1,COUNT(steps) do if JSON_GET(steps[i],'capture_as')==name then return steps[i] end end
   error('missing scenario capture: '..name)
 end
+-- Direct step['condition']['code'] and chained .get() have different contracts.
+function WAIT_CONDITION_CODE_REQUIRED(step)
+  return JSON_REQUIRE(JSON_REQUIRE(step,'condition'),'code')
+end
+function CONDITION_CODE_OPTIONAL(step)
+  return JSON_TEXT(JSON_GET(step,'condition',{}),'code')
+end
 function FIRST_CONDITION_STEP(steps,needle,wait_only)
   for i=1,COUNT(steps) do
     local step=steps[i]
     if not wait_only or JSON_REQUIRE(step,'action')=='wait_for' then
-      local code=JSON_TEXT(JSON_GET(step,'condition',{}),'code')
+      local code
+      if wait_only then code=WAIT_CONDITION_CODE_REQUIRED(step)
+      else code=CONDITION_CODE_OPTIONAL(step) end
       if code:find(needle,1,true) then return step end
     end
   end
