@@ -1063,6 +1063,41 @@ fn scenario_presence_rejects_invalid_capture_code_and_required_keys() {
         .call::<MultiValue>(source)
         .unwrap();
     h.lua.load(r#"local data=JSON('{"steps":[{"action":"ui_lua","code":false,"condition":null,"capture_as":42},{"action":"wait_for","condition":{"code":"return true"}}]}');assert(FIRST_CONDITION_STEP(data.steps,'return true',true)==data.steps[2])"#).exec().unwrap();
+    for (name, needle) in [
+        ("absorption-japan.json", "JAC_ABSORPTION_CONTROL_PRIEST_V1"),
+        ("absorption-hero-recall.json", "e.TransferID"),
+    ] {
+        let valid = scenario(name);
+        assert_eq!(valid["steps"][4]["action"], "wait_for");
+        assert!(!valid["steps"][4]["condition"]["code"]
+            .as_str()
+            .unwrap()
+            .contains(needle));
+        for key in ["condition", "code"] {
+            let mut missing = valid.clone();
+            let object = if key == "condition" {
+                &mut missing["steps"][4]
+            } else {
+                &mut missing["steps"][4]["condition"]
+            };
+            assert!(object.as_object_mut().unwrap().remove(key).is_some());
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| compile_steps(
+                    &h.lua, &missing
+                )))
+                .is_err()
+            );
+            let source = serde_json::to_string(&missing).unwrap();
+            let error=h.lua.load(format!("local data=JSON([==[{source}]==]);FIRST_CONDITION_STEP(data.steps,[==[{needle}]==],true)")).exec().expect_err("missing wait key skipped in favor of a later match");
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("missing JSON key {key}")),
+                "{name}: {error}"
+            );
+        }
+    }
+    h.lua.load("local rows={{},{condition={}},{condition={code='return true'}}};assert(FIRST_CONDITION_STEP(rows,'return true')==rows[3])").exec().unwrap();
     for invalid in [
         Json::Null,
         Json::from(false),
