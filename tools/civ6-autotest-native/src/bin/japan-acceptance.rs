@@ -12,9 +12,11 @@ assert(m:GetHeroClaimPlayer(e.Class)==e.Owner,'recall rights changed before wait
 for _,u in Players[e.Owner]:GetUnits():Members() do assert(not u:IsHero() or u:GetHeroClassType()~=e.Class,'hero alive before waiting') end
 local r=Players[e.Owner]:GetReligion();local faith=r:GetFaithBalance()
 assert(faith>0,'funded same-era checks did not precede waiting')
-Game:SetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE',{Owner=e.Owner,Class=e.Class,Faith=faith,Era=Game.GetEras():GetCurrentEra()})
-r:ChangeFaithBalance(-faith)
-assert(r:GetFaithBalance()==0,'waiting fixture faith was not reserved')
+local whole=math.floor(faith)
+Game:SetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE',{Owner=e.Owner,Class=e.Class,Faith=whole,Fraction=faith-whole,Era=Game.GetEras():GetCurrentEra()})
+r:ChangeFaithBalance(-whole)
+local remaining=r:GetFaithBalance()
+assert(remaining>=0 and remaining<1,'waiting fixture faith was not reserved; before='..faith..' amount='..whole..' after='..remaining)
 return 'funded rejection checks complete; reserve fixture faith until the explicit purchase window'
 "#;
 const RESTORE: &str = r#"
@@ -150,7 +152,7 @@ mod tests {
     fn fixture_funding_is_restored_with_income_and_rejects_early_recall() {
         let lua = mlua::Lua::new();
         lua.load(r#"
-        bank,era,alive=2000000,0,false
+        bank,era,alive=2000000.625,0,false
         local properties={JAC_ABSORPTION_LIVE_RECALL_V1={Owner=2,Class=0}}
         Game={GetProperty=function(_,k) return properties[k] end,SetProperty=function(_,k,v) properties[k]=v end,GetEras=function() return {GetCurrentEra=function() return era end} end}
         local religion={GetFaithBalance=function() return bank end,ChangeFaithBalance=function(_,v) bank=bank+v end}
@@ -159,9 +161,11 @@ mod tests {
         ExposedMembers={JAC_Absorption={GetHeroesManager=function() return {GetHeroClaimPlayer=function() return 2 end} end}}
         "#).exec().unwrap();
         lua.load(RESERVE).exec().unwrap();
-        lua.load("assert(bank==0);bank=34;era=2").exec().unwrap();
+        lua.load("assert(bank==0.625);bank=34.625;era=2")
+            .exec()
+            .unwrap();
         lua.load(RESTORE).exec().unwrap();
-        lua.load("assert(bank==2000034);assert(Game:GetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE')==nil);era=0").exec().unwrap();
+        lua.load("assert(bank==2000034.625);assert(Game:GetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE')==nil);era=0").exec().unwrap();
         lua.load(RESERVE).exec().unwrap();
         lua.load("alive=true;era=2").exec().unwrap();
         assert!(
@@ -171,6 +175,6 @@ mod tests {
                 .to_string()
                 .contains("AI recalled before")
         );
-        lua.load("assert(bank==0)").exec().unwrap();
+        lua.load("assert(bank==0.625)").exec().unwrap();
     }
 }
