@@ -1,0 +1,284 @@
+diff --git a/src/chain.rs b/src/chain.rs
+index 4f964c4..a0326ed 100644
+--- a/src/chain.rs
++++ b/src/chain.rs
+@@ -451,7 +451,10 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+         if test_mode {
+             argv.push("--test-mode".into());
+         }
+-        let command = Call::new(argv).merged();
++        let command = Call::new(argv)
++            .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
++            .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
++            .merged();
+         let mut run = Output::default();
+         for attempt in 0..2 {
+             run = r.run(command.clone())?;
+@@ -459,6 +462,7 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+             if attempt == 0
+                 && run.stdout.contains("[FAIL] 1/")
+                 && run.stdout.contains("restart_game")
++                && !run.stdout.contains("STARTUP_RECOVERY_ATTEMPTED")
+             {
+                 r.print("  retry: restart_game failed, closing Civ6 and running again")?;
+                 close_civ6(r)?;
+diff --git a/src/driver.rs b/src/driver.rs
+index c3b4ff0..434e3db 100644
+--- a/src/driver.rs
++++ b/src/driver.rs
+@@ -26,25 +26,35 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
+             "cargo".into()
+         }
+     });
+-    let out = r.run(
+-        Call::new(args(&[
+-            &cargo,
+-            "build",
+-            "--locked",
+-            "--release",
+-            "--message-format=json",
+-            "--manifest-path",
+-            &path(manifest),
+-            "--target-dir",
+-            &path(worktree.join("tools/target")),
+-            "--bin",
+-            "civ6-autotest",
+-            "--bin",
+-            "civ6-tuner",
+-        ]))
+-        .timeout(1200.0)
+-        .managed(),
+-    )?;
++    let mut names = vec!["civ6-autotest", "civ6-tuner"];
++    let helper = worktree.join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
++    if worktree
++        .join("tools/civ6-autotest-rs/src/startup.rs")
++        .is_file()
++        && !helper.is_file()
++    {
++        return Err(
++            "Startup recovery is present but its diagnostic helper source is missing".into(),
++        );
++    }
++    if helper.is_file() {
++        names.push("civ6-startup-diagnostics");
++    }
++    let mut argv = args(&[
++        &cargo,
++        "build",
++        "--locked",
++        "--release",
++        "--message-format=json",
++        "--manifest-path",
++        &path(manifest),
++        "--target-dir",
++        &path(worktree.join("tools/target")),
++    ]);
++    for name in &names {
++        argv.extend(args(&["--bin", name]));
++    }
++    let out = r.run(Call::new(argv).timeout(1200.0).managed())?;
+     if out.code != 0 {
+         return Err(format!(
+             "Rust driver build failed (exit {}): {} {}",
+@@ -53,7 +63,7 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
+             tail(&out.stderr, 1600)
+         ));
+     }
+-    for name in ["civ6-autotest", "civ6-tuner"] {
++    for name in names {
+         let expected = binary(worktree, name);
+         if !expected.is_file() {
+             return Err(format!("Rust driver build did not produce {name}"));
+diff --git a/src/process.rs b/src/process.rs
+index e123796..bd2af14 100644
+--- a/src/process.rs
++++ b/src/process.rs
+@@ -1,4 +1,5 @@
+ use std::{
++    collections::BTreeMap,
+     io::Read,
+     process::{Command, Stdio},
+     sync::atomic::{AtomicBool, Ordering},
+@@ -14,6 +15,7 @@ static CLEANUP_DONE: AtomicBool = AtomicBool::new(false);
+ #[derive(Clone, Debug, PartialEq)]
+ pub struct Call {
+     pub args: Vec<String>,
++    pub env: BTreeMap<String, String>,
+     pub timeout: Option<f64>,
+     pub merge_stderr: bool,
+     pub creationflags: u32,
+@@ -23,6 +25,7 @@ impl Call {
+     pub fn new(args: Vec<String>) -> Self {
+         Self {
+             args,
++            env: BTreeMap::new(),
+             timeout: None,
+             merge_stderr: false,
+             creationflags: CREATE_NO_WINDOW,
+@@ -33,6 +36,10 @@ impl Call {
+         self.timeout = Some(seconds);
+         self
+     }
++    pub fn env(mut self, key: &str, value: impl Into<String>) -> Self {
++        self.env.insert(key.into(), value.into());
++        self
++    }
+     pub fn merged(mut self) -> Self {
+         self.merge_stderr = true;
+         self
+@@ -116,6 +123,7 @@ impl Runner for RealRunner {
+         interrupted()?;
+         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
+         cmd.args(&call.args[1..])
++            .envs(&call.env)
+             .stdin(Stdio::null())
+             .stdout(Stdio::piped());
+         #[cfg(windows)]
+diff --git a/tests/parity.rs b/tests/parity.rs
+index 578a941..2cbb701 100644
+--- a/tests/parity.rs
++++ b/tests/parity.rs
+@@ -819,6 +819,64 @@ fn build_in_another_target_directory_rejects_stale_driver_files() {
+         .contains("refusing a stale executable"));
+ }
+ 
++#[test]
++fn startup_diagnostic_worker_is_built_and_its_provenance_is_required() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let source =
++        f.p.live()
++            .join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
++    fs::create_dir_all(source.parent().unwrap()).unwrap();
++    fs::write(&source, "fn main() {}").unwrap();
++    let filename = if cfg!(windows) {
++        "civ6-startup-diagnostics.exe"
++    } else {
++        "civ6-startup-diagnostics"
++    };
++    let executable = f.p.live().join("tools/target/release").join(filename);
++    fs::write(&executable, "old diagnostic worker").unwrap();
++    let old_artifacts = cargo_artifacts(&f);
++    let mut r = Fake::outputs(&[(&old_artifacts, "", 0)]);
++    assert!(driver::prepare(&mut r, &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("refusing a stale executable"));
++    assert!(r.calls[0]
++        .args
++        .windows(2)
++        .any(|a| a == ["--bin", "civ6-startup-diagnostics"]));
++    let artifacts = format!(
++        "{}\n{}",
++        old_artifacts,
++        json!({"reason":"compiler-artifact", "manifest_path":path(f.p.live().join(driver::MANIFEST)), "target":{"name":"civ6-startup-diagnostics","kind":["bin"]}, "executable":path(&executable)})
++    );
++    driver::prepare(
++        &mut Fake::outputs(&[(&artifacts, "", 0)]),
++        &f.p,
++        &f.p.live(),
++    )
++    .unwrap();
++}
++
++#[test]
++fn missing_startup_helper_source_refuses_existing_stale_binary_before_build() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let startup = f.p.live().join("tools/civ6-autotest-rs/src/startup.rs");
++    fs::create_dir_all(startup.parent().unwrap()).unwrap();
++    fs::write(startup, "pub fn recovery() {}").unwrap();
++    fs::write(
++        f.p.live()
++            .join("tools/target/release/civ6-startup-diagnostics.exe"),
++        "old helper",
++    )
++    .unwrap();
++    let mut runner = Fake::success();
++    assert!(driver::prepare(&mut runner, &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("source is missing"));
++    assert!(runner.calls.is_empty());
++}
++
+ #[cfg(windows)]
+ #[test]
+ fn cancelled_build_waits_for_real_grandchildren_to_exit() {
+@@ -1166,6 +1224,77 @@ fn restart_retry_preserves_first_artifacts_and_closes_each_run() {
+     );
+ }
+ 
++#[test]
++fn recovered_startup_failure_does_not_launch_another_outer_retry() {
++    let f = Fixture::new();
++    let artifacts = f.root.join("artifacts");
++    fs::create_dir(&artifacts).unwrap();
++    fs::write(artifacts.join("diagnostic.json"), "saved before shutdown").unwrap();
++    let prepare = format!("scenario.json\n{}\n", path(&artifacts));
++    let mut r = Fake::outputs(&[
++        (&prepare, "", 0),
++        ("", "", 0),
++        ("", "", 0),
++        ("", "", 0),
++        ("STARTUP_RECOVERY_ATTEMPTED\n[FAIL] 1/ restart_game", "", 1),
++    ]);
++    assert_eq!(
++        main(
++            &mut r,
++            &f.p,
++            &["a:s.json".into(), "--stop-on-failure".into()]
++        )
++        .unwrap(),
++        1
++    );
++    let drivers: Vec<_> = r
++        .calls
++        .iter()
++        .filter(|c| c.args[0] == "fixture-python")
++        .collect();
++    assert_eq!(drivers.len(), 1);
++    assert_eq!(
++        drivers[0].env["CIV6_LIVE_CHAIN_PID"],
++        std::process::id().to_string()
++    );
++    assert_eq!(
++        drivers[0].env["CIV6_LIVE_LOCK_PATH"],
++        path(f.p.here.join("civ6.lock"))
++    );
++    assert!(r.sleeps.is_empty());
++    assert!(!f.root.join("artifacts-try1").exists());
++    assert_eq!(
++        read_text(artifacts.join("diagnostic.json")).unwrap(),
++        "saved before shutdown"
++    );
++    assert_eq!(
++        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
++        2
++    );
++}
++
++#[test]
++fn child_specific_environment_is_applied_without_changing_the_parent() {
++    let key = "CIV6_LIVE_TEST_CHILD_ENV";
++    let previous = std::env::var_os(key);
++    let mut r = process::RealRunner;
++    let out = r
++        .run(
++            Call::new(args(&[
++                "cmd.exe",
++                "/d",
++                "/c",
++                "set CIV6_LIVE_TEST_CHILD_ENV",
++            ]))
++            .env(key, "chain-owned")
++            .timeout(5.0),
++        )
++        .unwrap();
++    assert_eq!(out.code, 0);
++    assert_eq!(out.stdout, "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n");
++    assert_eq!(std::env::var_os(key), previous);
++}
++
+ #[test]
+ fn real_child_output_pipe_is_merged_in_order_without_game_or_network() {
+     let mut r = process::RealRunner;
