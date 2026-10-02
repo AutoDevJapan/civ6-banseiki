@@ -7,6 +7,9 @@ const TRACE_START: &str = r#"
 local api=assert(ExposedMembers.JAC_Absorption)
 local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))
 assert(not Players[e.Owner]:IsHuman(),'diagnostic requires the original AI owner')
+if JAC_NATIVE_HERO_FAITH_HANDLER then Events.FaithChanged.Remove(JAC_NATIVE_HERO_FAITH_HANDLER) end
+if JAC_NATIVE_HERO_COMMAND_HANDLER then Events.CityCommandStarted.Remove(JAC_NATIVE_HERO_COMMAND_HANDLER) end
+if JAC_NATIVE_HERO_UNIT_HANDLER then Events.UnitAddedToMap.Remove(JAC_NATIVE_HERO_UNIT_HANDLER) end
 local function snapshot()
  local m=Game.GetHeroesManager();local origin=assert(m:GetHeroOriginCityID(e.Class))
  local city=assert(Players[e.Owner]:GetCities():FindID(origin.id))

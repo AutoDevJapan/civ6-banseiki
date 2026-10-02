@@ -730,7 +730,15 @@ impl Runner {
             }
             sleep(deadline, 0.5)?;
         }
-        let folders = mods::enabled_mod_folders(&self.scenario, &self.mods_dir)?;
+        let p = platform::single_civ_process(Duration::ZERO)?
+            .ok_or_else(|| RunError::new("Civ6 vanished after launch"))?;
+        let install = p
+            .path
+            .ancestors()
+            .nth(4)
+            .ok_or_else(|| RunError::new("cannot locate the running Civ6 install"))?;
+        let folders =
+            mods::enabled_custom_mod_folders(&self.scenario, &self.mods_dir, &install.join("DLC"))?;
         let missing = mods::missing_atlas_textures(&folders)?;
         if !missing.is_empty() {
             return Err(RunError::new(format!(
@@ -739,8 +747,6 @@ impl Runner {
             )));
         }
         // Restart must leave a single fresh process. FILETIME uses 100 ns ticks from 1601.
-        let p = platform::single_civ_process(Duration::ZERO)?
-            .ok_or_else(|| RunError::new("Civ6 vanished after launch"))?;
         if let Some((file, time)) = mods::newest_mod_time(&folders)? {
             let ticks = time
                 .duration_since(std::time::UNIX_EPOCH)

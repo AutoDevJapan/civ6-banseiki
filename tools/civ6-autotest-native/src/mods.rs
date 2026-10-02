@@ -308,6 +308,49 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
     resolve_enabled_mods(&wanted, &found, mods_dir)
 }
 
+/// Official DLC is catalogued under the running game's install, while only
+/// user MODs require per-folder freshness and custom atlas checks.
+pub fn enabled_custom_mod_folders(
+    scenario: &Value,
+    mods_dir: &Path,
+    dlc_dir: &Path,
+) -> Result<Vec<PathBuf>, String> {
+    let wanted = scenario_mod_ids(scenario)?;
+    let mut official = BTreeMap::new();
+    for info in mod_files(dlc_dir)? {
+        if !has_extension(&info, "modinfo") {
+            continue;
+        }
+        let bytes = fs::read(&info)
+            .map_err(|e| format!("Cannot read official DLC {}: {e}", info.display()))?;
+        let Ok(summary) = parse_xml(&bytes) else {
+            continue;
+        };
+        if let Some(id) = mod_id_from_document(&summary)?
+            && wanted.contains(&id)
+            && official.insert(id.clone(), info.clone()).is_some()
+        {
+            return Err(format!("duplicate official DLC GUID {id}"));
+        }
+    }
+    let mut custom = scenario.clone();
+    for step in custom["steps"]
+        .as_array_mut()
+        .ok_or("scenario steps missing")?
+    {
+        if step["action"] == "enable_mods" {
+            step["ids"]
+                .as_array_mut()
+                .ok_or("enable_mods IDs missing")?
+                .retain(|v| {
+                    v.as_str()
+                        .is_none_or(|s| !official.contains_key(&s.to_ascii_lowercase()))
+                });
+        }
+    }
+    enabled_mod_folders(&custom, mods_dir)
+}
+
 fn directory_link_flags(is_symlink: bool, attributes: u32) -> bool {
     is_symlink || attributes & 0x400 != 0
 }
@@ -527,6 +570,51 @@ mod tests {
 
     const MOD_A: &str = "ba3a1c58-9287-4654-a22f-85f9e6841e9b";
     const MOD_B: &str = "bd7a82c5-6b38-4b69-a7f5-8dc9af534249";
+
+    #[test]
+    fn official_dlc_is_found_in_install_and_custom_mods_stay_mandatory() {
+        let temp = std::env::temp_dir();
+        let root = temp.join(format!(
+            "native-dlc-test-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let mods = root.join("Mods");
+        let dlc = root.join("DLC");
+        let custom = mods.join("Custom");
+        let official = dlc.join("Babylon");
+        fs::create_dir_all(&custom).unwrap();
+        fs::create_dir_all(&official).unwrap();
+        let official_info = official.join("Babylon.modinfo");
+        fs::write(&official_info, format!("<Mod id=\"{MOD_A}\"/>")).unwrap();
+        fs::write(
+            custom.join("Custom.modinfo"),
+            format!("<Mod id=\"{MOD_B}\"/>"),
+        )
+        .unwrap();
+        let scenario = json!({"steps":[{"action":"enable_mods","ids":[MOD_A,MOD_B]}]});
+        assert_eq!(
+            enabled_custom_mod_folders(&scenario, &mods, &dlc).unwrap(),
+            vec![fs::canonicalize(&custom).unwrap()]
+        );
+        fs::remove_file(&official_info).unwrap();
+        assert!(
+            enabled_custom_mod_folders(&scenario, &mods, &dlc)
+                .unwrap_err()
+                .contains(MOD_A)
+        );
+        fs::write(&official_info, format!("<Mod id=\"{MOD_A}\"/>")).unwrap();
+        fs::remove_file(custom.join("Custom.modinfo")).unwrap();
+        assert!(
+            enabled_custom_mod_folders(&scenario, &mods, &dlc)
+                .unwrap_err()
+                .contains(MOD_B)
+        );
+        let resolved = fs::canonicalize(&root).unwrap();
+        let temp = fs::canonicalize(temp).unwrap();
+        assert!(resolved.starts_with(&temp) && resolved != temp);
+        fs::remove_dir_all(resolved).unwrap();
+    }
 
     #[test]
     fn enabled_ids_are_case_insensitive_deduplicated_and_sorted() {
