@@ -101,6 +101,11 @@ fn test_diagnostic_mods_are_separate_map_scoped_packages() {
             "JAC_Test_NativeSlots.modinfo",
             "a1faab65-5371-4e25-9a46-7522075f865d",
         ),
+        (
+            "poc/JAC_Test_NativeSlotOnly",
+            "JAC_Test_NativeSlotOnly.modinfo",
+            "8c615430-5a09-4431-877a-bfd03bca9e80",
+        ),
     ] {
         let xml = read_repo(format!("{root}/{manifest}"));
         let document = Document::parse(&xml).unwrap();
@@ -147,6 +152,11 @@ fn test_diagnostic_mods_are_separate_map_scoped_packages() {
 #[test]
 fn test_official_sql_keeps_production_personas_until_diagnostic_mods_are_loaded() {
     let db = official::official_db();
+    // The archived snapshot predates the loader's InsertOrIgnore support.
+    // Base/Assets/Gameplay/Data/Agendas.xml declares this official kind;
+    // persona.rs applies the same seed when rebuilding the database from assets.
+    db.execute_batch("INSERT OR IGNORE INTO Kinds (Kind) VALUES ('KIND_TRAIT');")
+        .unwrap();
     db.execute_batch(&read_repo(
         "poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql",
     ))
@@ -185,6 +195,25 @@ fn test_official_sql_keeps_production_personas_until_diagnostic_mods_are_loaded(
         66
     );
     assert_eq!(count(&db, "SELECT COUNT(*) FROM Modifiers WHERE ModifierId IN ('JAC_NATIVE_SLOT_PLAYER_RECEIPT','JAC_NATIVE_SLOT_CITY_ACTIVE')"), 2);
+    assert_eq!(
+        count(&db, "SELECT COUNT(*) FROM pragma_foreign_key_check"),
+        before_fk
+    );
+    let isolated = read_repo("poc/JAC_Test_NativeSlotOnly/Data/JAC_NativeSlotOnly.sql");
+    for statement in isolated.split(';').filter(|sql| !sql.trim().is_empty()) {
+        db.execute_batch(statement)
+            .unwrap_or_else(|error| panic!("isolated slot SQL: {statement}: {error}"));
+    }
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType='GOVERNOR_JAC_TITLE_PROXY' AND TraitType='TRAIT_JAC_TEST_PROXY_DISABLED'"), 1);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM CivilizationTraits WHERE TraitType='TRAIT_JAC_TEST_PROXY_DISABLED'"), 0);
+    assert_eq!(
+        count(
+            &db,
+            "SELECT COUNT(*) FROM LeaderTraits WHERE TraitType='TRAIT_JAC_TEST_PROXY_DISABLED'"
+        ),
+        0
+    );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType='GOVERNOR_JAC_NATIVE_SLOT' AND IdentityPressure=8 AND TransitionStrength=100 AND TraitType IS NULL"), 1);
     assert_eq!(
         count(&db, "SELECT COUNT(*) FROM pragma_foreign_key_check"),
         before_fk
