@@ -775,9 +775,8 @@ impl Runner {
                     sleep(deadline, 0.5)?;
                     continue;
                 }
-                // Reconnect after the FrontEnd-to-game transition before
-                // deciding which load-screen control is actually available.
-                self.client = None;
+                // Keep the accepted FireTuner stream through the load screen.
+                // The game need not reopen its listener before Begin Game.
                 let states = match self.states(deadline) {
                     Ok(states) => states,
                     Err(error) => {

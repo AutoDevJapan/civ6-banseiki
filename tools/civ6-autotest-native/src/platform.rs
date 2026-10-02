@@ -111,13 +111,11 @@ mod native {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MAPVK_VK_TO_VSC, MapVirtualKeyW};
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW,
-        GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SW_RESTORE, SW_SHOWNORMAL,
-        SetForegroundWindow, ShowWindow, WM_KEYDOWN, WM_KEYUP,
+        EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+        IsWindowVisible, PostMessageW, SW_SHOWNORMAL, WM_KEYDOWN, WM_KEYUP,
     };
 
     const POLL: Duration = Duration::from_millis(500);
-    const FOCUS_WAIT: Duration = Duration::from_millis(400);
     const KEY_HOLD: Duration = Duration::from_millis(80);
     const EXIT_WAIT_MS: u32 = 10_000;
 
@@ -470,7 +468,7 @@ mod native {
                     process,
                     handle,
                 };
-                require_window(&window, false)?;
+                require_window(&window)?;
                 Ok(WindowProbe::Ready(window))
             }
         }
@@ -497,18 +495,13 @@ mod native {
         Ok(())
     }
 
-    fn require_window(window: &VerifiedWindow, foreground: bool) -> Result<(), String> {
+    fn require_window(window: &VerifiedWindow) -> Result<(), String> {
         if unique_pid(&process_ids()?)? != Some(window.process.pid)
             || matching_windows(window.process.pid)? != vec![window.hwnd]
         {
             return Err("Civ VI window/process is no longer unique; input aborted".into());
         }
         require_target(window)?;
-        if foreground && unsafe { GetForegroundWindow() } != window.hwnd {
-            return Err(
-                "Civ VI window is not the verified foreground window; input aborted".into(),
-            );
-        }
         Ok(())
     }
 
@@ -543,24 +536,18 @@ mod native {
         if !(1..=255).contains(&vk) {
             return Err(format!("Invalid virtual key: {vk}"));
         }
-        require_time(deadline, FOCUS_WAIT + KEY_HOLD)?;
+        require_time(deadline, KEY_HOLD)?;
         let window = match probe_window()? {
             WindowProbe::Ready(window) => window,
             WindowProbe::Pending(reason) => return Err(reason),
         };
-        require_window(&window, false)?;
-        require_time(deadline, FOCUS_WAIT + KEY_HOLD)?;
-        unsafe { ShowWindow(window.hwnd, SW_RESTORE) };
-        if unsafe { SetForegroundWindow(window.hwnd) } == 0 {
-            return Err("Could not bring Civ VI window to foreground; input aborted".into());
-        }
-        thread::sleep(FOCUS_WAIT);
+        require_window(&window)?;
         let scan = unsafe { MapVirtualKeyW(u32::from(vk), MAPVK_VK_TO_VSC) };
         if scan == 0 {
             return Err(format!("Cannot map virtual key {vk} to a scan code"));
         }
         let (down, up) = key_message_params(scan);
-        require_window(&window, true)?;
+        require_window(&window)?;
         require_time(deadline, KEY_HOLD)?;
         // Retain the proven WM delivery mode used by the existing loading-screen
         // driver; never send global keyboard input to whatever happens to have focus.
@@ -568,16 +555,16 @@ mod native {
             return Err(win_error("Could not post Civ VI key down"));
         }
         thread::sleep(KEY_HOLD);
-        let foreground_result = require_window(&window, true);
-        // Release even after focus loss/deadline expiry, but only to the original,
+        let target_result = require_window(&window);
+        // Release even after deadline expiry, but only to the original,
         // still-owned Civ VI target. HWND/PID reuse must not receive cleanup input.
         require_target(&window)?;
         if unsafe { PostMessageW(window.hwnd, WM_KEYUP, usize::from(vk), up) } == 0 {
             return Err(win_error("Could not post Civ VI key up"));
         }
-        foreground_result?;
+        target_result?;
         require_time(deadline, Duration::ZERO)?;
-        require_window(&window, true)
+        require_window(&window)
     }
 }
 
