@@ -1,0 +1,57 @@
+<GameInfo>
+	<IconTextureAtlases>
+		<Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS" IconSize="32" IconsPerRow="8" IconsPerColumn="1" Filename="XP1_Governors32.dds"/>
+    <Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS" IconSize="64" IconsPerRow="8" IconsPerColumn="1" Filename="XP1_Governors64.dds"/>
+
+		<!-- Atlasses bellow are used in CityBanner governor meters -->
+		<Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" IconSize="32" IconsPerRow="8" IconsPerColumn="2" Filename="XP1_GovernorsCityBannerFill32.dds"/>
+		<Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" IconSize="32" IconsPerRow="8" IconsPerColumn="2" Filename="XP1_GovernorsCityBannerSlot32.dds"/>
+
+    <Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Baseline="6" IconSize="22" IconsPerRow="8" IconsPerColumn="2" Filename="XP1_GovernorsCityBannerFill22.dds"/>
+    <Row Name="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Baseline="6" IconSize="22" IconsPerRow="8" IconsPerColumn="2" Filename="XP1_GovernorsCityBannerSlot22.dds"/>
+	</IconTextureAtlases>
+	<IconDefinitions>
+		<Row Name="ICON_GOVERNOR_THE_DEFENDER"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="0"/>
+    <Row Name="ICON_GOVERNOR_THE_CARDINAL"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="1"/>
+    <Row Name="ICON_GOVERNOR_THE_BUILDER"           Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="2"/>
+    <Row Name="ICON_GOVERNOR_THE_AMBASSADOR"        Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="3"/>
+		<Row Name="ICON_GOVERNOR_THE_RESOURCE_MANAGER"  Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="4"/>
+		<Row Name="ICON_GOVERNOR_THE_MERCHANT"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="5"/>
+    <Row Name="ICON_GOVERNOR_THE_EDUCATOR"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS" Index="6"/>
+
+		<!-- Icons bellow are used in CityBanner governor meters -->
+		<Row Name="ICON_GOVERNOR_THE_DEFENDER_FILL"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="0"/>
+		<Row Name="ICON_GOVERNOR_THE_CARDINAL_FILL"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="1"/>
+		<Row Name="ICON_GOVERNOR_THE_BUILDER_FILL"           Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="2"/>
+		<Row Name="ICON_GOVERNOR_THE_AMBASSADOR_FILL"        Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="3"/>
+		<Row Name="ICON_GOVERNOR_THE_RESOURCE_MANAGER_FILL"  Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="4"/>
+		<Row Name="ICON_GOVERNOR_THE_MERCHANT_FILL"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="5"/>
+		<Row Name="ICON_GOVERNOR_THE_EDUCATOR_FILL"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="6"/>
+		<Row Name="ICON_GOVERNOR_OTHER_AMBASSADORS_FILL"     Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_FILL" Index="8"/>
+
+		<Row Name="ICON_GOVERNOR_THE_DEFENDER_SLOT"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="0"/>
+		<Row Name="ICON_GOVERNOR_THE_CARDINAL_SLOT"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="1"/>
+		<Row Name="ICON_GOVERNOR_THE_BUILDER_SLOT"           Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="2"/>
+		<Row Name="ICON_GOVERNOR_THE_AMBASSADOR_SLOT"        Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="3"/>
+		<Row Name="ICON_GOVERNOR_THE_RESOURCE_MANAGER_SLOT"  Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="4"/>
+		<Row Name="ICON_GOVERNOR_THE_MERCHANT_SLOT"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="5"/>
+		<Row Name="ICON_GOVERNOR_THE_EDUCATOR_SLOT"          Atlas="ICON_ATLAS_EXPANSION_1_GOVERNORS_SLOT" Index="6"/>
+  </IconDefinitions>
+  <IconAliases>
+    <Row Name="GOVERNOR_THE_DEFENDER_SLOT"         OtherName="ICON_GOVERNOR_THE_DEFENDER_SLOT"         />
+    <Row Name="GOVERNOR_THE_CARDINAL_SLOT"         OtherName="ICON_GOVERNOR_THE_CARDINAL_SLOT"         />
+    <Row Name="GOVERNOR_THE_BUILDER_SLOT"          OtherName="ICON_GOVERNOR_THE_BUILDER_SLOT"          />
+    <Row Name="GOVERNOR_THE_AMBASSADOR_SLOT"       OtherName="ICON_GOVERNOR_THE_AMBASSADOR_SLOT"       />
+    <Row Name="GOVERNOR_THE_RESOURCE_MANAGER_SLOT" OtherName="ICON_GOVERNOR_THE_RESOURCE_MANAGER_SLOT" />
+    <Row Name="GOVERNOR_THE_MERCHANT_SLOT"         OtherName="ICON_GOVERNOR_THE_MERCHANT_SLOT"         />
+    <Row Name="GOVERNOR_THE_EDUCATOR_SLOT"         OtherName="ICON_GOVERNOR_THE_EDUCATOR_SLOT"         />
+
+    <Row Name="GOVERNOR_THE_DEFENDER_FILL"         OtherName="ICON_GOVERNOR_THE_DEFENDER_FILL"         />
+    <Row Name="GOVERNOR_THE_CARDINAL_FILL"         OtherName="ICON_GOVERNOR_THE_CARDINAL_FILL"         />
+    <Row Name="GOVERNOR_THE_BUILDER_FILL"          OtherName="ICON_GOVERNOR_THE_BUILDER_FILL"          />
+    <Row Name="GOVERNOR_THE_AMBASSADOR_FILL"       OtherName="ICON_GOVERNOR_THE_AMBASSADOR_FILL"       />
+    <Row Name="GOVERNOR_THE_RESOURCE_MANAGER_FILL" OtherName="ICON_GOVERNOR_THE_RESOURCE_MANAGER_FILL" />
+    <Row Name="GOVERNOR_THE_MERCHANT_FILL"         OtherName="ICON_GOVERNOR_THE_MERCHANT_FILL"         />
+    <Row Name="GOVERNOR_THE_EDUCATOR_FILL"         OtherName="ICON_GOVERNOR_THE_EDUCATOR_FILL"         />
+  </IconAliases>
+</GameInfo>
