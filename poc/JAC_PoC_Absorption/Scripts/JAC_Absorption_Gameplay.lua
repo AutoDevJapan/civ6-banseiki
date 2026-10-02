@@ -1894,6 +1894,26 @@ local function ObserveRecoveredHero(state, intent, token, class, origin)
   Save(state)
   return true
 end
+local function RecoveredNativeWork(source, owner)
+  assert(type(source.Index) == "number" and source.Index >= 0
+    and source.Index == math.floor(source.Index), "native recovery index required")
+  local found, count = nil, 0
+  for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
+    for _, work in ipairs(A.OwnedGreatWorkSlots(playerID)) do
+      if work.Index == source.Index then
+        count = count + 1
+        if playerID == owner then found = work end
+      end
+    end
+  end
+  assert(count == 1 and found,
+    "native recovery requires one verified original work in the recipient's slot")
+  for _, key in ipairs({ "GreatWorkType", "ObjectType", "CreatorName", "TurnCreated", "CreatedByPlayer" }) do
+    assert(source[key] == nil or found[key] == source[key],
+      "recovered native Great Work metadata changed: " .. key)
+  end
+  return found
+end
 function A.RecoverArchived(id, owner, token, original)
   assert((type(id) == "string" or type(id) == "number")
     and type(token) == "string" and type(owner) == "number",
@@ -1931,9 +1951,15 @@ function A.RecoverArchived(id, owner, token, original)
     if record.NativeHero.Origin then record.NativeHero.Origin.Owner = owner end
   end
   if record.Kind == "ITEM" then
-    local capital = assert(Players[owner]:GetCities():GetCapitalCity(),
-      "recovered item has no vault city")
-    record.City = { Owner = owner, X = capital:GetX(), Y = capital:GetY() }
+    if record.NativeWork then
+      local work = RecoveredNativeWork(record.NativeWork, owner)
+      record.NativeWork = R.Copy(work)
+      record.City = { Owner = owner, X = work.X, Y = work.Y }
+    else
+      local capital = assert(Players[owner]:GetCities():GetCapitalCity(),
+        "recovered item has no vault city")
+      record.City = { Owner = owner, X = capital:GetX(), Y = capital:GetY() }
+    end
   end
   local snap = intent.Snapshot
   if snap then
