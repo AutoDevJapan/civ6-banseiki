@@ -1,3 +1,4 @@
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{new_lua, read_repo, repo_root};
 use mlua::{Lua, Value as LuaValue};
 use regex::Regex;
@@ -11,6 +12,24 @@ const MOD: &str = "poc/JAC_PoC_Assassin";
 const RULES: &str = "poc/JAC_PoC_Assassin/Scripts/JAC_Assassin_Rules.lua";
 const GAMEPLAY: &str = "poc/JAC_PoC_Assassin/Scripts/JAC_Assassin_Gameplay.lua";
 const SCENARIO: &str = "tools/civ6-autotest/scenarios/assassin-leader-save-load.json";
+
+#[test]
+fn parallel_production_assertion_rejects_extra_results_and_nil_or_string_false() {
+    let h = Harness::new();
+    h.run("assert(A.StartProduction(0,10))");
+    assert_eq!(h.parallel_result().unwrap(), (false, "PRODUCING".into()));
+    for result in [
+        "false,'PRODUCING',99",
+        "false,'PRODUCING',nil",
+        "nil,'PRODUCING'",
+        "'false','PRODUCING'",
+    ] {
+        h.run(&format!("A.StartProduction=function() return {result} end"));
+        assert!(h.parallel_result().is_err(), "{result}");
+    }
+    h.run("A.StartProduction=function() return false,'PRODUCING' end");
+    assert_eq!(h.parallel_result().unwrap(), (false, "PRODUCING".into()));
+}
 
 fn case_segments(name: &str) -> Vec<String> {
     let source = include_str!("../fixtures/assassin/cases.lua");
@@ -90,6 +109,11 @@ impl Harness {
             error.to_string().contains(expected),
             "expected {expected:?}, got {error}"
         );
+    }
+    fn parallel_result(&self) -> mlua::Result<(bool, String)> {
+        self.lua
+            .load("return A.StartProduction(0,11)")
+            .strict_eval()
     }
 }
 
@@ -209,11 +233,19 @@ mod assassin_lua_tests {
     #[test]
     fn test_multiple_cities_reject_parallel_production() {
         let h = Harness::new();
-        let first: bool = h.lua.load("return A.StartProduction(0,10)").eval().unwrap();
+        let first = h
+            .lua
+            .load("return A.StartProduction(0,10)")
+            .python_truthy()
+            .unwrap();
         assert!(first);
-        let second: (bool, String) = h.lua.load("return A.StartProduction(0,11)").eval().unwrap();
+        let second = h.parallel_result().unwrap();
         assert_eq!(second, (false, "PRODUCING".into()));
-        let other: bool = h.lua.load("return A.StartProduction(1,10)").eval().unwrap();
+        let other = h
+            .lua
+            .load("return A.StartProduction(1,10)")
+            .python_truthy()
+            .unwrap();
         assert!(other);
     }
 
@@ -625,14 +657,11 @@ mod assassin_lua_tests {
                         h.run("Game.GetLocalPlayer=function() return 0 end");
                     }
                     let code = step["condition"]["code"].as_str().unwrap();
-                    let value: LuaValue =
-                        h.lua.load(code).eval().unwrap_or_else(|e| {
+                    let value =
+                        h.lua.load(code).python_truthy().unwrap_or_else(|e| {
                             panic!("step {index} wait_for failed: {e}\n{code}")
                         });
-                    assert!(
-                        !matches!(value, LuaValue::Nil | LuaValue::Boolean(false)),
-                        "step {index}: wait_for was false"
-                    );
+                    assert!(value, "step {index}: wait_for was false");
                 }
                 "save" => {
                     h.lua
@@ -676,6 +705,8 @@ mod assassin_lua_tests {
         let prefix = check.split("local function Same").next().unwrap();
         h.run(&format!("{prefix}\n{}", "t.FinalUnits={} for _,id in ipairs({U,U2}) do t.FinalUnits[tostring(id)]=TrainedSnapshot(0,id) end; Game:SetProperty('JAC_ASN_LIVE_TEST',t)"));
         h.run(check);
+        let changed_unit_error =
+            Regex::new("load changed trained individual|trained unit is not placed").unwrap();
         for change in [
             "DATA[0].Units[U].X=DATA[0].Units[U].X+1",
             "DATA[0].Units[U2].Y=DATA[0].Units[U2].Y+1",
@@ -691,9 +722,7 @@ mod assassin_lua_tests {
                 .exec()
                 .expect_err("changed unit must fail");
             assert!(
-                Regex::new("load changed trained individual|trained unit is not placed")
-                    .unwrap()
-                    .is_match(&error.to_string()),
+                changed_unit_error.is_match(&error.to_string()),
                 "unexpected error for {change}: {error}"
             );
             h.run("DATA=BAD_LOAD_BACKUP; rebuild()");

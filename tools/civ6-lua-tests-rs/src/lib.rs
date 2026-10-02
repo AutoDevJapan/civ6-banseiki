@@ -6,6 +6,7 @@ use serde_json::{Map, Value as Json};
 use std::path::{Path, PathBuf};
 
 pub mod official;
+pub mod strict;
 
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

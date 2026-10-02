@@ -1,3 +1,4 @@
+use civ6_lua_tests_rs::strict::{ChunkExt, Data};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Function, Lua, MultiValue, Value};
 use rusqlite::Connection;
@@ -17,6 +18,36 @@ const TABLES: [&str; 6] = [
     "Outcomes",
     "Rules",
 ];
+
+#[test]
+fn export_comparison_detects_numeric_key_changes_and_restore_keeps_both_keys() {
+    let mut h = Harness::new();
+    h.f();
+    h.reload();
+    h.exec("local export=rp.Export; rp.Export=function(...) local data=export(...); data.probe={[0]='same',['0']='same'};return data end");
+    let before = h.export();
+    assert_eq!(before["probe"].entries().len(), 2);
+    let fresh = new_lua();
+    fresh
+        .globals()
+        .set("RESTORED", before.to_lua(&fresh))
+        .unwrap();
+    assert_eq!(
+        fresh.load("return RESTORED").strict_eval::<Data>().unwrap(),
+        before
+    );
+    fresh.load("RESTORED.probe[0]=nil").exec().unwrap();
+    assert_ne!(
+        fresh.load("return RESTORED").strict_eval::<Data>().unwrap(),
+        before
+    );
+    fresh.load("RESTORED.probe={}").exec().unwrap();
+    let empty = fresh.load("return RESTORED").strict_eval::<Data>().unwrap();
+    fresh.load("RESTORED.probe=nil").exec().unwrap();
+    let absent = fresh.load("return RESTORED").strict_eval::<Data>().unwrap();
+    assert_ne!(empty, absent);
+    assert_ne!(absent["probe"], Data::Nil);
+}
 
 fn catalog() -> Json {
     let db = Connection::open_in_memory().unwrap();
@@ -61,37 +92,6 @@ fn catalog() -> Json {
     Json::Object(result)
 }
 
-fn plain(value: Value) -> Json {
-    match value {
-        Value::Nil => Json::Null,
-        Value::Boolean(value) => json!(value),
-        Value::Integer(value) => json!(value),
-        Value::Number(value) => json!(value),
-        Value::String(value) => json!(value.to_str().unwrap().as_ref()),
-        Value::Table(table) => {
-            let entries: Vec<(Value, Value)> = table.pairs().map(|pair| pair.unwrap()).collect();
-            if !entries.is_empty() && entries.iter().all(|(key, _)| matches!(key, Value::Integer(n) if *n > 0 && (*n as usize) <= entries.len())) {
-                let mut values = vec![Json::Null; entries.len()];
-                for (key, value) in entries { let Value::Integer(n) = key else { unreachable!() }; values[n as usize - 1] = plain(value); }
-                Json::Array(values)
-            } else {
-                let mut out = Map::new();
-                for (key, value) in entries {
-                    let key = match key {
-                        Value::String(s) => s.to_str().unwrap().to_string(),
-                        Value::Integer(n) => n.to_string(),
-                        Value::Number(n) => n.to_string(),
-                        other => panic!("unexpected Lua table key: {other:?}"),
-                    };
-                    out.insert(key, plain(value));
-                }
-                Json::Object(out)
-            }
-        }
-        other => panic!("unexpected Lua value: {other:?}"),
-    }
-}
-
 struct Harness {
     lua: Lua,
     tables: Json,
@@ -109,9 +109,9 @@ impl Harness {
 
     fn load(
         &mut self,
-        saved: Option<Json>,
+        saved: Option<Data>,
         tables: Option<Json>,
-        engine: Option<Json>,
+        engine: Option<Data>,
     ) -> mlua::Result<()> {
         self.lua = new_lua();
         let data = tables.unwrap_or_else(|| self.tables.clone());
@@ -125,11 +125,11 @@ impl Harness {
             json_to_lua(&self.lua, &table_data),
             saved
                 .as_ref()
-                .map(|x| json_to_lua(&self.lua, x))
+                .map(|x| x.to_lua(&self.lua))
                 .unwrap_or(Value::Nil),
             engine
                 .as_ref()
-                .map(|x| json_to_lua(&self.lua, x))
+                .map(|x| x.to_lua(&self.lua))
                 .unwrap_or(Value::Nil),
             json_to_lua(&self.lua, &data["modifiers"]),
         );
@@ -165,13 +165,13 @@ impl Harness {
             .get(name)
             .unwrap()
     }
-    fn call_result(&self, name: &str, args: Vec<Json>) -> mlua::Result<Json> {
+    fn call_result(&self, name: &str, args: Vec<Json>) -> mlua::Result<Data> {
         let values = args.iter().map(|x| json_to_lua(&self.lua, x)).collect();
         self.function(name)
-            .call::<Value>(MultiValue::from_vec(values))
-            .map(plain)
+            .call::<MultiValue>(MultiValue::from_vec(values))
+            .and_then(Data::from_lupa_results)
     }
-    fn call(&self, name: &str, args: Vec<Json>) -> Json {
+    fn call(&self, name: &str, args: Vec<Json>) -> Data {
         self.call_result(name, args)
             .unwrap_or_else(|e| panic!("{name}: {e}"))
     }
@@ -181,38 +181,34 @@ impl Harness {
             .exec()
             .unwrap_or_else(|e| panic!("{code}: {e}"));
     }
-    fn eval(&self, expr: &str) -> Json {
-        plain(
-            self.lua
-                .load(format!("return {expr}"))
-                .eval()
-                .unwrap_or_else(|e| panic!("{expr}: {e}")),
-        )
+    fn eval(&self, expr: &str) -> Data {
+        self.lua
+            .load(format!("return {expr}"))
+            .strict_eval()
+            .unwrap_or_else(|e| panic!("{expr}: {e}"))
     }
-    fn eval_chunk(&self, code: &str) -> Json {
-        plain(
-            self.lua
-                .load(code)
-                .eval()
-                .unwrap_or_else(|e| panic!("{code}: {e}")),
-        )
+    fn eval_chunk(&self, code: &str) -> Data {
+        self.lua
+            .load(code)
+            .strict_eval()
+            .unwrap_or_else(|e| panic!("{code}: {e}"))
     }
-    fn state(&self, religion: &str) -> Json {
+    fn state(&self, religion: &str) -> Data {
         self.call("Inspect", vec![json!(religion)])
     }
-    fn s(&self) -> Json {
+    fn s(&self) -> Data {
         self.state(R1)
     }
-    fn export(&self) -> Json {
+    fn export(&self) -> Data {
         self.call("Export", vec![])
     }
-    fn snapshot(&self) -> Json {
+    fn snapshot(&self) -> Data {
         self.call("Snapshot", vec![])
     }
-    fn writes(&self) -> Json {
+    fn writes(&self) -> Data {
         self.eval("WRITES")
     }
-    fn engine(&self, player: &str) -> Json {
+    fn engine(&self, player: &str) -> Data {
         self.eval(&format!("ENGINE['{player}']"))
     }
     fn found(&self, religion: &str, followers: i64, facilities: i64, founder: i64) {
@@ -280,7 +276,7 @@ impl Harness {
         }
         base
     }
-    fn resolve(&self, religion: &str, discovery: &str, outcome: &str, extra: Json) -> Json {
+    fn resolve(&self, religion: &str, discovery: &str, outcome: &str, extra: Json) -> Data {
         self.call(
             "ResolveDiscovery",
             vec![
@@ -668,14 +664,14 @@ fn test_founder_defeat_keeps_believers_assets_and_other_faction() {
     call!(h, "NotifyFounderDefeated", 0);
     assert_eq!(
         (h.s()["followers"].clone(), h.s()["state"].clone()),
-        (json!(4), json!("PUBLIC"))
+        (json!(4).into(), json!("PUBLIC").into())
     );
     assert_eq!(h.s()["founderDefeated"], true);
     assert_eq!(h.s()["assets"]["book"]["holder"], "EXILE_1");
     h.l();
     assert_eq!(
         (h.s()["followers"].clone(), h.s()["state"].clone()),
-        (json!(1), json!("UNDERGROUND"))
+        (json!(1).into(), json!("UNDERGROUND").into())
     );
     h.reload();
     let before = h.snapshot();
@@ -691,15 +687,15 @@ fn test_global_last_follower_is_required_for_loss() {
     h.l();
     assert_eq!(
         (h.s()["state"].clone(), h.s()["followers"].clone()),
-        (json!("PUBLIC"), json!(1))
+        (json!("PUBLIC").into(), json!(1).into())
     );
     call!(h, "SetCommunity", R1, "elsewhere", 0, 1, "PLAYER_1");
     assert_eq!(
         (h.s()["state"].clone(), h.s()["followers"].clone()),
-        (json!("LOST"), json!(0))
+        (json!("LOST").into(), json!(0).into())
     );
     assert_eq!(h.s()["publicFacilities"], 1);
-    assert_eq!(h.s()["canRevive"], false);
+    assert!(!h.s()["canRevive"].python_truthy());
 }
 
 #[test]
@@ -707,7 +703,7 @@ fn test_underground_believers_need_no_public_facility_or_item() {
     let mut h = Harness::new();
     h.found(R1, 1, 0, 0);
     assert_eq!(h.s()["state"], "UNDERGROUND");
-    assert_eq!(h.s()["lost"], false);
+    assert!(!h.s()["lost"].python_truthy());
     h.reload();
 }
 
@@ -729,8 +725,8 @@ fn test_loss_retains_all_assets_and_underground_evidence() {
     h.l();
     assert_eq!(h.s()["assets"], before);
     assert_eq!(h.s()["state"], "LOST");
-    assert_eq!(h.s()["underground"], true);
-    assert_eq!(h.s()["canRevive"], true);
+    assert!(h.s()["underground"].python_truthy());
+    assert!(h.s()["canRevive"].python_truthy());
     h.reload();
     assert_eq!(h.s()["followers"], 0);
 }
@@ -746,7 +742,7 @@ fn test_each_of_the_four_revival_sources_survives_load() {
         call!(h, "Revive", R1, "revival", "source", "new", 1, 0);
         assert_eq!(
             (h.s()["state"].clone(), h.s()["followers"].clone()),
-            (json!("UNDERGROUND"), json!(1)),
+            (json!("UNDERGROUND").into(), json!(1).into()),
             "{kind}"
         );
         assert_eq!(h.s()["revivalCount"], 1);
@@ -763,14 +759,14 @@ fn test_holy_site_alone_and_no_source_cannot_revive() {
     h.l();
     reject!(h, "Revive", R1, "r", "absent", "new", 1, 0);
     call!(h, "PreserveAsset", R1, "site", "HOLY_SITE", "RUINS");
-    assert_eq!(h.s()["canRevive"], false);
+    assert!(!h.s()["canRevive"].python_truthy());
     reject!(h, "Revive", R1, "r", "site", "new", 1, 0);
     call!(h, "PreserveAsset", R1, "record", "RECORD", "SCHOLAR_1");
-    assert_eq!(h.s()["canRevive"], true);
+    assert!(h.s()["canRevive"].python_truthy());
     call!(h, "RemoveAsset", R1, "record");
-    assert_eq!(h.s()["canRevive"], false);
+    assert!(!h.s()["canRevive"].python_truthy());
     call!(h, "RemoveAsset", R1, "site");
-    assert_eq!(h.s()["underground"], false);
+    assert!(!h.s()["underground"].python_truthy());
     assert_eq!(h.s()["state"], "LOST");
     h.reload();
 }
@@ -856,7 +852,7 @@ fn test_revival_picks_a_free_slot_and_preserves_both_religions() {
                 revived["publicFacilities"].clone(),
                 revived["state"].clone()
             ),
-            (json!(1), json!(5), json!("PUBLIC"))
+            (json!(1).into(), json!(5).into(), json!("PUBLIC").into())
         );
         assert_eq!(h.state(R2), other);
         assert_eq!(h.engine("1")["faith"], 480);
@@ -891,7 +887,7 @@ fn test_revival_does_not_overwrite_a_slot_created_by_the_faith_callback() {
             revived["publicFacilities"].clone(),
             revived["revivalCount"].clone()
         ),
-        (json!(1), json!(7), json!(1))
+        (json!(1).into(), json!(7).into(), json!(1).into())
     );
     assert_eq!(h.engine("1")["faith"], 480);
     h.reload();
@@ -1105,7 +1101,7 @@ fn test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay(
             assert_eq!(h.state(R2)["assets"]["book"]["originReligion"], R1);
         }
         if outcome == "ARTIFACT" {
-            assert_eq!(state["assets"]["book"]["vault"], true);
+            assert!(state["assets"]["book"]["vault"].python_truthy());
         }
         if outcome == "HERESY" {
             assert!(state["assets"].get("book").is_none());
@@ -1158,7 +1154,7 @@ fn test_direct_revival_cannot_strand_an_unresolved_discovery() {
         let discovery = h.s()["discoveries"]["d"].clone();
         assert_eq!(
             (discovery["outcome"].clone(), discovery["effects"].clone()),
-            (json!("REVIVE"), json!("APPLIED"))
+            (json!("REVIVE").into(), json!("APPLIED").into())
         );
         assert_eq!(h.engine("1")["faith"], 480);
         h.reload();
@@ -1187,7 +1183,7 @@ fn test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material() {
         h.engine("1")["culture"].as_f64().unwrap() - before["culture"].as_f64().unwrap(),
         10.0
     );
-    assert_eq!(h.s()["retiredAssets"]["book"], true);
+    assert!(h.s()["retiredAssets"]["book"].python_truthy());
     reject!(h, "PreserveAsset", R1, "book", "SCRIPTURE", "CAVE", 1);
     h.reload();
 }
@@ -1226,7 +1222,7 @@ fn test_research_eurekas_precede_science_that_finishes_a_chosen_tech() {
             h.engine("1")["science"].clone(),
             h.engine("1")["culture"].clone()
         ),
-        (json!(10), json!(10))
+        (json!(10).into(), json!(10).into())
     );
     h.reload();
 }
@@ -1251,10 +1247,10 @@ fn test_heresy_requires_400_faith_and_consumes_material() {
             h.engine("1")["faith"].clone(),
             h.engine("1")["culture"].clone()
         ),
-        (json!(0), json!(20))
+        (json!(0).into(), json!(20).into())
     );
     assert!(h.s()["assets"].get("book").is_none());
-    assert_eq!(h.s()["retiredAssets"]["book"], true);
+    assert!(h.s()["retiredAssets"]["book"].python_truthy());
     reject!(h, "Revive", R1, "r", "book", "new", 1, 0);
     h.reload();
 }
@@ -1283,13 +1279,19 @@ fn test_absorption_rounds_once_worldwide_and_preserves_other_religions() {
             effect["sourceFollowers"].clone(),
             effect["convertedFollowers"].clone()
         ),
-        (json!(5), json!(2))
+        (json!(5).into(), json!(2).into())
     );
     let conversions: Vec<_> = effect["conversions"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|c| json!([c["player"], c["city"], c["moved"]]))
+        .map(|c| {
+            Data::Array(vec![
+                c["player"].clone(),
+                c["city"].clone(),
+                c["moved"].clone(),
+            ])
+        })
         .collect();
     assert_eq!(conversions, vec![json!([0, 0, 1]), json!([1, 0, 1])]);
     assert_eq!(
@@ -1297,7 +1299,7 @@ fn test_absorption_rounds_once_worldwide_and_preserves_other_religions() {
             call!(h, "NativeFollowers", R1),
             call!(h, "NativeFollowers", R2)
         ),
-        (json!(3), json!(3))
+        (json!(3).into(), json!(3).into())
     );
     let rows = h.eval("NativeRows(ENGINE['0'].cities['0'])");
     let counts: BTreeMap<_, _> = rows
@@ -1352,7 +1354,7 @@ fn test_absorption_clears_maximum_fixed_point_pressure_including_fraction() {
             call!(h, "NativeFollowers", R1),
             call!(h, "NativeFollowers", R2)
         ),
-        (json!(4), json!(7))
+        (json!(4).into(), json!(7).into())
     );
     assert_eq!(h.engine("1")["faith"], 0);
 }
@@ -1378,7 +1380,7 @@ fn test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted() {
                 call!(h, "NativeFollowers", R1),
                 call!(h, "NativeFollowers", R2)
             ),
-            (json!(3), json!(3)),
+            (json!(3).into(), json!(3).into()),
             "{omitted} {sentinel}"
         );
         assert_eq!(
@@ -1411,7 +1413,7 @@ fn test_bound_native_counts_prevent_false_loss_and_revival() {
     call!(h, "PreserveAsset", R1, "book", "SCRIPTURE", "PLAYER_1", 1);
     call!(h, "BindEngineReligion", R1, 42);
     assert_eq!(h.s()["followers"], 7);
-    assert_eq!(h.s()["lost"], false);
+    assert!(!h.s()["lost"].python_truthy());
     reject!(
         h,
         "Discover",
@@ -1493,7 +1495,7 @@ fn test_native_revival_uses_numeric_religion_order() {
             e["after"]["10"].clone(),
             e["after"]["42"].clone()
         ),
-        (json!(1), json!(2), json!(1))
+        (json!(1).into(), json!(2).into(), json!(1).into())
     );
 }
 
@@ -1505,12 +1507,12 @@ fn test_bound_revival_creates_one_native_citizen_and_survives_load() {
     h.d();
     h.exec("ENGINE['0'].cities['0'].pressure={['43']=7168}; ENGINE['1'].cities['0'].pressure={['43']=4096}");
     call!(h, "BindEngineReligion", R1, 42);
-    assert_eq!(h.s()["lost"], true);
+    assert!(h.s()["lost"].python_truthy());
     let before = h.engine("1")["faith"].as_f64().unwrap();
     h.resolve(R1, "d", "REVIVE", json!({}));
     assert_eq!(call!(h, "NativeFollowers", R1), 1);
     assert_eq!(h.s()["followers"], 1);
-    assert_eq!(h.s()["lost"], false);
+    assert!(!h.s()["lost"].python_truthy());
     assert_eq!(h.engine("1")["faith"].as_f64().unwrap(), before - 20.0);
     h.reload();
 }
@@ -1555,18 +1557,18 @@ fn test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways(
     h.resolve(R1, "d", "DIPLOMATIC_INCIDENT", json!({}));
     assert_eq!(
         (h.engine("0")["gold"].clone(), h.engine("1")["gold"].clone()),
-        (json!(50.75), json!(150.75))
+        (json!(50.75).into(), json!(150.75).into())
     );
     assert_eq!(
         (
             h.engine("0")["favor"].clone(),
             h.engine("1")["favor"].clone()
         ),
-        (json!(6), json!(15))
+        (json!(6).into(), json!(15).into())
     );
-    assert_eq!(call!(h, "CanPersecute", 0, R1, 1, R2), false);
-    assert_eq!(call!(h, "CanPersecute", 1, R2, 0, R1), false);
-    assert_eq!(call!(h, "CanPersecute", 0, R2, 1, R2), true);
+    assert!(!call!(h, "CanPersecute", 0, R1, 1, R2)[0].python_truthy());
+    assert!(!call!(h, "CanPersecute", 1, R2, 0, R1)[0].python_truthy());
+    assert!(call!(h, "CanPersecute", 0, R2, 1, R2).python_truthy());
     let error = h
         .call_result(
             "AssertCanPersecute",
@@ -1575,7 +1577,7 @@ fn test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways(
         .unwrap_err();
     assert!(error.to_string().contains("alliance prohibits"));
     h.reload();
-    assert_eq!(call!(h, "CanPersecute", 0, R1, 1, R2), false);
+    assert!(!call!(h, "CanPersecute", 0, R1, 1, R2)[0].python_truthy());
 }
 
 #[test]
@@ -1595,7 +1597,7 @@ fn test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_res
         let a = alliances.as_object().unwrap().values().next().unwrap();
         assert_eq!(
             (a["active"].clone(), a["endedTurn"].clone()),
-            (json!(false), h.eval("TURN")),
+            (json!(false).into(), h.eval("TURN")),
             "{cause}"
         );
         h.exec(&format!(
@@ -1603,8 +1605,8 @@ fn test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_res
             if cause == "war" { "false" } else { "true" }
         ));
         h.reload();
-        assert_eq!(call!(h, "CanPersecute", 0, R1, 1, R2), true);
-        assert_eq!(call!(h, "CanPersecute", 1, R2, 0, R1), true);
+        assert!(call!(h, "CanPersecute", 0, R1, 1, R2).python_truthy());
+        assert!(call!(h, "CanPersecute", 1, R2, 0, R1).python_truthy());
     }
 }
 
@@ -1614,7 +1616,7 @@ fn pending_hero(h: &Harness) {
     h.d();
     h.resolve(R1, "d", "HERO", json!({}));
 }
-fn hero_verification(h: &Harness) -> Json {
+fn hero_verification(h: &Harness) -> Data {
     h.export()["heroes"]["1"]["verification"].clone()
 }
 
@@ -1626,14 +1628,14 @@ fn test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan() {
     assert_eq!(hero_verification(&h), "PENDING");
     assert_eq!(h.engine("1")["faith"], 500);
     let diag = h.eval("ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)");
-    assert_eq!(diag["timedOut"], true);
+    assert!(diag["timedOut"].python_truthy());
     assert_eq!(
         (
             diag["elapsed"].clone(),
             diag["frameChecks"].clone(),
             diag["publishedChecks"].clone()
         ),
-        (json!(31), json!(0), json!(1))
+        (json!(31).into(), json!(0).into(), json!(1).into())
     );
     h.exec("HERO_UI_TICK(1)");
     let after = h.eval("ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)");
@@ -1643,7 +1645,7 @@ fn test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan() {
             after["frameChecks"].clone(),
             after["publishedChecks"].clone()
         ),
-        (json!(31), json!(0), json!(1))
+        (json!(31).into(), json!(0).into(), json!(1).into())
     );
     h.exec("local x=rp.Export().heroes['1']; ENGINE['1'].units[tostring(x.unit)].lifespan=30; ENGINE['1'].active=false; HERO_UI_PUBLISH()");
     assert_eq!(hero_verification(&h), "PENDING");
@@ -1654,13 +1656,13 @@ fn test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan() {
     h.exec("HERO_UI_PUBLISH(); HERO_UI_TICK(1)");
     assert_eq!(h.engine("1")["faith"], 532.5);
     let completed = h.eval("ExposedMembers.JAC_RP_HeroUI.VerificationDiagnostics(1)");
-    assert_eq!(completed["timedOut"], false);
+    assert!(!completed["timedOut"].python_truthy());
     assert_eq!(
         (
             completed["frameChecks"].clone(),
             completed["publishedChecks"].clone()
         ),
-        (json!(0), json!(2))
+        (json!(0).into(), json!(2).into())
     );
 }
 
@@ -1712,7 +1714,7 @@ fn test_hidden_addin_activates_after_load_and_completes_pending_hero_once() {
     assert_eq!(hero_verification(&h), "PENDING");
     assert_eq!(h.engine("1")["faith"], before);
     h.exec("HERO_UI_LOAD_CLOSE(); HERO_UI_FRAME(0)");
-    assert_eq!(h.eval("HERO_UI_HIDDEN"), false);
+    assert!(!h.eval("HERO_UI_HIDDEN").python_truthy());
     assert_eq!(hero_verification(&h), "APPLIED");
     assert_eq!(h.engine("1")["faith"], before + 32.5);
     h.exec("HERO_UI_LOAD_CLOSE(); HERO_UI_FRAME(0)");
@@ -1777,7 +1779,7 @@ fn test_unverified_hero_claim_never_pays_faith() {
     let before = h.engine("1")["faith"].as_f64().unwrap();
     h.resolve(R1, "d", "HERO", json!({}));
     h.exec("ENGINE['0'].heroClaims['10']=0");
-    assert_eq!(call!(h, "CompleteHero", 1), false);
+    assert!(!call!(h, "CompleteHero", 1).python_truthy());
     assert_eq!(h.engine("1")["faith"], before);
     assert_eq!(h.s()["discoveries"]["d"]["effects"], "PENDING");
     h.exec("ENGINE['0'].heroClaims['10']=1; HERO_UI_TICK()");
@@ -1970,11 +1972,11 @@ fn test_conceal_has_no_yield_and_keeps_material_after_later_paid_revivals() {
     h.resolve(R1, "d", "CONCEAL", json!({}));
     assert_eq!(h.eval("ENGINE"), engine);
     assert_eq!(h.s()["assets"]["book"]["holder"], "HIDDEN_PLAYER_1");
-    assert_eq!(h.s()["canRevive"], true);
+    assert!(h.s()["canRevive"].python_truthy());
     h.reload();
     call!(h, "Revive", R1, "r", "book", "new", 1, 0);
     call!(h, "SetCommunity", R1, "new", 0, 0, "PLAYER_1");
-    assert_eq!(h.s()["canRevive"], true);
+    assert!(h.s()["canRevive"].python_truthy());
     h.exec("TURN=TURN+10");
     call!(h, "Revive", R1, "r2", "book", "new2", 1, 0);
     assert_eq!(h.engine("1")["faith"], 460);
@@ -2048,7 +2050,7 @@ fn test_non_revival_limit_is_per_player_religion_and_branch() {
             h.engine("1")["gold"].clone(),
             h.engine("1")["science"].clone()
         ),
-        (json!(600), json!(1100), json!(10))
+        (json!(600).into(), json!(1100).into(), json!(10).into())
     );
 }
 
@@ -2079,7 +2081,7 @@ fn test_absorption_requires_own_living_target_and_locks_the_transferred_source()
     assert_eq!(call!(h, "NativeFollowers", R2), 7);
     assert_eq!(h.engine("1")["faith"], 0);
     h.lost(R2);
-    assert_eq!(h.state(R2)["canRevive"], false);
+    assert!(!h.state(R2)["canRevive"].python_truthy());
     reject!(h, "Revive", R2, "newrevival", "book", "new", 1, 0);
     h.reload();
     assert_eq!(h.state(R2)["materialUses"]["book"]["outcome"], "ABSORB");
@@ -2137,7 +2139,7 @@ fn test_diplomatic_restitution_requires_foreign_founder_contact_and_peace() {
             h.engine("1")["favor"].clone(),
             h.s()["assets"]["book"]["holder"].clone()
         ),
-        (json!(15), json!("PLAYER_0"))
+        (json!(15).into(), json!("PLAYER_0").into())
     );
 }
 
@@ -2227,13 +2229,13 @@ fn test_legacy_v1_choices_never_pay_on_load_or_unlock_used_material() {
     for key in ["materialUses", "outcomeUses", "retiredAssets"] {
         religion.as_object_mut().unwrap().remove(key);
     }
-    religion["discoveries"]["d"]["outcome"] = json!("SELL");
-    religion["discoveries"]["d"]["effects"] = json!("DEFERRED");
-    religion["discoveries"]["d"]["resolvedTurn"] = json!(17);
+    religion["discoveries"]["d"]["outcome"] = json!("SELL").into();
+    religion["discoveries"]["d"]["effects"] = json!("DEFERRED").into();
+    religion["discoveries"]["d"]["resolvedTurn"] = json!(17).into();
     h.load(Some(old), None, None).unwrap();
     assert_eq!(h.writes(), 0);
     assert_eq!(h.engine("1")["gold"], 100);
-    assert_eq!(h.s()["canRevive"], false);
+    assert!(!h.s()["canRevive"].python_truthy());
     h.rejected(
         "ResolveDiscovery",
         vec![json!(R1), json!("d"), json!("SELL"), h.options(json!({}))],
@@ -2324,13 +2326,13 @@ fn test_twenty_religions_do_not_leak_state_across_save_load() {
     call!(h, "NotifyFounderDefeated", 1);
     h.reload();
     assert_eq!(h.export()["religions"].as_object().unwrap().len(), 20);
-    assert_eq!(h.s()["lost"], true);
+    assert!(h.s()["lost"].python_truthy());
     assert_eq!(
         (
             h.state(R2)["followers"].clone(),
             h.state(R2)["state"].clone()
         ),
-        (json!(2), json!("PUBLIC"))
+        (json!(2).into(), json!("PUBLIC").into())
     );
     assert_eq!(h.state(R2)["assets"], json!({}));
 }
@@ -2342,9 +2344,7 @@ fn test_switching_save_in_same_vm_does_not_use_previous_game_cache() {
     let first = h.export();
     h.found(R2, 3, 1, 0);
     let property_store: mlua::Table = h.lua.globals().get("PROPERTY_STORE").unwrap();
-    property_store
-        .set(KEY, json_to_lua(&h.lua, &first))
-        .unwrap();
+    property_store.set(KEY, first.to_lua(&h.lua)).unwrap();
     assert_eq!(
         h.export()["religions"]
             .as_object()
@@ -2366,7 +2366,7 @@ fn test_future_or_damaged_save_fails_without_overwrite() {
         json!("bad"),
     ] {
         let mut h = Harness::new();
-        assert!(h.load(Some(saved.clone()), None, None).is_err());
+        assert!(h.load(Some(saved.clone().into()), None, None).is_err());
         assert_eq!(h.writes(), 0);
         assert_eq!(h.eval("PROPERTY_STORE.JAC_RP_STATE_V1"), saved);
     }
@@ -2383,8 +2383,8 @@ fn scenario() -> Json {
 fn test_live_scenario_gameplay_and_external_captures_in_fresh_vms() {
     let mut h = Harness::new();
     let scenario = scenario();
-    let mut captures: BTreeMap<String, Json> = BTreeMap::new();
-    let mut saves: BTreeMap<String, (Json, Json, Json)> = BTreeMap::new();
+    let mut captures: BTreeMap<String, Data> = BTreeMap::new();
+    let mut saves: BTreeMap<String, (Data, Data, Data)> = BTreeMap::new();
     let (mut compared, mut loaded, mut native_founded) = (0, 0, 0);
     for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
         let action = step["action"].as_str().unwrap();
@@ -2447,10 +2447,12 @@ fn test_manual_new_game_flag_reset_handles_zero_lua_return_values() {
         let lua = new_lua();
         lua.globals().set("CLEAR_DEFAULTS", clear).unwrap();
         lua.load("local values={}; GameConfiguration={SetValue=function(key,value) values[key]=value end, GetValue=function(key) if values[key]~=nil then return values[key] end end, SetToDefaults=function() if CLEAR_DEFAULTS then values={} end end}").exec().unwrap();
-        let result = lua.load(step["code"].as_str().unwrap()).eval::<Value>();
+        let result = lua
+            .load(step["code"].as_str().unwrap())
+            .strict_eval::<Data>();
         if clear {
             assert_eq!(
-                plain(result.unwrap()),
+                result.unwrap(),
                 "manual new-game setup clears test deadlines"
             );
         } else {
@@ -2479,7 +2481,7 @@ fn test_all_scenario_lua_chunks_compile_including_ui_and_waits() {
         let result: bool = h
             .lua
             .load("local f,e=load(...); if not f then error(e) end; return true")
-            .call(*code)
+            .strict_call(*code)
             .unwrap_or_else(|error| panic!("scenario chunk {index}: {error}"));
         assert!(result);
     }

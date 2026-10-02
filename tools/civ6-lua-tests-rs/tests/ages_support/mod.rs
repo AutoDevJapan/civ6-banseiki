@@ -1,5 +1,6 @@
 #![allow(dead_code)] // Each integration-test executable uses a different subset of these helpers.
 
+use civ6_lua_tests_rs::strict::{ChunkExt, Data, FromLuaMulti, Key, TableExt};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Lua, Table, Value};
 use rusqlite::Connection;
@@ -198,31 +199,6 @@ pub fn ages_tables() -> Json {
     Json::Object(out)
 }
 
-pub fn value_json(value: Value) -> Json {
-    match value {
-        Value::Nil => Json::Null,
-        Value::Boolean(v) => json!(v),
-        Value::Integer(v) => json!(v),
-        Value::Number(v) => json!(v),
-        Value::String(v) => json!(v.to_str().unwrap().to_string()),
-        Value::Table(t) => {
-            let mut map = Map::new();
-            for pair in t.pairs::<Value, Value>() {
-                let (k, v) = pair.unwrap();
-                let key = match k {
-                    Value::String(s) => s.to_str().unwrap().to_string(),
-                    Value::Integer(i) => i.to_string(),
-                    Value::Number(n) => n.to_string(),
-                    _ => panic!("unsupported key {k:?}"),
-                };
-                map.insert(key, value_json(v));
-            }
-            Json::Object(map)
-        }
-        other => panic!("unsupported Lua value {other:?}"),
-    }
-}
-
 pub struct World {
     pub lua: Lua,
 }
@@ -281,20 +257,26 @@ impl World {
             .exec()
             .unwrap_or_else(|e| panic!("{source}: {e}"));
     }
-    pub fn j(&self, expr: &str) -> Json {
-        value_json(
-            self.lua
-                .load(format!("return {expr}"))
-                .eval()
-                .unwrap_or_else(|e| panic!("{expr}: {e}")),
-        )
+    pub fn j(&self, expr: &str) -> Data {
+        self.lua
+            .load(format!("return {expr}"))
+            .strict_eval()
+            .unwrap_or_else(|e| panic!("{expr}: {e}"))
     }
-    pub fn array(&self, expr: &str) -> Vec<Json> {
-        let value = self.j(expr);
-        let object = value.as_object().unwrap();
-        (1..=object.len())
-            .map(|i| object[&i.to_string()].clone())
-            .collect()
+    pub fn truth(&self, expr: &str) -> bool {
+        self.lua
+            .load(format!("return {expr}"))
+            .python_truthy()
+            .unwrap()
+    }
+    pub fn array(&self, expr: &str) -> Vec<Data> {
+        self.lua
+            .load(format!("return {expr}"))
+            .strict_eval::<Table>()
+            .unwrap()
+            .strict_sequence_values()
+            .collect::<mlua::Result<_>>()
+            .unwrap()
     }
     pub fn turns(&self, first: i64, last: i64) {
         for turn in first..=last {
@@ -339,9 +321,13 @@ impl World {
                         .map(|s| Value::String(self.lua.create_string(s).unwrap())),
                 )
                 .collect();
-        f.call(mlua::MultiValue::from_vec(args)).unwrap()
+        Table::from_results(
+            f.call::<mlua::MultiValue>(mlua::MultiValue::from_vec(args))
+                .unwrap(),
+        )
+        .unwrap()
     }
-    pub fn snapshot(&self) -> Json {
+    pub fn snapshot(&self) -> Data {
         self.j("LEDGER()")
     }
     pub fn bind_context(&self, name: &str, context: Table) {
@@ -351,10 +337,10 @@ impl World {
         self.turns(first, last);
         self.run("local l=LEDGER(); local h=l.houses.p1; if l.reign>0 and h.oathChosen~=l.reign then local picked={Reign=l.reign}; for i,r in pairs(JAC_Oaths_Choices(h)) do if i==1 or h.age=='HEROIC' then picked['Oath'..i]=r.OathType end end; CHOOSE_OATHS(1,picked) end");
     }
-    pub fn house(&self, pid: i64, field: &str) -> Json {
+    pub fn house(&self, pid: i64, field: &str) -> Data {
         self.j(&format!("LEDGER().houses.p{pid}.{field}"))
     }
-    pub fn parts(&self, pid: i64) -> Json {
+    pub fn parts(&self, pid: i64) -> Data {
         self.house(pid, "parts")
     }
     pub fn choose(&self, pid: i64, policy: Option<&str>, reign: i64) {
@@ -363,10 +349,10 @@ impl World {
             "CHOOSE({pid},{{PolicyType={policy},Reign={reign}}})"
         ));
     }
-    pub fn plot_property(&self, x: i64, y: i64, name: &str) -> Json {
+    pub fn plot_property(&self, x: i64, y: i64, name: &str) -> Data {
         self.j(&format!("Map.GetPlot({x},{y}):GetProperty({:?})", name))
     }
-    pub fn plot_properties(&self) -> Json {
+    pub fn plot_properties(&self) -> BTreeMap<Key, Vec<Data>> {
         let names = [
             "JAC_AGE_GOLDEN",
             "JAC_AGE_POLICY_VALOR",
@@ -378,37 +364,38 @@ impl World {
             "JAC_AGE_ANCHOR_PIRATE",
             "JAC_AGE_ANCHOR_TEMPLE",
         ];
-        let mut map = Map::new();
+        let mut map = BTreeMap::new();
         let plots = self.j(
             "(function() local ids={} for id in pairs(PLOTS) do ids[id]=true end return ids end)()",
         );
-        for index in plots.as_object().unwrap().keys() {
-            let x: i64 = index.parse::<i64>().unwrap() % 100;
-            let y: i64 = index.parse::<i64>().unwrap() / 100;
+        for index in plots.entries().keys() {
+            let Key::Integer(id) = index else {
+                panic!("expected integer plot key, got {index:?}")
+            };
+            let x = id % 100;
+            let y = id / 100;
             map.insert(
                 index.clone(),
-                Json::Array(
-                    names
-                        .iter()
-                        .map(|name| self.plot_property(x, y, name))
-                        .collect(),
-                ),
+                names
+                    .iter()
+                    .map(|name| self.plot_property(x, y, name))
+                    .collect(),
             );
         }
-        Json::Object(map)
+        map
     }
-    pub fn policy_flags(&self, x: i64, y: i64) -> Json {
-        let mut map = Map::new();
+    pub fn policy_flags(&self, x: i64, y: i64) -> Data {
+        let mut map = BTreeMap::new();
         for kind in ["VALOR", "ELITE", "PIRATE", "TEMPLE"] {
             map.insert(
                 kind.into(),
-                json!([
+                Data::Array(vec![
                     self.plot_property(x, y, &format!("JAC_AGE_POLICY_{kind}")),
-                    self.plot_property(x, y, &format!("JAC_AGE_ANCHOR_{kind}"))
+                    self.plot_property(x, y, &format!("JAC_AGE_ANCHOR_{kind}")),
                 ]),
             );
         }
-        Json::Object(map)
+        Data::Object(map)
     }
     pub fn relations(&self, before_ledger: bool) {
         self.run("ALLIED['2-3']=true; ALLIED['0-1']=true; FRIENDS['2-3']=true; FRIENDS['0-1']=true; Game:SetProperty('JAC_1534_ALLIANCE_HOJO-IMAGAWA',16603); Game:SetProperty('JAC_1534_ALLIANCE_ODA-TAKEDA',16603)");

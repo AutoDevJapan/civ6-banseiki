@@ -3,6 +3,43 @@ use ages_support::*;
 use civ6_lua_tests_rs::json_to_lua;
 use serde_json::json;
 
+#[test]
+fn era_panel_dictionary_check_detects_string_keys_collisions_and_save_key_changes() {
+    use civ6_lua_tests_rs::strict::{Data, Key};
+    let w = era_panel_world();
+    make_dark(&w, 1);
+    w.turns(66, 70);
+    w.run("PANEL.Refresh()");
+    let expected = w.j("PANEL.ICONS");
+    assert_eq!(
+        expected.entries().keys().cloned().collect::<Vec<_>>(),
+        [Key::Integer(0), Key::Integer(2), Key::Integer(3)]
+    );
+    w.run("local t={} for k,v in pairs(PANEL.ICONS) do t[tostring(k)]=v end PANEL.ICONS=t");
+    assert_ne!(w.j("PANEL.ICONS"), expected);
+    w.run("local t={} for k,v in pairs(PANEL.ICONS) do t[tonumber(k)]=v;t[k]=v end PANEL.ICONS=t");
+    let collision = w.j("PANEL.ICONS");
+    assert_eq!(collision.entries().len(), 6);
+    assert_ne!(collision, expected);
+    w.run("PANEL.Refresh()");
+    assert_eq!(w.j("PANEL.ICONS"), expected);
+    w.turn(71);
+    let before = w.snapshot();
+    let restored = World::new();
+    restored
+        .lua
+        .globals()
+        .set("SAVED", before.to_lua(&restored.lua))
+        .unwrap();
+    restored.run("Game:SetProperty('JAC_AGES_LEDGER',SAVED)");
+    assert_eq!(restored.snapshot(), before);
+    w.run("LEDGER().probe={[0]='same',['0']='same'}");
+    let both = w.snapshot();
+    w.run("LEDGER().probe[0]=nil");
+    assert_ne!(w.snapshot(), both);
+    assert_ne!(w.snapshot()["probe"], Data::Nil);
+}
+
 fn popup_world() -> World {
     let w = World::new();
     w.screen_base();
@@ -114,7 +151,7 @@ mod reign_popup_tests {
         let w = popup_world();
         w.turns(1, 65);
         w.run("LOCAL_TURN_BEGIN(); AUTOPLAY_END()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
         assert_eq!(w.j("POPUP.JAC_REIGN_POPUP_LAST"), json!(null));
     }
     #[test]
@@ -124,7 +161,7 @@ mod reign_popup_tests {
         w.run("for i=1,10 do Players[1].research.techs[i]=true end");
         w.turns(31, 66);
         w.run("LOCAL_TURN_BEGIN()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("POPUP.ContextPtr.hidden"));
         assert_eq!(w.j("LEDGER().history.r1.p1.age"), json!("GOLDEN"));
         assert_eq!(
             w.j("POPUP.Controls.Title.text"),
@@ -146,7 +183,7 @@ mod reign_popup_tests {
                 json!("Ages_FrameGolden")
             ]
         );
-        assert_eq!(w.j("POPUP.Controls.HeroicFlare.hidden"), json!(true));
+        assert!(w.truth("POPUP.Controls.HeroicFlare.hidden"));
         let score = w.j("LEDGER().history.r1.p1.score").as_i64().unwrap();
         let golden = w.j("LEDGER().history.r1.p1.golden").as_i64().unwrap();
         let dark = w.j("LEDGER().history.r1.p1.dark").as_i64().unwrap();
@@ -178,21 +215,21 @@ mod reign_popup_tests {
             [json!(1), json!("REIGN_KOJI"), json!("GOLDEN"), json!(66)]
         );
         w.run("POPUP.Controls.Continue.click(); LOCAL_TURN_BEGIN(); AUTOPLAY_END()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
         w.turn(67);
         w.run("LOCAL_TURN_BEGIN()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
-        assert_eq!(w.j("POPUP.JAC_ShowReignPopup(true)"), json!(true));
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(true));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
+        assert!(w.truth("POPUP.JAC_ShowReignPopup(true)"));
+        assert!(!w.truth("POPUP.ContextPtr.hidden"));
         w.run("POPUP.OnClose()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
     }
     #[test]
     fn test_autoplay_end_shows_it_when_the_turn_begin_did_not() {
         let w = popup_world();
         w.turns(1, 66);
         w.run("AUTOPLAY_END()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("POPUP.ContextPtr.hidden"));
         assert_eq!(w.j("POPUP.JAC_REIGN_POPUP_LAST.reign"), json!(1));
     }
     #[test]
@@ -201,8 +238,8 @@ mod reign_popup_tests {
         make_dark(&w, 1);
         w.turn(66);
         w.run("LOCAL_TURN_BEGIN()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(true));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(!w.truth("POPUP.ContextPtr.hidden"));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
         assert_eq!(
             w.j("POPUP.Controls.EraRibbonValue.text"),
             json!("LOC_JAC_AGE_NAME_DARK [ICON_GLORY_DARK_AGE]")
@@ -219,16 +256,13 @@ mod reign_popup_tests {
             w.j("POPUP.Controls.Continue.text"),
             json!("LOC_JAC_OATH_CHOOSE")
         );
-        assert_eq!(w.j("POPUP.JAC_REIGN_POPUP_LAST.pendingChoice"), json!(true));
+        assert!(w.truth("POPUP.JAC_REIGN_POPUP_LAST.pendingChoice"));
         w.run("POPUP.Controls.Continue.click()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
-        assert_eq!(w.j("not OATHS.ContextPtr.hidden"), json!(true));
-        assert_eq!(
-            w.j("OATHS.JAC_ChooseOath('JAC_OATH_TAKEDA_TSUTSUJIGASAKI')"),
-            json!(true)
-        );
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
+        assert!(!w.truth("OATHS.ContextPtr.hidden"));
+        assert!(w.truth("OATHS.JAC_ChooseOath('JAC_OATH_TAKEDA_TSUTSUJIGASAKI')"));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
     }
     #[test]
     fn test_turn_end_closes_without_opening_the_choice() {
@@ -236,8 +270,8 @@ mod reign_popup_tests {
         make_dark(&w, 1);
         w.turn(66);
         w.run("LOCAL_TURN_BEGIN(); LOCAL_TURN_END()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
     }
     #[test]
     fn test_heroic_after_dark_uses_the_heroic_art() {
@@ -252,7 +286,7 @@ mod reign_popup_tests {
             w.j("POPUP.Controls.Background.texture"),
             json!("Ages_ParchmentHeroic")
         );
-        assert_eq!(w.j("POPUP.Controls.HeroicFlare.hidden"), json!(false));
+        assert!(!w.truth("POPUP.Controls.HeroicFlare.hidden"));
         assert_eq!(
             w.j("POPUP.Controls.Title.text"),
             json!("UP:LOC_JAC_REIGN_EIROKU_ANNOUNCEMENT")
@@ -267,14 +301,14 @@ mod reign_popup_tests {
         let w = popup_world();
         w.turns(1, 66);
         w.run("LOCAL_PLAYER=-1; LOCAL_TURN_BEGIN()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
     }
     #[test]
     fn test_merged_period_names_the_era_it_judged() {
         let w = popup_world();
         w.turns(1, 73);
         w.run("LEDGER().history.r2['from']=0; Game:SetProperty('JAC_AGES_LEDGER',LEDGER())");
-        assert_eq!(w.j("POPUP.JAC_ShowReignPopup(true)"), json!(true));
+        assert!(w.truth("POPUP.JAC_ShowReignPopup(true)"));
         assert_eq!(
             w.j("string.match(POPUP.Controls.Score.text,'^[^,]+')"),
             json!("LOC_JAC_AGE_REIGN_SCORE(LOC_JAC_REIGN_TENBUN_NAME")
@@ -299,32 +333,26 @@ mod dark_policy_notification_tests {
         make_dark(&w, 1);
         w.turns_with_oath(66, 66);
         w.run("LOCAL_TURN_BEGIN(); POPUP.OnClose()");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
         assert_eq!(w.j("DARK.JAC_DARK_POLICY_SHOW_COUNT"), json!(1));
         w.run("DARK.OnClose(); LOCAL_TURN_BEGIN(); AUTOPLAY_END()");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
         w.run("TEST_N=NotificationManager.FindType(3,1); PANEL.OnNotificationActivated(1,TEST_N.id,true)");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
         assert_eq!(w.j("DARK.JAC_DARK_POLICY_SHOW_COUNT"), json!(2));
         w.run("DARK.OnClose(); ACTION.DoEndTurn()");
         assert_eq!(w.j("ACTION.END_TURN_REQUESTS"), json!(0));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
         w.run("PANEL.g_notificationHandlers[3].TryDismiss(PANEL.Entry(TEST_N))");
-        assert_eq!(w.j("TEST_N.dismissed"), json!(false));
-        assert_eq!(
-            w.j("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"),
-            json!(true)
-        );
-        assert_eq!(w.j("TEST_N.dismissed"), json!(true));
+        assert!(!w.truth("TEST_N.dismissed"));
+        assert!(w.truth("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"));
+        assert!(w.truth("TEST_N.dismissed"));
         w.run("ACTION.DoEndTurn()");
         assert_eq!(w.j("ACTION.END_TURN_REQUESTS"), json!(1));
         w.turns_with_oath(67, 67);
         w.run("PANEL.OnNotificationActivated(1,TEST_N.id,true)");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
-        assert_eq!(
-            w.j("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE')"),
-            json!(false)
-        );
+        assert!(w.truth("DARK.ContextPtr.hidden"));
+        assert!(!w.truth("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_PIRATE')"));
     }
     #[test]
     fn test_notification_can_replace_an_open_reign_popup() {
@@ -332,17 +360,17 @@ mod dark_policy_notification_tests {
         make_dark(&w, 1);
         w.turns_with_oath(66, 66);
         w.run("LOCAL_TURN_BEGIN()");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("POPUP.ContextPtr.hidden"));
         w.run("TEST_N=NotificationManager.FindType(3,1); PANEL.OnNotificationActivated(1,TEST_N.id,true)");
-        assert_eq!(w.j("not POPUP.ContextPtr.hidden"), json!(false));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(w.truth("POPUP.ContextPtr.hidden"));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
     }
     #[test]
     fn test_official_notifications_keep_their_own_handler() {
         let w = notification_world();
         w.run("NotificationManager.SendNotification(1,71,{MESSAGE='official'}); TEST_N=NotificationManager.FindType(71,1); PANEL.OnNotificationActivated(1,TEST_N.id,true)");
         assert_eq!(w.j("PANEL.OFFICIAL_ACTIVATIONS"), json!(1));
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
     }
     #[test]
     fn test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen() {
@@ -351,7 +379,7 @@ mod dark_policy_notification_tests {
         w.turns_with_oath(66, 66);
         w.run("NotificationManager.SendNotification(1,3,{JAC_DARK_POLICY_REIGN=0}); PANEL.OnNotificationActivated(1,#NOTIFICATIONS,true)");
         w.run("TEST_OTHER=NotificationManager.FindType(3,3); PANEL.OnNotificationActivated(3,TEST_OTHER.id,true)");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
     }
     #[test]
     fn test_ui_recreated_from_save_does_not_repeat_automatic_choice_but_notification_works() {
@@ -388,13 +416,13 @@ mod dark_policy_notification_tests {
             w.context("ActionPanel", &[mod_text("UI/JAC_ActionPanel_Sengoku.lua")]),
         );
         w.run("PANEL.RegisterHandlers(); LOAD_SCREEN_CLOSE()");
-        assert_eq!(w.j("POPUP.JAC_ShowReignPopup(false)"), json!(false));
+        assert!(!w.truth("POPUP.JAC_ShowReignPopup(false)"));
         w.run("LuaEvents.JAC_SengokuReignPopup_Closed(true)");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(false));
+        assert!(w.truth("DARK.ContextPtr.hidden"));
         assert_eq!(w.j("DARK.JAC_DARK_POLICY_SHOW_COUNT"), json!(0));
         w.run("TEST_N=NotificationManager.FindType(3,1); PANEL.OnNotificationActivated(1,TEST_N.id,true)");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
-        assert_eq!(w.j("TEST_N.dismissed"), json!(false));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
+        assert!(!w.truth("TEST_N.dismissed"));
         w.run("ACTION.OnInputActionTriggered('END_TURN')");
         assert_eq!(w.j("ACTION.END_TURN_REQUESTS"), json!(0));
     }
@@ -408,22 +436,16 @@ mod dark_policy_notification_tests {
             w.j("ACTION.Controls.EndTurnText.text"),
             json!("LOC_JAC_AGE_DARK_CHOICE_TITLE")
         );
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(true));
+        assert!(w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("ACTION.OnInputActionTriggered('END_TURN')");
-        assert_eq!(w.j("not DARK.ContextPtr.hidden"), json!(true));
+        assert!(!w.truth("DARK.ContextPtr.hidden"));
         w.run("ACTION.OnEndTurnClicked()");
         for shift in [false, true] {
-            assert_eq!(
-                w.j(&format!(
-                    "ACTION.ContextPtr.input(ACTION.KEY_INPUT(13,{shift}))"
-                )),
-                json!(true)
-            );
+            assert!(w.truth(&format!(
+                "ACTION.ContextPtr.input(ACTION.KEY_INPUT(13,{shift}))"
+            )));
         }
-        assert_eq!(
-            w.j("ACTION.ContextPtr.input(ACTION.KEY_INPUT(27,false))"),
-            json!(false)
-        );
+        assert!(!w.truth("ACTION.ContextPtr.input(ACTION.KEY_INPUT(27,false))"));
         assert_eq!(w.j("ACTION.BASE_INPUTS"), json!(1));
         assert_eq!(w.j("ACTION.FORCED_END_TURN_REQUESTS"), json!(0));
         w.run("ACTION.CheckAutoEndTurn()");
@@ -436,11 +458,8 @@ mod dark_policy_notification_tests {
         );
         w.run("TEST_N=NotificationManager.FindType(3,1); NotificationManager.Dismiss(1,TEST_N.id); ACTION.DoEndTurn(123)");
         assert_eq!(w.j("ACTION.END_TURN_REQUESTS"), json!(0));
-        assert_eq!(
-            w.j("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"),
-            json!(true)
-        );
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(false));
+        assert!(w.truth("DARK.JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"));
+        assert!(!w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("ACTION.DoEndTurn(123); ACTION.CheckAutoEndTurn()");
         assert_eq!(
             [
@@ -451,10 +470,7 @@ mod dark_policy_notification_tests {
         );
         assert_eq!(w.j("ACTION.LAST_BLOCKER"), json!(123));
         assert_eq!(w.j("ACTION.Controls.EndTurnText.text"), json!("NEXT TURN"));
-        assert_eq!(
-            w.j("ACTION.ContextPtr.input(ACTION.KEY_INPUT(13,true))"),
-            json!(true)
-        );
+        assert!(w.truth("ACTION.ContextPtr.input(ACTION.KEY_INPUT(13,true))"));
         assert_eq!(w.j("ACTION.FORCED_END_TURN_REQUESTS"), json!(1));
         w.run("ACTION.EXPANSION_ALLOWS_AUTO_END=false; ACTION.CheckAutoEndTurn()");
         assert_eq!(w.j("ACTION.AUTO_END_TURN_REQUESTS"), json!(1));
@@ -463,17 +479,17 @@ mod dark_policy_notification_tests {
     fn test_guard_applies_only_to_a_pending_human_on_the_judgement_turn() {
         let w = notification_world();
         w.turns_with_oath(1, 65);
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(false));
+        assert!(!w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("LEDGER().houses.p1.score=-1000");
         w.turns_with_oath(66, 66);
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(true));
+        assert!(w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("LOCAL_PLAYER=0");
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(false));
+        assert!(!w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("LOCAL_PLAYER=-1");
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(false));
+        assert!(!w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
         w.run("LOCAL_PLAYER=1");
         w.turns_with_oath(67, 67);
-        assert_eq!(w.j("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"), json!(false));
+        assert!(!w.truth("ACTION.JAC_IsDarkPolicyEndTurnBlocked()"));
     }
 }
 
@@ -507,10 +523,7 @@ mod era_panel_tests {
             json!("LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_TENBUN_NAME,1534)")
         );
         assert_eq!(w.j("PANEL.Controls.TimeToNextEra.text"), json!("60"));
-        assert_eq!(
-            w.j("PANEL.Controls.TimeToNextEraContainer.hidden"),
-            json!(false)
-        );
+        assert!(!w.truth("PANEL.Controls.TimeToNextEraContainer.hidden"));
         assert_eq!(w.j("PANEL.Controls.EraScoreValue.text"), json!("3"));
         assert_eq!(
             w.j("PANEL.Controls.EraRibbonValue.text"),
@@ -552,14 +565,14 @@ mod era_panel_tests {
         assert_eq!(w.j("PANEL.JAC_AGES_PANEL_VIEW.projected"), json!(projected));
         assert_eq!(
             [
-                w.j("not PANEL.Controls.GoldenCheckmark.hidden"),
-                w.j("not PANEL.Controls.NormalCheckmark.hidden"),
-                w.j("not PANEL.Controls.DarkCheckmark.hidden")
+                !w.truth("PANEL.Controls.GoldenCheckmark.hidden"),
+                !w.truth("PANEL.Controls.NormalCheckmark.hidden"),
+                !w.truth("PANEL.Controls.DarkCheckmark.hidden")
             ],
             [
-                json!(projected == "GOLDEN"),
-                json!(projected == "NORMAL"),
-                json!(projected == "DARK")
+                projected == "GOLDEN",
+                projected == "NORMAL",
+                projected == "DARK"
             ]
         );
         let effect = w.j("PANEL.Controls.EraEffects.text");
@@ -630,17 +643,17 @@ mod era_panel_tests {
             .filter(|(p, _)| *p != 1)
             .map(|(p, a)| {
                 (
-                    p.to_string(),
-                    json!(match a.as_str().unwrap() {
+                    civ6_lua_tests_rs::strict::Key::Integer(p as i64),
+                    civ6_lua_tests_rs::strict::Data::from(json!(match a.as_str().unwrap() {
                         "GOLDEN" => "[ICON_GLORY_GOLDEN_AGE]",
                         "NORMAL" => "[ICON_GLORY_NORMAL_AGE]",
                         "DARK" => "[ICON_GLORY_DARK_AGE]",
                         other => panic!("{other}"),
-                    }),
+                    })),
                 )
             })
-            .collect::<serde_json::Map<_, _>>();
-        assert_eq!(w.j("PANEL.ICONS"), serde_json::Value::Object(icons));
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(w.j("PANEL.ICONS").entries(), icons);
         let effect = w.j("PANEL.Controls.EraEffects.text");
         let lines = effect
             .as_str()
@@ -662,8 +675,8 @@ mod era_panel_tests {
         w.turn(1457);
         w.run("LEDGER().houses.p1.score=1000; Game:SetProperty('JAC_AGES_LEDGER',LEDGER()); PANEL.Refresh()");
         assert_eq!(w.j("PANEL.JAC_AGES_PANEL_VIEW.projected"), json!("DARK"));
-        assert_eq!(w.j("PANEL.Controls.DarkCheckmark.hidden"), json!(false));
-        assert_eq!(w.j("PANEL.Controls.GoldenCheckmark.hidden"), json!(true));
+        assert!(!w.truth("PANEL.Controls.DarkCheckmark.hidden"));
+        assert!(w.truth("PANEL.Controls.GoldenCheckmark.hidden"));
         assert_eq!(
             w.j("PANEL.Controls.EraName.text"),
             json!("LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_REIWA_NAME,2019)")
@@ -678,11 +691,8 @@ mod era_panel_tests {
         w.run("PANEL.Refresh()");
         let count = reigns()["reigns"].as_array().unwrap().len();
         assert_eq!(w.j("LEDGER().reign"), json!(count));
-        assert_eq!(
-            w.j("PANEL.Controls.TimeToNextEraContainer.hidden"),
-            json!(true)
-        );
-        assert_eq!(w.j("PANEL.Controls.ThresholdStack.hidden"), json!(true));
+        assert!(w.truth("PANEL.Controls.TimeToNextEraContainer.hidden"));
+        assert!(w.truth("PANEL.Controls.ThresholdStack.hidden"));
         assert_eq!(
             w.j("PANEL.Controls.EraName.text"),
             json!("LOC_JAC_AGE_PANEL_PERIOD(LOC_JAC_REIGN_CHIDAI_NAME,2119)")

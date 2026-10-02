@@ -1,5 +1,6 @@
+use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, json_to_lua, new_lua, read_repo, repo_root};
-use mlua::{FromLuaMulti, Lua, Table};
+use mlua::{Lua, Table};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use serde_json::{json, Value as Json};
@@ -8,6 +9,68 @@ use std::fmt::Debug;
 
 const MOD: &str = "poc/JAC_PoC_CourtArbitration/";
 const FIXTURE: &str = "tools/civ6-lua-tests-rs/fixtures/court/";
+
+mod fidelity_regressions {
+    use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[test]
+    fn shogunate_end_comparison_rejects_numeric_strings_and_fractional_numbers() {
+        let h = Court::new();
+        h.eq("JAC_ARB.ShogunateEndTurn()", 120_i64);
+        for result in ["'120'", "120.5", "true", "nil", "120,99"] {
+            h.run(&format!(
+                "JAC_ARB.ShogunateEndTurn=function() return {result} end"
+            ));
+            assert!(
+                catch_unwind(AssertUnwindSafe(
+                    || h.eq("JAC_ARB.ShogunateEndTurn()", 120_i64)
+                ))
+                .is_err(),
+                "{result}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlay_identity_check_rejects_nil_instead_of_false() {
+        let h = Court::scenario();
+        h.run(&fixture("overlay_setup.lua"));
+        h.run(&mod_source("UI/JAC_CourtArbitrationPanel.lua"));
+        h.eq("ContextPtr:IsHidden()", false);
+        h.run("ContextPtr.IsHidden=function() return nil end");
+        assert!(catch_unwind(AssertUnwindSafe(|| h.eq("ContextPtr:IsHidden()", false))).is_err());
+        h.run("ContextPtr.IsHidden=function() return false end");
+        h.eq("ContextPtr:IsHidden()", false);
+    }
+
+    #[test]
+    fn all_four_cost_and_penalty_comparisons_reject_extra_results_and_wrong_kinds() {
+        for (function, power, expected) in [
+            ("Costs", 1, (100_i64, 5_i64)),
+            ("Costs", 3, (34, 2)),
+            ("RefusalPenalty", 1, (15, 10)),
+            ("RefusalPenalty", 3, (45, 30)),
+        ] {
+            let h = Court::new();
+            let expression = format!("JAC_ARB.{function}({power})");
+            h.eq(&expression, expected);
+            for result in [
+                format!("{},{},99", expected.0, expected.1),
+                format!("{},{},nil", expected.0, expected.1),
+                format!("'{}',{}", expected.0, expected.1),
+            ] {
+                h.run(&format!(
+                    "JAC_ARB.{function}=function() return {result} end"
+                ));
+                assert!(
+                    catch_unwind(AssertUnwindSafe(|| h.eq(&expression, expected))).is_err(),
+                    "{expression}: {result}"
+                );
+            }
+        }
+    }
+}
 
 fn mod_source(path: &str) -> String {
     read_repo(format!("{MOD}{path}"))
@@ -121,15 +184,25 @@ impl Court {
             .unwrap_or_else(|error| panic!("{code}: {error}"));
     }
 
-    fn eval<T: FromLuaMulti>(&self, expression: &str) -> T {
+    fn strict_eval<T: FromLuaMulti>(&self, expression: &str) -> T {
         self.lua
             .load(format!("return {expression}"))
-            .eval()
+            .strict_eval()
             .unwrap_or_else(|error| panic!("{expression}: {error}"))
     }
 
     fn eq<T: FromLuaMulti + PartialEq + Debug>(&self, expression: &str, expected: T) {
-        assert_eq!(self.eval::<T>(expression), expected, "{expression}");
+        assert_eq!(self.strict_eval::<T>(expression), expected, "{expression}");
+    }
+    fn truth(&self, expression: &str, expected: bool) {
+        assert_eq!(
+            self.lua
+                .load(format!("return {expression}"))
+                .python_truthy()
+                .unwrap(),
+            expected,
+            "{expression}"
+        );
     }
 
     fn next(&mut self, turn: i64) {
@@ -144,9 +217,9 @@ impl Court {
     fn logs(&self) -> Vec<String> {
         self.lua
             .globals()
-            .get::<Table>("LOG")
+            .strict_get::<Table>("LOG")
             .unwrap()
-            .sequence_values::<String>()
+            .strict_sequence_values::<String>()
             .collect::<mlua::Result<Vec<_>>>()
             .unwrap()
     }
@@ -366,9 +439,9 @@ mod arbitration_turn_tests {
     fn test_muromachi_end_is_1573_month_7_on_the_sengoku_calendar() {
         let h = Court::new();
         h.eq("JAC_ARB.ShogunateEndTurn()", 120_i64);
-        h.eq("JAC_ARB.IsEmpoweredShogun(2,119)", true);
-        h.eq("JAC_ARB.IsEmpoweredShogun(2,120)", false);
-        h.eq("JAC_ARB.IsEmpoweredShogun(0,1)", false);
+        h.truth("JAC_ARB.IsEmpoweredShogun(2,119)", true);
+        h.truth("JAC_ARB.IsEmpoweredShogun(2,120)", false);
+        h.truth("JAC_ARB.IsEmpoweredShogun(0,1)", false);
         h.log_has("[JAC_ARB] loaded shogunate_end_turn=120");
     }
 
@@ -387,7 +460,7 @@ mod arbitration_turn_tests {
         h.eq("Players[1].gold", 500_i64);
         h.log_has("[JAC_ARB] rejected request player=1 pair=1-0 reason=ONE_PER_TURN");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", 12_i64);
         h.eq("Game:GetProperty('JAC_ARB_PENDING')", None::<i64>);
         h.log_has("[JAC_ARB] decision player=1 accept=true by=ai");
@@ -434,7 +507,7 @@ mod arbitration_turn_tests {
         );
         h.eq("Players[2].gold, JAC_ARB.Legitimacy(2)", (466_i64, 71_i64));
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", 32_i64);
     }
 
@@ -443,7 +516,7 @@ mod arbitration_turn_tests {
         let mut h = Court::new();
         h.run("Players[1].cities=4; REQUEST(2,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq("JAC_ARB.Legitimacy(1)", 11_i64);
         h.eq("Players[1]:GetProperty('JAC_ARB_OUTLAW_UNTIL')", 32_i64);
         h.log_has(
@@ -564,7 +637,7 @@ mod arbitration_turn_tests {
         h.run("Players[1].cities=3; Players[1]:SetProperty('JAC_LEGITIMACY',20); REQUEST(0,0,1)");
         h.advance();
         h.log_has("[JAC_ARB] decision player=1 accept=false by=ai");
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
     }
 
     #[test]
@@ -572,7 +645,7 @@ mod arbitration_turn_tests {
         let mut h = Court::new();
         h.run("Players[1].cities=4; REQUEST(0,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq(
             "JAC_ARB.Legitimacy(1), Players[1]:GetProperty('JAC_ARB_OUTLAW_UNTIL')",
             (41_i64, 12_i64),
@@ -584,7 +657,7 @@ mod arbitration_turn_tests {
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", None::<i64>);
         h.run("Players[1].cities=3; REQUEST(0,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
     }
 
     #[test]
@@ -592,7 +665,7 @@ mod arbitration_turn_tests {
         let mut h = Court::new();
         h.run("Players[1].human=true; REQUEST(0,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.log_has("[JAC_ARB] decision player=1 accept=false by=no_answer");
         h.run("REQUEST(0,0,1); RESPOND(3,1); RESPOND(0,1); RESPOND(1,1); RESPOND(1,0)");
         assert_eq!(
@@ -603,7 +676,7 @@ mod arbitration_turn_tests {
             1
         );
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.log_has("[JAC_ARB] decision player=1 accept=true by=answer");
     }
 
@@ -615,13 +688,13 @@ mod arbitration_turn_tests {
         h.next(3);
         h.run("SET_WAR(0,1,true)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.log_has("[JAC_ARB] truce reimposed pair=0-1 turn=4 until=12 ok=true");
         h.next(13);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", None::<i64>);
         h.run("SET_WAR(0,1,true)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
     }
 
     #[test]
@@ -629,7 +702,7 @@ mod arbitration_turn_tests {
         let mut h = Court::new();
         h.run("MIN_WAR=10; SET_WAR(0,1,true); REQUEST(2,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq(
             "Game:GetProperty('JAC_ARB_TRUCE_0_1'), Game:GetProperty('JAC_ARB_PEACE_TURN_0_1')",
             (32_i64, 2_i64),
@@ -639,7 +712,7 @@ mod arbitration_turn_tests {
         h.next(12);
         h.run("SET_WAR(0,1,true)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq(
             "Game:GetProperty('JAC_ARB_PEACE_TURN_0_1'), Game:GetProperty('JAC_ARB_TRUCE_0_1')",
             (13_i64, 32_i64),
@@ -655,14 +728,14 @@ mod arbitration_turn_tests {
         h.advance();
         h.run("SET_WAR(0,1,true)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq(
             "Game:GetProperty('JAC_ARB_PEACE_TURN_0_1'), Game:GetProperty('JAC_ARB_TRUCE_0_1')",
             (2_i64, 32_i64),
         );
         h.log_has("[JAC_ARB] truce breach deferred pair=0-1 turn=3 peace_turn=2");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq(
             "Game:GetProperty('JAC_ARB_PEACE_TURN_0_1'), Game:GetProperty('JAC_ARB_TRUCE_0_1')",
             (4_i64, 32_i64),
@@ -676,7 +749,7 @@ mod arbitration_turn_tests {
         let mut h = Court::new();
         h.run("MIN_WAR=10; FORCE_IGNORED=true; SET_WAR(0,1,true); REQUEST(2,0,1)");
         h.advance();
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", None::<i64>);
         h.eq("Game:GetProperty('JAC_ARB_AWAIT_0_1')", 30_i64);
         h.log_has("[JAC_ARB] SAFETY NET accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=deferred reason=min_war");
@@ -686,10 +759,10 @@ mod arbitration_turn_tests {
             "AWAITING_PEACE".to_string(),
         );
         h.next(10);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.log_has("[JAC_ARB] SAFETY NET peace deferred pair=0-1 turn=10 reason=min_war");
         h.next(11);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_AWAIT_0_1')", None::<i64>);
         h.eq(
             "Game:GetProperty('JAC_ARB_TRUCE_0_1'), Game:GetProperty('JAC_ARB_PEACE_TURN_0_1')",
@@ -718,10 +791,10 @@ mod arbitration_turn_tests {
             "[JAC_ARB] SAFETY NET truce reimposed pair=2-3 turn=2 until=5 ok=false reason=min_war",
         );
         h.next(10);
-        h.eq("Players[2]:GetDiplomacy():IsAtWarWith(3)", true);
+        h.truth("Players[2]:GetDiplomacy():IsAtWarWith(3)", true);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_2_3')", 5_i64);
         h.next(11);
-        h.eq("Players[2]:GetDiplomacy():IsAtWarWith(3)", false);
+        h.truth("Players[2]:GetDiplomacy():IsAtWarWith(3)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_2_3')", None::<i64>);
         h.log_has("[JAC_ARB] truce ended pair=2-3 turn=11");
     }
@@ -760,7 +833,7 @@ mod arbitration_turn_tests {
         for probe in probes {
             let code = probe["code"].as_str().unwrap();
             assert!(!code.contains("error("));
-            let report: String = h.lua.load(code).eval().unwrap();
+            let report: String = h.lua.load(code).strict_eval().unwrap();
             assert!(report.starts_with("turn="), "{report}");
         }
     }
@@ -784,13 +857,13 @@ mod subjugation_order_tests {
         h.refuse_on_turn_2();
         h.eq("Players[1]:GetProperty('JAC_ARB_OUTLAW_UNTIL')", 12_i64);
         h.log_has("[JAC_ARB] joined player=0 target=1 turn=2 until=12 by=ai");
-        h.eq("JAC_ARB.HasJoined(0,1,2)", true);
-        h.eq("JAC_ARB.HasJoined(3,1,2)", false);
-        h.eq("JAC_ARB.HasJoined(2,1,2)", false);
+        h.truth("JAC_ARB.HasJoined(0,1,2)", true);
+        h.truth("JAC_ARB.HasJoined(3,1,2)", false);
+        h.truth("JAC_ARB.HasJoined(2,1,2)", false);
         h.eq("(function() local n=0; for _,v in ipairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_REFUSED_NAME' then n=n+1 end end return n end)()", 4_i64);
         h.run("NEAR['1_3']=true");
         h.advance();
-        h.eq("JAC_ARB.HasJoined(3,1,3)", true);
+        h.truth("JAC_ARB.HasJoined(3,1,3)", true);
         h.log_has("[JAC_ARB] joined player=3 target=1 turn=3 until=12 by=ai");
     }
 
@@ -799,7 +872,7 @@ mod subjugation_order_tests {
         let mut h = Court::new();
         h.refuse_on_turn_2();
         h.run("JOIN(2,1)");
-        h.eq("JAC_ARB.HasJoined(2,1,2)", true);
+        h.truth("JAC_ARB.HasJoined(2,1,2)", true);
         h.eq(
             "Game:GetProperty('JAC_ARB_LAST_EVENT')",
             "join player=2 turn=2".to_string(),
@@ -847,7 +920,7 @@ mod subjugation_order_tests {
         let mut h = Court::new();
         h.refuse_on_turn_2();
         let (ouchi_before, otomo_before): (i64, i64) =
-            h.eval("JAC_ARB.Legitimacy(0), JAC_ARB.Legitimacy(1)");
+            h.strict_eval("JAC_ARB.Legitimacy(0), JAC_ARB.Legitimacy(1)");
         h.run("CONQUER(0,1,104)");
         h.eq(
             "Players[0].gold, JAC_ARB.Legitimacy(0), JAC_ARB.Legitimacy(1)",
@@ -855,14 +928,14 @@ mod subjugation_order_tests {
         );
         h.log_has(&format!("[JAC_ARB] subjugation capture player=0 target=1 city=7 turn=2 gold=+200 legitimacy={} target_legitimacy={}", ouchi_before + 10, otomo_before - 10));
         h.eq("(function() local n=0; for _,v in ipairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_CAPTURE_NAME' then n=n+1 end end return n end)()", 4_i64);
-        let mori_gold: i64 = h.eval("Players[3].gold");
+        let mori_gold: i64 = h.strict_eval("Players[3].gold");
         h.run("CONQUER(3,1,103)");
         h.eq(
             "Players[3].gold, JAC_ARB.Legitimacy(1)",
             (mori_gold, otomo_before - 10),
         );
         h.next(13);
-        let gold: i64 = h.eval("Players[0].gold");
+        let gold: i64 = h.strict_eval("Players[0].gold");
         h.run("CONQUER(0,1,102)");
         h.eq("Players[0].gold", gold);
     }
@@ -903,12 +976,12 @@ mod arbitration_ai_tests {
         h.eq("Players[0].gold, JAC_ARB.Legitimacy(0)", (400_i64, 51_i64));
         h.eq("(function() local c=Players[0]:GetProperty('JAC_ARB_LAST_COST'); return c.GoldBefore,c.GoldAfter,c.LegitimacyBefore,c.LegitimacyAfter end)()", (500_i64, 400_i64, 56_i64, 51_i64));
         h.eq("Game:GetProperty('JAC_ARB_AI_PAIR_REQUEST_0_1'), Players[0]:GetProperty('JAC_ARB_AI_LAST_REQUEST')", (2_i64, 2_i64));
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq("Game:GetProperty('JAC_ARB_LAST_EVENT')", None::<String>);
         h.log_has("[JAC_ARB] ai request player=0 pair=0-1 turn=2 by=ai_party score=6 duration=1 weariness=0 weariness_cities=1 army_loss=3 city_loss=1 low_legitimacy=0");
         h.advance();
         h.eq("Game:GetProperty('JAC_ARB_PENDING')", None::<i64>);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq(
             "JAC_ARB.Legitimacy(1), Players[1]:GetProperty('JAC_ARB_OUTLAW_UNTIL')",
             (44_i64, 13_i64),
@@ -921,7 +994,7 @@ mod arbitration_ai_tests {
         h.next(120);
         h.eq("(function() local p=Game:GetProperty('JAC_ARB_PENDING'); return p.Requester,p.Source,p.Power end)()", (0_i64, "ai_party".to_string(), 1_i64));
         h.next(121);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", 131_i64);
     }
 
@@ -998,7 +1071,7 @@ mod arbitration_ai_tests {
         h.eq("(function() local p=Game:GetProperty('JAC_ARB_PENDING'); return p.Requester,p.A,p.B,p.Power,p.Source end)()", (2_i64, 0_i64, 1_i64, 3_i64, "ai_shogun".to_string()));
         h.eq("Players[2].gold, JAC_ARB.Legitimacy(2)", (466_i64, 74_i64));
         h.next(3);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", 33_i64);
         h.eq(
             "JAC_ARB.Legitimacy(0), JAC_ARB.Legitimacy(1)",
@@ -1037,7 +1110,7 @@ mod arbitration_ai_tests {
             "ai_shogun".to_string(),
         );
         h.next(120);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", false);
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", 150_i64);
         h.eq("Game:GetProperty('JAC_ARB_PENDING')", None::<i64>);
         h.run("SET_WAR(0,3,true)");
@@ -1114,7 +1187,7 @@ mod arbitration_ai_tests {
             (2_i64, 500_i64),
         );
         h.next(2);
-        h.eq("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
+        h.truth("Players[0]:GetDiplomacy():IsAtWarWith(1)", true);
         h.eq("(function() local p=Game:GetProperty('JAC_ARB_PENDING'); return p.Requester,p.Turn,p.Source end)()", (0_i64, 2_i64, "ai_party".to_string()));
         h.run("START_TURN(2)");
         h.eq("Game:GetProperty('JAC_ARB_PENDING').Turn", 2_i64);
@@ -1165,7 +1238,7 @@ mod live_scenario_on_stubs_tests {
                     results.push(
                         h.lua
                             .load(code)
-                            .eval::<String>()
+                            .strict_eval::<String>()
                             .unwrap_or_else(|error| panic!("{code}: {error}")),
                     );
                 }
@@ -1174,7 +1247,7 @@ mod live_scenario_on_stubs_tests {
                     assert!(h
                         .lua
                         .load(code)
-                        .eval::<bool>()
+                        .strict_eval::<bool>()
                         .unwrap_or_else(|error| panic!("{code}: {error}")));
                 }
                 _ => {}
@@ -1244,7 +1317,7 @@ mod live_scenario_on_stubs_tests {
                 let result = h
                     .lua
                     .load(code)
-                    .eval::<String>()
+                    .strict_eval::<String>()
                     .unwrap_or_else(|error| panic!("{code}: {error}"));
                 assert_eq!(
                     result,
