@@ -768,6 +768,7 @@ impl Runner {
         let mut begun = false;
         let mut state_wait_started = None;
         let mut last_states = Vec::<String>::new();
+        let mut last_state_error = None;
         loop {
             duration(deadline, 1.)?;
             if !begun {
@@ -775,13 +776,27 @@ impl Runner {
                     sleep(deadline, 0.5)?;
                     continue;
                 }
+                let since = *state_wait_started.get_or_insert_with(Instant::now);
                 // Keep the accepted FireTuner stream through the load screen.
                 // The game need not reopen its listener before Begin Game.
                 let states = match self.states(deadline) {
                     Ok(states) => states,
                     Err(error) => {
-                        self.log("loadscreen_states", "WAIT", &error.to_string())?;
-                        sleep(deadline, 0.5)?;
+                        let error = error.to_string();
+                        if last_state_error.as_ref() != Some(&error) {
+                            self.log("loadscreen_states", "WAIT", &error)?;
+                            last_state_error = Some(error);
+                        }
+                        if since.elapsed() < Duration::from_secs(15) {
+                            sleep(deadline, 0.5)?;
+                            continue;
+                        }
+                        // A new ready marker proves the load screen is ready.
+                        // The established HWND-targeted ESC path needs no tuner listener.
+                        platform::focus_and_key(0x1b, deadline)?;
+                        begun = true;
+                        self.client = None;
+                        self.log("loadscreen_begin","OK","new ready marker observed; ESC posted once to the verified Civ6 window after state-query wait")?;
                         continue;
                     }
                 };
@@ -804,7 +819,6 @@ impl Runner {
                         deadline,
                     )?;
                 } else {
-                    let since = *state_wait_started.get_or_insert_with(Instant::now);
                     if since.elapsed() < Duration::from_secs(15) {
                         sleep(deadline, 0.5)?;
                         continue;
