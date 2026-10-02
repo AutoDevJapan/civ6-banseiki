@@ -83,6 +83,63 @@ fn cli_commands() -> [clap::Command; 8] {
 }
 
 #[test]
+fn negative_number_paths_are_values_but_unknown_hyphen_options_are_rejected() {
+    let mut checked = 0;
+    for mut command in cli_commands() {
+        command.build();
+        let leaves = if command.get_subcommands().next().is_some() {
+            command
+                .get_subcommands()
+                .filter(|sub| sub.get_name() != "help")
+                .map(|sub| (vec![sub.get_name().to_owned()], sub))
+                .collect::<Vec<_>>()
+        } else {
+            vec![(Vec::new(), &command)]
+        };
+        for (path, leaf) in leaves {
+            for arg in leaf
+                .get_arguments()
+                .filter(|arg| arg.get_action().takes_values() && arg.get_id() != "only")
+            {
+                let mut args = vec![command.get_name().to_owned()];
+                args.extend(path.iter().cloned());
+                args.push(format!("--{}", arg.get_long().unwrap()));
+                args.push("-1".into());
+                let matches = command.clone().try_get_matches_from(&args).unwrap();
+                let matches = path
+                    .iter()
+                    .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                assert_eq!(
+                    matches
+                        .get_one::<std::path::PathBuf>(arg.get_id().as_str())
+                        .unwrap(),
+                    Path::new("-1"),
+                    "{args:?}"
+                );
+                for unknown in ["-unknown", "--unknown-option"] {
+                    *args.last_mut().unwrap() = unknown.into();
+                    let error = command.clone().try_get_matches_from(&args).unwrap_err();
+                    assert_eq!(error.exit_code(), 2, "{args:?}");
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 25);
+    let t = temp();
+    for flag in ["--only", "--on", "--o"] {
+        let out = command("jac-generate-portraits", t.path())
+            .args([flag, "-1"])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("invalid value '-1'"));
+    }
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn every_cli_option_replaces_previous_occurrences_including_inferred_spellings() {
     let mut checked = 0;
     let mut paths_checked = 0;

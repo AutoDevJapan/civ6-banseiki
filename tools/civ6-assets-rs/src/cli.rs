@@ -3,7 +3,10 @@ use clap::{builder::TypedValueParser, ArgAction, Parser, Subcommand};
 
 // Match argparse for every tool, including support subcommands and inferred flags.
 fn legacy_options(command: clap::Command) -> clap::Command {
-    command.infer_long_args(true).args_override_self(true)
+    command
+        .infer_long_args(true)
+        .args_override_self(true)
+        .allow_negative_numbers(true)
 }
 fn path_value() -> impl TypedValueParser<Value = PathBuf> {
     clap::builder::OsStringValueParser::new().map(|value| {
