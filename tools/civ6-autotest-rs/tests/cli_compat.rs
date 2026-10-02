@@ -327,3 +327,71 @@ fn compat_check_subprocess_matches_negative_positional_and_path_lexing() {
     }
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 3);
 }
+
+#[test]
+fn compat_tuner_subprocess_accepts_bare_lua_comment_and_prioritizes_help() {
+    let bin = env!("CARGO_BIN_EXE_civ6-tuner");
+    for code in ["-- comment\nreturn 1", "- path with spaces"] {
+        let output = Command::new(bin)
+            .args(["lua", "--code", code, "--port", "0"])
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap().trim(),
+            "Invalid port or timeout"
+        );
+        assert!(output.stdout.is_empty());
+    }
+    let help = Command::new(bin)
+        .args(["lua", "--unknown", "--help"])
+        .output()
+        .unwrap();
+    assert_eq!(help.status.code(), Some(0));
+    assert!(help.stderr.is_empty());
+    assert!(String::from_utf8(help.stdout).unwrap().contains("--code"));
+    for args in [
+        vec!["lua", "--unknown", "--state", "--help"],
+        vec!["lua", "--state", "--code=two words", "--port", "0"],
+        vec!["lua", "--code", "--unknown", "--port", "0"],
+        vec!["lua", "--code", "--comment\nreturn1", "--port", "0"],
+    ] {
+        let output = Command::new(bin).args(&args).output().unwrap();
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn compat_check_subprocess_accepts_space_containing_option_like_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = repo_root().join("tools/civ6-autotest/scenarios/bundle0-load-save.json");
+    let path = "- path with spaces";
+    let bytes = fs::read(fixture).unwrap();
+    fs::write(temp.path().join(path), &bytes).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+        .args([
+            path, "--check", "--output", path, "--logs", path, "--saves", path, "--mods", path,
+        ])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        "VALID: JAC_PoC_Bundle0 load/save (10 steps)"
+    );
+    assert!(output.stderr.is_empty());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    assert_eq!(fs::read(temp.path().join(path)).unwrap(), bytes);
+}
