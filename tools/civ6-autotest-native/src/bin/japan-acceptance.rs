@@ -2,12 +2,12 @@
 use serde_json::{Value, json};
 use std::fs;
 
-const CHECKPOINT_READ: &str = "local A=assert(ExposedMembers.JAC_Absorption);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())";
+const CHECKPOINT_READ: &str = "local A=assert(JAC_AbsorptionGameplay);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())";
 const CHECKPOINT_WAIT: &str = "local read=ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ;if type(read)~='function' then return false end;local e=read();return type(e)=='table' and type(e.Owner)=='number' and type(e.Class)=='number' and type(e.EraBefore)=='number' and type(e.CityID)=='number'";
 const RESERVE: &str = r#"
 local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))
 assert(not Players[e.Owner]:IsHuman(),'fixture requires the original AI owner')
-local m=assert(ExposedMembers.JAC_Absorption.GetHeroesManager())
+local m=assert(JAC_AbsorptionGameplay.GetHeroesManager())
 assert(m:GetHeroClaimPlayer(e.Class)==e.Owner,'recall rights changed before waiting')
 for _,u in Players[e.Owner]:GetUnits():Members() do assert(not u:IsHero() or u:GetHeroClassType()~=e.Class,'hero alive before waiting') end
 local r=Players[e.Owner]:GetReligion();local faith=r:GetFaithBalance()
@@ -20,7 +20,7 @@ assert(remaining>=0 and remaining<1,'waiting fixture faith was not reserved; bef
 return 'funded rejection checks complete; reserve fixture faith until the explicit purchase window'
 "#;
 const RESTORE: &str = r#"
-local A=assert(ExposedMembers.JAC_Absorption)
+local A=assert(JAC_AbsorptionGameplay)
 local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))
 local s=assert(Game:GetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE'))
 assert(s.Owner==e.Owner and s.Class==e.Class,'waiting fixture identity changed')
@@ -50,16 +50,16 @@ fn prepare(source: &Value) -> Result<Value, String> {
         return Err("original acceptance layout changed".into());
     }
     for (index, state, marker) in [
-        (106, "GameCore_Tuner", "native Warlord A retired"),
+        (106, "JAC_Absorption_Entry", "native Warlord A retired"),
         (
             110,
             "InGame",
             "same-era rejection did not report the native era restriction",
         ),
-        (113, "GameCore_Tuner", "A.BeginHeroRecall"),
+        (113, "JAC_Absorption_Entry", "A.BeginHeroRecall"),
         (
             124,
-            "GameCore_Tuner",
+            "JAC_Absorption_Entry",
             "RequestVerification('japan-live-absorption')",
         ),
     ] {
@@ -75,13 +75,13 @@ fn prepare(source: &Value) -> Result<Value, String> {
     let mut steps = Vec::new();
     for (i, s) in original.iter().enumerate() {
         if i == 111 {
-            steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":RESERVE}));
+            steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESERVE}));
         }
         if i == 113 {
-            steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":RESTORE}));
+            steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESTORE}));
         }
         if i == 124 {
-            steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'"}));
+            steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":"local A=assert(JAC_AbsorptionGameplay);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'"}));
         }
         let mut s = s.clone();
         if i >= 108
@@ -96,7 +96,7 @@ fn prepare(source: &Value) -> Result<Value, String> {
         steps.push(s);
         if i == 106 {
             steps.push(
-                json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":CHECKPOINT_READ}),
+                json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":CHECKPOINT_READ}),
             );
             steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":CHECKPOINT_WAIT}}));
         }
@@ -209,7 +209,7 @@ mod tests {
         local religion={GetFaithBalance=function() return bank end,ChangeFaithBalance=function(_,v) bank=bank+v end}
         local unit={IsHero=function() return alive end,GetHeroClassType=function() return 0 end}
         Players={[2]={IsHuman=function() return false end,GetReligion=function() return religion end,GetUnits=function() return {Members=function() return ipairs({unit}) end} end}}
-        ExposedMembers={JAC_Absorption={GetHeroesManager=function() return {GetHeroClaimPlayer=function() return 2 end} end}}
+        JAC_AbsorptionGameplay={GetHeroesManager=function() return {GetHeroClaimPlayer=function() return 2 end} end}
         "#).exec().unwrap();
         lua.load(RESERVE).exec().unwrap();
         lua.load("assert(bank==0.625);bank=34.625;era=2")
@@ -237,7 +237,7 @@ mod tests {
         local r={GetFaithBalance=function() return current end,ChangeFaithBalance=function(_,amount) assert(amount==1000003);current=1000007.0625 end}
         Game={GetProperty=function(_,k) if k=='JAC_ABSORPTION_LIVE_RECALL_V1' then return {Owner=2,Class=0} end return property end,SetProperty=function(_,_,v) property=v end,GetEras=function() return {GetCurrentEra=function() return 2 end} end}
         Players={[2]={GetReligion=function() return r end,GetUnits=function() return {Members=function() return ipairs({}) end} end}}
-        ExposedMembers={JAC_Absorption={}}
+        JAC_AbsorptionGameplay={}
         "#).exec().unwrap();
         lua.load(RESTORE).exec().unwrap();
         assert_eq!((1000007.046875f64 as f32) as f64, 1000007.0625);
