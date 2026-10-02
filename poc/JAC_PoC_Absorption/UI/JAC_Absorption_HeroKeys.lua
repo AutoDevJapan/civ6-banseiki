@@ -63,12 +63,22 @@ local function PublishHeroKeys()
       elseif method == "PURCHASE_COST" then
         return city:GetGold():GetPurchaseCost(building, slot,
           extra or MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)
+      elseif method == "LOYALTY" then
+        return city:GetCulturalIdentity():GetLoyalty()
       end
       error("unsupported UI city read")
     end
     reads.Observe = function(token, class)
       local origin = reads.GetHeroOriginCityID(class)
       observed[token] = { Claim = reads.GetHeroClaimPlayer(class), Origin = origin }
+    end
+    reads.ObserveCity = function(request)
+      if observed[request.Token] or uiGame.GetCurrentGameTurn() ~= request.Turn then return end
+      local ok, value = pcall(reads.ReadCity, request.Owner, request.ID, "LOYALTY")
+      if ok and type(value) == "number" and value >= 0 and value <= 100 then
+        observed[request.Token] = { Owner = request.Owner, ID = request.ID,
+          Turn = request.Turn, Value = value }
+      end
     end
     ExposedMembers.JAC_HeroReadAPI = reads
   end
@@ -103,6 +113,44 @@ local function ObservePendingHeroes()
           reads.ObserveUnit(spread.Token, spread.Owner, spread.ID, spread.Turn)
         end
       end
+    end
+  end
+  for _, intent in pairs(state and state.Recoveries or {}) do
+    if intent.AwaitingUI and intent.ObservationToken and intent.HeroClass then
+      reads.Observe(intent.ObservationToken, intent.HeroClass)
+    end
+  end
+  local localID = uiGame.GetLocalPlayer and uiGame.GetLocalPlayer()
+  local pendingFriction = false
+  for _, player in ipairs(PlayerManager.GetAlive() or {}) do
+    for _, city in player:GetCities():Members() do
+      local governance = city:GetProperty("JAC_ABSORPTION_GOVERNANCE_V1")
+      local request = governance and governance.LoyaltyRead
+      if request then
+        reads.ObserveCity(request)
+        if governance.FrictionPending and request.Owner == localID
+          and reads.GetObservation(request.Token) then pendingFriction = true end
+      end
+    end
+  end
+  local localPlayer = localID and localID >= 0 and uiPlayers[localID]
+  if localPlayer and (not localPlayer.IsTurnActive or localPlayer:IsTurnActive())
+    and UI and UI.RequestPlayerOperation then
+    local flow = ExposedMembers.JAC_AbsorptionFlow
+    local worlds = flow and flow.GetPendingWorlds and flow.GetPendingWorlds(localID) or {}
+    for _, world in ipairs(worlds) do
+      local token = world.WaitingFor
+      local observedHero = reads.GetObservation(token)
+      if observedHero and type(observedHero.Claim) == "number"
+        and type(observedHero.Origin) == "table" then
+        pcall(UI.RequestPlayerOperation, localID, PlayerOperations.EXECUTE_SCRIPT,
+          { OnStart = "JAC_AbsorptionFlow_Operation", Command = "RESUME_WORLD",
+            WorldID = world.ID, ObservationToken = token })
+      end
+    end
+    if pendingFriction then
+      pcall(UI.RequestPlayerOperation, localID, PlayerOperations.EXECUTE_SCRIPT,
+        { OnStart = "JAC_AbsorptionFlow_Operation", Command = "RESUME_FRICTION" })
     end
   end
   local fixture = api and api.GetUIPhase() or Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")

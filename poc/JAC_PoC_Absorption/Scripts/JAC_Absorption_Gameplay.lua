@@ -40,6 +40,73 @@ local function CityRead(city, method, ...)
   assert(reads and reads.ReadCity, "UI city read API unavailable")
   return reads.ReadCity(city:GetOwner(), city:GetID(), method, ...)
 end
+local function ValidLoyalty(value)
+  assert(type(value) == "number" and value == value and value >= 0 and value <= 100,
+    "native city loyalty is not a 0..100 number")
+  return value
+end
+local function CoreCityLoyalty(city)
+  local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
+  if identity and identity.GetLoyalty then return ValidLoyalty(identity:GetLoyalty()) end
+  return nil
+end
+-- Gameplay has ChangeLoyalty, but the installed Core binding has no loyalty
+-- getter. The UI city cache has the official getter and publishes scalar reads.
+function A.CityLoyalty(city)
+  return CoreCityLoyalty(city) or ValidLoyalty(CityRead(city, "LOYALTY"))
+end
+local function RequestLoyaltyRead(city, governance, phase)
+  if CoreCityLoyalty(city) ~= nil then return end
+  local request = governance.LoyaltyRead
+  local turn = Game.GetCurrentGameTurn()
+  if request and request.Phase == phase and request.Turn == turn then return end
+  governance.LoyaltyRead = { Phase = phase, Owner = city:GetOwner(), ID = city:GetID(),
+    Turn = turn, Token = governance.ID .. ":city:"
+      .. city:GetX() .. ":" .. city:GetY() .. ":" .. turn .. ":" .. phase }
+  city:SetProperty(R.GOVERNANCE_KEY, governance)
+end
+local function PublishedLoyalty(city, governance, phase)
+  local direct = CoreCityLoyalty(city)
+  if direct ~= nil then return direct end
+  RequestLoyaltyRead(city, governance, phase)
+  local request = governance.LoyaltyRead
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local observed = reads and reads.GetObservation and reads.GetObservation(request.Token)
+  if not observed then return nil end
+  assert(observed.Owner == request.Owner and observed.ID == request.ID
+    and observed.Turn == request.Turn and city:GetOwner() == request.Owner
+    and city:GetID() == request.ID, "city loyalty observation identity changed")
+  return ValidLoyalty(observed.Value)
+end
+local function AdvanceLoyalty(city, governance, pending, phase, delta)
+  if pending.Before == nil then
+    local before = PublishedLoyalty(city, governance, phase .. ":before")
+    if before == nil then return false end
+    pending.Before, pending.Target = before, math.max(0, math.min(100, before + delta))
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+  end
+  if not pending.Issued and pending.Before ~= pending.Target then
+    -- Both the intent and a distinct after-read request exist before the
+    -- native setter. A crash after the call can reconcile without a new call.
+    pending.Issued = true
+    RequestLoyaltyRead(city, governance, phase .. ":after:0")
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+    city:ChangeLoyalty(delta)
+  end
+  if pending.Before == pending.Target then return true end
+  local suffix = tostring(pending.Rechecks or 0)
+  local current = PublishedLoyalty(city, governance, phase .. ":after:" .. suffix)
+  if current == nil then return false end
+  if current == pending.Target then return true end
+  assert(current == pending.Before, "city loyalty changed during interrupted adjustment")
+  if (pending.Rechecks or 0) >= 1 then
+    error("city loyalty change was not observed after two fresh publications")
+  end
+  pending.Rechecks = 1
+  RequestLoyaltyRead(city, governance, phase .. ":after:1")
+  city:SetProperty(R.GOVERNANCE_KEY, governance)
+  return false
+end
 local function WorkSlots(city, building)
   local b = city:GetBuildings()
   if b.GetNumGreatWorkSlots then return b:GetNumGreatWorkSlots(building) end
@@ -613,9 +680,12 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   assert(source:GetCities():GetCount() > 0 and target:GetCities():GetCount() > 0, "both factions need cities")
   if plan.FlowPolicy and R.CITY_POLICY[plan.Mode].Immediate ~= 0 then
     for _, city in source:GetCities():Members() do
-      local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
-      assert(identity and identity.GetLoyalty and city.ChangeLoyalty,
-        "city loyalty APIs unavailable; cannot start method effects")
+      assert(city.ChangeLoyalty, "native city loyalty setter unavailable")
+      if CoreCityLoyalty(city) == nil then
+        local reads = ExposedMembers.JAC_HeroReadAPI
+        assert(reads and reads.GetObservation,
+          "published UI city loyalty reads unavailable")
+      end
     end
   end
   for _, previous in pairs(state.Transactions) do
@@ -691,14 +761,16 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
         HeroSuicide(snap, decision.Outcome == "SUICIDE" and "EXPLICIT_SUICIDE" or "REQUESTED_OUTCOME_UNTRANSFERABLE")
       end
     end
-    if snap.Kind ~= "UNIT" then
+    if snap.Kind ~= "UNIT" or snap.Outcome == "ESCAPE" then
       local linked = false
       for _, asset in pairs(tx.SourceRoster) do
         if asset.Unit and asset.Unit.Owner == tx.From and asset.Unit.ID == snap.ID then linked = true end
       end
       if not linked then
         local person = snap.Properties[R.PERSON_KEY]
-        local id = person and person.ID or ("native-person:" .. tx.From .. ":" .. snap.ID)
+        local id = person and person.ID or (snap.Kind == "UNIT"
+          and ("unit:" .. tx.From .. ":" .. snap.ID)
+          or ("native-person:" .. tx.From .. ":" .. snap.ID))
         assert(not tx.SourceRoster[id], "native person ID collision")
         tx.SourceRoster[id] = person and R.Copy(person) or {
           ID = id, Kind = snap.Kind, Owner = tx.From, NativeIndividual = snap.Individual,
@@ -1356,8 +1428,14 @@ local function Verify(tx, state, exactUnits)
     if exactUnits then
       assert(city:GetPopulation() == snap.Population and R.Equal(Religion(city), snap.Faith), "city population/religion changed")
     end
-    assert(city:GetProperty(R.GOVERNANCE_KEY).From == tx.From, "governance provenance lost")
-    assert(R.Equal(city:GetProperty(R.GOVERNANCE_KEY).Previous, snap.Governance), "previous governance lost")
+    local governance = assert(city:GetProperty(R.GOVERNANCE_KEY), "city governance missing")
+    assert(governance.From == tx.From, "governance provenance lost")
+    assert(R.Equal(governance.Previous, snap.Governance), "previous governance lost")
+    assert(governance.ImmediateApplied, "city loyalty policy is still pending")
+    if exactUnits and governance.LoyaltyDelta and governance.LoyaltyDelta ~= 0 then
+      assert(A.CityLoyalty(city) == governance.ImmediateTarget,
+        "native city loyalty differs from applied policy")
+    end
     for _, work in ipairs(snap.PalaceWorks or {}) do assert(greatWorks[work], "Palace Great Work lost: " .. work) end
   end
   for _, index in ipairs(tx.Plots) do assert(Map.GetPlotByIndex(index):GetOwner() == tx.To, "territory transfer failed: " .. index) end
@@ -1475,25 +1553,28 @@ local function Execute(state, tx)
     if not previous or previous.ID ~= tx.ID then
       local policy = tx.Request.FlowPolicy and assert(R.CITY_POLICY[tx.Mode], "unknown city policy")
         or { Immediate = 0, Friction = 0, Turns = 0 }
-      local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
-      assert(policy.Immediate == 0 or identity and identity.GetLoyalty,
-        "city loyalty read API unavailable; cannot reconcile adjustment")
-      local before = identity and identity:GetLoyalty()
       city:SetProperty(R.GOVERNANCE_KEY, { ID = tx.ID, From = tx.From, To = tx.To, Turn = tx.Turn,
         Mode = tx.Mode, LoyaltyDelta = policy.Immediate, FrictionPerTurn = policy.Friction,
-        FrictionTurns = policy.Turns, FrictionApplied = 0, ImmediateBefore = before,
+        FrictionTurns = policy.Turns, FrictionApplied = 0,
         ImmediateApplied = policy.Immediate == 0, BalancePending = true, Previous = R.Copy(snap.Governance) })
     end
     local governance = city:GetProperty(R.GOVERNANCE_KEY)
     if governance.ID == tx.ID and not governance.ImmediateApplied then
-      local identity = assert(city:GetCulturalIdentity(), "city loyalty read API unavailable")
-      local current = identity:GetLoyalty()
-      local target = math.max(0, math.min(100, governance.ImmediateBefore + governance.LoyaltyDelta))
-      if current == governance.ImmediateBefore then city:ChangeLoyalty(governance.LoyaltyDelta)
-      else assert(current == target, "city loyalty changed during interrupted absorption") end
+      governance.ImmediatePending = governance.ImmediatePending or {}
+      if not AdvanceLoyalty(city, governance, governance.ImmediatePending,
+        "immediate", governance.LoyaltyDelta) then
+        tx.CityLoyaltyPending = { X = snap.X, Y = snap.Y,
+          Token = governance.LoyaltyRead and governance.LoyaltyRead.Token }
+        Save(state)
+        error("JAC_ABSORPTION_WAITING_UI", 0)
+      end
+      governance.ImmediateBefore = governance.ImmediatePending.Before
+      governance.ImmediateTarget = governance.ImmediatePending.Target
+      governance.ImmediatePending, governance.LoyaltyRead = nil, nil
       governance.ImmediateApplied = true
       city:SetProperty(R.GOVERNANCE_KEY, governance)
     end
+    tx.CityLoyaltyPending = nil
     Save(state)
   end
   -- Restore all native positions only after the province belongs to the recipient.
@@ -1648,6 +1729,11 @@ function A.Resume(id)
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
   assert(tx.Turn == Game.GetCurrentGameTurn(), "resume in the original turn; later-turn recovery needs review")
+  if tx.Status == "BLOCKED" then
+    tx.FirstError = tx.FirstError or tx.Error
+    tx.PreviousError = tx.Error
+    Save(state)
+  end
   if tx.AwaitingPreparation then
     if not tx.SourceSpreadReads or not tx.SourceReadyToken then
       state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
@@ -1903,12 +1989,6 @@ function A.RecoverArchived(id, owner, token, original)
       Save(state)
     end
     assert(not intent.CandidateID or intent.CandidateID == found:GetID(), "recovery candidate changed")
-    if snap.Hero then
-      local ready, cause = ObserveRecoveredHero(state, intent, token, snap.Hero.Class,
-        snap.Hero.Origin)
-      if cause then return AbortRecoveredHero(state, intent, token, cause, found) end
-      if not ready then return R.Copy(intent) end
-    end
     if found:GetX() < 0 or found:GetY() < 0 then
       local capital = assert(Players[owner]:GetCities():GetCapitalCity(), "recovery staging city missing")
       UnitManager.PlaceUnit(found, capital:GetX(), capital:GetY())
@@ -1920,8 +2000,23 @@ function A.RecoverArchived(id, owner, token, original)
       snap.TransferredProperties[R.PERSON_KEY] = R.Copy(record)
     end
     if snap.Hero then
+      if not intent.CoreRestored then
+        -- A published claim can arrive after the AI's current action window.
+        -- Restore native and registered person state before the candidate can be used.
+        local restored = pcall(RestoreUnit, found, snap)
+        if not restored then
+          return AbortRecoveredHero(state, intent, token, "HERO_RESTORE_ERROR", found)
+        end
+        intent.CoreRestored = true
+        Save(state)
+      end
+      local ready, cause = ObserveRecoveredHero(state, intent, token, snap.Hero.Class,
+        snap.Hero.Origin)
+      if cause then return AbortRecoveredHero(state, intent, token, cause, found) end
+      if not ready then return R.Copy(intent) end
+    end
+    if snap.Hero then
       local ok, err = pcall(function()
-        RestoreUnit(found, snap)
         VerifyUnit(found, snap)
         if snap.SpreadCharges ~= nil then VerifySpread(found, snap) end
       end)
@@ -2074,35 +2169,31 @@ end
 
 -- Called on the real game-turn boundary. All dates and interrupted applications
 -- live on the city, so script reloads cannot extend a friction penalty.
-function A.ApplyCityFriction()
+function A.ApplyCityFriction(onlyOwner)
   local turn = Game.GetCurrentGameTurn()
   for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
     local player = Players[playerID]
-    if player then
+    if player and (onlyOwner == nil or onlyOwner == playerID) then
       for _, city in player:GetCities():Members() do
         local g = city:GetProperty(R.GOVERNANCE_KEY)
-        if g and g.To == playerID and g.FrictionPending then
-          local pending = g.FrictionPending
-          local identity = assert(city:GetCulturalIdentity(), "city loyalty read API unavailable")
-          local current = identity:GetLoyalty()
-          if current == pending.Before then city:ChangeLoyalty(g.FrictionPerTurn)
-          else assert(current == pending.Target, "interrupted city friction changed externally") end
-          g.FrictionApplied = (g.FrictionApplied or 0) + 1
-          g.LastFrictionTurn, g.FrictionPending = pending.Turn, nil
-          city:SetProperty(R.GOVERNANCE_KEY, g)
-        elseif g and g.To == playerID and g.FrictionPerTurn and g.FrictionPerTurn ~= 0
-          and (g.FrictionApplied or 0) < (g.FrictionTurns or 0) and turn > g.Turn
-          and (not g.LastFrictionTurn or g.LastFrictionTurn < turn) then
-          local identity = assert(city.GetCulturalIdentity and city:GetCulturalIdentity(),
-            "city loyalty read API unavailable during friction")
-          local current = identity:GetLoyalty()
-          g.FrictionPending = { Turn = turn, Before = current,
-            Target = math.max(0, math.min(100, current + g.FrictionPerTurn)) }
-          city:SetProperty(R.GOVERNANCE_KEY, g)
-          city:ChangeLoyalty(g.FrictionPerTurn)
-          g.FrictionApplied = (g.FrictionApplied or 0) + 1
-          g.LastFrictionTurn, g.FrictionPending = turn, nil
-          city:SetProperty(R.GOVERNANCE_KEY, g)
+        if g and g.To == playerID and g.ImmediateApplied then
+          if not g.FrictionPending and g.FrictionPerTurn and g.FrictionPerTurn ~= 0
+            and (g.FrictionApplied or 0) < (g.FrictionTurns or 0)
+            and turn > g.Turn and turn <= g.Turn + g.FrictionTurns
+            and (not g.LastFrictionTurn or g.LastFrictionTurn < turn) then
+            g.FrictionPending = { Turn = turn }
+            city:SetProperty(R.GOVERNANCE_KEY, g)
+          end
+          if g.FrictionPending then
+            local pending = g.FrictionPending
+            local ready = AdvanceLoyalty(city, g, pending,
+              "friction:" .. pending.Turn, g.FrictionPerTurn)
+            if ready then
+              g.FrictionApplied = (g.FrictionApplied or 0) + 1
+              g.LastFrictionTurn, g.FrictionPending, g.LoyaltyRead = pending.Turn, nil, nil
+              city:SetProperty(R.GOVERNANCE_KEY, g)
+            end
+          end
         end
       end
     end
@@ -2110,7 +2201,7 @@ function A.ApplyCityFriction()
 end
 
 if GameEvents and GameEvents.OnGameTurnStarted then
-  GameEvents.OnGameTurnStarted.Add(A.ApplyCityFriction)
+  GameEvents.OnGameTurnStarted.Add(function() A.ApplyCityFriction() end)
 end
 
 ExposedMembers.JAC_Absorption = A -- gameplay/FireTuner API; no UI mutation or automatic diplomatic hook.

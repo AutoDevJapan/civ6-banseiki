@@ -48,12 +48,26 @@ function R.UnitKind(unit)
   local person = unit:GetProperty(R.PERSON_KEY)
   if unit.IsHero and unit:IsHero() then return "HERO" end
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit definition")
+  local gp = unit:GetGreatPerson()
+  local individual = gp and gp:GetIndividual() or -1
+  if person and person.Kind == "GREAT_PERSON" then
+    assert((individual >= 0 and GameInfo.GreatPersonIndividuals[individual]
+      and GameInfo.GreatPersonIndividuals[individual].GreatPersonClassType)
+      or (person.Persistent and person.Representation == R.LEADER_REPRESENTATION_POC),
+      "Great Person record has no native individual or explicit leader provenance")
+    return "GREAT_PERSON"
+  end
+  if person and person.Kind and person.Kind ~= "UNIT" then return person.Kind end
   if info.UnitType == "UNIT_GREAT_GENERAL" or unit:GetProperty("JAC_POC_GROWTHUI_WARLORD") then
     return "PERSON"
   end
   if person and person.Kind then return person.Kind end
-  local gp = unit:GetGreatPerson()
-  if gp and gp:GetIndividual() >= 0 then return "GREAT_PERSON" end
+  if individual >= 0 then
+    assert(GameInfo.GreatPersonIndividuals[individual]
+      and GameInfo.GreatPersonIndividuals[individual].GreatPersonClassType,
+      "native Great Person individual definition missing")
+    return "GREAT_PERSON"
+  end
   return "UNIT"
 end
 

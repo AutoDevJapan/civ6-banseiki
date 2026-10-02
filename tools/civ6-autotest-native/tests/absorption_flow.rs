@@ -160,7 +160,7 @@ fn actual_flow_journals_sorted_phase_one_rolls_and_reloads_without_reroll() -> m
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
         F.DebugSetRoll('phase-one','person','P1_ESCAPE',0)
         F.DebugSetRoll('phase-one','person','P1_BRANCH',0)
-        TEST_FLOW_PLAN={ID='phase-one',From=1,To=2,Mode='MERGER'}
+        TEST_FLOW_PLAN={ID='phase-one',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local choice=F.Begin(TEST_FLOW_PLAN)
         assert(choice.Phase=='CHOICE' and choice.Phase1Complete)
         assert(F.GetPending(2).ID=='phase-one' and F.GetPending(1)==nil)
@@ -254,7 +254,7 @@ fn actual_flow_forced_failure_rerolls_once_and_applies_distinct_world_actions() 
         F.DebugSetRoll('forced-flow','governor','P3_RETRY_BRANCH',0)
         F.DebugSetRoll('forced-flow','equipment','P3_SUCCESS',9999)
         F.DebugSetRoll('forced-flow','equipment','P3_RETRY_ESCAPE',9999)
-        local plan={ID='forced-flow',From=1,To=2,Mode='MERGER'}
+        local plan={ID='forced-flow',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local flow=F.Begin(plan)
         assert(flow.Phase=='CHOICE')
         local before=A.Canonical(F.Get('forced-flow'))
@@ -371,6 +371,85 @@ fn actual_flow_forced_failure_rerolls_once_and_applies_distinct_world_actions() 
 }
 
 #[test]
+fn escaped_units_keep_native_snapshots_and_recover_once_from_p1_and_p3() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    lua.load(
+        r#"
+        local A=ExposedMembers.JAC_Absorption
+        local F=ExposedMembers.JAC_AbsorptionFlow
+        local first=UNIT(1,20,'UNIT_WARRIOR',4)
+        first.damage=19;first.moves=1;first.xp=27;first.formation=2
+        local retry=UNIT(1,21,'UNIT_WARRIOR',8)
+        retry.damage=11;retry.moves=1;retry.xp=13
+        for i=1,400 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        local id='unit-escapes'
+        F.DebugSetSpawnDelay(0)
+        F.DebugSetRoll(id,'unit:1:20','P1_ESCAPE',0)
+        F.DebugSetRoll(id,'unit:1:20','P1_BRANCH',0)
+        F.DebugSetRoll(id,'unit:1:21','P3_SUCCESS',9999)
+        F.DebugSetRoll(id,'unit:1:21','P3_RETRY_ESCAPE',0)
+        F.DebugSetRoll(id,'unit:1:21','P3_RETRY_BRANCH',0)
+        local choice=F.Begin({ID=id,From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true})
+        local byID={};for _,entry in ipairs(choice.Entries) do byID[entry.ID]=entry end
+        assert(byID['unit:1:20'].EscapeOutcome=='ESCAPE'
+          and byID['unit:1:21'].EscapeOutcome==nil)
+        for _,entry in ipairs(choice.Entries) do
+          if not entry.EscapeOutcome then
+            local action=entry.Kind=='UNIT' and 'INCORPORATE'
+              or entry.Kind=='PERSON' and 'RECRUIT'
+              or entry.Kind=='HERO' and 'PROTECT'
+              or entry.Kind=='GREAT_PERSON' and 'RECRUIT'
+              or entry.Kind=='ITEM' and 'TRANSFER'
+              or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'
+            F.Select(2,id,entry.ID,action)
+            if entry.ID~='unit:1:21' then F.DebugSetRoll(id,entry.ID,'P3_SUCCESS',0) end
+          end
+        end
+        local result=F.Resolve(2,id)
+        assert(result.Phase=='RESULT',tostring(result.Error))
+        local archive=A.GetState().Archive
+        for _,unitID in ipairs({20,21}) do
+          local asset='unit:1:'..unitID
+          local record=assert(archive[asset],'escaped Unit has no archived identity')
+          local world=assert(F.GetWorld(id..':'..asset),'escaped Unit has no world reward')
+          assert(record.Kind=='UNIT' and record.ID==asset and world.Snapshot.ID==unitID)
+          assert(world.Status=='WAIT_SITE' and world.Kind=='UNIT'
+            and world.Snapshot.Damage==(unitID==20 and 19 or 11))
+          assert(UnitManager.GetUnit(1,unitID)==nil)
+        end
+        assert(F.Get(id).AppliedPlan.EntryConditionsMet==true)
+        local rolls=#RANDOM_CALLS
+        CURRENT_TURN=CURRENT_TURN+1
+        F.Tick()
+        for _,unitID in ipairs({20,21}) do
+          local asset='unit:1:'..unitID
+          local key=id..':'..asset
+          local world=assert(F.GetWorld(key))
+          assert(world.Status=='WAIT_CLEAR')
+          UNIT(2,NEXT_ID,'UNIT_WARRIOR',world.Site);NEXT_ID=NEXT_ID+1
+          PLOTS[world.Site].improvement=-1
+          F.Tick()
+          world=F.GetWorld(key)
+          assert(world.Status=='COMPLETE' and world.Recipient==2,tostring(world.Error))
+          local recovered=assert(A.FindUnit(2,'recovery:'..key))
+          assert(recovered.damage==(unitID==20 and 19 or 11)
+            and recovered.xp==(unitID==20 and 27 or 13)
+            and recovered.moves==1)
+          local record=assert(A.GetRoster(2)[asset])
+          assert(record.ID==asset and record.Unit.ID==recovered:GetID()
+            and record.RecoveryToken=='recovery:'..key)
+        end
+        local count=Players[2]:GetUnits():GetCount()
+        F.Tick()
+        assert(Players[2]:GetUnits():GetCount()==count and #RANDOM_CALLS==rolls,
+          'duplicate publication or reward tick created another Unit')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> mlua::Result<()> {
     for (mode, immediate, friction, turns) in [
         ("CONQUEST", -15, -2, 3),
@@ -465,12 +544,121 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
 }
 
 #[test]
+fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local A=ExposedMembers.JAC_Absorption
+        local R=A.Rules
+        PLAN.Mode='CONQUEST';PLAN.FlowPolicy=true
+        CITY_OBSERVATIONS={};LOYALTY_CALLS={}
+        ExposedMembers.JAC_HeroReadAPI={GetObservation=function(token)
+          return CITY_OBSERVATIONS[token] end,
+          ReadCity=function(owner,id,method)
+            assert(method=='LOYALTY')
+            return assert(Players[owner]:GetCities():FindID(id)).loyalty
+          end}
+        for _,city in Players[1]:GetCities():Members() do
+          city.GetCulturalIdentity=function() return {} end
+          local change=city.ChangeLoyalty
+          city.ChangeLoyalty=function(self,amount)
+            LOYALTY_CALLS[#LOYALTY_CALLS+1]={X=self.x,Amount=amount,Turn=CURRENT_TURN}
+            return change(self,amount)
+          end
+        end
+        function PUBLISH_LOYALTY(stale)
+          for _,city in Players[2]:GetCities():Members() do
+            local g=city:GetProperty(R.GOVERNANCE_KEY)
+            local request=g and g.LoyaltyRead
+            if request and not CITY_OBSERVATIONS[request.Token] then
+              CITY_OBSERVATIONS[request.Token]={Owner=request.Owner,ID=request.ID,
+                Turn=request.Turn,Value=stale and g.FrictionPending
+                  and request.Phase=='friction:6:after:0' and city.x==4
+                  and g.FrictionPending.Before or city.loyalty}
+            end
+          end
+        end
+        local tx=A.Apply(PLAN)
+        assert(tx.Status=='WAITING_UI' and tx.CityLoyaltyPending
+          and CITIES[4]:GetOwner()==2 and CITIES[8]:GetOwner()==1)
+        assert(#LOYALTY_CALLS==0,'unpublished transfer applied a delta')
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and #LOYALTY_CALLS==0)
+        PUBLISH_LOYALTY(false)
+        tx=A.Resume(PLAN.ID)
+        assert(tx.Status=='WAITING_UI' and #LOYALTY_CALLS==1 and CITIES[4].loyalty==72)
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and #LOYALTY_CALLS==1,
+          'stale after-read duplicated city loyalty')
+        PUBLISH_LOYALTY(false)
+        tx=A.Resume(PLAN.ID)
+        assert(tx.Status=='WAITING_UI' and CITIES[8]:GetOwner()==2)
+        PUBLISH_LOYALTY(false)
+        tx=A.Resume(PLAN.ID)
+        assert(tx.Status=='WAITING_UI' and #LOYALTY_CALLS==2)
+        PUBLISH_LOYALTY(false)
+        tx=A.Resume(PLAN.ID)
+        assert(tx.Status=='COMPLETE' and #LOYALTY_CALLS==2)
+        for _,x in ipairs({4,8}) do
+          local g=CITIES[x]:GetProperty(R.GOVERNANCE_KEY)
+          assert(g.ImmediateApplied and g.ImmediateBefore==87
+            and g.ImmediateTarget==72 and CITIES[x].loyalty==72)
+        end
+        CURRENT_TURN=6
+        A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==2 and CITIES[4]:GetProperty(R.GOVERNANCE_KEY).FrictionPending,
+          'friction ran before a published read')
+        PUBLISH_LOYALTY(false);A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==4)
+        A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==4,'unpublished friction after-read duplicated the delta')
+        PUBLISH_LOYALTY(true);A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==4 and CITIES[4]:GetProperty(R.GOVERNANCE_KEY).FrictionApplied==0,
+          'stale UI value completed or repeated friction')
+        PUBLISH_LOYALTY(false);A.ApplyCityFriction()
+        assert(CITIES[4]:GetProperty(R.GOVERNANCE_KEY).FrictionApplied==1)
+        for _,x in ipairs({4,8}) do CITIES[x].props=R.Copy(CITIES[x].props) end
+        Game.props=R.Copy(Game.props)
+        "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua",
+    )?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    lua.load(
+        r#"
+        local A=ExposedMembers.JAC_Absorption
+        local R=A.Rules
+        A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==4,'reload repeated a completed turn')
+        for turn=7,8 do
+          CURRENT_TURN=turn
+          A.ApplyCityFriction();PUBLISH_LOYALTY(false)
+          A.ApplyCityFriction();PUBLISH_LOYALTY(false)
+          A.ApplyCityFriction()
+        end
+        CURRENT_TURN=9;A.ApplyCityFriction()
+        assert(#LOYALTY_CALLS==8,'friction duration extended or duplicated')
+        for _,x in ipairs({4,8}) do
+          local g=CITIES[x]:GetProperty(R.GOVERNANCE_KEY)
+          assert(g.FrictionApplied==3 and g.LastFrictionTurn==8
+            and CITIES[x].loyalty==66)
+        end
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn official_mode_and_custom_heroes_are_required_before_any_roll_or_mutation() -> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
         r#"
         local F=ExposedMembers.JAC_AbsorptionFlow
-        local plan={ID='hero-mode',From=1,To=2,Mode='MERGER'}
+        local plan={ID='hero-mode',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local configured=GameConfiguration.GetValue
         GameConfiguration.GetValue=function() return nil end
         assert(not pcall(F.Begin,plan),'flow accepted a game without Heroes & Legends')
@@ -493,6 +681,66 @@ fn official_mode_and_custom_heroes_are_required_before_any_roll_or_mutation() ->
 }
 
 #[test]
+fn entry_and_relation_proofs_and_both_warlords_precede_all_rolls() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    lua.load(
+        r#"
+        local F=ExposedMembers.JAC_AbsorptionFlow
+        local R=ExposedMembers.JAC_Absorption.Rules
+        local before=R.Canonical(Game.props)
+        for _,flags in ipairs({{}, {RelationsResolved=true}, {EntryConditionsMet=false},
+          {EntryConditionsMet=false,RelationsResolved=true}, {EntryConditionsMet=true},
+          {EntryConditionsMet=true,RelationsResolved=false}}) do
+          local plan={ID='validation',From=1,To=2,Mode='MERGER',
+            EntryConditionsMet=flags.EntryConditionsMet,RelationsResolved=flags.RelationsResolved}
+          assert(not pcall(F.Begin,plan),'unverified entry/relation was accepted')
+          assert(R.Canonical(Game.props)==before and #RANDOM_CALLS==0
+            and SPAWNS==0 and KILLS==0 and TRANSFERS==0)
+        end
+        local heroes=GameInfo.HeroClasses
+        local original=getmetatable(heroes)
+        for _,only in ipairs({heroes[0],heroes[1]}) do
+          setmetatable(heroes,{__call=function() local once=false;return function()
+            if once then return nil end;once=true;return only end end})
+          assert(not pcall(F.Begin,{ID='validation',From=1,To=2,Mode='MERGER',
+            EntryConditionsMet=true,RelationsResolved=true}),
+            'a required Warlord class was omitted')
+          assert(R.Canonical(Game.props)==before and #RANDOM_CALLS==0
+            and SPAWNS==0 and KILLS==0 and TRANSFERS==0)
+        end
+        setmetatable(heroes,original)
+        local extra={Index=9,HeroClassType='HEROCLASS_JAC_FUTURE',UnitType='UNIT_HERO_JAC_FUTURE'}
+        setmetatable(heroes,{__call=function(t)
+          local i=0;local all={t[0],t[1],extra};return function() i=i+1;return all[i] end
+        end})
+        for i=1,200 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        local plan={ID='validated',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true}
+        local choice=F.Begin(plan)
+        assert(choice.Phase=='CHOICE' and choice.Request.EntryConditionsMet==true
+          and choice.Request.RelationsResolved==true and #RANDOM_CALLS>0)
+        for _,entry in ipairs(choice.Entries) do
+          if not entry.EscapeOutcome then
+            local action=entry.Kind=='UNIT' and 'INCORPORATE'
+              or entry.Kind=='PERSON' and 'RECRUIT'
+              or entry.Kind=='HERO' and 'PROTECT'
+              or entry.Kind=='GREAT_PERSON' and 'RECRUIT'
+              or entry.Kind=='ITEM' and 'TRANSFER'
+              or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'
+            F.Select(2,plan.ID,entry.ID,action)
+            F.DebugSetRoll(plan.ID,entry.ID,'P3_SUCCESS',0)
+          end
+        end
+        local result=F.Resolve(2,plan.ID)
+        assert(result.Phase=='RESULT',tostring(result.Error))
+        assert(result.AppliedPlan.EntryConditionsMet==true
+          and result.AppliedPlan.RelationsResolved==true)
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
@@ -501,7 +749,7 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
         Players[2].IsHuman=function() return false end
         local F=ExposedMembers.JAC_AbsorptionFlow
         local before=JAC_AbsorptionRules.Canonical(Game.props)
-        local ok=pcall(F.Begin,{ID='human-donor',From=1,To=2,Mode='MERGER'})
+        local ok=pcall(F.Begin,{ID='human-donor',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true})
         assert(not ok and JAC_AbsorptionRules.Canonical(Game.props)==before)
         assert(#RANDOM_CALLS==0 and SPAWNS==0 and KILLS==0 and TRANSFERS==0)
         "#,
@@ -517,7 +765,7 @@ fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or
         r#"
         local F=ExposedMembers.JAC_AbsorptionFlow
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
-        local choice=F.Begin({ID='operation-boundary',From=1,To=2,Mode='MERGER'})
+        local choice=F.Begin({ID='operation-boundary',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true})
         local before=JAC_AbsorptionRules.Canonical(choice)
         local rolls=#RANDOM_CALLS
         GameEvents.JAC_AbsorptionFlow_Operation.Emit(1,{Command='SELECT',FlowID=choice.ID,
@@ -557,7 +805,7 @@ fn native_sengoku_hero_without_verified_claim_becomes_recorded_suicide() -> mlua
         local roster=A.GetRoster(1);roster.native=person
         Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
         for i=1,300 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
-        local plan={ID='native-suicide',From=1,To=2,Mode='MERGER'}
+        local plan={ID='native-suicide',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local flow=F.Begin(plan)
         for _,entry in ipairs(flow.Entries) do
           assert(entry.Kind~='HERO' or entry.ID~='native' or entry.Portrait=='ICON_UNIT_HERO_JAC_WARLORD_A')
@@ -609,7 +857,7 @@ fn native_sengoku_hero_recontracts_with_lifespan_charges_and_origin() -> mlua::R
         local roster=A.GetRoster(1);roster.native=person
         Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
         for i=1,300 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
-        local plan={ID='native-transfer',From=1,To=2,Mode='MERGER'}
+        local plan={ID='native-transfer',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
         local flow=F.Begin(plan)
         for _,entry in ipairs(flow.Entries) do
           if not entry.EscapeOutcome then
@@ -641,6 +889,82 @@ fn native_sengoku_hero_recontracts_with_lifespan_charges_and_origin() -> mlua::R
         assert(record.Loyalty==71 and record.Relations.friend==29)
         assert(record.NativeHero.ClassType=='HEROCLASS_JAC_WARLORD_A')
         assert(A.GetState().Archive.native==nil and A.Verify(plan.ID,true))
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlua::Result<()> {
+    let lua = flow_world()?;
+    lua.load(
+        r#"
+        local A=ExposedMembers.JAC_Absorption
+        local F=ExposedMembers.JAC_AbsorptionFlow
+        local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
+        hero.lifespan=17;hero.charges=2;hero.renown=13
+        HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
+        HERO_DISCOVERED['1:0']=true
+        local person={ID='escrow-hero',Kind='HERO',Owner=1,Unit={Owner=1,ID=13}}
+        hero:SetProperty(A.Rules.PERSON_KEY,person)
+        local roster=A.GetRoster(1);roster['escrow-hero']=person
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
+        for i=1,400 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        local plan={ID='escrow-retry',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true}
+        local flow=F.Begin(plan)
+        for _,entry in ipairs(flow.Entries) do
+          if not entry.EscapeOutcome then
+            local action=entry.Kind=='UNIT' and 'INCORPORATE'
+              or entry.Kind=='PERSON' and 'RECRUIT'
+              or entry.Kind=='HERO' and 'PROTECT'
+              or entry.Kind=='GREAT_PERSON' and 'RECRUIT'
+              or entry.Kind=='ITEM' and 'TRANSFER'
+              or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'
+            F.Select(2,plan.ID,entry.ID,action)
+            F.DebugSetRoll(plan.ID,entry.ID,'P3_SUCCESS',0)
+          end
+        end
+        FAIL_CITY=true
+        flow=F.Resolve(2,plan.ID)
+        assert(flow.Phase=='BLOCKED' and flow.AppliedPlan and flow.Error,
+          'transfer failure did not keep the applied plan and cause')
+        local tx=assert(A.GetState().Transactions[plan.ID])
+        assert(tx.Status=='BLOCKED' and tx.Error and UnitManager.GetUnit(1,13)==nil,
+          'failure did not occur after donor Hero escrow')
+        assert(HERO_CREATIONS==0 and #RANDOM_CALLS>0)
+        ESCROW_ROLLS=#RANDOM_CALLS
+        FAIL_CITY=false
+        Game.props=A.Rules.Copy(Game.props)
+        for owner=0,3 do Players[owner].props=A.Rules.Copy(Players[owner].props) end
+        "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua",
+    )?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    load_module(&lua, FLOW)?;
+    lua.load(
+        r#"
+        local A=ExposedMembers.JAC_Absorption
+        local F=ExposedMembers.JAC_AbsorptionFlow
+        local result=F.Resolve(2,'escrow-retry')
+        assert(result.Phase=='RESULT',tostring(result.Error))
+        assert(result.FirstError and result.PreviousError
+          and A.GetState().Transactions['escrow-retry'].FirstError,
+          'retry discarded the original failure cause')
+        assert(#RANDOM_CALLS==ESCROW_ROLLS and HERO_CREATIONS==1,
+          'retry rerolled or created a second Hero')
+        local record=assert(A.GetRoster(2)['escrow-hero'])
+        local unit=assert(A.FindUnit(2,record.Unit.Token))
+        assert(unit:IsHero() and unit:GetProperty(A.Rules.PERSON_KEY).ID=='escrow-hero'
+          and unit.lifespan==17 and unit.charges==2 and unit.renown==13)
+        assert(F.Resolve(2,'escrow-retry').Phase=='RESULT' and HERO_CREATIONS==1)
         "#,
     )
     .exec()
@@ -706,6 +1030,26 @@ fn actual_panel_renders_identity_and_sends_only_a_human_choice() -> mlua::Result
         assert(panel.GetView().phase=='RESULT')
         Controls.ConfirmButton:DoLeftClick()
         assert(OPERATION_CALLS[4].Params.Command=='ACK')
+        TEST_UI_PENDING.Phase='BLOCKED'
+        TEST_UI_PENDING.AppliedPlan={ID='ui-flow'}
+        TEST_UI_PENDING.Turn=CURRENT_TURN
+        TEST_UI_PENDING.Error='raw engine stack trace'
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(not Controls.ConfirmButton:IsHidden()
+          and Controls.ConfirmButton:GetText()=='LOC_JAC_ABS_FLOW_RETRY')
+        assert(not panel.GetView().hint:find('raw engine stack trace',1,true),
+          'the retry panel exposed the internal exception')
+        Controls.ConfirmButton:DoLeftClick()
+        assert(OPERATION_CALLS[5].Params.Command=='RESOLVE')
+        TEST_UI_PENDING.AppliedPlan=nil
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(Controls.ConfirmButton:IsHidden(),
+          'prevalidation block offered a transfer retry')
+        TEST_UI_PENDING.AppliedPlan={ID='ui-flow'}
+        TEST_UI_PENDING.Turn=CURRENT_TURN-1
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(Controls.ConfirmButton:IsHidden(),
+          'past-turn block offered an unsafe retry')
         assert(#RANDOM_CALLS==0,'choice UI changed gameplay random stream')
         "#,
     )

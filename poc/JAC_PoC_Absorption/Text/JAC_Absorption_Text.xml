@@ -150,6 +150,12 @@
   <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ja_JP"><Text>移管を続ける</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="en_US"><Text>Continue transfer</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ru_RU"><Text>Продолжить передачу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="ja_JP"><Text>移管を再試行</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="en_US"><Text>Retry transfer</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="ru_RU"><Text>Повторить передачу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="ja_JP"><Text>保存済みの移管計画から再試行できます。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="en_US"><Text>Retry the saved transfer plan.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="ru_RU"><Text>Повторите сохранённый план передачи.</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ja_JP"><Text>所持品</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="en_US"><Text>Item</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ru_RU"><Text>Предмет</Text></Row>

@@ -305,12 +305,32 @@ local function DefaultAI(entry)
   if entry.Kind == "UNLOCK" then return "INHERIT" end
   return "PRESERVE"
 end
+local function RequireNativeHeroes()
+  assert(GameConfiguration and GameConfiguration.GetValue
+    and (GameConfiguration.GetValue("GAMEMODE_HEROES") == true
+      or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1),
+    "official Heroes & Legends mode required")
+  local manager = A.GetHeroesManager()
+  assert(manager and manager.GetHeroClaimPlayer and GameInfo.HeroClasses,
+    "native Heroes manager unavailable")
+  local required = { HEROCLASS_JAC_WARLORD_A = false, HEROCLASS_JAC_WARLORD_B = false }
+  for def in GameInfo.HeroClasses() do
+    assert(string.match(def.HeroClassType, "^HEROCLASS_JAC_"),
+      "official Hero class is still available in Banseiki")
+    if required[def.HeroClassType] ~= nil then required[def.HeroClassType] = true end
+  end
+  assert(required.HEROCLASS_JAC_WARLORD_A and required.HEROCLASS_JAC_WARLORD_B,
+    "required Sengoku Hero classes are missing")
+end
 function F.Begin(plan)
   assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "",
     "absorption flow ID required")
   assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To,
     "distinct absorption factions required")
   assert(R.ENTRY_MODES[plan.Mode], "unknown absorption method")
+  assert(plan.EntryConditionsMet == true and plan.RelationsResolved == true,
+    "absorption entry and relations must be validated")
+  RequireNativeHeroes()
   local state = State()
   local existing = state.Flows[plan.ID]
   if existing and existing.Phase1Complete then
@@ -322,15 +342,6 @@ function F.Begin(plan)
   assert(Players[plan.From] and Players[plan.From]:IsAlive()
     and Players[plan.To] and Players[plan.To]:IsAlive(), "absorption faction unavailable")
   assert(not Players[plan.From]:IsHuman(), "existing PoC absorbs AI sources only")
-  assert(plan.EntryConditionsMet ~= false and plan.RelationsResolved ~= false,
-    "absorption entry or relations explicitly rejected")
-  assert(GameConfiguration and GameConfiguration.GetValue
-    and (GameConfiguration.GetValue("GAMEMODE_HEROES") == true
-      or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1),
-    "official Heroes & Legends mode required")
-  local manager = A.GetHeroesManager()
-  assert(manager and manager.GetHeroClaimPlayer and GameInfo.HeroClasses,
-    "native Heroes manager unavailable")
   if existing then
     assert(R.Equal(existing.Request, plan), "absorption flow ID reused with different plan")
     if not existing.Phase1Complete then
@@ -431,8 +442,8 @@ local function InventoryStillMatches(flow)
 end
 local function BuildPlan(flow)
   local plan = R.Copy(flow.Request)
-  plan.EntryConditionsMet = true
-  plan.RelationsResolved = true
+  assert(plan.EntryConditionsMet == true and plan.RelationsResolved == true,
+    "validated absorption request changed")
   plan.FlowPolicy = true
   plan.Units, plan.Assets, plan.NativeWorks = {}, {}, {}
   for _, entry in ipairs(flow.Entries) do
@@ -463,7 +474,7 @@ local function QueueEscapes(state, flow, tx)
       for _, outcome in ipairs(ESCAPE[entry.Kind]) do
         if entry.FinalOutcome == outcome then escaping = true; break end
       end
-      if escaping and entry.Kind ~= "UNIT" then
+      if escaping then
         local key = flow.ID .. ":" .. tostring(entry.ID)
         if not state.World[key] then
           local snapshot
@@ -509,6 +520,7 @@ local function FinishApply(state, flow, tx)
   end
   QueueEscapes(state, flow, tx)
   flow.Phase, flow.CompletedTurn = "RESULT", Game.GetCurrentGameTurn()
+  flow.Error, flow.WaitingFor = nil, nil
   Save(state)
   return R.Copy(flow)
 end
@@ -516,7 +528,15 @@ function F.Resume(id)
   local state = State()
   local flow = assert(state.Flows[id], "unknown absorption flow")
   if flow.Phase == "RESULT" or flow.Phase == "DONE" then return R.Copy(flow) end
-  assert(flow.Phase == "APPLYING", "absorption is not applying")
+  assert(flow.Phase == "APPLYING" or
+    (flow.Phase == "BLOCKED" and flow.AppliedPlan), "absorption is not applying")
+  assert(flow.Turn == Game.GetCurrentGameTurn(),
+    "resume in the original turn; later-turn recovery needs review")
+  if flow.Phase == "BLOCKED" then
+    flow.FirstError = flow.FirstError or flow.Error
+    flow.Phase, flow.PreviousError = "APPLYING", flow.Error
+    Save(state)
+  end
   local tx = A.GetState().Transactions[id]
   if tx and tx.Status == "COMPLETE" then return FinishApply(state, flow, tx) end
   local ok, result
@@ -531,6 +551,7 @@ function F.Resume(id)
   assert(result.Status == "WAITING_UI" or result.Status == "PREPARED"
     or result.Status == "STAGED", "unexpected PoC transfer state")
   flow.WaitingFor = result.Status
+  flow.Error = nil
   Save(state)
   return R.Copy(flow)
 end
@@ -538,7 +559,10 @@ function F.Resolve(actor, id)
   local state = State()
   local flow = assert(state.Flows[id], "unknown absorption flow")
   RequireActor(actor, flow)
-  if flow.Phase == "APPLYING" then return F.Resume(id) end
+  RequireNativeHeroes()
+  if flow.Phase == "APPLYING" or flow.Phase == "BLOCKED" and flow.AppliedPlan then
+    return F.Resume(id)
+  end
   if flow.Phase == "RESULT" or flow.Phase == "DONE" then return R.Copy(flow) end
   assert(flow.Phase == "CHOICE" and flow.Phase1Complete, "absorption is not choosing")
   for _, entry in ipairs(flow.Entries) do
@@ -734,9 +758,35 @@ function F.ResumeWorld(id)
   if world.Status == "CLAIMED" then ClaimWorld(state, world, world.Recipient) end
   return R.Copy(world)
 end
+function F.ResumeWorldFor(actor, id, observationToken)
+  local state = State()
+  local world = assert(state.World[id], "unknown escaped world asset")
+  assert(type(actor) == "number" and actor == world.Recipient
+    and Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
+    "only the reward recipient can resume world recovery")
+  assert(world.Status == "CLAIMED" and world.WaitingFor == observationToken
+    and type(observationToken) == "string", "world recovery token is not pending")
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local observed = reads and reads.GetObservation and reads.GetObservation(observationToken)
+  assert(observed and type(observed.Claim) == "number"
+    and type(observed.Origin) == "table", "Hero publication is not ready")
+  ClaimWorld(state, world, actor)
+  return R.Copy(world)
+end
 function F.GetWorld(id)
   local world = State().World[id]
   return world and R.Copy(world) or nil
+end
+function F.GetPendingWorlds(owner)
+  local result = {}
+  local state = State()
+  for _, id in ipairs(R.Keys(state.World)) do
+    local world = state.World[id]
+    if world.Status == "CLAIMED" and world.Recipient == owner and world.WaitingFor then
+      result[#result + 1] = R.Copy(world)
+    end
+  end
+  return result
 end
 function F.Tick()
   local state = State()
@@ -804,6 +854,12 @@ local function Operation(actor, payload)
       return F.Resolve(actor, payload.FlowID)
     elseif payload.Command == "ACK" then
       return F.Acknowledge(actor, payload.FlowID)
+    elseif payload.Command == "RESUME_WORLD" then
+      return F.ResumeWorldFor(actor, payload.WorldID, payload.ObservationToken)
+    elseif payload.Command == "RESUME_FRICTION" then
+      assert(Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
+        "only an active human player can request published city reconciliation")
+      return A.ApplyCityFriction(actor)
     end
     error("unknown absorption command")
   end)

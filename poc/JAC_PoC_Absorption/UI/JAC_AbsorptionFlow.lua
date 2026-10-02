@@ -151,6 +151,7 @@ local function SetFocus(key)
     end
   end
   if key == "confirm" then focused = L("CONFIRM")
+  elseif key == "retry" then focused = L("RETRY")
   elseif key == "ack" then focused = L("ACK")
   elseif key == "close" then focused = L("CLOSE") end
   Controls.Hint:SetText((rendered.hint or "") .. (focused and (" " .. L("FOCUSED", focused)) or ""))
@@ -218,7 +219,11 @@ local function ChooseOwner(id)
 end
 
 local function Resolve()
-  if flow and flow.Phase == "APPLYING" and CanSend() then return Send("RESOLVE") end
+  if flow and (flow.Phase == "APPLYING"
+    or flow.Phase == "BLOCKED" and flow.AppliedPlan
+      and flow.Turn == Game.GetCurrentGameTurn()) and CanSend() then
+    return Send("RESOLVE")
+  end
   if not AllChosen() or not CanSend() then return false end
   return Send("RESOLVE")
 end
@@ -372,8 +377,10 @@ Draw = function()
   end
   targets = ordered
 
+  local retryable = flow.Phase == "BLOCKED" and flow.AppliedPlan ~= nil
+    and flow.Turn == Game.GetCurrentGameTurn()
   Controls.ConfirmButton:SetHide(flow.Phase ~= "CHOICE" and flow.Phase ~= "RESULT"
-    and flow.Phase ~= "APPLYING")
+    and flow.Phase ~= "APPLYING" and not retryable)
   if flow.Phase == "CHOICE" then
     Controls.ConfirmButton:SetText(L("CONFIRM"))
     Controls.ConfirmButton:SetDisabled(not complete or not CanSend())
@@ -389,6 +396,11 @@ Draw = function()
     Controls.ConfirmButton:SetDisabled(not CanSend())
     Controls.Hint:SetText(L("WAIT_HINT"))
     AddTarget("continue", Resolve)
+  elseif retryable then
+    Controls.ConfirmButton:SetText(L("RETRY"))
+    Controls.ConfirmButton:SetDisabled(not CanSend())
+    Controls.Hint:SetText(L("RETRY_HINT"))
+    AddTarget("retry", Resolve)
   else
     Controls.Hint:SetText(L(flow.Phase == "BLOCKED" and "BLOCKED_HINT" or "WAIT_HINT"))
   end
@@ -488,7 +500,8 @@ JAC_AbsorptionFlow_UI = {
 Controls.OpenButton:RegisterCallback(Mouse.eLClick, Open)
 Controls.CloseButton:RegisterCallback(Mouse.eLClick, Close)
 Controls.ConfirmButton:RegisterCallback(Mouse.eLClick, function()
-  if flow and (flow.Phase == "CHOICE" or flow.Phase == "APPLYING") then Resolve()
+  if flow and (flow.Phase == "CHOICE" or flow.Phase == "APPLYING"
+    or flow.Phase == "BLOCKED" and flow.AppliedPlan) then Resolve()
   elseif flow and flow.Phase == "RESULT" then Acknowledge() end
 end)
 ContextPtr:SetInputHandler(function(input)

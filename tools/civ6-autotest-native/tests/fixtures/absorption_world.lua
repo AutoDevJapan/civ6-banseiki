@@ -8,17 +8,21 @@ GameInfo = {
   Buildings = setmetatable({BUILDING_PALACE={Index=0,BuildingType='BUILDING_PALACE'}},
     {__call=function() return rows({{Index=0,BuildingType='BUILDING_PALACE'},{Index=1,BuildingType='BUILDING_TEST'}}) end}),
   Units = {[0]={UnitType="UNIT_WARRIOR"},[1]={UnitType="UNIT_GREAT_GENERAL"},[2]={UnitType="UNIT_MISSIONARY"},
-           [3]={UnitType="UNIT_BUILDER"},[4]={UnitType="UNIT_HERO_JAC_WARLORD_A"},[5]={UnitType="UNIT_HERO_JAC_WARLORD_B"}},
+           [3]={UnitType="UNIT_BUILDER"},[4]={UnitType="UNIT_HERO_JAC_WARLORD_A"},[5]={UnitType="UNIT_HERO_JAC_WARLORD_B"},
+           [6]={UnitType="UNIT_GREAT_SCIENTIST"},[7]={UnitType="UNIT_GREAT_ENGINEER"}},
   HeroClasses = setmetatable({[0]={Index=0,HeroClassType='HEROCLASS_JAC_WARLORD_A',UnitType='UNIT_HERO_JAC_WARLORD_A'},
     [1]={Index=1,HeroClassType='HEROCLASS_JAC_WARLORD_B',UnitType='UNIT_HERO_JAC_WARLORD_B'}},
     {__call=function(t) return rows({t[0],t[1]}) end}),
-  GreatPersonIndividuals = {[42]={Index=42,GreatPersonIndividualType='GREAT_PERSON_TEST_GENERAL'}},
+  GreatPersonIndividuals = {[42]={Index=42,GreatPersonIndividualType='GREAT_PERSON_TEST_GENERAL',GreatPersonClassType='GREAT_PERSON_CLASS_GENERAL',ActionCharges=2},
+    [43]={Index=43,GreatPersonIndividualType='GREAT_PERSON_TEST_SCIENTIST',GreatPersonClassType='GREAT_PERSON_CLASS_SCIENTIST',ActionCharges=2},
+    [44]={Index=44,GreatPersonIndividualType='GREAT_PERSON_TEST_ENGINEER',GreatPersonClassType='GREAT_PERSON_CLASS_ENGINEER',ActionCharges=2}},
   Improvements = {IMPROVEMENT_BARBARIAN_CAMP={Index=1},IMPROVEMENT_GOODY_HUT={Index=2}},
   Religions = {[5]={ReligionType="RELIGION_TEST"}},
   Technologies = {TECH_TEST={Index=11}}, Civics = {CIVIC_TEST={Index=12}}
 }
 UnitPropertyKeys={LifespanRemaining=4242}
-TYPE = {UNIT_WARRIOR=0,UNIT_GREAT_GENERAL=1,UNIT_MISSIONARY=2,UNIT_BUILDER=3,UNIT_HERO_JAC_WARLORD_A=4,UNIT_HERO_JAC_WARLORD_B=5}
+TYPE = {UNIT_WARRIOR=0,UNIT_GREAT_GENERAL=1,UNIT_MISSIONARY=2,UNIT_BUILDER=3,UNIT_HERO_JAC_WARLORD_A=4,UNIT_HERO_JAC_WARLORD_B=5,
+  UNIT_GREAT_SCIENTIST=6,UNIT_GREAT_ENGINEER=7}
 GameInfo.HeroClasses.HEROCLASS_JAC_WARLORD_A=GameInfo.HeroClasses[0]
 GameInfo.HeroClasses.HEROCLASS_JAC_WARLORD_B=GameInfo.HeroClasses[1]
 for name,id in pairs(TYPE) do GameInfo.Units[name]=GameInfo.Units[id];GameInfo.Units[id].Hash=100+id end
@@ -113,7 +117,7 @@ function UNIT(owner,id,kind,x)
   u.SetMilitaryFormation=function(self,n) self.formation=n end
   u.GetBuildCharges=function(self) return self.build end;u.GetSpreadCharges=function(self) return self.spread end
   u.GetName=function() return kind end
-  u.GetGreatPerson=function(self) if self.kind~=1 then return nil end;return {
+  u.GetGreatPerson=function(self) if self.kind~=1 and self.kind~=6 and self.kind~=7 then return nil end;return {
     GetIndividual=function() return self.individual end,GetActionCharges=function() return self.gpcharges end} end
   u.GetReligion=function(self)
     if self.kind~=2 then return nil end
@@ -154,7 +158,7 @@ function CITY(owner,x,pop,faith)
   end} end
   city.GetBuildings=function() return {
     HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
-    GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007 end
+    GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or (1003+city.x) end
   } end
   city.ChangeLoyalty=function(self,n) self.loyalty=self.loyalty+n end
   city.GetCulturalIdentity=function(self) return {
@@ -208,7 +212,10 @@ UnitManager={GetUnit=function(owner,id) return Players[owner].units[id] end,
   end}
 Game.GetGreatPeople=function() return {CreatePerson=function(_,owner,individual,x,y)
   SPAWNS=SPAWNS+1;if FAIL_SPAWN==SPAWNS then return end
-  local unit=UNIT(owner,NEXT_ID,"UNIT_GREAT_GENERAL",x+2);unit.individual=individual;NEXT_ID=NEXT_ID+1
+  local class=assert(GameInfo.GreatPersonIndividuals[individual]).GreatPersonClassType
+  local kind=class=='GREAT_PERSON_CLASS_SCIENTIST' and 'UNIT_GREAT_SCIENTIST'
+    or class=='GREAT_PERSON_CLASS_ENGINEER' and 'UNIT_GREAT_ENGINEER' or 'UNIT_GREAT_GENERAL'
+  local unit=UNIT(owner,NEXT_ID,kind,x+2);unit.individual=individual;NEXT_ID=NEXT_ID+1
 end} end
 HERO_MANAGER={
   GetHeroClaimPlayer=function(_,class) return HERO_CLAIMS[class] or -1 end,
