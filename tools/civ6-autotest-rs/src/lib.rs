@@ -8,6 +8,7 @@ pub mod click;
 pub mod capture;
 pub mod restart;
 pub mod scenario;
+pub mod runner;
 pub use error::{Error, ErrorKind, Result};
 
 pub fn repo_root() -> std::path::PathBuf {

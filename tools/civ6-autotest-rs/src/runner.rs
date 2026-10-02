@@ -1,0 +1,1916 @@
+use crate::{
+    judge, metrics, scenario,
+    time::{Clock, SystemClock},
+    Error, ErrorKind, Result,
+};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+pub trait Backend: Send {
+    fn connect(&mut self, _port: u16, _timeout: f64) -> Result<()> {
+        Ok(())
+    }
+    fn disconnect(&mut self) {}
+    fn list_states(&mut self, _timeout: f64) -> Result<Vec<String>> {
+        Err(Error::tuner("backend has no FireTuner"))
+    }
+    fn run_lua(&mut self, _state: &str, _code: &str, _timeout: f64) -> Result<String> {
+        Err(Error::tuner("backend has no FireTuner"))
+    }
+    fn require_single_process(&mut self) -> Result<()> {
+        Err(Error::input("backend has no Civ VI process"))
+    }
+    fn single_process(&mut self, _settle: f64) -> Result<Option<(u32, f64)>> {
+        Err(Error::input("backend has no Civ VI process"))
+    }
+    fn memory(&mut self, _pid: u32) -> Result<Value> {
+        Err(Error::input("backend has no process memory"))
+    }
+    fn launch(&mut self) -> Result<()> {
+        Err(Error::input("backend cannot launch Steam"))
+    }
+    fn wait_window(&mut self, _deadline: f64) -> Result<isize> {
+        Err(Error::input("backend has no Civ VI window"))
+    }
+    fn require_dx11(&mut self, _hwnd: isize) -> Result<()> {
+        Err(Error::input("backend has no DX11 window"))
+    }
+    fn click(&mut self, _fx: f64, _fy: f64) -> Result<(i32, i32)> {
+        Err(Error::input("backend cannot click"))
+    }
+    fn press_key(&mut self, _key: u16, _deadline: f64) -> Result<()> {
+        Err(Error::input("backend cannot send keys"))
+    }
+    fn request_close(&mut self) -> Result<()> {
+        Err(Error::input("backend cannot close window"))
+    }
+    fn wait_exit(&mut self, _pid: u32, _deadline: f64) -> Result<bool> {
+        Err(Error::input("backend cannot observe process exit"))
+    }
+    fn terminate(&mut self, _pid: u32, _start: f64) -> Result<()> {
+        Err(Error::input("backend cannot terminate process"))
+    }
+    fn capture(&mut self, _path: &Path, _crop: Option<[f64; 4]>, _deadline: f64) -> Result<()> {
+        Err(Error::capture("backend cannot capture window"))
+    }
+    fn mod_folders(&mut self, scenario: &Value, mods: &Path) -> Result<Vec<PathBuf>> {
+        crate::restart::enabled_mod_folders(scenario, mods)
+    }
+    fn newest_mod(&mut self, folders: &[PathBuf]) -> Result<Option<(PathBuf, f64)>> {
+        crate::restart::newest_mod_file(folders)
+    }
+    fn stale_art(&mut self, folders: &[PathBuf]) -> Result<Vec<String>> {
+        crate::restart::missing_atlas_textures(folders)
+    }
+    fn manual(&mut self, prompt: &str) -> Result<()> {
+        println!("MANUAL / Computer Use (no timeout; waits until Enter): {prompt}");
+        print!("Press Enter after the action is complete: ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input)? == 0 {
+            return Err(Error::scenario(
+                "End of input while waiting for manual action",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct SystemBackend {
+    client: Option<crate::tuner::TunerClient>,
+}
+impl Backend for SystemBackend {
+    fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
+        if self.client.is_none() {
+            self.client = Some(
+                crate::tuner::TunerClient::connect(port, timeout).map_err(|e| {
+                    Error::tuner(format!(
+                        "FireTuner に接続できません（Civ6 が起動していない可能性）: {e}"
+                    ))
+                })?,
+            );
+        }
+        Ok(())
+    }
+    fn disconnect(&mut self) {
+        if let Some(mut c) = self.client.take() {
+            c.close();
+        }
+    }
+    fn list_states(&mut self, timeout: f64) -> Result<Vec<String>> {
+        self.client
+            .as_mut()
+            .ok_or_else(|| Error::tuner("FireTuner is not connected"))?
+            .list_states(timeout)
+    }
+    fn run_lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
+        Ok(self
+            .client
+            .as_mut()
+            .ok_or_else(|| Error::tuner("FireTuner is not connected"))?
+            .run_lua(state, code, timeout)?
+            .value)
+    }
+    fn require_single_process(&mut self) -> Result<()> {
+        crate::click::require_single_civ_process()
+    }
+    fn single_process(&mut self, settle: f64) -> Result<Option<(u32, f64)>> {
+        crate::restart::single_civ_process(settle)
+    }
+    fn memory(&mut self, pid: u32) -> Result<Value> {
+        metrics::process_memory(pid)
+    }
+    fn launch(&mut self) -> Result<()> {
+        crate::restart::launch_via_steam()
+    }
+    fn wait_window(&mut self, deadline: f64) -> Result<isize> {
+        crate::restart::wait_for_civ_window(deadline)
+    }
+    fn require_dx11(&mut self, hwnd: isize) -> Result<()> {
+        crate::restart::require_dx11_window(hwnd)
+    }
+    fn click(&mut self, fx: f64, fy: f64) -> Result<(i32, i32)> {
+        crate::click::click_fraction(fx, fy)
+    }
+    fn press_key(&mut self, key: u16, deadline: f64) -> Result<()> {
+        crate::click::press_key(key, Some(deadline))
+    }
+    fn request_close(&mut self) -> Result<()> {
+        crate::click::request_civ_window_close()
+    }
+    fn wait_exit(&mut self, pid: u32, deadline: f64) -> Result<bool> {
+        crate::restart::wait_for_exit(pid, deadline)
+    }
+    fn terminate(&mut self, pid: u32, start: f64) -> Result<()> {
+        crate::restart::terminate_civ_process(pid, start)
+    }
+    fn capture(&mut self, path: &Path, crop: Option<[f64; 4]>, deadline: f64) -> Result<()> {
+        crate::capture::capture_civ_window(path, crop, Some(deadline))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AutoplayStatus {
+    pub turn: i64,
+    pub active: bool,
+    pub event: bool,
+    pub remaining: i64,
+    pub local_player: i64,
+}
+pub fn parse_autoplay_status(value: &str) -> Result<AutoplayStatus> {
+    let parts: Vec<_> = value.split('|').collect();
+    let error = || Error::scenario(format!("Unexpected autoplay status: {value:?}"));
+    if parts.len() != 5
+        || !["true", "false"].contains(&parts[1])
+        || !["true", "false"].contains(&parts[2])
+    {
+        return Err(error());
+    }
+    Ok(AutoplayStatus {
+        turn: parts[0].parse().map_err(|_| error())?,
+        active: parts[1] == "true",
+        event: parts[2] == "true",
+        remaining: parts[3].parse().map_err(|_| error())?,
+        local_player: parts[4].parse().map_err(|_| error())?,
+    })
+}
+#[derive(Clone, Debug)]
+pub struct AutoplayOptions {
+    pub deadline: Option<f64>,
+    pub record_metrics: bool,
+    pub research_metrics: bool,
+    pub allow_human_elimination: bool,
+    pub metrics_group: String,
+    pub start_turn_override: Option<i64>,
+}
+impl Default for AutoplayOptions {
+    fn default() -> Self {
+        Self {
+            deadline: None,
+            record_metrics: false,
+            research_metrics: false,
+            allow_human_elimination: false,
+            metrics_group: "AUTOPLAY".into(),
+            start_turn_override: None,
+        }
+    }
+}
+pub struct MetricsRun {
+    pub recorder: metrics::TurnMetrics,
+    pub pid: u32,
+    pub requested_turns: i64,
+    pub group: String,
+}
+pub struct Runner {
+    pub scenario: Value,
+    pub output: PathBuf,
+    pub logs: PathBuf,
+    pub saves: PathBuf,
+    pub port: u16,
+    pub auto_restart: bool,
+    pub mods_dir: PathBuf,
+    pub owner_start: bool,
+    pub test_mode: bool,
+    pub baseline: Option<Value>,
+    pub log_step_baseline: Option<Value>,
+    pub log_matches_consumed: BTreeMap<(String, String), usize>,
+    pub metrics_runs: usize,
+    pub turn_metrics: Vec<MetricsRun>,
+    pub save_load_metrics: metrics::SaveLoadMetrics,
+    pub result_passed: bool,
+    pub completed_steps: usize,
+    pub result_checks: Vec<judge::Check>,
+    pub failure: Option<String>,
+    pub lua_captures: BTreeMap<String, String>,
+    pub ruleset: Option<String>,
+    pub backend: Box<dyn Backend>,
+    pub clock: Arc<dyn Clock>,
+}
+impl Runner {
+    pub fn new(scenario: Value, output: PathBuf, logs: PathBuf, saves: PathBuf, port: u16) -> Self {
+        Self::with_backend(
+            scenario,
+            output,
+            logs,
+            saves,
+            port,
+            Box::<SystemBackend>::default(),
+            Arc::new(SystemClock),
+        )
+    }
+    pub fn with_backend(
+        scenario: Value,
+        output: PathBuf,
+        logs: PathBuf,
+        saves: PathBuf,
+        port: u16,
+        backend: Box<dyn Backend>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        let synthetic = scenario.get("test_mode").is_some_and(|v| v.is_object());
+        let save_load_metrics =
+            metrics::SaveLoadMetrics::new(output.join("save-load-metrics.csv"), synthetic);
+        Self {
+            scenario,
+            output,
+            logs,
+            saves,
+            port,
+            auto_restart: true,
+            mods_dir: crate::restart::default_mods_dir(),
+            owner_start: false,
+            test_mode: false,
+            baseline: None,
+            log_step_baseline: None,
+            log_matches_consumed: BTreeMap::new(),
+            metrics_runs: 0,
+            turn_metrics: vec![],
+            save_load_metrics,
+            result_passed: false,
+            completed_steps: 0,
+            result_checks: vec![],
+            failure: None,
+            lua_captures: BTreeMap::new(),
+            ruleset: None,
+            backend,
+            clock,
+        }
+    }
+    pub fn remaining(&self, deadline: f64) -> Result<f64> {
+        let v = deadline - self.clock.now();
+        if v <= 0.0 {
+            Err(Error::scenario("Step deadline expired"))
+        } else {
+            Ok(v)
+        }
+    }
+    fn budget(&self, deadline: f64, cap: f64) -> Result<f64> {
+        Ok(self.remaining(deadline)?.min(cap))
+    }
+    fn sleep_until(&self, deadline: f64, seconds: f64) {
+        self.clock
+            .sleep(seconds.min((deadline - self.clock.now()).max(0.0)));
+    }
+    pub fn log(&mut self, action: &str, status: &str, detail: &str) -> Result<()> {
+        if status == "FAIL" {
+            self.failure = Some(format!("{action}: {detail}"));
+        }
+        println!("[{status}] {action}: {detail}");
+        let mut handle = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.output.join("steps.jsonl"))?;
+        writeln!(
+            handle,
+            "{}",
+            json!({"at":crate::time::utc_now(),"action":action,"status":status,"detail":detail})
+        )?;
+        Ok(())
+    }
+    pub fn disconnect(&mut self) {
+        self.backend.disconnect();
+    }
+    pub fn states(&mut self, timeout: f64) -> Result<Vec<String>> {
+        self.backend.require_single_process()?;
+        let deadline = self.clock.now() + timeout;
+        let fetch = |this: &mut Self| -> Result<Vec<String>> {
+            let remaining = this.remaining(deadline).map_err(|_| {
+                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+            })?;
+            this.backend.connect(this.port, remaining)?;
+            let remaining = this.remaining(deadline).map_err(|_| {
+                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+            })?;
+            this.backend.list_states(remaining)
+        };
+        match fetch(self) {
+            Err(e) if retryable(&e) => {
+                self.disconnect();
+                fetch(self)
+            }
+            other => other,
+        }
+    }
+    pub fn lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
+        let deadline = self.clock.now() + timeout;
+        self.states(self.remaining(deadline)?)?;
+        let remaining = self.remaining(deadline).map_err(|_| {
+            Error::tuner("FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です")
+        })?;
+        self.backend.connect(self.port, remaining)?;
+        // Connecting can consume the last budget; never mutate after it expired.
+        let remaining = self.remaining(deadline)?;
+        self.backend.run_lua(state, code, remaining)
+    }
+    pub fn log_since_same_generation(&self, name: &str, baseline: &Value) -> Result<String> {
+        let path = self.logs.join(name);
+        let mark = &baseline["files"][name];
+        let contents = match fs::read(&path) {
+            Ok(v) => v,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if mark["inode"].is_null() {
+                    return Ok(String::new());
+                }
+                return Err(Error::scenario(format!(
+                    "{name} disappeared during wait; outcome undecidable"
+                )));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        let inode = judge::file_inode(&path)?;
+        if judge::log_marker_replaced(&contents, mark, inode) {
+            return Err(Error::scenario(format!(
+                "{name} rotated or truncated during wait; outcome undecidable"
+            )));
+        }
+        Ok(judge::slice_log_bytes(&contents, mark, inode))
+    }
+    pub fn wait(&mut self, condition: &Value, timeout: f64, close_diplomacy: bool) -> Result<()> {
+        let end = self.clock.now() + timeout;
+        let mut last = "not ready".to_string();
+        let mut unblocked = 0;
+        let mut diplomacy_closes = 0;
+        let log_baseline = if condition["type"] == "log_line" {
+            Some(match &self.log_step_baseline {
+                Some(v) => v.clone(),
+                None => judge::snapshot_logs(&self.logs)?,
+            })
+        } else {
+            None
+        };
+        while self.clock.now() < end {
+            if close_diplomacy {
+                let closed = self.close_diplomacy(end)?;
+                if !closed.is_empty() {
+                    diplomacy_closes += closed.len();
+                    self.log(
+                        "end_turn_diplomacy",
+                        "OK",
+                        &format!("closed {}; total {diplomacy_closes}", closed.join(", ")),
+                    )?;
+                    if diplomacy_closes > 25 {
+                        return Err(Error::scenario(
+                            "AI diplomacy screens keep reopening during one end_turn",
+                        ));
+                    }
+                }
+            }
+            let kind = condition["type"].as_str().unwrap_or("");
+            let key = (
+                text(condition, "log").to_string(),
+                text(condition, "contains").to_string(),
+            );
+            let present: Result<bool> = match kind {
+                "state" => {
+                    let budget = self.budget(end, 5.0)?;
+                    self.states(budget).map(|s| {
+                        s.iter()
+                            .any(|v| v.eq_ignore_ascii_case(text(condition, "name")))
+                    })
+                }
+                "lua" => {
+                    let budget = self.budget(end, 5.0)?;
+                    self.lua(
+                        text(condition, "state_name"),
+                        text(condition, "code"),
+                        budget,
+                    )
+                    .map(|v| {
+                        last = format!("Lua returned {v:?}");
+                        v == condition
+                            .get("equals")
+                            .map(|v| {
+                                if let Some(s) = v.as_str() {
+                                    s.to_lowercase()
+                                } else {
+                                    v.to_string().to_lowercase()
+                                }
+                            })
+                            .unwrap_or_else(|| "true".into())
+                    })
+                }
+                _ => {
+                    let content = self.log_since_same_generation(
+                        text(condition, "log"),
+                        log_baseline.as_ref().unwrap(),
+                    )?;
+                    Ok(content
+                        .lines()
+                        .filter(|line| line.contains(text(condition, "contains")))
+                        .count()
+                        > *self.log_matches_consumed.get(&key).unwrap_or(&0))
+                }
+            };
+            match present {
+                Ok(true) => {
+                    self.remaining(end)?;
+                    if kind == "log_line" {
+                        *self.log_matches_consumed.entry(key).or_default() += 1;
+                    }
+                    return Ok(());
+                }
+                Ok(false) => {}
+                Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
+                Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    if !self.unblock_ingame(text(condition, "state_name"), end, unblocked)? {
+                        return Err(e);
+                    }
+                    unblocked += 1;
+                    continue;
+                }
+                Err(e) if retryable(&e) => last = e.to_string(),
+                Err(e) => return Err(e),
+            }
+            self.sleep_until(end, 0.5);
+        }
+        Err(Error::scenario(format!(
+            "Timed out after {timeout}s waiting for {condition}; last: {last}"
+        )))
+    }
+    pub fn retry_idempotent<T>(
+        &mut self,
+        deadline: f64,
+        mut action: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<T> {
+        let mut delay = 0.5;
+        loop {
+            match action(self) {
+                Err(e) if retryable(&e) && e.kind != ErrorKind::LuaExecution => {
+                    if self.clock.now() + delay >= deadline {
+                        return Err(e);
+                    }
+                    println!("Transient FireTuner failure, retrying: {e}");
+                    self.disconnect();
+                    self.clock.sleep(delay);
+                    delay = (delay * 2.0).min(4.0);
+                }
+                value => return value,
+            }
+        }
+    }
+    pub fn unblock_ingame(&mut self, state: &str, deadline: f64, attempts: usize) -> Result<bool> {
+        if !state.eq_ignore_ascii_case("InGame") || attempts >= 3 {
+            return Ok(false);
+        }
+        self.disconnect();
+        let end = deadline.min(self.clock.now() + 10.0);
+        let closed = match self.close_diplomacy_once(end) {
+            Ok(v) => v,
+            Err(_) => return Ok(false),
+        };
+        if !closed.is_empty() {
+            self.log(
+                "ingame_unblock",
+                "OK",
+                &format!(
+                    "closed {} after an InGame timeout; retry {}/3",
+                    closed.join(", "),
+                    attempts + 1
+                ),
+            )?;
+        }
+        Ok(!closed.is_empty())
+    }
+    pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
+        let budget = self.budget(deadline, 5.0)?;
+        if !self
+            .states(budget)?
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case("InGameTopOptionsMenu"))
+        {
+            return Ok(false);
+        }
+        let closed=self.lua("InGameTopOptionsMenu","if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",self.budget(deadline,5.0)?)?=="true";
+        if closed {
+            self.wait(&json!({"type":"lua","state_name":"InGameTopOptionsMenu","code":"return ContextPtr:IsHidden()"}),self.budget(deadline,5.0)?,false)?;
+            println!("Closed in-game options menu");
+        }
+        Ok(closed)
+    }
+    pub fn dismiss_advisor(&mut self, deadline: f64) -> Result<bool> {
+        self.retry_idempotent(deadline, |r| r.dismiss_advisor_once(deadline))
+    }
+    pub fn dismiss_advisor_once(&mut self, deadline: f64) -> Result<bool> {
+        if !self
+            .states(self.budget(deadline, 5.0)?)?
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case("AdvisorPopup"))
+        {
+            return Ok(false);
+        }
+        let dismissed = self.lua(
+            "AdvisorPopup",
+            "if IsBlockingInput() then OnHideAdvisorDialog(); return true end\nreturn false",
+            self.budget(deadline, 5.0)?,
+        )? == "true";
+        if dismissed {
+            println!("Dismissed blocking Advisor popup");
+        }
+        Ok(dismissed)
+    }
+    pub fn close_diplomacy(&mut self, deadline: f64) -> Result<Vec<String>> {
+        self.retry_idempotent(deadline, |r| r.close_diplomacy_once(deadline))
+    }
+    pub fn close_diplomacy_once(&mut self, deadline: f64) -> Result<Vec<String>> {
+        let states = self.states(self.budget(deadline, 5.0)?)?;
+        let mut closed = vec![];
+        for (state, call, label) in POPUP_CLOSERS {
+            if states.iter().any(|s| s.eq_ignore_ascii_case(state))
+                && self.lua(
+                    state,
+                    &format!("if ContextPtr:IsHidden() then return false end\n{call}\nreturn true"),
+                    self.budget(deadline, 5.0)?,
+                )? == "true"
+            {
+                closed.push(label.to_string());
+            }
+        }
+        Ok(closed)
+    }
+    pub fn autoplay_status(&mut self, deadline: f64) -> Result<AutoplayStatus> {
+        let end = deadline.min(self.clock.now() + 30.0);
+        self.retry_idempotent(end, |r| r.autoplay_status_once(deadline))
+    }
+    pub fn autoplay_status_once(&mut self, deadline: f64) -> Result<AutoplayStatus> {
+        parse_autoplay_status(&self.lua(
+            "InGame",
+            AUTOPLAY_STATUS_CODE,
+            self.budget(deadline, 5.0)?,
+        )?)
+    }
+    pub fn research_query(
+        &mut self,
+        code: &str,
+        deadline: f64,
+        minimum_turn: Option<i64>,
+    ) -> Result<String> {
+        loop {
+            let value = self.retry_idempotent(deadline, |r| {
+                r.lua("InGame", code, r.budget(deadline, 10.0)?)
+            })?;
+            if let Some(minimum) = minimum_turn {
+                if metrics::parse_research_sample(&value)?.0 < minimum {
+                    self.clock.sleep(self.budget(deadline, 0.1)?);
+                    continue;
+                }
+            }
+            return Ok(value);
+        }
+    }
+}
+fn retryable(e: &Error) -> bool {
+    matches!(
+        e.kind,
+        ErrorKind::Tuner | ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution | ErrorKind::Io
+    )
+}
+fn text<'a>(v: &'a Value, k: &str) -> &'a str {
+    v[k].as_str().unwrap_or("")
+}
+pub const LOADSCREEN_READY: &str = "LoadScreen: OnLoadGameViewStateDone";
+pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
+    (
+        "DiplomacyDealView",
+        "OnLocalPlayerTurnEnd()",
+        "AI deal proposal",
+    ),
+    ("DiplomacyActionView", "OnClose()", "AI diplomacy statement"),
+    (
+        "JAC_SengokuReignPopup",
+        "OnClose()",
+        "era-name change screen",
+    ),
+    ("DedicationPopup", "OnClose()", "house oath choice"),
+    (
+        "JAC_SengokuDarkPolicy",
+        "OnClose()",
+        "dark-age policy choice",
+    ),
+];
+pub const AUTOPLAY_STATUS_CODE:&str="return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
+
+impl Runner {
+    pub fn wait_frontend_ready(&mut self, timeout: f64, mut skip_opening: bool) -> Result<()> {
+        let deadline = self.clock.now() + timeout;
+        let mut next_click = self.clock.now() + 12.0;
+        let mut last = "FrontEnd not ready".into();
+        while self.clock.now() < deadline {
+            if skip_opening && self.clock.now() >= next_click {
+                if self.backend.click(0.5, 0.15).is_err() {
+                    skip_opening = false;
+                }
+                next_click = self.clock.now() + 12.0;
+            }
+            match self.lua(
+                "FrontEnd",
+                "return UI.IsInFrontEnd()",
+                self.budget(deadline, 5.0)?,
+            ) {
+                Ok(value) if value == "true" => return Ok(()),
+                Ok(value) => last = format!("FrontEnd returned {value:?}"),
+                Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
+                Err(e) if retryable(&e) => {
+                    last = e.to_string();
+                    self.disconnect();
+                }
+                Err(e) => return Err(e),
+            }
+            self.sleep_until(deadline, 0.5);
+        }
+        Err(Error::scenario(format!("FrontEnd did not answer after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
+    }
+    pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
+        let mut attempts = 0;
+        let mut next_launch = 0.0;
+        let mut last = "no Civ VI process yet".to_string();
+        while self.clock.now() < deadline {
+            let now = self.clock.now();
+            let present = match self.backend.single_process(0.0) {
+                Ok(v) => v.is_some(),
+                Err(e)
+                    if e.kind == ErrorKind::Input
+                        && e.message.starts_with("Multiple Civ VI processes found") =>
+                {
+                    true
+                }
+                Err(e) => return Err(e),
+            };
+            if !present && now >= next_launch {
+                if attempts >= 4 {
+                    return Err(Error::scenario(format!(
+                        "Steam did not start Civ VI after {attempts} attempts; last: {last}"
+                    )));
+                }
+                self.backend.launch()?;
+                attempts += 1;
+                next_launch = now + 45.0;
+                println!("Steam Civ VI launch attempt {attempts}");
+            }
+            match self
+                .backend
+                .wait_window(deadline.min(self.clock.now() + 5.0))
+            {
+                Ok(hwnd) => {
+                    self.backend.require_dx11(hwnd)?;
+                    return Ok(());
+                }
+                Err(e) if e.kind == ErrorKind::Input => last = e.to_string(),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(Error::scenario(format!(
+            "Civ VI window did not appear after Steam launch; last: {last}"
+        )))
+    }
+    pub fn restart_game(&mut self, timeout: f64) -> Result<String> {
+        let deadline = self.clock.now() + timeout;
+        let old = self.backend.single_process(30.0)?;
+        if let Some((pid, started)) = old {
+            let graceful = (|| -> Result<bool> {
+                let states = self.states(self.budget(deadline, 5.0)?)?;
+                let state = states
+                    .iter()
+                    .find(|s| s.eq_ignore_ascii_case("FrontEnd"))
+                    .or_else(|| states.iter().find(|s| s.eq_ignore_ascii_case("InGame")));
+                if let Some(state) = state {
+                    match self.lua(
+                        state,
+                        "Events.UserConfirmedClose()\nreturn true",
+                        self.budget(deadline, 5.0)?,
+                    ) {
+                        Ok(_) => {}
+                        Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {}
+                        Err(e) => return Err(e),
+                    }
+                    return Ok(true);
+                }
+                Ok(false)
+            })();
+            self.disconnect();
+            let graceful = match graceful {
+                Ok(v) => v,
+                Err(e) if retryable(&e) || e.kind == ErrorKind::Input => {
+                    println!("FireTuner quit unavailable: {e}");
+                    false
+                }
+                Err(e) => return Err(e),
+            };
+            if !graceful && self.backend.single_process(30.0)? == old {
+                if let Err(e) = self.backend.request_close() {
+                    println!("Civ VI window quit unavailable: {e}");
+                }
+            }
+            if !self
+                .backend
+                .wait_exit(pid, deadline.min(self.clock.now() + 15.0))?
+            {
+                self.backend.terminate(pid, started)?;
+                if !self
+                    .backend
+                    .wait_exit(pid, deadline.min(self.clock.now() + 10.0))?
+                {
+                    return Err(Error::scenario(format!(
+                        "Civ VI process {pid} did not exit after termination"
+                    )));
+                }
+            }
+        }
+        self.remaining(deadline)?;
+        if old.is_some() {
+            self.clock.sleep(self.budget(deadline, 8.0)?);
+        }
+        if self.backend.single_process(30.0)?.is_some() {
+            return Err(Error::scenario(
+                "A Civ VI process appeared before Steam relaunch",
+            ));
+        }
+        self.launch_steam_and_wait(deadline)?;
+        if self.owner_start {
+            self.disconnect();
+            self.wait_frontend_ready(self.remaining(deadline)?, false)?;
+            return Ok(
+                "Civ VI relaunched via Steam; opening played to the end; FrontEnd answered".into(),
+            );
+        }
+        self.clock.sleep(self.budget(deadline, 8.0)?);
+        if let Err(e) = self.backend.click(0.5, 0.15) {
+            println!("Opening skip click unavailable ({e}); waiting for the opening");
+        }
+        self.disconnect();
+        self.wait_frontend_ready(self.remaining(deadline)?, true)?;
+        Ok(
+            "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
+                .into(),
+        )
+    }
+    pub fn loadscreen_count(&self) -> Result<usize> {
+        Ok(self
+            .log_since_same_generation(
+                "Lua.log",
+                self.baseline
+                    .as_ref()
+                    .ok_or_else(|| Error::scenario("No log baseline for transition"))?,
+            )?
+            .matches(LOADSCREEN_READY)
+            .count())
+    }
+    pub fn enter_game_after_loadscreen(
+        &mut self,
+        before: usize,
+        timeout: f64,
+        deadline: Option<f64>,
+        response_unknown: bool,
+    ) -> Result<()> {
+        let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
+        let mut sent = false;
+        let mut last = "loading screen not ready".to_string();
+        while self.clock.now() < end {
+            let count = self.loadscreen_count()?;
+            if !sent {
+                if count <= before {
+                    self.sleep_until(end, 0.5);
+                    continue;
+                }
+                self.remaining(end)?;
+                let states = match self.states(self.budget(end, 5.0)?) {
+                    Ok(v) => v,
+                    Err(e) if retryable(&e) => vec![],
+                    Err(e) => return Err(e),
+                };
+                if states.iter().any(|s| s.eq_ignore_ascii_case("LoadScreen")) {
+                    self.lua(
+                        "LoadScreen",
+                        "OnActivateButtonClicked()\nreturn true",
+                        self.budget(end, 5.0)?,
+                    )?;
+                    last = "Begin Game pressed via LoadScreen Lua".into();
+                } else {
+                    self.remaining(end)?;
+                    self.backend.press_key(crate::click::VK_ESCAPE, end)?;
+                    last = "Esc sent on loading screen".into();
+                }
+                sent = true;
+                self.disconnect();
+            }
+            let check = (|| -> Result<bool> {
+                if self
+                    .states(self.budget(end, 5.0)?)?
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case("InGame"))
+                {
+                    if self.lua(
+                        "InGame",
+                        "return Game ~= nil and Game.GetLocalPlayer() >= 0",
+                        self.budget(end, 5.0)?,
+                    )? == "true"
+                    {
+                        self.close_options_menu(end)?;
+                        self.dismiss_advisor(end)?;
+                        self.remaining(end)?;
+                        return Ok(true);
+                    }
+                    last = "InGame exists; waiting for the local player".into();
+                } else {
+                    last = "InGame state not available yet".into();
+                    self.disconnect();
+                }
+                Ok(false)
+            })();
+            match check {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e)
+                    if matches!(
+                        e.kind,
+                        ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
+                    ) =>
+                {
+                    return Err(e)
+                }
+                Err(e) if retryable(&e) => {
+                    last = e.to_string();
+                    self.disconnect();
+                }
+                Err(e) => return Err(e),
+            }
+            self.sleep_until(end, 2.0);
+        }
+        let uncertain = if response_unknown {
+            "; outcome undecidable after unknown Lua response"
+        } else {
+            ""
+        };
+        Err(Error::scenario(format!(
+            "Timed out after {timeout}s entering the game; last: {last}{uncertain}"
+        )))
+    }
+    pub fn save_path(&self, name: &str) -> PathBuf {
+        self.saves.join(format!("{name}.Civ6Save"))
+    }
+    pub fn save_name(&self, step: &Value) -> Result<String> {
+        let name = text(step, "name");
+        if step["exact_name"] == true {
+            return Ok(name.to_string());
+        }
+        let resolved = resolve_path(&self.output)?;
+        let suffix = format!(
+            "{:x}",
+            Sha256::digest(resolved.to_string_lossy().as_bytes())
+        );
+        Ok(format!("{}-{}", &name[..name.len().min(67)], &suffix[..12]))
+    }
+    pub fn check_start_turn(&mut self, deadline: f64) -> Result<()> {
+        if self.ruleset.as_deref() != Some(scenario::BANSEIKI_RULESET) {
+            return Ok(());
+        }
+        let value = self.lua(
+            "InGame",
+            "return tostring(GameConfiguration.GetStartTurn())",
+            self.budget(deadline, 5.0)?,
+        )?;
+        if value.trim().trim_matches('"') != "1" {
+            return Err(Error::scenario(format!("{} start turn is {value}, expected 1: the calendar override was not applied (configure without build_setup?)",scenario::BANSEIKI_RULESET)));
+        }
+        Ok(())
+    }
+    pub fn end_turn(&mut self, timeout: f64, deadline: Option<f64>) -> Result<String> {
+        let deadline = deadline.unwrap_or_else(|| self.clock.now() + timeout);
+        self.lua("InGame", CLOSE_NOTEBOOKS, self.budget(deadline, 5.0)?)?;
+        self.close_options_menu(deadline)?;
+        self.dismiss_advisor(deadline)?;
+        let start = parse_integer(&self.lua(
+            "InGame",
+            "return Game.GetCurrentGameTurn()",
+            self.budget(deadline, 5.0)?,
+        )?)?;
+        self.close_diplomacy(deadline)?;
+        self.lua(
+            "InGame",
+            "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
+            self.budget(deadline, 5.0)?,
+        )?;
+        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",start+1)}),self.remaining(deadline)?,true)?;
+        self.dismiss_advisor(deadline)?;
+        self.remaining(deadline)?;
+        Ok(format!("human turn {start}->{}", start + 1))
+    }
+    pub fn choose_dedication(&mut self, human: i64, deadline: f64) -> Result<Option<String>> {
+        let code = format!("local h = {human}\n{DEDICATION_CODE}");
+        let value = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
+        if value == "none" || value.is_empty() {
+            return Ok(None);
+        }
+        self.log(
+            "autoplay_dedication",
+            "OK",
+            &format!("human={human} chose commemoration indices={value}"),
+        )?;
+        self.remaining(deadline)?;
+        self.backend.press_key(crate::click::VK_ESCAPE, deadline)?;
+        Ok(Some(value))
+    }
+    pub fn run_step(&mut self, step: &Value) -> Result<String> {
+        let action = text(step, "action");
+        if action == "manual" {
+            self.backend.manual(text(step, "prompt"))?;
+            return Ok(text(step, "prompt").into());
+        }
+        let timeout = step["timeout"]
+            .as_f64()
+            .unwrap_or(if action == "restart_game" {
+                360.0
+            } else {
+                120.0
+            });
+        let deadline = self.clock.now() + timeout;
+        match action {
+            "restart_game" => self.restart_game(self.remaining(deadline)?),
+            "enable_mods" => {
+                let ids = strings(&step["ids"]);
+                let disabled = self.lua(
+                    "FrontEnd",
+                    &scenario::enable_mods_code(&ids, &strings(&step["disable_ids"])),
+                    self.budget(deadline, 5.0)?,
+                )?;
+                Ok(format!(
+                    "enabled/verified {}; disabled {}",
+                    ids.join(", "),
+                    if disabled.is_empty() {
+                        "none"
+                    } else {
+                        &disabled
+                    }
+                ))
+            }
+            "configure" => {
+                self.lua(
+                    "FrontEnd",
+                    &scenario::configure_code(step),
+                    self.budget(deadline, 5.0)?,
+                )?;
+                self.ruleset = Some(text(step, "ruleset").into());
+                let build = scenario::builds_setup(step);
+                if build {
+                    self.lua(
+                        "HostGame",
+                        &scenario::build_setup_code(step["players"].as_array().unwrap()),
+                        self.budget(deadline, 30.0)?,
+                    )?;
+                }
+                self.lua("FrontEnd",&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),self.budget(deadline,5.0)?)?;
+                Ok(format!(
+                    "{}, {}, {}, seed={}, players={}{}",
+                    text(step, "ruleset"),
+                    text(step, "map_size"),
+                    text(step, "speed"),
+                    step["seed"],
+                    step["players"].as_array().unwrap().len(),
+                    if build {
+                        "; Create Game setup built and checked"
+                    } else {
+                        ""
+                    }
+                ))
+            }
+            "start_game" => {
+                let before = self.loadscreen_count()?;
+                if self.owner_start {
+                    self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
+                    println!("OWNER ACTION: press Start Game on the Create Game screen");
+                    let wait = timeout.max(3600.0);
+                    let owner_deadline = self.clock.now() + wait;
+                    self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
+                    self.check_start_turn(owner_deadline)?;
+                    return Ok(
+                        "owner pressed Start Game; single-player game reached InGame".into(),
+                    );
+                }
+                let unknown=match self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true",self.budget(deadline,5.0)?) {Ok(_)=>false,Err(e) if e.kind==ErrorKind::LuaResponseUnknown=>{println!("HostGame response interrupted during transition: {e}");true},Err(e)=>return Err(e)};
+                self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+                self.check_start_turn(deadline)?;
+                Ok("single-player game reached InGame".into())
+            }
+            "autoplay" => {
+                let options = AutoplayOptions {
+                    deadline: Some(deadline),
+                    record_metrics: step["metrics"] == true,
+                    research_metrics: step["research_metrics"] == true,
+                    allow_human_elimination: step["allow_human_elimination"] == true,
+                    metrics_group: step["metrics_group"].as_str().unwrap_or("AUTOPLAY").into(),
+                    start_turn_override: None,
+                };
+                let turns = step["turns"]
+                    .as_i64()
+                    .ok_or_else(|| Error::scenario("turns must be positive"))?;
+                if step["fast_forward"] == true {
+                    self.fast_forward_autoplay(turns, timeout, options)
+                } else {
+                    self.autoplay(turns, timeout, options)
+                }
+            }
+            "end_turn" => {
+                let turns = if self.test_mode {
+                    step.get("test_turns")
+                        .unwrap_or_else(|| step.get("turns").unwrap_or(&Value::Null))
+                } else {
+                    step.get("turns").unwrap_or(&Value::Null)
+                };
+                let turns = if turns.is_null() {
+                    1
+                } else {
+                    turns
+                        .as_i64()
+                        .filter(|n| *n > 0)
+                        .ok_or_else(|| Error::scenario("turns must be positive"))?
+                };
+                let mut results = vec![];
+                for _ in 0..turns {
+                    results.push(self.end_turn(self.remaining(deadline)?, Some(deadline))?);
+                }
+                Ok(results.join("; "))
+            }
+            "ui_lua" => {
+                let mut attempts = 0;
+                let value = loop {
+                    match self.lua(
+                        text(step, "state_name"),
+                        text(step, "code"),
+                        self.budget(deadline, 5.0)?,
+                    ) {
+                        Ok(v) => break v,
+                        Err(e)
+                            if matches!(
+                                e.kind,
+                                ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
+                            ) =>
+                        {
+                            return Err(e)
+                        }
+                        Err(e) if retryable(&e) => {
+                            if !self.unblock_ingame(text(step, "state_name"), deadline, attempts)? {
+                                return Err(e);
+                            }
+                            attempts += 1;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                };
+                if let Some(key) = step["equals_capture"].as_str() {
+                    if self.lua_captures.get(key) != Some(&value) {
+                        return Err(Error::scenario(format!(
+                            "ui_lua snapshot mismatch for {key}: {value:?} != {:?}",
+                            self.lua_captures.get(key)
+                        )));
+                    }
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    self.lua_captures.insert(key.into(), value.clone());
+                }
+                Ok(format!(
+                    "ran Lua in {}; return={value}",
+                    text(step, "state_name")
+                ))
+            }
+            "screenshot" => {
+                self.backend.require_single_process()?;
+                let base = resolve_path(&self.output)?;
+                let target =
+                    resolve_path(&base.join(scenario::safe_relative_path(text(step, "path"))?))?;
+                if !target.starts_with(&base) {
+                    return Err(Error::scenario(format!(
+                        "Screenshot path escapes output directory: {:?}",
+                        text(step, "path")
+                    )));
+                }
+                self.close_options_menu(deadline)?;
+                self.dismiss_advisor(deadline)?;
+                self.remaining(deadline)?;
+                let crop = step["crop"].as_array().map(|a| {
+                    [
+                        a[0].as_f64().unwrap(),
+                        a[1].as_f64().unwrap(),
+                        a[2].as_f64().unwrap(),
+                        a[3].as_f64().unwrap(),
+                    ]
+                });
+                self.backend.capture(&target, crop, deadline)?;
+                self.remaining(deadline)?;
+                Ok(target.display().to_string())
+            }
+            "save" => self.save_step(step, deadline),
+            "load" => self.load_step(step, timeout, deadline),
+            "exit_to_menu" => {
+                self.lua(
+                    "InGame",
+                    "Events.ExitToMainMenu()\nreturn true",
+                    self.budget(deadline, 5.0)?,
+                )?;
+                self.disconnect();
+                self.wait(
+                    &json!({"type":"state","name":"FrontEnd"}),
+                    self.remaining(deadline)?,
+                    false,
+                )?;
+                self.wait(&json!({"type":"lua","state_name":"FrontEnd","code":"return UI.IsInFrontEnd()"}),self.remaining(deadline)?,false)?;
+                Ok("main menu reached".into())
+            }
+            "wait_for" => {
+                self.wait(&step["condition"], self.remaining(deadline)?, false)?;
+                Ok(format!("condition met: {}", step["condition"]))
+            }
+            "pause" => {
+                let seconds = step["seconds"].as_f64().unwrap();
+                if seconds > self.remaining(deadline)? {
+                    return Err(Error::scenario("Step deadline would expire during pause"));
+                }
+                self.clock.sleep(seconds);
+                Ok(format!("paused {seconds}s for UI animation"))
+            }
+            _ => Err(Error::scenario(format!("Unknown action: {action}"))),
+        }
+    }
+    fn save_step(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        let name = self.save_name(step)?;
+        let target = self.save_path(&name);
+        if target.exists() {
+            return Err(Error::scenario(format!(
+                "Save already exists (will not overwrite): {}",
+                target.display()
+            )));
+        }
+        self.close_options_menu(deadline)?;
+        self.dismiss_advisor(deadline)?;
+        let code=format!("JAC_AUTOTEST_SAVE_DONE = false\nif JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\nJAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\nEvents.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\nlocal result = Network.SaveGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false}})\nif result == false then error('Network.SaveGame returned false') end\nreturn true",scenario::lua_string(&name));
+        let recorded = step["metrics"] == true;
+        let saved_turn = if recorded {
+            parse_integer(&self.lua(
+                "InGame",
+                "return tostring(Game.GetCurrentGameTurn())",
+                self.budget(deadline, 5.0)?,
+            )?)?
+        } else {
+            0
+        };
+        let started = self.clock.now();
+        self.lua("InGame", &code, self.budget(deadline, 30.0)?)?;
+        self.wait(&json!({"type":"lua","state_name":"InGame","code":"return JAC_AUTOTEST_SAVE_DONE == true"}),self.remaining(deadline)?,false)?;
+        self.lua("InGame","Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER)\nJAC_AUTOTEST_SAVE_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?)?;
+        let until = deadline.min(self.clock.now() + 5.0);
+        while !target.is_file() && self.clock.now() < until {
+            self.sleep_until(until, 0.2);
+        }
+        if !target.is_file() || target.metadata()?.len() == 0 {
+            return Err(Error::scenario(format!(
+                "SaveComplete fired but save not found at {}; check --saves",
+                target.display()
+            )));
+        }
+        self.remaining(deadline)?;
+        if recorded {
+            let row = self.save_load_metrics.record(
+                "save",
+                &name,
+                saved_turn,
+                target.metadata()?.len(),
+                self.clock.now() - started,
+            )?;
+            return Ok(format!(
+                "{}; save_bytes={} save_seconds={}",
+                target.display(),
+                row["save_bytes"],
+                row["duration_seconds"]
+            ));
+        }
+        Ok(target.display().to_string())
+    }
+    fn load_step(&mut self, step: &Value, timeout: f64, deadline: f64) -> Result<String> {
+        let name = self.save_name(step)?;
+        let path = self.save_path(&name);
+        if !path.is_file() {
+            return Err(Error::scenario(format!(
+                "Save not found: {}",
+                path.display()
+            )));
+        }
+        let code=format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=SaveTypes.SINGLE_PLAYER, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.SERVER_TYPE_NONE)\nif ok == false then error('Network.LoadGame returned false') end\nreturn true",scenario::lua_string(&name));
+        let before = self.loadscreen_count()?;
+        let started = self.clock.now();
+        let unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+            Ok(_) => false,
+            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                println!("LoadGame response interrupted during transition: {e}");
+                true
+            }
+            Err(e) => return Err(e),
+        };
+        self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        if step["metrics"] == true {
+            let seconds = self.clock.now() - started;
+            let turn = parse_integer(&self.lua(
+                "InGame",
+                "return tostring(Game.GetCurrentGameTurn())",
+                self.budget(deadline, 5.0)?,
+            )?)?;
+            let row = self.save_load_metrics.record(
+                "load",
+                &name,
+                turn,
+                path.metadata()?.len(),
+                seconds,
+            )?;
+            return Ok(format!(
+                "loaded {name}; save_bytes={} load_seconds={}",
+                row["save_bytes"], row["duration_seconds"]
+            ));
+        }
+        Ok(format!("loaded {name}"))
+    }
+}
+pub fn resolve_path(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut missing = vec![];
+    let mut existing = absolute.as_path();
+    while !existing.exists() {
+        let name = existing
+            .file_name()
+            .ok_or_else(|| Error::scenario(format!("Cannot resolve path: {}", path.display())))?;
+        missing.push(name.to_os_string());
+        existing = existing
+            .parent()
+            .ok_or_else(|| Error::scenario("Path has no parent"))?;
+    }
+    let mut resolved = fs::canonicalize(existing)?;
+    for component in missing.iter().rev() {
+        resolved.push(component);
+    }
+    #[cfg(windows)]
+    {
+        let s = resolved.to_string_lossy();
+        if let Some(unc) = s.strip_prefix("\\\\?\\UNC\\") {
+            return Ok(PathBuf::from(format!("\\\\{unc}")));
+        }
+        if let Some(plain) = s.strip_prefix("\\\\?\\") {
+            return Ok(PathBuf::from(plain));
+        }
+    }
+    Ok(resolved)
+}
+fn parse_integer(value: &str) -> Result<i64> {
+    value
+        .parse()
+        .map_err(|_| Error::scenario(format!("Invalid integer: {value:?}")))
+}
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+const CLOSE_NOTEBOOKS: &str =
+    "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true";
+const DEDICATION_CODE:&str="if not (Game.GetEras and PlayerOperations and PlayerOperations.COMMEMORATE) then return 'none' end\nlocal eras = Game.GetEras()\nlocal n = eras:GetPlayerNumAllowedCommemorations(h)\nlocal choices = eras:GetPlayerCommemorateChoices(h)\nif n <= 0 or #choices == 0 then return 'none' end\nlocal picked = {}\nfor i = 1, math.min(n, #choices) do\n  local p = {}\n  p[PlayerOperations.PARAM_COMMEMORATION_TYPE] = choices[i]\n  UI.RequestPlayerOperation(h, PlayerOperations.COMMEMORATE, p)\n  table.insert(picked, tostring(choices[i]))\nend\nreturn table.concat(picked, ',')";
+
+impl Runner {
+    pub fn autoplay(
+        &mut self,
+        turns: i64,
+        timeout: f64,
+        options: AutoplayOptions,
+    ) -> Result<String> {
+        let deadline = options
+            .deadline
+            .unwrap_or_else(|| self.clock.now() + timeout);
+        self.lua("InGame", CLOSE_NOTEBOOKS, self.budget(deadline, 5.0)?)?;
+        self.close_options_menu(deadline)?;
+        self.dismiss_advisor(deadline)?;
+        let core_start = if options.start_turn_override.is_some() {
+            options.start_turn_override
+        } else if self
+            .scenario
+            .get("test_mode")
+            .is_some_and(|v| v.is_object())
+        {
+            Some(parse_integer(&self.lua(
+                "GameCore_Tuner",
+                "return Game.GetCurrentGameTurn()",
+                self.budget(deadline, 5.0)?,
+            )?)?)
+        } else {
+            None
+        };
+        let start_line = core_start
+            .map(|v| format!("local startTurn = {v}\n"))
+            .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
+        let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
+        let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
+            let (pid, initial_memory, started) = if options.record_metrics {
+                let process = self.backend.single_process(30.0)?.ok_or_else(|| {
+                    Error::scenario("Civ VI process disappeared before metrics sampling")
+                })?;
+                (
+                    Some(process.0),
+                    self.backend.memory(process.0)?,
+                    self.clock.now(),
+                )
+            } else {
+                (None, Value::Null, 0.0)
+            };
+            let start_value = self.lua("InGame", &start_code, self.budget(deadline, 5.0)?)?;
+            let parts: Vec<_> = start_value.split('|').collect();
+            if parts.len() != 2 {
+                return Err(Error::scenario(format!(
+                    "Unexpected autoplay start: {start_value:?}"
+                )));
+            }
+            let start_turn = core_start.unwrap_or(parse_integer(parts[0])?);
+            let human = parse_integer(parts[1])?;
+            let target = start_turn
+                .checked_add(turns)
+                .ok_or_else(|| Error::scenario("Autoplay target overflow"))?;
+            if options.record_metrics || options.research_metrics {
+                self.metrics_runs += 1;
+            }
+            let run_number = self.metrics_runs;
+            let recorder_index = if let Some(pid) = pid {
+                let mut recorder = metrics::TurnMetrics::new(
+                    self.output
+                        .join(format!("autoplay-metrics-{run_number}.jsonl")),
+                    start_turn,
+                    started,
+                    self.scenario.get("test_mode").is_some(),
+                );
+                recorder.start(initial_memory)?;
+                let index = self.turn_metrics.len();
+                self.turn_metrics.push(MetricsRun {
+                    recorder,
+                    pid,
+                    requested_turns: turns,
+                    group: options.metrics_group.clone(),
+                });
+                Some(index)
+            } else {
+                None
+            };
+            let mut research = if options.research_metrics {
+                let mut recorder = metrics::ResearchMetrics::new(
+                    self.output
+                        .join(format!("autoplay-research-{run_number}.jsonl")),
+                );
+                let sample =
+                    self.research_query(metrics::RESEARCH_SAMPLE_CODE, deadline, Some(start_turn))?;
+                recorder.sample(&sample)?;
+                Some(recorder)
+            } else {
+                None
+            };
+            let mut restarts = 0;
+            let mut dedications = 0;
+            let mut inactive_since = None;
+            let mut status: Option<AutoplayStatus> = None;
+            let mut elimination = None;
+            let mut last_alive = start_turn;
+            let mut last_alive_check = None;
+            let mut diplomacy_closes = 0;
+            let mut diplomacy_since_resume = false;
+            let mut status_failure: Option<Error> = None;
+            while self.clock.now() < deadline {
+                let closed = self.close_diplomacy(deadline)?;
+                if !closed.is_empty() {
+                    diplomacy_closes += closed.len();
+                    diplomacy_since_resume = true;
+                    self.log(
+                        "autoplay_diplomacy",
+                        "OK",
+                        &format!(
+                            "closed {} (turn {}, total {diplomacy_closes})",
+                            closed.join(", "),
+                            status.as_ref().map(|s| s.turn).unwrap_or(start_turn)
+                        ),
+                    )?;
+                    if diplomacy_closes as i64 > 20 + 5 * turns {
+                        return Err(Error::scenario(format!("Closed {diplomacy_closes} AI diplomacy screens in one autoplay step; the game keeps reopening them")));
+                    }
+                } else if let Some(error) = status_failure.take() {
+                    return Err(error);
+                }
+                status_failure = None;
+                let current = match self.autoplay_status(deadline) {
+                    Ok(v) => v,
+                    Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
+                    Err(e) if retryable(&e) => {
+                        status_failure = Some(e);
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                };
+                status = Some(current.clone());
+                if core_start.is_some() && current.turn < start_turn {
+                    self.clock.sleep(self.budget(deadline, 0.1)?);
+                    continue;
+                }
+                if let Some(index) = recorder_index {
+                    if current.turn != self.turn_metrics[index].recorder.turn {
+                        if self.backend.single_process(30.0)?.map(|v| v.0) != pid {
+                            return Err(Error::scenario(
+                                "Civ VI process changed during metrics sampling",
+                            ));
+                        }
+                        let memory = self.backend.memory(pid.unwrap())?;
+                        let now = self.clock.now();
+                        self.turn_metrics[index]
+                            .recorder
+                            .sample_at(current.turn, memory, now)?;
+                    }
+                }
+                if let Some(recorder) = &mut research {
+                    if recorder.last_turn != Some(current.turn) {
+                        let code = metrics::research_sample_code(
+                            recorder
+                                .slots
+                                .as_ref()
+                                .ok_or_else(|| Error::scenario("No research slots"))?,
+                        )?;
+                        let sample = self.research_query(&code, deadline, Some(current.turn))?;
+                        recorder.sample(&sample)?;
+                    }
+                }
+                self.remaining(deadline)?;
+                if elimination.is_none()
+                    && (last_alive_check != Some(current.turn) || current.local_player < 0)
+                {
+                    let alive = if let Some(recorder) = research
+                        .as_ref()
+                        .filter(|r| r.last_turn == Some(current.turn))
+                    {
+                        recorder
+                            .rows
+                            .iter()
+                            .find(|r| r["slot"] == human)
+                            .ok_or_else(|| {
+                                Error::scenario(format!(
+                                    "Human player {human} missing from research sample"
+                                ))
+                            })?["alive"]
+                            .as_bool()
+                            .unwrap()
+                    } else {
+                        let value = self.lua(
+                            "InGame",
+                            &format!("return tostring(Players[{human}]:IsAlive())"),
+                            self.budget(deadline, 5.0)?,
+                        )?;
+                        if !["true", "false"].contains(&value.as_str()) {
+                            return Err(Error::scenario(format!(
+                                "Unexpected player alive status: {value:?}"
+                            )));
+                        }
+                        value == "true"
+                    };
+                    last_alive_check = Some(current.turn);
+                    if alive {
+                        last_alive = current.turn;
+                    } else {
+                        elimination = Some(current.turn);
+                        self.log(
+                            "autoplay_elimination",
+                            "OK",
+                            &format!(
+                                "human={human} first_observed_turn={} last_alive_turn={last_alive}",
+                                current.turn
+                            ),
+                        )?;
+                        if !options.allow_human_elimination {
+                            return Err(Error::scenario(format!("Human player {human} was eliminated during autoplay (first observed at turn {}, target {target})",current.turn)));
+                        }
+                    }
+                }
+                if current.turn > target {
+                    return Err(Error::scenario(format!(
+                        "Autoplay overshot turn {target}: {current:?}"
+                    )));
+                }
+                let returned = current.local_player == human
+                    || (options.allow_human_elimination
+                        && elimination.is_some()
+                        && current.local_player < 0);
+                if current.event && current.turn == target && !current.active && returned {
+                    return Ok((
+                        start_turn,
+                        current,
+                        elimination,
+                        recorder_index,
+                        research.is_some(),
+                    ));
+                }
+                self.close_options_menu(deadline)?;
+                self.dismiss_advisor(deadline)?;
+                if !current.active && current.turn < target {
+                    if let Some(since) = inactive_since {
+                        if self.clock.now() - since >= 5.0 && returned {
+                            let chosen = if dedications < 3 {
+                                self.choose_dedication(human, deadline)?
+                            } else {
+                                None
+                            };
+                            if chosen.is_some() {
+                                dedications += 1;
+                            } else if restarts >= 2 && !diplomacy_since_resume {
+                                return Err(Error::scenario(format!(
+                                    "Autoplay stopped early at turn {}/{target}: {current:?}",
+                                    current.turn
+                                )));
+                            }
+                            let remaining = target - current.turn;
+                            self.lua("InGame",&format!("JAC_AUTOTEST_AUTO_DONE = false\nAutoplayManager.SetTurns({remaining})\nAutoplayManager.SetReturnAsPlayer({human})\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn true"),self.budget(deadline,5.0)?)?;
+                            if chosen.is_none() && !diplomacy_since_resume {
+                                restarts += 1;
+                            } else if diplomacy_since_resume {
+                                self.log("autoplay_diplomacy","OK",&format!("resumed autoplay for {remaining} turns after closing diplomacy"))?;
+                            }
+                            diplomacy_since_resume = false;
+                            inactive_since = None;
+                        }
+                    } else {
+                        inactive_since = Some(self.clock.now());
+                    }
+                } else {
+                    inactive_since = None;
+                }
+                self.sleep_until(
+                    deadline,
+                    if recorder_index.is_some() || research.is_some() {
+                        0.1
+                    } else {
+                        0.5
+                    },
+                );
+            }
+            Err(Error::scenario(format!(
+                "Autoplay timed out at turn {} / {target}; last: {status:?}",
+                status
+                    .as_ref()
+                    .map(|v| v.turn.to_string())
+                    .unwrap_or_else(|| "?".into())
+            )))
+        })();
+        let (start_turn, status, elimination, recorder_index, research) = match execution {
+            Ok(v) => v,
+            Err(e)
+                if matches!(
+                    e.kind,
+                    ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
+                ) =>
+            {
+                return Err(e)
+            }
+            Err(e) => {
+                if let Err(cleanup)=self.lua("InGame","if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",5.0){println!("Autoplay cleanup failed: {cleanup}");}
+                return Err(e);
+            }
+        };
+        let mut attempts = 0;
+        loop {
+            match self.lua("InGame","if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?) {
+            Ok(_)=>break,Err(e) if e.kind==ErrorKind::LuaExecution=>return Err(e),Err(e) if retryable(&e)=>{if !self.unblock_ingame("InGame",deadline,attempts)? {return Err(e);}attempts+=1;},Err(e)=>return Err(e)
+        }
+        }
+        self.remaining(deadline)?;
+        let mut detail = format!(
+            "autoplay completed {turns} turns ({start_turn}->{}; event={})",
+            status.turn,
+            if status.event { "True" } else { "False" }
+        );
+        if let Some(turn) = elimination {
+            detail.push_str(&format!("; human_elimination_first_observed_turn={turn}"));
+        }
+        if let Some(index) = recorder_index {
+            let recorder = &self.turn_metrics[index].recorder;
+            detail.push_str(&format!(
+                "; metrics=autoplay-metrics-{}.jsonl,autoplay-metrics-{}.csv observed={} missed={}",
+                self.metrics_runs,
+                self.metrics_runs,
+                recorder.observed_turns,
+                recorder.missed_turns
+            ));
+        }
+        if research {
+            detail.push_str(&format!(
+                "; research=autoplay-research-{}.jsonl",
+                self.metrics_runs
+            ));
+        }
+        Ok(detail)
+    }
+    fn era_state(&mut self, deadline: f64) -> Result<(i64, i64, i64, i64)> {
+        let value=self.lua("InGame","local eras = Game.GetEras()\nreturn tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. '|' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. '|' .. tostring(eras:GetNextEraCountdown())",self.budget(deadline,5.0)?)?;
+        let values: Vec<_> = value.split('|').map(str::parse::<i64>).collect();
+        if values.len() != 4 || values.iter().any(|v| v.is_err()) {
+            return Err(Error::scenario(format!(
+                "Invalid fast-forward era state: {value:?}"
+            )));
+        }
+        Ok((
+            values[0].as_ref().copied().unwrap(),
+            values[1].as_ref().copied().unwrap(),
+            values[2].as_ref().copied().unwrap(),
+            values[3].as_ref().copied().unwrap(),
+        ))
+    }
+    pub fn fast_forward_autoplay(
+        &mut self,
+        turns: i64,
+        timeout: f64,
+        options: AutoplayOptions,
+    ) -> Result<String> {
+        scenario::validate_test_mode(&self.scenario["test_mode"])?;
+        let deadline = options
+            .deadline
+            .unwrap_or_else(|| self.clock.now() + timeout);
+        self.lua("InGame","if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true",self.budget(deadline,5.0)?)?;
+        let (mut current, mut minimum, mut maximum, mut countdown) = self.era_state(deadline)?;
+        let target = current
+            .checked_add(turns)
+            .ok_or_else(|| Error::scenario("Fast-forward target overflow"))?;
+        let mut skipped = 0;
+        while current < target {
+            let boundary = if countdown > 0 {
+                current + countdown
+            } else {
+                minimum
+            };
+            let limit = if maximum < 0 {
+                target - 2
+            } else {
+                (target - 2).min(boundary - 2)
+            };
+            if limit > current {
+                let code=format!("local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\nif not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\nif Game.GetCurrentGameTurn() ~= {current} then error('turn changed before fast-forward') end\nlocal target = {limit}\nGame.SetCurrentGameTurn(target)\nif Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\nreturn tostring(target)");
+                if let Err(e) = self.lua("GameCore_Tuner", &code, self.budget(deadline, 5.0)?) {
+                    if e.kind == ErrorKind::LuaResponseUnknown {
+                        let mode = &mut self.scenario["test_mode"];
+                        mode["acknowledged_skipped_turns"] = mode["skipped_turns"].clone();
+                        mode["skipped_turns"] = Value::Null;
+                        mode["unconfirmed_jump"] = json!({"from":current,"to":limit});
+                    }
+                    return Err(e);
+                }
+                skipped += limit - current;
+                let total = self.scenario["test_mode"]["skipped_turns"]
+                    .as_i64()
+                    .unwrap();
+                self.scenario["test_mode"]["skipped_turns"] = (total + limit - current).into();
+                current = limit;
+            }
+            let before = current;
+            let mut suboptions = options.clone();
+            suboptions.deadline = Some(deadline);
+            suboptions.start_turn_override = Some(current);
+            self.autoplay(2.min(target - current), timeout, suboptions)?;
+            (current, minimum, maximum, countdown) = self.era_state(deadline)?;
+            if current <= before || current > target {
+                return Err(Error::scenario(format!("Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}")));
+            }
+        }
+        Ok(format!("TEST MODE: reached turn {target}; skipped {skipped} turns; era boundaries processed normally"))
+    }
+    pub fn run(&mut self) -> Result<i32> {
+        scenario::validate_scenario(&self.scenario)?;
+        // create_dir rejects an existing leaf while create_dir_all only prepares parents.
+        if let Some(parent) = self.output.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent)?;
+        }
+        fs::create_dir(&self.output)?;
+        self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
+        let code = match self.run_inner() {
+            Ok(v) => v,
+            Err(e) => {
+                self.result_passed = false;
+                self.log("run", "FAIL", &e.to_string())?;
+                1
+            }
+        };
+        if !self.result_passed && self.failure.is_none() {
+            self.failure = Some("Run did not finish".into());
+        }
+        if let Some(baseline) = &self.baseline {
+            match judge::read_since(&self.logs, baseline) {
+                Ok(logs) => {
+                    for (name, content) in logs {
+                        if let Err(e) = fs::write(self.output.join(name), content) {
+                            println!("Could not save run log slices: {e}");
+                        }
+                    }
+                }
+                Err(e) => println!("Could not save run log slices: {e}"),
+            }
+        }
+        self.disconnect();
+        if let Err(e) = self.write_result() {
+            println!("Could not save result summary: {e}");
+            if self.result_passed {
+                return Err(e);
+            }
+        }
+        Ok(code)
+    }
+    fn run_inner(&mut self) -> Result<i32> {
+        let mut frontend_ready = false;
+        if self.auto_restart {
+            let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
+            let stale = self.backend.stale_art(&folders)?;
+            if !stale.is_empty() {
+                return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
+            }
+            let newest = self.backend.newest_mod(&folders)?;
+            let process = self.backend.single_process(30.0)?;
+            if let Some(reason) =
+                crate::restart::restart_reason(newest.as_ref(), process.map(|v| v.1))
+            {
+                self.log("auto_restart", "START", &reason)?;
+                let detail = self.restart_game(360.0)?;
+                let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
+                let latest = self.backend.newest_mod(&folders)?;
+                let relaunched = self.backend.single_process(30.0)?;
+                if let Some(stale) =
+                    crate::restart::restart_reason(latest.as_ref(), relaunched.map(|v| v.1))
+                {
+                    return Err(Error::scenario(format!(
+                        "Civ VI is still stale after restart: {stale}"
+                    )));
+                }
+                self.log("auto_restart", "OK", &detail)?;
+                frontend_ready = true;
+            } else {
+                self.log(
+                    "auto_restart",
+                    "SKIP",
+                    "Civ VI process is newer than all scenario mod files",
+                )?;
+            }
+        }
+        self.baseline = Some(judge::snapshot_logs(&self.logs)?);
+        self.write_baseline()?;
+        let steps = self.scenario["steps"].as_array().unwrap().clone();
+        let first = &steps[0];
+        if first["action"] != "restart_game" {
+            if !frontend_ready && self.backend.single_process(30.0)?.is_none() {
+                self.log("launch", "START", "Civ VI is not running")?;
+                let detail = self.restart_game(360.0)?;
+                self.log("launch", "OK", &detail)?;
+                frontend_ready = true;
+            }
+            self.backend.require_single_process()?;
+            if !frontend_ready && !(first["action"] == "ui_lua" && first["state_name"] == "InGame")
+            {
+                self.wait(&json!({"type":"lua","state_name":"FrontEnd","code":"return UI.IsInFrontEnd()"}),10.0,false)?;
+            }
+        }
+        for (i, step) in steps.iter().enumerate() {
+            let action = format!("{}/{} {}", i + 1, steps.len(), text(step, "action"));
+            self.log(&action, "START", &serde_json::to_string(step)?)?;
+            let result = (|| -> Result<String> {
+                if step["action"] != "wait_for" {
+                    self.log_step_baseline = Some(judge::snapshot_logs(&self.logs)?);
+                    self.log_matches_consumed.clear();
+                }
+                let detail = self.run_step(step)?;
+                if step["action"] == "restart_game" {
+                    self.baseline = Some(judge::snapshot_logs(&self.logs)?);
+                    self.write_baseline()?;
+                    self.log_step_baseline = None;
+                    self.log_matches_consumed.clear();
+                }
+                Ok(detail)
+            })();
+            match result {
+                Ok(detail) => {
+                    self.log(&action, "OK", &detail)?;
+                    self.completed_steps += 1;
+                }
+                Err(e) => {
+                    self.log(&action, "FAIL", &e.to_string())?;
+                    return Ok(1);
+                }
+            }
+        }
+        let logs = judge::read_since(&self.logs, self.baseline.as_ref().unwrap())?;
+        let checks = judge::judge(
+            &logs,
+            self.scenario["judge_profile"].as_str().unwrap_or("generic"),
+            self.scenario["expected_units"].as_u64().map(|n| n as usize),
+            self.scenario["strict_lua_errors"] == true,
+        );
+        judge::print_table(&checks);
+        let passed = checks.iter().filter(|c| c.passed).count();
+        self.result_passed = passed == checks.len();
+        self.result_checks = checks;
+        self.log(
+            "judge",
+            if self.result_passed { "OK" } else { "FAIL" },
+            &format!("{passed}/{} checks passed", self.result_checks.len()),
+        )?;
+        Ok(if self.result_passed { 0 } else { 1 })
+    }
+    fn write_baseline(&self) -> Result<()> {
+        fs::write(
+            self.output.join("baseline.json"),
+            serde_json::to_string_pretty(self.baseline.as_ref().unwrap())?,
+        )?;
+        Ok(())
+    }
+    pub fn write_result(&self) -> Result<()> {
+        let runs: Vec<_> = self
+            .turn_metrics
+            .iter()
+            .map(|r| {
+                let mut summary = r.recorder.summary();
+                let object = summary.as_object_mut().unwrap();
+                object.insert("pid".into(), r.pid.into());
+                object.insert("requested_turns".into(), r.requested_turns.into());
+                object.insert("group".into(), r.group.clone().into());
+                object.insert(
+                    "completed".into(),
+                    (r.recorder.turn == r.recorder.start_turn + r.requested_turns).into(),
+                );
+                summary
+            })
+            .collect();
+        let rows: Vec<_> = self
+            .turn_metrics
+            .iter()
+            .flat_map(|r| r.recorder.rows.iter().cloned())
+            .collect();
+        let mut groups: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for r in &self.turn_metrics {
+            groups
+                .entry(r.group.clone())
+                .or_default()
+                .extend(r.recorder.rows.iter().cloned());
+        }
+        let groups: BTreeMap<_, _> = groups
+            .into_iter()
+            .map(|(name, rows)| (name, metrics::summarize_turns(&rows)))
+            .collect();
+        let result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        fs::write(
+            self.output.join("result.json"),
+            format!("{}\n", serde_json::to_string_pretty(&result)?),
+        )?;
+        Ok(())
+    }
+}
