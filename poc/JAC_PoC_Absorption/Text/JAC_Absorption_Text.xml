@@ -321,4 +321,7 @@
   <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="ja_JP"><Text>英雄の移管で問題が起きました</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="en_US"><Text>Hero transfer encountered a problem</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="ru_RU"><Text>При передаче героя возникла ошибка</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="ja_JP"><Text>遺産保管庫</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="en_US"><Text>Heritage cache</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="ru_RU"><Text>Хранилище наследия</Text></Row>
 </LocalizedText></GameData>
