@@ -18,8 +18,7 @@ fn path_value_parser() -> impl TypedValueParser<Value = PathBuf> {
 #[command(
     about = "Count AI arbitration requests, outcomes and actual costs from an uninterrupted 200-turn artifact.",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 pub struct ArbitrationArgs {
     #[arg(value_parser = path_value_parser())]
@@ -32,8 +31,7 @@ pub struct ArbitrationArgs {
 #[command(
     about = "Summarize only archived artifacts of a 200-turn tuning run; never connect to Civ6.",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 pub struct TuningArgs {
     #[arg(value_parser = path_value_parser())]
@@ -53,8 +51,7 @@ pub enum ResearchKind {
 #[command(
     about = "Summarize first observed research completion turns across major factions.",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 pub struct ResearchArgs {
     #[arg(value_parser = path_value_parser())]
@@ -67,8 +64,7 @@ pub struct ResearchArgs {
 #[command(
     about = "Build a short, controlled gameplay test; its clock jump is never used by the 200-turn run.",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 pub struct ScenarioArgs {
     #[arg(
@@ -119,3 +115,11 @@ pub fn scenario(args: ScenarioArgs) -> Result<()> {
         .unwrap_or_else(|| scenario::output_in_repository(&repository));
     common::write_json(&output, &scenario::scenario_in_repository(&repository)?)
 }
+
+civ6_cli_compat_rs::parser!(ArbitrationArgs);
+
+civ6_cli_compat_rs::parser!(TuningArgs);
+
+civ6_cli_compat_rs::parser!(ResearchArgs);
+
+civ6_cli_compat_rs::parser!(ScenarioArgs);

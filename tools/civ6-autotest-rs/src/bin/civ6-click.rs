@@ -5,8 +5,7 @@ use clap::Parser;
 #[command(
     about = "Send verified input to the one Civ VI window",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 struct Args {
     /// Horizontal fraction of the window (0..1).
@@ -130,3 +129,5 @@ mod tests {
         }
     }
 }
+
+civ6_cli_compat_rs::parser!(Args);

@@ -8,8 +8,7 @@ mod support;
 #[command(
     about = "Capture the verified Civ VI window as PNG",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 struct Args {
     #[arg(value_parser = support::path_value_parser())]
@@ -124,3 +123,5 @@ mod tests {
         }
     }
 }
+
+civ6_cli_compat_rs::parser!(Args);

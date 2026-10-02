@@ -8,8 +8,7 @@ mod support;
 #[command(
     about = "Run a Civ VI PoC scenario with automatic mod freshness checks",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 struct Args {
     #[arg(value_parser = support::path_value_parser())]
@@ -24,7 +23,7 @@ struct Args {
     logs: Option<PathBuf>,
     #[arg(long, value_parser = support::path_value_parser())]
     saves: Option<PathBuf>,
-    #[arg(long, default_value = "4318", allow_hyphen_values = true)]
+    #[arg(long, default_value = "4318")]
     port: PortArgument,
     #[arg(long, value_parser = support::path_value_parser())]
     mods: Option<PathBuf>,
@@ -230,3 +229,5 @@ mod tests {
         }
     }
 }
+
+civ6_cli_compat_rs::parser!(Args);
