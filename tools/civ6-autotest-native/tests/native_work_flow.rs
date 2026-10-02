@@ -556,3 +556,41 @@ fn native_matrix_requires_unique_exact_index_and_empty_source() -> mlua::Result<
     )
     .exec()
 }
+
+#[test]
+fn native_deal_rejects_an_unreserved_destination_slot() -> mlua::Result<()> {
+    let lua = native_matrix_oracle()?;
+    lua.load(
+        r#"
+        Game.GetProperty=function(_,key)
+          if key=='JAC_NATIVE_DEAL_TARGET' then return 2 end
+          if key=='JAC_NATIVE_DEAL_SLOT' then
+            return {Owner=2,City=30,X=3,Y=0,Building=1,Slot=0}
+          end
+        end
+        ExposedMembers.JAC_NativeDealData=function()
+          return {Owner=1,Work={Index=0,City=10,X=1,Y=0,Building=1,Slot=0}}
+        end
+        ExposedMembers.JAC_NativeDealLocations=ExposedMembers.JAC_NativeMatrix.Locate
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[3].slots[1][1]=0
+    "#,
+    )
+    .exec()?;
+    let scenario = native_scenario("absorption-native-deal.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let condition = steps[steps.len() - 2]["condition"]["code"]
+        .as_str()
+        .expect("deal physical condition");
+    let error = lua.load(condition).eval::<bool>().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("deal ignored reserved destination slot"),
+        "{error}"
+    );
+    lua.load("ORACLE_CITIES[3].slots[1][1]=-1;ORACLE_CITIES[3].slots[1][0]=0")
+        .exec()?;
+    assert!(lua.load(condition).eval::<bool>()?);
+    Ok(())
+}

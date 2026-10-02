@@ -276,7 +276,10 @@ Draw = function()
     local identity = Localized(entry.Identity) or EntryIdentity(entry)
     local abilities = EntryAbilities(entry)
     local outcome
-    if flow.Phase == "RESULT" or flow.Phase == "DONE" or flow.Phase == "BLOCKED" then
+    if flow.FinalRollsComplete and entry.ReturnOwnerPending then
+      outcome = L("CHOOSE_OWNER", ActionName("RETURN"))
+    elseif flow.Phase == "RESULT" or flow.Phase == "DONE" or flow.Phase == "BLOCKED"
+      or flow.FinalRollsComplete then
       local final = entry.FinalOutcome or entry.EscapeOutcome or entry.SelectedAction
       local result = entry.EscapeOutcome and L("ESCAPED_RESULT")
         or entry.Success == false and L("FAILURE")

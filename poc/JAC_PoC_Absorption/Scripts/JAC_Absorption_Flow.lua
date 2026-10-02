@@ -614,6 +614,7 @@ function F.Resolve(actor, id)
     if not entry.EscapeOutcome and entry.SelectedAction == "RETURN"
       and not ValidReturnOwner(flow, entry.ReturnOwner) then
       entry.SelectedAction, entry.ReturnOwner = nil, nil
+      if flow.FinalRollsComplete then entry.ReturnOwnerPending = true end
       invalidReturn = true
     end
   end

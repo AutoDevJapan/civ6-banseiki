@@ -1278,6 +1278,21 @@ fn return_owner_lost_after_final_rolls_reopens_only_destination_before_mutation(
         r#"
         local A,F=TEST_ABSORPTION,TEST_FLOW
         F.Select(2,'waiting-return','artifact','RETURN',0)
+        local cities=Players[0].cities
+        Players[0].cities={}
+        local again=F.Resolve(2,'waiting-return')
+        assert(again.Phase=='CHOICE' and again.FinalRollsComplete)
+        for _,entry in ipairs(again.Entries) do
+          if entry.FinalOutcome=='RETURN' then
+            assert(entry.ReturnOwnerPending and not entry.SelectedAction and not entry.ReturnOwner,
+              'a second destination loss hid the correction actions')
+          end
+        end
+        assert(#RANDOM_CALLS==SAVED_FINAL_ROLLS and A.GetState().Transactions['waiting-return']==nil)
+        Game.props=A.Rules.Copy(Game.props)
+        Players[0].cities=cities
+        F.Select(2,'waiting-return','artifact','RETURN',0)
+        F.Select(2,'waiting-return','collection','RETURN',0)
         Players[1].units[3].GetSpreadCharges=ORIGINAL_SPREAD
         local done=F.Resolve(2,'waiting-return')
         assert(done.Phase=='RESULT',tostring(done.Error))
@@ -1312,6 +1327,8 @@ fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua:
         r#"
         local panel=JAC_AbsorptionFlow_UI
         assert(not panel.GetView().canResolve and Controls.ConfirmButton:IsDisabled())
+        assert(panel.GetView().rows[1].outcome:find('LOC_JAC_ABS_FLOW_FINAL',1,true))
+        assert(panel.GetView().rows[2].outcome:find('LOC_JAC_ABS_FLOW_CHOOSE_OWNER',1,true))
         TEST_ENTRY_MANAGER.instances[1].Choose:DoLeftClick()
         assert(#panel.GetView().actions==0 and not panel.ChooseAction('RETURN'))
         TEST_ENTRY_MANAGER.instances[2].Choose:DoLeftClick()

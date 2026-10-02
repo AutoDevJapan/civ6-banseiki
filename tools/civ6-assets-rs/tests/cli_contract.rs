@@ -60,16 +60,15 @@ fn success(cmd: &mut Command) -> Output {
 }
 fn install_process_fixture(destination: &Path) {
     let source = Path::new(env!("CARGO_BIN_EXE_jac-process-fixture"));
-    // Creating writable executable copies races concurrent fork/exec on Unix:
-    // a child can retain the copy's write descriptor briefly before exec.
-    // Alias the immutable Cargo artifact instead, including across filesystems.
+    // Do not open a new executable copy for writing during concurrent tests.
+    // Alias the immutable Cargo artifact, including across filesystems.
     #[cfg(unix)]
     std::os::unix::fs::symlink(fs::canonicalize(source).unwrap(), destination).unwrap();
     #[cfg(not(unix))]
     fs::copy(source, destination).unwrap();
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
     let t = temp();
@@ -78,6 +77,7 @@ fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
     let writer = fs::OpenOptions::new().write(true).open(&legacy).unwrap();
     let mut legacy_command = Command::new(&legacy);
     legacy_command
+        .current_dir(t.path())
         .arg("login")
         .env("JAC_ASSETS_TEST_PROCESS", "1");
     assert_eq!(
