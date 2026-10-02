@@ -15,6 +15,54 @@ use std::{
 };
 
 pub trait Backend: Send {
+    fn startup_cancel_check(&mut self) -> Result<()> {
+        crate::time::check_interrupt()
+    }
+    fn pin_startup_process(&mut self, _hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
+        Ok(self.single_process(0.0)?.map(Into::into))
+    }
+    fn startup_loading_evidence(
+        &mut self,
+        _game: crate::startup::GameProcess,
+        _logs: &Path,
+        _port: u16,
+    ) -> Result<Value> {
+        Err(Error::input(
+            "backend cannot prove a new-process loading timeout",
+        ))
+    }
+    fn startup_diagnostics(
+        &mut self,
+        _game: crate::startup::GameProcess,
+        _output: &Path,
+    ) -> Result<Value> {
+        Ok(json!({"status":"unavailable","reason":"backend has no native startup diagnostics"}))
+    }
+    fn acquire_startup_lock(&mut self) -> Result<()> {
+        Err(Error::input(
+            "backend cannot prove shared startup lock ownership",
+        ))
+    }
+    fn check_startup_lock(&mut self) -> Result<()> {
+        Err(Error::input(
+            "backend cannot prove shared startup lock ownership",
+        ))
+    }
+    fn release_startup_lock(&mut self) {}
+    fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
+        if self
+            .single_process(0.0)?
+            .is_some_and(|p| p != (game.pid, game.started))
+        {
+            return Err(Error::input(
+                "pinned startup process changed or another Civ6 appeared",
+            ));
+        }
+        Ok(())
+    }
+    fn startup_display_recovery(&mut self, _game: crate::startup::GameProcess) -> Result<Value> {
+        Ok(json!({"status":"skipped","reason":"backend cannot prove display recovery safe"}))
+    }
     fn connect(&mut self, _port: u16, _timeout: f64) -> Result<()> {
         Ok(())
     }
@@ -102,8 +150,68 @@ pub trait Backend: Send {
 #[derive(Default)]
 pub struct SystemBackend {
     client: Option<crate::tuner::TunerClient>,
+    startup_lease: Option<crate::startup::RecoveryLease>,
+    launch_floor: Option<f64>,
+    startup_pin: Option<crate::startup::PinnedGame>,
 }
 impl Backend for SystemBackend {
+    fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
+        let floor = self
+            .launch_floor
+            .ok_or_else(|| Error::input("no Steam launch request to pin"))?;
+        let pin = crate::startup::pin_window_process(hwnd, floor)?;
+        let game = pin.game;
+        self.startup_pin = Some(pin);
+        Ok(Some(game))
+    }
+    fn startup_loading_evidence(
+        &mut self,
+        game: crate::startup::GameProcess,
+        logs: &Path,
+        port: u16,
+    ) -> Result<Value> {
+        crate::startup::loading_evidence(game, logs, port)
+    }
+    fn startup_diagnostics(
+        &mut self,
+        game: crate::startup::GameProcess,
+        output: &Path,
+    ) -> Result<Value> {
+        crate::startup::collect_diagnostics(game, output)
+    }
+    fn acquire_startup_lock(&mut self) -> Result<()> {
+        self.startup_lease = Some(crate::startup::RecoveryLease::acquire()?);
+        Ok(())
+    }
+    fn check_startup_lock(&mut self) -> Result<()> {
+        self.startup_lease
+            .as_mut()
+            .ok_or_else(|| Error::input("shared startup lock was lost"))?
+            .check()
+    }
+    fn release_startup_lock(&mut self) {
+        self.startup_lease = None;
+        self.startup_pin = None;
+    }
+    fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
+        let pin = self
+            .startup_pin
+            .as_ref()
+            .filter(|pin| pin.game == game)
+            .ok_or_else(|| Error::input("startup process handle pin was lost"))?;
+        pin.check_remaining()
+    }
+    fn startup_display_recovery(&mut self, game: crate::startup::GameProcess) -> Result<Value> {
+        crate::startup::reset_display(
+            self.startup_lease
+                .as_mut()
+                .ok_or_else(|| Error::input("shared startup lock was lost"))?,
+            self.startup_pin
+                .as_ref()
+                .filter(|pin| pin.game == game)
+                .ok_or_else(|| Error::input("startup process handle pin was lost"))?,
+        )
+    }
     fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
         if self.client.is_none() {
             self.client = Some(
@@ -145,7 +253,14 @@ impl Backend for SystemBackend {
         metrics::process_memory(pid)
     }
     fn launch(&mut self) -> Result<()> {
-        crate::restart::request_steam_launch()
+        let floor = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| Error::input("Steam launch timestamp unavailable"))?
+            .as_secs_f64();
+        self.launch_floor = None;
+        crate::restart::request_steam_launch()?;
+        self.launch_floor = Some(floor);
+        Ok(())
     }
     fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
         crate::restart::close_orphaned_civ_reporters()
@@ -677,12 +792,29 @@ pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
 ];
 pub const AUTOPLAY_STATUS_CODE:&str="return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
 
+#[derive(Default)]
+struct StartupAttempt {
+    launch_requested: bool,
+    process: Option<crate::startup::GameProcess>,
+    frontend_seen: bool,
+    loading_timeout: bool,
+}
+
 impl Runner {
-    pub fn wait_frontend_ready(&mut self, timeout: f64, mut skip_opening: bool) -> Result<()> {
+    pub fn wait_frontend_ready(&mut self, timeout: f64, skip_opening: bool) -> Result<()> {
+        self.wait_startup_frontend(timeout, skip_opening, &mut StartupAttempt::default())
+    }
+    fn wait_startup_frontend(
+        &mut self,
+        timeout: f64,
+        mut skip_opening: bool,
+        attempt: &mut StartupAttempt,
+    ) -> Result<()> {
         let deadline = self.clock.now() + timeout;
         let mut next_click = self.clock.now() + 12.0;
         let mut last = "FrontEnd not ready".into();
         while self.clock.now() < deadline {
+            self.backend.startup_cancel_check()?;
             if skip_opening && self.clock.now() >= next_click {
                 if self.backend.click(0.5, 0.15).is_err() {
                     skip_opening = false;
@@ -698,6 +830,7 @@ impl Runner {
                 if frontend != "true" {
                     return Ok(frontend);
                 }
+                attempt.frontend_seen = true;
                 let menu = self.lua("MainMenu", MAIN_MENU_READY, self.budget(deadline, 5.0)?)?;
                 if menu == "true" {
                     return Ok(menu);
@@ -725,17 +858,33 @@ impl Runner {
                     last = e.to_string();
                     self.disconnect();
                 }
+                Err(e) if e.kind == ErrorKind::Scenario && self.clock.now() >= deadline => break,
                 Err(e) => return Err(e),
             }
             self.sleep_until(deadline, 0.5);
         }
+        self.backend.startup_cancel_check()?;
+        attempt.loading_timeout = !attempt.frontend_seen;
         Err(Error::scenario(format!("Main menu did not become ready after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
+        self.launch_startup_and_wait(deadline, false, false, &mut StartupAttempt::default())
+    }
+    fn launch_startup_and_wait(
+        &mut self,
+        deadline: f64,
+        recovery: bool,
+        pin_process: bool,
+        startup: &mut StartupAttempt,
+    ) -> Result<()> {
         let mut attempts = 0;
         let mut next_launch = 0.0;
         let mut last = "no Civ VI process yet".to_string();
         while self.clock.now() < deadline {
+            self.backend.startup_cancel_check()?;
+            if recovery {
+                self.backend.check_startup_lock()?;
+            }
             let now = self.clock.now();
             let present = match self.backend.single_process(0.0) {
                 Ok(v) => v.is_some(),
@@ -765,7 +914,11 @@ impl Runner {
                     }
                 }
                 self.remaining(deadline)?;
+                if recovery {
+                    self.backend.check_startup_lock()?;
+                }
                 self.backend.launch()?;
+                startup.launch_requested = true;
                 attempts += 1;
                 next_launch = now + 45.0;
                 println!("Steam Civ VI launch attempt {attempts}");
@@ -776,6 +929,9 @@ impl Runner {
             {
                 Ok(hwnd) => {
                     self.backend.require_dx11(hwnd)?;
+                    if pin_process && startup.launch_requested {
+                        startup.process = self.backend.pin_startup_process(hwnd)?;
+                    }
                     return Ok(());
                 }
                 Err(e) if e.kind == ErrorKind::Input => last = e.to_string(),
@@ -787,8 +943,188 @@ impl Runner {
         )))
     }
     pub fn restart_game(&mut self, timeout: f64) -> Result<String> {
+        if !timeout.is_finite() || timeout <= 0.0 {
+            return Err(Error::input("restart timeout must be finite and positive"));
+        }
+        self.backend.startup_cancel_check()?;
+        let mut first = StartupAttempt::default();
+        let error = match self.restart_game_attempt(timeout, false, &mut first) {
+            Ok(detail) => return Ok(detail),
+            Err(error) => error,
+        };
+        if !first.loading_timeout || !first.launch_requested || error.kind != ErrorKind::Scenario {
+            return Err(error);
+        }
+        let Some(game) = first.process else {
+            return Err(error);
+        };
+        let directory = self
+            .output
+            .join(format!("startup-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory)?;
+        let mut report = json!({"schema_version":1,"reason":"loading_startup_timeout",
+            "marker":crate::startup::RECOVERY_MARKER,"timeout_per_attempt_seconds":timeout,
+            "process":game,"trigger":{"launch_requested":true,"frontend_seen":false},
+            "recovery_attempted":false,"reset":{"status":"skipped","reason":"not authorized yet"},
+            "retry":{"status":"not_started"},"result":"diagnosing"});
+        self.diagnose_startup(game, &directory, &mut report, "attempt1")?;
+        self.backend.startup_cancel_check()?;
+        let evidence = match self
+            .backend
+            .startup_loading_evidence(game, &self.logs, self.port)
+        {
+            Ok(evidence) => evidence,
+            Err(reason) => {
+                self.backend.startup_cancel_check()?;
+                report["result"] = json!("recovery_refused");
+                report["reset"]["reason"] = json!(reason.to_string());
+                self.write_startup_report(&directory, &report)?;
+                if reason.kind == ErrorKind::Interrupted {
+                    return Err(reason);
+                }
+                return Err(error);
+            }
+        };
+        report["trigger"]["evidence"] = evidence;
+        report["recovery_attempted"] = json!(true);
+        self.write_startup_report(&directory, &report)?;
+        println!(
+            "{} {}",
+            crate::startup::RECOVERY_MARKER,
+            json!({"process":game,"artifact":directory,"max_retries":1})
+        );
+        let result = (|| -> Result<String> {
+            self.backend.startup_cancel_check()?;
+            self.backend.acquire_startup_lock()?;
+            report["lock"] = json!({"status":"held"});
+            self.stop_startup_process(game, &mut report)?;
+            self.backend.startup_cancel_check()?;
+            self.backend.check_startup_lock()?;
+            self.backend.check_startup_process(game)?;
+            report["reset"] = self.backend.startup_display_recovery(game)?;
+            self.write_startup_report(&directory, &report)?;
+            self.backend.startup_cancel_check()?;
+            self.backend.check_startup_lock()?;
+            if !self.backend.wait_exit(game.pid, self.clock.now() + 5.0)? {
+                return Err(Error::scenario("pinned startup process remains after display recovery; refusing another launch"));
+            }
+            if self.backend.single_process(0.0)?.is_some() {
+                return Err(Error::input(
+                    "a Civ6 process remains or appeared before the startup retry",
+                ));
+            }
+            report["retry"] = json!({"status":"started","attempt":2});
+            self.write_startup_report(&directory, &report)?;
+            let mut second = StartupAttempt::default();
+            let result = self.restart_game_attempt(timeout, true, &mut second);
+            report["retry"]["process"] = json!(second.process);
+            report["retry"]["status"] = json!(if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            });
+            if let Err(ref failure) = result {
+                report["retry"]["reason"] = json!(failure.to_string());
+                if second.loading_timeout && failure.kind == ErrorKind::Scenario {
+                    if let Some(process) = second.process {
+                        self.diagnose_startup(process, &directory, &mut report, "attempt2")?;
+                        // No reset or third launch, even if the retry has the same failure.
+                        self.stop_startup_process(process, &mut report)?;
+                    }
+                }
+            }
+            result.map(|detail| format!("{detail}; startup recovery retried once"))
+        })();
+        // Also release after lost ownership, Ctrl-C, diagnostics failure, or launch failure.
+        self.backend.release_startup_lock();
+        report["lock_released"] = json!(report.get("lock").is_some());
+        report["result"] = json!(if result.is_ok() {
+            "recovered"
+        } else {
+            "failed"
+        });
+        if let Err(ref failure) = result {
+            report["failure"] = json!(failure.to_string());
+            if report["reset"]["reason"] == "not authorized yet" {
+                report["reset"]["reason"] = json!(failure.to_string());
+            }
+        }
+        self.write_startup_report(&directory, &report)?;
+        result.map_err(|mut failure| {
+            failure.message = format!(
+                "{} [{}; diagnostics: {}]",
+                failure.message,
+                crate::startup::RECOVERY_MARKER,
+                directory.display()
+            );
+            failure
+        })
+    }
+    fn write_startup_report(&self, directory: &Path, report: &Value) -> Result<()> {
+        fs::write(
+            directory.join("recovery.json"),
+            serde_json::to_vec_pretty(report)?,
+        )?;
+        Ok(())
+    }
+    fn diagnose_startup(
+        &mut self,
+        game: crate::startup::GameProcess,
+        directory: &Path,
+        report: &mut Value,
+        name: &str,
+    ) -> Result<()> {
+        self.backend.startup_cancel_check()?;
+        let output = directory.join(name);
+        fs::create_dir(&output)?;
+        report[name] = json!({"process":game,"collected_before_shutdown":true,
+            "logs":crate::startup::snapshot_logs(&self.logs, &output, game)});
+        self.write_startup_report(directory, report)?;
+        report[name]["native"] = match self.backend.startup_diagnostics(game, &output) {
+            Ok(value) => value,
+            Err(e) if e.kind == ErrorKind::Interrupted => {
+                report[name]["native"] = json!({"status":"interrupted","reason":e.to_string()});
+                self.write_startup_report(directory, report)?;
+                return Err(e);
+            }
+            Err(e) => json!({"status":"unavailable","reason":e.to_string()}),
+        };
+        self.write_startup_report(directory, report)
+    }
+    fn stop_startup_process(
+        &mut self,
+        game: crate::startup::GameProcess,
+        report: &mut Value,
+    ) -> Result<()> {
+        self.backend.startup_cancel_check()?;
+        self.backend.check_startup_lock()?;
+        if self.backend.single_process(0.0)? != Some((game.pid, game.started)) {
+            return Err(Error::input(
+                "pinned startup process changed; refusing shutdown",
+            ));
+        }
+        self.disconnect();
+        self.backend.terminate(game.pid, game.started)?;
+        let exited = self.backend.wait_exit(game.pid, self.clock.now() + 10.0)?;
+        report["shutdown"] = json!({"status":if exited {"exited"}else{"pending"},"process":game});
+        Ok(())
+    }
+    fn restart_game_attempt(
+        &mut self,
+        timeout: f64,
+        recovery: bool,
+        attempt: &mut StartupAttempt,
+    ) -> Result<String> {
+        self.backend.startup_cancel_check()?;
+        if recovery {
+            self.backend.check_startup_lock()?;
+        }
         let deadline = self.clock.now() + timeout;
-        let old = self.backend.single_process(30.0)?;
+        let settle = self.budget(deadline, 30.0)?;
+        let old = self.backend.single_process(settle)?;
+        if recovery && old.is_some() {
+            return Err(Error::input("Civ6 appeared before the startup retry"));
+        }
         if let Some((pid, started)) = old {
             let graceful = (|| -> Result<bool> {
                 let states = self.states(self.budget(deadline, 5.0)?)?;
@@ -819,7 +1155,8 @@ impl Runner {
                 }
                 Err(e) => return Err(e),
             };
-            if !graceful && self.backend.single_process(30.0)? == old {
+            let settle = self.budget(deadline, 30.0)?;
+            if !graceful && self.backend.single_process(settle)? == old {
                 if let Err(e) = self.backend.request_close() {
                     println!("Civ VI window quit unavailable: {e}");
                 }
@@ -843,7 +1180,8 @@ impl Runner {
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
         }
-        if self.backend.single_process(30.0)?.is_some() {
+        let settle = self.budget(deadline, 30.0)?;
+        if self.backend.single_process(settle)?.is_some() {
             return Err(Error::scenario(
                 "A Civ VI process appeared before Steam relaunch",
             ));
@@ -853,10 +1191,10 @@ impl Runner {
             println!("Closed orphan Civ VI helpers: {closed:?}");
             self.clock.sleep(self.budget(deadline, 8.0)?);
         }
-        self.launch_steam_and_wait(deadline)?;
+        self.launch_startup_and_wait(deadline, recovery, true, attempt)?;
         if self.owner_start {
             self.disconnect();
-            self.wait_frontend_ready(self.remaining(deadline)?, false)?;
+            self.wait_startup_frontend(self.remaining(deadline)?, false, attempt)?;
             return Ok(
                 "Civ VI relaunched via Steam; opening played to the end; main menu visible and ready".into(),
             );
@@ -866,7 +1204,7 @@ impl Runner {
             println!("Opening skip click unavailable ({e}); waiting for the opening");
         }
         self.disconnect();
-        self.wait_frontend_ready(self.remaining(deadline)?, true)?;
+        self.wait_startup_frontend(self.remaining(deadline)?, true, attempt)?;
         Ok(
             "Civ VI relaunched via Steam; opening skipped with a left click; main menu visible and ready"
                 .into(),
