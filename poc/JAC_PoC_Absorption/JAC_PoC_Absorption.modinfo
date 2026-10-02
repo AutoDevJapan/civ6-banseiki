@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="61320778-2e75-4c11-9009-94101b519aba" version="1">
+  <Properties>
+    <Name>LOC_JAC_ABSORPTION_MOD_NAME</Name>
+    <Teaser>LOC_JAC_ABSORPTION_MOD_DESCRIPTION</Teaser>
+    <Description>LOC_JAC_ABSORPTION_MOD_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="8424840C-92EF-4426-A9B4-B4E0CB818049" title="LOC_BABYLON_MOD_TITLE"/>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+    <Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_ABSORPTION_MOD_NAME">
+      <ja_JP>JAC PoC：勢力吸収</ja_JP><en_US>JAC PoC: Faction Absorption</en_US><ru_RU>JAC PoC: поглощение держав</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_ABSORPTION_MOD_DESCRIPTION">
+      <ja_JP>都市・部隊・人物・英雄・所持品・宗教を移管し、保存と読込を検証する PoC。</ja_JP>
+      <en_US>A PoC for transferring cities, units, people, Heroes, belongings and religion, including save/load checks.</en_US>
+      <ru_RU>Проверка передачи городов, войск, персонажей, героев, имущества и религии с сохранением и загрузкой.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria><Criteria id="JAC_Absorption_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria></ActionCriteria>
+  <InGameActions>
+    <AddUserInterfaces id="JAC_Absorption_HeroKeys" criteria="JAC_Absorption_Banseiki"><Properties><Context>InGame</Context></Properties><File>UI/JAC_Absorption_HeroKeys.xml</File></AddUserInterfaces>
+    <UpdateDatabase id="JAC_Absorption_Data" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/JAC_Absorption.sql</File></UpdateDatabase>
+    <UpdateText id="JAC_Absorption_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Text.xml</File></UpdateText>
+    <ImportFiles id="JAC_Absorption_Rules" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Rules.lua</File></ImportFiles>
+    <AddGameplayScripts id="JAC_Absorption_Gameplay" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>200</LoadOrder></Properties><File>Scripts/JAC_Absorption_Gameplay.lua</File></AddGameplayScripts>
+  </InGameActions>
+  <Files>
+    <File>UI/JAC_Absorption_HeroKeys.xml</File><File>UI/JAC_Absorption_HeroKeys.lua</File>
+    <File>Data/JAC_Absorption.sql</File><File>Text/JAC_Absorption_Text.xml</File>
+    <File>Scripts/JAC_Absorption_Rules.lua</File><File>Scripts/JAC_Absorption_Gameplay.lua</File>
+  </Files>
+</Mod>
