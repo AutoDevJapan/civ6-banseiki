@@ -1,0 +1,95 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameInfo>
+	<LocalizedText>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_A_NAME" Language="ja_JP">
+			<Text>無名の英傑（歩兵）</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_A_NAME" Language="en_US">
+			<Text>Unnamed Warlord (Infantry)</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_A_NAME" Language="ru_RU">
+			<Text>Безымянный герой (пехота)</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_B_NAME" Language="ja_JP">
+			<Text>無名の英傑（騎兵）</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_B_NAME" Language="en_US">
+			<Text>Unnamed Warlord (Cavalry)</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_B_NAME" Language="ru_RU">
+			<Text>Безымянный герой (конница)</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_DESCRIPTION" Language="ja_JP">
+			<Text>限られた寿命の間、家に仕える英傑武将。</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_DESCRIPTION" Language="en_US">
+			<Text>A heroic warlord serving a house for a limited lifespan.</Text>
+		</Row>
+		<Row Tag="LOC_UNIT_HERO_JAC_WARLORD_DESCRIPTION" Language="ru_RU">
+			<Text>Герой, служащий дому в течение ограниченного срока.</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_A_NAME" Language="ja_JP">
+			<Text>歩兵の英傑を迎える</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_A_NAME" Language="en_US">
+			<Text>Recruit an infantry warlord</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_A_NAME" Language="ru_RU">
+			<Text>Призвать героя пехоты</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_B_NAME" Language="ja_JP">
+			<Text>騎兵の英傑を迎える</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_B_NAME" Language="en_US">
+			<Text>Recruit a cavalry warlord</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_B_NAME" Language="ru_RU">
+			<Text>Призвать героя конницы</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_DESCRIPTION" Language="ja_JP">
+			<Text>発見した英傑武将をこの都市に迎え、家に仕えてもらう。</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_DESCRIPTION" Language="en_US">
+			<Text>Recruit a discovered warlord to serve this house from this city.</Text>
+		</Row>
+		<Row Tag="LOC_PROJECT_CREATE_HERO_JAC_WARLORD_DESCRIPTION" Language="ru_RU">
+			<Text>Призвать открытого героя служить дому из этого города.</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_A_NAME" Language="ja_JP">
+			<Text>歩兵の英傑の武勇譚</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_A_NAME" Language="en_US">
+			<Text>Tale of the Infantry Warlord</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_A_NAME" Language="ru_RU">
+			<Text>Сказание о герое пехоты</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_B_NAME" Language="ja_JP">
+			<Text>騎兵の英傑の武勇譚</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_B_NAME" Language="en_US">
+			<Text>Tale of the Cavalry Warlord</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_EPIC_JAC_WARLORD_B_NAME" Language="ru_RU">
+			<Text>Сказание о герое конницы</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_A_NAME" Language="ja_JP">
+			<Text>英傑武将の太刀</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_A_NAME" Language="en_US">
+			<Text>Warlord’s Sword</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_A_NAME" Language="ru_RU">
+			<Text>Меч героя</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_B_NAME" Language="ja_JP">
+			<Text>英傑武将の馬具</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_B_NAME" Language="en_US">
+			<Text>Warlord’s Tack</Text>
+		</Row>
+		<Row Tag="LOC_GREATWORK_HERO_SYMBOL_JAC_WARLORD_B_NAME" Language="ru_RU">
+			<Text>Сбруя героя</Text>
+		</Row>
+	</LocalizedText>
+</GameInfo>

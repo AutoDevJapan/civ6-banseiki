@@ -22,9 +22,9 @@ from judge import (default_log_dir, judge, log_marker_replaced, print_table, rea
                    slice_log_bytes, snapshot_logs)
 from metrics import (RESEARCH_SAMPLE_CODE, ResearchMetrics, SaveLoadMetrics, TurnMetrics,
                      parse_research_sample, process_memory, research_sample_code, summarize_turns)
-from restart import (DEFAULT_MODS_DIR, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
-                     newest_mod_file, require_dx11_window, restart_reason, single_civ_process,
-                     terminate_civ_process, wait_for_civ_window, wait_for_exit)
+from restart import (DEFAULT_MODS_DIR, close_orphaned_civ_reporters, enabled_mod_folders, launch_via_steam, missing_atlas_textures,
+                     newest_mod_file, require_dx11_window, restart_reason, single_civ_process, terminate_civ_process, wait_for_civ_window,
+                     wait_for_exit)
 from tuner import LuaExecutionError, LuaResponseUnknown, TunerClient, TunerError, validate_lua_code
 
 
@@ -643,9 +643,23 @@ class Runner:
                 if not str(exc).startswith("Multiple Civ VI processes found"):
                     raise
                 process_present = True  # Never launch another copy during an overlap.
-            if not process_present and now >= next_launch:
-                if attempts >= 4:
-                    raise ScenarioError(f"Steam did not start Civ VI after {attempts} attempts; last: {last}")
+            if not process_present and now >= next_launch and attempts < 4:
+                # Exhausting launch requests is not the caller's timeout: Steam can
+                # complete the fourth request later. Keep waiting without launching again.
+                # A launch can itself crash before opening a window and leave a new
+                # helper that keeps Steam's running-app entry alive for the retry.
+                closed = close_orphaned_civ_reporters()
+                if closed:
+                    print(f"Closed helpers from failed launch: {closed}", flush=True)
+                    time.sleep(min(8, _remaining(deadline)))
+                    try:
+                        if single_civ_process(settle=0) is not None:
+                            continue
+                    except InputError as exc:
+                        if str(exc).startswith("Multiple Civ VI processes found"):
+                            continue
+                        raise
+                _remaining(deadline)  # Cleanup may have consumed the last seconds.
                 launch_via_steam()
                 attempts += 1
                 next_launch = now + 45
@@ -657,7 +671,7 @@ class Runner:
             else:
                 require_dx11_window(hwnd)
                 return
-        raise ScenarioError(f"Civ VI window did not appear after Steam launch; last: {last}")
+        raise ScenarioError(f"Civ VI window did not appear after {attempts} Steam launch attempts within the deadline; last: {last}")
 
     LOADSCREEN_READY = "LoadScreen: OnLoadGameViewStateDone"
 
@@ -1204,6 +1218,10 @@ class Runner:
             time.sleep(min(8, _remaining(deadline)))
         if single_civ_process() is not None:
             raise ScenarioError("A Civ VI process appeared before Steam relaunch")
+        closed = close_orphaned_civ_reporters()
+        if closed:
+            print(f"Closed orphan Civ VI helpers: {closed}", flush=True)
+            time.sleep(min(8, _remaining(deadline)))  # Steam releases its running-app entry.
         self._launch_steam_and_wait(deadline)
         if self.owner_start:
             # The owner is using the PC: Windows refuses to move focus, so let the opening finish.
