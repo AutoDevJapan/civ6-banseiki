@@ -33,6 +33,17 @@ fn deal_script(marker: &str) -> String {
         .to_owned()
 }
 
+fn condition(marker: &str) -> String {
+    scenario()["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|step| step["condition"]["code"].as_str())
+        .find(|code| code.contains(marker))
+        .unwrap_or_else(|| panic!("missing condition: {marker}"))
+        .to_owned()
+}
+
 fn assert_context_boundary(steps: &[Value], plain: &[&str], core_functions: &[&str]) {
     let exposed = Regex::new(r"ExposedMembers\.([A-Za-z_][A-Za-z_0-9]*)").expect("name pattern");
     let direct_call =
@@ -87,14 +98,14 @@ fn world() -> mlua::Result<Lua> {
           GetProperty=function(_,key) return props[key] end,
           SetProperty=function(_,key,value) props[key]=value end}
         GameInfo={Districts={DISTRICT_HOLY_SITE={Index=5}},
-          Buildings={BUILDING_SHRINE={Index=2},BUILDING_TEMPLE={Index=3},
-            BUILDING_JAC_ABSORPTION_CACHE={Index=4},[2]={Index=2},[3]={Index=3}},
+          Buildings={BUILDING_PALACE={Index=1},BUILDING_SHRINE={Index=2},BUILDING_TEMPLE={Index=3},
+            BUILDING_JAC_ABSORPTION_CACHE={Index=4},[1]={Index=1},[2]={Index=2},[3]={Index=3}},
           GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_RELIC'},
             [2]={GreatWorkSlotType='GREATWORKSLOT_ARTIFACT'}}}
         CITIES={};PLOTS={};CALLS={};PENDING={}
         local function city(id,x)
           local c={id=id,x=x,owner=1,districts={},purchased={},built={},at={},
-            pillaged={},slotCount=1,slotType=1,work=-1}
+            pillaged={},slotCount=1,slotType=1,palace=-1,work=-1}
           function c:GetID() return self.id end
           function c:GetOwner() return self.owner end
           function c:GetX() return self.x end
@@ -113,9 +124,17 @@ fn world() -> mlua::Result<Lua> {
               HasBuilding=function(_,b) return c.built[b]==true end,
               GetBuildingsAtLocation=function(_,plot) return c.at[plot] or {} end,
               IsPillaged=function(_,b) return c.pillaged[b]==true end,
-              GetNumGreatWorkSlots=function(_,b) assert(b==3);return c.slotCount end,
-              GetGreatWorkSlotType=function(_,b,s) assert(b==3 and s==0);return c.slotType end,
-              GetGreatWorkInSlot=function(_,b,s) assert(b==3 and s==0);return c.work end}
+              GetNumGreatWorkSlots=function(_,b)
+                if b==1 then return 1 end
+                assert(b==3);return c.slotCount
+              end,
+              GetGreatWorkSlotType=function(_,b,s)
+                assert((b==1 or b==3) and s==0);return c.slotType
+              end,
+              GetGreatWorkInSlot=function(_,b,s)
+                assert((b==1 or b==3) and s==0)
+                return b==1 and c.palace or c.work
+              end}
           end
           function c:GetBuildQueue()
             local function enqueue(kind,index,plot,construction)
@@ -166,6 +185,7 @@ fn world() -> mlua::Result<Lua> {
         plot(3,3,cap);plot(10,10,control,0,true);plot(11,12,control,5)
         plot(30,30,dealTarget,0,true);plot(31,32,dealTarget)
         cap.purchased={0,1,2,3};control.purchased={10,11}
+        cap.built[1]=true;cap.at[0]={1}
         dealTarget.purchased={30,31}
         cap.districts={}
         control.districts={DISTRICT(control,11,true)}
@@ -484,10 +504,14 @@ fn gameplay_grant_uses_detached_observation_after_ui_functions_are_removed() -> 
           assert(name=='GOODY_CULTURE_GRANT_ONE_RELIC')
           GRANTED=true
         end
-        ExposedMembers.JAC_NativeTempleFixture=nil
         "#,
     )
     .exec()?;
+    lua.load("Game.SetProperty=nil").exec()?;
+    lua.load(script("planned one empty capital Palace slot"))
+        .exec()?;
+    lua.load("Game.SetProperty=SAVED_GAME_SETTER;ExposedMembers.JAC_NativeTempleFixture=nil")
+        .exec()?;
     let core: Table = lua.create_table()?;
     let metatable = lua.create_table()?;
     metatable.set("__index", lua.globals())?;
@@ -504,7 +528,80 @@ fn gameplay_grant_uses_detached_observation_after_ui_functions_are_removed() -> 
         assert(GRANTED)
         local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE')
         assert(t.Before and next(t.Before)==nil)
+        assert(t.Palace.Owner==1 and t.Palace.City==10 and t.Palace.Building==1)
         assert(t.Fixtures.source.Request.Stage=='Temple')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn second_grant_targets_temple_after_first_relic_fills_palace() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local F=ExposedMembers.JAC_NativeTempleFixture
+        local R=ExposedMembers.JAC_NativeTempleRequest
+        for _,stage in ipairs({'Holy','Shrine','Temple'}) do
+          F.Observe('source',stage)
+          R('source',stage)
+          PUBLISH()
+          assert(F.Ready('source',stage))
+        end
+        F.Observe('source','grant')
+        JAC_AbsorptionGameplay.OwnedGreatWorkSlots=function()
+          local c=CITIES[10]
+          local works={}
+          if c.palace>=0 then works[#works+1]={Index=c.palace,Owner=1,CityID=c.id,X=c.x,Y=0,Building=1,Slot=0} end
+          if c.work>=0 then works[#works+1]={Index=c.work,Owner=1,CityID=c.id,X=c.x,Y=0,Building=3,Slot=0} end
+          return works
+        end
+        Players[1].AttachModifierByID=function(_,name)
+          assert(name=='GOODY_CULTURE_GRANT_ONE_RELIC')
+          GRANTS=(GRANTS or 0)+1
+          if GRANTS==1 then assert(CITIES[10].palace==-1);CITIES[10].palace=0
+          elseif GRANTS==2 then assert(CITIES[10].palace==0 and CITIES[10].work==-1);CITIES[10].work=1
+          else error('unexpected extra grant') end
+        end
+        "#,
+    )
+    .exec()?;
+    lua.load(script("planned one empty capital Palace slot"))
+        .exec()?;
+    let core: Table = lua.create_table()?;
+    let metatable = lua.create_table()?;
+    metatable.set("__index", lua.globals())?;
+    core.set_metatable(Some(metatable))?;
+    core.set(
+        "CityManager",
+        lua.globals().get::<Table>("CORE_CITY_MANAGER")?,
+    )?;
+    lua.load(script("granted actual relic after exact-city"))
+        .set_environment(core.clone())
+        .exec()?;
+    assert!(
+        lua.load(condition("JAC_NATIVE_FIRST_GRANT"))
+            .eval::<bool>()?
+    );
+    let prime = script("Palace relic excluded; second official modifier granted Temple relic");
+    lua.load("ExposedMembers.JAC_NativeFirstGrant.Index=99")
+        .exec()?;
+    assert!(
+        lua.load(&prime)
+            .set_environment(core.clone())
+            .exec()
+            .is_err()
+    );
+    lua.load("assert(GRANTS==1);ExposedMembers.JAC_NativeFirstGrant.Index=0")
+        .exec()?;
+    lua.load(&prime).set_environment(core).exec()?;
+    assert!(lua.load(condition("grant:publication")).eval::<bool>()?);
+    lua.load(
+        r#"
+        local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE')
+        assert(GRANTS==2 and CITIES[10].palace==0 and CITIES[10].work==1)
+        assert(t.FirstGrant.Index==0 and t.FirstGrant.Location=='PALACE')
+        assert(t.Before[0] and not t.Before[1],'Palace work must be excluded but Temple work retained')
         "#,
     )
     .exec()
@@ -519,6 +616,8 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
         &[
             "JAC_NativeDealTemplePlan",
             "JAC_NativeDealTempleObservation",
+            "JAC_NativeDealPalacePlan",
+            "JAC_NativeDealFirstGrant",
         ],
         &["JAC_NativeDealTempleRequest"],
     );
@@ -557,7 +656,7 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
             requests += 1;
         }
     }
-    assert_eq!(scripts, 33, "all deal Lua snippets must compile");
+    assert_eq!(scripts, 36, "all deal Lua snippets must compile");
     assert_eq!(requests, 6, "both capitals need all three stages");
     let grant = steps
         .iter()
@@ -567,10 +666,13 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
                 .is_some_and(|code| code.contains("p:AttachModifierByID("))
         })
         .expect("relic grant");
-    assert_eq!(steps[grant - 3]["action"], "wait_for");
+    assert_eq!(steps[grant - 4]["action"], "wait_for");
+    assert_eq!(steps[grant - 3]["state_name"], "InGame");
     assert_eq!(steps[grant - 2]["state_name"], "InGame");
     assert_eq!(steps[grant - 1]["state_name"], "InGame");
     assert_eq!(steps[grant + 1]["action"], "wait_for");
+    assert_eq!(steps[grant + 2]["state_name"], "JAC_Absorption_Entry");
+    assert_eq!(steps[grant + 3]["action"], "wait_for");
     assert!(
         steps[grant]["code"]
             .as_str()
@@ -590,6 +692,8 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
         &[
             "JAC_NativeTemplePlan",
             "JAC_NativeTempleObservation",
+            "JAC_NativePalacePlan",
+            "JAC_NativeFirstGrant",
             "JAC_NativeOfficialMoveProof",
             "JAC_NativeWorkIndex",
             "JAC_CustodyProbeSite",
@@ -610,7 +714,7 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
             checked += 1;
         }
     }
-    assert_eq!(checked, 58, "all scenario Lua scripts must compile");
+    assert_eq!(checked, 61, "all scenario Lua scripts must compile");
     let baseline = steps
         .iter()
         .position(|s| {
@@ -644,8 +748,11 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
         })
         .expect("control preparation");
     assert!(grant < control && control < baseline);
+    assert_eq!(steps[grant - 1]["state_name"], "InGame");
     assert_eq!(steps[grant + 1]["action"], "wait_for");
     assert_eq!(steps[grant + 1]["timeout"], 20);
+    assert_eq!(steps[grant + 2]["state_name"], "JAC_Absorption_Entry");
+    assert_eq!(steps[grant + 3]["action"], "wait_for");
     assert!(baseline < carrier);
     assert_eq!(steps[baseline + 1]["action"], "wait_for");
     assert!(
