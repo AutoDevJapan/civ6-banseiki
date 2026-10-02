@@ -159,7 +159,7 @@
     },
     {
       "action": "ui_lua",
-      "code": "local p=Players[Game.GetLocalPlayer()];local cap=p:GetCities():GetCapitalCity();local b=GameInfo.Buildings['BUILDING_JAC_ABSORPTION_CACHE'];if not cap:GetBuildings():HasBuilding(b.Index) then cap:GetBuildQueue():CreateIncompleteBuilding(b.Index,Map.GetPlot(cap:GetX(),cap:GetY()):GetIndex(),100) end;p:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC');Game:SetProperty('JAC_NATIVE_DEAL_OWNER',p:GetID());return 'granted native relic in existing city without creating new cities'",
+      "code": "local p=Players[Game.GetLocalPlayer()];local cap=p:GetCities():GetCapitalCity();local b=GameInfo.Buildings['BUILDING_JAC_ABSORPTION_CACHE'];if not cap:GetBuildings():HasBuilding(b.Index) then cap:GetBuildQueue():CreateIncompleteBuilding(b.Index,Map.GetPlot(cap:GetX(),cap:GetY()):GetIndex(),100) end;p:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC');local target;for _,other in ipairs(PlayerManager.GetAliveMajors()) do if other:GetID()~=p:GetID() then target=other:GetID();break end end;assert(target,'native deal target missing');local diplomacy=p:GetDiplomacy();if not diplomacy:HasMet(target) then diplomacy:SetHasMet(target) end;Game:SetProperty('JAC_NATIVE_DEAL_OWNER',p:GetID());Game:SetProperty('JAC_NATIVE_DEAL_TARGET',target);return 'granted native relic in existing city and met deal target'",
       "state_name": "JAC_Absorption_Entry"
     },
     {
@@ -169,8 +169,8 @@
     },
     {
       "action": "ui_lua",
-      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target;for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetID()~=d.Owner then target=p:GetID();break end end;assert(target);local p=Players[d.Owner];if p:GetDiplomacy().SetHasMet then p:GetDiplomacy():SetHasMet(target) end;DealManager.ClearWorkingDeal(d.Outgoing,d.Owner,target);local deal=assert(DealManager.GetWorkingDeal(d.Outgoing,d.Owner,target));local item=assert(deal:AddItemOfType(d.GreatWork,d.Owner));item:SetSubType(d.Work.Type);item:SetValueType(d.Work.Index);deal:Validate();print('[JAC_NATIVE_DEAL_VALID] '..tostring(deal:IsValid())..' enact='..type(DealManager.EnactWorkingDeal));assert(deal:IsValid(),'native deal invalid');DealManager.EnactWorkingDeal(d.Owner,target);Game:SetProperty('JAC_NATIVE_DEAL_TARGET',target);return 'enacted actual great-work gift to '..target",
-      "state_name": "JAC_Absorption_Entry"
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));assert(d.Owner==Game.GetLocalPlayer(),'native deal owner must be local');local manager=assert(DealManager,'DealManager is unavailable in UI');local working=manager.GetWorkingDeal and manager.GetWorkingDeal(d.Outgoing,d.Owner,target);local options=manager.GetPossibleDealItems and manager.GetPossibleDealItems(d.Owner,target,d.GreatWork,working);local candidate;for _,entry in ipairs(options or {}) do if entry.ForType==d.Work.Index then candidate=entry end end;print('[JAC_NATIVE_DEAL_API] target='..target..' working='..tostring(working~=nil)..' possible='..tostring(candidate~=nil)..' valid='..tostring(candidate and candidate.IsValid)..' enact='..type(manager.EnactWorkingDeal)..' send='..type(manager.SendWorkingDeal));assert(candidate and candidate.IsValid,'native great work is not a valid deal item');assert(type(manager.EnactWorkingDeal)=='function','direct native deal enactment is unavailable');local deal=assert(working,'native working deal missing');local item=assert(deal:AddItemOfType(d.GreatWork,d.Owner));item:SetSubType(d.Work.Type);item:SetValueType(d.Work.Index);local validation=deal:Validate();print('[JAC_NATIVE_DEAL_VALID] result='..tostring(validation)..' isValid='..tostring(deal:IsValid()));assert(deal:IsValid(),'native deal invalid');manager.EnactWorkingDeal(d.Owner,target);return 'enacted actual great-work gift to '..target",
+      "state_name": "InGame"
     },
     {
       "action": "ui_lua",
