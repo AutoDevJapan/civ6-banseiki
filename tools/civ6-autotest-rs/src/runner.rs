@@ -627,6 +627,23 @@ fn text<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
 }
 pub const LOADSCREEN_READY: &str = "LoadScreen: OnLoadGameViewStateDone";
+pub const MAIN_MENU_READY: &str = "return not ContextPtr:IsHidden() and Controls.MainMenuOptionStack:GetSizeY() > 0 and Controls.MainButtonTrackAnim:IsStopped()";
+// Match only the localized connection-error message. The official Escape handler
+// acknowledges that message and clears its instance; login and legal dialogs stay open.
+pub const DISMISS_2K_CONNECTION_MESSAGE: &str = r#"
+if ContextPtr:IsHidden() then return false end
+local function find(control, id)
+    if control:GetID() == id then return control end
+    for _, child in ipairs(control:GetChildren() or {}) do
+        local match = find(child, id)
+        if match then return match end
+    end
+end
+local title = find(Controls.My2KBG, 'Title')
+if not title or title:GetText() ~= Locale.Lookup('TXT_KEY_MY2K_ADDITION_CONNECTION_ISSUE') then return false end
+InputHandler(KeyEvents.KeyUp, Keys.VK_ESCAPE, 0)
+return true
+"#;
 pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
     (
         "DiplomacyDealView",
@@ -660,11 +677,35 @@ impl Runner {
                 }
                 next_click = self.clock.now() + 12.0;
             }
-            match self.lua(
-                "FrontEnd",
-                "return UI.IsInFrontEnd()",
-                self.budget(deadline, 5.0)?,
-            ) {
+            let probe = (|| -> Result<String> {
+                let frontend = self.lua(
+                    "FrontEnd",
+                    "return UI.IsInFrontEnd()",
+                    self.budget(deadline, 5.0)?,
+                )?;
+                if frontend != "true" {
+                    return Ok(frontend);
+                }
+                let menu = self.lua("MainMenu", MAIN_MENU_READY, self.budget(deadline, 5.0)?)?;
+                if menu == "true" {
+                    return Ok(menu);
+                }
+                let states = self.states(self.budget(deadline, 5.0)?)?;
+                if states.iter().any(|s| state_name_eq(s, "My2K")) {
+                    // Rechecking visibility/title makes a lost acknowledgment safe:
+                    // a cleared instance cannot acknowledge the message a second time.
+                    let dismissed = self.lua(
+                        "My2K",
+                        DISMISS_2K_CONNECTION_MESSAGE,
+                        self.budget(deadline, 5.0)?,
+                    )?;
+                    if dismissed == "true" {
+                        println!("Acknowledged the 2K connection-error notification");
+                    }
+                }
+                Ok("main menu hidden or still animating".into())
+            })();
+            match probe {
                 Ok(value) if value == "true" => return Ok(()),
                 Ok(value) => last = format!("FrontEnd returned {value:?}"),
                 Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
@@ -676,7 +717,7 @@ impl Runner {
             }
             self.sleep_until(deadline, 0.5);
         }
-        Err(Error::scenario(format!("FrontEnd did not answer after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
+        Err(Error::scenario(format!("Main menu did not become ready after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
         let mut attempts = 0;
