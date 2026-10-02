@@ -349,9 +349,32 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local panel=JAC_AbsorptionFlow_UI\nif not panel or ContextPtr:IsHidden() or Controls.Panel:IsHidden() then return false end\nlocal view=panel.GetView()\nreturn view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and not Controls.Panel:IsHidden(),\n 'corrected return panel hidden before confirmation')\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),\n 'corrected return confirmation is not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human confirmed the corrected return destination through the real UI'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local snapshot=Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY')\nlocal flow=snapshot and JAC_AbsorptionFlowGameplay.Get(snapshot.ID)\nreturn flow and (flow.Phase=='APPLYING' or flow.Phase=='RESULT' or flow.Phase=='BLOCKED')"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal owner=assert(ExposedMembers.JAC_ReturnBoundaryNewOwner)\nassert(owner~=snapshot.Recipient and Players[owner]:IsAlive() and\n Players[owner]:GetCities():GetCount()>0)\nlocal flow=assert(F.Resolve(Game.GetLocalPlayer(),snapshot.ID))\nassert(flow.Phase=='APPLYING' or flow.Phase=='RESULT',\n 'corrected return did not resume the frozen result')\nassert(flow.FinalRollsComplete,'final result was not frozen after reselection')\nlocal decision=assert(flow.AppliedPlan and flow.AppliedPlan.Assets and\n flow.AppliedPlan.Assets[snapshot.Asset],'corrected return decision absent from applied plan')\nassert(decision.Outcome=='RETURN' and decision.ReturnOwner==owner,\n 'applied plan did not use the corrected return owner')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'reselection changed a final draw or outcome')\n if entry.ID==snapshot.Asset then\n  assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==owner)\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'reselection changed an unrelated choice')\n end\nend\nreturn 'successful RETURN resumed with a new owner and the same final random result'"
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal owner=assert(ExposedMembers.JAC_ReturnBoundaryNewOwner)\nassert(owner~=snapshot.Recipient and Players[owner]:IsAlive() and\n Players[owner]:GetCities():GetCount()>0)\nlocal flow=assert(F.Get(snapshot.ID))\nassert(flow.Phase=='APPLYING' or flow.Phase=='RESULT',\n 'corrected return did not resume the frozen result')\nassert(flow.FinalRollsComplete,'final result was not frozen after reselection')\nlocal decision=assert(flow.AppliedPlan and flow.AppliedPlan.Assets and\n flow.AppliedPlan.Assets[snapshot.Asset],'corrected return decision absent from applied plan')\nassert(decision.Outcome=='RETURN' and decision.ReturnOwner==owner,\n 'applied plan did not use the corrected return owner')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'reselection changed a final draw or outcome')\n if entry.ID==snapshot.Asset then\n  assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==owner)\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'reselection changed an unrelated choice')\n end\nend\nreturn 'successful RETURN resumed with a new owner and the same final random result'"
     },
     {
       "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='TRANSFER',ID=t.ID})\nend\nreturn flow.Phase",
