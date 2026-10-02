@@ -1,0 +1,16 @@
+[JAC_ARB] loaded shogunate_end_turn=120
+[JAC_ARB] request player=0 pair=0-1 turn=2 power=1
+[JAC_ARB] cost player=0 pair=0-1 turn=2 gold=100 legitimacy=5 gold_before=500.00 gold_after=400.00 legitimacy_before=40 legitimacy_after=35 by=ai_party
+[JAC_ARB] ai request player=0 pair=0-1 turn=2 by=ai_party score=6 duration=5 weariness=0 weariness_cities=0 army_loss=3 city_loss=0 low_legitimacy=2
+[JAC_ARB] decision player=1 accept=true by=ai
+[JAC_ARB] accepted pair=0-1 turn=3 truce_turns=10 power=1 peace=true
+[JAC_ARB] request player=2 pair=1-3 turn=14 power=3
+[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_before=500.00 gold_after=466.00 legitimacy_before=77 legitimacy_after=75 by=ai_shogun
+[JAC_ARB] ai request player=2 pair=1-3 turn=14 by=ai_shogun score=3 duration=12 ally=false capital=false long_war=true
+[JAC_ARB] decision player=1 accept=false by=ai
+[JAC_ARB] decision player=3 accept=false by=ai
+[JAC_ARB] refused player=1 pair=1-3 turn=15 legitimacy=0 outlaw_until=45 power=3
+[JAC_ARB] refusal cost player=1 pair=1-3 turn=15 intended=45 applied=30 legitimacy_before=30 legitimacy_after=0
+[JAC_ARB] refused player=3 pair=1-3 turn=15 legitimacy=15 outlaw_until=45 power=3
+[JAC_ARB] refusal cost player=3 pair=1-3 turn=15 intended=45 applied=45 legitimacy_before=60 legitimacy_after=15
+[JAC_ARB] ai blocked turn=16 gold=1 legitimacy=2 interval=3

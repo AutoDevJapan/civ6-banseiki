@@ -1,0 +1,998 @@
+[
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_twenty_two_houses_have_pools",
+    "rust_test": "data_tests::test_city_names::test_twenty_two_houses_have_pools"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_every_house_has_enough_own_names",
+    "rust_test": "data_tests::test_city_names::test_every_house_has_enough_own_names"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_no_names_copied_from_other_civilizations",
+    "rust_test": "data_tests::test_city_names::test_no_names_copied_from_other_civilizations"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_no_duplicates_within_a_house",
+    "rust_test": "data_tests::test_city_names::test_no_duplicates_within_a_house"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_every_name_has_three_languages",
+    "rust_test": "data_tests::test_city_names::test_every_name_has_three_languages"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_houses_do_not_share_names_on_screen",
+    "rust_test": "data_tests::test_city_names::test_houses_do_not_share_names_on_screen"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_no_clash_with_official_japan_names",
+    "rust_test": "data_tests::test_city_names::test_no_clash_with_official_japan_names"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_random_depth_is_set_for_all_houses",
+    "rust_test": "data_tests::test_city_names::test_random_depth_is_set_for_all_houses"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_city_names_load_after_both_civilization_files",
+    "rust_test": "data_tests::test_city_names::test_city_names_load_after_both_civilization_files"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_generated_files_are_current",
+    "rust_test": "data_tests::test_city_names::test_generated_files_are_current"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_every_entry_cites_a_source",
+    "rust_test": "data_tests::test_city_names::test_every_entry_cites_a_source"
+  },
+  {
+    "source": "tests/test_city_names.py",
+    "class": "CityNameTests",
+    "test": "test_romanization_matches_map_conventions",
+    "rust_test": "data_tests::test_city_names::test_romanization_matches_map_conventions"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_generated_files_are_current",
+    "rust_test": "events::tests::test_generated_files_are_current"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_no_prerequisite_or_boost_is_starting_knowledge",
+    "rust_test": "events::tests::test_no_prerequisite_or_boost_is_starting_knowledge"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_generator_refuses_starting_knowledge_in_the_list",
+    "rust_test": "events::tests::test_generator_refuses_starting_knowledge_in_the_list"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_sql_loads_with_valid_references",
+    "rust_test": "events::tests::test_sql_loads_with_valid_references"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_rows_follow_the_event_list",
+    "rust_test": "events::tests::test_rows_follow_the_event_list"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_renames_are_the_ssot_stages",
+    "rust_test": "events::tests::test_renames_are_the_ssot_stages"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_year_to_turn_follows_the_sengoku_calendar",
+    "rust_test": "events::tests::test_year_to_turn_follows_the_sengoku_calendar"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_resource_events_boost_the_research_of_the_reserved_sites",
+    "rust_test": "events::tests::test_resource_events_boost_the_research_of_the_reserved_sites"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_missing_prereq_gets_a_boost_not_the_tech",
+    "rust_test": "events::tests::test_missing_prereq_gets_a_boost_not_the_tech"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_every_text_key_has_three_languages",
+    "rust_test": "events::tests::test_every_text_key_has_three_languages"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_modinfo_lists_files",
+    "rust_test": "events::tests::test_modinfo_lists_files"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_lua_reads_only_existing_tables_and_properties",
+    "rust_test": "events::tests::test_lua_reads_only_existing_tables_and_properties"
+  },
+  {
+    "source": "tests/test_historical_events.py",
+    "class": "HistoricalEventTests",
+    "test": "test_ages_ledger_scores_existing_events",
+    "rust_test": "events::tests::test_ages_ledger_scores_existing_events"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_tree_periods_and_their_house_name_are_gone",
+    "rust_test": "data_tests::test_house_names::test_tree_periods_and_their_house_name_are_gone"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_taiko_survey_is_the_name_for_every_house",
+    "rust_test": "data_tests::test_house_names::test_taiko_survey_is_the_name_for_every_house"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_registry_is_well_formed",
+    "rust_test": "data_tests::test_house_names::test_registry_is_well_formed"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_every_key_has_all_languages_and_a_distinct_generic_counterpart",
+    "rust_test": "data_tests::test_house_names::test_every_key_has_all_languages_and_a_distinct_generic_counterpart"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_house_text_never_appears_under_a_generic_tag",
+    "rust_test": "data_tests::test_house_names::test_house_text_never_appears_under_a_generic_tag"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_database_only_references_generic_tags",
+    "rust_test": "data_tests::test_house_names::test_database_only_references_generic_tags"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_ui_wiring",
+    "rust_test": "data_tests::test_house_names::test_ui_wiring"
+  },
+  {
+    "source": "tests/test_house_names.py",
+    "class": "HouseNameTests",
+    "test": "test_house_text_does_not_contain_a_generic_name",
+    "rust_test": "data_tests::test_house_names::test_house_text_does_not_contain_a_generic_name"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_factions_match_the_22_map_seats",
+    "rust_test": "data_tests::test_japan_1534_relations::test_factions_match_the_22_map_seats"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_relations_are_valid_unordered_pairs",
+    "rust_test": "data_tests::test_japan_1534_relations::test_relations_are_valid_unordered_pairs"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_dates_are_well_formed_and_ordered",
+    "rust_test": "data_tests::test_japan_1534_relations::test_dates_are_well_formed_and_ordered"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_apply_rule_uses_start_date_and_confidence",
+    "rust_test": "data_tests::test_japan_1534_relations::test_apply_rule_uses_start_date_and_confidence"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_lua_copies_exactly_the_applicable_rows",
+    "rust_test": "data_tests::test_japan_1534_relations::test_lua_copies_exactly_the_applicable_rows"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_script_and_feuds_run_on_the_two_historical_maps_only",
+    "rust_test": "data_tests::test_japan_1534_relations::test_script_and_feuds_run_on_the_two_historical_maps_only"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_feud_xml_is_generated_from_the_hostility_rows",
+    "rust_test": "data_tests::test_japan_1534_relations::test_feud_xml_is_generated_from_the_hostility_rows"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_every_major_starts_with_limited_access_so_reasons_are_not_unknown",
+    "rust_test": "data_tests::test_japan_1534_relations::test_every_major_starts_with_limited_access_so_reasons_are_not_unknown"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_ruleset_shares_ally_vision_by_default",
+    "rust_test": "data_tests::test_japan_1534_relations::test_ruleset_shares_ally_vision_by_default"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_ally_pairs_start_allied_so_they_share_vision",
+    "rust_test": "data_tests::test_japan_1534_relations::test_ally_pairs_start_allied_so_they_share_vision"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_ally_houses_carry_poundmakers_shared_vision_modifier",
+    "rust_test": "data_tests::test_japan_1534_relations::test_ally_houses_carry_poundmakers_shared_vision_modifier"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_ally_vision_probe_reads_both_contexts_before_and_after_a_turn",
+    "rust_test": "data_tests::test_japan_1534_relations::test_ally_vision_probe_reads_both_contexts_before_and_after_a_turn"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_alliance_type_probe_sets_in_gameplay_and_reads_in_ui",
+    "rust_test": "data_tests::test_japan_1534_relations::test_alliance_type_probe_sets_in_gameplay_and_reads_in_ui"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_alliance_expiry_probe_measures_raw_engine_expiry_per_renewal_variant",
+    "rust_test": "data_tests::test_japan_1534_relations::test_alliance_expiry_probe_measures_raw_engine_expiry_per_renewal_variant"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_end_alliance_probe_tries_one_variant_per_pair_and_never_wars_and_makes_peace_on_one_turn",
+    "rust_test": "data_tests::test_japan_1534_relations::test_end_alliance_probe_tries_one_variant_per_pair_and_never_wars_and_makes_peace_on_one_turn"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_start_alliances_lapse_at_the_alliance_limit_and_are_not_re_made",
+    "rust_test": "data_tests::test_japan_1534_relations::test_start_alliances_lapse_at_the_alliance_limit_and_are_not_re_made"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_sengoku_tree_keeps_the_printing_access_bonus",
+    "rust_test": "data_tests::test_japan_1534_relations::test_sengoku_tree_keeps_the_printing_access_bonus"
+  },
+  {
+    "source": "tests/test_japan_1534_relations.py",
+    "class": "Japan1534RelationsTests",
+    "test": "test_feud_ui_scenario_rejects_unknown_reason_rows",
+    "rust_test": "data_tests::test_japan_1534_relations::test_feud_ui_scenario_rejects_unknown_reason_rows"
+  },
+  {
+    "source": "tests/test_japan_no_world_congress.py",
+    "class": "JapanNoWorldCongressTests",
+    "test": "test_congress_capability_removed_only_for_all_four_japan_maps",
+    "rust_test": "data_tests::test_japan_no_world_congress::test_congress_capability_removed_only_for_all_four_japan_maps"
+  },
+  {
+    "source": "tests/test_japan_no_world_congress.py",
+    "class": "JapanNoWorldCongressTests",
+    "test": "test_capability_delete_does_not_remove_other_gs_systems",
+    "rust_test": "data_tests::test_japan_no_world_congress::test_capability_delete_does_not_remove_other_gs_systems"
+  },
+  {
+    "source": "tests/test_localized_names.py",
+    "class": "LocalizedNamesTests",
+    "test": "test_every_jac_tag_has_three_languages",
+    "rust_test": "data_tests::test_localized_names::test_every_jac_tag_has_three_languages"
+  },
+  {
+    "source": "tests/test_localized_names.py",
+    "class": "LocalizedNamesTests",
+    "test": "test_non_japanese_rows_have_no_cjk",
+    "rust_test": "data_tests::test_localized_names::test_non_japanese_rows_have_no_cjk"
+  },
+  {
+    "source": "tests/test_localized_names.py",
+    "class": "LocalizedNamesTests",
+    "test": "test_map_names_are_loc_tags",
+    "rust_test": "data_tests::test_localized_names::test_map_names_are_loc_tags"
+  },
+  {
+    "source": "tests/test_localized_names.py",
+    "class": "LocalizedNamesTests",
+    "test": "test_no_literal_cjk_outside_japanese_text",
+    "rust_test": "data_tests::test_localized_names::test_no_literal_cjk_outside_japanese_text"
+  },
+  {
+    "source": "tests/test_lua_file_names.py",
+    "class": "LuaFileNameTests",
+    "test": "test_lua_file_names_are_unique_across_all_mods",
+    "rust_test": "data_tests::test_lua_file_names::test_lua_file_names_are_unique_across_all_mods"
+  },
+  {
+    "source": "tests/test_portrait_art.py",
+    "class": "PortraitArtTests",
+    "test": "test_atlas_places_all_22_faces_in_eight_columns",
+    "rust_test": "data_tests::test_portrait_art::test_atlas_places_all_22_faces_in_eight_columns"
+  },
+  {
+    "source": "tests/test_portrait_art.py",
+    "class": "PortraitArtTests",
+    "test": "test_source_keys_match_frontend_leaders",
+    "rust_test": "data_tests::test_portrait_art::test_source_keys_match_frontend_leaders"
+  },
+  {
+    "source": "tests/test_portrait_art.py",
+    "class": "PortraitArtTests",
+    "test": "test_prompts_require_three_distinct_files_and_keyless_codex",
+    "rust_test": "data_tests::test_portrait_art::test_prompts_require_three_distinct_files_and_keyless_codex"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "SengokuResourceGateTests",
+    "test": "test_deleted_official_techs_never_open_a_resource_early",
+    "rust_test": "data_tests::test_resources::test_deleted_official_techs_never_open_a_resource_early"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "SengokuResourceGateTests",
+    "test": "test_modinfo_runs_the_resource_gate_between_trees_and_unlocks",
+    "rust_test": "data_tests::test_resources::test_modinfo_runs_the_resource_gate_between_trees_and_unlocks"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "CustomResourceTests",
+    "test": "test_each_custom_resource_is_fully_defined_with_text_and_icons",
+    "rust_test": "data_tests::test_resources::test_each_custom_resource_is_fully_defined_with_text_and_icons"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "CustomResourceTests",
+    "test": "test_modinfo_wires_every_new_file",
+    "rust_test": "data_tests::test_resources::test_modinfo_wires_every_new_file"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "DeferredSiteDataTests",
+    "test": "test_lua_data_is_exactly_the_reserved_sites_of_each_map",
+    "rust_test": "data_tests::test_resources::test_lua_data_is_exactly_the_reserved_sites_of_each_map"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "DeferredSiteDataTests",
+    "test": "test_named_ssot_sites_are_deferred_with_a_year_and_a_free_land_tile",
+    "rust_test": "data_tests::test_resources::test_named_ssot_sites_are_deferred_with_a_year_and_a_free_land_tile"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "DeferredSiteDataTests",
+    "test": "test_site_techs_exist_and_the_lua_api_and_test_hook_are_wired",
+    "rust_test": "data_tests::test_resources::test_site_techs_exist_and_the_lua_api_and_test_hook_are_wired"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "DeferredSiteDataTests",
+    "test": "test_the_scenario_turns_reach_1542_on_the_sengoku_calendar",
+    "rust_test": "data_tests::test_resources::test_the_scenario_turns_reach_1542_on_the_sengoku_calendar"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "DeferredSiteDataTests",
+    "test": "test_custom_resources_are_on_the_map_at_the_start",
+    "rust_test": "data_tests::test_resources::test_custom_resources_are_on_the_map_at_the_start"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "ImprovementTests",
+    "test": "test_a_listed_resource_lets_a_mine_go_on_flat_land",
+    "rust_test": "data_tests::test_resources::test_a_listed_resource_lets_a_mine_go_on_flat_land"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "ImprovementTests",
+    "test": "test_plantation_and_mine_are_buildable_under_the_sengoku_pack",
+    "rust_test": "data_tests::test_resources::test_plantation_and_mine_are_buildable_under_the_sengoku_pack"
+  },
+  {
+    "source": "tests/test_resources.py",
+    "class": "ImprovementTests",
+    "test": "test_every_gold_lacquer_tea_silk_tile_can_take_its_improvement",
+    "rust_test": "data_tests::test_resources::test_every_gold_lacquer_tea_silk_tile_can_take_its_improvement"
+  },
+  {
+    "source": "tests/test_sengoku_calendar.py",
+    "class": "SengokuCalendarTests",
+    "test": "test_turn_display_is_normalized",
+    "rust_test": "reigns::tests::test_turn_display_is_normalized"
+  },
+  {
+    "source": "tests/test_sengoku_calendar.py",
+    "class": "SengokuCalendarTests",
+    "test": "test_calendar_action_is_pack_and_ruleset_scoped",
+    "rust_test": "reigns::tests::test_calendar_action_is_pack_and_ruleset_scoped"
+  },
+  {
+    "source": "tests/test_sengoku_calendar.py",
+    "class": "SengokuCalendarTests",
+    "test": "test_start_year_and_start_era_calendar",
+    "rust_test": "reigns::tests::test_start_year_and_start_era_calendar"
+  },
+  {
+    "source": "tests/test_sengoku_calendar.py",
+    "class": "SengokuCalendarTests",
+    "test": "test_start_era_is_restricted_to_ancient",
+    "rust_test": "reigns::tests::test_start_era_is_restricted_to_ancient"
+  },
+  {
+    "source": "tests/test_sengoku_calendar.py",
+    "class": "SengokuCalendarTests",
+    "test": "test_speed_curves_reach_1600_and_cover_long_games",
+    "rust_test": "reigns::tests::test_speed_curves_reach_1600_and_cover_long_games"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_no_diplomatic_action_is_lost",
+    "rust_test": "cascade::sengoku_cascade_tests::test_no_diplomatic_action_is_lost"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_only_documented_rows_are_lost",
+    "rust_test": "cascade::sengoku_cascade_tests::test_only_documented_rows_are_lost"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_no_governor_title_source_remains",
+    "rust_test": "cascade::sengoku_cascade_tests::test_no_governor_title_source_remains"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_owner_decided_gates",
+    "rust_test": "cascade::sengoku_cascade_tests::test_owner_decided_gates"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_nulled_items_are_not_available",
+    "rust_test": "cascade::sengoku_cascade_tests::test_nulled_items_are_not_available"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "SengokuCascadeTests",
+    "test": "test_every_remap_matches_an_official_row_and_leaves_no_dangling_gate",
+    "rust_test": "cascade::sengoku_cascade_tests::test_every_remap_matches_an_official_row_and_leaves_no_dangling_gate"
+  },
+  {
+    "source": "tests/test_sengoku_cascade.py",
+    "class": "AllianceScenarioTests",
+    "test": "test_live_scenario_checks_every_alliance_and_the_c11_grant",
+    "rust_test": "cascade::alliance_scenario_tests::test_live_scenario_checks_every_alliance_and_the_c11_grant"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_count_and_unique_ids",
+    "rust_test": "events::tests::test_count_and_unique_ids"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_factions_are_the_22_seats",
+    "rust_test": "events::tests::test_factions_are_the_22_seats"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_earlier_by_ids_exist_in_trees",
+    "rust_test": "events::tests::test_earlier_by_ids_exist_in_trees"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_years_month_and_names",
+    "rust_test": "events::tests::test_years_month_and_names"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_month_set_when_date_text_names_a_month",
+    "rust_test": "events::tests::test_month_set_when_date_text_names_a_month"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_boost_and_advisor_popup",
+    "rust_test": "events::tests::test_boost_and_advisor_popup"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_ssot_decisions",
+    "rust_test": "events::tests::test_ssot_decisions"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_renames_chain_in_date_order",
+    "rust_test": "events::tests::test_renames_chain_in_date_order"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_every_house_renames_by_research_only",
+    "rust_test": "events::tests::test_every_house_renames_by_research_only"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_rakuichi_is_two_events",
+    "rust_test": "events::tests::test_rakuichi_is_two_events"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_catholicism_spreads_by_research_not_a_fixed_order",
+    "rust_test": "events::tests::test_catholicism_spreads_by_research_not_a_fixed_order"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_former_domains_are_ai_targets_only",
+    "rust_test": "events::tests::test_former_domains_are_ai_targets_only"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_house_specific_has_generic_name",
+    "rust_test": "events::tests::test_house_specific_has_generic_name"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_required_events_present_and_every_faction_covered",
+    "rust_test": "events::tests::test_required_events_present_and_every_faction_covered"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_no_dangling_event_references",
+    "rust_test": "events::tests::test_no_dangling_event_references"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_scope_is_machine_readable",
+    "rust_test": "events::tests::test_scope_is_machine_readable"
+  },
+  {
+    "source": "tests/test_sengoku_events.py",
+    "class": "SengokuEventTests",
+    "test": "test_resources_match_the_resource_placement",
+    "rust_test": "events::tests::test_resources_match_the_resource_placement"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_exactly_three_unique_oaths_for_each_of_the_22_registered_houses",
+    "rust_test": "oaths::tests::test_exactly_three_unique_oaths_for_each_of_the_22_registered_houses"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_all_four_ages_have_the_same_three_house_choices",
+    "rust_test": "oaths::tests::test_all_four_ages_have_the_same_three_house_choices"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_official_commemorations_removed_without_deleting_history_or_touching_gs",
+    "rust_test": "oaths::tests::test_official_commemorations_removed_without_deleting_history_or_touching_gs"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_every_effect_has_an_official_type_reversible_gate_and_attachment",
+    "rust_test": "oaths::tests::test_every_effect_has_an_official_type_reversible_gate_and_attachment"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_balance_amounts_and_tenka_actual_modifiers",
+    "rust_test": "oaths::tests::test_balance_amounts_and_tenka_actual_modifiers"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_effect_arguments_resolve_to_actual_buildings_and_yields",
+    "rust_test": "oaths::tests::test_effect_arguments_resolve_to_actual_buildings_and_yields"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_every_name_and_effect_translated_and_history_sourced",
+    "rust_test": "oaths::tests::test_every_name_and_effect_translated_and_history_sourced"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathDataTests",
+    "test": "test_generated_data_current",
+    "rust_test": "oaths::tests::test_generated_data_current"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_no_oath_or_effect_before_first_reign",
+    "rust_test": "oaths::tests::test_no_oath_or_effect_before_first_reign"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_each_age_offers_exactly_odas_three_and_no_other_house",
+    "rust_test": "oaths::tests::test_each_age_offers_exactly_odas_three_and_no_other_house"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_golden_single_choice_activates_only_tenka_in_all_owned_cities",
+    "rust_test": "oaths::tests::test_golden_single_choice_activates_only_tenka_in_all_owned_cities"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_heroic_requires_atomic_three_distinct_choices",
+    "rust_test": "oaths::tests::test_heroic_requires_atomic_three_distinct_choices"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_foreign_unknown_stale_wrong_count_and_forged_requester_rejected",
+    "rust_test": "oaths::tests::test_foreign_unknown_stale_wrong_count_and_forged_requester_rejected"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_dark_and_normal_capture_quest_once_per_actual_capture",
+    "rust_test": "oaths::tests::test_dark_and_normal_capture_quest_once_per_actual_capture"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_golden_capture_does_not_add_quest_score",
+    "rust_test": "oaths::tests::test_golden_capture_does_not_add_quest_score"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_capture_from_free_city_or_city_state_earns_base_points_without_oath",
+    "rust_test": "oaths::tests::test_capture_from_free_city_or_city_state_earns_base_points_without_oath"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_research_quests_only_for_matching_completions_after_choice",
+    "rust_test": "oaths::tests::test_research_quests_only_for_matching_completions_after_choice"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_relation_quest_uses_base_ledger_dedup_and_friendship_one_not_two",
+    "rust_test": "oaths::tests::test_relation_quest_uses_base_ledger_dedup_and_friendship_one_not_two"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_next_reign_expires_choice_and_flags_and_rejects_old_popup",
+    "rust_test": "oaths::tests::test_next_reign_expires_choice_and_flags_and_rejects_old_popup"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_new_and_transferred_cities_reconcile_both_owners_flags",
+    "rust_test": "oaths::tests::test_new_and_transferred_cities_reconcile_both_owners_flags"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_selection_flags_and_quest_counts_survive_script_reload_without_rescoring",
+    "rust_test": "oaths::tests::test_selection_flags_and_quest_counts_survive_script_reload_without_rescoring"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_golden_flags_persist_before_first_turn_after_reload",
+    "rust_test": "oaths::tests::test_golden_flags_persist_before_first_turn_after_reload"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_unanswered_human_defaults_next_turn_and_locks_choice",
+    "rust_test": "oaths::tests::test_unanswered_human_defaults_next_turn_and_locks_choice"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_ai_favours_war_or_income_and_is_deterministic",
+    "rust_test": "oaths::tests::test_ai_favours_war_or_income_and_is_deterministic"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_ai_naval_oath_requires_a_coastal_city",
+    "rust_test": "oaths::tests::test_ai_naval_oath_requires_a_coastal_city"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_ai_heroic_gets_all_three_without_randomness",
+    "rust_test": "oaths::tests::test_ai_heroic_gets_all_three_without_randomness"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathLedgerTests",
+    "test": "test_property_writes_use_fixed_order_for_all_66_flags",
+    "rust_test": "oaths::tests::test_property_writes_use_fixed_order_for_all_66_flags"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_actual_rendered_rows_are_exactly_odas_three_in_each_age",
+    "rust_test": "oaths::tests::test_actual_rendered_rows_are_exactly_odas_three_in_each_age"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_click_and_confirm_uses_engine_operation_and_activates_modifier",
+    "rust_test": "oaths::tests::test_click_and_confirm_uses_engine_operation_and_activates_modifier"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_heroic_confirms_three_in_one_operation",
+    "rust_test": "oaths::tests::test_heroic_confirms_three_in_one_operation"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_inactive_turn_and_foreign_row_do_not_send",
+    "rust_test": "oaths::tests::test_inactive_turn_and_foreign_row_do_not_send"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_reign_popup_defers_choice_until_closed",
+    "rust_test": "oaths::tests::test_reign_popup_defers_choice_until_closed"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_pending_choice_can_be_reopened_after_load",
+    "rust_test": "oaths::tests::test_pending_choice_can_be_reopened_after_load"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_pending_load_can_show_before_activation_but_confirms_only_when_active",
+    "rust_test": "oaths::tests::test_pending_load_can_show_before_activation_but_confirms_only_when_active"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_reopening_same_view_keeps_selection_but_player_change_discards_it",
+    "rust_test": "oaths::tests::test_reopening_same_view_keeps_selection_but_player_change_discards_it"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_no_shared_oaths_for_unregistered_civilization",
+    "rust_test": "oaths::tests::test_no_shared_oaths_for_unregistered_civilization"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_turn_end_closes_and_late_popup_cannot_rechoose",
+    "rust_test": "oaths::tests::test_turn_end_closes_and_late_popup_cannot_rechoose"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_delayed_engine_reply_opens_dark_policy_only_after_oath_is_applied",
+    "rust_test": "oaths::tests::test_delayed_engine_reply_opens_dark_policy_only_after_oath_is_applied"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_notification_and_all_end_turn_paths_require_oath_before_dark_policy",
+    "rust_test": "oaths::tests::test_notification_and_all_end_turn_paths_require_oath_before_dark_policy"
+  },
+  {
+    "source": "tests/test_sengoku_oaths.py",
+    "class": "OathPopupTests",
+    "test": "test_normal_and_golden_oaths_block_until_chosen_even_without_policy_notification",
+    "rust_test": "oaths::tests::test_normal_and_golden_oaths_block_until_chosen_even_without_policy_notification"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_ids_unique_and_complete",
+    "rust_test": "trees::tests::test_ids_unique_and_complete"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_prerequisites_acyclic_and_all_nodes_reachable",
+    "rust_test": "trees::tests::test_prerequisites_acyclic_and_all_nodes_reachable"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_positions_and_costs",
+    "rust_test": "trees::tests::test_positions_and_costs"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_columns_map_to_the_reigns_of_their_intended_dates",
+    "rust_test": "trees::tests::test_columns_map_to_the_reigns_of_their_intended_dates"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_generated_files_current_and_all_text_keys_translated",
+    "rust_test": "trees::tests::test_generated_files_current_and_all_text_keys_translated"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_every_unlock_proposal_has_explicit_proxy_or_todo",
+    "rust_test": "trees::tests::test_every_unlock_proposal_has_explicit_proxy_or_todo"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_sql_loads_and_rewires_without_erasing_gs_sentinels",
+    "rust_test": "trees::tests::test_sql_loads_and_rewires_without_erasing_gs_sentinels"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_starting_knowledge_matches_all_era_i_roots_and_is_new_game_only",
+    "rust_test": "trees::tests::test_starting_knowledge_matches_all_era_i_roots_and_is_new_game_only"
+  },
+  {
+    "source": "tests/test_sengoku_trees.py",
+    "class": "SengokuTreeTests",
+    "test": "test_banseiki_sengoku_disables_official_victories_and_time_limit",
+    "rust_test": "trees::tests::test_banseiki_sengoku_disables_official_victories_and_time_limit"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "RequirementModel",
+    "test": "test_set",
+    "rust_test": "unification::tests::test_set"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_map_cities_are_the_registry_and_settler_maps_have_none",
+    "rust_test": "unification::tests::test_map_cities_are_the_registry_and_settler_maps_have_none"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_checked_in_sql_is_generated_without_a_castle_count",
+    "rust_test": "unification::tests::test_checked_in_sql_is_generated_without_a_castle_count"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_victory_follows_owned_castles_razes_and_settler_capitals",
+    "rust_test": "unification::tests::test_victory_follows_owned_castles_razes_and_settler_capitals"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_captured_or_transferred_castle_still_counts",
+    "rust_test": "unification::tests::test_captured_or_transferred_castle_still_counts"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_city_rebuilt_on_a_razed_castle_does_not_count",
+    "rust_test": "unification::tests::test_city_rebuilt_on_a_razed_castle_does_not_count"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_pact_marker_lets_only_the_lead_team_win",
+    "rust_test": "unification::tests::test_pact_marker_lets_only_the_lead_team_win"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_pact_script_and_panel_are_registered",
+    "rust_test": "unification::tests::test_pact_script_and_panel_are_registered"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_rebuilt_castle_script_marks_razed_plots_and_survives_capture",
+    "rust_test": "unification::tests::test_rebuilt_castle_script_marks_razed_plots_and_survives_capture"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_castle_files_do_not_depend_on_load_order",
+    "rust_test": "unification::tests::test_castle_files_do_not_depend_on_load_order"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_victory_is_in_sengoku_domain_and_visible_in_official_rankings",
+    "rust_test": "unification::tests::test_victory_is_in_sengoku_domain_and_visible_in_official_rankings"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_test_map_registry_comes_from_map_data_and_stays_in_a_test_only_mod",
+    "rust_test": "unification::tests::test_test_map_registry_comes_from_map_data_and_stays_in_a_test_only_mod"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_live_scenarios_use_the_test_map_and_a_light_real_map_check",
+    "rust_test": "unification::tests::test_live_scenarios_use_the_test_map_and_a_light_real_map_check"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_pact_live_scenario_forms_the_pact_through_the_panel",
+    "rust_test": "unification::tests::test_pact_live_scenario_forms_the_pact_through_the_panel"
+  },
+  {
+    "source": "tests/test_unification_victory.py",
+    "class": "UnificationVictoryTests",
+    "test": "test_live_scenarios_find_players_dead_or_alive",
+    "rust_test": "unification::tests::test_live_scenarios_find_players_dead_or_alive"
+  }
+]

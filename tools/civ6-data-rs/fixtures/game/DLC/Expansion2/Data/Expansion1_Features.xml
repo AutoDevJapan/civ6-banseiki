@@ -1,0 +1,15 @@
+<GameInfo>
+    <Types>
+        <Row Type="FEATURE_REEF" Kind="KIND_FEATURE"/>
+    </Types>
+    <Features>
+    .	<Row FeatureType="FEATURE_REEF" Name="LOC_FEATURE_REEF_NAME" DefenseModifier="3" NoRiver="true"/>
+    </Features>
+    <Feature_ValidTerrains>
+        <Row FeatureType="FEATURE_REEF" TerrainType="TERRAIN_COAST"/>
+    </Feature_ValidTerrains>
+    <Feature_YieldChanges>
+        <Row FeatureType="FEATURE_REEF" YieldType="YIELD_FOOD" YieldChange="1"/>
+        <Row FeatureType="FEATURE_REEF" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+    </Feature_YieldChanges>
+</GameInfo>

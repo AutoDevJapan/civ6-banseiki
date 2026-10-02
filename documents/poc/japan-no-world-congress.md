@@ -33,8 +33,8 @@ GS の開催時期は次の値で決まる。`Expansion2_GlobalParameters.xml:29
 
 ## テスト
 
-- `tests/test_japan_no_world_congress.py`: 削除が日本マップ4種の条件（ルールセット + `MAP_SCRIPT`）でだけ読み込まれること、削除が世界会議の1行だけで他の GS の能力に触れていないこと。
-- `tools/civ6-autotest/judge.py` / `tests/test_judge.py`: 日本マップ判定に「世界会議に関わる UI・ゲーム側のエラー」の検査を追加（`ActionPanel_Expansion2`、`DiplomacyRibbon_Expansion2` などの実行時エラーを失敗にする）。
+- `tools/civ6-data-rs/src/data_tests.rs`: 削除が日本マップ4種の条件（ルールセット + `MAP_SCRIPT`）でだけ読み込まれること、削除が世界会議の1行だけで他の GS の能力に触れていないこと。
+- `tools/civ6-autotest-rs/src/judge.rs` / `tools/civ6-autotest-rs/tests`: 日本マップ判定に「世界会議に関わる UI・ゲーム側のエラー」の検査を追加（`ActionPanel_Expansion2`、`DiplomacyRibbon_Expansion2` などの実行時エラーを失敗にする）。
 
 ## 実機確認（メインセッション）
 

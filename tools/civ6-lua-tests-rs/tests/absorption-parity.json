@@ -1,0 +1,842 @@
+[
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_all_assets_and_native_components_transfer_before_last_city_elimination",
+    "rust_test": "absorption::AbsorptionTests::test_all_assets_and_native_components_transfer_before_last_city_elimination",
+    "lua_assertions": 13
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_save_reload_discards_lua_session_and_restores_properties_without_replaying",
+    "rust_test": "absorption::AbsorptionTests::test_save_reload_discards_lua_session_and_restores_properties_without_replaying",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_non_transfer_branches_keep_original_snapshots_and_detach_person_references",
+    "rust_test": "absorption::AbsorptionTests::test_non_transfer_branches_keep_original_snapshots_and_detach_person_references",
+    "lua_assertions": 5
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_returned_belonging_goes_to_explicit_surviving_third_party",
+    "rust_test": "absorption::AbsorptionTests::test_returned_belonging_goes_to_explicit_surviving_third_party",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_every_spec_disposition_is_routable_and_rejects_cross_kind_outcomes",
+    "rust_test": "absorption::AbsorptionTests::test_every_spec_disposition_is_routable_and_rejects_cross_kind_outcomes",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_great_people_cannot_be_converted_to_yields",
+    "rust_test": "absorption::AbsorptionTests::test_great_people_cannot_be_converted_to_yields",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_missing_unit_decision_is_rejected_before_any_mutation",
+    "rust_test": "absorption::AbsorptionTests::test_missing_unit_decision_is_rejected_before_any_mutation",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_missing_asset_decision_is_rejected_before_any_mutation",
+    "rust_test": "absorption::AbsorptionTests::test_missing_asset_decision_is_rejected_before_any_mutation",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_inconsistent_linked_person_and_unit_decisions_are_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_inconsistent_linked_person_and_unit_decisions_are_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_coexistence_is_not_absorption",
+    "rust_test": "absorption::AbsorptionTests::test_coexistence_is_not_absorption",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_entry_and_external_relations_require_explicit_resolution",
+    "rust_test": "absorption::AbsorptionTests::test_entry_and_external_relations_require_explicit_resolution",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_asset_collision_is_rejected_before_engine_changes",
+    "rust_test": "absorption::AbsorptionTests::test_asset_collision_is_rejected_before_engine_changes",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_invalid_return_is_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_invalid_return_is_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_clones_stage_at_recipient_city_then_return_to_original_positions",
+    "rust_test": "absorption::AbsorptionTests::test_native_clones_stage_at_recipient_city_then_return_to_original_positions",
+    "lua_assertions": 3
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_large_army_batches_publication_requests_instead_of_waiting_per_unit",
+    "rust_test": "absorption::AbsorptionTests::test_large_army_batches_publication_requests_instead_of_waiting_per_unit",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_off_map_native_candidates_are_placed_before_transfer_and_verified",
+    "rust_test": "absorption::AbsorptionTests::test_off_map_native_candidates_are_placed_before_transfer_and_verified",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_failed_off_map_placement_keeps_donors_and_reuses_saved_candidate_on_resume",
+    "rust_test": "absorption::AbsorptionTests::test_failed_off_map_placement_keeps_donors_and_reuses_saved_candidate_on_resume",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_empty_army_still_waits_for_city_cache_publication_before_preparation",
+    "rust_test": "absorption::AbsorptionTests::test_empty_army_still_waits_for_city_cache_publication_before_preparation",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_public_verification_requires_a_new_publication_and_consumes_it",
+    "rust_test": "absorption::AbsorptionTests::test_public_verification_requires_a_new_publication_and_consumes_it",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_ui_only_purchase_cost_and_faith_balance_return_scalars_to_core",
+    "rust_test": "absorption::AbsorptionTests::test_ui_only_purchase_cost_and_faith_balance_return_scalars_to_core",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_ui_only_spread_getter_waits_for_publication_and_reuses_candidates",
+    "rust_test": "absorption::AbsorptionTests::test_ui_only_spread_getter_waits_for_publication_and_reuses_candidates",
+    "lua_assertions": 4
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_ui_only_spread_mismatch_blocks_and_preserves_donors_until_resume",
+    "rust_test": "absorption::AbsorptionTests::test_ui_only_spread_mismatch_blocks_and_preserves_donors_until_resume",
+    "lua_assertions": 3
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_old_turn_ui_spread_cache_waits_before_preparation_and_resumes",
+    "rust_test": "absorption::AbsorptionTests::test_old_turn_ui_spread_cache_waits_before_preparation_and_resumes",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_same_turn_spent_spread_is_published_before_snapshot_and_never_restored_as_unused",
+    "rust_test": "absorption::AbsorptionTests::test_same_turn_spent_spread_is_published_before_snapshot_and_never_restored_as_unused",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_rejected_preparation_releases_factions_and_corrected_request_waits_for_new_publication",
+    "rust_test": "absorption::AbsorptionTests::test_rejected_preparation_releases_factions_and_corrected_request_waits_for_new_publication",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_ui_only_spread_wait_never_becomes_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_ui_only_spread_wait_never_becomes_suicide",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_published_hero_spread_mismatch_records_suicide_instead_of_blocking_other_assets",
+    "rust_test": "absorption::AbsorptionTests::test_published_hero_spread_mismatch_records_suicide_instead_of_blocking_other_assets",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes",
+    "rust_test": "absorption::AbsorptionTests::test_split_ui_getters_and_gameplay_mutations_preserve_native_heroes",
+    "lua_assertions": 3
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_fresh_published_hero_mismatch_is_archived_without_accepting_stale_ui_as_success",
+    "rust_test": "absorption::AbsorptionTests::test_fresh_published_hero_mismatch_is_archived_without_accepting_stale_ui_as_success",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_ui_only_city_citizens_and_work_slots_wait_for_final_publication",
+    "rust_test": "absorption::AbsorptionTests::test_ui_only_city_citizens_and_work_slots_wait_for_final_publication",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_only_missing_work_slot_getter_still_requires_final_ui_publication",
+    "rust_test": "absorption::AbsorptionTests::test_only_missing_work_slot_getter_still_requires_final_ui_publication",
+    "lua_assertions": 2
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record",
+    "rust_test": "absorption::AbsorptionTests::test_native_heroes_keep_identity_spent_charges_renown_origin_and_person_record",
+    "lua_assertions": 10
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_absent_gameplay_manager_becomes_suicide_history",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_absent_gameplay_manager_becomes_suicide_history",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_dormant_native_claim_without_unit_is_archived_as_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_dormant_native_claim_without_unit_is_archived_as_suicide",
+    "lua_assertions": 4
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_dormant_claim_with_stale_person_reference_preserves_requested_outcome",
+    "rust_test": "absorption::AbsorptionTests::test_dormant_claim_with_stale_person_reference_preserves_requested_outcome",
+    "lua_assertions": 4
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_missing_origin_city_becomes_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_missing_origin_city_becomes_suicide",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_missing_origin_building_becomes_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_missing_origin_building_becomes_suicide",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_heroes_sharing_origin_archive_the_second_claim",
+    "rust_test": "absorption::AbsorptionTests::test_native_heroes_sharing_origin_archive_the_second_claim",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_no_spawn_after_claim_change_finishes_as_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_no_spawn_after_claim_change_finishes_as_suicide",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_init_throw_after_creation_adopts_candidate_without_recreating",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_init_throw_after_creation_adopts_candidate_without_recreating",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_token_write_failure_kills_only_its_candidate",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_token_write_failure_kills_only_its_candidate",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_wrong_origin_is_suicide_without_duplicate",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_wrong_origin_is_suicide_without_duplicate",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_city_failure_can_resume_from_escrow_without_second_kill",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_city_failure_can_resume_from_escrow_without_second_kill",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_manager_mismatch_is_not_reported_as_inheritance",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_manager_mismatch_is_not_reported_as_inheritance",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_hero_creation_error_does_not_kill_a_third_party_unit",
+    "rust_test": "absorption::AbsorptionTests::test_hero_creation_error_does_not_kill_a_third_party_unit",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_reused_donor_id_blocks_without_killing_an_unrelated_unit",
+    "rust_test": "absorption::AbsorptionTests::test_reused_donor_id_blocks_without_killing_an_unrelated_unit",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_restore_error_becomes_suicide_without_losing_other_assets",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_restore_error_becomes_suicide_without_losing_other_assets",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_recall_binds_new_id_and_person_after_reload",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_recall_binds_new_id_and_person_after_reload",
+    "lua_assertions": 5
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_recall_after_second_absorption_preserves_original_owner_and_uses_current_mapping",
+    "rust_test": "absorption::AbsorptionTests::test_recall_after_second_absorption_preserves_original_owner_and_uses_current_mapping",
+    "lua_assertions": 5
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_recall_rejects_candidate_and_token_collisions_without_killing_them",
+    "rust_test": "absorption::AbsorptionTests::test_recall_rejects_candidate_and_token_collisions_without_killing_them",
+    "lua_assertions": 2
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_recall_resumes_after_token_write_and_does_not_duplicate_history",
+    "rust_test": "absorption::AbsorptionTests::test_recall_resumes_after_token_write_and_does_not_duplicate_history",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_checks_detect_corruption_instead_of_only_testing_unit_count",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_checks_detect_corruption_instead_of_only_testing_unit_count",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_lifespan_changes_after_turn_but_owner_recall_identity_must_remain",
+    "rust_test": "absorption::AbsorptionTests::test_native_lifespan_changes_after_turn_but_owner_recall_identity_must_remain",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_gameplay_scenario_checks_use_the_context_aware_spread_snapshot",
+    "rust_test": "absorption::AbsorptionTests::test_gameplay_scenario_checks_use_the_context_aware_spread_snapshot",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_all_gameplay_scenario_chunks_use_shared_lifespan_key",
+    "rust_test": "absorption::AbsorptionTests::test_all_gameplay_scenario_chunks_use_shared_lifespan_key",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_ui_publishes_engine_enum_when_gameplay_has_no_unit_property_keys",
+    "rust_test": "absorption::AbsorptionTests::test_ui_publishes_engine_enum_when_gameplay_has_no_unit_property_keys",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_shipped_lifespan_property_is_used_without_legacy_lifespan_or_renown_methods",
+    "rust_test": "absorption::AbsorptionTests::test_shipped_lifespan_property_is_used_without_legacy_lifespan_or_renown_methods",
+    "lua_assertions": 3
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_archival_and_explicit_suicide_preserve_requested_outcome",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_archival_and_explicit_suicide_preserve_requested_outcome",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_position_is_restored_separately_from_its_recall_origin",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_position_is_restored_separately_from_its_recall_origin",
+    "lua_assertions": 2
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_unrestorable_exposed_renown_becomes_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_unrestorable_exposed_renown_becomes_suicide",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_is_not_escrowed_when_an_ordinary_unit_cannot_preserve_spent_charges",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_is_not_escrowed_when_an_ordinary_unit_cannot_preserve_spent_charges",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_duplicate_at_absorber_survives_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_duplicate_at_absorber_survives_suicide",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_city_transfer_throw_after_mutation_resumes_with_the_new_city_id",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_city_transfer_throw_after_mutation_resumes_with_the_new_city_id",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_token_set_then_throw_becomes_suicide",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_token_set_then_throw_becomes_suicide",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_engine_spawn_failure_preserves_every_donor_unit_and_city_then_resume_is_idempotent",
+    "rust_test": "absorption::AbsorptionTests::test_engine_spawn_failure_preserves_every_donor_unit_and_city_then_resume_is_idempotent",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_property_copy_failure_is_blocked_before_removing_any_donor",
+    "rust_test": "absorption::AbsorptionTests::test_property_copy_failure_is_blocked_before_removing_any_donor",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_spent_build_charges_need_an_adapter_and_never_destroy_the_donor",
+    "rust_test": "absorption::AbsorptionTests::test_spent_build_charges_need_an_adapter_and_never_destroy_the_donor",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_city_failure_retains_snapshots_and_resume_does_not_recreate_units",
+    "rust_test": "absorption::AbsorptionTests::test_city_failure_retains_snapshots_and_resume_does_not_recreate_units",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_later_turn_resume_is_rejected_without_reapplying_old_damage_or_movement",
+    "rust_test": "absorption::AbsorptionTests::test_later_turn_resume_is_rejected_without_reapplying_old_damage_or_movement",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_same_transaction_id_with_changed_decisions_is_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_same_transaction_id_with_changed_decisions_is_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_verification_catches_missing_or_corrupted_transfers_instead_of_only_counting",
+    "rust_test": "absorption::AbsorptionTests::test_verification_catches_missing_or_corrupted_transfers_instead_of_only_counting",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_completed_transaction_is_not_replayed_after_later_turns",
+    "rust_test": "absorption::AbsorptionTests::test_completed_transaction_is_not_replayed_after_later_turns",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_registered_unit_and_city_properties_are_preserved_and_unsupported_values_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_registered_unit_and_city_properties_are_preserved_and_unsupported_values_rejected",
+    "lua_assertions": 2
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_adapter_preflight_apply_verify_and_reload_contract",
+    "rust_test": "absorption::AbsorptionTests::test_adapter_preflight_apply_verify_and_reload_contract",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_bad_adapter_and_empty_string_fail_before_native_mutation",
+    "rust_test": "absorption::AbsorptionTests::test_bad_adapter_and_empty_string_fail_before_native_mutation",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_foreign_reference_rebind_keeps_target_deadline_and_fixed_roll_and_survives_reload",
+    "rust_test": "absorption::AbsorptionTests::test_foreign_reference_rebind_keeps_target_deadline_and_fixed_roll_and_survives_reload",
+    "lua_assertions": 5
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_saved_rebound_expectation_is_used_on_resume_without_reloading_callback",
+    "rust_test": "absorption::AbsorptionTests::test_saved_rebound_expectation_is_used_on_resume_without_reloading_callback",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_corrupted_rebound_reference_is_detected_by_generic_verification",
+    "rust_test": "absorption::AbsorptionTests::test_corrupted_rebound_reference_is_detected_by_generic_verification",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_city_property_rebind_uses_saved_expectations_on_reload",
+    "rust_test": "absorption::AbsorptionTests::test_city_property_rebind_uses_saved_expectations_on_reload",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_nonserializable_property_rebind_blocks_before_destroying_donors",
+    "rust_test": "absorption::AbsorptionTests::test_nonserializable_property_rebind_blocks_before_destroying_donors",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_native_hero_detected_by_engine_flag_with_a_nonstandard_type_is_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_native_hero_detected_by_engine_flag_with_a_nonstandard_type_is_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_missing_native_great_person_charge_api_blocks_before_any_mutation",
+    "rust_test": "absorption::AbsorptionTests::test_missing_native_great_person_charge_api_blocks_before_any_mutation",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_spent_native_great_person_charges_do_not_reset_on_transfer",
+    "rust_test": "absorption::AbsorptionTests::test_spent_native_great_person_charges_do_not_reset_on_transfer",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_missing_staged_replacement_blocks_instead_of_breaking_saved_references",
+    "rust_test": "absorption::AbsorptionTests::test_missing_staged_replacement_blocks_instead_of_breaking_saved_references",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_live_scenario_builds_missing_hero_origins_on_their_actual_city_plots",
+    "rust_test": "absorption::AbsorptionTests::test_live_scenario_builds_missing_hero_origins_on_their_actual_city_plots",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_live_scenario_checks_execute_in_lua_and_detect_asset_corruption_after_reload",
+    "rust_test": "absorption::AbsorptionTests::test_live_scenario_checks_execute_in_lua_and_detect_asset_corruption_after_reload",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_live_transfer_rejects_missing_cleric_before_ai_turn",
+    "rust_test": "absorption::AbsorptionTests::test_live_transfer_rejects_missing_cleric_before_ai_turn",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_live_ai_turn_allows_cleric_consumption_but_checks_current_save_snapshot",
+    "rust_test": "absorption::AbsorptionTests::test_live_ai_turn_allows_cleric_consumption_but_checks_current_save_snapshot",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_live_recall_probes_execute_native_eligibility_checks_and_detect_wrong_owner",
+    "rust_test": "absorption::AbsorptionTests::test_live_recall_probes_execute_native_eligibility_checks_and_detect_wrong_owner",
+    "lua_assertions": 4
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_human_receiver_scenario_executes_real_recall_and_rebinds_person_in_lua_vm",
+    "rust_test": "absorption::AbsorptionTests::test_human_receiver_scenario_executes_real_recall_and_rebinds_person_in_lua_vm",
+    "lua_assertions": 9
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_partial_expected_properties_freeze_references_to_every_staged_unit",
+    "rust_test": "absorption::AbsorptionTests::test_partial_expected_properties_freeze_references_to_every_staged_unit",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_receiver_assets_added_or_updated_while_blocked_survive_resume",
+    "rust_test": "absorption::AbsorptionTests::test_receiver_assets_added_or_updated_while_blocked_survive_resume",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_receiver_assets_added_by_city_transfer_hooks_are_not_overwritten",
+    "rust_test": "absorption::AbsorptionTests::test_receiver_assets_added_by_city_transfer_hooks_are_not_overwritten",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_new_destination_id_collision_is_stopped_before_removing_donors",
+    "rust_test": "absorption::AbsorptionTests::test_new_destination_id_collision_is_stopped_before_removing_donors",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_source_assets_created_while_blocked_are_preserved_instead_of_cleared",
+    "rust_test": "absorption::AbsorptionTests::test_source_assets_created_while_blocked_are_preserved_instead_of_cleared",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_unsupported_charge_types_stop_before_source_assets_are_changed",
+    "rust_test": "absorption::AbsorptionTests::test_unsupported_charge_types_stop_before_source_assets_are_changed",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_runtime_special_charge_without_definition_is_also_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_runtime_special_charge_without_definition_is_also_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_spent_park_charge_cannot_be_reset_by_absorption",
+    "rust_test": "absorption::AbsorptionTests::test_spent_park_charge_cannot_be_reset_by_absorption",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_runtime_park_and_nonhero_action_charges_are_rejected_before_changes",
+    "rust_test": "absorption::AbsorptionTests::test_runtime_park_and_nonhero_action_charges_are_rejected_before_changes",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_nonhero_action_charges_declared_in_mode_table_are_rejected",
+    "rust_test": "absorption::AbsorptionTests::test_nonhero_action_charges_declared_in_mode_table_are_rejected",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_rock_band_state_is_rejected_by_type_class_or_tag_before_changes",
+    "rust_test": "absorption::AbsorptionTests::test_rock_band_state_is_rejected_by_type_class_or_tag_before_changes",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_candidate_special_charge_blocks_and_reuses_the_candidate_on_resume",
+    "rust_test": "absorption::AbsorptionTests::test_candidate_special_charge_blocks_and_reuses_the_candidate_on_resume",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_city_district_loss_is_detected_with_buildings_and_territory_intact",
+    "rust_test": "absorption::AbsorptionTests::test_city_district_loss_is_detected_with_buildings_and_territory_intact",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_legacy_city_assets_keep_recorded_checks_without_inventing_district_coverage",
+    "rust_test": "absorption::AbsorptionTests::test_legacy_city_assets_keep_recorded_checks_without_inventing_district_coverage",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_new_city_asset_coverage_rejects_missing_district_snapshot",
+    "rust_test": "absorption::AbsorptionTests::test_new_city_asset_coverage_rejects_missing_district_snapshot",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_multiple_same_type_districts_and_ui_only_enumeration_are_preserved",
+    "rust_test": "absorption::AbsorptionTests::test_multiple_same_type_districts_and_ui_only_enumeration_are_preserved",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_district_only_ui_cache_waits_after_transfer_and_across_resume",
+    "rust_test": "absorption::AbsorptionTests::test_district_only_ui_cache_waits_after_transfer_and_across_resume",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_palace_work_loss_is_detected_even_when_the_palace_building_is_exempt",
+    "rust_test": "absorption::AbsorptionTests::test_palace_work_loss_is_detected_even_when_the_palace_building_is_exempt",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_palace_work_moved_to_receiver_capital_is_preserved_and_verified",
+    "rust_test": "absorption::AbsorptionTests::test_palace_work_moved_to_receiver_capital_is_preserved_and_verified",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_previous_governance_is_saved_before_engine_clears_city_properties",
+    "rust_test": "absorption::AbsorptionTests::test_previous_governance_is_saved_before_engine_clears_city_properties",
+    "lua_assertions": 1
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionTests",
+    "test": "test_exact_verification_detects_city_rename_but_later_turns_allow_it",
+    "rust_test": "absorption::AbsorptionTests::test_exact_verification_detects_city_rename_but_later_turns_allow_it",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_ai_purchase_receipt_rejects_interleaved_faith_or_unit_events",
+    "rust_test": "absorption::AbsorptionPackageTests::test_ai_purchase_receipt_rejects_interleaved_faith_or_unit_events",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_cleric_fixture_can_be_purchased_without_enabling_other_disabled_units",
+    "rust_test": "absorption::AbsorptionPackageTests::test_cleric_fixture_can_be_purchased_without_enabling_other_disabled_units",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_scenario_lua_compiles_and_both_snapshots_have_round_trip_comparisons",
+    "rust_test": "absorption::AbsorptionPackageTests::test_scenario_lua_compiles_and_both_snapshots_have_round_trip_comparisons",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_control_missionary_publication_checks_charges_then_core_religion",
+    "rust_test": "absorption::AbsorptionPackageTests::test_control_missionary_publication_checks_charges_then_core_religion",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_recall_publication_uses_ui_class_getter_and_waits_for_native_claim",
+    "rust_test": "absorption::AbsorptionPackageTests::test_recall_publication_uses_ui_class_getter_and_waits_for_native_claim",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_recall_spawn_preparation_moves_only_blockers_and_preserves_them",
+    "rust_test": "absorption::AbsorptionPackageTests::test_recall_spawn_preparation_moves_only_blockers_and_preserves_them",
+    "lua_assertions": 10
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_human_recall_scenario_uses_custom_native_classes_and_real_purchase",
+    "rust_test": "absorption::AbsorptionPackageTests::test_human_recall_scenario_uses_custom_native_classes_and_real_purchase",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_modinfo_references_exist_and_have_no_open_pr_dependencies",
+    "rust_test": "absorption::AbsorptionPackageTests::test_modinfo_references_exist_and_have_no_open_pr_dependencies",
+    "lua_assertions": 0
+  },
+  {
+    "source": "tests/test_absorption_lua.py",
+    "class": "AbsorptionPackageTests",
+    "test": "test_all_text_has_exactly_japanese_english_and_russian",
+    "rust_test": "absorption::AbsorptionPackageTests::test_all_text_has_exactly_japanese_english_and_russian",
+    "lua_assertions": 0
+  }
+]

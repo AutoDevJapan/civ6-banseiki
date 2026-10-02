@@ -1,0 +1,2 @@
+# This verbatim Lua fixture preserves the original scenario's final space.
+/tests/fixtures/map-after-autoplay.lua whitespace=-blank-at-eol

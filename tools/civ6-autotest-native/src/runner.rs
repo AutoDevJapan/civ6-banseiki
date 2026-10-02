@@ -388,7 +388,7 @@ pub fn cli(args: &[String]) -> Result<i32> {
     validate(&scenario)?;
     if check {
         println!(
-            "checked {} steps and all Lua syntax (Rust/Lua54; no Python)",
+            "checked {} steps and all Lua syntax (Rust/Lua51; no Python)",
             scenario["steps"].as_array().unwrap().len()
         );
         return Ok(0);
@@ -1461,6 +1461,13 @@ mod tests {
         include_str!("../../civ6-autotest/scenarios/absorption-priest-diagnostic.json");
     #[test]
     fn all_acceptance_steps_and_lua_compile_without_running_engine() {
+        assert_eq!(
+            mlua::Lua::new()
+                .globals()
+                .get::<String>("_VERSION")
+                .unwrap(),
+            "Lua 5.1"
+        );
         for (source, count) in [(JAPAN, 127), (HERO, 101), (PRIEST, 13)] {
             let s: Value = serde_json::from_str(source).unwrap();
             assert_eq!(s["steps"].as_array().unwrap().len(), count);

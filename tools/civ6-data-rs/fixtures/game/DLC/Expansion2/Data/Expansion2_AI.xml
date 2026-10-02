@@ -1,0 +1,600 @@
+<GameInfo>
+    <Types>
+        <Row Type="PSEUDOYIELD_DIPLOMATIC_FAVOR" Kind="KIND_PSEUDOYIELD"/>
+        <Row Type="PSEUDOYIELD_DIPLOMATIC_VICTORY_POINT" Kind="KIND_PSEUDOYIELD"/>
+        <Row Type="PSEUDOYIELD_DIPLOMATIC_GRIEVANCE" Kind="KIND_PSEUDOYIELD"/>
+        <Row Type="PSEUDOYIELD_RELIGIOUS_CONVERT_EMPIRE" Kind="KIND_PSEUDOYIELD"/>
+        <Row Type="TRAIT_LEADER_PURSUE_DIPLOMATIC_VICTORY" Kind="KIND_TRAIT"/>
+        <Row Type="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" Kind="KIND_VICTORY_STRATEGY"/>
+    </Types>
+    <AiEvents>
+        <Row EventType="AI_EVENT_NEEDS_RAILROAD"/>
+    </AiEvents>
+    <Traits>
+        <Row TraitType="TRAIT_LEADER_PURSUE_DIPLOMATIC_VICTORY" InternalOnly="true"/>
+    </Traits>
+    <Strategies>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" VictoryType="VICTORY_DIPLOMATIC" NumConditionsNeeded="2"/>
+    </Strategies>
+    <StrategyConditions>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ConditionFunction="Has Diplomatic Victory Points" ThresholdValue="1"/>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ConditionFunction="Leads Diplomatic Victory Points" ThresholdValue="1"/>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ConditionFunction="Percentage Diplomatic Victory Points" ThresholdValue="25"/>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ConditionFunction="Percentage Diplomatic Victory Points" ThresholdValue="60" Exclusive="true"/>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ConditionFunction="Is Not Major" Disqualifier="true"/>
+    </StrategyConditions>
+    <AiFavoredItems>
+        <Row ListType="DefaultTriggeredTrees" Item="TRIGGER_RAILROAD"/>
+        <Row ListType="ReligiousVictoryPseudoYields" Item="PSEUDOYIELD_RELIGIOUS_CONVERT_EMPIRE" Value="100"/>
+        <Row ListType="Default Homeland" Item="Rock Band Move" Value="55"/>
+    </AiFavoredItems>
+    <PseudoYields>
+        <Row PseudoYieldType="PSEUDOYIELD_DIPLOMATIC_FAVOR" DefaultValue="0.7"/>
+        <Row PseudoYieldType="PSEUDOYIELD_DIPLOMATIC_VICTORY_POINT" DefaultValue="100"/>
+        <Row PseudoYieldType="PSEUDOYIELD_DIPLOMATIC_GRIEVANCE" DefaultValue="-0.5"/>
+        <!-- Religious Convert is a value intended to help AI pursuing a religious victory to choose targets in other empires -->
+        <Row PseudoYieldType="PSEUDOYIELD_RELIGIOUS_CONVERT_EMPIRE" DefaultValue="1.0"/>
+        <!-- Too many things are competing with districts, and AI are not building enough, so increase that desire a bit -->
+        <Update>
+            <Where PseudoYieldType="PSEUDOYIELD_DISTRICT"/>
+            <Set>
+                <DefaultValue>4.0</DefaultValue>
+            </Set>
+        </Update>
+    </PseudoYields>
+    <TriggeredBehaviorTrees>
+        <Row TriggerType="TRIGGER_RAILROAD" TreeName="Build Railroad" AIEvent="AI_EVENT_NEEDS_RAILROAD" Priority="2"/>
+    </TriggeredBehaviorTrees>
+    <AllowedMoves>
+        <Row AllowedMoveType="Rock Band Move" Value="35" IsHomeland="true"/>
+    </AllowedMoves>
+    <!-- Railroad behavior trees -->
+    <NodeDefinitions>
+        <Row NodeType="Railroad Target" NodeId="68" ShapeId="2">
+            <Description>Finds the next hex that needs a railroad to build a road between cities</Description>
+        </Row>
+    </NodeDefinitions>
+    <NodeDataDefinitions>
+        <Row DataName="Next Plot" DefnId="0" DataType="Map Point" NodeType="Railroad Target" Required="False"/>
+    </NodeDataDefinitions>
+    <BehaviorTrees>
+        <Row TreeName="Build Railroad"/>
+    </BehaviorTrees>
+    <BehaviorTreeNodes>
+        <Row NodeType="Sequence" NodeId="0" TreeName="Build Railroad" JumpTo="11"/>
+        <Row NodeType="Decode Trigger" NodeId="1" TreeName="Build Railroad"/>
+        <Row NodeType="Priority" NodeId="2" TreeName="Build Railroad" JumpTo="6"/>
+        <Row NodeType="Find Available Unit" NodeId="3" TreeName="Build Railroad"/>
+        <Row NodeType="Contract Manager Decorator" NodeId="4" TreeName="Build Railroad" JumpTo="6"/>
+        <Row NodeType="Build Unit" NodeId="5" TreeName="Build Railroad"/>
+        <Row NodeType="Concurrent" NodeId="6" TreeName="Build Railroad" JumpTo="11"/>
+        <Row NodeType="Railroad Target" NodeId="7" TreeName="Build Railroad"/>
+        <Row NodeType="Sequence" NodeId="8" TreeName="Build Railroad" JumpTo="11"/>
+        <Row NodeType="Move Unit" NodeId="9" TreeName="Build Railroad"/>
+        <Row NodeType="Build Improvement" NodeId="10" TreeName="Build Railroad"/>
+    </BehaviorTreeNodes>
+    <TreeData>
+        <Row DefnId="0" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="1" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="2" NodeId="1" TreeName="Build Railroad" Tag="Railroad"/>
+        <Row DefnId="3" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="4" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="5" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="6" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="7" NodeId="1" TreeName="Build Railroad"/>
+        <Row DefnId="8" NodeId="1" TreeName="Build Railroad" Tag="RR Value"/>
+        <Row DefnId="0" NodeId="3" TreeName="Build Railroad" Tag="RR Builders"/>
+        <Row DefnId="2" NodeId="3" TreeName="Build Railroad" Tag="RR Builder"/>
+        <Row DefnId="3" NodeId="3" TreeName="Build Railroad"/>
+        <Row DefnId="4" NodeId="3" TreeName="Build Railroad" DefaultData="UNIT_MILITARY_ENGINEER"/>
+        <Row DefnId="0" NodeId="4" TreeName="Build Railroad" Tag="RR Contract"/>
+        <Row DefnId="1" NodeId="4" TreeName="Build Railroad"/>
+        <Row DefnId="2" NodeId="4" TreeName="Build Railroad" DefaultData="5"/>
+        <Row DefnId="0" NodeId="5" TreeName="Build Railroad" Tag="RR Builders"/>
+        <Row DefnId="1" NodeId="5" TreeName="Build Railroad"/>
+        <Row DefnId="4" NodeId="5" TreeName="Build Railroad" Tag="RR Contract"/>
+        <Row DefnId="6" NodeId="5" TreeName="Build Railroad"/>
+        <Row DefnId="8" NodeId="5" TreeName="Build Railroad" Tag="RR Value"/>
+        <Row DefnId="0" NodeId="7" TreeName="Build Railroad" Tag="RR Plot"/>
+        <Row DefnId="0" NodeId="9" TreeName="Build Railroad" Tag="RR Builder"/>
+        <Row DefnId="1" NodeId="9" TreeName="Build Railroad" Tag="RR Plot"/>
+        <Row DefnId="2" NodeId="9" TreeName="Build Railroad" DefaultData="false"/>
+        <Row DefnId="3" NodeId="9" TreeName="Build Railroad" DefaultData="false"/>
+        <Row DefnId="4" NodeId="9" TreeName="Build Railroad" DefaultData="0"/>
+        <Row DefnId="0" NodeId="10" TreeName="Build Railroad" Tag="RR Builder"/>
+        <Row DefnId="1" NodeId="10" TreeName="Build Railroad" Tag="RR Plot"/>
+        <Row DefnId="2" NodeId="10" TreeName="Build Railroad" Tag="Railroad"/>
+        <Row DefnId="3" NodeId="10" TreeName="Build Railroad" DefaultData="false"/>
+    </TreeData>
+  <Strategies>
+    <Row StrategyType="STRATEGY_ANCIENT_CHANGES" NumConditionsNeeded="1"/>
+  </Strategies>
+  <StrategyConditions>
+    <Row StrategyType="STRATEGY_ANCIENT_CHANGES" ConditionFunction="Is Ancient"/>
+    <Row StrategyType="STRATEGY_ANCIENT_CHANGES" ConditionFunction="Is Not Major" Disqualifier="true"/>
+  </StrategyConditions>
+    <!-- Victory strategies can now add a preference to various random agendas. This only applies if the agenda can be chosen (era or civic) -->
+    <Strategy_Priorities>
+        <Row StrategyType="VICTORY_STRATEGY_CULTURAL_VICTORY" ListType="CultureVictoryAgendas"/>
+        <Row StrategyType="VICTORY_STRATEGY_MILITARY_VICTORY" ListType="MilitaryVictoryAgendas"/>
+        <Row StrategyType="VICTORY_STRATEGY_RELIGIOUS_VICTORY" ListType="ReligiousVictoryAgendas"/>
+        <Row StrategyType="VICTORY_STRATEGY_SCIENCE_VICTORY" ListType="ScienceVictoryAgendas"/>
+        <Row StrategyType="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" ListType="DiplomaticPseudoYieldPreferences"/>
+    <Row StrategyType="STRATEGY_ANCIENT_CHANGES" ListType="AncientPseudoYields"/>
+  </Strategy_Priorities>
+    <AiListTypes>
+        <Row ListType="CultureVictoryAgendas"/>
+        <Row ListType="MilitaryVictoryAgendas"/>
+        <Row ListType="ReligiousVictoryAgendas"/>
+        <Row ListType="ScienceVictoryAgendas"/>
+        <Row ListType="DiplomaticPseudoYieldPreferences"/>
+        <Row ListType="DiplomaticVictoryPreference"/>
+        <Row ListType="AncientPseudoYields"/>
+    </AiListTypes>
+    <AiLists>
+        <Row ListType="CultureVictoryAgendas" System="Agendas"/>
+        <Row ListType="MilitaryVictoryAgendas" System="Agendas"/>
+        <Row ListType="ReligiousVictoryAgendas" System="Agendas"/>
+        <Row ListType="ScienceVictoryAgendas" System="Agendas"/>
+        <Row ListType="DiplomaticPseudoYieldPreferences" System="PseudoYields"/>
+        <Row ListType="DiplomaticVictoryPreference" LeaderType="TRAIT_LEADER_PURSUE_DIPLOMATIC_VICTORY" System="Strategies"/>
+        <Row ListType="AncientPseudoYields" System="PseudoYields"/>
+    </AiLists>
+    <AiFavoredItems>
+        <Row ListType="CultureVictoryAgendas" Item="AGENDA_DESTINATION_CIV" Value="33"/>
+        <Row ListType="MilitaryVictoryAgendas" Item="AGENDA_EXPANSIONIST" Value="33"/>
+        <Row ListType="ReligiousVictoryAgendas" Item="AGENDA_ZEALOT" Value="33"/>
+        <Row ListType="ScienceVictoryAgendas" Item="AGENDA_LIBERTARIAN" Value="33"/>
+        <!-- Victory strategy changes to try to promote tier 3 buildings -->
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_ADMIRAL" Value="50"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_ENGINEER" Value="50"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_GENERAL" Value="50"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_SCIENTIST" Value="50"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_ARTIST" Value="25"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_MUSICIAN" Value="25"/>
+        <Row ListType="IndustrialPseudoYields" Item="PSEUDOYIELD_GPP_WRITER" Value="25"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_ADMIRAL" Value="50"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_ENGINEER" Value="50"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_GENERAL" Value="50"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_SCIENTIST" Value="50"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_ARTIST" Value="25"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_MUSICIAN" Value="25"/>
+        <Row ListType="ModernPseudoYields" Item="PSEUDOYIELD_GPP_WRITER" Value="25"/>
+        <!-- Diplomatic Victory Strategy-->
+        <Row ListType="DiplomaticPseudoYieldPreferences" Item="PSEUDOYIELD_DIPLOMATIC_FAVOR" Value="100"/>
+        <Row ListType="DiplomaticPseudoYieldPreferences" Item="PSEUDOYIELD_DIPLOMATIC_VICTORY_POINT" Value="100"/>
+        <Row ListType="DiplomaticVictoryPreference" Item="VICTORY_STRATEGY_DIPLOMATIC_VICTORY" Value="-2"/>
+        <!-- Add great general and admiral desire to aggressive civs and military strategies -->
+        <Row ListType="AggressivePseudoYields" Item="PSEUDOYIELD_CITY_DEFENSES" Value="-25"/>
+        <Row ListType="AggressivePseudoYields" Item="PSEUDOYIELD_GPP_ADMIRAL" Value="50"/>
+        <Row ListType="AggressivePseudoYields" Item="PSEUDOYIELD_GPP_GENERAL" Value="50"/>
+        <Row ListType="MilitaryVictoryPseudoYields" Item="PSEUDOYIELD_GPP_ADMIRAL" Value="50"/>
+        <Row ListType="MilitaryVictoryPseudoYields" Item="PSEUDOYIELD_GPP_GENERAL" Value="50"/>
+        <Row ListType="AncientPseudoYields" Item="PSEUDOYIELD_DIPLOMATIC_FAVOR" Value="-100"/>
+        <Row ListType="MedievalPseudoYields" Item="PSEUDOYIELD_DIPLOMATIC_FAVOR" Value="100"/>
+    </AiFavoredItems>
+    <!-- AI can have favored or disfavored resolutions based on agenda or leader traits -->
+    <AiListTypes>
+        <!-- Resolutions -->
+        <Row ListType="AirPowerResolutions"/>
+        <Row ListType="CityStateProtectorResolutions"/>
+        <Row ListType="CivilizedResolutions"/>
+        <Row ListType="CulturedResolutions"/>
+        <Row ListType="DevoutResolutions"/>
+        <Row ListType="EnvironmentalistResolutions"/>
+        <Row ListType="ExploitativeResolutions"/>
+        <Row ListType="ExplorerResolutions"/>
+        <Row ListType="FunLovingResolutions"/>
+        <Row ListType="GreatPersonAdvocateResolutions"/>
+        <Row ListType="IdealogueResolutions"/>
+        <Row ListType="IndustrialistResolutions"/>
+        <Row ListType="MoneyGrubberResolutions"/>
+        <Row ListType="NukeLoverResolutions"/>
+        <Row ListType="ParanoidResolutions"/>
+        <Row ListType="PopulousResolutions"/>
+        <Row ListType="StandingArmyResolutions"/>
+        <Row ListType="TechnophileResolutions"/>
+        <Row ListType="AyyubidDynastyResolutions"/>
+        <Row ListType="BlackQueenResolutions"/>
+        <Row ListType="CityStateAllyResolutions"/>
+        <Row ListType="CounterReformerResolutions"/>
+        <Row ListType="DelianLeagueResolutions"/>
+        <Row ListType="EnthusiasticDiscipleResolutions"/>
+        <Row ListType="GreatPersonObessessedResolutions"/>
+        <Row ListType="IronCrownResolutions"/>
+        <Row ListType="LastVikingResolutions"/>
+        <Row ListType="OptimusPrincepsResolutions"/>
+        <Row ListType="SunNeverSetsResolutions"/>
+        <Row ListType="TlatoaniResolutions"/>
+        <Row ListType="WesternizerResolutions"/>
+        <Row ListType="EndToSufferingResolutions"/>
+        <Row ListType="SaintResolutions"/>
+        <Row ListType="ShortLifeGloryResolutions"/>
+        <Row ListType="BillionaireResolutions"/>
+        <Row ListType="HorseLordResolutions"/>
+        <Row ListType="IronConfederacyResolutions"/>
+        <Row ListType="NarikalaFortressResolutions"/>
+        <Row ListType="SpiritOfTucapelResolutions"/>
+        <Row ListType="DemagogueResolutions"/>
+        <Row ListType="DestinationCivResolutions"/>
+        <Row ListType="ExpansionistResolutions"/>
+        <Row ListType="FlatEartherResolutions"/>
+        <Row ListType="FlatEartherVictories"/>
+        <Row ListType="GreatWhiteFleetResolutions"/>
+        <Row ListType="IntolerantResolutions"/>
+        <Row ListType="LibertarianResolutions"/>
+        <Row ListType="PillagerResolutions"/>
+        <Row ListType="TurtlerResolutions"/>
+        <Row ListType="ZealotResolutions"/>
+        <Row ListType="AngevinEmpireResolutions"/>
+        <Row ListType="KaitiakitangaResolutions"/>
+        <Row ListType="LordOfMinesResolutions"/>
+        <Row ListType="RavenBannerResolutions"/>
+        <Row ListType="PatronOfArtsResolutions"/>
+        <Row ListType="DharmaResolutions"/>
+        <Row ListType="ExtraLightCavalryResolutions"/>
+        <Row ListType="GreatWallResolutions"/>
+        <Row ListType="GreatMountainsResolutions"/>
+        <Row ListType="TraitReligiousConvertResolutions"/>
+        <Row ListType="FoundingFathersResolutions"/>
+        <Row ListType="NkisiResolutions"/>
+        <Row ListType="GreatTurkishBombardResolutions"/>
+        <Row ListType="TreasureFleetResolutions"/>
+        <Row ListType="MediterraneanColoniesResolutions"/>
+        <Row ListType="ElectronicsFactoryResolutions"/>
+        <Row ListType="AllRoadToRomeResolutions"/>
+        <Row ListType="ManaResolutions"/>
+        <Row ListType="EleanorResolutions"/>
+        <!-- Discussions -->
+        <Row ListType="CityStateProtectorDiscussions"/>
+        <Row ListType="DarwinistDiscussions"/>
+        <Row ListType="DevoutDiscussions"/>
+        <Row ListType="EnvironmentalistDiscussions"/>
+        <Row ListType="ExploitativeDiscussions"/>
+        <Row ListType="GreatPersonAdvocateDiscussions"/>
+        <Row ListType="IndustrialistDiscussions"/>
+        <Row ListType="NukeLoverDiscussions"/>
+        <Row ListType="ParanoidDiscussions"/>
+        <Row ListType="AllyOfEnkiduDiscussions"/>
+        <Row ListType="BackstabAverseDiscussions"/>
+        <Row ListType="CityStateAllyDiscussions"/>
+        <Row ListType="CounterReformerDiscussions"/>
+        <Row ListType="DelianLeagueDiscussions"/>
+        <Row ListType="EnthusiasticDiscipleDiscussions"/>
+        <Row ListType="GreatPersonObessessedDiscussions"/>
+        <Row ListType="IronCrownDiscussions"/>
+        <Row ListType="OptimusPrincepsDiscussions"/>
+        <Row ListType="PeacekeeperDiscussions"/>
+        <Row ListType="QueenOfNileDiscussions"/>
+        <Row ListType="WithYourShieldOrOnItDiscussions"/>
+        <Row ListType="ArchipelagicStateDiscussions"/>
+        <Row ListType="SaintDiscussions"/>
+        <Row ListType="ShortLifeGloryDiscussions"/>
+        <Row ListType="BackstabberDiscussions"/>
+        <Row ListType="PerpetuallyOnGuardDiscussions"/>
+        <Row ListType="FlowerOfScotlandDiscussions"/>
+        <Row ListType="HorseLordDiscussions"/>
+        <Row ListType="HornChestLoinsDiscussions"/>
+        <Row ListType="MauryaEmpireDiscussions"/>
+        <Row ListType="NarikalaFortressDiscussions"/>
+        <Row ListType="CheomseongdaeDiscussions"/>
+        <Row ListType="DemagogueDiscussions"/>
+        <Row ListType="DestinationCivDiscussions"/>
+        <Row ListType="ExpansionistDiscussions"/>
+        <Row ListType="FlatEartherDiscussions"/>
+        <Row ListType="IntolerantDiscussions"/>
+        <Row ListType="LibertarianDiscussions"/>
+        <Row ListType="TurtlerDiscussions"/>
+        <Row ListType="CanadianExpeditionaryDiscussions"/>
+        <Row ListType="KaitiakitangaDiscussions"/>
+        <Row ListType="RavenBannerDiscussions"/>
+        <Row ListType="PatronOfArtsDiscussions"/>
+        <Row ListType="SicilianWarsDiscussions"/>
+        <Row ListType="NobelPrizeDiscussions"/>
+        <Row ListType="EleanorDiscussions"/>
+    </AiListTypes>
+    <AiLists>
+        <!-- Resolutions -->
+        <Row ListType="AirPowerResolutions" AgendaType="TRAIT_AGENDA_PREFER_AIRPOWER" System="Resolutions"/>
+        <Row ListType="CityStateProtectorResolutions" AgendaType="TRAIT_AGENDA_PREFER_CITY_STATE_PROTECTOR" System="Resolutions"/>
+        <Row ListType="CivilizedResolutions" AgendaType="TRAIT_AGENDA_PREFER_CLEAR_BANDIT_CAMPS" System="Resolutions"/>
+        <Row ListType="CulturedResolutions" AgendaType="TRAIT_AGENDA_PREFER_CULTURE" System="Resolutions"/>
+        <Row ListType="DevoutResolutions" AgendaType="TRAIT_AGENDA_PREFER_FAITH" System="Resolutions"/>
+        <Row ListType="EnvironmentalistResolutions" AgendaType="TRAIT_AGENDA_PREFER_ENVIRONMENT" System="Resolutions"/>
+        <Row ListType="ExploitativeResolutions" AgendaType="TRAIT_AGENDA_PREFER_EXPLOITATION" System="Resolutions"/>
+        <Row ListType="ExplorerResolutions" AgendaType="TRAIT_AGENDA_EXPLORATION_OBSESSED" System="Resolutions"/>
+        <Row ListType="FunLovingResolutions" AgendaType="TRAIT_AGENDA_PREFER_HAPPINESS" System="Resolutions"/>
+        <Row ListType="GreatPersonAdvocateResolutions" AgendaType="TRAIT_AGENDA_GREAT_PERSON_ADVOCATE" System="Resolutions"/>
+        <Row ListType="IdealogueResolutions" AgendaType="TRAIT_AGENDA_PREFER_SAME_GOVERNMENT" System="Resolutions"/>
+        <Row ListType="IndustrialistResolutions" AgendaType="TRAIT_AGENDA_PREFER_INDUSTRY" System="Resolutions"/>
+        <Row ListType="MoneyGrubberResolutions" AgendaType="TRAIT_AGENDA_PREFER_INCOME" System="Resolutions"/>
+        <Row ListType="NukeLoverResolutions" AgendaType="TRAIT_AGENDA_PREFER_NUKES" System="Resolutions"/>
+        <Row ListType="ParanoidResolutions" AgendaType="TRAIT_AGENDA_PARANOID" System="Resolutions"/>
+        <Row ListType="PopulousResolutions" AgendaType="TRAIT_AGENDA_PREFER_POPULATION" System="Resolutions"/>
+        <Row ListType="StandingArmyResolutions" AgendaType="TRAIT_AGENDA_PREFER_STANDING_ARMY" System="Resolutions"/>
+        <Row ListType="TechnophileResolutions" AgendaType="TRAIT_AGENDA_PREFER_SCIENCE" System="Resolutions"/>
+        <Row ListType="AyyubidDynastyResolutions" AgendaType="TRAIT_AGENDA_AYYUBID_DYNASTY" System="Resolutions"/>
+        <Row ListType="BlackQueenResolutions" AgendaType="TRAIT_AGENDA_BLACK_QUEEN" System="Resolutions"/>
+        <Row ListType="CityStateAllyResolutions" AgendaType="TRAIT_AGENDA_CITY_STATE_ALLY" System="Resolutions"/>
+        <Row ListType="CounterReformerResolutions" AgendaType="TRAIT_AGENDA_COUNTER_REFORMER" System="Resolutions"/>
+        <Row ListType="DelianLeagueResolutions" AgendaType="TRAIT_AGENDA_DELAIN_LEAGUE" System="Resolutions"/>
+        <Row ListType="EnthusiasticDiscipleResolutions" AgendaType="TRAIT_AGENDA_ENTHUSIASTIC_DISCIPLE" System="Resolutions"/>
+        <Row ListType="GreatPersonObessessedResolutions" AgendaType="TRAIT_AGENDA_GREAT_PERSON_OBSESSED" System="Resolutions"/>
+        <Row ListType="IronCrownResolutions" AgendaType="TRAIT_AGENDA_IRON_CROWN" System="Resolutions"/>
+        <Row ListType="LastVikingResolutions" AgendaType="TRAIT_AGENDA_LAST_VIKING_KING" System="Resolutions"/>
+        <Row ListType="OptimusPrincepsResolutions" AgendaType="TRAIT_AGENDA_OPTIMUS_PRINCEPS" System="Resolutions"/>
+        <Row ListType="SunNeverSetsResolutions" AgendaType="TRAIT_AGENDA_SUN_NEVER_SETS" System="Resolutions"/>
+        <Row ListType="TlatoaniResolutions" AgendaType="TRAIT_AGENDA_TLATOANI" System="Resolutions"/>
+        <Row ListType="WesternizerResolutions" AgendaType="TRAIT_AGENDA_WESTERNIZER" System="Resolutions"/>
+        <Row ListType="EndToSufferingResolutions" AgendaType="TRAIT_AGENDA_END_TO_SUFFERING" System="Resolutions"/>
+        <Row ListType="SaintResolutions" AgendaType="TRAIT_AGENDA_SAINT" System="Resolutions"/>
+        <Row ListType="ShortLifeGloryResolutions" AgendaType="TRAIT_AGENDA_SHORT_LIFE_GLORY" System="Resolutions"/>
+        <Row ListType="BillionaireResolutions" AgendaType="TRAIT_AGENDA_BILLIONAIRE" System="Resolutions"/>
+        <Row ListType="HorseLordResolutions" AgendaType="TRAIT_AGENDA_HORSE_LORD" System="Resolutions"/>
+        <Row ListType="IronConfederacyResolutions" AgendaType="TRAIT_AGENDA_IRON_CONFEDERACY" System="Resolutions"/>
+        <Row ListType="NarikalaFortressResolutions" AgendaType="TRAIT_AGENDA_NARIKALA_FORTRESS" System="Resolutions"/>
+        <Row ListType="SpiritOfTucapelResolutions" AgendaType="TRAIT_AGENDA_SPIRIT_OF_TUCAPEL" System="Resolutions"/>
+        <Row ListType="DemagogueResolutions" AgendaType="TRAIT_AGENDA_PREFER_NOFAVOR" System="Resolutions"/>
+        <Row ListType="DestinationCivResolutions" AgendaType="TRAIT_AGENDA_PREFER_NOTOURISM" System="Resolutions"/>
+        <Row ListType="ExpansionistResolutions" AgendaType="TRAIT_AGENDA_EXPANSIONIST" System="Resolutions"/>
+        <Row ListType="FlatEartherResolutions" AgendaType="TRAIT_AGENDA_FLAT_EARTHER" System="Resolutions"/>
+    <Row ListType="FlatEartherVictories" AgendaType="TRAIT_AGENDA_FLAT_EARTHER" System="Strategies"/>
+        <Row ListType="GreatWhiteFleetResolutions" AgendaType="TRAIT_AGENDA_GREAT_WHITE_FLEET" System="Resolutions"/>
+        <Row ListType="IntolerantResolutions" AgendaType="TRAIT_AGENDA_INTOLERANT" System="Resolutions"/>
+        <Row ListType="LibertarianResolutions" AgendaType="TRAIT_AGENDA_PREFER_NODIPLOVP" System="Resolutions"/>
+        <Row ListType="PillagerResolutions" AgendaType="TRAIT_AGENDA_PREFER_PILLAGE" System="Resolutions"/>
+        <Row ListType="TurtlerResolutions" AgendaType="TRAIT_AGENDA_TURTLER" System="Resolutions"/>
+        <Row ListType="ZealotResolutions" AgendaType="TRAIT_AGENDA_ZEALOT" System="Resolutions"/>
+        <Row ListType="AngevinEmpireResolutions" AgendaType="TRAIT_AGENDA_ANGEVIN_EMPIRE" System="Resolutions"/>
+        <Row ListType="KaitiakitangaResolutions" AgendaType="TRAIT_AGENDA_KAITIAKITANGA" System="Resolutions"/>
+        <Row ListType="LordOfMinesResolutions" AgendaType="TRAIT_AGENDA_LORD_OF_MINES" System="Resolutions"/>
+        <Row ListType="RavenBannerResolutions" AgendaType="TRAIT_AGENDA_RAVEN_BANNER" System="Resolutions"/>
+        <Row ListType="PatronOfArtsResolutions" AgendaType="TRAIT_AGENDA_PATRON_OF_ARTS" System="Resolutions"/>
+        <Row ListType="DharmaResolutions" LeaderType="TRAIT_CIVILIZATION_DHARMA" System="Resolutions"/>
+        <Row ListType="ExtraLightCavalryResolutions" LeaderType="TRAIT_CIVILIZATION_EXTRA_LIGHT_CAVALRY" System="Resolutions"/>
+        <Row ListType="GreatWallResolutions" LeaderType="TRAIT_CIVILIZATION_IMPROVEMENT_GREAT_WALL" System="Resolutions"/>
+        <Row ListType="GreatMountainsResolutions" LeaderType="TRAIT_CIVILIZATION_GREAT_MOUNTAINS" System="Resolutions"/>
+        <Row ListType="TraitReligiousConvertResolutions" LeaderType="TRAIT_LEADER_RELIGIOUS_CONVERT" System="Resolutions"/>
+        <Row ListType="FoundingFathersResolutions" LeaderType="TRAIT_CIVILIZATION_FOUNDING_FATHERS" System="Resolutions"/>
+        <Row ListType="NkisiResolutions" LeaderType="TRAIT_CIVILIZATION_NKISI" System="Resolutions"/>
+        <Row ListType="GreatTurkishBombardResolutions" LeaderType="TRAIT_CIVILIZATION_GREAT_TURKISH_BOMBARD" System="Resolutions"/>
+        <Row ListType="TreasureFleetResolutions" LeaderType="TRAIT_CIVILIZATION_TREASURE_FLEET" System="Resolutions"/>
+        <Row ListType="MediterraneanColoniesResolutions" LeaderType="TRAIT_CIVILIZATION_MEDITERRANEAN_COLONIES" System="Resolutions"/>
+        <Row ListType="ElectronicsFactoryResolutions" LeaderType="TRAIT_CIVILIZATION_BUILDING_ELECTRONICS_FACTORY" System="Resolutions"/>
+        <Row ListType="AllRoadToRomeResolutions" LeaderType="TRAIT_CIVILIZATION_ALL_ROADS_TO_ROME" System="Resolutions"/>
+        <Row ListType="ManaResolutions" LeaderType="TRAIT_CIVILIZATION_MAORI_MANA" System="Resolutions"/>
+        <Row ListType="EleanorResolutions" LeaderType="TRAIT_LEADER_ELEANOR_LOYALTY" System="Resolutions"/>
+        <!-- Discussions -->
+        <Row ListType="CityStateProtectorDiscussions" AgendaType="TRAIT_AGENDA_PREFER_CITY_STATE_PROTECTOR" System="Discussions"/>
+        <Row ListType="DarwinistDiscussions" AgendaType="TRAIT_AGENDA_ENJOYS_WAR" System="Discussions"/>
+        <Row ListType="DevoutDiscussions" AgendaType="TRAIT_AGENDA_PREFER_FAITH" System="Discussions"/>
+        <Row ListType="EnvironmentalistDiscussions" AgendaType="TRAIT_AGENDA_PREFER_ENVIRONMENT" System="Discussions"/>
+        <Row ListType="ExploitativeDiscussions" AgendaType="TRAIT_AGENDA_PREFER_EXPLOITATION" System="Discussions"/>
+        <Row ListType="GreatPersonAdvocateDiscussions" AgendaType="TRAIT_AGENDA_GREAT_PERSON_ADVOCATE" System="Discussions"/>
+        <Row ListType="IndustrialistDiscussions" AgendaType="TRAIT_AGENDA_PREFER_INDUSTRY" System="Discussions"/>
+        <Row ListType="NukeLoverDiscussions" AgendaType="TRAIT_AGENDA_PREFER_NUKES" System="Discussions"/>
+        <Row ListType="ParanoidDiscussions" AgendaType="TRAIT_AGENDA_PARANOID" System="Discussions"/>
+        <Row ListType="AllyOfEnkiduDiscussions" AgendaType="TRAIT_AGENDA_ALLY_OF_ENKIDU" System="Discussions"/>
+        <Row ListType="BackstabAverseDiscussions" AgendaType="TRAIT_AGENDA_BACKSTAB_AVERSE" System="Discussions"/>
+        <Row ListType="CityStateAllyDiscussions" AgendaType="TRAIT_AGENDA_CITY_STATE_ALLY" System="Discussions"/>
+        <Row ListType="CounterReformerDiscussions" AgendaType="TRAIT_AGENDA_COUNTER_REFORMER" System="Discussions"/>
+        <Row ListType="DelianLeagueDiscussions" AgendaType="TRAIT_AGENDA_DELAIN_LEAGUE" System="Discussions"/>
+        <Row ListType="EnthusiasticDiscipleDiscussions" AgendaType="TRAIT_AGENDA_ENTHUSIASTIC_DISCIPLE" System="Discussions"/>
+        <Row ListType="GreatPersonObessessedDiscussions" AgendaType="TRAIT_AGENDA_GREAT_PERSON_OBSESSED" System="Discussions"/>
+        <Row ListType="IronCrownDiscussions" AgendaType="TRAIT_AGENDA_IRON_CROWN" System="Discussions"/>
+        <Row ListType="OptimusPrincepsDiscussions" AgendaType="TRAIT_AGENDA_OPTIMUS_PRINCEPS" System="Discussions"/>
+        <Row ListType="PeacekeeperDiscussions" AgendaType="TRAIT_AGENDA_PEACEKEEPER" System="Discussions"/>
+        <Row ListType="QueenOfNileDiscussions" AgendaType="TRAIT_AGENDA_QUEEN_OF_NILE" System="Discussions"/>
+        <Row ListType="WithYourShieldOrOnItDiscussions" AgendaType="TRAIT_AGENDA_WITH_YOUR_SHIELD_OR_ON_IT" System="Discussions"/>
+        <Row ListType="ArchipelagicStateDiscussions" AgendaType="TRAIT_AGENDA_ARCHIPELAGIC_STATE" System="Discussions"/>
+        <Row ListType="SaintDiscussions" AgendaType="TRAIT_AGENDA_SAINT" System="Discussions"/>
+        <Row ListType="ShortLifeGloryDiscussions" AgendaType="TRAIT_AGENDA_SHORT_LIFE_GLORY" System="Discussions"/>
+        <Row ListType="BackstabberDiscussions" AgendaType="TRAIT_AGENDA_BACKSTABBER" System="Discussions"/>
+        <Row ListType="PerpetuallyOnGuardDiscussions" AgendaType="TRAIT_AGENDA_PERPETUALLY_ON_GUARD" System="Discussions"/>
+        <Row ListType="FlowerOfScotlandDiscussions" AgendaType="TRAIT_AGENDA_PERPETUALLY_ON_GUARD" System="Discussions"/>
+        <Row ListType="HorseLordDiscussions" AgendaType="TRAIT_AGENDA_HORSE_LORD" System="Discussions"/>
+        <Row ListType="HornChestLoinsDiscussions" AgendaType="TRAIT_AGENDA_HORN_CHEST_LOINS" System="Discussions"/>
+        <Row ListType="MauryaEmpireDiscussions" AgendaType="TRAIT_AGENDA_MAURYA_EMPIRE" System="Discussions"/>
+        <Row ListType="NarikalaFortressDiscussions" AgendaType="TRAIT_AGENDA_NARIKALA_FORTRESS" System="Discussions"/>
+        <Row ListType="CheomseongdaeDiscussions" AgendaType="TRAIT_AGENDA_CHEOMSEONGDAE" System="Discussions"/>
+        <Row ListType="DemagogueDiscussions" AgendaType="TRAIT_AGENDA_PREFER_NOFAVOR" System="Discussions"/>
+        <Row ListType="DestinationCivDiscussions" AgendaType="TRAIT_AGENDA_PREFER_NOTOURISM" System="Discussions"/>
+        <Row ListType="ExpansionistDiscussions" AgendaType="TRAIT_AGENDA_EXPANSIONIST" System="Discussions"/>
+        <Row ListType="FlatEartherDiscussions" AgendaType="TRAIT_AGENDA_FLAT_EARTHER" System="Discussions"/>
+        <Row ListType="IntolerantDiscussions" AgendaType="TRAIT_AGENDA_INTOLERANT" System="Discussions"/>
+        <Row ListType="LibertarianDiscussions" AgendaType="TRAIT_AGENDA_PREFER_NODIPLOVP" System="Discussions"/>
+        <Row ListType="TurtlerDiscussions" AgendaType="TRAIT_AGENDA_TURTLER" System="Discussions"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" AgendaType="TRAIT_AGENDA_CANADIAN_EXPEDITIONARY" System="Discussions"/>
+        <Row ListType="KaitiakitangaDiscussions" AgendaType="TRAIT_AGENDA_KAITIAKITANGA" System="Discussions"/>
+        <Row ListType="RavenBannerDiscussions" AgendaType="TRAIT_AGENDA_RAVEN_BANNER" System="Discussions"/>
+        <Row ListType="SicilianWarsDiscussions" AgendaType="TRAIT_AGENDA_SICILIAN_WARS" System="Discussions"/>
+        <Row ListType="NobelPrizeDiscussions" LeaderType="TRAIT_CIVILIZATION_NOBEL_PRIZE" System="Discussions"/>
+        <Row ListType="EleanorDiscussions" LeaderType="TRAIT_LEADER_ELEANOR_LOYALTY" System="Discussions"/>
+    </AiLists>
+    <AiFavoredItems>
+        <!-- Resolutions -->
+        <Row ListType="AirPowerResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="CityStateProtectorResolutions" Item="WC_RES_SOVEREIGNTY" Favored="false"/>
+        <Row ListType="CivilizedResolutions" Item="WC_RES_LUXURY" Favored="false"/>
+        <Row ListType="CulturedResolutions" Item="WC_RES_WORLD_IDEOLOGY" Favored="false"/>
+        <Row ListType="DevoutResolutions" Item="WC_RES_WORLD_RELIGION" Favored="true"/>
+        <Row ListType="ExploitativeResolutions" Item="WC_RES_DEFORESTATION_TREATY" Favored="false"/>
+        <Row ListType="EnvironmentalistResolutions" Item="WC_RES_DEFORESTATION_TREATY" Favored="true"/>
+        <Row ListType="EnvironmentalistResolutions" Item="WC_RES_GLOBAL_ENERGY_TREATY" Favored="true"/>
+        <Row ListType="ExplorerResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="FunLovingResolutions" Item="WC_RES_LUXURY" Favored="true"/>
+        <Row ListType="GreatPersonAdvocateResolutions" Item="WC_RES_PATRONAGE" Favored="true"/>
+        <Row ListType="IdealogueResolutions" Item="WC_RES_WORLD_IDEOLOGY" Favored="true"/>
+        <Row ListType="IndustrialistResolutions" Item="WC_RES_DEFORESTATION_TREATY" Favored="false"/>
+        <Row ListType="IndustrialistResolutions" Item="WC_RES_GLOBAL_ENERGY_TREATY" Favored="false"/>
+        <Row ListType="MoneyGrubberResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="NukeLoverResolutions" Item="WC_RES_ARMS_CONTROL" Favored="true"/>
+        <Row ListType="ParanoidResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="true"/>
+        <Row ListType="ParanoidResolutions" Item="WC_RES_BORDER_CONTROL" Favored="true"/>
+        <Row ListType="PopulousResolutions" Item="WC_RES_MIGRATION_TREATY" Favored="true"/>
+        <Row ListType="StandingArmyResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="TechnophileResolutions" Item="WC_RES_HERITAGE_ORG" Favored="false"/>
+        <Row ListType="AyyubidDynastyResolutions" Item="WC_RES_WORLD_RELIGION" Favored="false"/>
+        <Row ListType="AyyubidDynastyResolutions" Item="WC_RES_URBAN_DEVELOPMENT" Favored="true"/>
+        <Row ListType="BlackQueenResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="CityStateAllyResolutions" Item="WC_RES_SOVEREIGNTY" Favored="true"/>
+        <Row ListType="CounterReformerResolutions" Item="WC_RES_WORLD_RELIGION" Favored="false"/>
+        <Row ListType="DelianLeagueResolutions" Item="WC_RES_SOVEREIGNTY" Favored="true"/>
+        <Row ListType="EnthusiasticDiscipleResolutions" Item="WC_RES_WORLD_RELIGION" Favored="true"/>
+        <Row ListType="GreatPersonObessessedResolutions" Item="WC_RES_PATRONAGE" Favored="true"/>
+        <Row ListType="GreatPersonObessessedResolutions" Item="WC_RES_PUBLIC_WORKS" Favored="true"/>
+        <Row ListType="IronCrownResolutions" Item="WC_RES_SOVEREIGNTY" Favored="false"/>
+        <Row ListType="IronCrownResolutions" Item="WC_RES_GOVERNANCE_DOCTRINE" Favored="false"/>
+        <Row ListType="LastVikingResolutions" Item="WC_RES_TRADE_TREATY" Favored="false"/>
+        <Row ListType="LastVikingResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="OptimusPrincepsResolutions" Item="WC_RES_BORDER_CONTROL" Favored="false"/>
+        <Row ListType="SunNeverSetsResolutions" Item="WC_RES_DEFORESTATION_TREATY" Favored="false"/>
+        <Row ListType="SunNeverSetsResolutions" Item="WC_RES_GLOBAL_ENERGY_TREATY" Favored="false"/>
+        <Row ListType="TlatoaniResolutions" Item="WC_RES_LUXURY" Favored="true"/>
+        <Row ListType="WesternizerResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="EndToSufferingResolutions" Item="WC_RES_MIGRATION_TREATY" Favored="true"/>
+        <Row ListType="SaintResolutions" Item="WC_RES_WORLD_RELIGION" Favored="true"/>
+        <Row ListType="ShortLifeGloryResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="BillionaireResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="HorseLordResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="IronConfederacyResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="NarikalaFortressResolutions" Item="WC_RES_URBAN_DEVELOPMENT" Favored="true"/>
+        <Row ListType="SpiritOfTucapelResolutions" Item="WC_RES_MIGRATION_TREATY" Favored="false"/>
+        <Row ListType="DemagogueResolutions" Item="WC_RES_DIPLOVICTORY" Favored="true"/>
+        <Row ListType="DestinationCivResolutions" Item="WC_RES_HERITAGE_ORG" Favored="true"/>
+        <Row ListType="ExpansionistResolutions" Item="WC_RES_BORDER_CONTROL" Favored="false"/>
+        <Row ListType="FlatEartherResolutions" Item="WC_RES_PUBLIC_WORKS" Favored="false"/>
+        <Row ListType="FlatEartherResolutions" Item="WC_RES_PATRONAGE" Favored="false"/>
+        <Row ListType="FlatEartherVictories" Item="VICTORY_STRATEGY_SCIENCE_VICTORY" Value="5"/>
+        <Row ListType="GreatWhiteFleetResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="IntolerantResolutions" Item="WC_RES_WORLD_RELIGION" Favored="false"/>
+        <Row ListType="LibertarianResolutions" Item="WC_RES_DIPLOVICTORY" Favored="false"/>
+        <Row ListType="PillagerResolutions" Item="WC_RES_TRADE_TREATY" Favored="false"/>
+        <Row ListType="TurtlerResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="true"/>
+        <Row ListType="TurtlerResolutions" Item="WC_RES_ARMS_CONTROL" Favored="false"/>
+        <Row ListType="TurtlerResolutions" Item="WC_RES_PATRONAGE" Favored="false"/>
+        <Row ListType="ZealotResolutions" Item="WC_RES_WORLD_RELIGION" Favored="true"/>
+        <Row ListType="AngevinEmpireResolutions" Item="WC_RES_MIGRATION_TREATY" Favored="true"/>
+        <Row ListType="KaitiakitangaResolutions" Item="WC_RES_DEFORESTATION_TREATY" Favored="true"/>
+        <Row ListType="KaitiakitangaResolutions" Item="WC_RES_GLOBAL_ENERGY_TREATY" Favored="true"/>
+        <Row ListType="LordOfMinesResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="LordOfMinesResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="true"/>
+        <Row ListType="LordOfMinesResolutions" Item="WC_RES_URBAN_DEVELOPMENT" Favored="false"/>
+        <Row ListType="RavenBannerResolutions" Item="WC_RES_SOVEREIGNTY" Favored="true"/>
+        <Row ListType="PatronOfArtsResolutions" Item="WC_RES_HERITAGE_ORG" Favored="true"/>
+        <Row ListType="DharmaResolutions" Item="WC_RES_WORLD_RELIGION" Favored="true"/>
+        <Row ListType="ExtraLightCavalryResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="GreatWallResolutions" Item="WC_RES_BORDER_CONTROL" Favored="false"/>
+        <Row ListType="GreatMountainsResolutions" Item="WC_RES_TRADE_TREATY" Favored="false"/>
+        <Row ListType="TraitReligiousConvertResolutions" Item="WC_RES_URBAN_DEVELOPMENT" Favored="false"/>
+        <Row ListType="FoundingFathersResolutions" Item="WC_RES_WORLD_IDEOLOGY" Favored="true"/>
+        <Row ListType="NkisiResolutions" Item="WC_RES_HERITAGE_ORG" Favored="true"/>
+        <Row ListType="GreatTurkishBombardResolutions" Item="WC_RES_MERCENARY_COMPANIES" Favored="false"/>
+        <Row ListType="TreasureFleetResolutions" Item="WC_RES_TRADE_TREATY" Favored="true"/>
+        <Row ListType="MediterraneanColoniesResolutions" Item="WC_RES_MIGRATION_TREATY" Favored="true"/>
+        <Row ListType="ElectronicsFactoryResolutions" Item="WC_RES_GLOBAL_ENERGY_TREATY" Favored="false"/>
+        <Row ListType="AllRoadToRomeResolutions" Item="WC_RES_TRADE_TREATY" Favored="false"/>
+        <Row ListType="ManaResolutions" Item="WC_RES_PATRONAGE" Favored="false"/>
+        <Row ListType="EleanorResolutions" Item="WC_RES_HERITAGE_ORG" Favored="true"/>
+        <!-- MAKE ELEANOR HATE DiploVictory for testing UI -->
+        <Row ListType="EleanorResolutions" Item="WC_RES_DIPLOVICTORY" Favored="true"/>
+        <!-- Discussions -->
+        <Row ListType="CityStateProtectorDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="DarwinistDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="DevoutDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="false"/>
+        <Row ListType="EnvironmentalistDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="ExploitativeDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="false"/>
+        <Row ListType="GreatPersonAdvocateDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="GreatPersonAdvocateDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="GreatPersonAdvocateDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="GreatPersonAdvocateDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="true"/>
+        <Row ListType="IndustrialistDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="false"/>
+        <Row ListType="NukeLoverDiscussions" Item="WC_EMERGENCY_NUCLEAR" Favored="false"/>
+        <Row ListType="ParanoidDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="AllyOfEnkiduDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="true"/>
+        <Row ListType="BackstabAverseDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="true"/>
+        <Row ListType="CityStateAllyDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="DevoutDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="true"/>
+        <Row ListType="DelianLeagueDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="EnthusiasticDiscipleDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="false"/>
+        <Row ListType="GreatPersonObessessedDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="GreatPersonObessessedDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="GreatPersonObessessedDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="GreatPersonObessessedDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="true"/>
+        <Row ListType="IronCrownDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="false"/>
+        <Row ListType="OptimusPrincepsDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="PeacekeeperDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="QueenOfNileDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="WithYourShieldOrOnItDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="ArchipelagicStateDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="SaintDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="false"/>
+        <Row ListType="ShortLifeGloryDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="BackstabberDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="false"/>
+        <Row ListType="PerpetuallyOnGuardDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="PerpetuallyOnGuardDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="FlowerOfScotlandDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="true"/>
+        <Row ListType="FlowerOfScotlandDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="HorseLordDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="HornChestLoinsDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="MauryaEmpireDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="NarikalaFortressDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="CheomseongdaeDiscussions" Item="WC_EMERGENCY_SPACE_STATION" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_NUCLEAR" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_REQUEST_AID" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_WORLD_GAMES" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="DemagogueDiscussions" Item="WC_EMERGENCY_SPACE_STATION" Favored="true"/>
+        <Row ListType="DestinationCivDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="DestinationCivDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="ExpansionistDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="FlatEartherDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="false"/>
+        <Row ListType="FlatEartherDiscussions" Item="WC_EMERGENCY_SPACE_STATION" Favored="false"/>
+        <Row ListType="IntolerantDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="true"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_NUCLEAR" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_REQUEST_AID" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_WORLD_GAMES" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="false"/>
+        <Row ListType="LibertarianDiscussions" Item="WC_EMERGENCY_SPACE_STATION" Favored="false"/>
+        <Row ListType="TurtlerDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="TurtlerDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_MILITARY" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_RELIGIOUS" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_NUCLEAR" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_BACKSTAB" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_REQUEST_AID" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_WORLD_GAMES" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="CanadianExpeditionaryDiscussions" Item="WC_EMERGENCY_SPACE_STATION" Favored="true"/>
+        <Row ListType="KaitiakitangaDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="RavenBannerDiscussions" Item="WC_EMERGENCY_CITY_STATE" Favored="true"/>
+        <Row ListType="PatronOfArtsDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="PatronOfArtsDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="SicilianWarsDiscussions" Item="WC_EMERGENCY_CLIMATE_ACCORDS" Favored="true"/>
+        <Row ListType="NobelPrizeDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+        <Row ListType="NobelPrizeDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PEACE" Favored="true"/>
+        <Row ListType="NobelPrizeDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_PHYSICS" Favored="true"/>
+        <Row ListType="EleanorDiscussions" Item="WC_EMERGENCY_WORLD_FAIR" Favored="true"/>
+        <Row ListType="EleanorDiscussions" Item="WC_EMERGENCY_NOBEL_PRIZE_LITERATURE" Favored="true"/>
+    </AiFavoredItems>
+</GameInfo>

@@ -1,0 +1,1286 @@
+[
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_every_chunk_is_followed_by_a_full_previous_era_record",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_chunk_length_is_guarded_by_the_minimum_era_length",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_api_listing_separates_not_enumerable_from_absent",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_changed_since_last_boundary",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_moments_cover_all_players",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+    "class": "BanseikiRulesetStaticTests",
+    "test": "test_audited_exclusion_is_exact_and_applies_to_every_banseiki_slot",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+    "class": "BanseikiRulesetStaticTests",
+    "test": "test_duplicate_policy_and_runtime_scenario_cover_same_civilization",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_stall_with_pending_dedication_chooses_closes_and_resumes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_repeated_dedication_is_bounded_then_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_no_pending_dedication_keeps_old_restart_behaviour",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_statement_after_final_turn_retries_only_idempotent_handler_cleanup",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_statement_mid_autoplay_is_closed_and_autoplay_completes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_repeated_early_stops_by_statements_resume_without_using_restart_budget",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_deal_proposal_is_refused_before_the_statement_view_closes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_status_query_starved_by_statement_closes_it_and_asks_again",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_dark_age_policy_choice_is_closed_without_holding_autoplay",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_oath_choice_is_closed_after_reign_without_selecting_official_dedications",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_screen_that_keeps_reopening_is_bounded",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_wait_closes_statement_and_polls_again",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_wait_still_fails_when_nothing_was_open_or_retries_run_out",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_ui_lua_is_never_replayed_after_it_may_have_run",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_shortened_turns_require_explicit_test_mode",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_configuration_clears_test_mode_on_ordinary_runs",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_end_turn_honours_count_default_and_shared_deadline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_end_turn_rejects_invalid_counts",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_build_setup_checks_every_player_after_refresh",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_build_setup_defaults_on_for_banseiki_only",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_start_turn_guard",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_output_scoped_save_name_and_exact_name",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_save_dismisses_blocking_advisor_before_saving",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_flag_validation",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_allow_elimination_observes_target_and_records_turn",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_research_samples_and_report_use_first_observed_completion",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_autoplay_emits_research_jsonl_for_each_observed_turn",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_new_scenarios_check_requested_states",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_transitive_dependents_are_disabled_first_once_and_reported",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_traversal_includes_enabled_descendants_of_a_disabled_intermediate",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_requested_dependents_are_preserved_and_conflicts_fail_before_mutations",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_dependency_cycle_fails_before_mutations",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_disable_verifies_the_engine_state_and_names_the_failed_mod",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_no_disable_targets_leaves_unrelated_mods_enabled",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_late_disable_rejection_is_detected_before_any_settings_change",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_missing_enable_target_fails_before_disabling_other_mods",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_engine_refusal_restores_changes_without_enabling_disabled_intermediates",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_failed_restoration_identifies_the_mod_still_disabled",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_late_enable_failure_restores_disabled_and_newly_enabled_mods",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_implicitly_enabled_prerequisite_is_restored_when_enable_throws",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_enable_failure_without_disable_targets_restores_the_selection",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_enable_and_disable_overlap_is_case_insensitive",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_every_single_turn_is_logged_in_both_contexts",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_speeds_differ_only_in_speed",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_setup_guard_matches_the_test_mod_sql",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_other_scenarios_on_the_test_map_disable_the_probe_mod",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_gamecore_logger_never_raises_and_reports_changes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraReignsScenarioTests",
+    "test": "test_checked_turns_are_the_generated_era_starts",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_every_scale_scenario_is_valid",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_takeda_variant_checks_selected_faction_and_full_initial_territory",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_resource_scenario_matches_the_manifest_on_the_adopted_15km_map",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_rejects_bad_map_file_and_metrics_flag",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_capture_and_compare_lua_results",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_turn_metrics_preserve_missing_samples",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_autoplay_writes_turn_and_memory_samples",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_autoplay_reports_eliminated_human_instead_of_overshoot",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_map_log_profile_detects_mod_errors",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_following_file_diagnostic_belongs_to_error",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_bundle0_success_and_unrelated_database_error",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_restored_state_mismatch_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_action_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_generic_errors_include_stack_and_api_error",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_jac_icon_or_texture_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_jac_texture_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_error_none_is_not_a_failure",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_database_error_with_mod_context_fails",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_success_and_restored_mismatch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_expected_two_units_in_assignment_restore_and_journal",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_ignores_unrelated_game_error_and_catches_target_ui_error",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_japan_map_fails_on_congress_dependent_ui_error",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_baseline_excludes_old_lines_and_handles_truncate",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_baseline_detects_same_inode_rewrite_past_old_offset",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_shipped_scenarios_validate_offline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "AutoplayTests",
+    "test": "test_event_and_transient_inactive_state_do_not_complete_or_restart_early",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_fast_forward_uses_core_clock_and_discards_stale_ui_measurement",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_fast_forward_csv_files_warn_against_continuous_performance_comparison",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_csv_and_summary_keep_skipped_turns_and_untimed_intervals_explicit",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_first_interval_starts_before_autoplay_response",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_stdlib_memory_api_samples_a_real_process",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_save_load_measure_actual_file_and_wait_until_ready",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_result_keeps_partial_measurements_on_failed_run",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_save_load_flags_require_boolean",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_result_separates_continuous_memory_from_post_load_memory",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_interruption_is_recorded_and_summary_write_error_does_not_replace_it",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_metric_groups_are_validated",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_scenario_is_valid_starts_as_oda_and_checks_load_before_advancing",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_every_embedded_lua_step_and_wait_compiles",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_automatic_popup_assertion_cannot_force_a_missing_screen_open",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_fast_forward_runs_engine_jump_with_scope_checks_and_keeps_source_intact",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_only_civ6_reporter_is_closed_without_a_running_game",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_running_game_keeps_reporters",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_unreadable_reporter_is_not_terminated",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_exited_reporter_is_ignored",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_remaining_reporter_that_cannot_be_opened_stops_launch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_reporter_must_finish_exiting_before_launch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_steam_launch_clears_reporters_before_sending_uri",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_close_failure_stops_steam_launch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "DX11LaunchTests",
+    "test": "test_only_dx11_window_is_accepted_after_launch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "DX11LaunchTests",
+    "test": "test_unreadable_window_is_not_accepted",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_freshness_decision_uses_strictly_newer_mod_file",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_mod_scan_resolves_folder_and_finds_newest_file",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_missing_or_duplicate_enabled_mod_is_rejected",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_atlas_images_missing_from_the_mod_packages_are_reported",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_stale_art_stops_before_restart",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_wrong_steam_executable_stops_before_click_or_tuner",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_action_validation",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_auto_restart_precedes_first_step_and_log_baseline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_no_auto_restart_skips_freshness_query",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_still_stale_after_restart_stops_before_first_step",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_action_launches_and_clicks_verified_window",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_frontend_probe_reconnects_after_unknown_read_only_reply",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_frontend_probe_clicks_again_if_movie_still_plays",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_single_process_waits_for_exiting_process_to_disappear",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_single_process_still_refuses_when_duplicates_persist",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_window_wait_ignores_transient_duplicate_processes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_steam_wait_does_not_launch_again_during_process_overlap",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_first_restart_action_can_start_stopped_game_with_auto_disabled",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_requests_ui_quit_before_steam_launch",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_forces_only_same_process_after_grace",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_without_process_launches_then_waits_for_frontend",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_still_refuses_when_several_processes_persist",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_run_launches_civ_when_not_running_and_first_step_needs_game",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_owner_start_opens_setup_without_hosting_and_waits_long",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_sends_one_escape_even_if_ingame_state_exists",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_never_sends_escape_before_load_complete_log",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_sends_begin_game_escape_only_once",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_reconnects_when_frontend_state_list_is_stale",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_timeout_never_repeats_escape",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_lua_errors_stop_without_retrying_mutations",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_detects_lua_log_rotation_and_truncation_before_input",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_detects_lua_log_rotation_after_escape",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_rejects_same_inode_rewrite_even_if_log_grows",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_run_creates_missing_output_parents_but_rejects_existing_run",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_multiple_civ_processes_stop_run_before_tuner_access",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_failed_cold_start_is_reported_before_tuner_access",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_unreachable_tuner_reports_connection_failure",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_paths_reject_drives_absolute_and_parent_escape",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_rejects_resolved_path_outside_output",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_fails_if_capture_finishes_after_deadline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_nonfinite_timeouts_are_rejected",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_scenario_validates_lua_code_before_running",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_manual_wait_has_no_step_deadline_or_timeout_option",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_wait_caps_state_and_lua_queries_to_remaining_time",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_lua_wait_unknown_reply_fails_without_reexecution",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_lua_wait_confirmed_error_fails_without_reexecution",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_pre_send_framing_error_is_logged_as_step_failure",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_pre_send_failure_is_logged_without_waiting",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_waits_after_unknown_reply_without_resending",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_unknown_transition_without_read_only_confirmation_is_undecidable",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_confirmed_transition_lua_error_never_enters_wait",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_exit_to_menu_waits_for_state_before_lua_predicate",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_log_wait_requires_new_line_and_does_not_reuse_a_match",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_log_wait_stops_if_generation_changes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_later_step_cannot_reuse_previous_steps_log_line",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_oserror_after_autoplay_start_attempts_cleanup_without_replay",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_closes_successive_ai_statements_without_repeating_action",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_reopening_diplomacy_has_a_fixed_limit",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_honours_turns_and_rejects_invalid_values",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_during_focus_sends_no_key",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_after_key_mapping_sends_no_window_key",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_after_foreground_check_sends_no_sendinput_key",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_key_before_deadline_is_sent",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_foreground_mismatch_sends_no_keys_or_clicks",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_releases_after_foreground_changes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_targets_verified_game_while_background",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_rechecks_target_before_background_input",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_sendinput_fallback_checks_foreground_and_releases_key",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_input_error_is_logged_as_step_failure",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_failed_foreground_activation_sends_no_input",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_must_have_unique_civ_executable",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_hidden_second_civ_process_blocks_input_before_window_scan",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_process_snapshot_counts_both_civ_executables",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_status_query_retries_after_timeout",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_advisor_dismissal_retries_after_timeout",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_research_query_retries_after_timeout",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_gives_up_only_after_deadline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_stale_research_snapshot_stops_at_deadline",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_lua_error_is_not_retried",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_state_changing_lua_is_not_replayed",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_round_trip_fragmented_and_named_state",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_lua_error_is_reported",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_missing_ack_is_not_replayed",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_missing_state_fails_before_lua_send",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_send_failure_is_classified_as_unknown",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_reject_oversized_frame",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_empty_frame_is_skipped_not_fatal",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_send_nul_is_rejected",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_run_rejects_invalid_metadata_even_without_a_fast_forward_step",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_lost_jump_acknowledgment_marks_count_unknown_and_never_replays",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_invalid_test_mode_is_rejected_before_any_game_call",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_fast_forward_processes_every_era_boundary_before_skipping_again",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_scenario_localization_keys_exist_in_mod_text",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_all_new_chunks_validate_and_compile_as_lua",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_full_map_measurements_cover_continuous_play_and_both_reloads",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_saved_state_snapshot_uses_indexed_city_iterator_and_detects_changes",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_optional_tail_is_scoped_hidden_and_preserves_endless_last_era",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_resource_calendar_calls_actual_getter_and_rejects_wrong_year",
+    "crate": "civ6-autotest-rs"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_strict_judge_rejects_official_screen_errors",
+    "crate": "civ6-autotest-rs"
+  }
+]

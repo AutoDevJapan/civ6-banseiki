@@ -1,0 +1,11 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Maps_XP2>
+        <Row MapSizeType="MAPSIZE_DUEL" CO2For1DegreeTempRise="500000" DesertPlotCountToLabel="3" MountainPlotCountToLabel="3" LakePlotCountToLabel="1" SeaPlotCountToLabel="3" OceanPlotCountToLabel="6"/>
+        <Row MapSizeType="MAPSIZE_TINY" CO2For1DegreeTempRise="1000000" DesertPlotCountToLabel="3" MountainPlotCountToLabel="3" LakePlotCountToLabel="1" SeaPlotCountToLabel="4" OceanPlotCountToLabel="8"/>
+        <Row MapSizeType="MAPSIZE_SMALL" CO2For1DegreeTempRise="1500000" DesertPlotCountToLabel="4" MountainPlotCountToLabel="4" LakePlotCountToLabel="1" SeaPlotCountToLabel="4" OceanPlotCountToLabel="8"/>
+        <Row MapSizeType="MAPSIZE_STANDARD" CO2For1DegreeTempRise="2000000" DesertPlotCountToLabel="4" MountainPlotCountToLabel="4" LakePlotCountToLabel="1" SeaPlotCountToLabel="5" OceanPlotCountToLabel="10"/>
+        <Row MapSizeType="MAPSIZE_LARGE" CO2For1DegreeTempRise="2500000" DesertPlotCountToLabel="5" MountainPlotCountToLabel="5" LakePlotCountToLabel="1" SeaPlotCountToLabel="5" OceanPlotCountToLabel="10"/>
+        <Row MapSizeType="MAPSIZE_HUGE" CO2For1DegreeTempRise="3000000" DesertPlotCountToLabel="5" MountainPlotCountToLabel="5" LakePlotCountToLabel="1" SeaPlotCountToLabel="6" OceanPlotCountToLabel="12"/>
+    </Maps_XP2>
+</GameInfo>

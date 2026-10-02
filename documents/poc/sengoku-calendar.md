@@ -18,7 +18,7 @@ SSOT 3.1 の開始時点は **天文3年5月12日**、3.2 の進行目安は標�
 
 ## 進行曲線
 
-`GameSpeed_Turns` は戦国用に全速度を入れ替える。`TurnsPerIncrement` は合計10000ターン分を用意し、約200ターン後も暦が進むようにする。ゲームの時間切れ禁止は既存の `JAC_Sengoku_Victories.xml` の設定を維持する。`Data/JAC_Sengoku_Calendar.xml` は `tools/generate_sengoku_reigns.py` の生成物（`--check` で古さを検査）。
+`GameSpeed_Turns` は戦国用に全速度を入れ替える。`TurnsPerIncrement` は合計10000ターン分を用意し、約200ターン後も暦が進むようにする。ゲームの時間切れ禁止は既存の `JAC_Sengoku_Victories.xml` の設定を維持する。`Data/JAC_Sengoku_Calendar.xml` は `tools/civ6-data-rs/src/reigns.rs` の生成物（`--check` で古さを検査）。
 
 標準速度は4か月/ターン。標準以外は、元号＝時代（[era-equals-reign.md](era-equals-reign.md)）のエンジンの時代の始まりに改元の年月が来るように、元号ごとに1ターンの月数を変える（オーナー判断 U-2b、2026-09-30）。エンジンは区間を行の順に使う（`01_GameplaySchema.sql:3337`）ので、区間は増減を繰り返してよい。
 
@@ -32,7 +32,7 @@ SSOT 3.1 の開始時点は **天文3年5月12日**、3.2 の進行目安は標�
 
 ## メインセッションの実機確認
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-calendar.json --check` は構文検証のみ。実機では同シナリオを実行し、次を確認する。
+`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-calendar.json --check` は構文検証のみ。実機では同シナリオを実行し、次を確認する。
 
 1. FrontEnd で戦国パックのカレンダーが `CALENDAR_STANDARD_FROM_START_ERA` に切り替わり、開始時代の選択肢が `ERA_ANCIENT` だけになる。
 2. 開始ターンで `GameInfo.StartEras['ERA_ANCIENT'].Year == 1534`、`Calendar.MakeYearStr` の文字列が1534年を含む。

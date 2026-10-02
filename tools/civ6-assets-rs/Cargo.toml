@@ -1,0 +1,53 @@
+[package]
+name = "civ6-assets-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+civ6-cli-compat-rs = { path = "../civ6-cli-compat-rs" }
+civ6-data-rs = { path = "../civ6-data-rs" }
+anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.6", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+font8x8 = "0.3"
+fast_image_resize = "5.1"
+memmap2 = "0.9"
+regex = "1.12"
+resvg = "0.46"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+sha2 = "0.10"
+tempfile = "3.27"
+uuid = { version = "1.23", features = ["v5"] }
+xmltree = "0.11"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+mlua = { version = "0.11", features = ["lua51", "vendored", "error-send"] }
+
+[[bin]]
+name = "japan-map-generate"
+path = "src/bin/japan-map-generate.rs"
+[[bin]]
+name = "japan-map-prosperity"
+path = "src/bin/japan-map-prosperity.rs"
+[[bin]]
+name = "japan-map-prosper-start"
+path = "src/bin/japan-map-prosper-start.rs"
+[[bin]]
+name = "japan-map-support"
+path = "src/bin/japan-map-support.rs"
+[[bin]]
+name = "japan-map-unification"
+path = "src/bin/japan-map-unification.rs"
+[[bin]]
+name = "jac-build-art"
+path = "src/bin/jac-build-art.rs"
+[[bin]]
+name = "jac-draw-crests"
+path = "src/bin/jac-draw-crests.rs"
+[[bin]]
+name = "jac-generate-portraits"
+path = "src/bin/jac-generate-portraits.rs"

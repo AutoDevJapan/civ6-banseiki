@@ -1,0 +1,62 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Anton Strenger (Firaxis Games) -->
+<GameInfo>
+    <Eras_XP1>
+        <Row EraType="ERA_ANCIENT" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="2"/>
+        <Row EraType="ERA_CLASSICAL" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="3"/>
+        <Row EraType="ERA_MEDIEVAL" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="3"/>
+        <Row EraType="ERA_RENAISSANCE" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="6"/>
+        <Row EraType="ERA_INDUSTRIAL" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="6"/>
+        <Row EraType="ERA_MODERN" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="9"/>
+        <Row EraType="ERA_ATOMIC" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="9"/>
+        <Row EraType="ERA_INFORMATION" GameEraMinimumTurns="40" GameEraMaximumTurns="60" LiberatedEnvoys="9"/>
+        <Row EraType="ERA_FUTURE" LiberatedEnvoys="9"/>
+    </Eras_XP1>
+    <MajorStartingUnits>
+        <Update>
+            <Where Era="ERA_INDUSTRIAL" Unit="UNIT_PIKEMAN"/>
+            <Set>
+                <Unit>UNIT_PIKE_AND_SHOT</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_MODERN" Unit="UNIT_PIKEMAN"/>
+            <Set>
+                <Unit>UNIT_PIKE_AND_SHOT</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_INFORMATION" Unit="UNIT_RANGER"/>
+            <Set>
+                <Unit>UNIT_SPEC_OPS</Unit>
+            </Set>
+        </Update>
+        <Row Era="ERA_ANCIENT" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_CLASSICAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_MEDIEVAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_RENAISSANCE" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_INDUSTRIAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_MODERN" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_ATOMIC" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_INFORMATION" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+        <Row Era="ERA_FUTURE" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5" OnDistrictCreated="true"/>
+    </MajorStartingUnits>
+    <StartingBuildings>
+        <Row Era="ERA_INFORMATION" Building="BUILDING_FERRIS_WHEEL" District="DISTRICT_WATER_ENTERTAINMENT_COMPLEX"/>
+        <Row Era="ERA_INFORMATION" Building="BUILDING_AQUARIUM" District="DISTRICT_WATER_ENTERTAINMENT_COMPLEX"/>
+    </StartingBuildings>
+    <!-- Additional Starting Units for Minor Civilizations in addition to their Settler-->
+    <BonusMinorStartingUnits>
+        <Update>
+            <Where Era="ERA_INDUSTRIAL" Unit="UNIT_PIKEMAN"/>
+            <Set>
+                <Unit>UNIT_PIKE_AND_SHOT</Unit>
+            </Set>
+        </Update>
+        <Update>
+            <Where Era="ERA_MODERN" Unit="UNIT_PIKEMAN"/>
+            <Set>
+                <Unit>UNIT_PIKE_AND_SHOT</Unit>
+            </Set>
+        </Update>
+    </BonusMinorStartingUnits>
+</GameInfo>

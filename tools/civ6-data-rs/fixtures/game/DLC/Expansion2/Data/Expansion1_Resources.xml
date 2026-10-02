@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <!--Luxury -->
+        <Row Type="RESOURCE_AMBER" Kind="KIND_RESOURCE"/>
+        <Row Type="RESOURCE_OLIVES" Kind="KIND_RESOURCE"/>
+        <Row Type="RESOURCE_TURTLES" Kind="KIND_RESOURCE"/>
+    </Types>
+    <TypeTags>
+        <Row Type="RESOURCE_OLIVES" Tag="CLASS_GODDESS_OF_FESTIVALS"/>
+    </TypeTags>
+    <Resources>
+        <Row ResourceType="RESOURCE_AMBER" Name="LOC_RESOURCE_AMBER_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" AdjacentToLand="true" Frequency="2" SeaFrequency="1"/>
+        <Row ResourceType="RESOURCE_OLIVES" Name="LOC_RESOURCE_OLIVES_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" Frequency="2"/>
+        <Row ResourceType="RESOURCE_TURTLES" Name="LOC_RESOURCE_TURTLES_NAME" ResourceClassType="RESOURCECLASS_LUXURY" Happiness="4" SeaFrequency="5"/>
+    </Resources>
+    <Resource_ValidTerrains>
+        <Row ResourceType="RESOURCE_AMBER" TerrainType="TERRAIN_COAST"/>
+        <Row ResourceType="RESOURCE_OLIVES" TerrainType="TERRAIN_GRASS"/>
+    </Resource_ValidTerrains>
+    <Resource_ValidFeatures>
+        <Row ResourceType="RESOURCE_AMBER" FeatureType="FEATURE_JUNGLE"/>
+        <Row ResourceType="RESOURCE_AMBER" FeatureType="FEATURE_FOREST"/>
+        <Row ResourceType="RESOURCE_FISH" FeatureType="FEATURE_REEF"/>
+        <Row ResourceType="RESOURCE_TURTLES" FeatureType="FEATURE_REEF"/>
+    </Resource_ValidFeatures>
+    <Resource_YieldChanges>
+        <Row ResourceType="RESOURCE_AMBER" YieldType="YIELD_CULTURE" YieldChange="1"/>
+        <Row ResourceType="RESOURCE_OLIVES" YieldType="YIELD_GOLD" YieldChange="1"/>
+        <Row ResourceType="RESOURCE_OLIVES" YieldType="YIELD_PRODUCTION" YieldChange="1"/>
+        <Row ResourceType="RESOURCE_TURTLES" YieldType="YIELD_SCIENCE" YieldChange="1"/>
+    </Resource_YieldChanges>
+    <Resource_SeaLuxuries>
+        <Update>
+            <Where MapArgument="3"/>
+            <Set>
+                <Large>3</Large>
+                <Huge>3</Huge>
+            </Set>
+        </Update>
+        <Update>
+            <Where MapArgument="4"/>
+            <Set>
+                <Small>3</Small>
+                <Standard>3</Standard>
+                <Large>4</Large>
+                <Huge>4</Huge>
+            </Set>
+        </Update>
+    </Resource_SeaLuxuries>
+</GameInfo>

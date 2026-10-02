@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameData>
+    <!-- DiplomacySelections ******************************************************* -->
+    <DiplomacySelections>
+    <Row>
+      <Type>GREETING</Type>
+      <Leader>ANY</Leader>
+      <Mood>ANY</Mood>
+      <Sort>30</Sort>
+      <Key>CHOICE_DECLARE_GOLDEN_AGE_WAR</Key>
+      <Text>LOC_DIPLO_CHOICE_DECLARE_GOLDEN_AGE_WAR</Text>
+      <DiplomaticActionType>DIPLOACTION_DECLARE_GOLDEN_AGE_WAR</DiplomaticActionType>
+    </Row>
+    <Row>
+      <Type>GREETING</Type>
+      <Leader>ANY</Leader>
+      <Mood>ANY</Mood>
+      <Sort>30</Sort>
+      <Key>CHOICE_DECLARE_WAR_OF_RETRIBUTION</Key>
+      <Text>LOC_DIPLO_CHOICE_DECLARE_WAR_OF_RETRIBUTION</Text>
+      <DiplomaticActionType>DIPLOACTION_DECLARE_WAR_OF_RETRIBUTION</DiplomaticActionType>
+    </Row>
+    <Row>
+      <Type>GREETING</Type>
+      <Leader>ANY</Leader>
+      <Mood>ANY</Mood>
+      <Sort>30</Sort>
+      <Key>CHOICE_DECLARE_IDEOLOGICAL_WAR</Key>
+      <Text>LOC_DIPLO_CHOICE_DECLARE_IDEOLOGICAL_WAR</Text>
+      <DiplomaticActionType>DIPLOACTION_DECLARE_IDEOLOGICAL_WAR</DiplomaticActionType>
+    </Row>
+  </DiplomacySelections>
+</GameData>

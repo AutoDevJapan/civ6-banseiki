@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <Row Type="VICTORY_DIPLOMATIC" Kind="KIND_VICTORY"/>
+    </Types>
+    <Victories>
+        <Row VictoryType="VICTORY_DIPLOMATIC" Name="LOC_VICTORY_DIPLOMATIC_NAME" Description="LOC_VICTORY_DIPLOMATIC_DESCRIPTION" Blurb="LOC_VICTORY_DIPLOMATIC_BLURB" RequirementSetId="REQUIREMENTS_DIPLOMATIC_VICTORY" Icon="ICON_VICTORY_DIPLOMATIC" />
+        <Update>
+            <Where VictoryType="VICTORY_TECHNOLOGY"/>
+            <Set>
+                <RequirementSetId>REQUIREMENTS_EXOPLANET_TECHNOLOGY_VICTORY</RequirementSetId>
+            </Set>
+        </Update>
+    </Victories>
+    <AiLists>
+        <Delete ListType="ScienceVictoryProjects"/>
+        <Row ListType="ScienceVictoryProjects" System="Projects"/>
+    </AiLists>
+    <AiFavoredItems>
+        <Delete ListType="ScienceVictoryProjects"/>
+        <Row ListType="ScienceVictoryProjects" Item="PROJECT_LAUNCH_EARTH_SATELLITE" Favored="true"/>
+        <Row ListType="ScienceVictoryProjects" Item="PROJECT_LAUNCH_MOON_LANDING" Favored="true"/>
+        <Row ListType="ScienceVictoryProjects" Item="PROJECT_LAUNCH_MARS_BASE" Favored="true"/>
+        <Row ListType="ScienceVictoryProjects" Item="PROJECT_LAUNCH_EXOPLANET_EXPEDITION" Favored="true"/>
+    </AiFavoredItems>
+
+    <!-- Diplomatic Victory Requirements -->
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_DIPLOMATIC_VICTORY</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_DIPLOMATIC_VICTORY</RequirementSetId>
+            <RequirementId>DIPLOMATIC_VICTORY_REQUIREMENT</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>DIPLOMATIC_VICTORY_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_TEAM_DIPLOMATIC_VICTORY</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementStrings>
+        <Row>
+            <RequirementId>DIPLOMATIC_VICTORY_REQUIREMENT</RequirementId>
+            <Context>VictoryProgress</Context>
+            <Text>LOC_VICTORY_DIPLOMATIC_REQUIREMENT</Text>
+        </Row>
+    </RequirementStrings>
+
+    <!-- Technology Victory Requirements -->
+    <RequirementSets>
+        <Delete RequirementSetId="REQUIREMENTS_TECHNOLOGY_VICTORY"/>
+        <Delete RequirementSetId="TECH_VICTORY_PER_TEAM_REQUIREMENTS"/>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_EXOPLANET_TECHNOLOGY_VICTORY</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_EXOPLANET_TECHNOLOGY_VICTORY</RequirementSetId>
+            <RequirementId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS_MET</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>TECHNOLOGY_VICTORY_POINTS_MET</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>TECHNOLOGY_VICTORY_EARTH_SATELLITE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>TECHNOLOGY_VICTORY_MOON_LANDING</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>TECHNOLOGY_VICTORY_MARS_BASE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</RequirementSetId>
+            <RequirementId>TECHNOLOGY_VICTORY_EXOPLANET_EXPEDITION</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Delete RequirementId="TECH_VICTORY_PER_TEAM_REQUIREMENTS_MET"/>
+        <Delete RequirementId="TECHNOLOGY_VICTORY_MARS_REACTOR_MODULE"/>
+        <Delete RequirementId="TECHNOLOGY_VICTORY_MARS_HABITATION_MODULE"/>
+        <Delete RequirementId="TECHNOLOGY_VICTORY_MARS_HYDROPONICS_MODULE"/>
+        <Row>
+            <RequirementId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS_MET</RequirementId>
+            <RequirementType>REQUIREMENT_COLLECTION_ANY_MET</RequirementType>
+        </Row>
+
+        <Row>
+            <RequirementId>TECHNOLOGY_VICTORY_POINTS_MET</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_SCIENCE_VICTORY_POINTS</RequirementType>
+            <ProgressWeight>4</ProgressWeight>
+            <Persistent>true</Persistent>
+        </Row>
+        <Row>
+            <RequirementId>TECHNOLOGY_VICTORY_MARS_BASE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_COMPLETED_PROJECT</RequirementType>
+            <Persistent>true</Persistent>
+        </Row>
+        <Row>
+            <RequirementId>TECHNOLOGY_VICTORY_EXOPLANET_EXPEDITION</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_COMPLETED_PROJECT</RequirementType>
+            <Persistent>true</Persistent>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS_MET</RequirementId>
+            <Name>CollectionType</Name>
+            <Value>COLLECTION_TEAM_PLAYERS</Value>
+        </Row>
+        <Row>
+            <RequirementId>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS_MET</RequirementId>
+            <Name>RequirementSetId</Name>
+            <Value>EXOPLANET_TECHNOLOGY_VICTORY_PER_TEAM_REQUIREMENTS</Value>
+        </Row>
+        <Row>
+            <RequirementId>TECHNOLOGY_VICTORY_MARS_BASE</RequirementId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_LAUNCH_MARS_BASE</Value>
+        </Row>
+        <Row>
+            <RequirementId>TECHNOLOGY_VICTORY_EXOPLANET_EXPEDITION</RequirementId>
+            <Name>ProjectType</Name>
+            <Value>PROJECT_LAUNCH_EXOPLANET_EXPEDITION</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>

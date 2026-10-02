@@ -1,0 +1,32 @@
+{
+  "baseline_ids": 166,
+  "source_files": 15,
+  "coverage_note": "Baseline inventory includes RequirementModel.test_set helper; an explicit Rust ALL/ANY test preserves that ID in addition to all 165 original unittest methods.",
+  "document_change": {
+    "path": "documents/poc/sengoku-tree-unlocks.md",
+    "difference": "Only audit command changes to cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit; main regenerates documentation."
+  },
+  "asset_interface": "Public asset_dependencies::{SEATS,art,city_names,feuds} ports consume JSON and extracted source constants; main assets worker can reuse these actual Rust helper APIs. unification::test_map_assets_from_schema(&rusqlite::Connection) copies only map schema and regenerates every row.",
+  "fixtures": "fixtures/game contains exact official source XML/SQL for deterministic Base+GatheringStorm validation on Ubuntu/Windows, with file hashes in fixtures/game-sources.json. No game process is started.",
+  "live_gate": "Not run in this bounded task. Original Python remains until main completes cross-model review and live gate.",
+  "cross_model_review": {
+    "model": "gpt-6-luna",
+    "targets": [
+      "reigns/trees/cascade",
+      "events/oaths",
+      "unification/assassin",
+      "resources/art/names/relations tests"
+    ],
+    "must_remaining": 0,
+    "resolutions": [
+      "Required relationship from/to key checks restored.",
+      "Source helper ports exposed as asset_dependencies APIs for assets integration; tests call these APIs.",
+      "Unused mlua serialize removed. error-send is required by anyhow conversions demonstrated by compiler errors; it selects no extra Lua VM.",
+      "Oath catalogue regression expectations now use independent icon/yield/modifier type mappings."
+    ],
+    "out_of_scope": [
+      "RandomAgendasInEra design-document wording differs internally; generator retains old behavior and assets unchanged.",
+      "Ubuntu CI and live game gate are main integration checks; this task runs Windows workspace tests."
+    ]
+  }
+}

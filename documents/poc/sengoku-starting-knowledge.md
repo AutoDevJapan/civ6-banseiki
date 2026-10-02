@@ -24,7 +24,7 @@
 
 ## メインセッションの実機確認
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-starting-knowledge.json --check` は JSON の検証のみ。メインセッションで同じファイルを `--check` なしで実行する。
+`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-starting-knowledge.json --check` は JSON の検証のみ。メインセッションで同じファイルを `--check` なしで実行する。
 
 シナリオは 15 km 日本マップ、22勢力、武田家を人間プレイヤーとして万世紀ルールセットで開始する。HostGame の設定を再構築した後、**ターン1**に全22勢力の32技術・30制度の保有を走査し、上記4技術・3制度だけが取得済みであることを厳密に照合する。全ブースト行の誤発火と、研究・制度取得に由来する歴史的瞬間がないことも検査する。技術・制度ツリー画面を開いて、各画面の表示状態がそれぞれ4/32、3/30だけ研究済みであることを確かめ、スクリーンショットを残す。その後セーブ・ロードし、開始ターンと保存プロパティ、全22勢力の保有集合、ブースト、歴史的瞬間を再検査する。ゲーム起動と実行結果は本ワークツリーでは未確認。
 

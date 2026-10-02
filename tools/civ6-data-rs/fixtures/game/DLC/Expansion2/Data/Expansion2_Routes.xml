@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <Row Type="ROUTE_RAILROAD" Kind="KIND_ROUTE"/>
+    </Types>
+    <Routes>
+    <!-- Note: For AI purposes, we must assume that anything with this placement value or higher needs to be built with a unit. -->
+        <Row RouteType="ROUTE_RAILROAD" Name="LOC_ROUTE_RAILROAD_NAME" Description="LOC_ROUTE_RAILROAD_DESCRIPTION" MovementCost="0.25" SupportsBridges="true" PlacementValue="5" PlacementRequiresRoutePresent="false" PlacementRequiresOwnedTile="false"/>
+    </Routes>
+  <Routes_XP2>
+    <Row RouteType="ROUTE_ANCIENT_ROAD" BuildWithUnitChargeCost="1"/>
+    <Row RouteType="ROUTE_MEDIEVAL_ROAD" BuildWithUnitChargeCost="1"/>
+    <Row RouteType="ROUTE_INDUSTRIAL_ROAD" BuildWithUnitChargeCost="1"/>
+    <Row RouteType="ROUTE_MODERN_ROAD" BuildWithUnitChargeCost="1"/>
+    <Row RouteType="ROUTE_RAILROAD" BuildWithUnitChargeCost="0" BuildOnlyWithUnit="true" PrereqTech="TECH_STEAM_POWER"/>
+  </Routes_XP2>
+  <Route_ResourceCosts>
+    <Row RouteType="ROUTE_RAILROAD" ResourceType="RESOURCE_IRON" BuildWithUnitCost="1"/>
+    <Row RouteType="ROUTE_RAILROAD" ResourceType="RESOURCE_COAL" BuildWithUnitCost="1"/>
+  </Route_ResourceCosts>
+    <Route_ValidBuildUnits>
+        <Row RouteType="ROUTE_RAILROAD" UnitType="UNIT_MILITARY_ENGINEER"/>
+    </Route_ValidBuildUnits>
+</GameInfo>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <Types>
+        <Row Type="GOLDEN_AGE_WAR" Kind="KIND_WAR"/>
+        <Row Type="EMERGENCY_WAR" Kind="KIND_WAR"/>
+        <Row Type="WAR_OF_RETRIBUTION" Kind="KIND_WAR"/>
+        <Row Type="IDEOLOGICAL_WAR" Kind="KIND_WAR"/>
+    </Types>
+    <Wars>
+        <Row WarType="GOLDEN_AGE_WAR"  Name="LOC_GOLDEN_AGE_NAME"/>
+        <Row WarType="EMERGENCY_WAR"  Name="LOC_EMERGENCY_WAR_NAME"/>
+        <Row WarType="WAR_OF_RETRIBUTION"  Name="LOC_WAR_OF_RETRIBUTION_NAME"/>
+        <Row WarType="IDEOLOGICAL_WAR"  Name="LOC_IDEOLOGICAL_WAR_NAME"/>
+    </Wars>
+</GameInfo>

@@ -1,0 +1,1021 @@
+[JAC_ARB] loaded shogunate_end_turn=120
+[JAC_ARB] request player=0 pair=0-1 turn=2 power=1
+[JAC_ARB] cost player=0 pair=0-1 turn=2 gold=100 legitimacy=5 gold_before=500.00 gold_after=400.00 legitimacy_before=40 legitimacy_after=35 by=ai_party
+[JAC_ARB] ai request player=0 pair=0-1 turn=2 by=ai_party score=6 duration=5 weariness=0 weariness_cities=0 army_loss=3 city_loss=0 low_legitimacy=2
+[JAC_ARB] decision player=1 accept=true by=ai
+[JAC_ARB] accepted pair=0-1 turn=3 truce_turns=10 power=1 peace=true
+[JAC_ARB] request player=2 pair=1-3 turn=14 power=3
+[JAC_ARB] cost player=2 pair=1-3 turn=14 gold=34 legitimacy=2 gold_before=500.00 gold_after=466.00 legitimacy_before=77 legitimacy_after=75 by=ai_shogun
+[JAC_ARB] ai request player=2 pair=1-3 turn=14 by=ai_shogun score=3 duration=12 ally=false capital=false long_war=true
+[JAC_ARB] decision player=1 accept=false by=ai
+[JAC_ARB] decision player=3 accept=false by=ai
+[JAC_ARB] refused player=1 pair=1-3 turn=15 legitimacy=0 outlaw_until=45 power=3
+[JAC_ARB] refusal cost player=1 pair=1-3 turn=15 intended=45 applied=30 legitimacy_before=30 legitimacy_after=0
+[JAC_ARB] refused player=3 pair=1-3 turn=15 legitimacy=15 outlaw_until=45 power=3
+[JAC_ARB] refusal cost player=3 pair=1-3 turn=15 intended=45 applied=45 legitimacy_before=60 legitimacy_after=15
+[JAC_ARB] ai blocked turn=16 gold=1 legitimacy=2 interval=3
+[JAC_ARB] ai weariness roster turn=1 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=1 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=1 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=1 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=1 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=2 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=2 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=2 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=2 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=2 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=3 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=3 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=3 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=3 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=3 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=4 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=4 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=4 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=4 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=4 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=5 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=5 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=5 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=5 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=5 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=6 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=6 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=6 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=6 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=6 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=7 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=7 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=7 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=7 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=7 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=8 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=8 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=8 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=8 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=8 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=9 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=9 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=9 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=9 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=9 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=10 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=10 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=10 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=10 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=10 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=11 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=11 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=11 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=11 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=11 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=12 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=12 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=12 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=12 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=12 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=13 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=13 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=13 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=13 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=13 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=14 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=14 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=14 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=14 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=14 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=15 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=15 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=15 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=15 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=15 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=16 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=16 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=16 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=16 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=16 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=17 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=17 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=17 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=17 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=17 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=18 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=18 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=18 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=18 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=18 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=19 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=19 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=19 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=19 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=19 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=20 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=20 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=20 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=20 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=20 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=21 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=21 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=21 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=21 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=21 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=22 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=22 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=22 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=22 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=22 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=23 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=23 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=23 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=23 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=23 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=24 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=24 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=24 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=24 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=24 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=25 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=25 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=25 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=25 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=25 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=26 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=26 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=26 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=26 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=26 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=27 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=27 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=27 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=27 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=27 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=28 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=28 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=28 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=28 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=28 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=29 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=29 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=29 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=29 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=29 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=30 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=30 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=30 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=30 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=30 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=31 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=31 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=31 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=31 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=31 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=32 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=32 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=32 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=32 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=32 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=33 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=33 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=33 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=33 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=33 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=34 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=34 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=34 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=34 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=34 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=35 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=35 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=35 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=35 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=35 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=36 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=36 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=36 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=36 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=36 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=37 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=37 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=37 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=37 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=37 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=38 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=38 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=38 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=38 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=38 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=39 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=39 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=39 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=39 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=39 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=40 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=40 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=40 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=40 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=40 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=41 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=41 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=41 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=41 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=41 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=42 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=42 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=42 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=42 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=42 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=43 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=43 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=43 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=43 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=43 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=44 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=44 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=44 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=44 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=44 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=45 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=45 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=45 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=45 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=45 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=46 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=46 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=46 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=46 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=46 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=47 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=47 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=47 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=47 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=47 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=48 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=48 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=48 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=48 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=48 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=49 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=49 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=49 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=49 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=49 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=50 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=50 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=50 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=50 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=50 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=51 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=51 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=51 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=51 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=51 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=52 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=52 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=52 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=52 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=52 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=53 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=53 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=53 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=53 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=53 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=54 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=54 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=54 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=54 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=54 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=55 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=55 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=55 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=55 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=55 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=56 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=56 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=56 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=56 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=56 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=57 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=57 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=57 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=57 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=57 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=58 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=58 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=58 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=58 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=58 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=59 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=59 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=59 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=59 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=59 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=60 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=60 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=60 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=60 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=60 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=61 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=61 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=61 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=61 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=61 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=62 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=62 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=62 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=62 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=62 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=63 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=63 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=63 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=63 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=63 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=64 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=64 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=64 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=64 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=64 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=65 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=65 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=65 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=65 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=65 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=66 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=66 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=66 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=66 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=66 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=67 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=67 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=67 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=67 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=67 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=68 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=68 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=68 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=68 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=68 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=69 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=69 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=69 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=69 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=69 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=70 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=70 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=70 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=70 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=70 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=71 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=71 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=71 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=71 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=71 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=72 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=72 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=72 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=72 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=72 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=73 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=73 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=73 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=73 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=73 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=74 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=74 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=74 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=74 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=74 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=75 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=75 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=75 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=75 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=75 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=76 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=76 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=76 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=76 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=76 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=77 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=77 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=77 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=77 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=77 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=78 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=78 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=78 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=78 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=78 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=79 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=79 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=79 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=79 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=79 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=80 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=80 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=80 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=80 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=80 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=81 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=81 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=81 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=81 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=81 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=82 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=82 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=82 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=82 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=82 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=83 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=83 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=83 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=83 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=83 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=84 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=84 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=84 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=84 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=84 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=85 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=85 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=85 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=85 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=85 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=86 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=86 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=86 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=86 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=86 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=87 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=87 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=87 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=87 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=87 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=88 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=88 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=88 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=88 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=88 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=89 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=89 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=89 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=89 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=89 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=90 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=90 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=90 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=90 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=90 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=91 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=91 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=91 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=91 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=91 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=92 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=92 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=92 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=92 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=92 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=93 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=93 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=93 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=93 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=93 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=94 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=94 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=94 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=94 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=94 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=95 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=95 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=95 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=95 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=95 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=96 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=96 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=96 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=96 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=96 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=97 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=97 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=97 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=97 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=97 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=98 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=98 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=98 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=98 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=98 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=99 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=99 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=99 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=99 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=99 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=100 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=100 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=100 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=100 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=100 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=101 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=101 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=101 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=101 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=101 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=102 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=102 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=102 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=102 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=102 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=103 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=103 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=103 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=103 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=103 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=104 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=104 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=104 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=104 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=104 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=105 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=105 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=105 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=105 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=105 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=106 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=106 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=106 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=106 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=106 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=107 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=107 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=107 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=107 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=107 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=108 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=108 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=108 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=108 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=108 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=109 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=109 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=109 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=109 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=109 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=110 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=110 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=110 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=110 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=110 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=111 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=111 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=111 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=111 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=111 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=112 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=112 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=112 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=112 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=112 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=113 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=113 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=113 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=113 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=113 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=114 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=114 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=114 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=114 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=114 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=115 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=115 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=115 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=115 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=115 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=116 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=116 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=116 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=116 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=116 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=117 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=117 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=117 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=117 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=117 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=118 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=118 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=118 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=118 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=118 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=119 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=119 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=119 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=119 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=119 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=120 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=120 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=120 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=120 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=120 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=121 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=121 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=121 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=121 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=121 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=122 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=122 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=122 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=122 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=122 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=123 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=123 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=123 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=123 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=123 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=124 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=124 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=124 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=124 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=124 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=125 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=125 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=125 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=125 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=125 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=126 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=126 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=126 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=126 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=126 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=127 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=127 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=127 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=127 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=127 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=128 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=128 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=128 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=128 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=128 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=129 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=129 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=129 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=129 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=129 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=130 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=130 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=130 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=130 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=130 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=131 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=131 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=131 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=131 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=131 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=132 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=132 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=132 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=132 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=132 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=133 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=133 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=133 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=133 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=133 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=134 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=134 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=134 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=134 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=134 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=135 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=135 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=135 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=135 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=135 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=136 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=136 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=136 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=136 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=136 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=137 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=137 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=137 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=137 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=137 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=138 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=138 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=138 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=138 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=138 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=139 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=139 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=139 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=139 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=139 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=140 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=140 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=140 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=140 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=140 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=141 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=141 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=141 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=141 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=141 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=142 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=142 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=142 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=142 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=142 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=143 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=143 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=143 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=143 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=143 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=144 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=144 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=144 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=144 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=144 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=145 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=145 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=145 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=145 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=145 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=146 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=146 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=146 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=146 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=146 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=147 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=147 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=147 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=147 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=147 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=148 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=148 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=148 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=148 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=148 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=149 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=149 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=149 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=149 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=149 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=150 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=150 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=150 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=150 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=150 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=151 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=151 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=151 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=151 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=151 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=152 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=152 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=152 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=152 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=152 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=153 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=153 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=153 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=153 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=153 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=154 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=154 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=154 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=154 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=154 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=155 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=155 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=155 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=155 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=155 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=156 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=156 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=156 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=156 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=156 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=157 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=157 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=157 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=157 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=157 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=158 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=158 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=158 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=158 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=158 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=159 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=159 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=159 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=159 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=159 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=160 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=160 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=160 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=160 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=160 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=161 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=161 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=161 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=161 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=161 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=162 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=162 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=162 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=162 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=162 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=163 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=163 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=163 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=163 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=163 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=164 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=164 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=164 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=164 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=164 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=165 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=165 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=165 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=165 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=165 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=166 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=166 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=166 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=166 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=166 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=167 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=167 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=167 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=167 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=167 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=168 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=168 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=168 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=168 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=168 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=169 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=169 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=169 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=169 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=169 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=170 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=170 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=170 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=170 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=170 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=171 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=171 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=171 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=171 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=171 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=172 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=172 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=172 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=172 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=172 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=173 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=173 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=173 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=173 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=173 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=174 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=174 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=174 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=174 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=174 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=175 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=175 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=175 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=175 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=175 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=176 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=176 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=176 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=176 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=176 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=177 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=177 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=177 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=177 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=177 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=178 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=178 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=178 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=178 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=178 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=179 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=179 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=179 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=179 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=179 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=180 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=180 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=180 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=180 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=180 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=181 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=181 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=181 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=181 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=181 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=182 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=182 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=182 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=182 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=182 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=183 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=183 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=183 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=183 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=183 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=184 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=184 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=184 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=184 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=184 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=185 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=185 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=185 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=185 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=185 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=186 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=186 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=186 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=186 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=186 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=187 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=187 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=187 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=187 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=187 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=188 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=188 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=188 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=188 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=188 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=189 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=189 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=189 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=189 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=189 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=190 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=190 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=190 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=190 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=190 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=191 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=191 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=191 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=191 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=191 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=192 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=192 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=192 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=192 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=192 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=193 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=193 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=193 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=193 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=193 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=194 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=194 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=194 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=194 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=194 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=195 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=195 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=195 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=195 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=195 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=196 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=196 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=196 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=196 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=196 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=197 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=197 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=197 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=197 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=197 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=198 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=198 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=198 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=198 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=198 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=199 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=199 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=199 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=199 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=199 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=200 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=200 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=200 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=200 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=200 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness roster turn=201 cities=0:2,1:2,2:2,3:2
+[JAC_ARB] ai weariness player=0 turn=201 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=1 turn=201 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=2 turn=201 total=0 observed=2 cities=2
+[JAC_ARB] ai weariness player=3 turn=201 total=0 observed=2 cities=2

@@ -1,0 +1,1039 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <Kinds>
+    <Row Kind="KIND_DIPLOMACY_EMERGENCY"/>
+  </Kinds>
+  <Types>
+    <Row Type="EMERGENCY_MILITARY" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_SETTLED_CITY" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_CAPTURE_CITY_STATE" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_RELIGIOUS" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_SPYING" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_NUCLEAR" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+    <Row Type="EMERGENCY_BACKSTAB" Kind="KIND_DIPLOMACY_EMERGENCY"/>
+  </Types>
+  <EmergencyAlliances>
+      <Row EmergencyType="EMERGENCY_MILITARY" Duration="30" LockoutTime="1" OpenBorders="True" ShareVis="True"
+            TargetRequirementSet="MILITARY_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="MILITARY_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_TAKE_CITY" GoalTrigger="EMERGENCY_TRIGGER_TAKE_CITY"
+         Name="LOC_EMERGENCY_NAME_MILITARY" EmergencyText="Military" GoalText="ConquerCities"/>
+    <Row EmergencyType="EMERGENCY_SETTLED_CITY" Duration="5" LockoutTime="5" OpenBorders="True" ShareVis="True"
+        TargetRequirementSet="SETTLEMENT_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="SETTLEMENT_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_NONE" GoalTrigger="EMERGENCY_TRIGGER_NOTHING"
+         Name="LOC_EMERGENCY_NAME_CITY_STATE" EmergencyText="Military" GoalText="ConquerCities"/>
+    <Row EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" Duration="30" LockoutTime="1" OpenBorders="True" ShareVis="True"
+        TargetRequirementSet="CITY_STATE_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_CAPTURE_CITY_STATE" GoalTrigger="EMERGENCY_TRIGGER_LIBERATE_CITY_STATE"
+         Name="LOC_EMERGENCY_NAME_CITY_STATE" EmergencyText="CityState" GoalText="LiberateCity"/>
+    <Row EmergencyType="EMERGENCY_RELIGIOUS" Duration="30" LockoutTime="10" OpenBorders="False" ShareVis="False"
+         RemovesWarState="False" WarOnTarget="False"
+        TargetRequirementSet="RELIGIOUS_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_CONVERT_CITY" GoalTrigger="EMERGENCY_TRIGGER_CITY_RELIGIOUS_TURN"
+         Name="LOC_EMERGENCY_NAME_RELIGIOUS" EmergencyText="Religious" GoalText="ConvertCity"/>
+    <Row EmergencyType="EMERGENCY_NUCLEAR" Duration="60" LockoutTime="1" OpenBorders="True" ShareVis="True"
+        TargetRequirementSet="NUCLEAR_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="NUCLEAR_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_NUKE_USED" GoalTrigger="EMERGENCY_TRIGGER_TAKE_CITY"
+         Name="LOC_EMERGENCY_NAME_NUCLEAR" EmergencyText="Nuclear" GoalText="ConquerCities"/>
+    <Row EmergencyType="EMERGENCY_BACKSTAB" Duration="60" LockoutTime="1" OpenBorders="True" ShareVis="True"
+        TargetRequirementSet="BACKSTAB_EMERGENCY_TARGET_REQUIREMENTS" MemberRequirementSet="BACKSTAB_EMERGENCY_MEMBER_REQUIREMENTS"
+         Trigger="EMERGENCY_TRIGGER_WAR_DECLARED" GoalTrigger="EMERGENCY_TRIGGER_TAKE_CITY"
+         Name="LOC_EMERGENCY_NAME_BACKSTAB" EmergencyText="Backstab" GoalText="ConquerCities"/>
+  </EmergencyAlliances>
+  <EmergencyBuffs>
+      <Row ModifierID="MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" EmergencyType="EMERGENCY_MILITARY" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_MILITARY_COMBAT_STRENGTH" />
+    <Row ModifierID="MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" EmergencyType="EMERGENCY_MILITARY"/>
+      <Row ModifierID="MILITARY_EMERGENCY_MEMBER_MOVEMENT_BUFF" EmergencyType="EMERGENCY_MILITARY" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_MILITARY_MOVEMENT"/>
+    <Row ModifierID="SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_BUFF" EmergencyType="EMERGENCY_SETTLED_CITY" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_SETTLEMENT_MOVEMENT"/>
+    <Row ModifierID="SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_BUFF" EmergencyType="EMERGENCY_SETTLED_CITY" Description="LOC_EMERGENCY_TARGET_BUFF_DESCRIPTION_SETTLEMENT_MOVEMENT"/>
+    <Row ModifierID="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" EmergencyType="EMERGENCY_NUCLEAR" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_NUCLEAR_COMBAT_STRENGTH" />
+    <Row ModifierID="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" EmergencyType="EMERGENCY_NUCLEAR"/>
+    <Row ModifierID="NUCLEAR_EMERGENCY_MEMBER_MOVEMENT_BUFF" EmergencyType="EMERGENCY_NUCLEAR" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_NUCLEAR_MOVEMENT" />
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_BACKSTAB_COMBAT_STRENGTH" />
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" EmergencyType="EMERGENCY_BACKSTAB"/>
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_MOVEMENT_BUFF" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_BACKSTAB_MOVEMENT" />
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_MEMBER_BUFF_DESCRIPTION_BACKSTAB_TRADING" />
+
+    <Row ModifierID="EMERGENCY_PREVENT_FREE_CITY_BUFF" EmergencyType="EMERGENCY_MILITARY" Description="LOC_EMERGENCY_TARGET_BUFF_DESCRIPTION_IDENTITY_IN_CITY"/>
+    <Row ModifierID="EMERGENCY_PREVENT_FREE_CITY_BUFF" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" Description="LOC_EMERGENCY_TARGET_BUFF_DESCRIPTION_IDENTITY_IN_CITY"/>
+    <Row ModifierID="EMERGENCY_PREVENT_FREE_CITY_BUFF" EmergencyType="EMERGENCY_NUCLEAR" Description="LOC_EMERGENCY_TARGET_BUFF_DESCRIPTION_IDENTITY_IN_CITY"/>
+    <Row ModifierID="EMERGENCY_PREVENT_FREE_CITY_BUFF" EmergencyType="EMERGENCY_BACKSTAB" Description="LOC_EMERGENCY_TARGET_BUFF_DESCRIPTION_IDENTITY_IN_CITY"/>
+  </EmergencyBuffs>
+  <EmergencyRewards>
+      <Row ModifierID="MILITARY_EMERGENCY_MEMBER_HEALING_REWARD" EmergencyType="EMERGENCY_MILITARY"  OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_MILITARY_INCREASED_HEALING"/>
+      <Row ModifierID="MILITARY_EMERGENCY_TARGET_CITY_STRIKE_REWARD" EmergencyType="EMERGENCY_MILITARY"  OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_MILITARY_CITY_STRIKE"/>
+    <Row ModifierID="SETTLEMENT_EMERGENCY_MEMBER_GPT_REWARD" EmergencyType="EMERGENCY_SETTLED_CITY" OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_SETTLEMENT_GOLD_PER_TURN"/>
+    <Row ModifierID="SETTLEMENT_EMERGENCY_TARGET_GPT_REWARD" EmergencyType="EMERGENCY_SETTLED_CITY" OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_SETTLEMENT_GOLD_PER_TURN"/>
+    <Row ModifierID="CITY_STATE_EMERGENCY_MEMBER_ENVOY_GOLD_REWARD" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_CITY_STATE_GOLD_PER_ENVOY"/>
+    <Row ModifierID="CITY_STATE_EMERGENCY_TARGET_ENVOY_GOLD_REWARD" EmergencyType="EMERGENCY_CAPTURE_CITY_STATE" OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_CITY_STATE_GOLD_FOR_TRADE_ROUTES"/>
+    <Row ModifierID="RELIGIOUS_EMERGENCY_MEMBER_RELIC_REWARD" EmergencyType="EMERGENCY_RELIGIOUS" OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_RELIGIOUS_RELICS"/>
+    <Row ModifierID="RELIGIOUS_EMERGENCY_TARGET_PRESSURE_REWARD" EmergencyType="EMERGENCY_RELIGIOUS" OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_RELIGIOUS_PRESSURE"/>
+    <Row ModifierID="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD" EmergencyType="EMERGENCY_NUCLEAR" OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_NUCLEAR_COMBAT_STRENGTH"/>
+    <Row ModifierID="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD" EmergencyType="EMERGENCY_NUCLEAR" OnSuccess="True"/>
+    <Row ModifierID="NUCLEAR_EMERGENCY_TARGET_CULTURAL_IDENTITY_REWARD" EmergencyType="EMERGENCY_NUCLEAR" OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_NUCLEAR_CULTURE_SCARE"/>
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD" EmergencyType="EMERGENCY_BACKSTAB" OnSuccess="True" Description="LOC_EMERGENCY_MEMBER_REWARD_DESCRIPTION_MILITARY_COMBAT_STRENGTH"/>
+    <Row ModifierID="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD" EmergencyType="EMERGENCY_BACKSTAB" OnSuccess="True"/>
+    <Row ModifierID="BACKSTAB_EMERGENCY_TARGET_WAR_WEARINESS_REWARD" EmergencyType="EMERGENCY_BACKSTAB" OnSuccess="False" Description="LOC_EMERGENCY_TARGET_REWARD_DESCRIPTION_MILITARY_WAR_WEARINESS"/>
+  </EmergencyRewards>
+  <EmergencyTexts>
+    <Row Type="Military" Flavor="LOC_EMERGENCY_FLAVOR_MILITARY" Description="LOC_EMERGENCY_DESCRIPTION_MILITARY" ExtraEffects="LOC_EMERGENCY_EXTRA_EFFECTS_MILITARY" DescriptionShorter="LOC_WORLD_CONGRESS_MILITARY_EMERGENCY_SUMMARY"/>
+    <Row Type="CityState" Flavor="LOC_EMERGENCY_FLAVOR_CITY_STATE" Description="LOC_EMERGENCY_DESCRIPTION_CITY_STATE" ExtraEffects="LOC_EMERGENCY_EXTRA_EFFECTS_CITY_STATE" DescriptionShorter="LOC_WORLD_CONGRESS_CITY_STATE_EMERGENCY_SUMMARY"/>
+    <Row Type="Religious" Flavor="LOC_EMERGENCY_FLAVOR_RELIGIOUS" Description="LOC_EMERGENCY_DESCRIPTION_RELIGIOUS" DescriptionShorter="LOC_WORLD_CONGRESS_RELIGIOUS_EMERGENCY_SUMMARY"/>
+    <Row Type="Nuclear" Flavor="LOC_EMERGENCY_FLAVOR_NUCLEAR" Description="LOC_EMERGENCY_DESCRIPTION_NUCLEAR" ExtraEffects="LOC_EMERGENCY_EXTRA_EFFECTS_NUCLEAR" DescriptionShorter="LOC_WORLD_CONGRESS_NUCLEAR_EMERGENCY_SUMMARY"/>
+    <Row Type="Backstab" Flavor="LOC_EMERGENCY_FLAVOR_BACKSTAB" Description="LOC_EMERGENCY_DESCRIPTION_BACKSTAB" ExtraEffects="LOC_EMERGENCY_EXTRA_EFFECTS_BACKSTAB" DescriptionShorter="LOC_WORLD_CONGRESS_BETRAYAL_EMERGENCY_SUMMARY"/>
+  </EmergencyTexts>
+  <EmergencyGoalTexts>
+    <Row GoalType="ConquerCities" GoalDescription="LOC_EMERGENCY_GOAL_CAPTURE_CITIES" ShortGoalDescription="LOC_EMERGENCY_GOAL_SHORT_CAPTURE_CITIES" TentativeGoalDescription="LOC_EMERGENCY_GOAL_TENTATIVE_CAPTURE_CITIES"
+         ShortTargetGoalDescription="LOC_EMERGENCY_GOAL_SHORT_CAPTURE_CITIES_DEFENSE" ListGoal="LOC_EMERGENCY_GOAL_LIST_CAPTURE_CITIES" TargetListGoal="LOC_EMERGENCY_GOAL_LIST_CAPTURE_CITY_DEFENSE"/>
+    <Row GoalType="ConvertCity" GoalDescription="LOC_EMERGENCY_GOAL_UNCONVERT_CITY" ShortGoalDescription="LOC_EMERGENCY_GOAL_SHORT_UNCONVERT_CITY" TentativeGoalDescription="LOC_EMERGENCY_GOAL_TENTATIVE_UNCONVERT_CITY"
+         ShortTargetGoalDescription="LOC_EMERGENCY_GOAL_SHORT_UNCONVERT_CITY_DEFENSE" ListGoal="LOC_EMERGENCY_GOAL_LIST_UNCONVERT_CITY" TargetListGoal="LOC_EMERGENCY_GOAL_LIST_UNCONVERT_CITY_DEFENSE"/>
+    <Row GoalType="LiberateCity" GoalDescription="LOC_EMERGENCY_GOAL_LIBERATE_CITY" ShortGoalDescription="LOC_EMERGENCY_GOAL_SHORT_LIBERATE_CITY" TentativeGoalDescription="LOC_EMERGENCY_GOAL_TENTATIVE_LIBERATE_CITY"
+         ShortTargetGoalDescription="LOC_EMERGENCY_GOAL_SHORT_LIBERATE_CITY_DEFENSE" ListGoal="LOC_EMERGENCY_GOAL_LIST_LIBERATE_CITY" TargetListGoal="LOC_EMERGENCY_GOAL_LIST_LIBERATE_CITY_DEFENSE"/>
+  </EmergencyGoalTexts>
+
+  <Modifiers>
+    <!-- Military -->
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType>
+      <SubjectRequirementSetId>MILITARY_EMERGENCY_MOVEMENT_BUFF_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_TARGET_CITY_STRIKE_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>MILITARY_EMERGENCY_TARGETS_REWARD_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_HEALING_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_HEALING</ModifierType>
+      <SubjectRequirementSetId>MILITARY_EMERGENCY_MEMBERS_REWARD_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Settlement -->
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType>
+      <SubjectRequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType>
+      <SubjectRequirementSetId>SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_MEMBER_GPT_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_YIELD_PER_TURN</ModifierType>
+      <SubjectRequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_GPT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_TARGET_GPT_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_YIELD_PER_TURN</ModifierType>
+      <SubjectRequirementSetId>SETTLEMENT_EMERGENCY_TARGET_GPT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- City State -->
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_MEMBER_ENVOY_GOLD_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_YIELDS_PER_ENVOY</ModifierType>
+      <SubjectRequirementSetId>CITY_STATE_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_TARGET_ENVOY_GOLD_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_TRADE_ROUTES_ADJUST_YIELDS</ModifierType>
+      <SubjectRequirementSetId>CITY_STATE_EMERGENCY_REWARD_TARGET_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Religious -->
+    <Row>
+      <ModifierId>RELIGIOUS_EMERGENCY_MEMBER_RELIC_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RELIC</ModifierType>
+      <SubjectRequirementSetId>RELIGIOUS_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>RELIGIOUS_EMERGENCY_TARGET_PRESSURE_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_CITIES_EXERT_RELIGIOUS_PRESSURE</ModifierType>
+      <SubjectRequirementSetId>RELIGIOUS_EMERGENCY_REWARD_TARGET_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Spying -->
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_MEMBER_ANTI_SPY_KILL_SPY</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_CITIES_KILL_ALL_EMERGENCY_TARGET_SPIES</ModifierType>
+      <SubjectRequirementSetId>SPYING_EMERGENCY_REWARD_SPY_KILLING_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_MEMBER_GRANT_ABILITY_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_GRANT_ABILITY</ModifierType>
+      <SubjectRequirementSetId>SPYING_EMERGENCY_BUFF_ABILITY_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_MEMBER_ANTI_SPY_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_SPYING_EFFICIENCY</ModifierType>
+      <SubjectRequirementSetId>SPYING_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_TARGET_GRANT_SPY_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_UNIT</ModifierType>
+      <SubjectRequirementSetId>SPYING_EMERGENCY_REWARD_TARGET_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Nuclear -->
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_TARGET_CULTURAL_IDENTITY_REWARD</ModifierId>
+      <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PRESSURE_FROM_EMERGENCIES</ModifierType>
+      <SubjectRequirementSetId>NUCLEAR_EMERGENCY_REWARD_TARGET_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Backstab -->
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_TRADE_ROUTES_ADJUST_YIELDS</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_BUFF_TRADE_YIELDS_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_TARGET_WAR_WEARINESS_REWARD</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_WAR_WEARINESS</ModifierType>
+      <SubjectRequirementSetId>BACKSTAB_EMERGENCY_REWARD_TARGET_REQUIREMENTS</SubjectRequirementSetId>
+    </Row>
+    <!-- Multiple -->
+    <Row>
+      <ModifierId>EMERGENCY_PREVENT_FREE_CITY_BUFF</ModifierId>
+      <ModifierType>MODIFIER_EMERGENCY_TARGET_CITY_GRANT_LOYALTY</ModifierType>
+    </Row>
+  </Modifiers>
+
+  <ModifierArguments>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <Name>Amount</Name>
+      <Value>-2</Value>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <Name>Amount</Name>
+      <Value>-2</Value>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_TARGET_CITY_STRIKE_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>2</Value>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_HEALING_REWARD</ModifierId>
+      <Name>Type</Name>
+      <Value>ALL</Value>
+    </Row>
+    <Row>
+      <ModifierId>MILITARY_EMERGENCY_MEMBER_HEALING_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>5</Value>
+    </Row>
+    <!-- Settlement -->
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_MEMBER_GPT_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_MEMBER_GPT_REWARD</ModifierId>
+      <Name>YieldType</Name>
+      <Value>YIELD_GOLD</Value>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_TARGET_GPT_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>SETTLEMENT_EMERGENCY_TARGET_GPT_REWARD</ModifierId>
+      <Name>YieldType</Name>
+      <Value>YIELD_GOLD</Value>
+    </Row>
+    <!-- City State -->
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_TARGET_ENVOY_GOLD_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>2</Value>
+    </Row>
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_TARGET_ENVOY_GOLD_REWARD</ModifierId>
+      <Name>YieldType</Name>
+      <Value>YIELD_GOLD</Value>
+    </Row>
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_TARGET_ENVOY_GOLD_REWARD</ModifierId>
+      <Name>AffectOrigin</Name>
+      <Value>true</Value>
+    </Row>
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_MEMBER_ENVOY_GOLD_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>CITY_STATE_EMERGENCY_MEMBER_ENVOY_GOLD_REWARD</ModifierId>
+      <Name>YieldType</Name>
+      <Value>YIELD_GOLD</Value>
+    </Row>
+    <!-- Religious -->
+    <Row>
+      <ModifierId>RELIGIOUS_EMERGENCY_MEMBER_RELIC_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>RELIGIOUS_EMERGENCY_TARGET_PRESSURE_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>250</Value>
+    </Row>
+    <Row>
+      <ModifierId>RELIGIOUS_EMERGENCY_TARGET_PRESSURE_REWARD</ModifierId>
+      <Name>Range</Name>
+      <Value>9</Value>
+    </Row>
+    <!-- Spying -->
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_MEMBER_ANTI_SPY_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-10</Value>
+    </Row>
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_MEMBER_ANTI_SPY_REWARD</ModifierId>
+      <Name>OperationType</Name>
+      <Value>UNITOPERATION_SPY_GREAT_WORK_HEIST</Value>
+    </Row>
+    <Row>
+      <ModifierId>SPYING_EMERGENCY_TARGET_GRANT_SPY_REWARD</ModifierId>
+      <Name>UnitPromotionClassType</Name>
+      <Value>PROMOTION_CLASS_SPY</Value>
+    </Row>
+    <!-- Nuclear -->
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <Name>Amount</Name>
+      <Value>-2</Value>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <Name>Amount</Name>
+      <Value>-2</Value>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>NUCLEAR_EMERGENCY_TARGET_CULTURAL_IDENTITY_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-1</Value>
+    </Row>
+    <!-- Backstab -->
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_MOVEMENT_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>1</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>2</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF</ModifierId>
+      <Name>YieldType</Name>
+      <Value>YIELD_PRODUCTION</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF</ModifierId>
+      <Name>AffectDestination</Name>
+      <Value>True</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_TRADING_BUFF</ModifierId>
+      <Name>AffectOrigin</Name>
+      <Value>True</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>-3</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_TARGET_WAR_WEARINESS_REWARD</ModifierId>
+      <Name>Overall</Name>
+      <Value>True</Value>
+    </Row>
+    <Row>
+      <ModifierId>BACKSTAB_EMERGENCY_TARGET_WAR_WEARINESS_REWARD</ModifierId>
+      <Name>Amount</Name>
+      <Value>50</Value>
+    </Row>
+
+    <Row>
+      <ModifierId>EMERGENCY_PREVENT_FREE_CITY_BUFF</ModifierId>
+      <Name>Amount</Name>
+      <Value>20</Value>
+    </Row>
+  </ModifierArguments>
+
+  <ModifierStrings>
+    <Row ModifierId="MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="MILITARY_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="MILITARY_EMERGENCY_TARGET_CITY_STRIKE_REWARD" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="NUCLEAR_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_ATTACK_REWARD" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+    <Row ModifierId="BACKSTAB_EMERGENCY_MEMBER_COMBAT_STRENGTH_DEFEND_REWARD" Context="Preview" Text="LOC_COMBAT_PREVIEW_EMERGENCY_MILITARY_BUFF"/>
+  </ModifierStrings>
+
+  <!--REQUIREMENTS-->
+  <RequirementSets>
+    <!-- Military -->
+    <Row RequirementSetId="MILITARY_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_MOVEMENT_BUFF_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_MEMBERS_REWARD_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="MILITARY_EMERGENCY_TARGETS_REWARD_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- Settling -->
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_MEMBER_GPT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_TARGET_GPT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- City State -->
+    <Row RequirementSetId="CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="CITY_STATE_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="CITY_STATE_EMERGENCY_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="CITY_STATE_EMERGENCY_REWARD_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- Religious -->
+    <Row RequirementSetId="RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="RELIGIOUS_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="RELIGIOUS_EMERGENCY_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="RELIGIOUS_EMERGENCY_REWARD_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- Spying -->
+    <Row RequirementSetId="SPYING_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SPYING_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SPYING_EMERGENCY_BUFF_ABILITY_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SPYING_EMERGENCY_REWARD_SPY_KILLING_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SPYING_EMERGENCY_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="SPYING_EMERGENCY_REWARD_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- Nuclear -->
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="NUCLEAR_EMERGENCY_REWARD_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <!-- Backstab -->
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_BUFF_KILL_ROUTES_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_BUFF_TRADE_YIELDS_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+    <Row RequirementSetId="BACKSTAB_EMERGENCY_REWARD_TARGET_REQUIREMENTS" RequirementSetType="REQUIREMENTSET_TEST_ALL"/>
+  </RequirementSets>
+  <RequirementSetRequirements>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_EMERGENCY_TARGET_IS_WINNING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_EMERGENCY_TARGET_IS_ON_CONTINENT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MOVEMENT_BUFF_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MOVEMENT_BUFF_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBERS_REWARD_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_MEMBERS_REWARD_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_TARGETS_REWARD_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_TARGETS_REWARD_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>MILITARY_EMERGENCY_TARGETS_REWARD_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_IS_CITY_STRIKE</RequirementId>
+    </Row>
+    <!-- Settlement Emergency -->
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_GPT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_TARGET_GPT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_MEMBER_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SETTLEMENT_EMERGENCY_TARGET_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <!-- City State -->
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_HAS_ENVOYS_AT_EMERGENCY_CITY_STATE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>CITY_STATE_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_TRADE_ROUTE_TO_CITY_STATE</RequirementId>
+    </Row>
+    <!-- Religious -->
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_HAS_FOUNDED_A_RELIGION</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>RELIGIOUS_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <!-- Spying -->
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_HAS_HIGH_DIPLO_VIS_OF_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_BUFF_ABILITY_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_BUFF_ABILITY_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IS_SPY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_REWARD_SPY_KILLING_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IS_SPY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>SPYING_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <!-- Nuclear -->
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_NOT_ALLY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>NUCLEAR_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <!-- Backstab -->
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_HIGH_ALLIANCE_LEVEL_WITH_EMERGENCY_PLAYER_DATA</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_ATTACKER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_COMBAT_STRENGTH_DEFENDER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_MOVEMENT_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_KILL_ROUTES_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBER_AND_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_BUFF_TRADE_YIELDS_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBERS</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_ATTACKER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_DEFENDER_REWARD_MEMBER_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+    </Row>
+    <Row>
+      <RequirementSetId>BACKSTAB_EMERGENCY_REWARD_TARGET_REQUIREMENTS</RequirementSetId>
+      <RequirementId>REQUIRES_PLAYER_AT_WAR_WITH_EMERGENCY_MEMBER</RequirementId>
+    </Row>
+  </RequirementSetRequirements>
+  <Requirements>
+    <Row>
+      <RequirementId>REQUIRES_NOTHING</RequirementId>
+      <RequirementType>REQUIREMENT_ALWAYS_MET</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_EMERGENCY_TARGET_IS_WINNING</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_IS_WINNING_ANY_VICTORY</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_TARGET</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_IS_EMERGENCY_TARGET</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_IS_EMERGENCY_TARGET</RequirementType>
+        <Inverse>True</Inverse>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementId>
+      <RequirementType>REQUIREMENT_UNIT_IN_EMERGENCY_TARGET_TERRITORY</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_VERSUS_TYPE_MATCHES</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_COMBAT_IS_CITY_STRIKE</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_VERSUS_TYPE_MATCHES</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_UNIT_IS_SPY</RequirementId>
+      <RequirementType>REQUIREMENT_UNIT_TYPE_MATCHES</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_IS_NOT_EMERGENCY_TARGET_DECLARED_FRIEND</RequirementId>
+      <RequirementType>REQUIREMENT_DECLARED_FRIEND</RequirementType>
+      <Inverse>True</Inverse>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_HAS_FOUNDED_A_RELIGION</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_FOUNDED_NO_RELIGION</RequirementType>
+      <Inverse>True</Inverse>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBERS</RequirementId>
+      <RequirementType>REQUIREMENT_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBERS</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBER_AND_TARGET</RequirementId>
+      <RequirementType>REQUIREMENT_TRADE_ROUTE_BETWEEN_EMERGENCY_MEMBER_AND_TARGET</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_TARGET</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_ATTACKER_IS_PLAYER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_TARGET</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_DEFENDER_IS_PLAYER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_ATTACKER_IS_EMERGENCY_MEMBER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_DEFENDER_IS_EMERGENCY_MEMBER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_ATTACKER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_ATTACKER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_DEFENDER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementId>
+      <RequirementType>REQUIREMENT_COMBAT_DEFENDER_IS_EMERGENCY_MEMBER_WITH_SCORE</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_HAS_ENVOYS_AT_EMERGENCY_CITY_STATE</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_HAS_ENVOY_WITH_EMERGENCY_DATA_PLAYER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_TRADE_ROUTE_TO_CITY_STATE</RequirementId>
+      <RequirementType>REQUIREMENT_TRADE_ROUTE_DESTINATION_IS_CITY_STATE</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_HIGH_ALLIANCE_LEVEL_WITH_EMERGENCY_PLAYER_DATA</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_IS_AT_LEAST_ALLIANCE_LEVEL_WITH_EMERGENCY_PLAYER</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_EMERGENCY_TARGET_IS_ON_CONTINENT</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_HAS_CITY_ON_EMERGENCY_PLOT_CONTINENT</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_HAS_HIGH_DIPLO_VIS_OF_TARGET</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_HAS_AT_LEAST_DIPLO_VIS_LEVEL</RequirementType>
+    </Row>
+    <Row>
+      <RequirementId>REQUIRES_PLAYER_AT_WAR_WITH_EMERGENCY_MEMBER</RequirementId>
+      <RequirementType>REQUIREMENT_PLAYER_AT_WAR_WITH_EMERGENCY_MEMBER</RequirementType>
+    </Row>
+  </Requirements>
+
+  <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_HIGH_DIPLO_VIS_OF_TARGET</RequirementId>
+            <Name>Level</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HIGH_ALLIANCE_LEVEL_WITH_EMERGENCY_PLAYER_DATA</RequirementId>
+            <Name>Level</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_UNIT_IS_SPY</RequirementId>
+            <Name>UnitType</Name>
+            <Value>UNIT_SPY</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_COMBAT_UNIT_VS_UNIT</RequirementId>
+            <Name>CombatVersusType</Name>
+            <Value>COMBAT_UNIT_VS_UNIT</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_COMBAT_IS_CITY_STRIKE</RequirementId>
+            <Name>CombatVersusType</Name>
+            <Value>COMBAT_DISTRICT_VS_UNIT</Value>
+        </Row>
+  </RequirementArguments>
+</GameInfo>

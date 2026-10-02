@@ -1,0 +1,14 @@
+{
+  "source_commit": "bb5c8d1fc41acee8cf3be9d99a5ee68a1f02afc2",
+  "construction": "Fixed expectations transcribed from the original report source and archived test fixture. Neither original executables nor Rust report functions generated the expectations.",
+  "sources": [
+    "tools/civ6-autotest/arbitration_report.py",
+    "tools/civ6-autotest/tuning_report.py",
+    "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "tools/civ6-autotest/tests/test_tuning_report.py"
+  ],
+  "cases": {
+    "arbitration-cost-refusal": "Original LOG plus all 201 weariness rosters: 2 requests, 1 accepted case, 1 refused case with 2 respondents, 90 intended and 75 applied legitimacy loss; 804 samples over 1608 cities.",
+    "tuning-six-reigns": "Five checkpoints, all 22 houses in each of 6 saved reign rosters, 132 judgments: 1 GOLDEN, 1 HEROIC, 19 NORMAL, 1 DARK per reign; explicit periods, policies, scores, character positions and file SHA-256."
+  }
+}

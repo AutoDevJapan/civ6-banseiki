@@ -27,14 +27,14 @@
 | 魚・蟹の収穫 | `TECH_JAC_SENGOKU_COASTAL_PILOTAGE`（今回） |
 | 牛・鹿・羊の収穫 | `TECH_JAC_SENGOKU_ROADS_AND_PACKTRAINS`（T05、暫定。日本マップには置かないが、通常マップでも戦国ツリーが読み込まれるため公式の畜産の代わりに付け替える） |
 
-- 日本マップに置く資源の型（魚・馬・鉄・米・塩・絹・茶・鯨・銀・金・漆）に限らず、公式の `Resources`・`Resource_Harvests` で戦国以外の技術を指すものは残らない（馬の出現だけは設計どおり前提なし）。テストは `tests/test_resources.py`（公式データから `Resources` と `Resource_Harvests` の前提技術を読み、モデル DB で「付け替え → 公式技術の削除」を再現して確かめる）。
+- 日本マップに置く資源の型（魚・馬・鉄・米・塩・絹・茶・鯨・銀・金・漆）に限らず、公式の `Resources`・`Resource_Harvests` で戦国以外の技術を指すものは残らない（馬の出現だけは設計どおり前提なし）。テストは `tools/civ6-data-rs/src/data_tests.rs`（公式データから `Resources` と `Resource_Harvests` の前提技術を読み、モデル DB で「付け替え → 公式技術の削除」を再現して確かめる）。
 - 資源ゲートは「種類」単位なので、**地点単位の後発**（生野・鶴子・延沢・足尾・相川など）は次の Lua で扱う。
 
 ## 2. 後発地点（Lua API と地点データ）
 
-- 生成器（`tools/japan_map_scale/generate.py`）は `start_year` が1534より後の候補（9件）に、開始資源と重ならず海を越えない最寄りの空きタイルを割り当て、`manifest.json` の `resource_candidates`（`placement_status: reserved_for_later_release`、`plot`、`reveal_year`、`reveal_tech`）に記録する。採用縮尺の 15 km（SSOT 3.4）は9件すべて。20 km は比較用の地図で機能をそろえない（SSOT 3.4）ため、佐渡が3タイルで相川・鶴子と取り合いになる西三川砂金は置かず8件のまま。20 km に無理に置く処理は入れない。地図の `PlotResources` には入れない。予約タイルは森林・湿地の抽選からも除く。
+- 生成器（`tools/civ6-assets-rs/src/generate.rs`）は `start_year` が1534より後の候補（9件）に、開始資源と重ならず海を越えない最寄りの空きタイルを割り当て、`manifest.json` の `resource_candidates`（`placement_status: reserved_for_later_release`、`plot`、`reveal_year`、`reveal_tech`）に記録する。採用縮尺の 15 km（SSOT 3.4）は9件すべて。20 km は比較用の地図で機能をそろえない（SSOT 3.4）ため、佐渡が3タイルで相川・鶴子と取り合いになる西三川砂金は置かず8件のまま。20 km に無理に置く処理は入れない。地図の `PlotResources` には入れない。予約タイルは森林・湿地の抽選からも除く。
 - 予約の一覧: 生野銀山（1542）、鶴子銀山（1542）、足尾銅山（1550）、土肥金山（1577）、宝達金山（1586）、会津漆器（1590）、西三川砂金（1593）、相川金銀山（1596）、延沢銀山（1596。年範囲 1596〜1615 の下限。暫定）。相川は SSOT 3.2 が例に挙げる地点なので、候補 JSON（`documents/spec/data/japan-map-resources.json`）に今回加えた。
-- 技術との対応（暫定。年と技術の**早い方**で現れる）: 生野・鶴子は T09 灰吹法、足尾は T06 鉱脈採掘、土肥・宝達・西三川・相川・延沢は T14 金銀山経営。会津漆器は年のみ。`generate.py` の `REVEAL_TECH`。
+- 技術との対応（暫定。年と技術の**早い方**で現れる）: 生野・鶴子は T09 灰吹法、足尾は T06 鉱脈採掘、土肥・宝達・西三川・相川・延沢は T14 金銀山経営。会津漆器は年のみ。`tools/civ6-assets-rs/src/generate.rs` の `REVEAL_TECH`。
 - `Scripts/JAC_Resources.lua`（`JAC_PoC_JapanMapScale` の `AddGameplayScripts`。日本マップ4種を選んだときだけ読み込む。条件は他の地図用アクションと同じ `JAC_Japan_{20,15}km_{Historical,Settlers}`）:
   - `ExposedMembers.JAC_Resources.RevealSite(siteId)` 記録済みタイルに資源を置く。置いたら true。再呼び出し・未知の ID・タイルに既存資源ありは false（ログに理由）。置いた ID はゲームプロパティ `JAC_RESOURCE_SITES_REVEALED` に保存（セーブ・ロードで再配置しない）。
   - `RevealDue(year)`、`RevealForTech(techType)`、`GetSites()`、`IsRevealed(siteId)`。史実イベントはこれらを呼ばない。資源を伴う出来事は資源を置かず、地点の研究へのひらめきを与える（オーナー判断 2026-09-30、SSOT 3.2。[historical-events.md](historical-events.md)「資源を伴う出来事」）。
@@ -48,7 +48,7 @@
 
 - 農園: 戦国パックでも建設できるようにした（`JAC_Sengoku_Unlocks.sql`）。前提技術は T01 用水普請 `TECH_JAC_SENGOKU_IRRIGATION_WORKS`。公式の農園の前提は `TECH_IRRIGATION`（`Civ6/Base/Assets/Gameplay/Data/Improvements.xml:43`）で、戦国ツリーで灌漑にあたるのが用水普請のため。用水普請は第I期の根ノードで初期知識に入るので、茶・絹・漆は開始時から農園で改良できる（1534年時点で栽培されていたため妥当と判断。暫定）。茶・絹の農園の行は公式のまま（`Improvements.xml:263,266`）。
 - 鉱山を平地に置けるか（レビュー Must 3）: 公式データでは置ける。鉱山自体の地形は丘だけ（`Improvements.xml:105-109`）だが、`Improvement_ValidResources` に載った資源のタイルなら地形に関係なく置ける。根拠は、塩が平地（砂漠・平原・ツンドラ）にしか出ない（`Civ6/Base/Assets/Gameplay/Data/Resources.xml:273-275`）のに鉱山でしか改良できない（`Improvements.xml:236`）こと、公式シナリオの金も平地（平原・砂漠）に出て鉱山で改良する（`Civ6/DLC/AustraliaScenario/Data/AustraliaScenario_Resources.xml:144-145,192`）こと。なお鉄は公式では丘にしか出ない（`Resources.xml:295-298`）ので、「平地の鉄を鉱山で掘る」例ではない。JAC の金はこの仕組み（`IMPROVEMENT_MINE` と `RESOURCE_JAC_GOLD` の行）だけで平地の砂金を鉱山にする。地形の条件は増やしていない。エンジン内部の判定なので、実機では金の平地タイルで鉱山が建てられるかを見る（下の項目5）。
-- テスト（`tests/test_resources.py` の `ImprovementTests`）: 塩の例で上の仕組みが公式データに成り立つこと、戦国パックの SQL 適用後に農園・鉱山が建設可能なこと、4つの地図で置いた・予約した金・漆・茶・絹の全タイルが対応する改良を受けられる（`Improvement_ValidResources` に行があり、地物があるなら除去不要）こと。
+- テスト（`tools/civ6-data-rs/src/data_tests.rs` の `ImprovementTests`）: 塩の例で上の仕組みが公式データに成り立つこと、戦国パックの SQL 適用後に農園・鉱山が建設可能なこと、4つの地図で置いた・予約した金・漆・茶・絹の全タイルが対応する改良を受けられる（`Improvement_ValidResources` に行があり、地物があるなら除去不要）こと。
 
 
 - `RESOURCE_JAC_GOLD`（金）と `RESOURCE_JAC_LACQUER`（漆）。公式シナリオの金 `RESOURCE_GOLD`（`Civ6/DLC/AustraliaScenario/Data/AustraliaScenario_Resources.xml:5,122,142-145,156,192`）の書き方に合わせた。DLC のシナリオ限定なので通常マップでは使わず独自 ID にした。
@@ -61,7 +61,7 @@
 
 ## 再生成
 
-`python tools/japan_map_scale/generate.py`（初回は地形データを `tools/japan_map_scale/cache/` に取得）。地図・`Scripts/JAC_ResourceSites.lua`・設定・訳語・シナリオ（`japan-map-*.json`、`japan-resources.json`）が一括で更新される。他ブランチと地図がぶつかったら、統合後にもう一度これを実行する。
+`cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-generate --`（初回は地形データを `tools/japan_map_scale/cache/` に取得）。地図・`Scripts/JAC_ResourceSites.lua`・設定・訳語・シナリオ（`japan-map-*.json`、`japan-resources.json`）が一括で更新される。他ブランチと地図がぶつかったら、統合後にもう一度これを実行する。
 
 ## 実機で見る項目（`tools/civ6-autotest/scenarios/japan-resources.json`）
 

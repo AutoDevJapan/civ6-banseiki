@@ -1,0 +1,74 @@
+[
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_failed_new_launch_releases_its_helper_before_next_steam_request",
+    "rust_target": "driver_restart",
+    "rust_test": "test_failed_new_launch_releases_its_helper_before_next_steam_request",
+    "assertions": "A crashed first request leaves a helper; cleanup closes it before the second Steam request."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_helper_cleanup_exhausting_deadline_sends_no_steam_request",
+    "rust_target": "driver_restart",
+    "rust_test": "test_helper_cleanup_exhausting_deadline_sends_no_steam_request",
+    "assertions": "Cleanup and the release wait consume the deadline; no Steam request or window query follows."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_four_launch_requests_still_wait_for_delayed_window_until_deadline",
+    "rust_target": "driver_restart",
+    "rust_test": "test_four_launch_requests_still_wait_for_delayed_window_until_deadline",
+    "assertions": "A window arriving at 230 seconds succeeds within the supplied 420 seconds after exactly four requests."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_exhausted_launch_requests_fail_at_the_supplied_deadline",
+    "rust_target": "driver_restart",
+    "rust_test": "test_exhausted_launch_requests_fail_at_the_supplied_deadline",
+    "assertions": "Failure occurs at the supplied 420-second deadline with four requests and no fifth launch."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "OrphanReporterTests",
+    "test": "test_only_verified_orphan_helper_is_closed",
+    "rust_target": "restart_parity",
+    "rust_test": "test_only_verified_orphan_helper_is_closed",
+    "assertions": "Return the closed PIDs; inspect and terminate the same pinned handle under any Steam root."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "OrphanReporterTests",
+    "test": "test_live_game_parent_preserves_reporter",
+    "rust_target": "restart_parity",
+    "rust_test": "test_live_game_parent_preserves_reporter",
+    "assertions": "A live parent in the process snapshot prevents even opening its reporter."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "OrphanReporterTests",
+    "test": "test_same_named_other_program_is_preserved",
+    "rust_target": "restart_parity",
+    "rust_test": "test_same_named_other_program_is_preserved",
+    "assertions": "Reject a same-named executable whose last five path components differ; close its pinned handle."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "OrphanReporterTests",
+    "test": "test_game_appearing_during_inspection_preserves_reporter",
+    "rust_target": "restart_parity",
+    "rust_test": "test_game_appearing_during_inspection_preserves_reporter",
+    "assertions": "A manual launch observed after image inspection stops termination and preserves remaining helpers."
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "OrphanReporterTests",
+    "test": "test_running_game_prevents_all_cleanup",
+    "rust_target": "restart_parity",
+    "rust_test": "test_running_game_prevents_all_cleanup",
+    "assertions": "A running game prevents process-row enumeration, handle opening and helper termination."
+  }
+]

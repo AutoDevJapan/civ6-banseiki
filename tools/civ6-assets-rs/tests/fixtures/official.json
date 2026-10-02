@@ -1,0 +1,1054 @@
+{
+  "schema": [
+    "CREATE TABLE \"Buildings\" (\r\n\t\t\"BuildingType\" TEXT NOT NULL,\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(BuildingType, Plot))",
+    "CREATE TABLE \"Cities\" (\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(Plot))",
+    "CREATE TABLE \"CityAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "CREATE TABLE \"DistrictAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "CREATE TABLE \"Districts\" (\r\n\t\t\"DistrictType\" TEXT NOT NULL,\r\n\t\t\"CityID\" INTEGER NOT NULL,\t\t-- The city ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(Plot))",
+    "CREATE TABLE \"GameConfig\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"Map\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Width\" INTEGER,\r\n\t\t\"Height\" INTEGER,\r\n\t\t\"TopLatitude\" INTEGER,\r\n\t\t\"BottomLatitude\" INTEGER,\r\n\t\t\"WrapX\" BOOLEAN,\r\n\t\t\"WrapY\" BOOLEAN,\r\n\t\t\"MapSizeType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"MapAttributes\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "CREATE TABLE \"MetaData\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "CREATE TABLE \"ModComponent_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "CREATE TABLE \"ModComponent_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "CREATE TABLE \"ModComponents\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "CREATE TABLE \"ModDependencies\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Title\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"ModProperties\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name, Value))",
+    "CREATE TABLE \"ModSettings\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "CREATE TABLE \"ModSettings_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "CREATE TABLE \"ModSettings_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "CREATE TABLE \"ModText\" (\r\n\t\t\"Language\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Language, ID))",
+    "CREATE TABLE \"NamedRiver\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT,\r\n\t\t\"DiscoveringCiv\" TEXT,\r\n\t\t\"CustomName\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"NamedRiverPlot\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"PlotIndex\" INTEGER NOT NULL,\r\n\t\t\"Edge\" INTEGER NOT NULL,\r\n\t\tPRIMARY KEY(ID, PlotIndex, Edge))",
+    "CREATE TABLE \"PlayerAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "CREATE TABLE \"Players\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"CivilizationType\" TEXT,\r\n\t\t\"LeaderType\" TEXT,\r\n\t\t\"CivilizationLevelType\" TEXT,\r\n\t\t\"AgendaType\" TEXT,\r\n\t\t\"Status\" TEXT,\r\n\t\t\"Handicap\" TEXT,\r\n\t\t\"StartingPosition\" TEXT,\r\n\t\t\"Color\" TEXT,\r\n\t\t\"Initialized\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "CREATE TABLE \"PlotCliffs\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfCliff\" BOOLEAN,\r\n\t\t\"IsWOfCliff\" BOOLEAN,\r\n\t\t\"IsNWOfCliff\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotFeatures\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"FeatureType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotImprovements\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ImprovementType\" TEXT,\r\n\t\t\"ImprovementOwner\" INTEGER,\t\t-- The owner ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotOwners\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Owner\" INTEGER,\t\t\t\t-- The owner ID in the database, not the game\r\n\t\t\"CityOwner\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\t\"CityWorking\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotResources\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ResourceType\" TEXT,\r\n\t\t\"ResourceCount\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotRivers\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfRiver\" BOOLEAN,\r\n\t\t\"IsWOfRiver\" BOOLEAN,\r\n\t\t\"IsNWOfRiver\" BOOLEAN,\r\n\t\t\"EFlowDirection\" INTEGER,\r\n\t\t\"SEFlowDirection\" INTEGER,\r\n\t\t\"SWFlowDirection\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"PlotRoutes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"RouteType\" TEXT,\r\n\t\t\"RouteEra\" TEXT,\r\n\t\t\"IsRoutePillaged\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"Plots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"TerrainType\" TEXT NOT NULL,\r\n\t\t\"ContinentType\" TEXT,\r\n\t\t\"IsImpassable\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "CREATE TABLE \"RevealedPlots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Player\" INTEGER,\r\n\t\tPRIMARY KEY(ID, Player))",
+    "CREATE TABLE \"StartPositions\" (\r\n\t\t\"Plot\" INTEGER NOT NULL,\r\n\t\t\"Type\" STRING NOT NULL,\r\n\t\t\"Value\" STRING NOT NULL,\r\n\t\tPRIMARY KEY(\"Plot\"))",
+    "CREATE TABLE \"UnitAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "CREATE TABLE \"Units\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"UnitType\" TEXT NOT NULL,\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(ID))"
+  ],
+  "schema_map": {
+    "Buildings": "CREATE TABLE \"Buildings\" (\r\n\t\t\"BuildingType\" TEXT NOT NULL,\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(BuildingType, Plot))",
+    "Cities": "CREATE TABLE \"Cities\" (\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(Plot))",
+    "CityAttributes": "CREATE TABLE \"CityAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "DistrictAttributes": "CREATE TABLE \"DistrictAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Districts": "CREATE TABLE \"Districts\" (\r\n\t\t\"DistrictType\" TEXT NOT NULL,\r\n\t\t\"CityID\" INTEGER NOT NULL,\t\t-- The city ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(Plot))",
+    "GameConfig": "CREATE TABLE \"GameConfig\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "Map": "CREATE TABLE \"Map\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Width\" INTEGER,\r\n\t\t\"Height\" INTEGER,\r\n\t\t\"TopLatitude\" INTEGER,\r\n\t\t\"BottomLatitude\" INTEGER,\r\n\t\t\"WrapX\" BOOLEAN,\r\n\t\t\"WrapY\" BOOLEAN,\r\n\t\t\"MapSizeType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "MapAttributes": "CREATE TABLE \"MapAttributes\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "MetaData": "CREATE TABLE \"MetaData\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "ModComponent_Items": "CREATE TABLE \"ModComponent_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModComponent_Properties": "CREATE TABLE \"ModComponent_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModComponents": "CREATE TABLE \"ModComponents\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "ModDependencies": "CREATE TABLE \"ModDependencies\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Title\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(ID))",
+    "ModProperties": "CREATE TABLE \"ModProperties\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name, Value))",
+    "ModSettings": "CREATE TABLE \"ModSettings\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "ModSettings_Items": "CREATE TABLE \"ModSettings_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModSettings_Properties": "CREATE TABLE \"ModSettings_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModText": "CREATE TABLE \"ModText\" (\r\n\t\t\"Language\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Language, ID))",
+    "NamedRiver": "CREATE TABLE \"NamedRiver\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT,\r\n\t\t\"DiscoveringCiv\" TEXT,\r\n\t\t\"CustomName\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "NamedRiverPlot": "CREATE TABLE \"NamedRiverPlot\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"PlotIndex\" INTEGER NOT NULL,\r\n\t\t\"Edge\" INTEGER NOT NULL,\r\n\t\tPRIMARY KEY(ID, PlotIndex, Edge))",
+    "PlayerAttributes": "CREATE TABLE \"PlayerAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Players": "CREATE TABLE \"Players\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"CivilizationType\" TEXT,\r\n\t\t\"LeaderType\" TEXT,\r\n\t\t\"CivilizationLevelType\" TEXT,\r\n\t\t\"AgendaType\" TEXT,\r\n\t\t\"Status\" TEXT,\r\n\t\t\"Handicap\" TEXT,\r\n\t\t\"StartingPosition\" TEXT,\r\n\t\t\"Color\" TEXT,\r\n\t\t\"Initialized\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotAttributes": "CREATE TABLE \"PlotAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "PlotCliffs": "CREATE TABLE \"PlotCliffs\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfCliff\" BOOLEAN,\r\n\t\t\"IsWOfCliff\" BOOLEAN,\r\n\t\t\"IsNWOfCliff\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotFeatures": "CREATE TABLE \"PlotFeatures\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"FeatureType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotImprovements": "CREATE TABLE \"PlotImprovements\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ImprovementType\" TEXT,\r\n\t\t\"ImprovementOwner\" INTEGER,\t\t-- The owner ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "PlotOwners": "CREATE TABLE \"PlotOwners\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Owner\" INTEGER,\t\t\t\t-- The owner ID in the database, not the game\r\n\t\t\"CityOwner\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\t\"CityWorking\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "PlotResources": "CREATE TABLE \"PlotResources\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ResourceType\" TEXT,\r\n\t\t\"ResourceCount\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotRivers": "CREATE TABLE \"PlotRivers\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfRiver\" BOOLEAN,\r\n\t\t\"IsWOfRiver\" BOOLEAN,\r\n\t\t\"IsNWOfRiver\" BOOLEAN,\r\n\t\t\"EFlowDirection\" INTEGER,\r\n\t\t\"SEFlowDirection\" INTEGER,\r\n\t\t\"SWFlowDirection\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotRoutes": "CREATE TABLE \"PlotRoutes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"RouteType\" TEXT,\r\n\t\t\"RouteEra\" TEXT,\r\n\t\t\"IsRoutePillaged\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "Plots": "CREATE TABLE \"Plots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"TerrainType\" TEXT NOT NULL,\r\n\t\t\"ContinentType\" TEXT,\r\n\t\t\"IsImpassable\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "RevealedPlots": "CREATE TABLE \"RevealedPlots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Player\" INTEGER,\r\n\t\tPRIMARY KEY(ID, Player))",
+    "StartPositions": "CREATE TABLE \"StartPositions\" (\r\n\t\t\"Plot\" INTEGER NOT NULL,\r\n\t\t\"Type\" STRING NOT NULL,\r\n\t\t\"Value\" STRING NOT NULL,\r\n\t\tPRIMARY KEY(\"Plot\"))",
+    "UnitAttributes": "CREATE TABLE \"UnitAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Units": "CREATE TABLE \"Units\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"UnitType\" TEXT NOT NULL,\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(ID))"
+  },
+  "xp2_schema": {
+    "Buildings": "CREATE TABLE \"Buildings\" (\r\n\t\t\"BuildingType\" TEXT NOT NULL,\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(BuildingType, Plot))",
+    "Cities": "CREATE TABLE \"Cities\" (\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(Plot))",
+    "CityAttributes": "CREATE TABLE \"CityAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "DistrictAttributes": "CREATE TABLE \"DistrictAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Districts": "CREATE TABLE \"Districts\" (\r\n\t\t\"DistrictType\" TEXT NOT NULL,\r\n\t\t\"CityID\" INTEGER NOT NULL,\t\t-- The city ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\tPRIMARY KEY(Plot))",
+    "GameConfig": "CREATE TABLE \"GameConfig\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "Map": "CREATE TABLE \"Map\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Width\" INTEGER,\r\n\t\t\"Height\" INTEGER,\r\n\t\t\"TopLatitude\" INTEGER,\r\n\t\t\"BottomLatitude\" INTEGER,\r\n\t\t\"WrapX\" BOOLEAN,\r\n\t\t\"WrapY\" BOOLEAN,\r\n\t\t\"MapSizeType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "MapAttributes": "CREATE TABLE \"MapAttributes\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "MetaData": "CREATE TABLE \"MetaData\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name))",
+    "ModComponent_Items": "CREATE TABLE \"ModComponent_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModComponent_Properties": "CREATE TABLE \"ModComponent_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModComponents": "CREATE TABLE \"ModComponents\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "ModDependencies": "CREATE TABLE \"ModDependencies\" (\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Title\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(ID))",
+    "ModProperties": "CREATE TABLE \"ModProperties\" (\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Name, Value))",
+    "ModSettings": "CREATE TABLE \"ModSettings\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\tPRIMARY KEY(Type, ID))",
+    "ModSettings_Items": "CREATE TABLE \"ModSettings_Items\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModSettings_Properties": "CREATE TABLE \"ModSettings_Properties\" (\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Type, ID, Name, Value))",
+    "ModText": "CREATE TABLE \"ModText\" (\r\n\t\t\"Language\" TEXT NOT NULL,\r\n\t\t\"ID\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(Language, ID))",
+    "NamedRiver": "CREATE TABLE \"NamedRiver\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT,\r\n\t\t\"DiscoveringCiv\" TEXT,\r\n\t\t\"CustomName\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "NamedRiverPlot": "CREATE TABLE \"NamedRiverPlot\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"PlotIndex\" INTEGER NOT NULL,\r\n\t\t\"Edge\" INTEGER NOT NULL,\r\n\t\tPRIMARY KEY(ID, PlotIndex, Edge))",
+    "PlayerAttributes": "CREATE TABLE \"PlayerAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Players": "CREATE TABLE \"Players\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"CivilizationType\" TEXT,\r\n\t\t\"LeaderType\" TEXT,\r\n\t\t\"CivilizationLevelType\" TEXT,\r\n\t\t\"AgendaType\" TEXT,\r\n\t\t\"Status\" TEXT,\r\n\t\t\"Handicap\" TEXT,\r\n\t\t\"StartingPosition\" TEXT,\r\n\t\t\"Color\" TEXT,\r\n\t\t\"Initialized\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotAttributes": "CREATE TABLE \"PlotAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "PlotCliffs": "CREATE TABLE \"PlotCliffs\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfCliff\" BOOLEAN,\r\n\t\t\"IsWOfCliff\" BOOLEAN,\r\n\t\t\"IsNWOfCliff\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotFeatures": "CREATE TABLE \"PlotFeatures\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"FeatureType\" TEXT,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotImprovements": "CREATE TABLE \"PlotImprovements\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ImprovementType\" TEXT,\r\n\t\t\"ImprovementOwner\" INTEGER,\t\t-- The owner ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "PlotOwners": "CREATE TABLE \"PlotOwners\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Owner\" INTEGER,\t\t\t\t-- The owner ID in the database, not the game\r\n\t\t\"CityOwner\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\t\"CityWorking\" INTEGER,\t\t\t-- The city ID in the database, not the game\r\n\t\tPRIMARY KEY(ID))",
+    "PlotResources": "CREATE TABLE \"PlotResources\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"ResourceType\" TEXT,\r\n\t\t\"ResourceCount\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotRivers": "CREATE TABLE \"PlotRivers\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"IsNEOfRiver\" BOOLEAN,\r\n\t\t\"IsWOfRiver\" BOOLEAN,\r\n\t\t\"IsNWOfRiver\" BOOLEAN,\r\n\t\t\"EFlowDirection\" INTEGER,\r\n\t\t\"SEFlowDirection\" INTEGER,\r\n\t\t\"SWFlowDirection\" INTEGER,\r\n\t\tPRIMARY KEY(ID))",
+    "PlotRoutes": "CREATE TABLE \"PlotRoutes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"RouteType\" TEXT,\r\n\t\t\"RouteEra\" TEXT,\r\n\t\t\"IsRoutePillaged\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "Plots": "CREATE TABLE \"Plots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"TerrainType\" TEXT NOT NULL,\r\n\t\t\"ContinentType\" TEXT,\r\n\t\t\"IsImpassable\" BOOLEAN,\r\n\t\tPRIMARY KEY(ID))",
+    "RevealedPlots": "CREATE TABLE \"RevealedPlots\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Player\" INTEGER,\r\n\t\tPRIMARY KEY(ID, Player))",
+    "StartPositions": "CREATE TABLE \"StartPositions\" (\r\n\t\t\"Plot\" INTEGER NOT NULL,\r\n\t\t\"Type\" STRING NOT NULL,\r\n\t\t\"Value\" STRING NOT NULL,\r\n\t\tPRIMARY KEY(\"Plot\"))",
+    "UnitAttributes": "CREATE TABLE \"UnitAttributes\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"Type\" TEXT NOT NULL,\r\n\t\t\"Name\" TEXT NOT NULL,\r\n\t\t\"Value\" TEXT,\r\n\t\tPRIMARY KEY(ID, Type, Name))",
+    "Units": "CREATE TABLE \"Units\" (\r\n\t\t\"ID\" INTEGER NOT NULL,\r\n\t\t\"UnitType\" TEXT NOT NULL,\r\n\t\t\"Owner\" INTEGER NOT NULL,\t\t-- The owner ID in the database, not the game\r\n\t\t\"Plot\"\tINTEGER NOT NULL,\r\n\t\t\"Name\"\tTEXT,\r\n\t\tPRIMARY KEY(ID))"
+  },
+  "rules": {
+    "RESOURCE_ALUMINUM": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_ALUMINUM_NAME",
+        "PrereqTech": "TECH_RADIO",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_ALUMINUM",
+        "RevealedEra": "6"
+      }
+    },
+    "RESOURCE_AMBER": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "AdjacentToLand": "true",
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_AMBER_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_AMBER",
+        "SeaFrequency": "1"
+      }
+    },
+    "RESOURCE_ANTIQUITY_SITE": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_SNOW",
+        "TERRAIN_SNOW_HILLS",
+        "TERRAIN_TUNDRA",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS",
+        "FEATURE_FLOODPLAINS_GRASSLAND",
+        "FEATURE_FLOODPLAINS_PLAINS",
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE",
+        "FEATURE_MARSH",
+        "FEATURE_OASIS"
+      ],
+      "attributes": {
+        "Name": "LOC_RESOURCE_ANTIQUITY_SITE_NAME",
+        "PrereqCivic": "CIVIC_NATURAL_HISTORY",
+        "ResourceClassType": "RESOURCECLASS_ARTIFACT",
+        "ResourceType": "RESOURCE_ANTIQUITY_SITE"
+      }
+    },
+    "RESOURCE_BANANAS": {
+      "terrains": [],
+      "features": [
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "4",
+        "Name": "LOC_RESOURCE_BANANAS_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_BANANAS"
+      }
+    },
+    "RESOURCE_CATTLE": {
+      "terrains": [
+        "TERRAIN_GRASS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "6",
+        "Name": "LOC_RESOURCE_CATTLE_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_CATTLE"
+      }
+    },
+    "RESOURCE_CINNAMON": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "6",
+        "Name": "LOC_RESOURCE_CINNAMON_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_CINNAMON"
+      }
+    },
+    "RESOURCE_CITRUS": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_CITRUS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_CITRUS"
+      }
+    },
+    "RESOURCE_CLOVES": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "6",
+        "Name": "LOC_RESOURCE_CLOVES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_CLOVES"
+      }
+    },
+    "RESOURCE_COAL": {
+      "terrains": [
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS"
+      ],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_COAL_NAME",
+        "PrereqTech": "TECH_INDUSTRIALIZATION",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_COAL",
+        "RevealedEra": "5"
+      }
+    },
+    "RESOURCE_COCOA": {
+      "terrains": [],
+      "features": [
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_COCOA_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_COCOA"
+      }
+    },
+    "RESOURCE_COFFEE": {
+      "terrains": [
+        "TERRAIN_GRASS"
+      ],
+      "features": [
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_COFFEE_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_COFFEE"
+      }
+    },
+    "RESOURCE_COPPER": {
+      "terrains": [
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_SNOW_HILLS",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "4",
+        "Name": "LOC_RESOURCE_COPPER_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_COPPER"
+      }
+    },
+    "RESOURCE_COSMETICS": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_COSMETICS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_COSMETICS"
+      }
+    },
+    "RESOURCE_COTTON": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS",
+        "FEATURE_FLOODPLAINS_GRASSLAND",
+        "FEATURE_FLOODPLAINS_PLAINS"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_COTTON_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_COTTON"
+      }
+    },
+    "RESOURCE_CRABS": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [],
+      "attributes": {
+        "Name": "LOC_RESOURCE_CRABS_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_CRABS",
+        "SeaFrequency": "17"
+      }
+    },
+    "RESOURCE_DEER": {
+      "terrains": [
+        "TERRAIN_TUNDRA",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "4",
+        "Name": "LOC_RESOURCE_DEER_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_DEER"
+      }
+    },
+    "RESOURCE_DIAMONDS": {
+      "terrains": [
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_DIAMONDS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_DIAMONDS"
+      }
+    },
+    "RESOURCE_DYES": {
+      "terrains": [],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_DYES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_DYES"
+      }
+    },
+    "RESOURCE_FISH": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [
+        "FEATURE_REEF"
+      ],
+      "attributes": {
+        "Name": "LOC_RESOURCE_FISH_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_FISH",
+        "SeaFrequency": "23"
+      }
+    },
+    "RESOURCE_FURS": {
+      "terrains": [
+        "TERRAIN_TUNDRA"
+      ],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_FURS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_FURS"
+      }
+    },
+    "RESOURCE_GYPSUM": {
+      "terrains": [
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_GYPSUM_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_GYPSUM"
+      }
+    },
+    "RESOURCE_HORSES": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "12",
+        "Name": "LOC_RESOURCE_HORSES_NAME",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_HORSES",
+        "RevealedEra": "1"
+      }
+    },
+    "RESOURCE_INCENSE": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_INCENSE_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_INCENSE"
+      }
+    },
+    "RESOURCE_IRON": {
+      "terrains": [
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "12",
+        "Name": "LOC_RESOURCE_IRON_NAME",
+        "PrereqTech": "TECH_BRONZE_WORKING",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_IRON",
+        "RevealedEra": "2"
+      }
+    },
+    "RESOURCE_IVORY": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS"
+      ],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_IVORY_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_IVORY"
+      }
+    },
+    "RESOURCE_JAC_GOLD": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_JAC_GOLD_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_JAC_GOLD"
+      }
+    },
+    "RESOURCE_JAC_LACQUER": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS"
+      ],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_JAC_LACQUER_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_JAC_LACQUER"
+      }
+    },
+    "RESOURCE_JADE": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_TUNDRA"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_JADE_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_JADE"
+      }
+    },
+    "RESOURCE_JEANS": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_JEANS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_JEANS"
+      }
+    },
+    "RESOURCE_MARBLE": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_MARBLE_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_MARBLE"
+      }
+    },
+    "RESOURCE_MERCURY": {
+      "terrains": [
+        "TERRAIN_PLAINS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_MERCURY_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_MERCURY"
+      }
+    },
+    "RESOURCE_NITER": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_TUNDRA"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS_GRASSLAND",
+        "FEATURE_FLOODPLAINS_PLAINS"
+      ],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_NITER_NAME",
+        "PrereqTech": "TECH_MILITARY_ENGINEERING",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_NITER",
+        "RevealedEra": "3"
+      }
+    },
+    "RESOURCE_OIL": {
+      "terrains": [
+        "TERRAIN_COAST",
+        "TERRAIN_DESERT",
+        "TERRAIN_SNOW",
+        "TERRAIN_TUNDRA"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS",
+        "FEATURE_MARSH"
+      ],
+      "attributes": {
+        "Frequency": "5",
+        "Name": "LOC_RESOURCE_OIL_NAME",
+        "PrereqTech": "TECH_STEEL",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_OIL",
+        "RevealedEra": "6",
+        "SeaFrequency": "8"
+      }
+    },
+    "RESOURCE_OLIVES": {
+      "terrains": [
+        "TERRAIN_GRASS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_OLIVES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_OLIVES"
+      }
+    },
+    "RESOURCE_PEARLS": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [],
+      "attributes": {
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_PEARLS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_PEARLS",
+        "SeaFrequency": "1"
+      }
+    },
+    "RESOURCE_PERFUME": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "6",
+        "Name": "LOC_RESOURCE_PERFUME_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_PERFUME"
+      }
+    },
+    "RESOURCE_RICE": {
+      "terrains": [
+        "TERRAIN_GRASS"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS_GRASSLAND",
+        "FEATURE_MARSH"
+      ],
+      "attributes": {
+        "Frequency": "6",
+        "Name": "LOC_RESOURCE_RICE_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_RICE"
+      }
+    },
+    "RESOURCE_SALT": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_PLAINS",
+        "TERRAIN_TUNDRA"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_SALT_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_SALT"
+      }
+    },
+    "RESOURCE_SHEEP": {
+      "terrains": [
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "4",
+        "Name": "LOC_RESOURCE_SHEEP_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_SHEEP"
+      }
+    },
+    "RESOURCE_SHIPWRECK": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [],
+      "attributes": {
+        "Name": "LOC_RESOURCE_SHIPWRECK_NAME",
+        "PrereqCivic": "CIVIC_CULTURAL_HERITAGE",
+        "ResourceClassType": "RESOURCECLASS_ARTIFACT",
+        "ResourceType": "RESOURCE_SHIPWRECK"
+      }
+    },
+    "RESOURCE_SILK": {
+      "terrains": [],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_SILK_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_SILK"
+      }
+    },
+    "RESOURCE_SILVER": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_TUNDRA",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_SILVER_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_SILVER"
+      }
+    },
+    "RESOURCE_SPICES": {
+      "terrains": [],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_SPICES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_SPICES"
+      }
+    },
+    "RESOURCE_STONE": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_STONE_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_STONE"
+      }
+    },
+    "RESOURCE_SUGAR": {
+      "terrains": [],
+      "features": [
+        "FEATURE_FLOODPLAINS",
+        "FEATURE_FLOODPLAINS_GRASSLAND",
+        "FEATURE_FLOODPLAINS_PLAINS",
+        "FEATURE_MARSH"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_SUGAR_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_SUGAR"
+      }
+    },
+    "RESOURCE_TEA": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS"
+      ],
+      "features": [],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_TEA_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_TEA"
+      }
+    },
+    "RESOURCE_TOBACCO": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_TOBACCO_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_TOBACCO"
+      }
+    },
+    "RESOURCE_TOYS": {
+      "terrains": [],
+      "features": [],
+      "attributes": {
+        "Frequency": "0",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_TOYS_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_TOYS"
+      }
+    },
+    "RESOURCE_TRUFFLES": {
+      "terrains": [],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE",
+        "FEATURE_MARSH"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_TRUFFLES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_TRUFFLES"
+      }
+    },
+    "RESOURCE_TURTLES": {
+      "terrains": [],
+      "features": [
+        "FEATURE_REEF"
+      ],
+      "attributes": {
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_TURTLES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_TURTLES",
+        "SeaFrequency": "5"
+      }
+    },
+    "RESOURCE_URANIUM": {
+      "terrains": [
+        "TERRAIN_DESERT",
+        "TERRAIN_DESERT_HILLS",
+        "TERRAIN_GRASS",
+        "TERRAIN_GRASS_HILLS",
+        "TERRAIN_PLAINS",
+        "TERRAIN_PLAINS_HILLS",
+        "TERRAIN_SNOW",
+        "TERRAIN_SNOW_HILLS",
+        "TERRAIN_TUNDRA",
+        "TERRAIN_TUNDRA_HILLS"
+      ],
+      "features": [
+        "FEATURE_FOREST",
+        "FEATURE_JUNGLE"
+      ],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_URANIUM_NAME",
+        "PrereqTech": "TECH_COMBINED_ARMS",
+        "ResourceClassType": "RESOURCECLASS_STRATEGIC",
+        "ResourceType": "RESOURCE_URANIUM",
+        "RevealedEra": "7"
+      }
+    },
+    "RESOURCE_WHALES": {
+      "terrains": [
+        "TERRAIN_COAST"
+      ],
+      "features": [],
+      "attributes": {
+        "Happiness": "4",
+        "LakeEligible": "false",
+        "Name": "LOC_RESOURCE_WHALES_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_WHALES",
+        "SeaFrequency": "1"
+      }
+    },
+    "RESOURCE_WHEAT": {
+      "terrains": [
+        "TERRAIN_PLAINS"
+      ],
+      "features": [
+        "FEATURE_FLOODPLAINS",
+        "FEATURE_FLOODPLAINS_PLAINS"
+      ],
+      "attributes": {
+        "Frequency": "10",
+        "Name": "LOC_RESOURCE_WHEAT_NAME",
+        "ResourceClassType": "RESOURCECLASS_BONUS",
+        "ResourceType": "RESOURCE_WHEAT"
+      }
+    },
+    "RESOURCE_WINE": {
+      "terrains": [
+        "TERRAIN_GRASS",
+        "TERRAIN_PLAINS"
+      ],
+      "features": [
+        "FEATURE_FOREST"
+      ],
+      "attributes": {
+        "Frequency": "2",
+        "Happiness": "4",
+        "Name": "LOC_RESOURCE_WINE_NAME",
+        "ResourceClassType": "RESOURCECLASS_LUXURY",
+        "ResourceType": "RESOURCE_WINE"
+      }
+    }
+  },
+  "colors": {
+    "AINU_TARIKONA": [
+      183,
+      128,
+      230
+    ],
+    "AMAGO_TSUNEHISA": [
+      0,
+      79,
+      206
+    ],
+    "ASAKURA_TAKAKAGE": [
+      117,
+      0,
+      115
+    ],
+    "ASHIKAGA_YOSHIHARU": [
+      202,
+      20,
+      21
+    ],
+    "ASHINA_MORIKIYO": [
+      120,
+      61,
+      2
+    ],
+    "CHOSOKABE_KUNICHIKA": [
+      255,
+      0,
+      255
+    ],
+    "DATE_TANEMUNE": [
+      83,
+      83,
+      83
+    ],
+    "HOJO_UJITSUNA": [
+      134,
+      114,
+      2
+    ],
+    "HONGANJI_SHONYO": [
+      97,
+      191,
+      34
+    ],
+    "IMAGAWA_UJITERU": [
+      1,
+      42,
+      108
+    ],
+    "MATSUDAIRA_KIYOYASU": [
+      55,
+      0,
+      101
+    ],
+    "MIYOSHI_NAGAYOSHI": [
+      255,
+      129,
+      18
+    ],
+    "MORI_MOTONARI": [
+      109,
+      0,
+      205
+    ],
+    "NAGAO_TAMEKAGE": [
+      1,
+      79,
+      81
+    ],
+    "ODA_NOBUHIDE": [
+      249,
+      249,
+      249
+    ],
+    "OTOMO_YOSHIAKI": [
+      229,
+      117,
+      116
+    ],
+    "OUCHI_YOSHITAKA": [
+      0,
+      192,
+      155
+    ],
+    "ROKKAKU_SADAYORI": [
+      247,
+      216,
+      1
+    ],
+    "RYUKYU_SHO_SEI": [
+      116,
+      163,
+      243
+    ],
+    "SHIMAZU_TAKAHISA": [
+      121,
+      224,
+      119
+    ],
+    "TAKEDA_NOBUTORA": [
+      120,
+      0,
+      1
+    ],
+    "YAMANOUCHI_UESUGI_NORIMASA": [
+      21,
+      108,
+      48
+    ]
+  },
+  "excerpts": {
+    "Base/Assets/Gameplay/Data/Features.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><GameInfo><Feature_ValidTerrains><!-- Jungles are later adjusted in feature generator to plains or plains hills --><Row FeatureType=\"FEATURE_FLOODPLAINS\" TerrainType=\"TERRAIN_DESERT\" /><Row FeatureType=\"FEATURE_ICE\" TerrainType=\"TERRAIN_COAST\" /><Row FeatureType=\"FEATURE_ICE\" TerrainType=\"TERRAIN_OCEAN\" /><Row TerrainType=\"TERRAIN_GRASS\" FeatureType=\"FEATURE_JUNGLE\" /><Row TerrainType=\"TERRAIN_GRASS_HILLS\" FeatureType=\"FEATURE_JUNGLE\" /><Row FeatureType=\"FEATURE_JUNGLE\" TerrainType=\"TERRAIN_PLAINS\" /><Row FeatureType=\"FEATURE_JUNGLE\" TerrainType=\"TERRAIN_PLAINS_HILLS\" /><Row TerrainType=\"TERRAIN_GRASS\" FeatureType=\"FEATURE_FOREST\" /><Row FeatureType=\"FEATURE_FOREST\" TerrainType=\"TERRAIN_PLAINS\" /><Row FeatureType=\"FEATURE_FOREST\" TerrainType=\"TERRAIN_TUNDRA\" /><Row FeatureType=\"FEATURE_FOREST\" TerrainType=\"TERRAIN_GRASS_HILLS\" /><Row TerrainType=\"TERRAIN_PLAINS_HILLS\" FeatureType=\"FEATURE_FOREST\" /><Row FeatureType=\"FEATURE_FOREST\" TerrainType=\"TERRAIN_TUNDRA_HILLS\" /><Row TerrainType=\"TERRAIN_DESERT\" FeatureType=\"FEATURE_OASIS\" /><Row FeatureType=\"FEATURE_MARSH\" TerrainType=\"TERRAIN_GRASS\" /><!-- Natural Wonders --><Row FeatureType=\"FEATURE_BARRIER_REEF\" TerrainType=\"TERRAIN_COAST\" /><Row FeatureType=\"FEATURE_CLIFFS_DOVER\" TerrainType=\"TERRAIN_PLAINS_HILLS\" /><Row TerrainType=\"TERRAIN_GRASS_HILLS\" FeatureType=\"FEATURE_CLIFFS_DOVER\" /><Row TerrainType=\"TERRAIN_PLAINS\" FeatureType=\"FEATURE_CRATER_LAKE\" /><Row TerrainType=\"TERRAIN_TUNDRA\" FeatureType=\"FEATURE_CRATER_LAKE\" /><Row TerrainType=\"TERRAIN_GRASS\" FeatureType=\"FEATURE_DEAD_SEA\" /><Row FeatureType=\"FEATURE_DEAD_SEA\" TerrainType=\"TERRAIN_DESERT\" /><Row TerrainType=\"TERRAIN_GRASS_MOUNTAIN\" FeatureType=\"FEATURE_EVEREST\" /><Row TerrainType=\"TERRAIN_PLAINS_MOUNTAIN\" FeatureType=\"FEATURE_EVEREST\" /><Row FeatureType=\"FEATURE_EVEREST\" TerrainType=\"TERRAIN_DESERT_MOUNTAIN\" /><Row FeatureType=\"FEATURE_EVEREST\" TerrainType=\"TERRAIN_TUNDRA_MOUNTAIN\" /><Row FeatureType=\"FEATURE_GALAPAGOS\" TerrainType=\"TERRAIN_COAST\" /><Row TerrainType=\"TERRAIN_GRASS_MOUNTAIN\" FeatureType=\"FEATURE_KILIMANJARO\" /><Row TerrainType=\"TERRAIN_PLAINS_MOUNTAIN\" FeatureType=\"FEATURE_KILIMANJARO\" /><Row TerrainType=\"TERRAIN_DESERT_MOUNTAIN\" FeatureType=\"FEATURE_KILIMANJARO\" /><Row FeatureType=\"FEATURE_KILIMANJARO\" TerrainType=\"TERRAIN_TUNDRA_MOUNTAIN\" /><Row FeatureType=\"FEATURE_PANTANAL\" TerrainType=\"TERRAIN_GRASS\" /><Row FeatureType=\"FEATURE_PANTANAL\" TerrainType=\"TERRAIN_PLAINS\" /><Row FeatureType=\"FEATURE_PIOPIOTAHI\" TerrainType=\"TERRAIN_GRASS\" /><Row TerrainType=\"TERRAIN_GRASS_HILLS\" FeatureType=\"FEATURE_PIOPIOTAHI\" /><Row FeatureType=\"FEATURE_PIOPIOTAHI\" TerrainType=\"TERRAIN_PLAINS\" /><Row FeatureType=\"FEATURE_PIOPIOTAHI\" TerrainType=\"TERRAIN_PLAINS_HILLS\" /><Row TerrainType=\"TERRAIN_GRASS\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_PLAINS\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_TUNDRA\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_GRASS_HILLS\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_PLAINS_HILLS\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_TUNDRA_HILLS\" FeatureType=\"FEATURE_TORRES_DEL_PAINE\" /><Row TerrainType=\"TERRAIN_GRASS\" FeatureType=\"FEATURE_TSINGY\" /><Row FeatureType=\"FEATURE_TSINGY\" TerrainType=\"TERRAIN_PLAINS\" /><Row FeatureType=\"FEATURE_TSINGY\" TerrainType=\"TERRAIN_TUNDRA\" /><Row TerrainType=\"TERRAIN_GRASS_HILLS\" FeatureType=\"FEATURE_TSINGY\" /><Row TerrainType=\"TERRAIN_PLAINS_HILLS\" FeatureType=\"FEATURE_TSINGY\" /><Row FeatureType=\"FEATURE_TSINGY\" TerrainType=\"TERRAIN_TUNDRA_HILLS\" /><Row TerrainType=\"TERRAIN_PLAINS\" FeatureType=\"FEATURE_YOSEMITE\" /><Row TerrainType=\"TERRAIN_TUNDRA\" FeatureType=\"FEATURE_YOSEMITE\" /></Feature_ValidTerrains></GameInfo>",
+    "Base/Assets/Gameplay/Data/GlobalParameters.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><GameInfo><GlobalParameters><Replace Value=\"1\" Name=\"AGENDAS_MAJOR_CIV_HISTORICAL_AGENDAS\" /><Replace Value=\"1\" Name=\"AGENDAS_MAJOR_CIV_RANDOM_AGENDAS\" /><Replace Name=\"AI_BASE_LUXURY_VALUE\" Value=\"1.5\" /><Replace Value=\"80\" Name=\"AI_CURRENT_TASK_BIAS\" /><Replace Name=\"AI_DISCOUNT_RATE\" Value=\"2.0\" /><Replace Name=\"AI_ISLAND_COAST_PERCENTAGE\" Value=\"20\" /><Replace Name=\"AI_TURNS_BETWEEN_FRIENDSHIP_OFFERS\" Value=\"5\" /><Replace Name=\"AI_TURNS_BETWEEN_PEACE_OFFERS\" Value=\"3\" /><Replace Name=\"AI_TURNS_BETWEEN_TRADES\" Value=\"10\" /><Replace Name=\"AI_ZONE_OF_CONTROL_DISCOUNT\" Value=\"0.1\" /><Replace Value=\"4\" Name=\"ARCHAEOLOGY_MAX_ERA\" /><Replace Value=\"6\" Name=\"ARCHAEOLOGY_SITES_PER_CIV_LAND\" /><Replace Name=\"ARCHAEOLOGY_SITES_PER_CIV_SEA\" Value=\"2\" /><Replace Value=\"0.004\" Name=\"AVOID_FEATURE_MAX_MULTIPLIER\" /><Replace Name=\"AVOID_FEATURE_MAX_THRESHOLD\" Value=\"24\" /><Replace Value=\"-30\" Name=\"BARBARIAN_BOLDNESS_PER_CAMP_ATTACK\" /><Replace Value=\"15\" Name=\"BARBARIAN_BOLDNESS_PER_KILL\" /><Replace Value=\"-5\" Name=\"BARBARIAN_BOLDNESS_PER_SCOUT_LOST\" /><Replace Value=\"2\" Name=\"BARBARIAN_BOLDNESS_PER_TURN\" /><Replace Value=\"-10\" Name=\"BARBARIAN_BOLDNESS_PER_UNIT_LOST\" /><Replace Name=\"BARBARIAN_CAMP_COASTAL_SPAWN_ROLL\" Value=\"6\" /><Replace Value=\"1\" Name=\"BARBARIAN_CAMP_EXTRA_DISTANCE_PER_LOW_DIFFICULTY\" /><Replace Name=\"BARBARIAN_CAMP_FIRST_TURN_PERCENT_OF_TARGET_TO_ADD\" Value=\"33\" /><Replace Name=\"BARBARIAN_CAMP_MAX_PER_MAJOR_CIV\" Value=\"3\" /><Replace Name=\"BARBARIAN_CAMP_MINIMUM_DISTANCE_ANOTHER_CAMP\" Value=\"7\" /><Replace Name=\"BARBARIAN_CAMP_MINIMUM_DISTANCE_CITY\" Value=\"4\" /><Replace Value=\"2\" Name=\"BARBARIAN_CAMP_ODDS_OF_NEW_CAMP_SPAWNING\" /><Replace Name=\"BARBARIAN_DEFENSE_ALL_UNITS\" Value=\"4\" /><Replace Name=\"BARBARIAN_DEFENSE_RANGED_UNITS\" Value=\"1\" /><Replace Value=\"3\" Name=\"BARBARIAN_NUM_RANDOM_UNIT_CHOICES\" /><Replace Value=\"20\" Name=\"BARBARIAN_RELEASE_VARIATION\" /><Replace Value=\"50\" Name=\"BARBARIAN_TECH_PERCENT\" /><Replace Name=\"BONUS_RESOURCE_FERTILITY\" Value=\"0\" /><Replace Name=\"CITY_AMENITIES_FOR_FREE\" Value=\"1\" /><Replace Name=\"CITY_CAPTURED_DAMAGE_PERCENTAGE\" Value=\"50\" /><Replace Name=\"CITY_CENTER_TRAIN_WHEN_CONTAMINATED\" Value=\"false\" /><Replace Name=\"CITY_FOOD_CONSUMPTION_PER_POPULATION\" Value=\"2\" /><Replace Name=\"CITY_GROWTH_EXPONENT\" Value=\"1.5\" /><Replace Name=\"CITY_GROWTH_MULTIPLIER\" Value=\"8\" /><Replace Name=\"CITY_GROWTH_OCCUPATION_MULTIPLIER\" Value=\"0.0\" /><Replace Value=\"15\" Name=\"CITY_GROWTH_THRESHOLD\" /><Replace Value=\"0\" Name=\"CITY_HOUSING_LEFT_25PCT_GROWTH\" /><Replace Value=\"1\" Name=\"CITY_HOUSING_LEFT_50PCT_GROWTH\" /><Replace Name=\"CITY_HOUSING_LEFT_ZERO_GROWTH\" Value=\"-4\" /><Replace Name=\"CITY_MAX_BUY_PLOT_RANGE\" Value=\"3\" /><Replace Value=\"8\" Name=\"CITY_MIN_DISTANCE_FOR_INCURSION\" /><Replace Name=\"CITY_MIN_RANGE\" Value=\"3\" /><Replace Name=\"CITY_MOVEMENT_COST\" Value=\"1\" /><Replace Value=\"1\" Name=\"CITY_NORMAL_PLOT_WORKER_CAPACITY\" /><Replace Name=\"CITY_POP_PER_AMENITY\" Value=\"2\" /><Replace Name=\"CITY_POPULATION_AQUEDUCT_BOOST\" Value=\"2\" /><Replace Value=\"6\" Name=\"CITY_POPULATION_AQUEDUCT_MIN\" /><Replace Value=\"3\" Name=\"CITY_POPULATION_COAST\" /><Replace Value=\"0.25\" Name=\"CITY_POPULATION_LOSS_TO_CONQUEST_PERCENTAGE\" /><Replace Name=\"CITY_POPULATION_NO_WATER\" Value=\"2\" /><Replace Name=\"CITY_POPULATION_RIVER_LAKE\" Value=\"5\" /><Replace Name=\"COAST_FERTILITY\" Value=\"0\" /><Replace Value=\"5\" Name=\"COMBAT_AIR_SUPPORT_BONUS_MODIFIER\" /><Replace Name=\"COMBAT_AMPHIBIOUS_ATTACK_PENALTY\" Value=\"-10\" /><Replace Name=\"COMBAT_ANTI_AIR_SUPPORT_BONUS_MODIFIER\" Value=\"5\" /><Replace Value=\"7\" Name=\"COMBAT_ARMY_ANTIAIR_STRENGTH_MODIFIER\" /><Replace Value=\"17\" Name=\"COMBAT_ARMY_STRENGTH_MODIFIER\" /><Replace Name=\"COMBAT_BASE_CAPTURE_STRENGTH_DIFFERENCE\" Value=\"20\" /><Replace Name=\"COMBAT_BASE_DAMAGE\" Value=\"24\" /><Replace Name=\"COMBAT_BOMBARD_VS_UNIT_STRENGTH_MODIFIER\" Value=\"17\" /><Replace Value=\"false\" Name=\"COMBAT_CITIES_OCCUPIED_FOREVER\" /><Replace Value=\"50\" Name=\"COMBAT_CITY_RANGED_DAMAGE_THRESHOLD\" /><Replace Value=\"7\" Name=\"COMBAT_CORPS_ANTIAIR_STRENGTH_MODIFIER\" /><Replace Name=\"COMBAT_CORPS_STRENGTH_MODIFIER\" Value=\"10\" /><Replace Name=\"COMBAT_DAMAGE_MULTIPLIER_MINIMUM\" Value=\"0.25\" /><Replace Name=\"COMBAT_DEFENSE_DAMAGE_PERCENT_BOMBARD\" Value=\"100\" /><Replace Name=\"COMBAT_DEFENSE_DAMAGE_PERCENT_MELEE\" Value=\"15\" /><Replace Name=\"COMBAT_DEFENSE_DAMAGE_PERCENT_RANGED\" Value=\"50\" /><Replace Value=\"15\" Name=\"COMBAT_DISTRICT_STRENGTH_REDUCTION\" /><Replace Name=\"COMBAT_FLANKING_BONUS_MODIFIER\" Value=\"2\" /><Replace Value=\"10\" Name=\"COMBAT_GARRISON_MILITIA_MODIFIER\" /><Replace Name=\"COMBAT_HEAL_CITY_GARRISON\" Value=\"20\" /><Replace Name=\"COMBAT_HEAL_CITY_OUTER_DEFENSES\" Value=\"1\" /><Replace Name=\"COMBAT_HEAL_LAND_ENEMY\" Value=\"5\" /><Replace Value=\"15\" Name=\"COMBAT_HEAL_LAND_FRIENDLY\" /><Replace Name=\"COMBAT_HEAL_LAND_NEUTRAL\" Value=\"10\" /><Replace Value=\"0\" Name=\"COMBAT_HEAL_NAVAL_ENEMY\" /><Replace Name=\"COMBAT_HEAL_NAVAL_FRIENDLY\" Value=\"20\" /><Replace Value=\"0\" Name=\"COMBAT_HEAL_NAVAL_NEUTRAL\" /><Replace Value=\"3\" Name=\"COMBAT_HEAL_OUTER_DEFENSES_COOLDOWN\" /><Replace Name=\"COMBAT_HEAL_RELIGIOUS_CHARGE\" Value=\"40\" /><Replace Value=\"false\" Name=\"COMBAT_KEEP_ALL_CITIES_ON_CAPTURE\" /><Replace Value=\"12\" Name=\"COMBAT_MAX_EXTRA_DAMAGE\" /><Replace Value=\"100\" Name=\"COMBAT_MAX_HIT_POINTS\" /><Replace Name=\"COMBAT_MAX_NUM_ATTACKS\" Value=\"1\" /><Replace Name=\"COMBAT_MIN_CIVILIAN_DAMAGE_PERCENT\" Value=\"65\" /><Replace Value=\"1\" Name=\"COMBAT_MIN_HEALTH_PERCENT_TO_ADVANCED_AIR_PILLAGE\" /><Replace Value=\"50\" Name=\"COMBAT_MIN_HEALTH_PERCENT_TO_AIR_PILLAGE\" /><Replace Value=\"3\" Name=\"COMBAT_MINIMUM_CITY_STRIKE_STRENGTH\" /><Replace Value=\"1\" Name=\"COMBAT_MINIMUM_DAMAGE\" /><Replace Value=\"0\" Name=\"COMBAT_MINIMUM_GARRISON_STRENGTH\" /><Replace Name=\"COMBAT_POPULATION_PER_STRENGTH\" Value=\"2\" /><Replace Value=\"5\" Name=\"COMBAT_POWER_DAMPENER\" /><Replace Name=\"COMBAT_POWER_SCALING\" Value=\"0.04\" /><Replace Name=\"COMBAT_PUSHBACK_STRENGTH_MODIFIER\" Value=\"10\" /><Replace Name=\"COMBAT_RANGED_VS_DISTRICT_STRENGTH_MODIFIER\" Value=\"17\" /><Replace Name=\"COMBAT_RAZE_ANY_CITY\" Value=\"false\" /><Replace Value=\"5\" Name=\"COMBAT_RELIGIOUS_FOLLOWING_CITY_TILE\" /><Replace Name=\"COMBAT_RELIGIOUS_HOLY_CITY_TILE\" Value=\"15\" /><Replace Name=\"COMBAT_RIVER_DEFENSE\" Value=\"5\" /><Replace Value=\"1.0\" Name=\"COMBAT_STRENGTH_FROM_ENVOYS\" /><Replace Name=\"COMBAT_SUPPORT_BONUS_MODIFIER\" Value=\"2\" /><Replace Value=\"10\" Name=\"COMBAT_WOUNDED_DAMAGE_MULTIPLIER\" /><Replace Value=\"10\" Name=\"COMBAT_WOUNDED_DISTRICT_DAMAGE_MULTIPLIER\" /><Replace Name=\"CULTURE_COST_FIRST_PLOT\" Value=\"10\" /><Replace Name=\"CULTURE_COST_LATER_PLOT_EXPONENT\" Value=\"1.3\" /><Replace Name=\"CULTURE_COST_LATER_PLOT_MULTIPLIER\" Value=\"6\" /><Replace Name=\"CULTURE_PERCENTAGE_YIELD_PER_POP\" Value=\"30\" /><Replace Value=\"30\" Name=\"DIPLOMACY_ALLIANCE_TIME_LIMIT\" /><Replace Name=\"DIPLOMACY_DECLARED_FRIENDSHIP_TIME_LIMIT\" Value=\"30\" /><Replace Name=\"DIPLOMACY_DEFENSIVE_PACT_TIME_LIMIT\" Value=\"30\" /><Replace Name=\"DIPLOMACY_DENOUNCE_TIME_LIMIT\" Value=\"30\" /><Replace Name=\"DIPLOMACY_DENOUNCE_WAR_DELAY\" Value=\"5\" /><Replace Name=\"DIPLOMACY_EARLIEST_MAJOR_DOW_TURN\" Value=\"0\" /><Replace Name=\"DIPLOMACY_FIRST_MEET_HOSPITALITY_DISTANCE\" Value=\"6\" /><Replace Value=\"10\" Name=\"DIPLOMACY_MAXIMUM_LOPSIDED_DEAL_MODIFIER\" /><Replace Value=\"10\" Name=\"DIPLOMACY_PEACE_MIN_TURNS\" /><Replace Name=\"DIPLOMACY_RESEARCH_AGREEMENT_BEAKER_PERCENTAGE\" Value=\"10\" /><Replace Value=\"10\" Name=\"DIPLOMACY_SIGNIFICANTLY_LOPSIDED_DEAL\" /><Replace Name=\"DIPLOMACY_VISIBILITY_TO_SEE_THREAT\" Value=\"2\" /><Replace Name=\"DIPLOMACY_VISIBILITY_TO_SEE_TRUST\" Value=\"3\" /><Replace Value=\"false\" Name=\"DIPLOMACY_WAR_LAST_FOREVER\" /><Replace Value=\"10\" Name=\"DIPLOMACY_WAR_MIN_TURNS\" /><Replace Name=\"DIPLOMACY_WARMONGER_POINT_PERCENT_DECAY\" Value=\"50\" /><Replace Value=\"3\" Name=\"DISTRICT_POPULATION_REQUIRED_PER\" /><Replace Value=\"2\" Name=\"ESPIONAGE_BONUS_GAIN_SOURCES\" /><Replace Name=\"ESPIONAGE_ESCAPE_BASE_CHANCE\" Value=\"10\" /><Replace Value=\"-1\" Name=\"ESPIONAGE_ESCAPE_COUNTERSPY_LEVEL_MODIFIER\" /><Replace Value=\"1\" Name=\"ESPIONAGE_ESCAPE_LEVEL_BOOST\" /><Replace Name=\"ESPIONAGE_ESCAPE_POLICE_CORRECT_MODIFIER\" Value=\"-4\" /><Replace Name=\"ESPIONAGE_GAIN_SOURCES_DURATION_MULTIPLIER\" Value=\"3\" /><Replace Value=\"4\" Name=\"ESPIONAGE_MAX_LEVEL\" /><Replace Name=\"EXPERIENCE_ACTIVATE_GOODY_HUT\" Value=\"5\" /><Replace Name=\"EXPERIENCE_BARB_SOFT_CAP\" Value=\"1\" /><Replace Name=\"EXPERIENCE_CITY_CAPTURED\" Value=\"10\" /><Replace Name=\"EXPERIENCE_COMBAT_ATTACKER_BONUS\" Value=\"1\" /><Replace Name=\"EXPERIENCE_COMBAT_RANGED\" Value=\"1\" /><Replace Name=\"EXPERIENCE_DISTRICT_VS_UNIT\" Value=\"2\" /><Replace Name=\"EXPERIENCE_KILL_BONUS\" Value=\"2\" /><Replace Name=\"EXPERIENCE_MAX_BARB_LEVEL\" Value=\"2\" /><Replace Value=\"6\" Name=\"EXPERIENCE_MAX_LEVEL\" /><Replace Value=\"10\" Name=\"EXPERIENCE_MAXIMUM_ONE_COMBAT\" /><Replace Name=\"EXPERIENCE_NEEDED_FOR_NEXT_LEVEL_MULTIPLIER\" Value=\"5\" /><Replace Value=\"2\" Name=\"EXPERIENCE_NOT_COMBAT_RANGED\" /><Replace Name=\"EXPERIENCE_PROMOTE_HEALED\" Value=\"50\" /><Replace Name=\"EXPERIENCE_RETRAIN_HEALED\" Value=\"100\" /><Replace Value=\"10\" Name=\"EXPERIENCE_REVEAL_NATURAL_WONDER\" /><Replace Name=\"EXPERIENCE_UNIT_VS_DISTRICT_NOT_CITY_CAPTURED\" Value=\"3\" /><Replace Name=\"FORTIFY_BONUS_PER_TURN\" Value=\"3\" /><Replace Name=\"FORTIFY_TURN_MAX\" Value=\"2\" /><Replace Name=\"FRESH_WATER_FERTILITY\" Value=\"2\" /><Replace Value=\"1000\" Name=\"GAME_COST_ESCALATION\" /><Replace Value=\"2\" Name=\"GOLD_EQUIVALENT_OTHER_YIELDS\" /><Replace Name=\"GOLD_INTEREST_MAX_PER_TURN\" Value=\"1000\" /><Replace Value=\"0\" Name=\"GOLD_NEGATIVE_BALANCE_AMENITY_LOSS_LINE\" /><Replace Name=\"GOLD_NEGATIVE_BALANCE_DISBAND_UNIT_LINE\" Value=\"-10\" /><Replace Value=\"-10\" Name=\"GOLD_NEGATIVE_BALANCE_SUBSEQUENT_AMENITY_LOSS\" /><Replace Name=\"GOLD_NEGATIVE_BALANCE_SUBSEQUENT_DISBAND_UNIT\" Value=\"-10\" /><Replace Value=\"50\" Name=\"GOLD_PERCENTAGE_YIELD_PER_UNASSIGNED_POP\" /><Replace Name=\"GOLD_PURCHASE_MULTIPLIER\" Value=\"2\" /><Replace Name=\"GOVERNMENT_ALLOW_EMPTY_POLICY_SLOTS\" Value=\"false\" /><Replace Value=\"2\" Name=\"GOVERNMENT_BASE_ANARCHY_TURNS\" /><Replace Name=\"GOVERNMENT_UNLOCK_WITH_FAITH\" Value=\"false\" /><Replace Name=\"GREATWORK_ART_LOCK_TIME\" Value=\"10\" /><Replace Name=\"HARVEST_IMPROVED_DEGRADATION\" Value=\"50\" /><Replace Value=\"30\" Name=\"HARVEST_PILLAGED_DEGRADATION\" /><Replace Value=\"1\" Name=\"INFLUENCE_TOKENS_FREE_FOR_FIRST_PLAYER_MEET\" /><Replace Name=\"INFLUENCE_TOKENS_MINIMUM_FOR_SUZERAIN\" Value=\"3\" /><Replace Value=\"9\" Name=\"LAKE_MAX_AREA_SIZE\" /><Replace Value=\"40\" Name=\"LAKE_PLOT_RANDOM\" /><Replace Value=\"25\" Name=\"LEVY_MILITARY_PERCENT_OF_UNIT_PURCHASE_COST\" /><Replace Value=\"30\" Name=\"LEVY_MILITARY_TURN_DURATION\" /><Replace Value=\"2\" Name=\"LUXURY_HAPPINESS_LOSS_PER_ERA\" /><Replace Name=\"LUXURY_HAPPINESS_MINIMUM\" Value=\"2\" /><Replace Name=\"LUXURY_RESOURCE_FERTILITY\" Value=\"5\" /><Replace Value=\"2.0\" Name=\"MAYHEM_BUILDING_PILLAGED\" /><Replace Name=\"MAYHEM_CAPTURE_CIVILIAN\" Value=\"1\" /><Replace Value=\"3.0\" Name=\"MAYHEM_CITY_DEATH\" /><Replace Name=\"MAYHEM_CITY_DEATH_WITH_BARBARIANS\" Value=\"2.0\" /><Replace Name=\"MAYHEM_DECLARATION_OF_WAR\" Value=\"2\" /><Replace Name=\"MAYHEM_DENOUNCEMENT\" Value=\"1\" /><Replace Name=\"MAYHEM_DISTRICT_DEATH\" Value=\"1.0\" /><Replace Name=\"MAYHEM_DISTRICT_DEATH_WITH_BARBARIANS\" Value=\"0.5\" /><Replace Name=\"MAYHEM_DISTRICT_PILLAGED\" Value=\"1.5\" /><Replace Value=\"1.0\" Name=\"MAYHEM_IMPROVEMENT_PILLAGED\" /><Replace Value=\"5.0\" Name=\"MAYHEM_NUCLEAR_LAUNCH\" /><Replace Value=\"-1\" Name=\"MAYHEM_PEACE\" /><Replace Name=\"MAYHEM_PLAYER_DESTROYED\" Value=\"3.0\" /><Replace Name=\"MAYHEM_UNIT_COMBAT\" Value=\"1.0\" /><Replace Value=\"0.5\" Name=\"MAYHEM_UNIT_COMBAT_WITH_BARBARIANS\" /><Replace Value=\"1.0\" Name=\"MAYHEM_UNIT_DEATH\" /><Replace Name=\"MAYHEM_UNIT_DEATH_WITH_BARBARIANS\" Value=\"0.5\" /><Replace Name=\"MOUNTAIN_ADJACENT_FERTILITY\" Value=\"1\" /><Replace Name=\"MOVEMENT_EMBARK_COST\" Value=\"2\" /><Replace Value=\"2\" Name=\"MOVEMENT_RIVER_COST\" /><Replace Value=\"2\" Name=\"MOVEMENT_WHILE_EMBARKED_BASE\" /><Replace Name=\"NATIONAL_PARK_AMENITIES_OWNING_CITY\" Value=\"2\" /><Replace Value=\"0\" Name=\"NATIONAL_PARK_GOLD_YIELD_PER_TOURISM\" /><Replace Name=\"NATIONAL_PARK_NUM_OTHER_AMENITY_CITIES\" Value=\"4\" /><Replace Name=\"NATURAL_WONDER_ADJACENT_FERTILITY\" Value=\"1\" /><Replace Value=\"10\" Name=\"OCEAN_MIN_WATER_SIZE\" /><Replace Value=\"1\" Name=\"PILLAGE_ADVANCED_MOVEMENT_COST\" /><Replace Value=\"25\" Name=\"PILLAGE_BUILDING_REPAIR_PERCENT\" /><Replace Value=\"3\" Name=\"PILLAGE_MOVEMENT_COST\" /><Replace Name=\"PLOT_BUY_BASE_COST\" Value=\"50\" /><Replace Name=\"PLOT_CONTAMINATION_DAMAGE_BASE\" Value=\"50\" /><Replace Name=\"PLOT_INFLUENCE_BASE_MULTIPLIER\" Value=\"100\" /><Replace Name=\"PLOT_INFLUENCE_DISTANCE_DIVISOR\" Value=\"2\" /><Replace Value=\"100\" Name=\"PLOT_INFLUENCE_DISTANCE_MULTIPLIER\" /><Replace Name=\"PLOT_INFLUENCE_IMPROVEMENT_COST\" Value=\"-5\" /><Replace Name=\"PLOT_INFLUENCE_MAX_ACQUIRE_DISTANCE\" Value=\"5\" /><Replace Value=\"-105\" Name=\"PLOT_INFLUENCE_NW_COST\" /><Replace Name=\"PLOT_INFLUENCE_RESOURCE_COST\" Value=\"-105\" /><Replace Name=\"PLOT_INFLUENCE_RING_COST\" Value=\"100\" /><Replace Name=\"PLOT_INFLUENCE_WATER_COST\" Value=\"25\" /><Replace Value=\"-1\" Name=\"PLOT_INFLUENCE_YIELD_POINT_COST\" /><Replace Name=\"PLOT_UNIT_LIMIT\" Value=\"1\" /><!-- Damage inflicted per turn for units on water --><Replace Value=\"0\" Name=\"PLOT_WATER_DAMAGE_BASE\" /><Replace Name=\"POLICY_COST_BASE\" Value=\"25\" /><Replace Value=\"1.5\" Name=\"POLICY_COST_EXPONENT\" /><Replace Name=\"POLICY_COST_INCREASE_TO_BE_EXPONENTED\" Value=\"3\" /><Replace Name=\"POLICY_COST_VISIBLE_DIVISOR\" Value=\"5\" /><Replace Name=\"POLICY_ENACTED_DISCOUNT\" Value=\"50\" /><Replace Value=\"true\" Name=\"POLICY_REQUIRE_CITIES\" /><Replace Value=\"5\" Name=\"PURCHASE_DIVISOR\" /><Replace Name=\"REBELLION_CHANCE_PER_POINT\" Value=\"2.0\" /><Replace Value=\"20\" Name=\"REBELLION_COOLDOWN_TURNS\" /><Replace Value=\"3\" Name=\"RELIGION_HEALING_MULTIPLIER\" /><Replace Name=\"RELIGION_INITIAL_BELIEFS\" Value=\"2\" /><Replace Name=\"RELIGION_PANTHEON_MIN_FAITH\" Value=\"25\" /><Replace Name=\"RELIGION_SPREAD_ADJACENT_CITY_DISTANCE\" Value=\"10\" /><Replace Value=\"1\" Name=\"RELIGION_SPREAD_ADJACENT_PER_TURN_PRESSURE\" /><Replace Value=\"50\" Name=\"RELIGION_SPREAD_ATHEISM_PRESSURE_PER_POP\" /><Replace Value=\"250\" Name=\"RELIGION_SPREAD_COMBAT_VICTORY\" /><Replace Name=\"RELIGION_SPREAD_HOLY_CITY_PRESSURE_MULTIPLIER\" Value=\"4\" /><Replace Name=\"RELIGION_SPREAD_HOLY_CITY_PRESSURE_PER_POP\" Value=\"200\" /><Replace Value=\"2\" Name=\"RELIGION_SPREAD_HOLY_SITE_PRESSURE_MULTIPLIER\" /><Replace Name=\"RELIGION_SPREAD_RANGE_COMBAT_VICTORY\" Value=\"6\" /><Replace Name=\"RELIGION_SPREAD_RANGE_UNIT_CAPTURE\" Value=\"6\" /><Replace Name=\"RELIGION_SPREAD_STRENGTH_MULTIPLIER\" Value=\"200\" /><Replace Value=\"1.0\" Name=\"RELIGION_SPREAD_TRADE_ROUTE_PRESSURE_FOR_DESTINATION\" /><Replace Name=\"RELIGION_SPREAD_TRADE_ROUTE_PRESSURE_FOR_ORIGIN\" Value=\"0.5\" /><Replace Name=\"RELIGION_SPREAD_UNIT_CAPTURE\" Value=\"125\" /><Replace Value=\"1\" Name=\"RIVER_FERTILITY\" /><Replace Name=\"RIVER_PLOTS_PER_EDGE\" Value=\"12\" /><Replace Name=\"RIVER_SEA_WATER_RANGE_DEFAULT\" Value=\"3\" /><Replace Value=\"4\" Name=\"RIVER_SOURCE_MIN_RIVER_RANGE\" /><Replace Value=\"2\" Name=\"RIVER_SOURCE_MIN_SEAWATER_RANGE\" /><Replace Name=\"RIVER_SOURCE_RANGE_DEFAULT\" Value=\"4\" /><Replace Value=\"70\" Name=\"SCIENCE_PERCENTAGE_YIELD_PER_POP\" /><Replace Name=\"SNOW_ICE_FERTILITY\" Value=\"0\" /><Replace Name=\"START_DISTANCE_FERTILITY_EXCLUSION_ZONE\" Value=\"6\" /><Replace Value=\"12\" Name=\"START_DISTANCE_MAJOR_CIVILIZATION\" /><Replace Value=\"2\" Name=\"START_DISTANCE_MAJOR_NATURAL_WONDER\" /><Replace Value=\"5\" Name=\"START_DISTANCE_MINOR_CIVILIZATION_START\" /><Replace Name=\"START_DISTANCE_MINOR_MAJOR_CIVILIZATION\" Value=\"6\" /><Replace Value=\"3\" Name=\"START_DISTANCE_MINOR_NATURAL_WONDER\" /><Replace Name=\"START_DISTANCE_RANGE_MAJOR\" Value=\"2\" /><Replace Name=\"START_DISTANCE_RANGE_MINOR\" Value=\"3\" /><Replace Name=\"START_FERTILITY_WEIGHT_BONUS\" Value=\"75\" /><Replace Name=\"START_FERTILITY_WEIGHT_CONTINENTAL_DIVIDE\" Value=\"250\" /><Replace Name=\"START_FERTILITY_WEIGHT_LUXURY\" Value=\"250\" /><Replace Value=\"5\" Name=\"START_LEGENDARY_BONUS_QUANTITY\" /><Replace Value=\"3\" Name=\"START_LEGENDARY_LUXURY_QUANTITY\" /><Replace Name=\"STRATEGIC_RESOURCE_FERTILITY\" Value=\"0\" /><Replace Value=\"5\" Name=\"STRATEGIC_RESOURCE_FERTILITY_STARTING_ERA_ADDITIONAL\" /><Replace Value=\"1\" Name=\"STRATEGIC_RESOURCE_FERTILITY_STARTING_ERA_RANGE\" /><Replace Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_PRODUCTION_ANYWHERE\" Value=\"2\" /><Replace Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_PRODUCTION_WITH_DISTRICT\" Value=\"1\" /><Replace Value=\"2\" Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_PURCHASE_ANYWHERE\" /><Replace Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_PURCHASE_WITH_DISTRICT\" Value=\"1\" /><Replace Value=\"1\" Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_UNIT_HEALING\" /><Replace Value=\"1\" Name=\"STRATEGIC_RESOURCE_MINIMUM_FOR_UNIT_UPGRADING\" /><Replace Name=\"TOURISM_ADVANCED_ERA_WONDER\" Value=\"true\" /><Replace Value=\"2\" Name=\"TOURISM_BASE_FROM_WONDER\" /><Replace Name=\"TOURISM_CONFLICTING_GOVERNMENT_MULTIPLIER\" Value=\"3\" /><Replace Value=\"100\" Name=\"TOURISM_CULTURE_PER_CITIZEN\" /><Replace Value=\"50\" Name=\"TOURISM_DIFFERENT_RELIGION_REDUCTION\" /><Replace Value=\"8\" Name=\"TOURISM_FROM_HOLY_CITY\" /><Replace Name=\"TOURISM_OPEN_BORDERS_BONUS\" Value=\"25\" /><Replace Name=\"TOURISM_TOURISM_TO_MOVE_CITIZEN\" Value=\"150\" /><Replace Value=\"25\" Name=\"TOURISM_TRADE_ROUTE_BONUS\" /><Replace Value=\"15\" Name=\"TRADE_ROUTE_BASE_RANGE\" /><Replace Name=\"TRADE_ROUTE_GOLD_PER_DESTINATION_DISTRICT\" Value=\"2\" /><Replace Value=\"2\" Name=\"TRADE_ROUTE_GOLD_PER_ORIGIN_DISTRICT\" /><Replace Name=\"TRADE_ROUTE_LAND_RANGE_REFUEL\" Value=\"15\" /><Replace Value=\"true\" Name=\"TRADE_ROUTE_PLACES_ROADS\" /><Replace Name=\"TRADE_ROUTE_TURN_DURATION_BASE\" Value=\"20\" /><Replace Value=\"30\" Name=\"TRADE_ROUTE_WATER_RANGE_REFUEL\" /><Replace Value=\"1\" Name=\"TRADING_POST_GOLD_IN_FOREIGN_CITY\" /><Replace Value=\"0\" Name=\"TRADING_POST_GOLD_IN_OWN_CITY\" /><Replace Name=\"TUNDRA_FERTILITY_MODIFIER\" Value=\"-5\" /><Replace Name=\"UNIT_ARMY_COST_MODIFIER\" Value=\"2.0\" /><Replace Value=\"1.5\" Name=\"UNIT_CORPS_COST_MODIFIER\" /><Replace Name=\"UNIT_EXPERIENCE_LEVEL_FOR_CUSTOM_NAME\" Value=\"2\" /><Replace Value=\"30\" Name=\"UNIT_MAX_DIRECT_LOYALTY_DAMAGE\" /><Replace Name=\"UNLOCK_EMBARKATION\" Value=\"false\" /><Replace Name=\"UPGRADE_BASE_COST\" Value=\"10\" /><Replace Name=\"UPGRADE_MINIMUM_COST\" Value=\"15\" /><Replace Name=\"UPGRADE_NET_PRODUCTION_PERCENT_COST\" Value=\"75\" /><Replace Value=\"2000\" Name=\"WAR_WEARINESS_DECAY_PEACE_DECLARED\" /><Replace Name=\"WAR_WEARINESS_DECAY_TURN_AT_PEACE\" Value=\"200\" /><Replace Value=\"50\" Name=\"WAR_WEARINESS_DECAY_TURN_AT_WAR\" /><Replace Name=\"WAR_WEARINESS_LOSS_OVER_REQ_AMENITIES_AT_WAR_CITY\" Value=\"3\" /><Replace Value=\"0\" Name=\"WAR_WEARINESS_LOSS_OVER_REQ_AMENITIES_FOUNDED_CITY\" /><Replace Name=\"WAR_WEARINESS_LOSS_OVER_REQ_AMENITIES_NONFOUNDED_CITY\" Value=\"1\" /><Replace Name=\"WAR_WEARINESS_PER_COMBAT_IN_ALLIED_LANDS\" Value=\"1\" /><Replace Name=\"WAR_WEARINESS_PER_COMBAT_IN_FOREIGN_LANDS\" Value=\"2\" /><Replace Value=\"3\" Name=\"WAR_WEARINESS_PER_UNIT_KILLED\" /><Replace Name=\"WAR_WEARINESS_PER_WMD_LAUNCHED\" Value=\"10\" /><Replace Name=\"WAR_WEARINESS_POINTS_FOR_AMENITY_LOSS\" Value=\"400\" /><Replace Value=\"16\" Name=\"WAR_WEARINESS_WARMONGER_BASE\" /><Replace Name=\"WARMONGER_CITY_PERCENT_OF_DOW\" Value=\"50\" /><Replace Name=\"WARMONGER_FINAL_MAJOR_CITY_MULTIPLIER\" Value=\"200\" /><Replace Value=\"100\" Name=\"WARMONGER_FINAL_MINOR_CITY_MULTIPLIER\" /><Replace Value=\"32\" Name=\"WARMONGER_LIBERATE_POINTS\" /><Replace Name=\"WARMONGER_RAZE_PENALTY_PERCENT\" Value=\"200\" /><Replace Name=\"WARMONGER_REDUCTION_IF_AT_WAR\" Value=\"40\" /><Replace Name=\"WARMONGER_REDUCTION_IF_DENOUNCED\" Value=\"20\" /><Replace Name=\"WARMONGER_STOP_OCCUPYING_REFUND_PERCENT\" Value=\"-100\" /><Replace Value=\"2\" Name=\"WONDER_FREE_TILES_UPON_COMPLETION\" /><Replace Name=\"YIELD_FOOD_CITY_TERRAIN_REPLACE\" Value=\"2\" /><Replace Value=\"30\" Name=\"YIELD_MODIFIER_PER_EARNED_GREAT_PERSON_MAXIMUM\" /><Replace Value=\"1\" Name=\"YIELD_PRODUCTION_CITY_TERRAIN_REPLACE\" /></GlobalParameters></GameInfo>",
+    "DLC/Expansion2/Data/Expansion1_Modifiers.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><GameInfo><DynamicModifiers><!-- Emergencies --><Row><ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_ATTACKER_STRENGTH</ModifierType><CollectionType>COLLECTION_EMERGENCY_COMBATS</CollectionType><EffectType>EFFECT_ADJUST_ATTACKER_STRENGTH_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_COMBATS_ADJUST_DEFENDER_STRENGTH</ModifierType><CollectionType>COLLECTION_EMERGENCY_COMBATS</CollectionType><EffectType>EFFECT_ADJUST_DEFENDER_STRENGTH_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_HEALING</ModifierType><CollectionType>COLLECTION_EMERGENCY_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_HEALING_MODIFIERS</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_PLAYERS_YIELD_PER_TURN</ModifierType><CollectionType>COLLECTION_EMERGENCY_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_YIELD_CHANGE</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_MOVEMENT</ModifierType><CollectionType>COLLECTION_EMERGENCY_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_MOVEMENT</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_PLAYERS_YIELDS_PER_ENVOY</ModifierType><CollectionType>COLLECTION_EMERGENCY_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_YIELD_CHANGE_PER_USED_INFLUENCE_TOKEN</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_RELIC</ModifierType><CollectionType>COLLECTION_EMERGENCY_PLAYERS</CollectionType><EffectType>EFFECT_GRANT_RELIC</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_CITIES_EXERT_RELIGIOUS_PRESSURE</ModifierType><CollectionType>COLLECTION_EMERGENCY_CITIES</CollectionType><EffectType>EFFECT_GRANT_RELIGIOUS_PRESSURE_BURST</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_CITIES_KILL_ALL_EMERGENCY_TARGET_SPIES</ModifierType><CollectionType>COLLECTION_EMERGENCY_CITIES</CollectionType><EffectType>EFFECT_KILL_EMERGENCY_TARGET_SPIES_IN_CITY</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_UNITS_GRANT_ABILITY</ModifierType><CollectionType>COLLECTION_EMERGENCY_UNITS</CollectionType><EffectType>EFFECT_GRANT_ABILITY</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_UNITS_ADJUST_SPYING_EFFICIENCY</ModifierType><CollectionType>COLLECTION_EMERGENCY_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_SPY_OPERATION_CHANCE</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_PLAYERS_GRANT_UNIT</ModifierType><CollectionType>COLLECTION_EMERGENCY_PLAYERS</CollectionType><EffectType>EFFECT_GRANT_UNIT_BY_CLASS</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_TRADE_ROUTES_CANCEL</ModifierType><CollectionType>COLLECTION_EMERGENCY_TRADE_ROUTES</CollectionType><EffectType>EFFECT_TRADE_ROUTE_CANCEL</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_TRADE_ROUTES_ADJUST_YIELDS</ModifierType><CollectionType>COLLECTION_EMERGENCY_TRADE_ROUTES</CollectionType><EffectType>EFFECT_ADJUST_TRADE_ROUTE_YIELD_CHANGE</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_PLAYERS_ADJUST_WAR_WEARINESS</ModifierType><CollectionType>COLLECTION_EMERGENCY_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_WAR_WEARINESS</EffectType></Row><Row><ModifierType>MODIFIER_EMERGENCY_TARGET_CITY_GRANT_LOYALTY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PER_TURN</EffectType></Row><!-- Alliances --><Row><ModifierType>MODIFIER_ALLIANCE_DISTRICTS_ADJUST_GREAT_POINTS</ModifierType><CollectionType>COLLECTION_ALLIANCE_DISTRICTS</CollectionType><EffectType>EFFECT_ADJUST_DISTRICT_GREAT_PERSON_POINTS</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_RESEARCH_AGREEMENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_RESEARCH_AGREEMENT</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_ENVOY_POINTS_FROM_ALLY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_ENVOY_POINTS_FROM_ALLY_TRIBUTARIES</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_SCIENCE_FROM_ALLY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_SCIENCE_SHARING</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_TOURISM_FROM_ALLY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_TOURISM_SHARING</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_CULTURE_FROM_ALLY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_CULTURE_SHARING</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_TRAINED_UNITS_FREE_UPGRADE</ModifierType><CollectionType>COLLECTION_ALLIANCE_TRAINED_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_GRANT_EXPERIENCE</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_SHARE_VISIBILITY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_GRANT_SHARED_VIS</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_DO_NOTHING</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_DO_NOTHING</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_CITIES_MILITARY_UNIT_PRODUCTION</ModifierType><CollectionType>COLLECTION_ALLIANCE_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_ALL_MILITARY_UNITS_PRODUCTION</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_YIELD_FROM_FOLLOWERS_OF_ALLY_RELIGIONS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_YIELD_INCOME_FROM_ALLY_RELIGION</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_RELIGIOUS_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_PRESSURE_FROM_NO_ALLY_RELIGION</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYERS_SHARE_SUZERAIN</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ALLIANCE_SHARE_SUZERAIN</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_COMBATS_UNIT_STRENGTHS</ModifierType><CollectionType>COLLECTION_ALLIANCE_COMBATS</CollectionType><EffectType>EFFECT_ADJUST_ALLIANCE_PLAYER_STRENGTH_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_PLAYER_TRADE_ROUTE_CAPACITY</ModifierType><CollectionType>COLLECTION_ALLIANCE_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_TRADE_ROUTE_CAPACITY</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_TRADE_ROUTE_ADJUST_YIELD</ModifierType><CollectionType>COLLECTION_ALLIANCE_TRADEROUTES</CollectionType><EffectType>EFFECT_ADJUST_TRADE_ROUTE_YIELD_CHANGE</EffectType></Row><Row><ModifierType>MODIFIER_ALLIANCE_UNIT_MOVEMENT</ModifierType><CollectionType>COLLECTION_ALLIANCE_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_MOVEMENT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ALLIANCES_ATTACH_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_ALLIANCES</CollectionType><EffectType>EFFECT_ATTACH_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_ALLIANCE_POINTS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALLIANCE_POINTS_FOR_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_ALLIANCE_POINTS_FOR_COMMON_FOE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALLIANCE_POINTS_FOR_COMMON_ENEMY_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_ALLIANCE_POINTS_FOR_TRADE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALLIANCE_POINTS_FOR_TRADE_MODIFIER</EffectType></Row><!-- Miscellaneous --><Row><ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_GREAT_PERSON_POINTS</ModifierType><CollectionType>COLLECTION_ALL_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_GREAT_PERSON_POINTS</EffectType></Row><Row><ModifierType>MODIFIER_GAME_ADJUST_PLOT_YIELD</ModifierType><CollectionType>COLLECTION_ALL_PLOT_YIELDS</CollectionType><EffectType>EFFECT_ADJUST_PLOT_YIELD</EffectType></Row><Row><ModifierType>MODIFIER_COMBAT_RESULTS_ATTACH_UNIT_MODIFIER</ModifierType><CollectionType>COLLECTION_COMBAT_RESULTS</CollectionType><EffectType>EFFECT_ATTACH_UNIT_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_FAITH_ON_DISTRICT_PILLAGE</ModifierType><CollectionType>COLLECTION_PLAYER_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_FAITH_ON_DISTRICT_PLUNDER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_FAITH_ON_IMPROVEMENT_PILLAGE</ModifierType><CollectionType>COLLECTION_PLAYER_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_FAITH_ON_IMPROVEMENT_PLUNDER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_SPY_ESTABLISH_TIME</ModifierType><CollectionType>COLLECTION_PLAYER_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_SPY_ESTABLISH_TIME</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_SPY_OFFENSIVE_OPERATION_TIME</ModifierType><CollectionType>COLLECTION_PLAYER_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_SPY_OFFENSIVE_OPERATION_TIME</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADD_DIPLOMATIC_ACTION_OVERRIDE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADD_DIPLOMATIC_ACTION_OVERRIDE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADD_DIPLOMATIC_COMBAT_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADD_DIPLOMATIC_COMBAT_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADD_UPGRADE_MILITARY_FORMATION_ON_CITY_CONQUEST</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADD_PLAYER_UPGRADE_MILITARY_FORMATION_ON_CITY_CONQUEST</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ALL_ALLIANCES_PROVIDE_SHARED_VIS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_DUPLICATE_INFLUENCE_TOKEN_WHEN_SAME_RELIGION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_DUPLICATE_INFLUENCE_TOKEN_WHEN_SAME_RELIGION</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_EXTRA_STARTING_POPULATION_OFF_HOME_CONTINENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_EXTRA_STARTING_POPULATION_OFF_HOME_CONTINENT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ALWAYS_ALLOW_COMMEMORATION_QUEST_COUNT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ALWAYS_ALLOW_COMMEMORATION_QUEST_COUNT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_CULTURAL_IDENTITY_PRESSURE_RADIUS_FROM_CAPITAL</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_CULTURAL_IDENTITY_PRESSURE_RADIUS_FROM_CAPITAL</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_PRIDE_MOMENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_PRIDE_MOMENT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_CITY_RELIGION_CONVERSION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CITY_RELIGION_CONVERSION</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_CIVIC_BOOST</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CIVIC_BOOST</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_CONTINENT_DISCOVERED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CONTINENT_DISCOVERED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_DISTRICT_CONSTRUCTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_DISTRICT_CONSTRUCTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_NATURAL_WONDER_DISCOVERED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_NATURAL_WONDER_DISCOVERED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_CORPS_KILLED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CORPS_KILLED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_ARMY_KILLED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_ARMY_KILLED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_TECH_BOOST</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_TECH_BOOST</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_TRADE_ROUTE_COMPLETED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_TRADE_ROUTE_COMPLETED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_IDENTITY_PER_TURN_FOR_DOMESTIC_TRADE_ROUTE_ORIGIN</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_IDENTITY_PER_TURN_FOR_DOMESTIC_TRADE_ROUTE_ORIGIN</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_NON_BARBARIAN_NAVAL_UNIT_KILLED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_NON_BARBARIAN_UNIT_SEA_KILLED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_SCIENCE_BUILDING_CONSTRUCTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_SCIENCE_BUILDING_CONSTRUCTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_CULTURE_BUILDING_CONSTRUCTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CULTURE_BUILDING_CONSTRUCTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_AERODROME_BUILDING_CONSTRUCTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_AERODROME_BUILDING_CONSTRUCTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_INDUSTRIAL_BUILDING_CONSTRUCTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_INDUSTRIAL_BUILDING_CONSTRUCTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_SPY_SUCCESSFUL_MISSION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_SPY_SUCCESSFUL_MISSION</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_ARTIFACT_EXTRACTED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_ARTIFACT_EXTRACTED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_PLAYER_ERA_SCORE_PER_GREAT_PERSON_EARNED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_GREAT_PERSON_EARNED</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_GOVERNOR_POINTS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS</EffectType></Row><Row><ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_GOVERNOR_POINTS</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_TRADE_ROUTE_YIELD_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_TRADE_ROUTE_YIELD_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_TRADE_ROUTE_YIELD_PER_IMPROVEMENT_IN_TARGET</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_TRADE_ROUTE_YIELD_PER_IMPROVEMENT_IN_TARGET_CITY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_TRADE_ROUTE_YIELD_PER_SPECIALTY_DISTRICT_FOR_INTERNATIONAL</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_TRADE_ROUTE_YIELD_PER_SPECIALTY_DISTRICT_FOR_INTERNATIONAL</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_TOURISM_FROM_NATIONAL_PARKS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_TOURISM_FROM_NATIONAL_PARKS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_IMMEDIATE_TRADING_POST</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_IMMEDIATE_TRADING_POST</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_WMD_MAINTENANCE_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_WMD_MAINTENANCE_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_POST_COMBAT_LOYALTY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_POST_COMBAT_LOYALTY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_POST_PILLAGE_LOYALTY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_POST_PILLAGE_LOYALTY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DISTRICTS_ADJUST_YIELD_BASED_ON_ADJACENCY_BONUS</ModifierType><CollectionType>COLLECTION_PLAYER_DISTRICTS</CollectionType><EffectType>EFFECT_ADJUST_DISTRICT_YIELD_BASED_ON_ADJACENCY_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNITS_ADJUST_DIPLO_VISIBILITY_COMBAT_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_DIPLO_VISIBILITY_COMBAT_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_ALL_UNITS_ADJUST_DIPLO_VISIBILITY_COMBAT_MODIFIER</ModifierType><CollectionType>COLLECTION_ALL_UNITS</CollectionType><EffectType>EFFECT_ADJUST_UNIT_DIPLO_VISIBILITY_COMBAT_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_BUILT_CITIES_GRANT_FREE_UNIT</ModifierType><CollectionType>COLLECTION_PLAYER_BUILT_CITIES</CollectionType><EffectType>EFFECT_GRANT_UNIT_IN_CITY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_PER_POPULATION</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_YIELD_PER_POPULATION</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER_PER_GOVERNOR_TITLE</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_YIELD_MODIFIER_PER_GOVERNOR_TITLE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CORPS_ARMY_MODIFIED_STRENGTH</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CORPS_ARMY_MODIFIED_STRENGTH</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_RELIGION_ENABLE_AWARDS_ENVOY_RELIGIOUS_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ENABLE_RELIGION_AWARDS_ENVOY_RELIGIOUS_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_TREAT_HOLY_SITES_AS_HOLY_CITIES</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_TREAT_HOLY_SITE_AS_HOLY_CITY</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_BUILDING_PRODUCTION_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALL_BUILDING_PRODUCTION_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PER_TURN</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PER_TURN</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IDENTITY_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IMPROVEMENT_AMENITY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_IMPROVEMENT_AMENITY</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_UNIT_PRODUCTION_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALL_UNIT_PRODUCTION_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_GRANT_LOYALTY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_GRANT_CITY_LOYALTY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_ALWAYS_LOYAL</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_ALWAYS_LOYAL</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_HAPPINESS_GREAT_PERSON</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_HAPPINESS_GREAT_PERSON</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_HAPPINESS_YIELD</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_HAPPINESS_YIELD</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_LOYALTY_ADJUST_MARTIAL_LAW_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_LOYALTY_MARTIAL_LAW_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_BUILDING_PRODUCTION_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_ALL_BUILDING_PRODUCTION_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_BUILDING_YIELD_MODIFIERS_FOR_DISTRICT</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_BUILDING_YIELD_MODIFIERS_FOR_DISTRICT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_DISTRICT_PRODUCTION_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_ALL_DISTRICT_PRODUCTION_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_BUILDING_PRODUCTION_CHANGE</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_PRODUCTION_BUILDING</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_DISTRICT_PRODUCTION_CHANGE</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_PRODUCTION_DISTRICT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_GREAT_PERSON_POINT</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_GREAT_PERSON_POINTS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_CITIZEN</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PER_CITIZEN</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PRESSURE_FROM_EMERGENCIES</ModifierType><CollectionType>COLLECTION_EMERGENCY_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IMPROVEMENT_AMENITY</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_IMPROVEMENT_AMENITY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_TRAIT_AMENITY</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_TRAIT_AMENITY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_ALL_UNIT_PRODUCTION_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION_CHANGE</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_PRODUCTION_UNIT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_UNITS_PURCHASE_COST</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_ALL_UNITS_PURCHASE_COST</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_RIVER_ADJACENCY</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_RIVER_ADJACENCY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITYSTATEUNITS_ATTACH_MODIFIER</ModifierType><CollectionType>COLLECTION_PLAYER_CITY_STATE_UNITS</CollectionType><EffectType>EFFECT_ATTACH_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_HORN_CHEST_LOINS</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_AGENDA_HORN_CHEST_LOINS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_HORSE_LORD</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_AGENDA_HORSE_LORD</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_SPIRIT_OF_TUCAPEL</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_CULTURAL_ID</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_TRADE_GAIN_TILES_EN_ROUTE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_TRADE_GAIN_TILES_EN_ROUTE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNIT_ADJUST_PARADROP_ABILITY</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_UNIT_PARADROP_ABILITY</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DISABLE_HEALING</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_DISABLE_HEALING</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DISABLE_INFLUENCE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_DISABLE_INFLUENCE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DISABLE_PATRONAGE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_DISABLE_PATRONAGE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DISABLE_SETTLING</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_DISABLE_SETTLING</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_INQUISITION_START_CHARGES</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_INQUISITION_START_CHARGES</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_UNIT_BUILD_DISABLED</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_UNIT_BUILD_DISABLED</EffectType></Row><Row><ModifierType>MODIFIER_UNIT_STRENGTH_FROM_CITY_CULTURAL_IDENTITY</ModifierType><CollectionType>COLLECTION_PLAYER_COMBAT</CollectionType><EffectType>EFFECT_ADJUST_UNIT_STRENGTH_FROM_CITY_CULTURAL_IDENTITY</EffectType></Row><Row><ModifierType>MODIFIER_UNIT_ADJUST_COMBAT_UNIT_CAPTURE</ModifierType><CollectionType>COLLECTION_UNIT_COMBAT</CollectionType><EffectType>EFFECT_ADJUST_UNIT_COMBAT_UNIT_CAPTURE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_IDENTITY_PER_TURN</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_BROKEN_PLEDGE</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_BROKEN_PLEDGE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_KEPT_PLEDGE</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_KEPT_PLEDGE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_DIPLOMACY_NO_PLEDGE</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_DIPLOMACY_NO_PLEDGE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_GOVERNORS_ADJUST_IDENTITY_PER_TITLE</ModifierType><CollectionType>COLLECTION_PLAYER_GOVERNORS</CollectionType><EffectType>EFFECT_GOVERNOR_ADJUST_IDENITITY_PER_TITLE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_GOVERNORS_ADJUST_GOVERNOR_IDENTITY_PRESSURE</ModifierType><CollectionType>COLLECTION_PLAYER_GOVERNORS</CollectionType><EffectType>EFFECT_ADJUST_GOVERNOR_IDENTITY_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_GRANT_BOOST_WITH_GREAT_PERSON</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_GRANT_BOOST_WITH_GREAT_PERSON</EffectType></Row><!-- Governor Modifiers --><Row><ModifierType>MODIFIER_CITY_ADJUST_ATTACKS_PER_TURN</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_ATTACKS_PER_TURN</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_RESOURCE_HARVEST_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RESOURCE_HARVEST_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_SIEGE_PROTECTION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_SIEGE_PROTECTION</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_SPY_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_SPY_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_IGNORE_STRATEGIC_RESOURCE_REQUIREMENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_IGNORE_STRATEGIC_RESOURCE_REQUIREMENTS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_INCREASE_DISTRICT_PRODUCTION_RATE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_ALL_DISTRICTS_PRODUCTION</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_WONDER_PRODUCTION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_WONDER_PRODUCTION</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_PROJECT_PRODUCTION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PROJECT_PRODUCTION</EffectType></Row><Row><ModifierType>MODIFIER_GOVERNOR_ADJUST_CITY_ENVOYS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_GOVERNOR_ADJUST_CITY_TOKENS_GRANTED</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_ADJUST_AMENITIES_FROM_GOVERNORS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_AMENITIES_FROM_GOVERNORS</EffectType></Row><Row><ModifierType>MODIFIER_GOVERNOR_ADJUST_CITY_COPY_LUXURIES_FOR_IMPORT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_GOVERNOR_ADJUST_CITY_COPY_LUXURIES_FOR_IMPORT</EffectType></Row><Row><ModifierType>MODIFIER_GOVERNOR_ADJUST_CITY_ENVOYS_MODIFIER</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_GOVERNOR_ADJUST_CITY_TOKENS_GRANTED_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_GOVERNOR_ADJUST_GOVERNOR_IDENTITY_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_GOVERNOR_IDENTITY_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_CULTURE_BORDER_EXPANSION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_CULTURE_BORDER_EXPANSION</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_CAN_PURCHASE_DISTRICTS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_CAN_PURCHASE_DISTRICTS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_CITY_YIELD_PER_DISTRICT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_YIELD_PER_DISTRICT</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_CITIZEN_GOLD_PER_TURN</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_GOLD_FROM_CITIZENS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_ALLOWED_IMPROVEMENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_ALLOWED_IMPROVEMENT</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_ALLOWED_INCOMING_REGIONAL_STACKING</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_ALLOWED_INCOMING_REGIONAL_STACKING</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_AIR_DEFENSE_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_AIR_DEFENSE_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGION_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGION_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGIOUS_COMBAT_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGIOUS_COMBAT_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGIOUS_HEAL</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGIOUS_HEAL</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGION_IGNORE_PRESSURE</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGION_IGNORE_PRESSURE</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGION_IGNORE_COMBAT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGION_IGNORE_COMBAT</EffectType></Row><Row><ModifierType>MODIFIER_SINGLE_CITY_RELIGION_EXTRA_PROMOTIONS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_RELIGION_EXTRA_PROMOTIONS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_SETTLER_CONSUME_POPULATION</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_SETTLER_CONSUME_POP</EffectType></Row><Row><ModifierType>MODIFIER_CITY_DISTRICTS_ADJUST_YIELD_MODIFIER</ModifierType><CollectionType>COLLECTION_CITY_DISTRICTS</CollectionType><EffectType>EFFECT_ADJUST_DISTRICT_YIELD_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_YIELD_FROM_FOREIGN_TRADE_ROUTES_PASSING_THROUGH</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_YIELD_FROM_FOREIGN_TRADE_ROUTES_PASSING_THROUGH</EffectType></Row><Row><ModifierType>MODIFIER_CITY_ADJUST_CITY_COMBAT_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_COMBAT_BONUS</EffectType></Row><Row><ModifierType>MODIFIER_CITY_INCREASE_GREAT_PERSON_POINT_BONUS</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_CITY_GREAT_PERSON_POINTS_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_GREAT_PERSON_POINT_BONUS</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_GREAT_PERSON_POINTS_MODIFIER</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_CITY_ALL_YIELDS_CHANGE</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_ALL_YIELDS_CHANGE</EffectType></Row><!-- Government District Modifiers --><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_AMENITIES_FROM_GOVERNORS</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_AMENITIES_FROM_GOVERNORS</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_ADJUST_UNIT_PROJECT_PERCENT</ModifierType><CollectionType>COLLECTION_OWNER</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_UNIT_PROJECT_PERCENT</EffectType></Row><Row><ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_HOUSING_PER_DISTRICT</ModifierType><CollectionType>COLLECTION_PLAYER_CITIES</CollectionType><EffectType>EFFECT_ADJUST_CITY_HOUSING_PER_DISTRICT</EffectType></Row><!-- Other stuff --><Row><ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_ERA_SCORE_PER_CURRENT_CIVIC</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CURRENT_CIVIC</EffectType></Row><Row><ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_ERA_SCORE_PER_CURRENT_TECH</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_CURRENT_TECH</EffectType></Row><Row><ModifierType>MODIFIER_ALL_PLAYERS_ADJUST_ERA_SCORE_PER_UNIT_PROMOTION_EARNED</ModifierType><CollectionType>COLLECTION_MAJOR_PLAYERS</CollectionType><EffectType>EFFECT_ADJUST_PLAYER_ERA_SCORE_PER_UNIT_PROMOTION_EARNED</EffectType></Row></DynamicModifiers></GameInfo>",
+    "DLC/Expansion2/Data/Expansion2_GlobalParameters.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><GameInfo><GlobalParameters><Replace Name=\"AI_TRADE_VALUE_FOR_AID\" Value=\"150\" /><Replace Value=\"3\" Name=\"ALLIANCE_LEVEL_COUNT\" /><Replace Name=\"ALLIANCE_LEVEL_THREE_XP\" Value=\"960\" /><Replace Value=\"320\" Name=\"ALLIANCE_LEVEL_TWO_XP\" /><Replace Value=\"2\" Name=\"ALLIANCE_POINTS_FOR_DEAL\" /><Replace Value=\"2\" Name=\"ALLIANCE_POINTS_FOR_SOCIETY\" /><Replace Value=\"1\" Name=\"ALLIANCE_POINTS_FOR_TRADE\" /><Replace Value=\"4\" Name=\"ALLIANCE_POINTS_MULTIPLIER\" /><Replace Name=\"BARBARIAN_LOWER_THROTTLE_PER_DIFFICULTY\" Value=\"3\" /><Replace Value=\"18\" Name=\"BARBARIAN_MAX_THROTTLE_PER_RAID\" /><Replace Name=\"CAPITAL_IDENTITY_PRESSURE_MAXIMUM\" Value=\"0\" /><Replace Name=\"CAPITAL_IDENTITY_PRESSURE_MINIMUM\" Value=\"0\" /><Replace Value=\"10\" Name=\"CAPITAL_IDENTITY_PRESSURE_TILE_RADIUS_MAXIUMUM_BASE\" /><Replace Value=\"1\" Name=\"CAPITAL_IDENTITY_PRESSURE_TILE_RADIUS_MINIMUM\" /><Replace Value=\"10\" Name=\"CITIZEN_IDENTITY_GREAT_WORK_RADIUS_CUTOFF\" /><Replace Value=\"1\" Name=\"CITIZEN_IDENTITY_PRESSURE_BASE\" /><Replace Name=\"CITIZEN_IDENTITY_PRESSURE_CAPITAL\" Value=\"1\" /><Replace Name=\"CITIZEN_IDENTITY_PRESSURE_MOD_CULTURAL_DOMINANCE\" Value=\"25\" /><Replace Value=\"10\" Name=\"CITIZEN_IDENTITY_PRESSURE_RADIUS_CUTOFF\" /><Replace Value=\"10\" Name=\"CITIZEN_IDENTITY_WONDER_RADIUS_CUTOFF\" /><Replace Value=\"0\" Name=\"CITY_AMENITIES_FOR_FREE\" /><Replace Name=\"CIVIC_COST_PERCENT_CHANGE_AFTER_GAME_ERA\" Value=\"20\" /><Replace Name=\"CIVIC_COST_PERCENT_CHANGE_BEFORE_GAME_ERA\" Value=\"-20\" /><Replace Name=\"CLIMATE_CHANGE_PERCENT_COASTAL_LOWLANDS\" Value=\"45\" /><Replace Name=\"CLIMATE_CO2_PERCENT_FROM_UNITS\" Value=\"50\" /><Replace Value=\"0\" Name=\"COASTAL_RAID_ADVANCED_MOVEMENT_COST\" /><Replace Value=\"10\" Name=\"COMBAT_HEAL_CITY_OUTER_DEFENSES\" /><Replace Name=\"COMBAT_STRENGTH_REDUCTION_INSUFFICIENT_FUEL\" Value=\"20\" /><Replace Name=\"COMMEMORATE_BASE_CHOICES_ALLOWED\" Value=\"1\" /><Replace Name=\"COMMEMORATE_OPTIONS_MAX\" Value=\"3\" /><Replace Value=\"14\" Name=\"DARK_AGE_SCORE_BASE_THRESHOLD\" /><Replace Value=\"2\" Name=\"DIPLOMACY_ADJACENT_EMPIRE_CITIES_REQUIRED\" /><Replace Name=\"DIPLOMACY_ADJACENT_EMPIRE_RANGE\" Value=\"10\" /><Replace Name=\"DIPLOMATIC_VICTORY_POINTS_REQUIRED\" Value=\"20\" /><Replace Value=\"1\" Name=\"DROUGHT_FOOD_LOSS_PER_TILE\" /><Replace Name=\"EMERGENCY_FAVOR\" Value=\"50\" /><Replace Value=\"400\" Name=\"EMERGENCY_GOLD_PER_MEMBER_PER_ERA\" /><Replace Value=\"2\" Name=\"ESPIONAGE_FABRICATE_SCANDAL_BASE_ENVOYS_REMOVED\" /><Replace Value=\"1\" Name=\"ESPIONAGE_FABRICATE_SCANDAL_LEVEL_ENVOYS_REMOVED\" /><Replace Name=\"ESPIONAGE_FOMENT_UNREST_BASE_IDENTITY_CHANGE\" Value=\"75\" /><Replace Name=\"ESPIONAGE_FOMENT_UNREST_BASE_LOYALTY_CHANGE\" Value=\"-15\" /><Replace Name=\"ESPIONAGE_FOMENT_UNREST_LEVEL_IDENTITY_CHANGE\" Value=\"25\" /><Replace Value=\"-5\" Name=\"ESPIONAGE_FOMENT_UNREST_LEVEL_LOYALTY_CHANGE\" /><Replace Name=\"ESPIONAGE_MISSION_LENGTH_REDUCTION_CULTURAL_DOMINANCE\" Value=\"50\" /><Replace Value=\"6\" Name=\"ESPIONAGE_NEUTRALIZE_GOVERNOR_BASE_TURNS\" /><Replace Value=\"8\" Name=\"EXPERIENCE_MAXIMUM_ONE_COMBAT\" /><Replace Name=\"FAITH_PER_UNUSED_GREAT_PERSON_POINT\" Value=\"1.0\" /><Replace Value=\"3\" Name=\"FAVOR_CO2_DIVISOR\" /><Replace Value=\"0\" Name=\"FAVOR_CO2_MAXIMUM\" /><Replace Name=\"FAVOR_CO2_MINIMUM\" Value=\"-20\" /><Replace Name=\"FAVOR_COST_FOR_EMERGENCY\" Value=\"30\" /><Replace Name=\"FAVOR_COST_FOR_REQUEST\" Value=\"20\" /><Replace Name=\"FAVOR_FOR_LIBERATE_CITY_STATE\" Value=\"100\" /><Replace Name=\"FAVOR_FOR_LIBERATE_PLAYER_CITY\" Value=\"100\" /><Replace Name=\"FAVOR_FOR_REVIVE_PLAYER\" Value=\"200\" /><Replace Name=\"FAVOR_GRIEVANCES_DIVISOR\" Value=\"50\" /><Replace Value=\"0\" Name=\"FAVOR_GRIEVANCES_MAXIMUM\" /><Replace Name=\"FAVOR_GRIEVANCES_MINIMUM\" Value=\"-10\" /><Replace Value=\"200\" Name=\"FAVOR_GRIEVANCES_START\" /><Replace Name=\"FAVOR_PER_OWNED_ORIGINAL_CAPITAL\" Value=\"-5\" /><Replace Value=\"28\" Name=\"GOLDEN_AGE_SCORE_BASE_THRESHOLD\" /><Replace Name=\"GOVERNOR_BASE_TURNS_TO_ESTABLISH\" Value=\"5\" /><Replace Name=\"GRIEVANCE_MULTIPLIER_FOR_BROKEN_PROMISE\" Value=\"200\" /><Replace Name=\"GRIEVANCES_ALL_PLAYERS_CITY_STATE_CONQUEST\" Value=\"50\" /><Replace Name=\"GRIEVANCES_FOR_DENOUNCEMENT\" Value=\"25\" /><Replace Value=\"50\" Name=\"GRIEVANCES_HAVE_ENVOYS_CITY_STATE_DOW\" /><Replace Name=\"GRIEVANCES_POSSESS_CAPITAL_PER_TURN\" Value=\"3\" /><Replace Name=\"GRIEVANCES_POSSESS_NON_CAPITAL_PER_TURN\" Value=\"1\" /><Replace Name=\"GRIEVANCES_SUZERAIN_CITY_STATE_DOW\" Value=\"100\" /><Replace Value=\"15\" Name=\"ICE_TILES_PERCENT\" /><Replace Value=\"20\" Name=\"IDENTITY_PER_TURN_FROM_CITY_STATES\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_FREE_CITIES\" Value=\"10\" /><Replace Value=\"2\" Name=\"IDENTITY_PER_TURN_FROM_HIGHEST_INFLUENCE_TOKENS_PER_TOKEN\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_MARTIAL_LAW\" Value=\"8\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_OCCUPATION_MAX\" Value=\"10\" /><Replace Value=\"0\" Name=\"IDENTITY_PER_TURN_FROM_OCCUPATION_MIN\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_OCCUPATION_MULTIPLIER\" Value=\"25\" /><Replace Value=\"0\" Name=\"IDENTITY_PER_TURN_FROM_ORIGINAL_OWNER_ON_FREE_CITY\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_OWNER_BEFORE_OCCUPATION_ON_FREE_CITY\" Value=\"0\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_RELIGION_MATCHING_FOUNDED\" Value=\"3\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_RELIGION_MISMATCHING_FOUNDED\" Value=\"-3\" /><Replace Name=\"IDENTITY_PER_TURN_FROM_STARVATION\" Value=\"-4\" /><Replace Name=\"LOYALTY_AFTER_TRANSFERRED_BY_COMBAT\" Value=\"50\" /><Replace Name=\"LOYALTY_AFTER_TRANSFERRED_BY_COMBAT_ORIGINAL_OWNER\" Value=\"50\" /><Replace Name=\"LOYALTY_AFTER_TRANSFERRED_BY_COMBAT_OWNER_BEFORE_OCCUPATION\" Value=\"50\" /><Replace Value=\"100\" Name=\"LOYALTY_AFTER_TRANSFERRED_BY_CULTURAL_IDENTITY\" /><Replace Name=\"LOYALTY_AFTER_TRANSFERRED_BY_LIBERATION\" Value=\"100\" /><Replace Name=\"LOYALTY_FROM_EXCESS_SCORE_DIVISOR\" Value=\"1\" /><Replace Value=\"0.0\" Name=\"LOYALTY_FROM_EXCESS_SCORE_MULTIPLIER\" /><Replace Name=\"LOYALTY_MAXIMUM\" Value=\"100\" /><Replace Name=\"LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_LOYALTY\" Value=\"20\" /><Replace Name=\"LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_MAX_RATIO\" Value=\"3.0\" /><Replace Value=\"0\" Name=\"LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_NEUTRAL_LOYALTY\" /><Replace Value=\"1.0\" Name=\"LOYALTY_PER_TURN_FROM_NEARBY_CITIZEN_PRESSURE_NEUTRAL_RATIO\" /><Replace Name=\"LOYALTY_START\" Value=\"100\" /><Replace Name=\"MAP_MAX_FLOODPLAIN_SIZE\" Value=\"10\" /><Replace Name=\"MAP_MIN_FLOODPLAIN_SIZE\" Value=\"4\" /><Replace Name=\"MAX_GOVERNOR_APPOINTMENTS\" Value=\"8\" /><Replace Name=\"MOVEMENT_PORTAL_COST\" Value=\"2\" /><Replace Name=\"NEXT_ERA_TURN_COUNTDOWN\" Value=\"10\" /><Replace Name=\"OWNER_IDENTITY_PERCENT_LOST_AFTER_TRANSFERRED_BY_CULTURAL_IDENTITY\" Value=\"50\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_FROM_CAPITAL_TO_DOMESTIC_CITY\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_FROM_CAPITAL_TO_FOREIGN_CITY\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_FROM_CITY_TO_DOMESTIC_CITY\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_FROM_CITY_TO_FOREIGN_CITY\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_FROM_POP_COUNT\" /><Replace Value=\"0\" Name=\"OWNERSHIP_IDENTITY_PRESSURE_TILE_RADIUS\" /><Replace Value=\"12\" Name=\"PARADROP_LONG_RANGE\" /><Replace Value=\"7\" Name=\"PARADROP_SHORT_RANGE\" /><Replace Value=\"-50\" Name=\"POWER_MAX_PRODUCTION_MODIFIER_PENALTY\" /><Replace Name=\"RANDOM_EVENT_FIRST_TIME_OCCURRENCE_BOOST\" Value=\"30\" /><Replace Name=\"RANDOM_EVENT_START_TURN\" Value=\"2\" /><Replace Value=\"4\" Name=\"ROCK_BAND_MAX_LEVEL\" /><Replace Value=\"4\" Name=\"ROCK_BAND_MAX_PROMOTIONS\" /><Replace Value=\"50\" Name=\"SCIENCE_PERCENTAGE_YIELD_PER_POP\" /><Replace Value=\"50\" Name=\"SCIENCE_VICTORY_POINTS_REQUIRED\" /><Replace Name=\"SHARE_WAR_GRIEVANCES_ALLY\" Value=\"50\" /><Replace Value=\"25\" Name=\"SHARE_WAR_GRIEVANCES_DECLARED_FRIENDS\" /><Replace Value=\"25\" Name=\"SHARE_WAR_GRIEVANCES_DEFENSIVE_PERCENT\" /><Replace Value=\"20\" Name=\"TECH_COST_PERCENT_CHANGE_AFTER_GAME_ERA\" /><Replace Name=\"TECH_COST_PERCENT_CHANGE_BEFORE_GAME_ERA\" Value=\"-20\" /><Replace Name=\"THRESHOLD_SHIFT_PER_ANARCHY\" Value=\"0\" /><Replace Value=\"1\" Name=\"THRESHOLD_SHIFT_PER_CITY\" /><Replace Name=\"THRESHOLD_SHIFT_PER_INCOMPLETE_ERA_CIVIC\" Value=\"0\" /><Replace Name=\"THRESHOLD_SHIFT_PER_INCOMPLETE_ERA_TECH\" Value=\"0\" /><Replace Name=\"THRESHOLD_SHIFT_PER_INCOMPLETE_OLD_CIVIC\" Value=\"0\" /><Replace Value=\"0\" Name=\"THRESHOLD_SHIFT_PER_INCOMPLETE_OLD_TECH\" /><Replace Value=\"0\" Name=\"THRESHOLD_SHIFT_PER_MISSING_AMENITY\" /><Replace Name=\"THRESHOLD_SHIFT_PER_PAST_DARK_AGE\" Value=\"-5\" /><Replace Name=\"THRESHOLD_SHIFT_PER_PAST_GOLDEN_AGE\" Value=\"5\" /><Replace Value=\"1000\" Name=\"TOURISM_BOMB_WONDER_ADDITIONAL\" /><Replace Value=\"1\" Name=\"TOURISM_CONFLICTING_GOVERNMENT_MULTIPLIER\" /><Replace Name=\"TOURISM_TOURISM_TO_MOVE_CITIZEN\" Value=\"200\" /><Replace Name=\"TRADE_ROUTE_GOLD_CULTURAL_DOMINANCE\" Value=\"4\" /><Replace Name=\"TRADE_ROUTE_TRANSPORTATION_EFFICIENCY_MAX_RATIO\" Value=\"1.0\" /><Replace Value=\"2\" Name=\"TRADE_ROUTE_TRANSPORTATION_EFFICIENCY_SCORE_BEST_ROUTE_TILE\" /><Replace Name=\"TRADE_ROUTE_TRANSPORTATION_EFFICIENCY_SCORE_MULTIPLE_DOMAINS\" Value=\"15\" /><Replace Name=\"TRADE_ROUTE_TRANSPORTATION_EFFICIENCY_SCORE_PORTAL_USE\" Value=\"15\" /><Replace Value=\"2\" Name=\"TRADE_ROUTE_TRANSPORTATION_EFFICIENCY_SCORE_WATER_TILE\" /><Replace Value=\"20\" Name=\"UNIT_MAX_STR_REDUCTION_INSUFFICIENT_RESOURCES\" /><Replace Name=\"UPGRADE_MINIMUM_COST_LEVY\" Value=\"0\" /><Replace Value=\"100\" Name=\"UPGRADE_NET_PRODUCTION_PERCENT_COST\" /><Replace Name=\"USE_OLD_WORLD_CONGRESS_FLOW\" Value=\"true\" /><Replace Value=\"1\" Name=\"WORLD_CONGRESS_ALLIANCE_FAVOR_PER_TURN\" /><Replace Value=\"0\" Name=\"WORLD_CONGRESS_BASELINE_FAVOR_PER_TURN\" /><Replace Name=\"WORLD_CONGRESS_INITIAL_ERA\" Value=\"2\" /><Replace Value=\"30.0\" Name=\"WORLD_CONGRESS_MAJORITY_LEADER_MINIMUM\" /><Replace Value=\"30\" Name=\"WORLD_CONGRESS_MAX_TIME_BETWEEN_MEETINGS\" /><Replace Name=\"WORLD_CONGRESS_MIN_TIME_BETWEEN_SPECIAL_SESSIONS\" Value=\"15\" /><Replace Value=\"5.0\" Name=\"WORLD_CONGRESS_NEARLY_TIED_RANGE\" /><Replace Name=\"WORLD_CONGRESS_REQUEST_FOR_AID_DAMAGE_MIN\" Value=\"4\" /><Replace Value=\"200\" Name=\"WORLD_CONGRESS_REQUEST_FOR_MILITARY_AID_GRIEVANCES_MIN\" /><Replace Name=\"WORLD_CONGRESS_SUZERAIN_FAVOR_PER_TURN\" Value=\"1\" /><Replace Value=\"0\" Name=\"WORLD_CONGRESS_TRADE_PARTNER_FAVOR_PER_TURN\" /></GlobalParameters></GameInfo>",
+    "DLC/Expansion2/Data/Expansion2_Icons_Civilizations.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><GameInfo><IconTextureAtlases><Row Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerColumn=\"2\" IconsPerRow=\"8\" IconSize=\"22\" Filename=\"XP2_CivSymbols22.dds\" /><Row Filename=\"XP2_CivSymbols30.dds\" IconsPerRow=\"8\" IconSize=\"30\" IconsPerColumn=\"2\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" /><Row Filename=\"XP2_CivSymbols32.dds\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerColumn=\"2\" IconsPerRow=\"8\" IconSize=\"32\" /><Row IconSize=\"36\" IconsPerColumn=\"2\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerRow=\"8\" Filename=\"XP2_CivSymbols36.dds\" /><Row Filename=\"XP2_CivSymbols44.dds\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerColumn=\"2\" IconSize=\"44\" IconsPerRow=\"8\" /><Row IconsPerColumn=\"2\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconSize=\"45\" Filename=\"XP2_CivSymbols45.dds\" IconsPerRow=\"8\" /><Row IconsPerColumn=\"2\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconSize=\"48\" IconsPerRow=\"8\" Filename=\"XP2_CivSymbols48.dds\" /><Row IconSize=\"50\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerRow=\"8\" Filename=\"XP2_CivSymbols50.dds\" IconsPerColumn=\"2\" /><Row Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerRow=\"8\" Filename=\"XP2_CivSymbols64.dds\" IconsPerColumn=\"2\" IconSize=\"64\" /><Row Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerRow=\"8\" IconSize=\"80\" IconsPerColumn=\"2\" Filename=\"XP2_CivSymbols80.dds\" /><Row Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" Filename=\"XP2_CivSymbols128.dds\" IconsPerRow=\"8\" IconsPerColumn=\"2\" IconSize=\"128\" /><Row Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" IconsPerRow=\"8\" IconsPerColumn=\"2\" Filename=\"XP2_CivSymbols200.dds\" IconSize=\"200\" /><Row Filename=\"XP2_CivSymbols256.dds\" IconSize=\"256\" IconsPerRow=\"8\" IconsPerColumn=\"2\" Name=\"ICON_ATLAS_EXPANSION_2_CIVILIZATIONS\" /></IconTextureAtlases></GameInfo>"
+  }
+}

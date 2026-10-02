@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Resources>
+        <Update>
+            <Where ResourceType="RESOURCE_ALUMINUM"/>
+            <Set>
+                <Frequency>7</Frequency>
+            </Set>
+        </Update>
+        <Update>
+            <Where ResourceType="RESOURCE_HORSES"/>
+            <Set>
+                <PrereqTech>TECH_ANIMAL_HUSBANDRY</PrereqTech>
+                <Frequency>11</Frequency>
+            </Set>
+        </Update>
+        <Update>
+            <Where ResourceType="RESOURCE_IRON"/>
+            <Set>
+                <Frequency>10</Frequency>
+            </Set>
+        </Update>
+        <Update>
+            <Where ResourceType="RESOURCE_OIL"/>
+            <Set>
+                <Frequency>10</Frequency>
+                <PrereqTech>TECH_REFINING</PrereqTech>
+            </Set>
+        </Update>
+        <Update>
+            <Where ResourceType="RESOURCE_URANIUM"/>
+            <Set>
+                <Frequency>5</Frequency>
+            </Set>
+        </Update>
+    </Resources>
+    <Vocabularies>
+        <Row Vocabulary="POWER_CONVERSION_CLASS"/>
+    </Vocabularies>
+    <Tags>
+        <Row Tag="CLASS_POWER_CONVERSION_NUCLEAR" Vocabulary="POWER_CONVERSION_CLASS"/>
+    </Tags>
+    <TypeTags>
+        <Row Type="RESOURCE_URANIUM" Tag="CLASS_POWER_CONVERSION_NUCLEAR"/>
+    </TypeTags>
+    <Resource_ValidFeatures>
+        <!--Bonus -->
+        <Row ResourceType="RESOURCE_RICE" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row ResourceType="RESOURCE_WHEAT" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+        <!--Luxury -->
+        <Row ResourceType="RESOURCE_COTTON" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row ResourceType="RESOURCE_COTTON" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+        <Row ResourceType="RESOURCE_SUGAR" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row ResourceType="RESOURCE_SUGAR" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+        <!--Strategic -->
+        <Row ResourceType="RESOURCE_NITER" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row ResourceType="RESOURCE_NITER" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+        <Row ResourceType="RESOURCE_OIL" FeatureType="FEATURE_FLOODPLAINS"/>
+        <Row ResourceType="RESOURCE_ALUMINUM" FeatureType="FEATURE_JUNGLE"/>
+        <Row ResourceType="RESOURCE_COAL" FeatureType="FEATURE_FOREST"/>
+        <!--Antiquity -->
+        <Row ResourceType="RESOURCE_ANTIQUITY_SITE" FeatureType="FEATURE_FLOODPLAINS_GRASSLAND"/>
+        <Row ResourceType="RESOURCE_ANTIQUITY_SITE" FeatureType="FEATURE_FLOODPLAINS_PLAINS"/>
+    </Resource_ValidFeatures>
+    <Resource_Consumption>
+        <!--Power-->
+        <Row ResourceType="RESOURCE_COAL" Accumulate="true" PowerProvided="4" CO2perkWh="820" BaseExtractionRate="0" ImprovedExtractionRate="3" StockpileCap="50"/>
+        <Row ResourceType="RESOURCE_OIL" Accumulate="true" PowerProvided="4" CO2perkWh="490" BaseExtractionRate="0" ImprovedExtractionRate="3" StockpileCap="50"/>
+        <Row ResourceType="RESOURCE_URANIUM" Accumulate="true" PowerProvided="16" CO2perkWh="48" BaseExtractionRate="0" ImprovedExtractionRate="3" StockpileCap="50"/>
+        <!--Strategic-->
+        <Row ResourceType="RESOURCE_HORSES" Accumulate="true" BaseExtractionRate="0" ImprovedExtractionRate="2" StockpileCap="50"/>
+        <Row ResourceType="RESOURCE_IRON" Accumulate="true" BaseExtractionRate="0" ImprovedExtractionRate="2" StockpileCap="50"/>
+        <Row ResourceType="RESOURCE_NITER" Accumulate="true" BaseExtractionRate="0" ImprovedExtractionRate="2" StockpileCap="50"/>
+        <Row ResourceType="RESOURCE_ALUMINUM" Accumulate="true" BaseExtractionRate="0" ImprovedExtractionRate="2" StockpileCap="50"/>
+    </Resource_Consumption>
+    <Resource_Distribution>
+        <Update>
+            <Where Continents="1"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="2"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="3"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="4"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="5"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="6"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="7"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+        <Update>
+            <Where Continents="8"/>
+            <Set>
+                <Scarce>0</Scarce>
+                <Average>7</Average>
+                <Plentiful>0</Plentiful>
+                <PercentAdjusted>25</PercentAdjusted>
+            </Set>
+        </Update>
+    </Resource_Distribution>
+</GameInfo>

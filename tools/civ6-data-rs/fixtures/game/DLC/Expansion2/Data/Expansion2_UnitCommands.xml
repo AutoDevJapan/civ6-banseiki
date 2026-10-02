@@ -1,0 +1,10 @@
+<GameInfo>
+    <Types>
+        <Row Type="UNITCOMMAND_MOVE_JUMP" Kind="KIND_UNITCOMMAND"/>
+        <Row Type="UNITCOMMAND_BUILDING_PRODUCTION" Kind="KIND_UNITCOMMAND"/>
+    </Types>
+    <UnitCommands>
+        <Row CommandType="UNITCOMMAND_MOVE_JUMP" VisibleInUI="true" HoldCycling="true" CategoryInUI="MOVE" Icon="ICON_UNITCOMMAND_MOVE_JUMP" Description="LOC_UNITCOMMAND_MOVE_JUMP_DESCRIPTION" InterfaceMode="INTERFACEMODE_MOVE_JUMP"/>
+        <Row CommandType="UNITCOMMAND_BUILDING_PRODUCTION" VisibleInUI="true" HoldCycling="true" CategoryInUI="SPECIFIC" Icon="ICON_UNITCOMMAND_DISTRICT_PRODUCTION" Description="LOC_UNITCOMMAND_BUILDING_PRODUCTION_DESCRIPTION"/>
+    </UnitCommands>
+</GameInfo>
