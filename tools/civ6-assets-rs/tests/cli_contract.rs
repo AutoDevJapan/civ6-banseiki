@@ -58,6 +58,21 @@ fn success(cmd: &mut Command) -> Output {
     );
     out
 }
+fn install_process_fixture(destination: &Path) {
+    let source = Path::new(env!("CARGO_BIN_EXE_jac-process-fixture"));
+    // Reuse the immutable compiled inode: publishing copied executable bytes can
+    // race exec with a write-open file on Linux (ETXTBSY), even in unique temp dirs.
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(source, destination).unwrap();
+        assert_eq!(
+            destination.canonicalize().unwrap(),
+            source.canonicalize().unwrap()
+        );
+    }
+    #[cfg(not(unix))]
+    fs::copy(source, destination).unwrap();
+}
 fn normalized(e: &xmltree::Element) -> Value {
     json!({"tag":e.name,"attrs":e.attributes.iter().collect::<std::collections::BTreeMap<_,_>>(),"text":e.get_text().filter(|t|!t.trim().is_empty()),"children":civ6_assets_rs::elements(e).map(normalized).collect::<Vec<_>>()})
 }
@@ -870,11 +885,7 @@ fn map_clis_write_sqlite_and_prosperity_outputs() {
 #[test]
 fn portrait_cli_checks_oauth_sanitizes_environment_and_validates_every_image() {
     let t = temp();
-    fs::copy(
-        env!("CARGO_BIN_EXE_jac-process-fixture"),
-        t.path().join("fixture-codex.exe"),
-    )
-    .unwrap();
+    install_process_fixture(&t.path().join("fixture-codex.exe"));
     let run = |originals: &str| {
         let mut c = command("jac-generate-portraits", t.path());
         c.args([
@@ -962,11 +973,7 @@ fn cooker_process_resolves_relative_paths_and_propagates_failure() {
     let t = temp();
     fs::create_dir_all(t.path().join("cooker")).unwrap();
     fs::create_dir_all(t.path().join("build/XLPs")).unwrap();
-    fs::copy(
-        env!("CARGO_BIN_EXE_jac-process-fixture"),
-        t.path().join("cooker/Civ6AssetCooker_FinalRelease.exe"),
-    )
-    .unwrap();
+    install_process_fixture(&t.path().join("cooker/Civ6AssetCooker_FinalRelease.exe"));
     write(t.path().join("cooker/Civ6.cfg"), "fixture").unwrap();
     let names = vec!["JAC_Crests45".into(), "JAC_Leaders80".into()];
     build_art::write_xlp(&t.path().join("build"), "Package", "UITexture", &names).unwrap();

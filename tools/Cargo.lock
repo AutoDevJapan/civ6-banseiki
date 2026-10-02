@@ -256,6 +256,7 @@ dependencies = [
  "ctrlc",
  "flate2",
  "mlua",
+ "png 0.18.1",
  "regex",
  "roxmltree 0.21.1",
  "rusqlite",
