@@ -766,6 +766,8 @@ impl Runner {
     }
     fn enter_game(&mut self, before: usize, deadline: Instant) -> Result<()> {
         let mut begun = false;
+        let mut state_wait_started = None;
+        let mut last_states = Vec::<String>::new();
         loop {
             duration(deadline, 1.)?;
             if !begun {
@@ -773,7 +775,29 @@ impl Runner {
                     sleep(deadline, 0.5)?;
                     continue;
                 }
-                let states = self.states(deadline).unwrap_or_default();
+                // Reconnect after the FrontEnd-to-game transition before
+                // deciding which load-screen control is actually available.
+                self.client = None;
+                let states = match self.states(deadline) {
+                    Ok(states) => states,
+                    Err(error) => {
+                        self.log("loadscreen_states", "WAIT", &error.to_string())?;
+                        sleep(deadline, 0.5)?;
+                        continue;
+                    }
+                };
+                if states != last_states {
+                    self.log(
+                        "loadscreen_states",
+                        "OK",
+                        &format!(
+                            "ready lines={}, states={}",
+                            self.loadscreen_count()?,
+                            states.join(", ")
+                        ),
+                    )?;
+                    last_states = states.clone();
+                }
                 if states.iter().any(|s| s.eq_ignore_ascii_case("LoadScreen")) {
                     self.lua(
                         "LoadScreen",
@@ -781,6 +805,11 @@ impl Runner {
                         deadline,
                     )?;
                 } else {
+                    let since = *state_wait_started.get_or_insert_with(Instant::now);
+                    if since.elapsed() < Duration::from_secs(15) {
+                        sleep(deadline, 0.5)?;
+                        continue;
+                    }
                     platform::focus_and_key(0x1b, deadline)?;
                 }
                 begun = true;

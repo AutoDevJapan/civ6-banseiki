@@ -271,11 +271,10 @@ fn resolve_enabled_mods(
     Ok(wanted.iter().map(|id| found[id].clone()).collect())
 }
 
-pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<PathBuf>, String> {
-    let wanted = scenario_mod_ids(scenario)?;
-    if wanted.is_empty() {
-        return Ok(Vec::new());
-    }
+fn user_mod_catalog(
+    wanted: &BTreeSet<String>,
+    mods_dir: &Path,
+) -> Result<BTreeMap<String, PathBuf>, String> {
     let mut found = BTreeMap::new();
     for entry in read_dir_sorted(mods_dir)? {
         // Follow the Mods junction and its top-level MOD folder junctions. The
@@ -301,11 +300,11 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
             let id = mod_id_from_document(&summary)
                 .map_err(|error| format!("{}: {error}", info.display()))?;
             if let Some(id) = id {
-                record_enabled_mod(&mut found, &wanted, id, &folder)?;
+                record_enabled_mod(&mut found, wanted, id, &folder)?;
             }
         }
     }
-    resolve_enabled_mods(&wanted, &found, mods_dir)
+    Ok(found)
 }
 
 /// Official DLC is catalogued under the running game's install, while only
@@ -333,22 +332,20 @@ pub fn enabled_custom_mod_folders(
             return Err(format!("duplicate official DLC GUID {id}"));
         }
     }
-    let mut custom = scenario.clone();
-    for step in custom["steps"]
-        .as_array_mut()
-        .ok_or("scenario steps missing")?
-    {
-        if step["action"] == "enable_mods" {
-            step["ids"]
-                .as_array_mut()
-                .ok_or("enable_mods IDs missing")?
-                .retain(|v| {
-                    v.as_str()
-                        .is_none_or(|s| !official.contains_key(&s.to_ascii_lowercase()))
-                });
+    let users = user_mod_catalog(&wanted, mods_dir)?;
+    for id in official.keys() {
+        if users.contains_key(id) {
+            return Err(format!(
+                "Duplicate installed mod ID {id} in official DLC and user Mods"
+            ));
         }
     }
-    enabled_mod_folders(&custom, mods_dir)
+    let custom = wanted
+        .iter()
+        .filter(|id| !official.contains_key(*id))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    resolve_enabled_mods(&custom, &users, mods_dir)
 }
 
 fn directory_link_flags(is_symlink: bool, attributes: u32) -> bool {
@@ -597,6 +594,14 @@ mod tests {
             enabled_custom_mod_folders(&scenario, &mods, &dlc).unwrap(),
             vec![fs::canonicalize(&custom).unwrap()]
         );
+        let collision = custom.join("official-collision.modinfo");
+        fs::write(&collision, format!("<Mod id=\"{MOD_A}\"/>")).unwrap();
+        assert!(
+            enabled_custom_mod_folders(&scenario, &mods, &dlc)
+                .unwrap_err()
+                .contains("official DLC and user Mods")
+        );
+        fs::remove_file(collision).unwrap();
         fs::remove_file(&official_info).unwrap();
         assert!(
             enabled_custom_mod_folders(&scenario, &mods, &dlc)
