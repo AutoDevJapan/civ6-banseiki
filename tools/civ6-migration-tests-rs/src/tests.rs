@@ -206,6 +206,59 @@ fn reports_cover_all_29_declared_methods() {
     coverage("civ6-reports-rs");
 }
 
+#[test]
+fn incremental_inventory_covers_all_137_additional_methods() {
+    let groups = [
+        ("civ6-autotest-rs", 9, "restart-incremental-parity.json"),
+        ("civ6-data-rs", 8, "hero-parity.json"),
+        ("civ6-lua-tests-rs", 120, "absorption-parity.json"),
+    ];
+    let inventory =
+        read_json(&root().join("documents/rust-migration-incremental-inventory.json")).unwrap();
+    assert_eq!(inventory["baseline_commit"], "8ff592e");
+    assert_eq!(inventory["previous_baseline_commit"], "b4e7c53");
+    assert_eq!(inventory["count"], 137);
+    let rows = inventory["tests"].as_array().unwrap();
+    assert_eq!(rows.len(), 137);
+    let mut all: BTreeSet<Id> = baseline().into_values().flatten().collect();
+    let mut expected = BTreeMap::<String, BTreeSet<Id>>::new();
+    for row in rows {
+        let id = identity(row).unwrap();
+        assert!(
+            all.insert(id.clone()),
+            "duplicate original or incremental ID: {id:?}"
+        );
+        expected
+            .entry(string(row, "crate").unwrap().into())
+            .or_default()
+            .insert(id);
+    }
+    assert_eq!(
+        all.len(),
+        953,
+        "the original 816 and additional 137 IDs must be distinct"
+    );
+    assert_eq!(
+        expected
+            .iter()
+            .map(|(name, ids)| (name.as_str(), ids.len()))
+            .collect::<Vec<_>>(),
+        groups.map(|(name, count, _)| (name, count)),
+        "incremental crate assignments/counts changed"
+    );
+    for (name, _, filename) in groups {
+        let crate_root = root().join("tools").join(name);
+        let mapping = read_json(&crate_root.join("tests").join(filename)).unwrap();
+        validate(
+            name,
+            &crate_root,
+            &expected[name],
+            mapping.as_array().unwrap(),
+        )
+        .unwrap_or_else(|error| panic!("{name}/{filename}: {error}"));
+    }
+}
+
 fn python_paths(bytes: &[u8]) -> Vec<&str> {
     std::str::from_utf8(bytes)
         .expect("Git paths must be UTF-8")
@@ -627,6 +680,38 @@ fn regression_macro_imports_and_exports_cannot_shadow_verified_tests() {
         .err()
         .expect("external macro import must be rejected")
         .contains("unsupported macro"));
+}
+
+#[test]
+fn regression_conditional_macro_imports_reject_unknown_namespace_attributes() {
+    let shadow = "macro_rules! simple_tests { ($($name:ident),* $(,)?) => {}; }";
+    for imported in [
+        format!("#[cfg_attr(test, macro_use)] mod shadow {{ {shadow} }}"),
+        "#[cfg_attr(test, macro_use)] extern crate unknown;".into(),
+        format!("#[cfg_attr(test, macro_export)] {shadow}"),
+        "#[cfg_attr(test, allow(unused))] mod unknown {}".into(),
+    ] {
+        let source = format!("{MACRO} {imported} simple_tests! {{ test_one }}");
+        let error = inventory::parse(&source, "suite")
+            .err()
+            .expect("conditional namespace attributes must be rejected");
+        assert!(error.contains("unsupported macro"), "{source}: {error}");
+    }
+}
+
+#[test]
+fn regression_loaded_file_inner_conditional_macro_import_is_rejected() {
+    let fixture = tempfile::tempdir().unwrap();
+    write(
+        fixture.path(),
+        "lib.rs",
+        &format!("{MACRO} mod shadow; simple_tests! {{ test_one }}"),
+    );
+    write(fixture.path(), "shadow.rs", "#![cfg_attr(test, macro_use)] macro_rules! simple_tests { ($($name:ident),* $(,)?) => {}; }");
+    let error = inventory::resolve(&fixture.path().join("lib.rs"), "lib")
+        .err()
+        .expect("loaded file attributes must reject conditional macro imports");
+    assert!(error.contains("unsupported macro"), "{error}");
 }
 
 #[test]

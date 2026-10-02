@@ -169,11 +169,17 @@ fn module_path(module: &syn::ItemMod) -> Result<Option<String>, String> {
 }
 
 fn reject_macro_scopes(attrs: &[Attribute], prefix: &str) -> Result<(), String> {
-    if attrs
-        .iter()
-        .any(|attr| attr.path().is_ident("macro_use") || attr.path().is_ident("macro_export"))
-    {
-        return Err(format!("{prefix}: unsupported macro import/export scope"));
+    // Unknown conditional namespace attributes can import/export a shadowing
+    // macro without changing the parent's verified bit. Refuse them entirely;
+    // do not try to evaluate cfg_attr or emulate the compiler's import scopes.
+    if attrs.iter().any(|attr| {
+        attr.path().is_ident("macro_use")
+            || attr.path().is_ident("macro_export")
+            || attr.path().is_ident("cfg_attr")
+    }) {
+        return Err(format!(
+            "{prefix}: unsupported macro import/export or conditional namespace scope"
+        ));
     }
     Ok(())
 }
