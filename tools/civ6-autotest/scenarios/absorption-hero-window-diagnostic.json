@@ -1,0 +1,106 @@
+{
+  "judge_profile": "generic",
+  "name": "PR87 Rust diagnostic: observe target AI hero generation and faith across era window; not full acceptance",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ],
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "jac-absorption-after-turn-absorb-34-0675c70c359e",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroLifespanKey~=nil and ExposedMembers.JAC_HeroReadAPI~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'",
+      "state_name": "GameCore_Tuner"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));Players[e.To]:GetReligion():ChangeFaithBalance(1000000);return 'AI recall rejection fixtures funded'",
+      "state_name": "GameCore_Tuner"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))\nlocal death=Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')\nJAC_ABSORPTION_AI_PROBE={Phase='LIVING',Owner=e.To,Targets={},Results={}}\nlocal probe=JAC_ABSORPTION_AI_PROBE\nfor _,old in ipairs(e.Units) do if old.Hero and (probe.Phase=='LIVING' or old.Hero.Class==death.Class) then\n probe.Targets[#probe.Targets+1]={Class=old.Hero.Class,X=old.Hero.Origin.X,Y=old.Hero.Origin.Y}\nend end\nif JAC_ABSORPTION_AI_PROBE_HANDLER then Events.GameCoreEventPublishComplete.Remove(JAC_ABSORPTION_AI_PROBE_HANDLER) end\nJAC_ABSORPTION_AI_PROBE_HANDLER=function()\n if probe.Complete or probe.Error or not Players[probe.Owner]:IsTurnActive() then return end\n local ok,err=pcall(function()\n  local localPlayer=Game.GetLocalPlayer()\n  assert(localPlayer<0 or localPlayer==probe.Owner,'AI probe still uses another human command context')\n  assert(not Players[1]:IsTurnActive() and not Players[probe.Owner]:IsHuman(),'AI probe changed controller or turn')\n  local manager=Game.GetHeroesManager()\n  for _,target in ipairs(probe.Targets) do\n   local origin=assert(manager:GetHeroOriginCityID(target.Class))\n   assert(manager:GetHeroClaimPlayer(target.Class)==probe.Owner and origin.player==probe.Owner,'recall claim/owner changed')\n   local city=assert(Players[probe.Owner]:GetCities():FindID(origin.id))\n   assert(city:GetX()==target.X and city:GetY()==target.Y,'recall origin changed')\n   local building=manager:GetPlayerHeroOriginBuildingType(probe.Owner,target.Class)\n   assert(type(building)=='number' and building>=0 and city:GetBuildings():HasBuilding(building),'native recall origin building missing')\n   local native=GameInfo.Units[GameInfo.HeroClasses[target.Class].UnitType]\n   local params={[CityCommandTypes.PARAM_UNIT_TYPE]=native.Hash,[CityCommandTypes.PARAM_YIELD_TYPE]=GameInfo.Yields.YIELD_FAITH.Index}\n   local visible=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,true,params,false)\n   local allowed,results=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,false,params,true)\n   local alive=0;for _,u in Players[probe.Owner]:GetUnits():Members() do if u:GetHeroClassType()==target.Class then alive=alive+1 end end\n   local cost=city:GetGold():GetPurchaseCost(GameInfo.Yields.YIELD_FAITH.Index,native.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)\n   probe.Results[#probe.Results+1]={Class=target.Class,Claim=manager:GetHeroClaimPlayer(target.Class),Origin=origin,\n    LocalPlayer=localPlayer,OwnerActive=true,IsHuman=false,Turn=Game.GetCurrentGameTurn(),Era=Game.GetEras():GetCurrentEra(),\n    Alive=alive,OriginBuilding=building,Visible=visible,Allowed=allowed,Results=results,Cost=cost,Faith=Players[probe.Owner]:GetReligion():GetFaithBalance()}\n  end\n  probe.Complete=true\n  print('[JAC_ABSORPTION_AI_PROBE] '..A.Canonical(probe))\n end)\n if not ok then probe.Error=tostring(err) end\nend\nEvents.GameCoreEventPublishComplete.Add(JAC_ABSORPTION_AI_PROBE_HANDLER)\nreturn 'strict recall probe prepared for actual AI owner turn; phase='..probe.Phase\n",
+      "state_name": "InGame"
+    },
+    {
+      "action": "autoplay",
+      "timeout": 600,
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "code": "local p=assert(JAC_ABSORPTION_AI_PROBE)\nassert(not p.Error,p.Error);assert(p.Complete,'AI active-turn probe never ran')\nassert(p.Phase=='LIVING' and #p.Results==2,'native recall probe coverage changed')\nfor _,r in ipairs(p.Results) do\n assert(r.OwnerActive and not r.IsHuman and (r.LocalPlayer<0 or r.LocalPlayer==p.Owner),'invalid AI recall query context')\n assert(r.Cost>0 and r.Faith>=r.Cost,'recall rejection could be insufficient faith')\n assert(not r.Allowed,'native recall ignored living Hero')\n assert(r.Alive==1,'living recall fixture missing')\nend\nEvents.GameCoreEventPublishComplete.Remove(JAC_ABSORPTION_AI_PROBE_HANDLER)\nreturn ExposedMembers.JAC_Absorption.Canonical(p)\n",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1')\nlocal m=assert(A.GetHeroesManager());local class=GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'].Index\nlocal record=assert(A.GetRoster(e.To)['live:hero']);local u=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(u:IsHero() and u:GetHeroClassType()==class,'recall death fixture is not a native hero')\nlocal origin=m:GetHeroOriginCityID(class);local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nGame:SetProperty('JAC_ABSORPTION_LIVE_RECALL_V1',{Owner=e.To,EraBefore=Game.GetEras():GetCurrentEra(),Class=class,CityID=city:GetID(),X=city:GetX(),Y=city:GetY(),Record=A.Canonical(record)})\nUnitManager.Kill(u)\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nassert(m:GetHeroClaimPlayer(class)==e.To,'native death lost absorber recall rights')\nassert(A.Canonical(A.GetRoster(e.To)['live:hero'])==Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1').Record,'death lost contract/loyalty/relations')\nreturn 'native Warlord A retired for engine recall eligibility probe; faith funded'\n",
+      "state_name": "GameCore_Tuner"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.Owner]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.Owner]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.Owner and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers",
+      "state_name": "GameCore_Tuner"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))\nlocal death=Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')\nJAC_ABSORPTION_AI_PROBE={Phase='SAME_ERA',Owner=e.To,Targets={},Results={}}\nlocal probe=JAC_ABSORPTION_AI_PROBE\nfor _,old in ipairs(e.Units) do if old.Hero and (probe.Phase=='LIVING' or old.Hero.Class==death.Class) then\n probe.Targets[#probe.Targets+1]={Class=old.Hero.Class,X=old.Hero.Origin.X,Y=old.Hero.Origin.Y}\nend end\nif JAC_ABSORPTION_AI_PROBE_HANDLER then Events.GameCoreEventPublishComplete.Remove(JAC_ABSORPTION_AI_PROBE_HANDLER) end\nJAC_ABSORPTION_AI_PROBE_HANDLER=function()\n if probe.Complete or probe.Error or not Players[probe.Owner]:IsTurnActive() then return end\n local ok,err=pcall(function()\n  local localPlayer=Game.GetLocalPlayer()\n  assert(localPlayer<0 or localPlayer==probe.Owner,'AI probe still uses another human command context')\n  assert(not Players[1]:IsTurnActive() and not Players[probe.Owner]:IsHuman(),'AI probe changed controller or turn')\n  local manager=Game.GetHeroesManager()\n  for _,target in ipairs(probe.Targets) do\n   local origin=assert(manager:GetHeroOriginCityID(target.Class))\n   assert(manager:GetHeroClaimPlayer(target.Class)==probe.Owner and origin.player==probe.Owner,'recall claim/owner changed')\n   local city=assert(Players[probe.Owner]:GetCities():FindID(origin.id))\n   assert(city:GetX()==target.X and city:GetY()==target.Y,'recall origin changed')\n   local building=manager:GetPlayerHeroOriginBuildingType(probe.Owner,target.Class)\n   assert(type(building)=='number' and building>=0 and city:GetBuildings():HasBuilding(building),'native recall origin building missing')\n   local native=GameInfo.Units[GameInfo.HeroClasses[target.Class].UnitType]\n   local params={[CityCommandTypes.PARAM_UNIT_TYPE]=native.Hash,[CityCommandTypes.PARAM_YIELD_TYPE]=GameInfo.Yields.YIELD_FAITH.Index}\n   local visible=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,true,params,false)\n   local allowed,results=CityManager.CanStartCommand(city,CityCommandTypes.PURCHASE,false,params,true)\n   local alive=0;for _,u in Players[probe.Owner]:GetUnits():Members() do if u:GetHeroClassType()==target.Class then alive=alive+1 end end\n   local cost=city:GetGold():GetPurchaseCost(GameInfo.Yields.YIELD_FAITH.Index,native.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)\n   probe.Results[#probe.Results+1]={Class=target.Class,Claim=manager:GetHeroClaimPlayer(target.Class),Origin=origin,\n    LocalPlayer=localPlayer,OwnerActive=true,IsHuman=false,Turn=Game.GetCurrentGameTurn(),Era=Game.GetEras():GetCurrentEra(),\n    Alive=alive,OriginBuilding=building,Visible=visible,Allowed=allowed,Results=results,Cost=cost,Faith=Players[probe.Owner]:GetReligion():GetFaithBalance()}\n  end\n  probe.Complete=true\n  print('[JAC_ABSORPTION_AI_PROBE] '..A.Canonical(probe))\n end)\n if not ok then probe.Error=tostring(err) end\nend\nEvents.GameCoreEventPublishComplete.Add(JAC_ABSORPTION_AI_PROBE_HANDLER)\nreturn 'strict recall probe prepared for actual AI owner turn; phase='..probe.Phase\n",
+      "state_name": "InGame"
+    },
+    {
+      "action": "autoplay",
+      "timeout": 600,
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "code": "local p=assert(JAC_ABSORPTION_AI_PROBE)\nassert(not p.Error,p.Error);assert(p.Complete,'AI active-turn probe never ran')\nassert(p.Phase=='SAME_ERA' and #p.Results==1,'native recall probe coverage changed')\nfor _,r in ipairs(p.Results) do\n assert(r.OwnerActive and not r.IsHuman and (r.LocalPlayer<0 or r.LocalPlayer==p.Owner),'invalid AI recall query context')\n assert(r.Cost>0 and r.Faith>=r.Cost,'recall rejection could be insufficient faith')\n assert(not r.Allowed,'native recall ignored same-era restriction')\n local death=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'));assert(r.Alive==0 and r.Era==death.EraBefore,'same-era rejection used wrong lifecycle');assert(r.Cost>0 and r.Faith>=r.Cost,'same-era rejection could be insufficient faith')\n local sameEra=false;for _,reason in ipairs(r.Results and r.Results[CityCommandResults.FAILURE_REASONS] or {}) do if Locale.Lookup(reason)==Locale.Lookup('LOC_CAN_TRAIN_FAILURE_SAME_ERA') then sameEra=true end end;assert(sameEra,'same-era rejection did not report the native era restriction')\nend\nEvents.GameCoreEventPublishComplete.Remove(JAC_ABSORPTION_AI_PROBE_HANDLER)\nreturn ExposedMembers.JAC_Absorption.Canonical(p)\n",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "code": "\nlocal api=assert(ExposedMembers.JAC_Absorption)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nassert(not Players[e.Owner]:IsHuman(),'diagnostic requires the original AI owner')\nlocal function snapshot()\n local m=Game.GetHeroesManager();local origin=assert(m:GetHeroOriginCityID(e.Class))\n local city=assert(Players[e.Owner]:GetCities():FindID(origin.id))\n local native=GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType]\n local units={}\n for _,u in Players[e.Owner]:GetUnits():Members() do\n  if u:IsHero() and u:GetHeroClassType()==e.Class then\n   units[#units+1]={ID=u:GetID(),Class=u:GetHeroClassType(),X=u:GetX(),Y=u:GetY(),\n    Lifespan=u:GetProperty(ExposedMembers.JAC_HeroLifespanKey),Person=u:GetProperty(api.Rules.PERSON_KEY),Token=u:GetProperty(api.Rules.TOKEN_KEY)}\n  end\n end\n return {Turn=Game.GetCurrentGameTurn(),Era=Game.GetEras():GetCurrentEra(),Owner=e.Owner,Class=e.Class,\n  Faith=Players[e.Owner]:GetReligion():GetFaithBalance(),Cost=city:GetGold():GetPurchaseCost(GameInfo.Yields.YIELD_FAITH.Index,native.Hash,MilitaryFormationTypes.STANDARD_MILITARY_FORMATION),\n  Claim=m:GetHeroClaimPlayer(e.Class),Origin=origin,Units=units,Record=api.GetRoster(e.Owner)['live:hero']}\nend\nJAC_NATIVE_HERO_TRACE={Owner=e.Owner,Class=e.Class,Trace={},Before=snapshot()}\nassert(#JAC_NATIVE_HERO_TRACE.Before.Units==0,'hero already alive before observation window')\nlocal function observe(kind,data)\n local p=JAC_NATIVE_HERO_TRACE\n if p.Error then return end\n local ok,err=pcall(function()\n  assert(#p.Trace<8192,'too many observation events')\n  data.Kind=kind;data.Order=#p.Trace+1;data.Turn=Game.GetCurrentGameTurn();data.Era=Game.GetEras():GetCurrentEra()\n  data.Active=Players[e.Owner]:IsTurnActive();data.LocalPlayer=Game.GetLocalPlayer()\n  p.Trace[#p.Trace+1]=data\n  print('[JAC_NATIVE_HERO_TRACE_EVENT] '..api.Canonical(data))\n end)\n if not ok then p.Error=tostring(err);print('[JAC_NATIVE_HERO_TRACE_ERROR] '..p.Error) end\nend\nJAC_NATIVE_HERO_FAITH_HANDLER=function(owner,yield,balance)\n if owner==e.Owner then observe('FAITH',{Owner=owner,Yield=yield,Balance=balance}) end\nend\nJAC_NATIVE_HERO_COMMAND_HANDLER=function(owner,city,districtOwner,district,command,data)\n if owner==e.Owner then observe('COMMAND',{Owner=owner,City=city,Command=command,Data=data}) end\nend\nJAC_NATIVE_HERO_UNIT_HANDLER=function(owner,id,x,y)\n if owner~=e.Owner then return end\n local kind,class\n for _,u in Players[owner]:GetUnits():Members() do\n  if u:GetID()==id then kind=GameInfo.Units[u:GetType()].UnitType;class=u:GetHeroClassType() end\n end\n observe('UNIT',{Owner=owner,ID=id,Class=class,Type=kind,X=x,Y=y})\nend\nEvents.FaithChanged.Add(JAC_NATIVE_HERO_FAITH_HANDLER)\nEvents.CityCommandStarted.Add(JAC_NATIVE_HERO_COMMAND_HANDLER)\nEvents.UnitAddedToMap.Add(JAC_NATIVE_HERO_UNIT_HANDLER)\nJAC_NATIVE_HERO_SNAPSHOT=snapshot\nreturn api.Canonical(JAC_NATIVE_HERO_TRACE.Before)\n",
+      "state_name": "InGame"
+    },
+    {
+      "action": "autoplay",
+      "fast_forward": true,
+      "timeout": 1800,
+      "turns": 80
+    },
+    {
+      "action": "ui_lua",
+      "code": "\nlocal api=assert(ExposedMembers.JAC_Absorption)\nlocal p=assert(JAC_NATIVE_HERO_TRACE)\nEvents.FaithChanged.Remove(JAC_NATIVE_HERO_FAITH_HANDLER)\nEvents.CityCommandStarted.Remove(JAC_NATIVE_HERO_COMMAND_HANDLER)\nEvents.UnitAddedToMap.Remove(JAC_NATIVE_HERO_UNIT_HANDLER)\nassert(not p.Error,p.Error)\np.After=JAC_NATIVE_HERO_SNAPSHOT()\nassert(p.After.Turn>p.Before.Turn and p.After.Era>p.Before.Era,'era window was not processed')\nassert(#p.Trace>0,'no observation evidence')\nprint('[JAC_NATIVE_HERO_TRACE_COMPLETE] '..api.Canonical(p))\nreturn api.Canonical(p)\n",
+      "state_name": "InGame"
+    }
+  ],
+  "test_mode": {
+    "continuous_performance_valid": false,
+    "skipped_turns": 0
+  }
+}

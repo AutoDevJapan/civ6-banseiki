@@ -130,7 +130,9 @@ fn xml_text(bytes: &[u8]) -> Result<Cow<'_, str>, String> {
             return Err("Truncated UTF-16 XML".into());
         }
         let words: Vec<u16> = body
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| {
                 if little_endian {
                     u16::from_le_bytes([pair[0], pair[1]])

@@ -374,7 +374,7 @@ fn parse_state_pairs(raw: &str) -> Result<Vec<(i32, String)>, String> {
         return Err("LSQ returned no states or incomplete index/name pairs".into());
     }
     let mut pairs = Vec::with_capacity(fields.len() / 2);
-    for pair in fields.chunks_exact(2) {
+    for pair in fields.as_chunks::<2>().0 {
         let index: i32 = pair[0]
             .parse()
             .map_err(|_| format!("LSQ state index is not an i32: {:?}", pair[0]))?;
