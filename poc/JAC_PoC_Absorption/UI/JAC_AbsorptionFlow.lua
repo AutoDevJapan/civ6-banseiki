@@ -221,8 +221,7 @@ end
 
 local function Resolve()
   if flow and (flow.Phase == "APPLYING"
-    or flow.Phase == "BLOCKED" and flow.AppliedPlan
-      and flow.Turn == Game.GetCurrentGameTurn()) and CanSend() then
+    or flow.Phase == "BLOCKED" and flow.AppliedPlan) and CanSend() then
     return Send("RESOLVE")
   end
   if not AllChosen() or not CanSend() then return false end
@@ -379,7 +378,6 @@ Draw = function()
   targets = ordered
 
   local retryable = flow.Phase == "BLOCKED" and flow.AppliedPlan ~= nil
-    and flow.Turn == Game.GetCurrentGameTurn()
   Controls.ConfirmButton:SetHide(flow.Phase ~= "CHOICE" and flow.Phase ~= "RESULT"
     and flow.Phase ~= "APPLYING" and not retryable)
   if flow.Phase == "CHOICE" then

@@ -1093,8 +1093,13 @@ fn actual_panel_renders_identity_and_sends_only_a_human_choice() -> mlua::Result
         TEST_UI_PENDING.AppliedPlan={ID='ui-flow'}
         TEST_UI_PENDING.Turn=CURRENT_TURN-1
         Events.GameCoreEventPublishComplete.Emit()
-        assert(Controls.ConfirmButton:IsHidden(),
-          'past-turn block offered an unsafe retry')
+        assert(not Controls.ConfirmButton:IsHidden(),
+          'saved transfer could not resume on a later turn')
+        Controls.ConfirmButton:DoLeftClick()
+        assert(#OPERATION_CALLS==6 and OPERATION_CALLS[6].Params.Command=='RESOLVE')
+        Players[2].IsTurnActive=function() return false end
+        assert(not panel.Resolve() and #OPERATION_CALLS==6,
+          'later-turn retry bypassed the active human turn')
         assert(#RANDOM_CALLS==0,'choice UI changed gameplay random stream')
         "#,
     )
