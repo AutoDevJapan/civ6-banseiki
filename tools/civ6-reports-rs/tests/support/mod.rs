@@ -62,6 +62,36 @@ pub fn completed_steps() -> Vec<Value> {
     steps
 }
 
+pub fn golden_artifact(parent: &Path, name: &str) -> PathBuf {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/goldens")
+        .join(name);
+    let artifact = parent.join(name);
+    fs::create_dir_all(&artifact).unwrap();
+    for file in ["Lua.log", "steps.jsonl", "result.json"] {
+        // The fixed expectations use LF bytes, independently of Git's checkout settings.
+        fs::write(
+            artifact.join(file),
+            fs::read_to_string(source.join(file))
+                .unwrap()
+                .replace("\r\n", "\n"),
+        )
+        .unwrap();
+    }
+    artifact
+}
+
+pub fn golden_text(name: &str, file: &str) -> String {
+    fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/goldens")
+            .join(name)
+            .join(file),
+    )
+    .unwrap()
+    .replace("\r\n", "\n")
+}
+
 pub fn contains(issues: &Value, message: &str) {
     assert!(
         issues.as_array().unwrap().iter().any(|v| v == message),

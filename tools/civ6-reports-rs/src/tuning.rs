@@ -246,10 +246,11 @@ pub fn summarize(artifact: &Path) -> Result<Value> {
     let mut target = false;
     let mut load_step = false;
     for step in &steps {
-        let status = common::field(step, "status")?;
-        let action = common::field(step, "action")?;
-        let detail = common::field(step, "detail")?;
+        let status = common::required(step, "status")?;
+        let action = common::required(step, "action")?;
         if status == "OK" {
+            let action = common::field(step, "action")?;
+            let detail = common::field(step, "detail")?;
             if action.ends_with("autoplay") {
                 completed.push(detail.to_owned());
             }

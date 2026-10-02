@@ -461,17 +461,18 @@ pub fn summarize(artifact: &Path) -> Result<Value> {
     let mut completed = 0;
     let mut judge = Vec::new();
     let mut failures = Vec::new();
-    let mut target = false;
     let mut load_step = false;
     for step in &steps {
-        let status = common::field(step, "status")?;
-        let action = common::field(step, "action")?;
-        let detail = common::field(step, "detail")?;
-        if status == "OK"
-            && action.ends_with("autoplay")
-            && detail.contains("autoplay completed 50 turns")
-        {
-            completed += 1;
+        let status = common::required(step, "status")?;
+        let action = common::required(step, "action")?;
+        if status == "OK" {
+            let action = common::field(step, "action")?;
+            if action.ends_with("autoplay")
+                && common::field(step, "detail")?.contains("autoplay completed 50 turns")
+            {
+                completed += 1;
+            }
+            load_step |= action.ends_with(" load");
         }
         if action == "judge" {
             judge.push(step);
@@ -479,13 +480,21 @@ pub fn summarize(artifact: &Path) -> Result<Value> {
         if status == "FAIL" {
             failures.push(step);
         }
-        target |= status == "OK" && detail.contains("return=T+201 surviving majors=");
-        load_step |= status == "OK" && action.ends_with(" load");
     }
-    let mut full = completed == 4
-        && judge.last().is_some_and(|s| s["status"] == "OK")
-        && failures.is_empty()
-        && target;
+    let mut full =
+        completed == 4 && judge.last().is_some_and(|s| s["status"] == "OK") && failures.is_empty();
+    if full {
+        let mut target = false;
+        for step in &steps {
+            if step["status"] == "OK"
+                && common::field(step, "detail")?.contains("return=T+201 surviving majors=")
+            {
+                target = true;
+                break;
+            }
+        }
+        full = target;
+    }
     if loads != 1 || load_step {
         full = false;
         issues.push("reloaded or missing gameplay log is not an uninterrupted measurement".into());

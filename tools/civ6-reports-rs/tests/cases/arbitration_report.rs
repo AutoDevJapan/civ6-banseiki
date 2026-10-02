@@ -43,6 +43,37 @@ fn full(log: &str) -> Value {
     summary(log, Value::Null, Some(true), &coverage_log())
 }
 
+fn assert_failure_row_preserved(row: Value) {
+    let temp = support::tempdir();
+    let mut steps = support::completed_steps();
+    steps.push(row.clone());
+    support::artifact(temp.path(), &(LOG.to_owned() + &coverage_log()), &steps);
+    let data = report::summarize(temp.path()).unwrap();
+    assert_eq!(data["complete_200_turns"], false);
+    assert_eq!(data["measurement_complete"], false);
+    assert_eq!(data["failures"], json!([row]));
+    assert_eq!(data["requests"], 2);
+    assert_eq!(data["issues"], json!([]));
+    assert!(report::markdown(&data).contains("未達（部分集計）"));
+}
+
+#[test]
+fn failure_rows_missing_detail_are_preserved() {
+    assert_failure_row_preserved(json!({"status": "FAIL", "action": "run"}));
+}
+
+#[test]
+fn failure_rows_null_detail_are_preserved() {
+    assert_failure_row_preserved(json!({"status": "FAIL", "action": "run", "detail": null}));
+}
+
+#[test]
+fn failure_rows_nontext_action_are_preserved() {
+    for action in [Value::Null, json!(7), json!({"stage": "run"})] {
+        assert_failure_row_preserved(json!({"status": "FAIL", "action": action}));
+    }
+}
+
 fn remove_first(log: &str, prefix: &str) -> String {
     let line = log
         .split_inclusive('\n')

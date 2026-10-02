@@ -42,8 +42,16 @@ pub struct ResearchArgs {
     about = "Build a short, controlled gameplay test; its clock jump is never used by the 200-turn run."
 )]
 pub struct ScenarioArgs {
-    #[arg(long, default_value_os_t = scenario::default_output())]
-    pub output: PathBuf,
+    #[arg(
+        long,
+        help = "Output JSON path (default: the selected repository's scenarios/court-arbitration-ai.json)"
+    )]
+    pub output: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Repository to read (default: discover from the executable, then the working directory)"
+    )]
+    pub repo: Option<PathBuf>,
 }
 
 pub fn arbitration(args: ArbitrationArgs) -> Result<()> {
@@ -74,5 +82,9 @@ pub fn research(args: ResearchArgs) -> Result<()> {
 }
 
 pub fn scenario(args: ScenarioArgs) -> Result<()> {
-    common::write_json(&args.output, &scenario::scenario()?)
+    let repository = scenario::repository_root(args.repo.as_deref())?;
+    let output = args
+        .output
+        .unwrap_or_else(|| scenario::output_in_repository(&repository));
+    common::write_json(&output, &scenario::scenario_in_repository(&repository)?)
 }
