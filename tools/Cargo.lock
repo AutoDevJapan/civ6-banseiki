@@ -231,6 +231,7 @@ dependencies = [
 name = "civ6-lua-tests-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-data-rs",
  "flate2",
  "icu_properties",
  "mlua",
