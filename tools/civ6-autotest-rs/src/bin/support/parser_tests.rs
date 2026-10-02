@@ -14,7 +14,7 @@ pub fn assert_long_prefixes<P: Parser>(base: &[&str], options: &[(&str, &[&str])
             let mut args = base.to_vec();
             args.push(prefix);
             args.extend_from_slice(values);
-            let result = P::try_parse_from(args);
+            let result = civ6_cli_compat_rs::try_parse_from::<P, _, _>(args);
             let exact = options.iter().any(|(flag, _)| *flag == prefix);
             let matches = options
                 .iter()
@@ -35,7 +35,7 @@ pub fn assert_long_prefixes<P: Parser>(base: &[&str], options: &[(&str, &[&str])
 }
 
 pub fn assert_parse_error<P: Parser>(args: &[&str]) {
-    let error = P::try_parse_from(args)
+    let error = civ6_cli_compat_rs::try_parse_from::<P, _, _>(args)
         .err()
         .unwrap_or_else(|| panic!("accepted {args:?}"));
     assert_eq!(error.exit_code(), 2, "{args:?}: {error}");

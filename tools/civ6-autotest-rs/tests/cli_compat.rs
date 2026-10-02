@@ -249,3 +249,81 @@ fn compat_tuner_negative_number_strings_reach_invalid_port_guard_without_connect
         assert!(output.stdout.is_empty());
     }
 }
+
+#[test]
+fn compat_tuner_subprocess_matches_argparse_negative_lexing_without_connecting() {
+    for (state, attached, expected) in [
+        ("-.5", false, 1),
+        ("-1e3", false, 2),
+        ("-1.", false, 2),
+        ("-1e3", true, 1),
+        ("-1.", true, 1),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_civ6-tuner"));
+        command.arg("lua");
+        if attached {
+            command.arg(format!("--state={state}"));
+        } else {
+            command.args(["--state", state]);
+        }
+        let output = command
+            .args([
+                "--s", "InGame", "--code", "-.5", "--code", "return 1", "--port", "0",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "{state}/{attached}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if expected == 1 {
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap().trim(),
+                "Invalid port or timeout"
+            );
+        }
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn compat_check_subprocess_matches_negative_positional_and_path_lexing() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = repo_root().join("tools/civ6-autotest/scenarios/bundle0-load-save.json");
+    let bytes = fs::read(fixture).unwrap();
+    for name in ["-.5", "-1e3", "-1."] {
+        fs::write(temp.path().join(name), &bytes).unwrap();
+    }
+    for (name, separator, expected) in [
+        ("-.5", false, 0),
+        ("-1e3", false, 2),
+        ("-1.", false, 2),
+        ("-1e3", true, 0),
+        ("-1.", true, 0),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"));
+        command.args(["--check", "--output", "-.5", "--out=-1e3"]);
+        if separator {
+            command.arg("--");
+        }
+        let output = command.arg(name).current_dir(temp.path()).output().unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "{name}/{separator}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if expected == 0 {
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap().trim(),
+                "VALID: JAC_PoC_Bundle0 load/save (10 steps)"
+            );
+            assert!(output.stderr.is_empty());
+        } else {
+            assert!(output.stdout.is_empty());
+        }
+    }
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 3);
+}

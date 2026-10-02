@@ -5,8 +5,7 @@ use clap::{Parser, Subcommand};
 #[command(
     about = "Inspect or control the verified Civ VI process",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 struct Args {
     #[command(subcommand)]
@@ -20,7 +19,6 @@ enum Command {
     /// Close orphan Civ VI crash reporters, then launch DX11 via Steam.
     Launch,
     /// Wait for a game window and verify it is DX11.
-    #[command(allow_negative_numbers = true)]
     Wait {
         #[arg(long, default_value_t = 120.0)]
         seconds: f64,
@@ -28,7 +26,6 @@ enum Command {
     /// Ask the verified game window to close.
     Close,
     /// Force terminate only the matching process and creation time.
-    #[command(allow_negative_numbers = true)]
     Terminate { pid: u32, expected_start: f64 },
 }
 
@@ -117,3 +114,5 @@ mod tests {
         }
     }
 }
+
+civ6_cli_compat_rs::parser!(Args);

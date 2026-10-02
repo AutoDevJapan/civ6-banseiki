@@ -11,8 +11,7 @@ enum Command {
 #[command(
     about = "Inspect a running local Civ VI FireTuner",
     infer_long_args = true,
-    args_override_self = true,
-    allow_negative_numbers = true
+    args_override_self = true
 )]
 struct Args {
     command: Command,
@@ -20,7 +19,7 @@ struct Args {
     state: String,
     #[arg(long)]
     code: Option<String>,
-    #[arg(long, default_value = "4318", allow_hyphen_values = true)]
+    #[arg(long, default_value = "4318")]
     port: PortArgument,
 }
 
@@ -161,3 +160,5 @@ mod tests {
         }
     }
 }
+
+civ6_cli_compat_rs::parser!(Args);

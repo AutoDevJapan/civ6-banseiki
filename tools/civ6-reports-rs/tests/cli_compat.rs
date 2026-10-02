@@ -7,19 +7,25 @@ fn assert_prefixes<P: Parser>(base: &[&str], name: &str, values: &[&str]) {
         let mut args = base.to_vec();
         args.push(&name[..end]);
         args.extend_from_slice(values);
-        assert!(P::try_parse_from(&args).is_ok(), "{args:?}");
+        assert!(
+            civ6_cli_compat_rs::try_parse_from::<P, _, _>(&args).is_ok(),
+            "{args:?}"
+        );
     }
     for help in ["--h", "--he", "--hel", "--help"] {
-        let error = P::try_parse_from(base.iter().copied().chain([help]))
-            .err()
-            .unwrap();
+        let error =
+            civ6_cli_compat_rs::try_parse_from::<P, _, _>(base.iter().copied().chain([help]))
+                .err()
+                .unwrap();
         assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
         assert_eq!(error.exit_code(), 0);
     }
 }
 
 fn assert_parse_error<P: Parser>(args: &[&str]) {
-    let error = P::try_parse_from(args).err().unwrap();
+    let error = civ6_cli_compat_rs::try_parse_from::<P, _, _>(args)
+        .err()
+        .unwrap();
     assert_eq!(error.exit_code(), 2, "{args:?}: {error}");
 }
 
@@ -171,4 +177,27 @@ fn compat_report_negative_numbers_do_not_loosen_choices_or_unknown_flags() {
         assert_parse_error::<ScenarioArgs>(&["scenario", "--output", value, "--o", "out"]);
         assert_parse_error::<ScenarioArgs>(&["scenario", "--repo", value, "--r", "repo"]);
     }
+}
+
+#[test]
+fn compat_all_report_parsers_share_the_legacy_negative_boundary() {
+    let a = ArbitrationArgs::try_parse_from(["cli", "-.5", "--json", "-.5"]).unwrap();
+    assert_eq!(a.artifact, PathBuf::from("-.5"));
+    assert_eq!(a.json, Some(PathBuf::from("-.5")));
+    let t = TuningArgs::try_parse_from(["cli", "-.5", "--json=-1e3"]).unwrap();
+    assert_eq!(t.artifact, PathBuf::from("-.5"));
+    assert_eq!(t.json, Some(PathBuf::from("-1e3")));
+    let r = ResearchArgs::try_parse_from(["cli", "-.5"]).unwrap();
+    assert_eq!(r.research_jsonl, PathBuf::from("-.5"));
+    let s = ScenarioArgs::try_parse_from(["cli", "--output", "-.5", "--repo=-1."]).unwrap();
+    assert_eq!(s.output, Some(PathBuf::from("-.5")));
+    assert_eq!(s.repo, Some(PathBuf::from("-1.")));
+    for value in ["-1e3", "-1.", "--unknown"] {
+        assert_parse_error::<ArbitrationArgs>(&["cli", "artifact", "--json", value]);
+        assert_parse_error::<TuningArgs>(&["cli", "artifact", "--json", value]);
+        assert_parse_error::<ResearchArgs>(&["cli", value]);
+        assert_parse_error::<ScenarioArgs>(&["cli", "--output", value]);
+    }
+    let error = ResearchArgs::try_parse_from(["cli", "file", "--kind", "-.5"]).unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
 }

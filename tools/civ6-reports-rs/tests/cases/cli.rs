@@ -236,7 +236,6 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
         .unwrap()
             + "\n"
     );
-    use clap::Parser;
     let default =
         civ6_reports_rs::cli::ScenarioArgs::try_parse_from(["civ6-build-arbitration-ai-scenario"])
             .unwrap();

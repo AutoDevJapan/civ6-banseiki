@@ -263,7 +263,6 @@ fn check_cli_resolves_fixtures_from_unrelated_working_directory() {
         "0",
         "65536",
         "-1",
-        "-4_318",
         "18446744073709551616",
         "-18446744073709551616",
     ] {
@@ -298,6 +297,24 @@ fn check_cli_resolves_fixtures_from_unrelated_working_directory() {
             .output()
             .unwrap();
         assert!(result.status.success(), "{port}");
+    }
+    // argparse accepts the signed underscore form only as an attached value.
+    let attached = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+        .arg(&scenario)
+        .args(["--check", "--port=-4_318"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(attached.status.success());
+    for port in ["-4_318", "-1e3", "-1."] {
+        let result = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+            .arg(&scenario)
+            .args(["--check", "--port", port])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2), "{port}");
+        assert!(result.stdout.is_empty());
     }
     for port in ["1.5", "unused", "_4318", "4__318"] {
         let result = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
