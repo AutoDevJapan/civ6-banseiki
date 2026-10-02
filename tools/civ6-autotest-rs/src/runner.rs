@@ -73,8 +73,20 @@ pub trait Backend: Send {
         println!("MANUAL / Computer Use (no timeout; waits until Enter): {prompt}");
         print!("Press Enter after the action is complete: ");
         io::stdout().flush()?;
-        let mut input = String::new();
-        if io::stdin().read_line(&mut input)? == 0 {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut input = String::new();
+            let _ = send.send(io::stdin().read_line(&mut input));
+        });
+        let count = loop {
+            crate::time::check_interrupt()?;
+            match receive.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok(result) => break result?,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(e) => return Err(Error::scenario(e.to_string())),
+            }
+        };
+        if count == 0 {
             return Err(Error::scenario(
                 "End of input while waiting for manual action",
             ));
@@ -285,6 +297,7 @@ impl Runner {
         }
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
+        crate::time::check_interrupt()?;
         let v = deadline - self.clock.now();
         if v <= 0.0 {
             Err(Error::scenario("Step deadline expired"))
@@ -1613,7 +1626,9 @@ impl Runner {
             Err(e)
                 if matches!(
                     e.kind,
-                    ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
+                    ErrorKind::LuaExecution
+                        | ErrorKind::LuaResponseUnknown
+                        | ErrorKind::Interrupted
                 ) =>
             {
                 return Err(e)
@@ -1736,8 +1751,15 @@ impl Runner {
         }
         fs::create_dir(&self.output)?;
         self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
+        let mut interruption = None;
         let code = match self.run_inner() {
             Ok(v) => v,
+            Err(e) if e.kind == ErrorKind::Interrupted => {
+                self.result_passed = false;
+                self.failure = Some(format!("KeyboardInterrupt: {e}"));
+                interruption = Some(e);
+                130
+            }
             Err(e) => {
                 self.result_passed = false;
                 self.log("run", "FAIL", &e.to_string())?;
@@ -1766,7 +1788,11 @@ impl Runner {
                 return Err(e);
             }
         }
-        Ok(code)
+        if let Some(e) = interruption {
+            Err(e)
+        } else {
+            Ok(code)
+        }
     }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
@@ -1843,6 +1869,9 @@ impl Runner {
                     self.completed_steps += 1;
                 }
                 Err(e) => {
+                    if e.kind == ErrorKind::Interrupted {
+                        return Err(e);
+                    }
                     self.log(&action, "FAIL", &e.to_string())?;
                     return Ok(1);
                 }

@@ -45,6 +45,7 @@ fn run(args: Args) -> Result<i32> {
         );
         return Ok(0);
     }
+    civ6_autotest_rs::time::install_interrupt_handler()?;
     let output = args.output.unwrap_or_else(|| {
         civ6_autotest_rs::repo_root()
             .join("tools/civ6-autotest/artifacts")
@@ -84,7 +85,11 @@ fn main() {
         Ok(code) => code,
         Err(e) => {
             eprintln!("Scenario error: {e}");
-            2
+            if e.kind == civ6_autotest_rs::ErrorKind::Interrupted {
+                130
+            } else {
+                2
+            }
         }
     };
     std::process::exit(code);
