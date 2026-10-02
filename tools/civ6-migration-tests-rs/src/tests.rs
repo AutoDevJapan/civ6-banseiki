@@ -482,6 +482,169 @@ fn inventory_follows_real_modules_path_attributes_and_file_conditions() {
     assert!(!tests.contains_key("lib::nested::test_one"));
 }
 
+#[test]
+fn regression_explicit_file_path_uses_sibling_children() {
+    for folder in ["", "selected/"] {
+        let fixture = tempfile::tempdir().unwrap();
+        let root = fixture.path();
+        write(
+            root,
+            "lib.rs",
+            &format!("#[path = \"{folder}a.rs\"] mod a;"),
+        );
+        write(root, &format!("{folder}a.rs"), "mod b;");
+        write(
+            root,
+            &format!("{folder}b.rs"),
+            "#[test] fn test_actual() { assert!(true); }",
+        );
+        write(
+            root,
+            &format!("{folder}a/b.rs"),
+            "#[test] fn test_wrong_path() { assert!(true); }",
+        );
+        let tests = inventory::resolve(&root.join("lib.rs"), "lib").unwrap();
+        assert!(inventory::require(&tests, "lib::a::b::test_wrong_path").is_err());
+        inventory::require(&tests, "lib::a::b::test_actual").unwrap();
+        assert_eq!(
+            tests.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["lib::a::b::test_actual"]
+        );
+    }
+}
+
+#[test]
+fn regression_inline_path_selects_the_child_directory() {
+    for outer in [false, true] {
+        let fixture = tempfile::tempdir().unwrap();
+        let root = fixture.path();
+        let source = "#[path = \"selected\"] mod a { mod b; }";
+        if outer {
+            write(root, "lib.rs", "mod outer;");
+            write(root, "outer.rs", source);
+        } else {
+            write(root, "lib.rs", source);
+        }
+        write(
+            root,
+            "selected/b.rs",
+            "#[test] fn test_actual() { assert!(true); }",
+        );
+        let wrong = if outer { "outer/a/b.rs" } else { "a/b.rs" };
+        write(
+            root,
+            wrong,
+            "#[test] fn test_wrong_path() { assert!(true); }",
+        );
+        let tests = inventory::resolve(&root.join("lib.rs"), "lib").unwrap();
+        let prefix = if outer {
+            "lib::outer::a::b"
+        } else {
+            "lib::a::b"
+        };
+        assert!(inventory::require(&tests, &format!("{prefix}::test_wrong_path")).is_err());
+        inventory::require(&tests, &format!("{prefix}::test_actual")).unwrap();
+        assert_eq!(tests.len(), 1);
+    }
+}
+
+#[test]
+fn regression_macro_arguments_cannot_hide_early_returns_or_cfg() {
+    for (body, reason) in [
+        (
+            "assert!({ if unavailable() { return; } true });",
+            "early return",
+        ),
+        (
+            "assert_eq!(0, { if unavailable() { return; } 0 });",
+            "early return",
+        ),
+        (
+            "assert!(matches!(Some(1), Some(_) if { if unavailable() { return; } true }));",
+            "early return",
+        ),
+        (
+            "assert!(matches!(Some(1), Some(_) if cfg!(windows)));",
+            "runtime cfg",
+        ),
+        (
+            "assert!({ #[cfg(windows)] let result = true; result });",
+            "conditional",
+        ),
+        (
+            "opaque! { [ { if unavailable() { return; } } ] ; };",
+            "early return",
+        ),
+        ("opaque! { [ { std::cfg!(windows) } ] ; };", "runtime cfg"),
+    ] {
+        let source = format!("#[test] fn test_one() {{ {body} }}");
+        let tests = inventory::parse(&source, "suite").unwrap();
+        let error = inventory::require(&tests, "suite::test_one").unwrap_err();
+        assert!(error.contains(reason), "{source}: {error}");
+    }
+}
+
+#[test]
+fn regression_macro_literals_and_callback_returns_remain_valid() {
+    let source = r##"
+        #[test] fn test_one() {
+            assert_eq!((|| { return 42; })(), 42);
+            assert_eq!("return cfg!(windows)", r#"return cfg!(windows)"#);
+            assert!(matches!(Some(1), Some(_) if true));
+            assert!(true, "return; cfg!(windows)");
+            opaque! { ["return", r#"cfg!(windows)"#, 'r']; };
+            // assert!({ return; });
+        }
+    "##;
+    let tests = inventory::parse(source, "suite").unwrap();
+    inventory::require(&tests, "suite::test_one").unwrap();
+}
+
+#[test]
+fn regression_macro_imports_and_exports_cannot_shadow_verified_tests() {
+    let shadow = "macro_rules! simple_tests { ($($name:ident),* $(,)?) => {}; }";
+    for imported in [
+        format!("#[macro_use] mod shadow {{ {shadow} }}"),
+        format!("mod shadow {{ #![macro_use] {shadow} }}"),
+        format!("mod shadow {{ #[macro_export] {shadow} }}"),
+        "#[macro_use] extern crate unknown;".into(),
+        "#[macro_use(simple_tests)] extern crate unknown;".into(),
+    ] {
+        let source = format!("{MACRO} {imported} simple_tests! {{ test_one }}");
+        let error = inventory::parse(&source, "suite")
+            .err()
+            .expect("unsupported macro scope must be rejected");
+        assert!(error.contains("unsupported macro"), "{source}: {error}");
+    }
+    let fixture = tempfile::tempdir().unwrap();
+    write(
+        fixture.path(),
+        "lib.rs",
+        &format!("{MACRO} #[macro_use] mod shadow; simple_tests! {{ test_one }}"),
+    );
+    write(fixture.path(), "shadow.rs", shadow);
+    assert!(inventory::resolve(&fixture.path().join("lib.rs"), "lib")
+        .err()
+        .expect("external macro import must be rejected")
+        .contains("unsupported macro"));
+}
+
+#[test]
+fn regression_qualified_simple_tests_never_borrow_textual_verification() {
+    for path in [
+        "crate::simple_tests",
+        "self::simple_tests",
+        "other::simple_tests",
+        "::other::simple_tests",
+    ] {
+        let source = format!("{MACRO} {path}! {{ test_one }}");
+        match inventory::parse(&source, "suite") {
+            Ok(tests) => assert!(inventory::require(&tests, "suite::test_one").is_err()),
+            Err(error) => assert!(error.contains("unsupported macro")),
+        }
+    }
+}
+
 fn row(class: &str, test: &str, rust_test: &str) -> Value {
     json!({"source": "tests/old.py", "class": class, "test": test, "rust_test": rust_test})
 }

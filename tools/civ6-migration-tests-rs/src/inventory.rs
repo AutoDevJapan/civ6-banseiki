@@ -1,3 +1,4 @@
+use proc_macro2::{TokenStream, TokenTree};
 use std::collections::BTreeMap;
 use std::path::Path;
 use syn::parse::Parser;
@@ -85,6 +86,33 @@ struct Body {
     restriction: Option<String>,
 }
 
+impl Body {
+    // Non-expression macro syntax is outside the supported dialect. Inspect
+    // its token groups conservatively; quoted/byte/character literals remain
+    // opaque, so strings containing Rust or Lua code do not trigger the guard.
+    fn tokens(&mut self, tokens: TokenStream) {
+        let mut tokens = tokens.into_iter().peekable();
+        while let Some(token) = tokens.next() {
+            match token {
+                TokenTree::Group(group) => self.tokens(group.stream()),
+                TokenTree::Ident(id) if id == "return" => {
+                    self.restriction = Some("early return can skip a test".into());
+                }
+                TokenTree::Ident(id) if id == "cfg" || id == "cfg_attr" => match tokens.peek() {
+                    Some(TokenTree::Punct(p)) if p.as_char() == '!' => {
+                        self.restriction = Some("runtime cfg can skip a test".into());
+                    }
+                    Some(TokenTree::Group(_)) => {
+                        self.restriction = Some("conditional attribute in macro arguments".into());
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+    }
+}
+
 impl<'ast> Visit<'ast> for Body {
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         self.restriction = self
@@ -98,8 +126,18 @@ impl<'ast> Visit<'ast> for Body {
     }
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        if mac.path.is_ident("cfg") {
+        if mac.path.segments.last().is_some_and(|s| s.ident == "cfg") {
             self.restriction = Some("runtime cfg can skip a test".into());
+            return;
+        }
+        if let Ok(args) =
+            Punctuated::<syn::Expr, Token![,]>::parse_terminated.parse2(mac.tokens.clone())
+        {
+            for arg in &args {
+                self.visit_expr(arg);
+            }
+        } else {
+            self.tokens(mac.tokens.clone());
         }
     }
 
@@ -130,12 +168,24 @@ fn module_path(module: &syn::ItemMod) -> Result<Option<String>, String> {
     Err("invalid module path".into())
 }
 
+fn reject_macro_scopes(attrs: &[Attribute], prefix: &str) -> Result<(), String> {
+    if attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("macro_use") || attr.path().is_ident("macro_export"))
+    {
+        return Err(format!("{prefix}: unsupported macro import/export scope"));
+    }
+    Ok(())
+}
+
 // Follow the module graph from a Cargo test target, not every .rs file on disk.
-// Explicit #[path] uses the source directory; implicit foo.rs modules own foo/.
+// In rustc 1.95, #[path] files own their parent like mod.rs; implicit foo.rs
+// modules own foo/. Inline #[path] overrides supply a directory, not a file.
+// https://github.com/rust-lang/rust/blob/1.95.0/compiler/rustc_expand/src/module.rs
 fn file(
     path: &Path,
     prefix: &str,
-    root: bool,
+    owns_directory: bool,
     inherited: Conditions,
     macro_verified: bool,
     stack: &mut Vec<std::path::PathBuf>,
@@ -149,8 +199,9 @@ fn file(
     }
     let source = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let parsed = syn::parse_file(&source).map_err(|e| format!("{}: {e}", path.display()))?;
+    reject_macro_scopes(&parsed.attrs, prefix)?;
     let parent = path.parent().unwrap();
-    let directory = if root || path.file_name().unwrap() == "mod.rs" {
+    let directory = if owns_directory || path.file_name().unwrap() == "mod.rs" {
         parent.to_path_buf()
     } else {
         parent.join(path.file_stem().unwrap())
@@ -179,6 +230,15 @@ fn walk(
     tests: &mut Tests,
 ) -> Result<(), String> {
     for item in items {
+        let attrs = match item {
+            Item::Mod(module) => module.attrs.as_slice(),
+            Item::Macro(mac) => mac.attrs.as_slice(),
+            Item::ExternCrate(import) => import.attrs.as_slice(),
+            _ => &[],
+        };
+        // The migrated suites have no macro imports/exports. Refuse these
+        // rather than retaining a verified bit after a child changes scope.
+        reject_macro_scopes(attrs, prefix)?;
         match item {
             Item::Fn(function) if function.attrs.iter().any(|a| a.path().is_ident("test")) => {
                 let mut body = Body::default();
@@ -203,8 +263,15 @@ fn walk(
             Item::Mod(module) => {
                 let nested = format!("{prefix}::{}", module.ident);
                 let conditions = inherited.with_attrs(&module.attrs);
+                let override_path = module_path(module)?;
                 if let Some((_, items)) = &module.content {
-                    let directory = directories.map(|(dir, _)| dir.join(module.ident.to_string()));
+                    let directory = directories.map(|(dir, path_dir)| {
+                        if let Some(path) = &override_path {
+                            path_dir.join(path)
+                        } else {
+                            dir.join(module.ident.to_string())
+                        }
+                    });
                     walk(
                         items,
                         &nested,
@@ -215,7 +282,8 @@ fn walk(
                         tests,
                     )?;
                 } else if let Some((directory, path_directory)) = directories {
-                    let path = if let Some(path) = module_path(module)? {
+                    let owns_directory = override_path.is_some();
+                    let path = if let Some(path) = override_path {
                         path_directory.join(path)
                     } else {
                         let flat = directory.join(format!("{}.rs", module.ident));
@@ -232,7 +300,7 @@ fn walk(
                     file(
                         &path,
                         &nested,
-                        false,
+                        owns_directory,
                         conditions,
                         macro_verified,
                         stack,
@@ -265,6 +333,18 @@ fn walk(
                     insert(tests, format!("{prefix}::{name}"), conditions.clone());
                 }
             }
+            Item::Macro(mac)
+                if mac
+                    .mac
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|s| s.ident == "simple_tests") =>
+            {
+                return Err(format!(
+                    "{prefix}: unsupported macro qualified simple_tests invocation"
+                ));
+            }
             _ => {}
         }
     }
@@ -287,6 +367,7 @@ pub fn resolve(path: &Path, target: &str) -> Result<Tests, String> {
 
 pub fn parse(source: &str, target: &str) -> Result<Tests, String> {
     let parsed = syn::parse_file(source).map_err(|e| e.to_string())?;
+    reject_macro_scopes(&parsed.attrs, target)?;
     let mut tests = Tests::new();
     walk(
         &parsed.items,
