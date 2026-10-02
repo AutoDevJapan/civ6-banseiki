@@ -640,6 +640,8 @@ local function ChooseSite(state, world)
   assert(camp and hut, "native camp and goody hut improvements required")
   local candidates = {}
   local occupied = {}
+  local flow = state.Flows[world.FlowID]
+  local absorber = flow and flow.To
   for _, playerID in ipairs(PlayerManager.GetAliveIDs()) do
     for _, unit in Players[playerID]:GetUnits():Members() do
       local plot = Map.GetPlot(unit:GetX(), unit:GetY())
@@ -650,12 +652,11 @@ local function ChooseSite(state, world)
     local plot = Map.GetPlotByIndex(index)
     local improvement = plot:GetImprovementType()
     local existing = improvement == camp or improvement == hut
-    local terrain = plot.GetTerrainType and GameInfo.Terrains and GameInfo.Terrains[plot:GetTerrainType()]
-    -- IsWater/IsMountain are UI-only on the installed gameplay binding.
-    local passable = terrain and not terrain.Water and not terrain.Impassable
-      or not terrain and not plot:IsWater() and not plot:IsMountain()
-    local empty = improvement == -1 and plot:GetOwner() == -1 and not occupied[index]
-      and passable
+    local owner = plot:GetOwner()
+    -- Japan's preallocated provinces can leave no unowned land. Use an empty
+    -- absorber plot only after unowned sites, without erasing a district.
+    local empty = improvement == -1 and (owner == -1 or owner == absorber) and not occupied[index]
+      and not plot:IsWater() and not plot:IsMountain()
       and (not plot.IsCity or not plot:IsCity())
       and (not plot.GetDistrictType or plot:GetDistrictType() == -1)
     if (existing or empty) and not Reserved(state, index, world.ID)
@@ -663,7 +664,7 @@ local function ChooseSite(state, world)
       local distance = math.abs(plot:GetX() - world.Origin.X)
         + math.abs(plot:GetY() - world.Origin.Y)
       local preference = existing and (improvement == camp and world.Kind ~= "ITEM" and 0
-        or improvement == hut and 1 or 2) or 3
+        or improvement == hut and 1 or 2) or (owner == -1 and 3 or 4)
       candidates[#candidates + 1] = { Index = index, Distance = distance,
         Preference = preference, Existing = existing,
         Type = existing and improvement or hut }
