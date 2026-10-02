@@ -129,7 +129,9 @@
     "blp": "Verbatim name-table prefixes of actual successfully cooked packages, with whole-file source hashes; no large texture payload included.",
     "official": "Portable excerpts of official table definitions, valid resources/features, icon sizes and colors; original SDK remains read-only.",
     "subprocess": "jac-process-fixture is a Rust-only offline Codex/cooker fixture; it refuses to run unless JAC_ASSETS_TEST_PROCESS=1. No image-generation service or SDK cooker is invoked by the test suite.",
-    "geography_zip_sha256": "8ed144540862f074d69a34c27b7f85c1ce0c9a525c04569d222c30d1f2435af8"
+    "geography_zip_sha256": "8ed144540862f074d69a34c27b7f85c1ce0c9a525c04569d222c30d1f2435af8",
+    "source_cache": "source-cache.zip contains the three verbatim pinned downloads. Generator CLI tests extract and hash-check them, recreate the captured game schema/resource inputs and use an isolated repository; no network or installed SDK is required.",
+    "source_cache_zip_sha256": "3cba719eda6335ea7c968ed40e17b7c597d4eac7b3ec9b9f351f6f817277e6e6"
   },
   "validation_scope": "No Civ6/live_chain. No original .py removal. No MOD edits. Rust rendering may produce different PNG bytes while preserving alpha, dimensions, layout and glyph checks.",
   "shared_production_dependency": {
@@ -143,5 +145,10 @@
     ],
     "atlas_adapter": "Alpha-aware Lanczos resizing prepares cells; the shared data helper performs inventory checks, atlas layout and composition.",
     "asset_dependencies_git_blob": "ee4e75f80268216642554bb233f76b300cb8ffe2"
+  },
+  "cli_compatibility": {
+    "long_option_abbreviations": "Every root parser and support subcommand accepts unambiguous long-option prefixes; all 27 tool options are exercised.",
+    "portrait_only": "Choices come from shared SUBJECTS. Unknown subjects exit 2 before runtime; legacy --o remains an alias for --only.",
+    "normal_map_output": "Canonical paths identify the standard Maps directory for automatic support updates, including relative, absolute and dot-component forms. Unrelated exports leave standard support files alone."
   }
 }

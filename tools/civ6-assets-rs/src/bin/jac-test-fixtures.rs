@@ -29,6 +29,17 @@ fn main() -> anyhow::Result<()> {
     )?;
     zip.write_all(&serde_json::to_vec(&geography)?)?;
     zip.finish()?;
+    let file = fs::File::create(output.join("source-cache.zip"))?;
+    let mut zip = zip::ZipWriter::new(file);
+    for (name, _, _) in generate::SOURCES {
+        zip.start_file(
+            name,
+            zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated),
+        )?;
+        std::io::copy(&mut fs::File::open(cache.join(name))?, &mut zip)?;
+    }
+    zip.finish()?;
     let source = generate::official();
     let db =
         rusqlite::Connection::open_with_flags(&source, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;

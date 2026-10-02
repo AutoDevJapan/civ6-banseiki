@@ -1,7 +1,10 @@
 use crate::*;
 use clap::{Parser, Subcommand};
 #[derive(Parser)]
-#[command(about = "Build 1534 Japan maps from pinned public-domain geography")]
+#[command(
+    about = "Build 1534 Japan maps from pinned public-domain geography",
+    infer_long_args = true
+)]
 pub struct GenerateArgs {
     #[arg(long,default_value_os_t=generate::official())]
     pub official: PathBuf,
@@ -65,9 +68,18 @@ pub fn japan_map_generate() -> Result<()> {
             .context("map output parent")?
             .join("Scripts/JAC_ResourceSites.lua"),
     )?;
-    if a.output == generate::mod_dir().join("Maps") {
+    let output = a
+        .output
+        .canonicalize()
+        .context("resolve map output directory")?;
+    let default_output = match generate::mod_dir().join("Maps").canonicalize() {
+        Ok(path) => Some(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error).context("resolve standard map output directory"),
+    };
+    if default_output.as_ref() == Some(&output) {
         write_support::main_to(
-            &a.output,
+            &output,
             &generate::mod_dir(),
             &root().join("tools/civ6-autotest/scenarios"),
         )?;
@@ -75,6 +87,7 @@ pub fn japan_map_generate() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct ProsperityArgs {
     #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
     pub maps: PathBuf,
@@ -88,6 +101,7 @@ pub fn japan_map_prosperity() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct ProsperStartArgs {
     #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
     pub maps: PathBuf,
@@ -106,6 +120,7 @@ pub fn japan_map_prosper_start() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct SupportArgs {
     #[command(subcommand)]
     pub command: SupportCommand,
@@ -113,6 +128,7 @@ pub struct SupportArgs {
 #[derive(Subcommand)]
 pub enum SupportCommand {
     /// Config, translations, Oda/Takeda scenarios, resources and prosperous start checks.
+    #[command(infer_long_args = true)]
     Support {
         #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
         maps: PathBuf,
@@ -122,14 +138,17 @@ pub enum SupportCommand {
         scenarios: PathBuf,
     },
     /// Twenty additional factions, translations and artwork declarations (uses existing ArtDefs templates).
+    #[command(infer_long_args = true)]
     CustomCivs {
         #[arg(long,default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
         output: PathBuf,
     },
+    #[command(infer_long_args = true)]
     CityNames {
         #[arg(long,default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
         output: PathBuf,
     },
+    #[command(infer_long_args = true)]
     Feuds {
         #[arg(long,default_value_os_t=generate::mod_dir().join("Data/JAC_Japan_Feuds.xml"))]
         output: PathBuf,
@@ -148,6 +167,7 @@ pub fn japan_map_support() -> Result<()> {
     }
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct UnificationArgs {
     #[arg(long,default_value_os_t=generate::official())]
     pub official: PathBuf,
@@ -165,6 +185,7 @@ pub fn japan_map_unification() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct CrestArgs {
     #[arg(long,default_value_os_t=build_art::originals().join("crests"))]
     pub output: PathBuf,
@@ -174,8 +195,10 @@ pub fn jac_draw_crests() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct PortraitArgs {
-    #[arg(long,num_args=1..)]
+    // The original only had --only, so --o selected a subject before --originals was added.
+    #[arg(long,alias="o",num_args=1..,value_parser=portrait_subjects())]
     pub only: Vec<String>,
     #[arg(long,default_value_os_t=build_art::originals())]
     pub originals: PathBuf,
@@ -183,6 +206,15 @@ pub struct PortraitArgs {
     pub cli: Option<PathBuf>,
     #[arg(long)]
     pub print_prompt: bool,
+}
+fn portrait_subjects() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(
+        generate_portraits::SUBJECTS
+            .as_object()
+            .expect("portrait subjects")
+            .keys()
+            .map(String::as_str),
+    )
 }
 pub fn jac_generate_portraits() -> Result<()> {
     let a = PortraitArgs::parse();
@@ -212,6 +244,7 @@ pub fn jac_generate_portraits() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
+#[command(infer_long_args = true)]
 pub struct BuildArgs {
     #[arg(long)]
     pub originals: Option<PathBuf>,

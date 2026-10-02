@@ -1,14 +1,16 @@
 mod common;
 use civ6_assets_rs::{
-    arr, build_art, constants, generate, generate_portraits as portraits, read_json, root, s,
+    arr, build_art, cli, constants, generate, generate_portraits as portraits, read_json, root, s,
     write, write_city_names, write_custom_civs, xml,
 };
+use clap::CommandFactory;
 use common::*;
 use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
     ffi::OsStr,
     fs,
+    io::Read,
     path::Path,
     process::{Command, Output},
 };
@@ -63,6 +65,302 @@ fn copy_maps(to: &Path) {
         let file = file.unwrap();
         fs::copy(file.path(), to.join(file.file_name())).unwrap();
     }
+}
+
+#[test]
+fn all_cli_parsers_accept_unambiguous_long_argument_prefixes() {
+    let mut commands = [
+        cli::GenerateArgs::command(),
+        cli::ProsperityArgs::command(),
+        cli::ProsperStartArgs::command(),
+        cli::SupportArgs::command(),
+        cli::UnificationArgs::command(),
+        cli::CrestArgs::command(),
+        cli::PortraitArgs::command(),
+        cli::BuildArgs::command(),
+    ];
+    let mut checked = 0;
+    for command in &mut commands {
+        command.build();
+        let paths = if command.get_subcommands().next().is_some() {
+            command
+                .get_subcommands()
+                .filter(|sub| sub.get_name() != "help")
+                .map(|sub| vec![sub.get_name().to_owned()])
+                .collect::<Vec<_>>()
+        } else {
+            vec![Vec::new()]
+        };
+        for path in paths {
+            let leaf = path.iter().fold(&*command, |cmd, segment| {
+                cmd.find_subcommand(segment).unwrap()
+            });
+            let long_names = leaf
+                .get_arguments()
+                .filter_map(|arg| arg.get_long())
+                .collect::<Vec<_>>();
+            for arg in leaf.get_arguments().filter(|arg| arg.get_id() != "help") {
+                let long = arg.get_long().expect("all tool arguments have long names");
+                let value = arg.get_action().takes_values().then(|| {
+                    arg.get_value_parser()
+                        .possible_values()
+                        .and_then(|mut values| values.next())
+                        .map(|value| value.get_name().to_owned())
+                        .unwrap_or_else(|| "fixture-value".into())
+                });
+                let parse = |flag: &str| {
+                    let mut args = vec![command.get_name().to_owned()];
+                    args.extend(path.iter().cloned());
+                    args.push(format!("--{flag}"));
+                    args.extend(value.iter().cloned());
+                    let matches = command
+                        .clone()
+                        .try_get_matches_from(args)
+                        .unwrap_or_else(|e| {
+                            panic!("{} {path:?} --{flag}: {e}", command.get_name())
+                        });
+                    let matches = path
+                        .iter()
+                        .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                    matches
+                        .get_raw(arg.get_id().as_str())
+                        .unwrap()
+                        .map(OsStr::to_owned)
+                        .collect::<Vec<_>>()
+                };
+                let exact = parse(long);
+                let mut shortened = 0;
+                for length in 1..long.len() {
+                    let prefix = &long[..length];
+                    if long_names
+                        .iter()
+                        .filter(|name| name.starts_with(prefix))
+                        .count()
+                        == 1
+                    {
+                        assert_eq!(parse(prefix), exact, "--{prefix} must behave as --{long}");
+                        shortened += 1;
+                    }
+                }
+                assert!(
+                    shortened > 0,
+                    "no unambiguous prefix was checked for --{long}"
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 27);
+    let t = temp();
+    for (name, _) in BINS {
+        let out = success(command(name, t.path()).arg("--hel"));
+        assert!(String::from_utf8_lossy(&out.stdout).contains("Usage:"));
+    }
+    for sub in ["support", "custom-civs", "city-names", "feuds"] {
+        success(command("japan-map-support", t.path()).args([sub, "--hel"]));
+    }
+    for (name, flag) in [("japan-map-generate", "--o"), ("jac-build-art", "--gro")] {
+        let out = command(name, t.path())
+            .arg(flag)
+            .arg("fixture-value")
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(out.stdout.is_empty());
+    }
+}
+
+#[test]
+fn portrait_subject_choices_are_validated_before_runtime_or_output() {
+    let t = temp();
+    for args in [
+        vec!["--only", "UNKNOWN"],
+        vec!["--o", "UNKNOWN"],
+        vec!["--on", "UNKNOWN"],
+        vec!["--only", "ODA_NOBUHIDE", "UNKNOWN"],
+    ] {
+        let out = command("jac-generate-portraits", t.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(out.stdout.is_empty());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(error.contains("invalid value 'UNKNOWN'"));
+        assert!(error.contains("possible values"));
+    }
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
+    for key in portraits::SUBJECTS.as_object().unwrap().keys() {
+        for prefix in ["--o", "--on"] {
+            let out = success(command("jac-generate-portraits", t.path()).args([
+                prefix,
+                key,
+                "--print-p",
+            ]));
+            assert_eq!(
+                String::from_utf8(out.stdout).unwrap().trim_end(),
+                portraits::prompt(key).unwrap()
+            );
+        }
+    }
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
+}
+
+fn generator_fixture(repository: &Path, game: &Path, cache: &Path) {
+    for source in [
+        "documents/spec/data/japan-1534-start.json",
+        "documents/spec/data/japan-map-resources.json",
+        "tools/civ6-autotest/scenarios/japan-prosperous-15km.json",
+    ] {
+        write(
+            repository.join(source),
+            fs::read(root().join(source)).unwrap(),
+        )
+        .unwrap();
+    }
+    let mut archive =
+        zip::ZipArchive::new(fs::File::open(fixtures().join("source-cache.zip")).unwrap()).unwrap();
+    for (name, _, expected_hash) in generate::SOURCES {
+        let mut bytes = Vec::new();
+        archive
+            .by_name(name)
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        assert_eq!(civ6_assets_rs::sha256(&bytes), expected_hash);
+        write(cache.join(name), bytes).unwrap();
+    }
+    let schema: Vec<String> = serde_json::from_value(maps().official["schema"].clone()).unwrap();
+    drop(
+        generate::create_schema_statements(
+            &schema,
+            &game.join("Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map"),
+        )
+        .unwrap(),
+    );
+    // Reconstitute the captured final official resource rules as input XML, without an installed SDK.
+    let mut resources = xmltree::Element::new("Resources");
+    let mut terrains = xmltree::Element::new("Resource_ValidTerrains");
+    let mut features = xmltree::Element::new("Resource_ValidFeatures");
+    for (kind, rule) in &maps().rules {
+        let mut row = xmltree::Element::new("Row");
+        row.attributes.extend(rule.attributes.clone());
+        row.attributes.insert("ResourceType".into(), kind.clone());
+        civ6_assets_rs::push(&mut resources, row);
+        for terrain in &rule.terrains {
+            civ6_assets_rs::push(
+                &mut terrains,
+                civ6_assets_rs::node(
+                    "Row",
+                    &[
+                        ("ResourceType", kind.clone()),
+                        ("TerrainType", terrain.clone()),
+                    ],
+                ),
+            );
+        }
+        for feature in &rule.features {
+            civ6_assets_rs::push(
+                &mut features,
+                civ6_assets_rs::node(
+                    "Row",
+                    &[
+                        ("ResourceType", kind.clone()),
+                        ("FeatureType", feature.clone()),
+                    ],
+                ),
+            );
+        }
+    }
+    let mut info = xmltree::Element::new("GameInfo");
+    for table in [resources, terrains, features] {
+        civ6_assets_rs::push(&mut info, table);
+    }
+    civ6_assets_rs::xml_write(game.join("Base/Assets/Gameplay/Data/Resources.xml"), &info).unwrap();
+    for source in [
+        "Expansion1_Resources.xml",
+        "Expansion2_Resources.xml",
+        "Expansion2_RemoveData.xml",
+    ] {
+        write(game.join("DLC/Expansion2/Data").join(source), "<GameInfo/>").unwrap();
+    }
+    write(
+        repository.join("poc/JAC_PoC_JapanMapScale/Data/JAC_Japan_Resources.xml"),
+        "<GameInfo/>",
+    )
+    .unwrap();
+}
+
+#[test]
+fn generator_cli_updates_support_for_all_spellings_of_the_standard_output_directory() {
+    let t = temp();
+    let repository = t.path().join("repository");
+    let game = t.path().join("game");
+    let cache = t.path().join("cache");
+    generator_fixture(&repository, &game, &cache);
+    let mod_dir = repository.join("poc/JAC_PoC_JapanMapScale");
+    let maps_dir = mod_dir.join("Maps");
+    let config = mod_dir.join("Config/JAC_JapanMapScale_Config.xml");
+    let text = mod_dir.join("Text/JAC_JapanMapScale_Text.xml");
+    let scenario = repository.join("tools/civ6-autotest/scenarios/japan-map-15km.json");
+    let run = |output: &Path| {
+        let mut cmd = command("japan-map-generate", &repository);
+        cmd.env("CIV6_ASSETS_ROOT", &repository)
+            .env("CIV6_INSTALL_DIR", &game)
+            .arg("--cache")
+            .arg(&cache)
+            .arg("--out")
+            .arg(output);
+        cmd
+    };
+    // Exporting before the standard Maps directory exists must also remain valid.
+    success(&mut run(Path::new("first-export/Maps")));
+    assert!(!maps_dir.exists());
+    assert!(!config.exists());
+    assert!(!text.exists());
+    assert!(!scenario.exists());
+    assert!(repository.join("first-export/Maps/manifest.json").is_file());
+    for output in [
+        Path::new("poc/JAC_PoC_JapanMapScale/Maps"),
+        maps_dir.as_path(),
+        Path::new("./poc/JAC_PoC_JapanMapScale/Maps/../Maps"),
+    ] {
+        write(&config, "stale config").unwrap();
+        write(&text, "stale text").unwrap();
+        write(&scenario, "stale scenario").unwrap();
+        success(&mut run(output));
+        assert_eq!(
+            normalized(&xml(&config).unwrap()),
+            normalized(&civ6_assets_rs::write_support::config())
+        );
+        assert_eq!(
+            normalized(&xml(&text).unwrap()),
+            normalized(&civ6_assets_rs::write_support::text().unwrap())
+        );
+        assert_eq!(
+            read_json(&scenario).unwrap(),
+            read_json(root().join("tools/civ6-autotest/scenarios/japan-map-15km.json")).unwrap()
+        );
+        let manifest = read_json(maps_dir.join("manifest.json")).unwrap();
+        assert_eq!(arr(&manifest).len(), 2);
+        for entry in arr(&manifest) {
+            assert!(maps_dir.join(s(&entry["file"])).is_file());
+            assert!(maps_dir.join(s(&entry["settler_file"])).is_file());
+        }
+        assert!(mod_dir.join("Scripts/JAC_ResourceSites.lua").is_file());
+    }
+    // An unrelated export must still leave the standard MOD's support files alone.
+    write(&config, "preserved config").unwrap();
+    write(&text, "preserved text").unwrap();
+    write(&scenario, "preserved scenario").unwrap();
+    success(&mut run(Path::new("export/Maps")));
+    assert_eq!(fs::read_to_string(config).unwrap(), "preserved config");
+    assert_eq!(fs::read_to_string(text).unwrap(), "preserved text");
+    assert_eq!(fs::read_to_string(scenario).unwrap(), "preserved scenario");
+    assert!(repository.join("export/Maps/manifest.json").is_file());
+    assert!(repository
+        .join("export/Scripts/JAC_ResourceSites.lua")
+        .is_file());
 }
 
 #[test]
