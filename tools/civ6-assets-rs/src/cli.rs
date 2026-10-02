@@ -1,16 +1,30 @@
 use crate::*;
-use clap::{Parser, Subcommand};
+use clap::{builder::TypedValueParser, ArgAction, Parser, Subcommand};
+
+// Match argparse for every tool, including support subcommands and inferred flags.
+fn legacy_options(command: clap::Command) -> clap::Command {
+    command.infer_long_args(true).args_override_self(true)
+}
+fn path_value() -> impl TypedValueParser<Value = PathBuf> {
+    clap::builder::OsStringValueParser::new().map(|value| {
+        if value.is_empty() {
+            PathBuf::from(".")
+        } else {
+            PathBuf::from(value)
+        }
+    })
+}
 #[derive(Parser)]
 #[command(
     about = "Build 1534 Japan maps from pinned public-domain geography",
-    infer_long_args = true
+    defer(legacy_options)
 )]
 pub struct GenerateArgs {
-    #[arg(long,default_value_os_t=generate::official())]
+    #[arg(long,value_parser=path_value(),default_value_os_t=generate::official())]
     pub official: PathBuf,
-    #[arg(long,default_value_os_t=root().join("tools/japan_map_scale/cache"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=root().join("tools/japan_map_scale/cache"))]
     pub cache: PathBuf,
-    #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Maps"))]
     pub output: PathBuf,
 }
 pub fn japan_map_generate() -> Result<()> {
@@ -87,11 +101,11 @@ pub fn japan_map_generate() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct ProsperityArgs {
-    #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Maps"))]
     pub maps: PathBuf,
-    #[arg(long,default_value_os_t=root().join("documents/spec/data/japan-1534-prosperity.json"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=root().join("documents/spec/data/japan-1534-prosperity.json"))]
     pub output: PathBuf,
 }
 pub fn japan_map_prosperity() -> Result<()> {
@@ -101,11 +115,11 @@ pub fn japan_map_prosperity() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct ProsperStartArgs {
-    #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Maps"))]
     pub maps: PathBuf,
-    #[arg(long,default_value_os_t=root().join("tools/civ6-autotest/scenarios/japan-prosperous-15km.json"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=root().join("tools/civ6-autotest/scenarios/japan-prosperous-15km.json"))]
     pub scenario: PathBuf,
 }
 pub fn japan_map_prosper_start() -> Result<()> {
@@ -120,7 +134,7 @@ pub fn japan_map_prosper_start() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct SupportArgs {
     #[command(subcommand)]
     pub command: SupportCommand,
@@ -128,29 +142,29 @@ pub struct SupportArgs {
 #[derive(Subcommand)]
 pub enum SupportCommand {
     /// Config, translations, Oda/Takeda scenarios, resources and prosperous start checks.
-    #[command(infer_long_args = true)]
+    #[command(defer(legacy_options))]
     Support {
-        #[arg(long,default_value_os_t=generate::mod_dir().join("Maps"))]
+        #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Maps"))]
         maps: PathBuf,
-        #[arg(long,default_value_os_t=generate::mod_dir())]
+        #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir())]
         output: PathBuf,
-        #[arg(long,default_value_os_t=root().join("tools/civ6-autotest/scenarios"))]
+        #[arg(long,value_parser=path_value(),default_value_os_t=root().join("tools/civ6-autotest/scenarios"))]
         scenarios: PathBuf,
     },
     /// Twenty additional factions, translations and artwork declarations (uses existing ArtDefs templates).
-    #[command(infer_long_args = true)]
+    #[command(defer(legacy_options))]
     CustomCivs {
-        #[arg(long,default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
+        #[arg(long,value_parser=path_value(),default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
         output: PathBuf,
     },
-    #[command(infer_long_args = true)]
+    #[command(defer(legacy_options))]
     CityNames {
-        #[arg(long,default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
+        #[arg(long,value_parser=path_value(),default_value_os_t=root().join("poc/JAC_PoC_CustomCivs"))]
         output: PathBuf,
     },
-    #[command(infer_long_args = true)]
+    #[command(defer(legacy_options))]
     Feuds {
-        #[arg(long,default_value_os_t=generate::mod_dir().join("Data/JAC_Japan_Feuds.xml"))]
+        #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Data/JAC_Japan_Feuds.xml"))]
         output: PathBuf,
     },
 }
@@ -167,11 +181,11 @@ pub fn japan_map_support() -> Result<()> {
     }
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct UnificationArgs {
-    #[arg(long,default_value_os_t=generate::official())]
+    #[arg(long,value_parser=path_value(),default_value_os_t=generate::official())]
     pub official: PathBuf,
-    #[arg(long,default_value_os_t=root().join("poc/JAC_Test_UnificationMap/Maps/JAC_Unification_Test.Civ6Map"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=root().join("poc/JAC_Test_UnificationMap/Maps/JAC_Unification_Test.Civ6Map"))]
     pub output: PathBuf,
 }
 pub fn japan_map_unification() -> Result<()> {
@@ -185,9 +199,9 @@ pub fn japan_map_unification() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct CrestArgs {
-    #[arg(long,default_value_os_t=build_art::originals().join("crests"))]
+    #[arg(long,value_parser=path_value(),default_value_os_t=build_art::originals().join("crests"))]
     pub output: PathBuf,
 }
 pub fn jac_draw_crests() -> Result<()> {
@@ -195,14 +209,14 @@ pub fn jac_draw_crests() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct PortraitArgs {
     // The original only had --only, so --o selected a subject before --originals was added.
-    #[arg(long,alias="o",num_args=1..,value_parser=portrait_subjects())]
+    #[arg(long,alias="o",action=ArgAction::Set,num_args=1..,value_parser=portrait_subjects())]
     pub only: Vec<String>,
-    #[arg(long,default_value_os_t=build_art::originals())]
+    #[arg(long,value_parser=path_value(),default_value_os_t=build_art::originals())]
     pub originals: PathBuf,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub cli: Option<PathBuf>,
     #[arg(long)]
     pub print_prompt: bool,
@@ -244,21 +258,21 @@ pub fn jac_generate_portraits() -> Result<()> {
     Ok(())
 }
 #[derive(Parser)]
-#[command(infer_long_args = true)]
+#[command(defer(legacy_options))]
 pub struct BuildArgs {
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub originals: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub growth_originals: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub output: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub growth_mod: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub build: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub cooker: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long,value_parser=path_value())]
     pub game: Option<PathBuf>,
 }
 pub fn jac_build_art() -> Result<()> {

@@ -407,22 +407,24 @@ fn parity_manifest_covers_all_49_baseline_methods() {
             )
         })
         .collect::<BTreeSet<_>>();
-    let sources = mapped_methods.iter().map(|m| &m.0).collect::<BTreeSet<_>>();
-    let class_pattern = regex::Regex::new(r"(?m)^class (\w+)\(").unwrap();
-    let method_pattern = regex::Regex::new(r"(?m)^    def (test_\w+)\(").unwrap();
-    let mut old_methods = BTreeSet::new();
-    for source in sources {
-        let text = fs::read_to_string(root().join(source)).unwrap();
-        let classes = class_pattern.captures_iter(&text).collect::<Vec<_>>();
-        for method in method_pattern.captures_iter(&text) {
-            let owner = classes
-                .iter()
-                .rev()
-                .find(|class| class.get(0).unwrap().start() < method.get(0).unwrap().start())
-                .unwrap();
-            old_methods.insert((source.clone(), owner[1].to_owned(), method[1].to_owned()));
-        }
-    }
+    // Captured independently from the four old test files before their removal.
+    let baseline = read_json(fixtures().join("legacy-test-inventory.json")).unwrap();
+    assert_eq!(
+        baseline["source_commit"],
+        "331c933b685b3ea35ea7881e84ca6bbb9a3c2096"
+    );
+    assert_eq!(arr(&baseline["methods"]).len(), 49);
+    let old_methods = arr(&baseline["methods"])
+        .iter()
+        .map(|method| {
+            (
+                s(&method[0]).to_owned(),
+                s(&method[1]).to_owned(),
+                s(&method[2]).to_owned(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(old_methods.len(), 49);
     assert_eq!(mapped_methods, old_methods);
     for map in arr(&mappings) {
         let (module, name) = s(&map["rust_test"]).split_once("::").unwrap();

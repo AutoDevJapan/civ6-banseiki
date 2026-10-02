@@ -1,4 +1,6 @@
 mod common;
+#[path = "common/generated_lua.rs"]
+mod generated_lua;
 use civ6_assets_rs::{
     arr, build_art, cli, constants, generate, generate_portraits as portraits, read_json, root, s,
     write, write_city_names, write_custom_civs, xml,
@@ -65,6 +67,138 @@ fn copy_maps(to: &Path) {
         let file = file.unwrap();
         fs::copy(file.path(), to.join(file.file_name())).unwrap();
     }
+}
+
+fn cli_commands() -> [clap::Command; 8] {
+    [
+        cli::GenerateArgs::command(),
+        cli::ProsperityArgs::command(),
+        cli::ProsperStartArgs::command(),
+        cli::SupportArgs::command(),
+        cli::UnificationArgs::command(),
+        cli::CrestArgs::command(),
+        cli::PortraitArgs::command(),
+        cli::BuildArgs::command(),
+    ]
+}
+
+#[test]
+fn every_cli_option_replaces_previous_occurrences_including_inferred_spellings() {
+    let mut checked = 0;
+    let mut paths_checked = 0;
+    for mut command in cli_commands() {
+        command.build();
+        let leaves = if command.get_subcommands().next().is_some() {
+            command
+                .get_subcommands()
+                .filter(|sub| sub.get_name() != "help")
+                .map(|sub| (vec![sub.get_name().to_owned()], sub))
+                .collect::<Vec<_>>()
+        } else {
+            vec![(Vec::new(), &command)]
+        };
+        for (path, leaf) in leaves {
+            let names = leaf
+                .get_arguments()
+                .filter_map(|arg| arg.get_long())
+                .collect::<Vec<_>>();
+            for arg in leaf.get_arguments().filter(|arg| arg.get_id() != "help") {
+                let long = arg.get_long().unwrap();
+                let prefix = (1..long.len())
+                    .map(|length| &long[..length])
+                    .find(|prefix| {
+                        names.iter().filter(|name| name.starts_with(prefix)).count() == 1
+                    })
+                    .unwrap();
+                let values = if arg.get_id() == "only" {
+                    vec!["ODA_NOBUHIDE", "DATE_TANEMUNE"]
+                } else if arg.get_action().takes_values() {
+                    vec!["first-path", "last-path"]
+                } else {
+                    Vec::new()
+                };
+                for (first, last) in [
+                    (long, long),
+                    (prefix, prefix),
+                    (long, prefix),
+                    (prefix, long),
+                ] {
+                    let mut args = vec![command.get_name().to_owned()];
+                    args.extend(path.iter().cloned());
+                    args.push(format!("--{first}"));
+                    args.extend(values.first().map(|v| (*v).to_owned()));
+                    args.push(format!("--{last}"));
+                    args.extend(values.last().map(|v| (*v).to_owned()));
+                    let matches = command
+                        .clone()
+                        .try_get_matches_from(&args)
+                        .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+                    let matches = path
+                        .iter()
+                        .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                    let actual = matches
+                        .get_raw(arg.get_id().as_str())
+                        .unwrap()
+                        .map(OsStr::to_owned)
+                        .collect::<Vec<_>>();
+                    let expected =
+                        vec![OsStr::new(values.last().copied().unwrap_or("true")).to_owned()];
+                    assert_eq!(actual, expected, "{args:?}");
+                }
+                if arg.get_action().takes_values() && arg.get_id() != "only" {
+                    for flag in [long, prefix] {
+                        let mut args = vec![command.get_name().to_owned()];
+                        args.extend(path.iter().cloned());
+                        args.push(format!("--{flag}="));
+                        let matches = command
+                            .clone()
+                            .try_get_matches_from(&args)
+                            .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+                        let matches = path
+                            .iter()
+                            .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                        assert_eq!(
+                            matches
+                                .get_one::<std::path::PathBuf>(arg.get_id().as_str())
+                                .unwrap(),
+                            Path::new("."),
+                            "{args:?}"
+                        );
+                    }
+                    paths_checked += 1;
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 27);
+    assert_eq!(paths_checked, 25);
+}
+
+#[test]
+fn repeated_portrait_selection_preserves_only_the_last_group_for_exact_prefix_and_alias() {
+    let t = temp();
+    for first in ["--only", "--on", "--o"] {
+        for last in ["--only", "--on", "--o"] {
+            for subjects in [vec!["DATE_TANEMUNE"], vec!["DATE_TANEMUNE", "ODA_NOBUHIDE"]] {
+                let mut args = vec![first, "ODA_NOBUHIDE", "TAKEDA_NOBUTORA", last];
+                args.extend(subjects.iter().copied());
+                args.extend(["--print-prompt", "--print-p"]);
+                let out = success(command("jac-generate-portraits", t.path()).args(&args));
+                let expected = subjects
+                    .iter()
+                    .map(|key| portraits::prompt(key).unwrap())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                assert_eq!(
+                    String::from_utf8(out.stdout).unwrap().trim_end(),
+                    expected,
+                    "{args:?}"
+                );
+            }
+        }
+    }
+    assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
 }
 
 #[test]
@@ -178,6 +312,8 @@ fn portrait_subject_choices_are_validated_before_runtime_or_output() {
         vec!["--o", "UNKNOWN"],
         vec!["--on", "UNKNOWN"],
         vec!["--only", "ODA_NOBUHIDE", "UNKNOWN"],
+        vec!["--only", "UNKNOWN", "--o", "DATE_TANEMUNE"],
+        vec!["--on", "ODA_NOBUHIDE", "--only", "DATE_TANEMUNE", "UNKNOWN"],
     ] {
         let out = command("jac-generate-portraits", t.path())
             .args(args)
@@ -348,6 +484,11 @@ fn generator_cli_updates_support_for_all_spellings_of_the_standard_output_direct
             assert!(maps_dir.join(s(&entry["settler_file"])).is_file());
         }
         assert!(mod_dir.join("Scripts/JAC_ResourceSites.lua").is_file());
+        generated_lua::verify(
+            &maps_dir,
+            &mod_dir,
+            &repository.join("tools/civ6-autotest/scenarios"),
+        );
     }
     // An unrelated export must still leave the standard MOD's support files alone.
     write(&config, "preserved config").unwrap();
@@ -373,22 +514,72 @@ fn every_old_runnable_script_has_a_working_cli_mapping() {
         .filter(|r| r["bin"].is_string())
         .map(|r| s(&r["source"]).to_owned())
         .collect::<BTreeSet<_>>();
-    let mut runnable = BTreeSet::new();
-    for directory in ["tools/japan_map_scale", "tools/jac_art"] {
-        for file in fs::read_dir(root().join(directory)).unwrap() {
-            let file = file.unwrap();
-            if file.path().extension() == Some(OsStr::new("py"))
-                && fs::read_to_string(file.path())
-                    .unwrap()
-                    .contains("if __name__ == \"__main__\":")
-            {
-                runnable.insert(format!(
-                    "{directory}/{}",
-                    file.file_name().to_string_lossy()
-                ));
-            }
-        }
-    }
+    // Source identities are the pre-deletion inventory, independent of the mapping under test.
+    let baseline = [
+        (
+            "tools/japan_map_scale/generate.py",
+            "japan-map-generate",
+            "",
+        ),
+        (
+            "tools/japan_map_scale/prosperity.py",
+            "japan-map-prosperity",
+            "",
+        ),
+        (
+            "tools/japan_map_scale/prosper_start.py",
+            "japan-map-prosper-start",
+            "",
+        ),
+        (
+            "tools/japan_map_scale/write_support.py",
+            "japan-map-support",
+            "support",
+        ),
+        (
+            "tools/japan_map_scale/write_custom_civs.py",
+            "japan-map-support",
+            "custom-civs",
+        ),
+        (
+            "tools/japan_map_scale/write_city_names.py",
+            "japan-map-support",
+            "city-names",
+        ),
+        (
+            "tools/japan_map_scale/write_feuds.py",
+            "japan-map-support",
+            "feuds",
+        ),
+        (
+            "tools/japan_map_scale/unification_test_map.py",
+            "japan-map-unification",
+            "",
+        ),
+        ("tools/jac_art/draw_crests.py", "jac-draw-crests", ""),
+        ("tools/jac_art/build_art.py", "jac-build-art", ""),
+        (
+            "tools/jac_art/generate_portraits.py",
+            "jac-generate-portraits",
+            "",
+        ),
+    ];
+    let entries = arr(&mapping["entries"])
+        .iter()
+        .filter(|r| r["bin"].is_string())
+        .collect::<Vec<_>>();
+    assert_eq!(entries.len(), 11);
+    assert_eq!(
+        entries
+            .iter()
+            .map(|r| (s(&r["source"]), s(&r["bin"]), s(&r["subcommand"])))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(baseline)
+    );
+    let runnable = baseline
+        .iter()
+        .map(|(source, _, _)| (*source).to_owned())
+        .collect();
     assert_eq!(declared, runnable);
     assert_eq!(declared.len(), 11);
     let mapped_bins = arr(&mapping["entries"])
@@ -396,7 +587,8 @@ fn every_old_runnable_script_has_a_working_cli_mapping() {
         .filter_map(|r| r["bin"].as_str())
         .collect::<BTreeSet<_>>();
     assert_eq!(mapped_bins, BINS.iter().map(|(name, _)| *name).collect());
-    for (name, _) in BINS {
+    for (name, executable) in BINS {
+        assert!(Path::new(executable).is_file(), "{name}");
         let out = success(command(name, t.path()).arg("--help"));
         assert!(
             String::from_utf8_lossy(&out.stdout).contains("Usage:"),

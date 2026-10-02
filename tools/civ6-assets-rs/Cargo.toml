@@ -23,6 +23,9 @@ uuid = { version = "1.23", features = ["v5"] }
 xmltree = "0.11"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
+[dev-dependencies]
+mlua = { version = "0.11", features = ["lua51", "vendored", "error-send"] }
+
 [[bin]]
 name = "japan-map-generate"
 path = "src/bin/japan-map-generate.rs"
