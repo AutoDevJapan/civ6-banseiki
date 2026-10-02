@@ -231,6 +231,147 @@ fn test_restart_action_launches_and_clicks_verified_window() {
 }
 
 #[test]
+fn test_frontend_background_does_not_count_as_ready_menu() {
+    let fake = FakeBackend::new().lua(|state, _| Ok((state == "FrontEnd").to_string()));
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.wait_frontend_ready(2.0, false).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert_eq!(h.clock.at(), 2.0);
+}
+
+#[test]
+fn test_frontend_waits_for_menu_animation() {
+    let menu_probes = Arc::new(Mutex::new(0));
+    let observed = menu_probes.clone();
+    let fake = FakeBackend::new().lua(move |state, _| {
+        if state == "MainMenu" {
+            let mut count = observed.lock().unwrap();
+            *count += 1;
+            return Ok((*count >= 3).to_string());
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.wait_frontend_ready(5.0, false).unwrap();
+    assert_eq!(*menu_probes.lock().unwrap(), 3);
+    assert_eq!(h.clock.at(), 1.0);
+}
+
+#[test]
+fn test_menu_probe_requires_visible_options_and_finished_animation() {
+    use civ6_autotest_rs::runner::MAIN_MENU_READY;
+    let lua = mlua::Lua::new();
+    lua.load(r#"
+        ContextPtr={IsHidden=function() return HIDDEN end}
+        local label={GetID=function() return 'LabelAlphaAnim' end,IsStopped=function() return LABEL_STOPPED end,GetChildren=function() return {} end}
+        local option={GetID=function() return 'Top' end,GetChildren=function() return {label} end}
+        local alpha={IsStopped=function() return ALPHA_STOPPED end}
+        Controls={MainMenuOptionStack={GetID=function() return 'MainMenuOptionStack' end,GetSizeY=function() return HEIGHT end,GetParent=function() return alpha end,GetChildren=function() return {option} end},MainButtonTrackAnim={IsStopped=function() return STOPPED end}}
+    "#).exec().unwrap();
+    for (hidden, height, stopped, alpha, label, expected) in [
+        (true, 306, true, true, true, false),
+        (false, 0, true, true, true, false),
+        (false, 306, false, true, true, false),
+        (false, 306, true, false, true, false),
+        (false, 306, true, true, false, false),
+        (false, 306, true, true, true, true),
+    ] {
+        lua.globals().set("HIDDEN", hidden).unwrap();
+        lua.globals().set("HEIGHT", height).unwrap();
+        lua.globals().set("STOPPED", stopped).unwrap();
+        lua.globals().set("ALPHA_STOPPED", alpha).unwrap();
+        lua.globals().set("LABEL_STOPPED", label).unwrap();
+        assert_eq!(lua.load(MAIN_MENU_READY).eval::<bool>().unwrap(), expected);
+    }
+}
+
+fn connection_message_fixture(title: Option<&str>, translated_title: &str) -> mlua::Lua {
+    let lua = mlua::Lua::new();
+    lua.globals().set("TITLE", title).unwrap();
+    lua.globals()
+        .set("TRANSLATED_TITLE", translated_title)
+        .unwrap();
+    lua.load(r#"
+        HIDDEN=false; RESPONSES=0
+        ContextPtr={IsHidden=function() return HIDDEN end}
+        Locale={Lookup=function(key) assert(key=='TXT_KEY_MY2K_ADDITION_CONNECTION_ISSUE'); return TRANSLATED_TITLE end}
+        KeyEvents={KeyUp=1}; Keys={VK_ESCAPE=27}
+        local title={GetID=function() return 'Title' end,GetText=function() return TITLE end,GetChildren=function() return {} end}
+        local window={GetID=function() return 'WindowData' end,GetChildren=function() return TITLE and {title} or {} end}
+        Controls={My2KBG={GetID=function() return 'My2KBG' end,GetChildren=function() return {window} end}}
+        function InputHandler(event, key, value)
+            assert(event==KeyEvents.KeyUp and key==Keys.VK_ESCAPE and value==0)
+            RESPONSES=RESPONSES+1; HIDDEN=true; TITLE=nil
+        end
+    "#).exec().unwrap();
+    lua
+}
+
+#[test]
+fn test_connection_notification_acknowledges_once_in_each_language() {
+    use civ6_autotest_rs::runner::DISMISS_2K_CONNECTION_MESSAGE;
+    for title in ["Connection Issue", "接続の問題"] {
+        let lua = connection_message_fixture(Some(title), title);
+        assert!(lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
+        assert!(!lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
+        assert_eq!(lua.globals().get::<u32>("RESPONSES").unwrap(), 1);
+    }
+}
+
+#[test]
+fn test_connection_notification_keeps_other_dialogs_open() {
+    use civ6_autotest_rs::runner::DISMISS_2K_CONNECTION_MESSAGE;
+    for title in [
+        None,
+        Some("Sign In"),
+        Some("Terms of Service"),
+        Some("Logout"),
+        Some("Other Error"),
+    ] {
+        let lua = connection_message_fixture(title, "Connection Issue");
+        assert!(!lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
+        assert_eq!(lua.globals().get::<u32>("RESPONSES").unwrap(), 0);
+        assert!(!lua.globals().get::<bool>("HIDDEN").unwrap());
+    }
+}
+
+#[test]
+fn test_menu_probe_rechecks_after_lost_connection_message_acknowledgment() {
+    use civ6_autotest_rs::runner::DISMISS_2K_CONNECTION_MESSAGE;
+    let acknowledged = Arc::new(Mutex::new(0));
+    let seen = acknowledged.clone();
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["FrontEnd".into(), "MainMenu".into(), "My2K".into()]))
+        .lua(move |state, code| match state {
+            "FrontEnd" => Ok("true".into()),
+            "MainMenu" => Ok((*seen.lock().unwrap() > 0).to_string()),
+            "My2K" => {
+                assert_eq!(code, DISMISS_2K_CONNECTION_MESSAGE);
+                let lua = connection_message_fixture(Some("Connection Issue"), "Connection Issue");
+                assert!(lua.load(code).eval::<bool>().unwrap());
+                *seen.lock().unwrap() += 1;
+                Err(Error::unknown(
+                    "notification closed but acknowledgment lost",
+                ))
+            }
+            _ => panic!("unexpected state {state}"),
+        });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.wait_frontend_ready(5.0, false).unwrap();
+    assert_eq!(*acknowledged.lock().unwrap(), 1);
+    assert_eq!(h.events().iter().filter(|s| *s == "disconnect").count(), 1);
+}
+
+#[test]
 fn test_frontend_probe_reconnects_after_unknown_read_only_reply() {
     let mut first = true;
     let fake = FakeBackend::new().lua(move |_, _| {
