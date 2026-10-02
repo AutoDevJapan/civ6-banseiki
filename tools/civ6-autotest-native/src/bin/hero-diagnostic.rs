@@ -16,7 +16,7 @@ local function snapshot()
  local native=GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType]
  local units={}
  for _,u in Players[e.Owner]:GetUnits():Members() do
-  if u:IsHero() and u:GetHeroClassType()==e.Class then
+  if u:GetHeroClassType()==e.Class then
    units[#units+1]={ID=u:GetID(),Class=u:GetHeroClassType(),X=u:GetX(),Y=u:GetY(),
     Lifespan=u:GetProperty(ExposedMembers.JAC_HeroLifespanKey),Person=u:GetProperty(api.Rules.PERSON_KEY),Token=u:GetProperty(api.Rules.TOKEN_KEY)}
   end
@@ -197,6 +197,31 @@ mod tests {
         assert!(!TRACE_START.contains("RequestCommand"));
         assert!(!TRACE_START.contains("ChangeFaithBalance"));
         assert!(!TRACE_START.contains("UnitManager.Kill"));
+    }
+    #[test]
+    fn observer_runs_with_ui_unit_api_without_gameplay_is_hero() {
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+        turn,era=4,0
+        local unit={GetHeroClassType=function() return -1 end}
+        local city={GetGold=function() return {GetPurchaseCost=function() return 1000 end} end}
+        local player={IsHuman=function() return false end,IsTurnActive=function() return true end,
+          GetUnits=function() return {Members=function() return ipairs({unit}) end} end,
+          GetCities=function() return {FindID=function() return city end} end,
+          GetReligion=function() return {GetFaithBalance=function() return 2000 end} end}
+        Players={[2]=player}
+        Game={GetHeroesManager=function() return {GetHeroOriginCityID=function() return {id=7,player=2} end,GetHeroClaimPlayer=function() return 2 end} end,
+          GetCurrentGameTurn=function() return turn end,GetLocalPlayer=function() return -1 end,GetEras=function() return {GetCurrentEra=function() return era end} end}
+        GameInfo={Units={[1]={Hash=1}},HeroClasses={[0]={UnitType=1}},Yields={YIELD_FAITH={Index=1}}}
+        MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+        ExposedMembers={JAC_Absorption={Rules={PERSON_KEY='person',TOKEN_KEY='token'},GetRoster=function() return {['live:hero']={Unit={ID=8}}} end,Canonical=function() return 'snapshot' end},JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return {Owner=2,Class=0} end}
+        local function event() return {Add=function() end,Remove=function() end} end
+        Events={FaithChanged=event(),CityCommandStarted=event(),UnitAddedToMap=event()}
+        "#).exec().unwrap();
+        lua.load(TRACE_START).exec().unwrap();
+        lua.load("assert(#JAC_NATIVE_HERO_TRACE.Before.Units==0);turn=66;era=1;JAC_NATIVE_HERO_FAITH_HANDLER(2,1,1000)").exec().unwrap();
+        lua.load(TRACE_FINISH).exec().unwrap();
+        lua.load("assert(JAC_NATIVE_HERO_TRACE.After.Era==1);assert(JAC_NATIVE_HERO_TRACE.Trace[1].Kind=='FAITH');assert(JAC_NATIVE_HERO_TRACE.Trace[1].Balance==1000)").exec().unwrap();
     }
     #[test]
     fn input_drift_and_unsafe_paths_are_refused() {
