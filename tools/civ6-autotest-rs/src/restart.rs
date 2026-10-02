@@ -1,5 +1,5 @@
 //! Process lifecycle and MOD freshness checks for the Civ VI driver.
-use crate::{click, time::monotonic, Error, Result};
+use crate::{time::monotonic, Error, Result};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -13,6 +13,10 @@ pub const STEAM_URI: &str = "steam://launch/289070/option2";
 const REPORTER_SUFFIX: &str =
     "\\sid meier's civilization vi\\base\\binaries\\win64steam\\firaxisbugreporter.exe";
 
+pub fn reporter_finished(wait_result: u32) -> bool {
+    wait_result == 0
+}
+
 pub fn default_mods_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
@@ -25,8 +29,14 @@ pub fn default_mods_dir() -> PathBuf {
 }
 
 fn extension_is(path: &Path, extension: &str) -> bool {
-    let Some(actual) = path.extension().and_then(|s| s.to_str()) else { return false; };
-    if cfg!(windows) { actual.eq_ignore_ascii_case(extension) } else { actual == extension }
+    let Some(actual) = path.extension().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    if cfg!(windows) {
+        actual.eq_ignore_ascii_case(extension)
+    } else {
+        actual == extension
+    }
 }
 
 pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -56,7 +66,7 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
     let mut found = BTreeMap::new();
     for entry in fs::read_dir(mods_dir)? {
         let entry = entry?;
-        if !entry.file_type()?.is_dir() && !entry.file_type()?.is_symlink() {
+        if !entry.path().is_dir() {
             continue;
         }
         let folder = entry.path().canonicalize()?;
@@ -164,10 +174,7 @@ pub fn missing_atlas_textures(folders: &[PathBuf]) -> Result<Vec<String>> {
     for folder in folders {
         let files = walk_files(folder)?;
         let mut names = BTreeSet::new();
-        for path in files
-            .iter()
-            .filter(|p| extension_is(p, "xml"))
-        {
+        for path in files.iter().filter(|p| extension_is(p, "xml")) {
             let xml = fs::read_to_string(path)?;
             let Ok(doc) = roxmltree::Document::parse(&xml) else {
                 continue;
@@ -190,18 +197,12 @@ pub fn missing_atlas_textures(folders: &[PathBuf]) -> Result<Vec<String>> {
                 }
             }
         }
-        for path in files
-            .iter()
-            .filter(|p| extension_is(p, "dds"))
-        {
+        for path in files.iter().filter(|p| extension_is(p, "dds")) {
             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                 names.remove(stem);
             }
         }
-        for package in files
-            .iter()
-            .filter(|p| extension_is(p, "blp"))
-        {
+        for package in files.iter().filter(|p| extension_is(p, "blp")) {
             if names.is_empty() {
                 break;
             }
@@ -394,7 +395,7 @@ pub fn wait_for_civ_window_with<B: LifecycleBackend>(backend: &mut B, end: f64) 
 #[cfg(windows)]
 mod win {
     use super::*;
-    use crate::click::{image_path, with_process};
+    use crate::click::{self, image_path, with_process};
     use std::ptr;
     #[repr(C)]
     #[derive(Default)]
@@ -507,7 +508,7 @@ mod win {
                         "Could not close orphan Civ VI crash reporter {pid}"
                     )));
                 }
-                if unsafe { WaitForSingleObject(h, 10_000) } != 0 {
+                if !reporter_finished(unsafe { WaitForSingleObject(h, 10_000) }) {
                     return Err(Error::input(format!(
                         "Orphan Civ VI crash reporter {pid} did not finish exiting"
                     )));
