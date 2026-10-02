@@ -18,7 +18,7 @@ local function snapshot()
  for _,u in Players[e.Owner]:GetUnits():Members() do
   if u:GetHeroClassType()==e.Class then
    units[#units+1]={ID=u:GetID(),Class=u:GetHeroClassType(),X=u:GetX(),Y=u:GetY(),
-    Lifespan=u:GetProperty(ExposedMembers.JAC_HeroLifespanKey),Person=u:GetProperty(api.Rules.PERSON_KEY),Token=u:GetProperty(api.Rules.TOKEN_KEY)}
+    Lifespan=u:GetProperty(ExposedMembers.JAC_HeroLifespanKey),Person=u:GetProperty(api.GetPropertyKeys().PERSON_KEY),Token=u:GetProperty(api.GetPropertyKeys().TOKEN_KEY)}
   end
  end
  return {Turn=Game.GetCurrentGameTurn(),Era=Game.GetEras():GetCurrentEra(),Owner=e.Owner,Class=e.Class,
@@ -95,13 +95,13 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
         steps[0].clone(),
         json!({"action":"load","name":save,"exact_name":true,"timeout":600}),
         steps[100].clone(),
-        json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'"}),
+        json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":"local A=assert(JAC_AbsorptionGameplay);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'"}),
     ];
     // Original funded living/same-era checks and retirement remain unchanged.
     for (index, step) in steps[102..111].iter().enumerate() {
         out.push(step.clone());
         if index == 4 {
-            out.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())"}));
+            out.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":"local A=assert(JAC_AbsorptionGameplay);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())"}));
             out.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local read=ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ;if type(read)~='function' then return false end;local e=read();return type(e)=='table' and type(e.Owner)=='number' and type(e.Class)=='number' and type(e.EraBefore)=='number' and type(e.CityID)=='number'"}}));
         }
     }
@@ -214,7 +214,7 @@ mod tests {
           GetCurrentGameTurn=function() return turn end,GetLocalPlayer=function() return -1 end,GetEras=function() return {GetCurrentEra=function() return era end} end}
         GameInfo={Units={[1]={Hash=1}},HeroClasses={[0]={UnitType=1}},Yields={YIELD_FAITH={Index=1}}}
         MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
-        ExposedMembers={JAC_Absorption={Rules={PERSON_KEY='person',TOKEN_KEY='token'},GetRoster=function() return {['live:hero']={Unit={ID=8}}} end,Canonical=function() return 'snapshot' end},JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return {Owner=2,Class=0} end}
+        ExposedMembers={JAC_Absorption={GetPropertyKeys=function() return {PERSON_KEY='person',TOKEN_KEY='token'} end,GetRoster=function() return {['live:hero']={Unit={ID=8}}} end,Canonical=function() return 'snapshot' end},JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return {Owner=2,Class=0} end}
         local function event() return {Add=function() end,Remove=function() end} end
         Events={FaithChanged=event(),CityCommandStarted=event(),UnitAddedToMap=event()}
         "#).exec().unwrap();

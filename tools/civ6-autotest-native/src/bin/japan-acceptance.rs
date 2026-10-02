@@ -75,10 +75,14 @@ fn prepare(source: &Value) -> Result<Value, String> {
     let mut steps = Vec::new();
     for (i, s) in original.iter().enumerate() {
         if i == 111 {
-            steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESERVE}));
+            steps.push(
+                json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESERVE}),
+            );
         }
         if i == 113 {
-            steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESTORE}));
+            steps.push(
+                json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESTORE}),
+            );
         }
         if i == 124 {
             steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":"local A=assert(JAC_AbsorptionGameplay);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'"}));

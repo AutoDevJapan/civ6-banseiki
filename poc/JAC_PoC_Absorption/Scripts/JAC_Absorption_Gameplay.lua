@@ -34,6 +34,9 @@ local function GetRoster(owner) return R.Copy(Players[owner]:GetProperty(R.ROSTE
 A.GetRoster = GetRoster
 A.Canonical = R.Canonical
 A.GetState = State
+A.GetPropertyKeys = function()
+  return { PERSON_KEY = R.PERSON_KEY, TOKEN_KEY = R.TOKEN_KEY }
+end
 A.GetUIPhase = function() return R.Copy(Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")) end
 local function CityRead(city, method, ...)
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -2309,7 +2312,7 @@ end
 JAC_AbsorptionGameplay = A
 ExposedMembers.JAC_Absorption = {
   GetState = A.GetState, GetRoster = A.GetRoster, GetUIPhase = A.GetUIPhase,
-  Canonical = R.Canonical,
+  Canonical = R.Canonical, GetPropertyKeys = A.GetPropertyKeys,
 }
 Log("loaded version=1 explicit_dispositions=true")
 return A

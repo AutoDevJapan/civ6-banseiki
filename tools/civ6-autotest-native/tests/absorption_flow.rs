@@ -1070,7 +1070,8 @@ fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<(
     lua.load(
         r#"
         local A,F=TEST_ABSORPTION,TEST_FLOW
-        local allowedA={GetState=true,GetRoster=true,GetUIPhase=true,Canonical=true}
+        local allowedA={GetState=true,GetRoster=true,GetUIPhase=true,Canonical=true,
+          GetPropertyKeys=true}
         local allowedF={Get=true,GetPending=true,GetWorld=true,GetPendingWorlds=true}
         local countA,countF=0,0
         for key,value in pairs(ExposedMembers.JAC_Absorption) do
@@ -1079,7 +1080,12 @@ fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<(
         for key,value in pairs(ExposedMembers.JAC_AbsorptionFlow) do
           assert(allowedF[key] and type(value)=='function',key);countF=countF+1
         end
-        assert(countA==4 and countF==4)
+        assert(countA==5 and countF==4)
+        local keys=ExposedMembers.JAC_Absorption.GetPropertyKeys()
+        assert(keys.PERSON_KEY==A.Rules.PERSON_KEY and keys.TOKEN_KEY==A.Rules.TOKEN_KEY)
+        keys.PERSON_KEY='forged person key';keys.TOKEN_KEY='forged token key'
+        local fresh=ExposedMembers.JAC_Absorption.GetPropertyKeys()
+        assert(fresh.PERSON_KEY==A.Rules.PERSON_KEY and fresh.TOKEN_KEY==A.Rules.TOKEN_KEY)
         assert(ExposedMembers.JAC_Absorption.Apply==nil
           and ExposedMembers.JAC_AbsorptionFlow.Select==nil)
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
