@@ -65,7 +65,7 @@ fn test_stall_with_pending_dedication_chooses_closes_and_resumes() {
         &["7,9"],
     );
     assert!(result.is_ok(), "{result:?}");
-    assert_eq!(keys(&h), 1);
+    assert_eq!(keys(&h), 0);
     assert_eq!(count(&h, "GetPlayerCommemorateChoices"), 1);
     assert_eq!(count(&h, "SetActive(true)"), 2);
 }
@@ -74,7 +74,7 @@ fn test_stall_with_pending_dedication_chooses_closes_and_resumes() {
 fn test_repeated_dedication_is_bounded_then_fails() {
     let (h, result) = run_case(&["31|false|false|10|14"], &["1"; 50]);
     assert_eq!(result.unwrap_err().kind, ErrorKind::Scenario);
-    assert!(keys(&h) <= 3);
+    assert_eq!(keys(&h), 0);
     assert_eq!(count(&h, "GetPlayerCommemorateChoices"), 3);
     assert_eq!(count(&h, "SetActive(true)"), 1 + 3 + 2);
 }
@@ -84,4 +84,31 @@ fn test_no_pending_dedication_keeps_old_restart_behaviour() {
     let (h, result) = run_case(&["31|false|false|10|14"], &[]);
     assert_eq!(result.unwrap_err().kind, ErrorKind::Scenario);
     assert_eq!(keys(&h), 0);
+}
+
+#[test]
+fn dedication_closes_only_a_visible_popup_and_never_sends_escape() {
+    for hidden in [true, false] {
+        let closes = Arc::new(Mutex::new(0));
+        let observed = closes.clone();
+        let fake = FakeBackend::new()
+            .states(|| Ok(vec!["InGame".into(), "DedicationPopup".into()]))
+            .lua(move |state, code| {
+                if state == "DedicationPopup" {
+                    let lua = mlua::Lua::new();
+                    lua.load(format!("closed = 0; ContextPtr = {{IsHidden = function() return {hidden} end}}; OnClose = function() closed = closed + 1 end")).exec().unwrap();
+                    let result: bool = lua.load(code).eval().unwrap();
+                    *observed.lock().unwrap() += lua.globals().get::<i32>("closed").unwrap();
+                    return Ok(result.to_string());
+                }
+                Ok("7".into())
+            });
+        let mut h = Harness::new(json!({}), fake);
+        assert_eq!(
+            h.runner.choose_dedication(14, 100.0).unwrap(),
+            Some("7".into())
+        );
+        assert_eq!(keys(&h), 0);
+        assert_eq!(*closes.lock().unwrap(), i32::from(!hidden));
+    }
 }

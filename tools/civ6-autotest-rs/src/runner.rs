@@ -958,8 +958,9 @@ impl Runner {
             "OK",
             &format!("human={human} chose commemoration indices={value}"),
         )?;
-        self.remaining(deadline)?;
-        self.backend.press_key(crate::click::VK_ESCAPE, deadline)?;
+        // Close through the visible context. An unconditional Esc here opens
+        // Options if the polling loop already closed the dedication popup.
+        self.close_diplomacy(deadline)?;
         Ok(Some(value))
     }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
@@ -1426,6 +1427,7 @@ impl Runner {
             .map(|v| format!("local startTurn = {v}\n"))
             .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
         let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
+        let mut autoplay_started = false;
         let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
             let (pid, initial_memory, started) = if options.record_metrics {
                 let process = self.backend.single_process(30.0)?.ok_or_else(|| {
@@ -1440,6 +1442,7 @@ impl Runner {
                 (None, Value::Null, 0.0)
             };
             let start_value = self.lua("InGame", &start_code, self.budget(deadline, 5.0)?)?;
+            autoplay_started = true;
             let parts: Vec<_> = start_value.split('|').collect();
             if parts.len() != 2 {
                 return Err(Error::scenario(format!(
@@ -1677,30 +1680,49 @@ impl Runner {
                     .unwrap_or_else(|| "?".into())
             )))
         })();
+        let execution = execution.and_then(|value| {
+            let mut attempts = 0;
+            loop {
+                match self.lua("InGame","if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?) {
+                    Ok(_) => break,
+                    Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
+                    Err(e) if retryable(&e) => {
+                        if !self.unblock_ingame("InGame", deadline, attempts)? { return Err(e); }
+                        attempts += 1;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            self.remaining(deadline)?;
+            Ok(value)
+        });
         let (start_turn, status, elimination, recorder_index, research) = match execution {
             Ok(v) => v,
+            Err(e) if e.kind == ErrorKind::Interrupted => {
+                if autoplay_started {
+                    if let Err(cleanup) =
+                        crate::time::with_interrupt_cleanup(|| self.stop_autoplay())
+                    {
+                        println!("Autoplay cleanup failed: {cleanup}");
+                    }
+                }
+                return Err(e);
+            }
             Err(e)
                 if matches!(
                     e.kind,
-                    ErrorKind::LuaExecution
-                        | ErrorKind::LuaResponseUnknown
-                        | ErrorKind::Interrupted
+                    ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
                 ) =>
             {
                 return Err(e)
             }
             Err(e) => {
-                if let Err(cleanup)=self.lua("InGame","if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",5.0){println!("Autoplay cleanup failed: {cleanup}");}
+                if let Err(cleanup) = self.stop_autoplay() {
+                    println!("Autoplay cleanup failed: {cleanup}");
+                }
                 return Err(e);
             }
         };
-        let mut attempts = 0;
-        loop {
-            match self.lua("InGame","if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?) {
-            Ok(_)=>break,Err(e) if e.kind==ErrorKind::LuaExecution=>return Err(e),Err(e) if retryable(&e)=>{if !self.unblock_ingame("InGame",deadline,attempts)? {return Err(e);}attempts+=1;},Err(e)=>return Err(e)
-        }
-        }
-        self.remaining(deadline)?;
         let mut detail = format!(
             "autoplay completed {turns} turns ({start_turn}->{}; event={})",
             status.turn,
@@ -1726,6 +1748,9 @@ impl Runner {
             ));
         }
         Ok(detail)
+    }
+    fn stop_autoplay(&mut self) -> Result<String> {
+        self.lua("InGame", "if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", 5.0)
     }
     fn era_state(&mut self, deadline: f64) -> Result<(i64, i64, i64, i64)> {
         let value=self.lua("InGame","local eras = Game.GetEras()\nreturn tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. '|' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. '|' .. tostring(eras:GetNextEraCountdown())",self.budget(deadline,5.0)?)?;

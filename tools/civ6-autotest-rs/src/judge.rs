@@ -261,8 +261,9 @@ fn related_errors(content: &str) -> Vec<String> {
             let block = error_block(&lines, *i);
             own_path(&block)
                 || own_path(source)
-                || block.to_lowercase().contains(JAPAN_MAP_ID)
-                || source.to_lowercase().contains(JAPAN_MAP_ID)
+                || [BUNDLE0_ID, GROWTH_ID, JAPAN_MAP_ID].iter().any(|id| {
+                    block.to_lowercase().contains(id) || source.to_lowercase().contains(id)
+                })
         })
         .map(|(_, l)| (*l).into())
         .collect()
@@ -784,6 +785,8 @@ pub fn judge(
     let lua = &logs["Lua.log"];
     let jac = lua.lines().filter(|line| jac_error_line(line)).count();
     let runtime = runtime_errors(lua).len();
+    let modding = related_errors(&logs["Modding.log"]).len();
+    let database = database_errors(&logs["Database.log"]).len();
     let texture =
         re(r"(?:Failed to load background image texture: |We are lacking a texture for )\S*JAC_");
     let missing = lua
@@ -801,6 +804,16 @@ pub fn judge(
         })
         .count();
     let mut checks = vec![
+        Check::new(
+            "Generic: JAC Modding.log errors",
+            modding == 0,
+            format!("{modding} JAC-related modding errors"),
+        ),
+        Check::new(
+            "Generic: JAC Database.log errors",
+            database == 0,
+            format!("{database} JAC-related database errors"),
+        ),
         Check::new(
             "Generic: [JAC_POC] errors",
             jac == 0,

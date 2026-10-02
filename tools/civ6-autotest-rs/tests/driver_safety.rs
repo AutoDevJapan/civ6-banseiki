@@ -939,6 +939,37 @@ fn test_oserror_after_autoplay_start_attempts_cleanup_without_replay() {
 }
 
 #[test]
+fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
+    for after_start in [true, false] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("return tostring(startTurn)") {
+                return if after_start {
+                    Ok("1|0".into())
+                } else {
+                    Err(Error::interrupted("cancelled before acknowledgment"))
+                };
+            }
+            if code.contains("tostring(AutoplayManager.IsActive())") {
+                return Err(Error::interrupted("cancelled during autoplay"));
+            }
+            Ok("true".into())
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        assert_eq!(
+            runner
+                .autoplay(3, 10.0, AutoplayOptions::default())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Interrupted
+        );
+        assert_eq!(lua_count(&f, "SetActive(true)"), 1);
+        assert_eq!(lua_count(&f, "SetActive(false)"), usize::from(after_start));
+    }
+}
+
+#[test]
 fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
     for fail_at in ["start", "status"] {
         for kind in [ErrorKind::LuaResponseUnknown, ErrorKind::LuaExecution] {

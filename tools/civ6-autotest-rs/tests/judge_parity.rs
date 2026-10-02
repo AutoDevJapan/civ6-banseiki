@@ -101,6 +101,50 @@ fn bundle0_success_and_unrelated_database_error() {
     assert!(checks.iter().all(|c| c.passed), "{checks:?}");
 }
 #[test]
+fn modding_errors_fail_every_profile_without_reusing_a_later_mod_load() {
+    for source in [
+        "Mods/JAC_PoC_Bundle0/Data.xml",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+    ] {
+        for error in [
+            format!("ERROR: failed {source}\n"),
+            format!("Loading {source}\nERROR: invalid XML\n"),
+            format!("ERROR: invalid XML\nfrom file {source}\n"),
+        ] {
+            let mut input = sample();
+            input.get_mut("Modding.log").unwrap().push_str(&error);
+            for profile in ["bundle0", "growth", "japan_map", "generic"] {
+                let checks = judge(&input, profile, Some(2), false);
+                let check = checks
+                    .iter()
+                    .find(|c| c.name == "Generic: JAC Modding.log errors")
+                    .unwrap();
+                assert!(!check.passed, "{profile}: {error}");
+                assert_eq!(check.detail, "1 JAC-related modding errors");
+            }
+        }
+    }
+    let mut input = sample();
+    input.get_mut("Modding.log").unwrap().push_str("Loading OfficialDLC.xml\nERROR: official DLC warning\nLoading Mods/JAC_PoC_Bundle0/Data.xml\n");
+    assert!(judge(&input, "bundle0", None, false)
+        .iter()
+        .all(|c| c.passed));
+}
+
+#[test]
+fn database_errors_fail_the_generic_profile_too() {
+    let input = logs(
+        "",
+        "ERROR: invalid XML\nfrom file Mods/JAC_PoC_Bundle0/Data.xml\n",
+        "",
+    );
+    assert_eq!(
+        failed(&input, "generic", None),
+        BTreeSet::from(["Generic: JAC Database.log errors".into()])
+    );
+}
+#[test]
 fn restored_state_mismatch_fails() {
     let mut l = sample();
     l.get_mut("Lua.log")

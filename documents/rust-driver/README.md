@@ -61,3 +61,11 @@ cargo build --locked --offline --jobs 2 -p civ6-autotest-rs --bins
 ## MOD の Lua 検査
 
 MOD の Lua と構造を確認する元の358項目を、tools/civ6-lua-tests-rs の Rust テストへ統合した。mlua に組み込んだ Lua 5.1 で、この作業フォルダの MOD を実行する。対応一覧と追加の検査は同じ Cargo workspace で実行し、Lua の検査を省略しない。公式 Gathering Storm のデータベースを使う検査は、入力の出所とハッシュを fixtures/official/provenance.json に記録した固定データへ、現在の MOD の SQL を適用する。
+
+## 統合後のレビュー修正
+
+MOD に起因する Modding.log と Database.log のエラーを全プロファイルで判定する。ログ行のパス、読み込み元、束0・育成・日本地図の MOD ID を照合し、後に読み込まれた MOD のエラーとして誤認しないことも確認する。
+
+自動進行の開始応答を確認した後に Ctrl-C が入った場合は、そのスレッドの5秒以内の停止処理だけに中断の判定を保留する。中断の印は消さず、次の操作は開始しない。開始の応答が未確認のときは自動進行を再送しない。完了処理中の中断も同じ経路で扱う。
+
+奉献を選んだ後は、表示されている画面を Lua の閉鎖処理で閉じる。既に非表示になった画面へ Esc を送ってオプションを開くことはない。
