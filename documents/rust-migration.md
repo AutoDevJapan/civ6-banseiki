@@ -10,6 +10,12 @@
 
 進み具合は共有 ToDo の civ6 プロジェクトに記録する。
 
+## 移行の完了記録
+
+実行器・計測報告・データ生成・Lua の検査を [PR #93](https://github.com/AutoDevJapan/civ6-banseiki/pull/93)、地図・画像の生成と Python の削除を [PR #94](https://github.com/AutoDevJapan/civ6-banseiki/pull/94) で main に統合した。Python の79ファイルを削除し、Rust の全 workspace 検査1199件、追加実行器61件、共有の実行ツール56件が成功した。Lua の検査は省略していない。
+
+Python の削除後、GitHub の code scanning は Rust と Actions を対象とする。削除直後の自動実行は変更前の Python を含む設定で始まり、Python のソースが0件のため失敗した。この旧設定の実行は再試行できないため、main の現在の言語で設定を再構成した。Rust と Actions の [再解析](https://github.com/AutoDevJapan/civ6-banseiki/actions/runs/36994329128) は両方成功し、現在の main を確認できた。
+
 ## 移行後の構成
 
 | Crate | 内容 | 移行前の対応項目 |
@@ -44,5 +50,6 @@ tools/target/release/civ6-autotest.exe tools/civ6-autotest/scenarios/bundle0-loa
 | `rust-autotest-driver-02` | PR #93 の実行器（コミット ID 未記録） | 11/11 | 12/12 | exit 0、保存前と復元後の値が一致 |
 | `rust-autotest-driver-03` | `a1ddf6a` | 11/11 | 14/14 | exit 0、MOD の読み込みエラーの検査を含む |
 | `rust-autotest-driver-06` | `ce797d3` と main の `8ff592e` の統合 `9964715` | 11/11 | 14/14 | exit 0、最新の CLI と所有 MOD の検出を含む |
+| `rust-autotest-driver-07` | `3450eb5` | 11/11 | 14/14 | exit 0、再起動処理と共有の引数処理の修正後に保存・復元を確認 |
 
 いずれも早送りのテストモードは使っていない。実行後に Civ6 の終了を確認した。後続では、Lua のテスト比較に加え、main に入った再起動の期限と残留ヘルパーの扱いを移植した。実機記録のコミットと、その後の単体テストの対象を区別して記録する。
