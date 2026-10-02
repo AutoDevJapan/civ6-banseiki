@@ -1472,7 +1472,7 @@ function T.test_control_missionary_publication_checks_charges_then_core_religion
   local L=STRINGS["AbsorptionPackageTests.test_control_missionary_publication_checks_charges_then_core_religion"]
   local data,condition,check
   data=JSON(READ(L[1]))
-  condition=FIRST_CONDITION_STEP(data.steps,L[8]).condition.code
+  condition=FIRST_CONDITION_STEP(data.steps,L[8],true).condition.code
   check=FIRST_CODE(data.steps,L[15])
   -- VM is provided by the Rust Harness.
   RUN(L[18])
@@ -1498,7 +1498,7 @@ function T.test_recall_publication_uses_ui_class_getter_and_waits_for_native_cla
   local L=STRINGS["AbsorptionPackageTests.test_recall_publication_uses_ui_class_getter_and_waits_for_native_claim"]
   local data,code
   data=JSON(READ(L[1]))
-  code=FIRST_CONDITION_STEP(data.steps,L[8]).condition.code
+  code=FIRST_CONDITION_STEP(data.steps,L[8],true).condition.code
   -- VM is provided by the Rust Harness.
   RUN(L[11])
   TRUTH(function() return RUN(code) end,false)

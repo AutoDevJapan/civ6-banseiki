@@ -54,26 +54,29 @@ end
 function SELECT_CODES(steps,needle)
   local result,n={},0
   for i=1,COUNT(steps) do
-    local code=steps[i].code or ''
+    local code=JSON_TEXT(steps[i],'code')
     if code:find(needle,1,true) then n=n+1;result[n]=code end
   end
   return result
 end
 function FIRST_CODE(steps,needle)
   for i=1,COUNT(steps) do
-    local code=steps[i].code or ''
+    local code=JSON_TEXT(steps[i],'code')
     if code:find(needle,1,true) then return code end
   end
   error('missing scenario code: '..needle)
 end
 function FIRST_CAPTURE_STEP(steps,name)
-  for i=1,COUNT(steps) do if steps[i].capture_as==name then return steps[i] end end
+  for i=1,COUNT(steps) do if JSON_GET(steps[i],'capture_as')==name then return steps[i] end end
   error('missing scenario capture: '..name)
 end
-function FIRST_CONDITION_STEP(steps,needle)
+function FIRST_CONDITION_STEP(steps,needle,wait_only)
   for i=1,COUNT(steps) do
-    local code=(steps[i].condition or {}).code or ''
-    if code:find(needle,1,true) then return steps[i] end
+    local step=steps[i]
+    if not wait_only or JSON_REQUIRE(step,'action')=='wait_for' then
+      local code=JSON_TEXT(JSON_GET(step,'condition',{}),'code')
+      if code:find(needle,1,true) then return step end
+    end
   end
   error('missing scenario condition: '..needle)
 end
@@ -83,8 +86,8 @@ function LIVE()
   local result,n={},0
   for i=1,COUNT(data.steps) do
     local step=data.steps[i]
-    if step.action=='ui_lua' and step.state_name=='GameCore_Tuner'
-      and (step.capture_as or ''):sub(1,20)~='JAC_ABSORPTION_SYNC_' then
+    if JSON_REQUIRE(step,'action')=='ui_lua' and JSON_REQUIRE(step,'state_name')=='GameCore_Tuner'
+      and JSON_TEXT(step,'capture_as'):sub(1,20)~='JAC_ABSORPTION_SYNC_' then
       n=n+1;result[n]=step
     end
   end
@@ -95,16 +98,15 @@ function HUMAN_FILTER(steps)
   local result,n={},0
   for i=1,COUNT(steps) do
     local step=steps[i]
-    local code=step.code or ''
-    local capture=step.capture_as or ''
-    local condition=(step.condition or {}).code or ''
-    local excluded=false
-    for _,key in pairs({'JAC_ABSORPTION_FIXTURE_UI_WAIT','GetUIPhase','GetFaithBalance()>=1000000','JAC_ABSORPTION_RECALL_COST_V1'}) do
-      if condition:find(key,1,true) then excluded=true end
-    end
-    if not code:find('recall spawn blockers relocated',1,true) and step.action~='autoplay'
-      and capture:sub(1,20)~='JAC_ABSORPTION_SYNC_' and not excluded then
-      n=n+1;result[n]=step
+    if not JSON_TEXT(step,'code'):find('recall spawn blockers relocated',1,true)
+      and JSON_REQUIRE(step,'action')~='autoplay'
+      and JSON_TEXT(step,'capture_as'):sub(1,20)~='JAC_ABSORPTION_SYNC_' then
+      local condition=JSON_TEXT(JSON_GET(step,'condition',{}),'code')
+      local excluded=false
+      for _,key in pairs({'JAC_ABSORPTION_FIXTURE_UI_WAIT','GetUIPhase','GetFaithBalance()>=1000000','JAC_ABSORPTION_RECALL_COST_V1'}) do
+        if condition:find(key,1,true) then excluded=true end
+      end
+      if not excluded then n=n+1;result[n]=step end
     end
   end
   return result
