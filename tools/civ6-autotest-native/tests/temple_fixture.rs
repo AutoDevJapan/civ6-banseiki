@@ -1,5 +1,6 @@
 //! Scenario-only fixture checks; these do not establish engine API availability.
 use mlua::{Lua, Table};
+use regex::Regex;
 use serde_json::Value;
 
 const SCENARIO: &str = include_str!("../../civ6-autotest/scenarios/absorption-native-custody.json");
@@ -30,6 +31,50 @@ fn deal_script(marker: &str) -> String {
         .find(|code| code.contains(marker))
         .unwrap_or_else(|| panic!("missing deal script: {marker}"))
         .to_owned()
+}
+
+fn assert_context_boundary(steps: &[Value], plain: &[&str], core_functions: &[&str]) {
+    let exposed = Regex::new(r"ExposedMembers\.([A-Za-z_][A-Za-z_0-9]*)").expect("name pattern");
+    let direct_call =
+        Regex::new(r"ExposedMembers\.([A-Za-z_][A-Za-z_0-9]*)(?:\.[A-Za-z_][A-Za-z_0-9]*)?\s*\(")
+            .expect("direct call pattern");
+    let wrapped_call =
+        Regex::new(r"assert\s*\(\s*ExposedMembers\.([A-Za-z_][A-Za-z_0-9]*)\s*\)\s*\(")
+            .expect("wrapped call pattern");
+    for step in steps {
+        for scope in [step, &step["condition"]] {
+            let Some(code) = scope["code"].as_str() else {
+                continue;
+            };
+            match scope["state_name"].as_str() {
+                Some("InGame") => {
+                    assert!(
+                        !code.contains("Game:SetProperty("),
+                        "UI must not persist Gameplay state"
+                    );
+                }
+                Some("JAC_Absorption_Entry") => {
+                    for capture in exposed.captures_iter(code) {
+                        let name = &capture[1];
+                        assert!(
+                            plain.contains(&name) || core_functions.contains(&name),
+                            "unreviewed cross-context reference in Gameplay: {name}"
+                        );
+                    }
+                    for pattern in [&direct_call, &wrapped_call] {
+                        for capture in pattern.captures_iter(code) {
+                            let name = &capture[1];
+                            assert!(
+                                core_functions.contains(&name),
+                                "Gameplay invoked a UI observation or plan: {name}"
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 fn world() -> mlua::Result<Lua> {
@@ -469,27 +514,18 @@ fn gameplay_grant_uses_detached_observation_after_ui_functions_are_removed() -> 
 fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Result<()> {
     let scenario: Value = serde_json::from_str(DEAL_SCENARIO).expect("deal scenario JSON");
     let steps = scenario["steps"].as_array().expect("steps");
+    assert_context_boundary(
+        steps,
+        &[
+            "JAC_NativeDealTemplePlan",
+            "JAC_NativeDealTempleObservation",
+        ],
+        &["JAC_NativeDealTempleRequest"],
+    );
     let lua = Lua::new();
     let mut scripts = 0;
     let mut requests = 0;
     for (i, step) in steps.iter().enumerate() {
-        if step["state_name"].as_str() == Some("InGame") {
-            assert!(
-                !step["code"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .contains("Game:SetProperty("),
-                "UI must not persist Gameplay state"
-            );
-        } else if step["state_name"].as_str() == Some("JAC_Absorption_Entry") {
-            assert!(
-                !step["code"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .contains("ExposedMembers.JAC_NativeDealTempleFixture"),
-                "Gameplay must use detached UI observations"
-            );
-        }
         for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
             .into_iter()
             .flatten()
@@ -549,31 +585,23 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
 {
     let scenario = scenario();
     let steps = scenario["steps"].as_array().expect("steps");
+    assert_context_boundary(
+        steps,
+        &[
+            "JAC_NativeTemplePlan",
+            "JAC_NativeTempleObservation",
+            "JAC_NativeOfficialMoveProof",
+            "JAC_NativeWorkIndex",
+            "JAC_CustodyProbeSite",
+            "JAC_NativeCarrierPlan",
+            "JAC_NativeForeignActor",
+            "JAC_CustodyProbeReadResult",
+        ],
+        &["JAC_NativeTempleRequest"],
+    );
     let lua = Lua::new();
     let mut checked = 0;
     for step in steps {
-        if step["state_name"].as_str() == Some("InGame") {
-            assert!(
-                !step["code"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .contains("Game:SetProperty("),
-                "UI must not persist Gameplay state"
-            );
-        } else if step["state_name"].as_str() == Some("JAC_Absorption_Entry") {
-            let code = step["code"].as_str().unwrap_or_default();
-            for ui_function in [
-                "ExposedMembers.JAC_NativeTempleFixture",
-                "ExposedMembers.JAC_NativeMatrix",
-                "ExposedMembers.JAC_CustodyProbeRead()",
-                "ExposedMembers.JAC_CustodyProbeSite()",
-            ] {
-                assert!(
-                    !code.contains(ui_function),
-                    "Gameplay must use detached UI observations: {ui_function}"
-                );
-            }
-        }
         for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
             .into_iter()
             .flatten()
