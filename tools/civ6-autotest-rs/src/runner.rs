@@ -627,7 +627,19 @@ fn text<'a>(v: &'a Value, k: &str) -> &'a str {
     v[k].as_str().unwrap_or("")
 }
 pub const LOADSCREEN_READY: &str = "LoadScreen: OnLoadGameViewStateDone";
-pub const MAIN_MENU_READY: &str = "return not ContextPtr:IsHidden() and Controls.MainMenuOptionStack:GetSizeY() > 0 and Controls.MainButtonTrackAnim:IsStopped()";
+pub const MAIN_MENU_READY: &str = r#"
+if ContextPtr:IsHidden() then return false end
+local stack = Controls.MainMenuOptionStack
+if stack:GetSizeY() <= 0 or not Controls.MainButtonTrackAnim:IsStopped() or not stack:GetParent():IsStopped() then return false end
+local function labelsReady(control)
+    if control:GetID() == 'LabelAlphaAnim' and not control:IsStopped() then return false end
+    for _, child in ipairs(control:GetChildren() or {}) do
+        if not labelsReady(child) then return false end
+    end
+    return true
+end
+return labelsReady(stack)
+"#;
 // Match only the localized connection-error message. The official Escape handler
 // acknowledges that message and clears its instance; login and legal dialogs stay open.
 pub const DISMISS_2K_CONNECTION_MESSAGE: &str = r#"
@@ -846,7 +858,7 @@ impl Runner {
             self.disconnect();
             self.wait_frontend_ready(self.remaining(deadline)?, false)?;
             return Ok(
-                "Civ VI relaunched via Steam; opening played to the end; FrontEnd answered".into(),
+                "Civ VI relaunched via Steam; opening played to the end; main menu visible and ready".into(),
             );
         }
         self.clock.sleep(self.budget(deadline, 8.0)?);
@@ -856,7 +868,7 @@ impl Runner {
         self.disconnect();
         self.wait_frontend_ready(self.remaining(deadline)?, true)?;
         Ok(
-            "Civ VI relaunched via Steam; opening skipped with a left click; FrontEnd answered"
+            "Civ VI relaunched via Steam; opening skipped with a left click; main menu visible and ready"
                 .into(),
         )
     }

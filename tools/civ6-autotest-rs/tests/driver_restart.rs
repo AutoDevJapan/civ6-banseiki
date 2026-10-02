@@ -261,16 +261,26 @@ fn test_frontend_waits_for_menu_animation() {
 fn test_menu_probe_requires_visible_options_and_finished_animation() {
     use civ6_autotest_rs::runner::MAIN_MENU_READY;
     let lua = mlua::Lua::new();
-    lua.load("ContextPtr={IsHidden=function() return HIDDEN end}; Controls={MainMenuOptionStack={GetSizeY=function() return HEIGHT end},MainButtonTrackAnim={IsStopped=function() return STOPPED end}}").exec().unwrap();
-    for (hidden, height, stopped, expected) in [
-        (true, 306, true, false),
-        (false, 0, true, false),
-        (false, 306, false, false),
-        (false, 306, true, true),
+    lua.load(r#"
+        ContextPtr={IsHidden=function() return HIDDEN end}
+        local label={GetID=function() return 'LabelAlphaAnim' end,IsStopped=function() return LABEL_STOPPED end,GetChildren=function() return {} end}
+        local option={GetID=function() return 'Top' end,GetChildren=function() return {label} end}
+        local alpha={IsStopped=function() return ALPHA_STOPPED end}
+        Controls={MainMenuOptionStack={GetID=function() return 'MainMenuOptionStack' end,GetSizeY=function() return HEIGHT end,GetParent=function() return alpha end,GetChildren=function() return {option} end},MainButtonTrackAnim={IsStopped=function() return STOPPED end}}
+    "#).exec().unwrap();
+    for (hidden, height, stopped, alpha, label, expected) in [
+        (true, 306, true, true, true, false),
+        (false, 0, true, true, true, false),
+        (false, 306, false, true, true, false),
+        (false, 306, true, false, true, false),
+        (false, 306, true, true, false, false),
+        (false, 306, true, true, true, true),
     ] {
         lua.globals().set("HIDDEN", hidden).unwrap();
         lua.globals().set("HEIGHT", height).unwrap();
         lua.globals().set("STOPPED", stopped).unwrap();
+        lua.globals().set("ALPHA_STOPPED", alpha).unwrap();
+        lua.globals().set("LABEL_STOPPED", label).unwrap();
         assert_eq!(lua.load(MAIN_MENU_READY).eval::<bool>().unwrap(), expected);
     }
 }
