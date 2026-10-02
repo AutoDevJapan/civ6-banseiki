@@ -1459,6 +1459,9 @@ mod tests {
     const HERO: &str = include_str!("../../civ6-autotest/scenarios/absorption-hero-recall.json");
     const PRIEST: &str =
         include_str!("../../civ6-autotest/scenarios/absorption-priest-diagnostic.json");
+    const FLOW: &str = include_str!("../../civ6-autotest/scenarios/absorption-flow.json");
+    const RETURN_BOUNDARY: &str =
+        include_str!("../../civ6-autotest/scenarios/absorption-return-boundary.json");
     #[test]
     fn all_acceptance_steps_and_lua_compile_without_running_engine() {
         assert_eq!(
@@ -1473,6 +1476,13 @@ mod tests {
             assert_eq!(s["steps"].as_array().unwrap().len(), count);
             validate(&s).unwrap();
         }
+        let ordinary: Value = serde_json::from_str(FLOW).unwrap();
+        let boundary: Value = serde_json::from_str(RETURN_BOUNDARY).unwrap();
+        let ordinary_steps = ordinary["steps"].as_array().unwrap();
+        let boundary_steps = boundary["steps"].as_array().unwrap();
+        assert_eq!(boundary_steps.len(), 35);
+        assert_eq!(&boundary_steps[..29], &ordinary_steps[..29]);
+        validate(&boundary).unwrap();
     }
     #[test]
     fn reject_unported_actions_and_measurements_before_game_access() {
