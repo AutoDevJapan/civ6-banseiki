@@ -1,0 +1,58 @@
+[
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroDatabaseTests",
+    "test": "test_native_classes_reference_complete_projects_units_and_works",
+    "rust_test": "hero_tests::native_hero_database_tests::test_native_classes_reference_complete_projects_units_and_works",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroDatabaseTests",
+    "test": "test_shipped_heroes_have_no_discovery_project_or_purchase_path",
+    "rust_test": "hero_tests::native_hero_database_tests::test_shipped_heroes_have_no_discovery_project_or_purchase_path",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroDatabaseTests",
+    "test": "test_native_ids_are_dense_and_every_custom_era_has_lifespan_and_strength_data",
+    "rust_test": "hero_tests::native_hero_database_tests::test_native_ids_are_dense_and_every_custom_era_has_lifespan_and_strength_data",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroDatabaseTests",
+    "test": "test_framework_discounts_and_recruitment_bonus_target_new_definitions",
+    "rust_test": "hero_tests::native_hero_database_tests::test_framework_discounts_and_recruitment_bonus_target_new_definitions",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroPackageTests",
+    "test": "test_native_dlc_uses_registered_id_and_is_enabled_before_dependents",
+    "rust_test": "hero_tests::native_hero_package_tests::test_native_dlc_uses_registered_id_and_is_enabled_before_dependents",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroPackageTests",
+    "test": "test_native_warlord_art_uses_generic_infantry_and_cavalry",
+    "rust_test": "hero_tests::native_hero_package_tests::test_native_warlord_art_uses_generic_infantry_and_cavalry",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroPackageTests",
+    "test": "test_icons_preserve_every_size_of_generic_units",
+    "rust_test": "hero_tests::native_hero_package_tests::test_icons_preserve_every_size_of_generic_units",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  },
+  {
+    "source": "tests/test_banseiki_heroes.py",
+    "class": "NativeHeroPackageTests",
+    "test": "test_all_custom_names_have_three_languages_and_actions_are_scoped",
+    "rust_test": "hero_tests::native_hero_package_tests::test_all_custom_names_have_three_languages_and_actions_are_scoped",
+    "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851"
+  }
+]
