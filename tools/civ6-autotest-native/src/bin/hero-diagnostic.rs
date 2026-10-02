@@ -98,7 +98,12 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
         json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"local A=assert(ExposedMembers.JAC_Absorption);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'"}),
     ];
     // Original funded living/same-era checks and retirement remain unchanged.
-    out.extend(steps[102..111].iter().cloned());
+    for (index, step) in steps[102..111].iter().enumerate() {
+        out.push(step.clone());
+        if index == 4 {
+            out.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local e=Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1');return type(e)=='table' and type(e.Owner)=='number' and type(e.Class)=='number' and type(e.EraBefore)=='number' and type(e.CityID)=='number'"}}));
+        }
+    }
     out.push(json!({"action":"ui_lua","state_name":"InGame","code":TRACE_START}));
     out.push(steps[111].clone());
     out.push(json!({"action":"ui_lua","state_name":"InGame","code":TRACE_FINISH}));
@@ -149,13 +154,17 @@ mod tests {
         ))
         .unwrap();
         let d = prepare(&source, "owned-checkpoint").unwrap();
-        assert_eq!(d["steps"].as_array().unwrap().len(), 16);
+        assert_eq!(d["steps"].as_array().unwrap().len(), 17);
         assert_eq!(d["steps"][0], source["steps"][0]);
         assert_eq!(d["steps"][1]["exact_name"], true);
         for i in 0..9 {
-            assert_eq!(d["steps"][4 + i], source["steps"][102 + i]);
+            assert_eq!(
+                d["steps"][4 + i + usize::from(i > 4)],
+                source["steps"][102 + i]
+            );
         }
-        assert_eq!(d["steps"][14], source["steps"][111]);
+        assert_eq!(d["steps"][9]["action"], "wait_for");
+        assert_eq!(d["steps"][15], source["steps"][111]);
     }
     #[test]
     fn observation_chunks_compile_without_executing() {
