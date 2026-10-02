@@ -525,14 +525,20 @@ fn native_matrix_requires_unique_exact_index_and_empty_source() -> mlua::Result<
         local M=ExposedMembers.JAC_NativeMatrix
         local s,d=ORACLE_SOURCE,ORACLE_DEST
         assert(not M.Check('unchanged',0,s,d))
-        assert(M.Request('nil-dispatch',1,1,0,s,d))
+        assert(M.Request('local-official',1,1,0,s,d))
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil)
         ORACLE_EVENT(0,1,10,20)
         assert(not M.Verify(),'nil return or unrelated event proved movement')
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil,'event alone created official move proof')
         ORACLE_CITIES[1].slots[1][0]=-1
         ORACLE_CITIES[2].slots[1][0]=0
         assert(M.Verify(),'exact index zero in destination was rejected')
+        local proof=assert(ExposedMembers.JAC_NativeOfficialMoveProof)
+        assert(proof.Label=='local-official' and proof.Index==0 and
+          proof.Source.City==10 and proof.Dest.City==20 and proof.Dest.Slot==0)
         ORACLE_CITIES[1].slots[1][0]=0
         assert(not pcall(M.Verify),'duplicate source index was accepted')
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil,'stale physical proof survived a failed read')
         ORACLE_CITIES[1].slots[1][0]=-1
         ORACLE_CITIES[4].slots[1][0]=0
         assert(not pcall(M.Verify),'duplicate index in Free Cities was ignored')

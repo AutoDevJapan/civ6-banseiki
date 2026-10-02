@@ -3,6 +3,8 @@ use mlua::{Lua, Table};
 use serde_json::Value;
 
 const SCENARIO: &str = include_str!("../../civ6-autotest/scenarios/absorption-native-custody.json");
+const DEAL_SCENARIO: &str =
+    include_str!("../../civ6-autotest/scenarios/absorption-native-deal.json");
 
 fn scenario() -> Value {
     serde_json::from_str(SCENARIO).expect("custody scenario JSON")
@@ -16,6 +18,17 @@ fn script(marker: &str) -> String {
         .filter_map(|step| step["code"].as_str())
         .find(|code| code.contains(marker))
         .unwrap_or_else(|| panic!("missing script: {marker}"))
+        .to_owned()
+}
+
+fn deal_script(marker: &str) -> String {
+    serde_json::from_str::<Value>(DEAL_SCENARIO).expect("deal scenario JSON")["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .find(|code| code.contains(marker))
+        .unwrap_or_else(|| panic!("missing deal script: {marker}"))
         .to_owned()
 }
 
@@ -41,7 +54,15 @@ fn world() -> mlua::Result<Lua> {
           function c:GetOwner() return self.owner end
           function c:GetX() return self.x end
           function c:GetY() return 0 end
-          function c:GetDistricts() return {Members=function() return ipairs(c.districts) end} end
+          function c:GetDistricts() return {
+            Members=function() return ipairs(c.districts) end,
+            IsPillaged=function(_,kind,plot)
+              assert(kind==5)
+              for _,district in ipairs(c.districts) do
+                if district.plot==plot then return district.pillaged end
+              end
+              return false
+            end} end
           function c:GetBuildings()
             return {
               HasBuilding=function(_,b) return c.built[b]==true end,
@@ -95,12 +116,16 @@ fn world() -> mlua::Result<Lua> {
           return d
         end
         local cap=city(10,0);local control=city(20,10);local neighbor=city(30,20)
-        plot(0,0,cap,0,true);plot(1,2,cap,5);plot(2,1,neighbor,5)
+        local dealTarget=city(40,30);dealTarget.owner=2
+        plot(0,0,cap,0,true);plot(1,2,cap);plot(2,1,neighbor,5)
         plot(3,3,cap);plot(10,10,control,0,true);plot(11,12,control,5)
+        plot(30,30,dealTarget,0,true);plot(31,32,dealTarget)
         cap.purchased={0,1,2,3};control.purchased={10,11}
-        cap.districts={DISTRICT(cap,1,false)}
+        dealTarget.purchased={30,31}
+        cap.districts={}
         control.districts={DISTRICT(control,11,true)}
         neighbor.districts={DISTRICT(neighbor,2,true)}
+        dealTarget.districts={}
         control.built={[2]=true,[3]=true};control.at[11]={2,3}
         local function at(x,y)
           for _,c in pairs(CITIES) do if c.x==x and y==0 then return c end end
@@ -122,7 +147,9 @@ fn world() -> mlua::Result<Lua> {
         Players={[1]={GetID=function() return 1 end,GetCities=function()
           return {GetCapitalCity=function() return cap end,
             Members=function() return ipairs({cap,control}) end}
-        end}}
+        end},[2]={GetID=function() return 2 end,IsHuman=function() return false end,
+          GetCities=function() return {GetCapitalCity=function() return dealTarget end} end}}
+        PlayerManager={GetAliveMajors=function() return {Players[1],Players[2]} end}
         function PUBLISH()
           assert(#PENDING==1,'one stage must be requested at a time')
           local r=table.remove(PENDING,1)
@@ -178,6 +205,7 @@ fn temple_plan_finds_nonadjacent_own_district_and_reuses_completed_control() -> 
         assert(t.Source.ID==10 and t.Control.ID==20 and t.Cache==nil)
         local F=ExposedMembers.JAC_NativeTempleFixture
         for _,stage in ipairs({'Holy','Shrine','Temple'}) do
+          F.Observe('control',stage)
           ExposedMembers.JAC_NativeTempleRequest('control',stage)
           assert(F.Ready('control',stage))
         end
@@ -210,23 +238,68 @@ fn temple_plan_rejects_same_player_other_city_district_and_purchase_plot() -> ml
 }
 
 #[test]
+fn temple_plan_rejects_existing_incomplete_or_pillaged_holy_site() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local F=ExposedMembers.JAC_NativeTempleFixture
+        local cap=CITIES[10]
+        cap.districts={DISTRICT(cap,1,false)}
+        PLOTS[1].district=5
+        local ok,err=pcall(F.Plan,cap,'source')
+        assert(not ok and tostring(err):find('existing Holy Site is incomplete',1,true))
+        cap.districts[1].complete=true
+        cap.districts[1].pillaged=true
+        ok,err=pcall(F.Plan,cap,'source')
+        assert(not ok and tostring(err):find('existing Holy Site is incomplete or pillaged',1,true))
+        assert(#CALLS==0,'existing damaged district was rebuilt')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn temple_request_rejects_newly_incomplete_holy_site_without_saving_request() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local cap=CITIES[10]
+        cap.districts={DISTRICT(cap,1,false)}
+        PLOTS[1].district=5
+        local F=ExposedMembers.JAC_NativeTempleFixture
+        F.Observe('source','Holy')
+        local ok,err=pcall(ExposedMembers.JAC_NativeTempleRequest,'source','Holy')
+        assert(not ok and tostring(err):find('refusing duplicate construction',1,true))
+        assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE').Fixtures.source.Request==nil)
+        assert(#CALLS==0)
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn temple_requests_wait_for_each_published_stage_without_core_ui_getters() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(
         r#"
         local R=ExposedMembers.JAC_NativeTempleRequest
         local F=ExposedMembers.JAC_NativeTempleFixture
+        F.Observe('source','Holy')
         R('source','Holy')
         assert(#CALLS==1 and CALLS[1].kind=='district' and CALLS[1].plot==1)
         assert(not F.Ready('source','Holy'),'nil request return proved completion')
+        F.Observe('source','Shrine')
         local ok,err=pcall(R,'source','Shrine')
         assert(not ok and tostring(err):find('Holy Site not published',1,true) and #CALLS==1)
         PUBLISH();assert(F.Ready('source','Holy'))
+        F.Observe('source','Shrine')
         R('source','Shrine')
         assert(#CALLS==2 and CALLS[2].index==2 and not F.Ready('source','Shrine'))
+        F.Observe('source','Temple')
         ok,err=pcall(R,'source','Temple')
         assert(not ok and tostring(err):find('shrine not published',1,true) and #CALLS==2)
         PUBLISH();assert(F.Ready('source','Shrine'))
+        F.Observe('source','Temple')
         R('source','Temple')
         assert(#CALLS==3 and CALLS[3].index==3 and not F.Ready('source','Temple'))
         PUBLISH();assert(F.Ready('source','Temple'))
@@ -245,6 +318,7 @@ fn temple_stale_or_changed_identity_observations_do_not_advance() -> mlua::Resul
         local F=ExposedMembers.JAC_NativeTempleFixture
         local R=ExposedMembers.JAC_NativeTempleRequest
         local read=F.Read
+        F.Observe('control','Holy')
         R('control','Holy')
         local stale=F.Read('control','control:Holy')
         stale.Read=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE').Fixtures.control.Request.Read
@@ -253,10 +327,10 @@ fn temple_stale_or_changed_identity_observations_do_not_advance() -> mlua::Resul
         assert(not ok and tostring(err):find('stale temple observation',1,true))
         F.Read=read
         CITIES[20].id=99
-        ok,err=pcall(R,'control','Shrine')
+        ok,err=pcall(F.Observe,'control','Shrine')
         assert(not ok and tostring(err):find('fixture city identity changed',1,true) and #CALLS==0)
         CITIES[20].id=20;PLOTS[11].purchase=CITIES[10]
-        ok,err=pcall(R,'control','Shrine')
+        ok,err=pcall(F.Observe,'control','Shrine')
         assert(not ok and tostring(err):find('purchase city changed',1,true) and #CALLS==0)
         "#,
     )
@@ -273,12 +347,17 @@ fn temple_completion_requires_actual_plot_complete_district_and_exact_relic_slot
         local c=CITIES[20]
         c.at[11]={2};c.at[10]={3}
         assert(not F.Read('control','wrong-plot').Temple,'HasBuilding alone accepted wrong plot')
+        F.Observe('control','Temple')
+        local ok,err=pcall(ExposedMembers.JAC_NativeTempleRequest,'control','Temple')
+        assert(not ok and tostring(err):find('refusing duplicate construction',1,true))
+        assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE').Fixtures.control.Request==nil)
+        assert(#CALLS==0)
         c.at[11]={2,3};c.pillaged[2]=true
         assert(not F.Read('control','pillaged').Temple)
         c.pillaged[2]=false;c.districts[1].complete=false
         assert(not F.Read('control','incomplete').Temple)
         c.districts[1].complete=true;c.slotCount=2
-        local ok,err=pcall(F.Read,'control','wrong-count')
+        ok,err=pcall(F.Read,'control','wrong-count')
         assert(not ok and tostring(err):find('exact stock relic slot 0',1,true))
         c.slotCount=1;c.slotType=2
         ok,err=pcall(F.Read,'control','wrong-type')
@@ -288,6 +367,181 @@ fn temple_completion_requires_actual_plot_complete_district_and_exact_relic_slot
         "#,
     )
     .exec()
+}
+
+#[test]
+fn deal_temples_wait_for_both_exact_cities_without_ui_state_writes() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load("Game.SetProperty=nil").exec()?;
+    lua.load(deal_script("function F.Plan(")).exec()?;
+    lua.load("Game.SetProperty=SAVED_GAME_SETTER").exec()?;
+    let core: Table = lua.create_table()?;
+    let metatable = lua.create_table()?;
+    metatable.set("__index", lua.globals())?;
+    core.set_metatable(Some(metatable))?;
+    core.set(
+        "CityManager",
+        lua.globals().get::<Table>("CORE_CITY_MANAGER")?,
+    )?;
+    lua.load(deal_script(
+        "persist detached native deal temple plan in Gameplay",
+    ))
+    .set_environment(core.clone())
+    .exec()?;
+    lua.load(deal_script("local function requestTemple("))
+        .set_environment(core)
+        .exec()?;
+    lua.load(
+        r#"
+        local t=Game:GetProperty('JAC_NATIVE_DEAL_PROBE')
+        assert(t.Owner==1 and t.Target==2)
+        assert(t.Fixtures.source.ID==10 and t.Fixtures.source.Owner==1 and t.Fixtures.source.Plot==1)
+        assert(t.Fixtures.target.ID==40 and t.Fixtures.target.Owner==2 and t.Fixtures.target.Plot==31)
+        local F=ExposedMembers.JAC_NativeDealTempleFixture
+        local R=ExposedMembers.JAC_NativeDealTempleRequest
+        for _,label in ipairs({'source','target'}) do
+          for _,stage in ipairs({'Holy','Shrine','Temple'}) do
+            F.Observe(label,stage)
+            R(label,stage)
+            assert(not F.Ready(label,stage),'nil request return proved stage completion')
+            PUBLISH()
+            assert(F.Ready(label,stage),'exact-city stage did not publish')
+          end
+        end
+        local source=F.Read('source','ready')
+        local target=F.Read('target','ready')
+        assert(source.Temple and source.SlotValue==-1 and target.Temple and target.SlotValue==-1)
+        assert(#CALLS==6 and CALLS[1].city==CITIES[10] and CALLS[4].city==CITIES[40])
+        PLOTS[31].purchase=CITIES[30]
+        local ok,err=pcall(F.Read,'target','wrong-city')
+        assert(not ok and tostring(err):find('purchase city changed',1,true))
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn gameplay_grant_uses_detached_observation_after_ui_functions_are_removed() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local F=ExposedMembers.JAC_NativeTempleFixture
+        local R=ExposedMembers.JAC_NativeTempleRequest
+        for _,stage in ipairs({'Holy','Shrine','Temple'}) do
+          F.Observe('source',stage)
+          R('source',stage)
+          PUBLISH()
+          assert(F.Ready('source',stage))
+        end
+        F.Observe('source','grant')
+        JAC_AbsorptionGameplay.OwnedGreatWorkSlots=function() return {} end
+        Players[1].AttachModifierByID=function(_,name)
+          assert(name=='GOODY_CULTURE_GRANT_ONE_RELIC')
+          GRANTED=true
+        end
+        ExposedMembers.JAC_NativeTempleFixture=nil
+        "#,
+    )
+    .exec()?;
+    let core: Table = lua.create_table()?;
+    let metatable = lua.create_table()?;
+    metatable.set("__index", lua.globals())?;
+    core.set_metatable(Some(metatable))?;
+    core.set(
+        "CityManager",
+        lua.globals().get::<Table>("CORE_CITY_MANAGER")?,
+    )?;
+    lua.load(script("granted actual relic after exact-city"))
+        .set_environment(core)
+        .exec()?;
+    lua.load(
+        r#"
+        assert(GRANTED)
+        local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE')
+        assert(t.Before and next(t.Before)==nil)
+        assert(t.Fixtures.source.Request.Stage=='Temple')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Result<()> {
+    let scenario: Value = serde_json::from_str(DEAL_SCENARIO).expect("deal scenario JSON");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let lua = Lua::new();
+    let mut scripts = 0;
+    let mut requests = 0;
+    for (i, step) in steps.iter().enumerate() {
+        if step["state_name"].as_str() == Some("InGame") {
+            assert!(
+                !step["code"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("Game:SetProperty("),
+                "UI must not persist Gameplay state"
+            );
+        } else if step["state_name"].as_str() == Some("JAC_Absorption_Entry") {
+            assert!(
+                !step["code"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("ExposedMembers.JAC_NativeDealTempleFixture"),
+                "Gameplay must use detached UI observations"
+            );
+        }
+        for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
+            .into_iter()
+            .flatten()
+        {
+            lua.load(code).into_function()?;
+            scripts += 1;
+        }
+        if step["code"].as_str().is_some_and(|code| {
+            code.starts_with("return assert(ExposedMembers.JAC_NativeDealTempleRequest)")
+        }) {
+            assert_eq!(step["state_name"], "JAC_Absorption_Entry");
+            assert_eq!(steps[i - 1]["state_name"], "InGame");
+            assert!(
+                steps[i - 1]["code"]
+                    .as_str()
+                    .expect("UI observation")
+                    .contains(".Observe(")
+            );
+            let publication = &steps[i + 1];
+            assert_eq!(publication["action"], "wait_for");
+            assert_eq!(publication["timeout"], 20);
+            assert_eq!(publication["condition"]["state_name"], "InGame");
+            assert!(
+                publication["condition"]["code"]
+                    .as_str()
+                    .expect("fresh UI read")
+                    .contains(".Ready(")
+            );
+            requests += 1;
+        }
+    }
+    assert_eq!(scripts, 33, "all deal Lua snippets must compile");
+    assert_eq!(requests, 6, "both capitals need all three stages");
+    let grant = steps
+        .iter()
+        .position(|step| {
+            step["code"]
+                .as_str()
+                .is_some_and(|code| code.contains("p:AttachModifierByID("))
+        })
+        .expect("relic grant");
+    assert_eq!(steps[grant - 3]["action"], "wait_for");
+    assert_eq!(steps[grant - 2]["state_name"], "InGame");
+    assert_eq!(steps[grant - 1]["state_name"], "InGame");
+    assert_eq!(steps[grant + 1]["action"], "wait_for");
+    assert!(
+        steps[grant]["code"]
+            .as_str()
+            .expect("grant script")
+            .contains("targetRequest.Stage=='Temple'")
+    );
+    Ok(())
 }
 
 #[test]
@@ -306,6 +560,19 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
                     .contains("Game:SetProperty("),
                 "UI must not persist Gameplay state"
             );
+        } else if step["state_name"].as_str() == Some("JAC_Absorption_Entry") {
+            let code = step["code"].as_str().unwrap_or_default();
+            for ui_function in [
+                "ExposedMembers.JAC_NativeTempleFixture",
+                "ExposedMembers.JAC_NativeMatrix",
+                "ExposedMembers.JAC_CustodyProbeRead()",
+                "ExposedMembers.JAC_CustodyProbeSite()",
+            ] {
+                assert!(
+                    !code.contains(ui_function),
+                    "Gameplay must use detached UI observations: {ui_function}"
+                );
+            }
         }
         for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
             .into_iter()
@@ -315,7 +582,7 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
             checked += 1;
         }
     }
-    assert_eq!(checked, 48, "all scenario Lua scripts must compile");
+    assert_eq!(checked, 58, "all scenario Lua scripts must compile");
     let baseline = steps
         .iter()
         .position(|s| {
@@ -367,6 +634,13 @@ fn official_control_precedes_separate_carrier_and_all_temple_waits_are_bounded()
         if code.starts_with("return assert(ExposedMembers.JAC_NativeTempleRequest)") {
             let next = &steps[i + 1];
             assert_eq!(step["state_name"], "JAC_Absorption_Entry");
+            assert_eq!(steps[i - 1]["state_name"], "InGame");
+            assert!(
+                steps[i - 1]["code"]
+                    .as_str()
+                    .expect("UI observation")
+                    .contains(".Observe(")
+            );
             assert_eq!(next["action"], "wait_for");
             assert_eq!(next["timeout"], 20);
             assert_eq!(next["condition"]["state_name"], "InGame");
