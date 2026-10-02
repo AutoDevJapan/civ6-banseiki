@@ -14,7 +14,7 @@
 
 実行器・計測報告・データ生成・Lua の検査を [PR #93](https://github.com/AutoDevJapan/civ6-banseiki/pull/93)、地図・画像の生成と Python の削除を [PR #94](https://github.com/AutoDevJapan/civ6-banseiki/pull/94) で main に統合した。Python の79ファイルを削除し、Rust の全 workspace 検査1199件、追加実行器61件、共有の実行ツール56件が成功した。Lua の検査は省略していない。
 
-Python の削除後、GitHub の code scanning は Rust と Actions を対象とする。削除直後の自動実行は変更前の Python を含む設定で始まり、Python のソースが0件のため失敗した。この旧設定の実行は再試行できないため、main の現在の言語で設定を再構成した。Rust と Actions の解析で現在の main を確認する。
+Python の削除後、GitHub の code scanning は Rust と Actions を対象とする。削除直後の自動実行は変更前の Python を含む設定で始まり、Python のソースが0件のため失敗した。この旧設定の実行は再試行できないため、main の現在の言語で設定を再構成した。Rust と Actions の [再解析](https://github.com/AutoDevJapan/civ6-banseiki/actions/runs/36994329128) は両方成功し、現在の main を確認できた。
 
 ## 移行後の構成
 
