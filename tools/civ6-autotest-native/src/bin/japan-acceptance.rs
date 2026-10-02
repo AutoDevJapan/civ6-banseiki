@@ -29,7 +29,14 @@ for _,u in Players[e.Owner]:GetUnits():Members() do assert(not u:IsHero() or u:G
 local r=Players[e.Owner]:GetReligion();local income=r:GetFaithBalance()
 assert(income>=0,'waiting fixture balance became negative')
 r:ChangeFaithBalance(s.Faith)
-assert(r:GetFaithBalance()==s.Faith+income,'fixture funding restore mismatch')
+local expected=s.Faith+income
+local power=1
+while power*2<=expected do power=power*2 end
+local quantum=power/8388608
+local scaled=expected/quantum;local lower=math.floor(scaled);local fraction=scaled-lower
+if fraction>0.5 or fraction==0.5 and lower%2==1 then lower=lower+1 end
+local engineExpected=lower*quantum
+assert(r:GetFaithBalance()==engineExpected,'fixture funding restore mismatch; arithmetic='..expected..' engine='..engineExpected..' actual='..r:GetFaithBalance())
 Game:SetProperty('JAC_NATIVE_RECALL_FIXTURE_RESERVE',nil)
 return 'global era advanced; original fixture funding plus earned income restored before recall intent'
 "#;
@@ -41,6 +48,24 @@ fn prepare(source: &Value) -> Result<Value, String> {
         || original[111]["turns"] != 80
     {
         return Err("original acceptance layout changed".into());
+    }
+    for (index, state, marker) in [
+        (106, "GameCore_Tuner", "native Warlord A retired"),
+        (
+            110,
+            "InGame",
+            "same-era rejection did not report the native era restriction",
+        ),
+        (113, "GameCore_Tuner", "A.BeginHeroRecall"),
+    ] {
+        if original[index]["action"] != "ui_lua"
+            || original[index]["state_name"] != state
+            || !original[index]["code"]
+                .as_str()
+                .is_some_and(|code| code.contains(marker))
+        {
+            return Err(format!("original acceptance phase {} changed", index + 1));
+        }
     }
     let mut steps = Vec::new();
     for (i, s) in original.iter().enumerate() {
@@ -149,6 +174,18 @@ mod tests {
         }
     }
     #[test]
+    fn moved_rejection_retirement_or_intent_is_not_accepted() {
+        let source: Value = serde_json::from_str(include_str!(
+            "../../../civ6-autotest/scenarios/absorption-japan.json"
+        ))
+        .unwrap();
+        for index in [106, 110, 113] {
+            let mut changed = source.clone();
+            changed["steps"][index]["code"] = json!("return 'different phase'");
+            assert!(prepare(&changed).is_err());
+        }
+    }
+    #[test]
     fn fixture_funding_is_restored_with_income_and_rejects_early_recall() {
         let lua = mlua::Lua::new();
         lua.load(r#"
@@ -176,5 +213,19 @@ mod tests {
                 .contains("AI recalled before")
         );
         lua.load("assert(bank==0.625)").exec().unwrap();
+    }
+    #[test]
+    fn restoration_matches_observed_single_precision_getter() {
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+        local property={Owner=2,Class=0,Faith=1000003,Era=0}
+        local current=4.046875
+        local r={GetFaithBalance=function() return current end,ChangeFaithBalance=function(_,amount) assert(amount==1000003);current=1000007.0625 end}
+        Game={GetProperty=function(_,k) if k=='JAC_ABSORPTION_LIVE_RECALL_V1' then return {Owner=2,Class=0} end return property end,SetProperty=function(_,_,v) property=v end,GetEras=function() return {GetCurrentEra=function() return 2 end} end}
+        Players={[2]={GetReligion=function() return r end,GetUnits=function() return {Members=function() return ipairs({}) end} end}}
+        ExposedMembers={JAC_Absorption={}}
+        "#).exec().unwrap();
+        lua.load(RESTORE).exec().unwrap();
+        assert_eq!((1000007.046875f64 as f32) as f64, 1000007.0625);
     }
 }
