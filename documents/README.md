@@ -50,6 +50,7 @@
 | [`poc/era-equals-reign.md`](poc/era-equals-reign.md) | 元号＝時代（オーナー判断 T）：エンジンの時代の長さのプローブ（テスト専用 MOD `JAC_Test_EraTiming`）の結果と本実装（元号ごとの 48 の時代、速度とのずれ、ツリーの時代、台帳の判定、実機シナリオ `sengoku-era-reigns.json`、叙事詩・マラソン・追加時代・偉人画面・資源の年の追加確認） |
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方、時間・メモリ・保存容量・ロード時間のCSVと集計、実機シナリオとログ判定 |
+| [`poc/autotest-native.md`](poc/autotest-native.md) | PR87のPythonを実行しないRust検証ドライバー、標準の待ち列との接続、対応範囲と検査結果 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
 | [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |

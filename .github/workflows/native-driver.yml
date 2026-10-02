@@ -1,0 +1,39 @@
+name: Native Civ6 driver
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-driver:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tools/civ6-autotest-native
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Select Rust and required components
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - name: Check formatting
+        run: cargo +stable fmt --check
+      - name: Run native unit tests
+        run: cargo +stable test --locked
+      - name: Check native driver
+        run: cargo +stable clippy --locked --all-targets -- -D warnings
+      - name: Check all acceptance Lua chunks
+        run: |
+          cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-japan.json --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-hero-recall.json --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-priest-diagnostic.json --check
+          exit $LASTEXITCODE
