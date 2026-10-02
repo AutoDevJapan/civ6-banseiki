@@ -1775,6 +1775,20 @@ function A.CompleteHeroRecall(id)
   return R.Copy(record)
 end
 
+-- Only the read-only UI preparation reservation can be released. A prepared
+-- transaction, including one paused before Execute, owns its frozen plan.
+function A.CancelUnprepared(id, expectedPlan)
+  local state = State()
+  local tx = state.Transactions[id]
+  if not tx then return end
+  assert(tx.AwaitingPreparation == true and tx.Status == "WAITING_UI"
+    and R.Equal(tx.Request, expectedPlan), "only matching unprepared absorption can be cancelled")
+  assert(next(tx.Units or {}) == nil and next(tx.Adapters or {}) == nil,
+    "unprepared absorption contains staged mutations")
+  state.Transactions[id] = nil
+  Save(state)
+end
+
 function A.Resume(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")

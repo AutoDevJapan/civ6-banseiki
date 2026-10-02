@@ -418,6 +418,15 @@ function F.Select(actor, id, assetID, action, returnOwner)
   end
   assert(flow.Phase1Complete, "initial rolls are incomplete")
   assert(not entry.EscapeOutcome, "escaped asset cannot be selected")
+  if flow.FinalRollsComplete then
+    if not entry.ReturnOwnerPending then
+      assert(entry.SelectedAction == action and entry.ReturnOwner == returnOwner,
+        "final outcomes are frozen")
+      return R.Copy(flow)
+    end
+    assert(action == "RETURN" and entry.FinalOutcome == "RETURN",
+      "only the lost return destination can be corrected")
+  end
   assert(IsAllowed(entry, action), "action is not allowed for this asset")
   if action == "RETURN" then
     assert(ValidReturnOwner(flow, returnOwner),
@@ -425,6 +434,7 @@ function F.Select(actor, id, assetID, action, returnOwner)
   else assert(returnOwner == nil, "return owner only applies to RETURN") end
   -- All checks precede the mutation; a rejected change preserves the old one.
   entry.SelectedAction, entry.ReturnOwner = action, returnOwner
+  entry.ReturnOwnerPending = nil
   Save(state)
   return R.Copy(flow)
 end
@@ -541,6 +551,28 @@ function F.Resume(id)
   end
   local tx = A.GetState().Transactions[id]
   if tx and tx.Status == "COMPLETE" then return FinishApply(state, flow, tx) end
+  if not tx or tx.AwaitingPreparation then
+    local invalidReturn = false
+    for _, entry in ipairs(flow.Entries) do
+      if entry.FinalOutcome == "RETURN" and not ValidReturnOwner(flow, entry.ReturnOwner) then
+        invalidReturn = true
+      end
+    end
+    if invalidReturn then
+      A.CancelUnprepared(id, flow.AppliedPlan)
+      for _, entry in ipairs(flow.Entries) do
+        if entry.FinalOutcome == "RETURN" and not ValidReturnOwner(flow, entry.ReturnOwner) then
+          entry.SelectedAction, entry.ReturnOwner = nil, nil
+          entry.ReturnOwnerPending = true
+        end
+      end
+      -- Keep P3 outcomes and random journals. Only recipient selection reopens.
+      flow.Phase, flow.FinalRollsComplete = "CHOICE", true
+      flow.AppliedPlan, flow.WaitingFor, flow.Error = nil, nil, nil
+      Save(state)
+      return R.Copy(flow)
+    end
+  end
   local ok, result
   if tx then ok, result = pcall(A.Resume, id)
   else ok, result = pcall(A.Apply, R.Copy(flow.AppliedPlan)) end
@@ -590,7 +622,7 @@ function F.Resolve(actor, id)
     return R.Copy(flow)
   end
   for _, entry in ipairs(flow.Entries) do
-    if not entry.EscapeOutcome then
+    if not flow.FinalRollsComplete and not entry.EscapeOutcome then
       entry.ActionChance = ActionChance(flow, entry)
       local roll = Roll(state, flow, entry, "P3_SUCCESS")
       entry.Success = roll < entry.ActionChance
@@ -619,6 +651,7 @@ function F.Resolve(actor, id)
       end
     end
   end
+  flow.FinalRollsComplete = true
   flow.AppliedPlan = BuildPlan(flow)
   flow.Phase = "APPLYING"
   Save(state) -- all rolls and outcomes precede the first PoC mutation

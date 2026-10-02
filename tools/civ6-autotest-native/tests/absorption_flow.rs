@@ -1216,6 +1216,117 @@ fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_correct
 }
 
 #[test]
+fn return_owner_lost_after_final_rolls_reopens_only_destination_before_mutation() -> mlua::Result<()>
+{
+    let lua = flow_world()?;
+    prepare_choices(&lua)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        CHOOSE_ALL('waiting-return')
+        F.Select(2,'waiting-return','artifact','RETURN',3)
+        F.Select(2,'waiting-return','collection','RETURN',0)
+        ORIGINAL_SPREAD=Players[1].units[3].GetSpreadCharges
+        Players[1].units[3].GetSpreadCharges=nil
+        ExposedMembers.JAC_HeroReadAPI={GetObservation=function() return nil end}
+        local waiting=F.Resolve(2,'waiting-return')
+        assert(waiting.Phase=='APPLYING' and waiting.WaitingFor=='WAITING_UI',
+          waiting.Phase..':'..tostring(waiting.Error)..':'..tostring(waiting.WaitingFor))
+        assert(A.GetState().Transactions['waiting-return'].AwaitingPreparation)
+        SAVED_FINAL_ROLLS=#RANDOM_CALLS
+        SAVED_WAIT_SPAWNS,SAVED_WAIT_KILLS,SAVED_WAIT_TRANSFERS=SPAWNS,KILLS,TRANSFERS
+        SAVED_FINAL_ENTRIES=A.Rules.Copy(waiting.Entries)
+        Players[3].cities={};Players[3].IsAlive=function() return true end
+        CURRENT_TURN=6
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    load_module(&lua, FLOW)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        local result=F.Resume('waiting-return')
+        assert(result.Phase=='CHOICE' and result.AppliedPlan==nil,
+          'post-roll destination loss must allow correction before mutation')
+        assert(A.GetState().Transactions['waiting-return']==nil)
+        assert(#RANDOM_CALLS==SAVED_FINAL_ROLLS and SPAWNS==SAVED_WAIT_SPAWNS
+          and KILLS==SAVED_WAIT_KILLS and TRANSFERS==SAVED_WAIT_TRANSFERS)
+        for i,entry in ipairs(result.Entries) do
+          assert(A.Rules.Equal(entry.Rolls,SAVED_FINAL_ENTRIES[i].Rolls))
+          assert(entry.FinalOutcome==SAVED_FINAL_ENTRIES[i].FinalOutcome)
+          if entry.ID=='artifact' then
+            assert(entry.ReturnOwnerPending and not entry.SelectedAction and not entry.ReturnOwner)
+          elseif entry.ID=='collection' then
+            assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==0)
+          end
+        end
+        assert(not pcall(F.Select,2,result.ID,'artifact','TRANSFER'))
+        assert(not pcall(F.Select,2,result.ID,'collection','SEIZE'))
+        assert(not pcall(F.Select,2,result.ID,'collection','RETURN',2))
+        assert(not pcall(F.Select,2,result.ID,'artifact','RETURN',3))
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, FLOW)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        F.Select(2,'waiting-return','artifact','RETURN',0)
+        Players[1].units[3].GetSpreadCharges=ORIGINAL_SPREAD
+        local done=F.Resolve(2,'waiting-return')
+        assert(done.Phase=='RESULT',tostring(done.Error))
+        assert(#RANDOM_CALLS==SAVED_FINAL_ROLLS,'destination correction rerolled outcomes')
+        assert(A.GetRoster(0).artifact and A.GetRoster(0).collection)
+        assert(A.GetRoster(3).artifact==nil)
+        assert(F.Resolve(2,done.ID).Phase=='RESULT' and #RANDOM_CALLS==SAVED_FINAL_ROLLS)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(PANEL_WORLD).exec()?;
+    lua.load(
+        r#"
+        TEST_UI_PENDING={ID='frozen-return',From=1,To=2,Mode='MERGER',Phase='CHOICE',
+          FinalRollsComplete=true,Entries={
+          {ID='frozen',Kind='ITEM',Name='Kept',SelectedAction='TRANSFER',FinalOutcome='TRANSFER',
+            AllowedActions={'TRANSFER','RETURN'}},
+          {ID='missing',Kind='ITEM',Name='Return',ReturnOwnerPending=true,FinalOutcome='RETURN',
+            AllowedActions={'TRANSFER','LOOT','SEIZE','RETURN'}}}}
+        ExposedMembers.JAC_AbsorptionFlow={GetPending=function()
+          return JAC_AbsorptionRules.Copy(TEST_UI_PENDING) end}
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua")?;
+    lua.load(
+        r#"
+        local panel=JAC_AbsorptionFlow_UI
+        assert(not panel.GetView().canResolve and Controls.ConfirmButton:IsDisabled())
+        TEST_ENTRY_MANAGER.instances[1].Choose:DoLeftClick()
+        assert(#panel.GetView().actions==0 and not panel.ChooseAction('RETURN'))
+        TEST_ENTRY_MANAGER.instances[2].Choose:DoLeftClick()
+        assert(#panel.GetView().actions==1 and panel.GetView().actions[1].key=='action:RETURN')
+        assert(not panel.ChooseAction('SEIZE') and #OPERATION_CALLS==0)
+        assert(panel.ChooseAction('RETURN') and panel.ChooseOwner(3))
+        assert(#OPERATION_CALLS==1 and OPERATION_CALLS[1].Params.ReturnOwner==3
+          and OPERATION_CALLS[1].Params.Action=='RETURN')
+        assert(#RANDOM_CALLS==0)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
 -> mlua::Result<()> {
     let lua = flow_world()?;
@@ -1232,6 +1343,9 @@ fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state
         candidate.damage=35;candidate.moves=0;candidate.xp=41
         SAVED_CANDIDATE=candidate:GetID();SAVED_ROLLS=#RANDOM_CALLS;SAVED_SPAWNS=SPAWNS
         CURRENT_TURN=7;FAIL_CITY=false
+        local beforeCancel=A.Canonical(Game.props)
+        assert(not pcall(A.CancelUnprepared,'later-choice',failed.AppliedPlan))
+        assert(A.Canonical(Game.props)==beforeCancel,'staged transfer was cancelled')
         Game.props=A.Rules.Copy(Game.props)
     "#,
     )

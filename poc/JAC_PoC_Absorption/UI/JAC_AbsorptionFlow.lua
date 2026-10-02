@@ -191,6 +191,7 @@ end
 local function ChooseAction(action)
   local entry = CurrentEntry()
   if not entry or flow.Phase ~= "CHOICE" or entry.EscapeOutcome or not CanSend() then return false end
+  if flow.FinalRollsComplete and (not entry.ReturnOwnerPending or action ~= "RETURN") then return false end
   local allowed = false
   for _, offered in ipairs(entry.AllowedActions or {}) do
     if offered == action then allowed = true; break end
@@ -331,7 +332,8 @@ Draw = function()
   Controls.EntryScroll:CalculateInternalSize()
 
   local entry = CurrentEntry()
-  if flow.Phase == "CHOICE" and entry and not entry.EscapeOutcome then
+  if flow.Phase == "CHOICE" and entry and not entry.EscapeOutcome
+    and (not flow.FinalRollsComplete or entry.ReturnOwnerPending) then
     if ownerChoice and ownerChoice.AssetID == entry.ID then
       local owners = EligibleOwners()
       Controls.ActionHeading:SetText(L("CHOOSE_OWNER", ActionName(ownerChoice.Action)))
@@ -345,6 +347,7 @@ Draw = function()
     else
       ownerChoice = nil
       local offered = entry.AllowedActions or {}
+      if flow.FinalRollsComplete then offered = { "RETURN" } end
       Controls.ActionHeading:SetText(L("CHOOSE_ACTION", EntryName(entry)))
       for index, action in ipairs(offered) do
         local needsOwner = action == "RETURN" or action == "EXILE"
