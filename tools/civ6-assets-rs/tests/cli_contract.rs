@@ -5,7 +5,7 @@ use civ6_assets_rs::{
     arr, build_art, cli, constants, generate, generate_portraits as portraits, read_json, root, s,
     write, write_city_names, write_custom_civs, xml,
 };
-use clap::CommandFactory;
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use common::*;
 use serde_json::{json, Value};
 use std::{
@@ -69,23 +69,63 @@ fn copy_maps(to: &Path) {
     }
 }
 
-fn cli_commands() -> [clap::Command; 8] {
+// Keep metadata assertions on the same public lexer and typed guards as the real CLIs.
+struct ParsedMatches<P: Parser> {
+    matches: ArgMatches,
+    parsed: P,
+}
+impl<P: Parser> CommandFactory for ParsedMatches<P> {
+    fn command() -> clap::Command {
+        P::command()
+    }
+    fn command_for_update() -> clap::Command {
+        P::command_for_update()
+    }
+}
+impl<P: Parser> FromArgMatches for ParsedMatches<P> {
+    fn from_arg_matches(matches: &ArgMatches) -> Result<Self, clap::Error> {
+        Ok(Self {
+            matches: matches.clone(),
+            parsed: P::from_arg_matches(matches)?,
+        })
+    }
+    fn update_from_arg_matches(&mut self, matches: &ArgMatches) -> Result<(), clap::Error> {
+        self.parsed.update_from_arg_matches(matches)?;
+        self.matches = matches.clone();
+        Ok(())
+    }
+}
+impl<P: Parser> Parser for ParsedMatches<P> {}
+struct CliParser {
+    command: clap::Command,
+    parse: fn(&[String]) -> Result<ArgMatches, clap::Error>,
+}
+fn parser<P: Parser>() -> CliParser {
+    CliParser {
+        command: P::command(),
+        parse: |args| {
+            civ6_cli_compat_rs::try_parse_from::<ParsedMatches<P>, _, _>(args)
+                .map(|parsed| parsed.matches)
+        },
+    }
+}
+fn cli_commands() -> [CliParser; 8] {
     [
-        cli::GenerateArgs::command(),
-        cli::ProsperityArgs::command(),
-        cli::ProsperStartArgs::command(),
-        cli::SupportArgs::command(),
-        cli::UnificationArgs::command(),
-        cli::CrestArgs::command(),
-        cli::PortraitArgs::command(),
-        cli::BuildArgs::command(),
+        parser::<cli::GenerateArgs>(),
+        parser::<cli::ProsperityArgs>(),
+        parser::<cli::ProsperStartArgs>(),
+        parser::<cli::SupportArgs>(),
+        parser::<cli::UnificationArgs>(),
+        parser::<cli::CrestArgs>(),
+        parser::<cli::PortraitArgs>(),
+        parser::<cli::BuildArgs>(),
     ]
 }
 
 #[test]
 fn negative_number_paths_are_values_but_unknown_hyphen_options_are_rejected() {
     let mut checked = 0;
-    for mut command in cli_commands() {
+    for CliParser { mut command, parse } in cli_commands() {
         command.build();
         let leaves = if command.get_subcommands().next().is_some() {
             command
@@ -104,22 +144,40 @@ fn negative_number_paths_are_values_but_unknown_hyphen_options_are_rejected() {
                 let mut args = vec![command.get_name().to_owned()];
                 args.extend(path.iter().cloned());
                 args.push(format!("--{}", arg.get_long().unwrap()));
-                args.push("-1".into());
-                let matches = command.clone().try_get_matches_from(&args).unwrap();
-                let matches = path
-                    .iter()
-                    .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
-                assert_eq!(
-                    matches
-                        .get_one::<std::path::PathBuf>(arg.get_id().as_str())
-                        .unwrap(),
-                    Path::new("-1"),
-                    "{args:?}"
-                );
-                for unknown in ["-unknown", "--unknown-option"] {
+                args.push(String::new());
+                for value in ["-1", "-.5"] {
+                    *args.last_mut().unwrap() = value.into();
+                    let matches = parse(&args).unwrap();
+                    let matches = path
+                        .iter()
+                        .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                    assert_eq!(
+                        matches
+                            .get_one::<std::path::PathBuf>(arg.get_id().as_str())
+                            .unwrap(),
+                        Path::new(value),
+                        "{args:?}"
+                    );
+                }
+                for unknown in ["-1e3", "-1.", "-unknown", "--unknown-option"] {
                     *args.last_mut().unwrap() = unknown.into();
-                    let error = command.clone().try_get_matches_from(&args).unwrap_err();
+                    let error = parse(&args).unwrap_err();
                     assert_eq!(error.exit_code(), 2, "{args:?}");
+                }
+                args.pop();
+                for value in ["-1e3", "-1."] {
+                    *args.last_mut().unwrap() = format!("--{}={value}", arg.get_long().unwrap());
+                    let matches = parse(&args).unwrap();
+                    let matches = path
+                        .iter()
+                        .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
+                    assert_eq!(
+                        matches
+                            .get_one::<std::path::PathBuf>(arg.get_id().as_str())
+                            .unwrap(),
+                        Path::new(value),
+                        "{args:?}"
+                    );
                 }
                 checked += 1;
             }
@@ -129,12 +187,20 @@ fn negative_number_paths_are_values_but_unknown_hyphen_options_are_rejected() {
     let t = temp();
     for flag in ["--only", "--on", "--o"] {
         let out = command("jac-generate-portraits", t.path())
-            .args([flag, "-1"])
+            .arg(format!("{flag}=-1"))
             .output()
             .unwrap();
         assert_eq!(out.status.code(), Some(2));
         assert!(out.stdout.is_empty());
         assert!(String::from_utf8_lossy(&out.stderr).contains("invalid value '-1'"));
+        for value in ["-1", "-.5", "-1e3", "-1."] {
+            let out = command("jac-generate-portraits", t.path())
+                .args([flag, value])
+                .output()
+                .unwrap();
+            assert_eq!(out.status.code(), Some(2));
+            assert!(out.stdout.is_empty());
+        }
     }
     assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
 }
@@ -143,7 +209,7 @@ fn negative_number_paths_are_values_but_unknown_hyphen_options_are_rejected() {
 fn every_cli_option_replaces_previous_occurrences_including_inferred_spellings() {
     let mut checked = 0;
     let mut paths_checked = 0;
-    for mut command in cli_commands() {
+    for CliParser { mut command, parse } in cli_commands() {
         command.build();
         let leaves = if command.get_subcommands().next().is_some() {
             command
@@ -186,10 +252,7 @@ fn every_cli_option_replaces_previous_occurrences_including_inferred_spellings()
                     args.extend(values.first().map(|v| (*v).to_owned()));
                     args.push(format!("--{last}"));
                     args.extend(values.last().map(|v| (*v).to_owned()));
-                    let matches = command
-                        .clone()
-                        .try_get_matches_from(&args)
-                        .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+                    let matches = parse(&args).unwrap_or_else(|e| panic!("{args:?}: {e}"));
                     let matches = path
                         .iter()
                         .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
@@ -207,10 +270,7 @@ fn every_cli_option_replaces_previous_occurrences_including_inferred_spellings()
                         let mut args = vec![command.get_name().to_owned()];
                         args.extend(path.iter().cloned());
                         args.push(format!("--{flag}="));
-                        let matches = command
-                            .clone()
-                            .try_get_matches_from(&args)
-                            .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+                        let matches = parse(&args).unwrap_or_else(|e| panic!("{args:?}: {e}"));
                         let matches = path
                             .iter()
                             .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());
@@ -260,18 +320,13 @@ fn repeated_portrait_selection_preserves_only_the_last_group_for_exact_prefix_an
 
 #[test]
 fn all_cli_parsers_accept_unambiguous_long_argument_prefixes() {
-    let mut commands = [
-        cli::GenerateArgs::command(),
-        cli::ProsperityArgs::command(),
-        cli::ProsperStartArgs::command(),
-        cli::SupportArgs::command(),
-        cli::UnificationArgs::command(),
-        cli::CrestArgs::command(),
-        cli::PortraitArgs::command(),
-        cli::BuildArgs::command(),
-    ];
+    let mut commands = cli_commands();
     let mut checked = 0;
-    for command in &mut commands {
+    for CliParser {
+        command,
+        parse: parse_args,
+    } in &mut commands
+    {
         command.build();
         let paths = if command.get_subcommands().next().is_some() {
             command
@@ -304,12 +359,9 @@ fn all_cli_parsers_accept_unambiguous_long_argument_prefixes() {
                     args.extend(path.iter().cloned());
                     args.push(format!("--{flag}"));
                     args.extend(value.iter().cloned());
-                    let matches = command
-                        .clone()
-                        .try_get_matches_from(args)
-                        .unwrap_or_else(|e| {
-                            panic!("{} {path:?} --{flag}: {e}", command.get_name())
-                        });
+                    let matches = parse_args(&args).unwrap_or_else(|e| {
+                        panic!("{} {path:?} --{flag}: {e}", command.get_name())
+                    });
                     let matches = path
                         .iter()
                         .fold(&matches, |m, sub| m.subcommand_matches(sub).unwrap());

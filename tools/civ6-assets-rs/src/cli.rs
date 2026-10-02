@@ -3,10 +3,7 @@ use clap::{builder::TypedValueParser, ArgAction, Parser, Subcommand};
 
 // Match argparse for every tool, including support subcommands and inferred flags.
 fn legacy_options(command: clap::Command) -> clap::Command {
-    command
-        .infer_long_args(true)
-        .args_override_self(true)
-        .allow_negative_numbers(true)
+    command.infer_long_args(true).args_override_self(true)
 }
 fn path_value() -> impl TypedValueParser<Value = PathBuf> {
     clap::builder::OsStringValueParser::new().map(|value| {
@@ -30,6 +27,7 @@ pub struct GenerateArgs {
     #[arg(long,value_parser=path_value(),default_value_os_t=generate::mod_dir().join("Maps"))]
     pub output: PathBuf,
 }
+civ6_cli_compat_rs::parser!(GenerateArgs);
 pub fn japan_map_generate() -> Result<()> {
     let a = GenerateArgs::parse();
     generate::obtain_sources(&a.cache)?;
@@ -111,6 +109,7 @@ pub struct ProsperityArgs {
     #[arg(long,value_parser=path_value(),default_value_os_t=root().join("documents/spec/data/japan-1534-prosperity.json"))]
     pub output: PathBuf,
 }
+civ6_cli_compat_rs::parser!(ProsperityArgs);
 pub fn japan_map_prosperity() -> Result<()> {
     let a = ProsperityArgs::parse();
     write_json(&a.output, &prosperity::build(&a.maps)?)?;
@@ -125,6 +124,7 @@ pub struct ProsperStartArgs {
     #[arg(long,value_parser=path_value(),default_value_os_t=root().join("tools/civ6-autotest/scenarios/japan-prosperous-15km.json"))]
     pub scenario: PathBuf,
 }
+civ6_cli_compat_rs::parser!(ProsperStartArgs);
 pub fn japan_map_prosper_start() -> Result<()> {
     let a = ProsperStartArgs::parse();
     for km in constants::SCALES {
@@ -142,6 +142,7 @@ pub struct SupportArgs {
     #[command(subcommand)]
     pub command: SupportCommand,
 }
+civ6_cli_compat_rs::parser!(SupportArgs);
 #[derive(Subcommand)]
 pub enum SupportCommand {
     /// Config, translations, Oda/Takeda scenarios, resources and prosperous start checks.
@@ -191,6 +192,7 @@ pub struct UnificationArgs {
     #[arg(long,value_parser=path_value(),default_value_os_t=root().join("poc/JAC_Test_UnificationMap/Maps/JAC_Unification_Test.Civ6Map"))]
     pub output: PathBuf,
 }
+civ6_cli_compat_rs::parser!(UnificationArgs);
 pub fn japan_map_unification() -> Result<()> {
     let a = UnificationArgs::parse();
     unification_test_map::build(&a.output, &a.official)?;
@@ -207,6 +209,7 @@ pub struct CrestArgs {
     #[arg(long,value_parser=path_value(),default_value_os_t=build_art::originals().join("crests"))]
     pub output: PathBuf,
 }
+civ6_cli_compat_rs::parser!(CrestArgs);
 pub fn jac_draw_crests() -> Result<()> {
     draw_crests::generate(&CrestArgs::parse().output)?;
     Ok(())
@@ -224,6 +227,7 @@ pub struct PortraitArgs {
     #[arg(long)]
     pub print_prompt: bool,
 }
+civ6_cli_compat_rs::parser!(PortraitArgs);
 fn portrait_subjects() -> clap::builder::PossibleValuesParser {
     clap::builder::PossibleValuesParser::new(
         generate_portraits::SUBJECTS
@@ -278,6 +282,7 @@ pub struct BuildArgs {
     #[arg(long,value_parser=path_value())]
     pub game: Option<PathBuf>,
 }
+civ6_cli_compat_rs::parser!(BuildArgs);
 pub fn jac_build_art() -> Result<()> {
     let a = BuildArgs::parse();
     let mut o = build_art::BuildOptions::default();
