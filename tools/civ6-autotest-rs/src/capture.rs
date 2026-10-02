@@ -266,6 +266,40 @@ mod win {
     ) -> Result<()> {
         check_deadline(deadline)?;
         let hwnd = click::find_civ_window().map_err(|e| Error::capture(e.message))?;
+        capture_window(path, crop, deadline, hwnd, None)
+    }
+    pub fn capture_owned_window(
+        path: &Path,
+        hwnd: isize,
+        pid: u32,
+        deadline: Option<f64>,
+    ) -> Result<()> {
+        capture_window(path, None, deadline, hwnd, Some(pid))
+    }
+    fn capture_window(
+        path: &Path,
+        crop: Option<[f64; 4]>,
+        deadline: Option<f64>,
+        hwnd: H,
+        pid: Option<u32>,
+    ) -> Result<()> {
+        let verify = || -> Result<()> {
+            check_deadline(deadline)?;
+            if let Some(expected) = pid {
+                let mut actual = 0;
+                unsafe {
+                    windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+                        hwnd as _,
+                        &mut actual,
+                    );
+                }
+                if actual != expected {
+                    return Err(Error::capture("pinned startup window changed"));
+                }
+            }
+            Ok(())
+        };
+        verify()?;
         if unsafe { IsIconic(hwnd) } != 0 {
             return Err(Error::capture(
                 "Civ VI window is minimized; restore it before capture",
@@ -309,6 +343,7 @@ mod win {
             return Err(Error::capture("Could not allocate capture bitmap"));
         }
         resources.selected = true;
+        verify()?;
         let printed = unsafe { PrintWindow(hwnd, resources.memory, 2) } != 0;
         check_deadline(deadline)?;
         let mut pixels = if printed {
@@ -317,6 +352,7 @@ mod win {
             Vec::new()
         };
         if !printed || pixels.iter().all(|&b| b == 0) {
+            verify()?;
             if unsafe {
                 BitBlt(
                     resources.memory,
@@ -342,6 +378,7 @@ mod win {
             ));
         }
         let (cw, ch, cropped) = crop_bgra(w as usize, h as usize, &pixels, crop)?;
+        verify()?;
         check_deadline(deadline)?;
         save_png(path, cw, ch, &cropped)?;
         check_deadline(deadline)
@@ -349,6 +386,8 @@ mod win {
 }
 #[cfg(windows)]
 pub use win::capture_civ_window;
+#[cfg(windows)]
+pub use win::capture_owned_window;
 #[cfg(not(windows))]
 pub fn capture_civ_window(_: &Path, _: Option<[f64; 4]>, deadline: Option<f64>) -> Result<()> {
     check_deadline(deadline)?;

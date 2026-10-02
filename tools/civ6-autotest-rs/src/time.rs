@@ -5,6 +5,8 @@ use std::{
     time::{Duration, Instant},
 };
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(crate) static INTERRUPT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 thread_local! {
     static INTERRUPT_CLEANUP: Cell<bool> = const { Cell::new(false) };
 }
@@ -79,6 +81,7 @@ mod tests {
 
     #[test]
     fn pending_ctrl_c_allows_one_bounded_stop_and_stays_pending() {
+        let _exclusive = INTERRUPT_TEST_LOCK.lock().unwrap();
         struct Reset;
         impl Drop for Reset {
             fn drop(&mut self) {

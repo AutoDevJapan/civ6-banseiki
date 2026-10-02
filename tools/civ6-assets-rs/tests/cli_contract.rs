@@ -60,10 +60,14 @@ fn success(cmd: &mut Command) -> Output {
 }
 fn install_process_fixture(destination: &Path) {
     let source = Path::new(env!("CARGO_BIN_EXE_jac-process-fixture"));
-    // Do not open a new executable copy for writing during concurrent tests.
-    // Alias the immutable Cargo artifact, including across filesystems.
+    // Reuse the immutable compiled inode. A writable executable copy can fail
+    // with ETXTBSY on Linux even when each test has a separate directory.
     #[cfg(unix)]
-    std::os::unix::fs::symlink(fs::canonicalize(source).unwrap(), destination).unwrap();
+    {
+        let compiled = fs::canonicalize(source).unwrap();
+        std::os::unix::fs::symlink(&compiled, destination).unwrap();
+        assert_eq!(destination.canonicalize().unwrap(), compiled);
+    }
     #[cfg(not(unix))]
     fs::copy(source, destination).unwrap();
 }
