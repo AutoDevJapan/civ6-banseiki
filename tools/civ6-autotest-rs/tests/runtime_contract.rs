@@ -259,4 +259,54 @@ fn check_cli_resolves_fixtures_from_unrelated_working_directory() {
         );
     }
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    for port in [
+        "0",
+        "65536",
+        "-1",
+        "-4_318",
+        "18446744073709551616",
+        "-18446744073709551616",
+    ] {
+        let result = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+            .arg(&scenario)
+            .args(["--check", "--port", port])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "port={port}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(String::from_utf8_lossy(&result.stdout).starts_with("VALID:"));
+        let output = temp.path().join(format!("port-{port}"));
+        let live = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+            .arg(&scenario)
+            .args(["--port", port, "--output"])
+            .arg(&output)
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert_eq!(live.status.code(), Some(2));
+        assert!(!output.exists());
+    }
+    for port in ["+4318", "0004318", "4_318"] {
+        let result = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+            .arg(&scenario)
+            .args(["--check", "--port", port])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{port}");
+    }
+    for port in ["1.5", "unused", "_4318", "4__318"] {
+        let result = Command::new(env!("CARGO_BIN_EXE_civ6-autotest"))
+            .arg(&scenario)
+            .args(["--check", "--port", port])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&result.stderr).contains("invalid integer value"));
+    }
 }

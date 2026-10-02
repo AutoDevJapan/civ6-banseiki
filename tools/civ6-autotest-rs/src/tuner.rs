@@ -6,8 +6,37 @@ use std::time::Duration;
 
 use crate::error::{Error, Result};
 use crate::time::monotonic;
+use caseless::Caseless;
+pub fn state_name_eq(a: &str, b: &str) -> bool {
+    a.chars().default_caseless_match(b.chars())
+}
 
 pub const PORT: u16 = 4318;
+/// Parse an integer CLI argument without imposing the socket port range until use.
+#[derive(Clone, Debug)]
+pub struct PortArgument(Option<u16>);
+impl std::str::FromStr for PortArgument {
+    type Err = String;
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let value = value.trim();
+        let digits = value.strip_prefix(['+', '-']).unwrap_or(value);
+        let parts: Vec<_> = digits.split('_').collect();
+        if parts
+            .iter()
+            .any(|part| part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return Err(format!("invalid integer value: {value:?}"));
+        }
+        let normalized = value.replace('_', "");
+        Ok(Self(normalized.parse().ok().filter(|port| *port != 0)))
+    }
+}
+impl PortArgument {
+    pub fn socket_port(&self) -> Result<u16> {
+        self.0
+            .ok_or_else(|| Error::input("Invalid port or timeout"))
+    }
+}
 pub const MAX_FRAME: usize = 2 * 1024 * 1024;
 pub const HANDSHAKE: i32 = 4;
 pub const COMMAND: i32 = 3;
@@ -305,7 +334,7 @@ impl TunerClient {
         let pairs = self.list_state_pairs_deadline(deadline)?;
         let matches: Vec<i64> = pairs
             .iter()
-            .filter(|(_, state)| state.to_lowercase() == name.to_lowercase())
+            .filter(|(_, state)| state_name_eq(state, name))
             .map(|(index, _)| *index)
             .collect();
         if matches.len() != 1 {

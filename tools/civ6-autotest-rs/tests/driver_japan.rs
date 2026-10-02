@@ -94,12 +94,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
     assert_eq!(rows[2]["memory"]["private_bytes"], 100);
     assert!(detail.contains("observed=2 missed=0"));
     assert_eq!(
-        rows[0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&rows[0]),
         [
             "at",
             "continuous_performance_valid",
@@ -112,12 +107,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
         ]
     );
     assert_eq!(
-        rows[1]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&rows[1]),
         [
             "at",
             "continuous_performance_valid",
@@ -137,12 +127,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
         serde_json::from_slice(&std::fs::read(h.runner.output.join("result.json")).unwrap())
             .unwrap();
     assert_eq!(
-        result
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&result),
         [
             "checks",
             "completed_steps",
@@ -154,12 +139,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
         ]
     );
     assert_eq!(
-        result["metrics"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&result["metrics"]),
         ["autoplay", "groups", "save_load", "turn_summary"]
     );
     assert_eq!(
@@ -173,12 +153,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
     assert_eq!(result["metrics"]["autoplay"][0]["requested_turns"], 2);
     assert_eq!(result["metrics"]["autoplay"][0]["completed"], true);
     assert_eq!(
-        result["metrics"]["autoplay"][0]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&result["metrics"]["autoplay"][0]),
         [
             "completed",
             "csv",
@@ -196,12 +171,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
         ]
     );
     assert_eq!(
-        result["metrics"]["turn_summary"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&result["metrics"]["turn_summary"]),
         [
             "duration_seconds",
             "missed_turns",
@@ -211,12 +181,7 @@ fn test_autoplay_writes_turn_and_memory_samples() {
         ]
     );
     assert_eq!(
-        result["metrics"]["save_load"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&result["metrics"]["save_load"]),
         ["csv", "load_seconds", "samples", "save_bytes"]
     );
 }

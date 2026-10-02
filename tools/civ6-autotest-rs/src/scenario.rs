@@ -42,7 +42,9 @@ pub fn validate_test_mode(mode: &Value) -> Result<()> {
 }
 pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     let normalized = value.replace('\\', "/");
-    if normalized.is_empty()
+    if normalized
+        .split('/')
+        .all(|part| part.is_empty() || part == ".")
         || normalized.starts_with('/')
         || normalized.as_bytes().get(1) == Some(&b':')
         || normalized.split('/').any(|s| s == "..")

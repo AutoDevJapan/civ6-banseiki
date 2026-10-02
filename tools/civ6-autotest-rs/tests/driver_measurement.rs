@@ -6,11 +6,7 @@ use civ6_autotest_rs::{
     scenario, Error, ErrorKind,
 };
 use serde_json::{json, Value};
-use std::{
-    collections::VecDeque,
-    fs,
-    sync::{Arc, Mutex},
-};
+use std::{collections::VecDeque, fs};
 use support_driver::{FakeBackend, Harness};
 
 fn empty_logs(h: &Harness) {
@@ -331,6 +327,8 @@ fn test_strict_judge_rejects_official_screen_errors() {
         ])
     };
     for message in [
+        "Runtime Error: GreatPeoplePopup.lua:123: attempt to index nil",
+        "UI.DataError: EraComplete cannot show this era",
         "Runtime Error: official screen",
         "UI.DataError: official screen",
         "EraComplete cannot show",
@@ -347,5 +345,8 @@ fn test_strict_judge_rejects_official_screen_errors() {
             ["Scenario: all Lua errors"]
         );
     }
+    assert!(judge::judge(&logs(""), "generic", None, true)
+        .iter()
+        .all(|c| c.passed));
     assert!(scenario::validate_scenario(&json!({"name":"strict","strict_lua_errors":"true","steps":[{"action":"pause","seconds":0.1}]})).unwrap_err().message.contains("strict_lua_errors"));
 }

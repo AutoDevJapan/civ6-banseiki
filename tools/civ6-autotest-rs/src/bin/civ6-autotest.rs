@@ -1,4 +1,4 @@
-use civ6_autotest_rs::{judge, runner::Runner, scenario, Error, Result};
+use civ6_autotest_rs::{judge, runner::Runner, scenario, tuner::PortArgument, Result};
 use clap::Parser;
 use std::{fs, path::PathBuf};
 
@@ -16,8 +16,8 @@ struct Args {
     logs: Option<PathBuf>,
     #[arg(long)]
     saves: Option<PathBuf>,
-    #[arg(long, default_value_t = 4318)]
-    port: u16,
+    #[arg(long, default_value = "4318", allow_hyphen_values = true)]
+    port: PortArgument,
     #[arg(long)]
     mods: Option<PathBuf>,
     #[arg(long)]
@@ -26,9 +26,6 @@ struct Args {
     owner_start: bool,
 }
 fn run(args: Args) -> Result<i32> {
-    if args.port == 0 {
-        return Err(Error::scenario("Invalid port or timeout"));
-    }
     let bytes = fs::read(&args.scenario)?;
     let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
     let mut data = serde_json::from_slice(bytes)?;
@@ -45,6 +42,7 @@ fn run(args: Args) -> Result<i32> {
         );
         return Ok(0);
     }
+    let port = args.port.socket_port()?;
     civ6_autotest_rs::time::install_interrupt_handler()?;
     let output = args.output.unwrap_or_else(|| {
         civ6_autotest_rs::repo_root()
@@ -70,7 +68,7 @@ fn run(args: Args) -> Result<i32> {
         output,
         args.logs.map(Ok).unwrap_or_else(judge::default_log_dir)?,
         saves,
-        args.port,
+        port,
     );
     runner.auto_restart = !args.no_auto_restart;
     runner.owner_start = args.owner_start;

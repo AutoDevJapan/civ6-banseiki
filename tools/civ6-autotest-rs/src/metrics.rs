@@ -31,6 +31,7 @@ fn append_csv(path: &PathBuf, headers: &[&str], row: &[String]) -> Result<()> {
     let file = OpenOptions::new().create(true).append(true).open(path)?;
     let mut writer = csv::WriterBuilder::new()
         .has_headers(false)
+        .terminator(csv::Terminator::CRLF)
         .from_writer(file);
     if new {
         writer.write_record(headers)?;
@@ -40,7 +41,9 @@ fn append_csv(path: &PathBuf, headers: &[&str], row: &[String]) -> Result<()> {
     Ok(())
 }
 fn round3(n: f64) -> f64 {
-    (n * 1000.0).round() / 1000.0
+    // Decimal formatting rounds the original binary float, without multiplying
+    // it into an artificial tie or overflowing a large finite elapsed time.
+    format!("{n:.3}").parse().expect("formatted finite number")
 }
 fn numeric(v: &Value) -> f64 {
     v.as_f64().unwrap_or(0.0)
@@ -213,6 +216,9 @@ impl SaveLoadMetrics {
             rows: Vec::new(),
             test_mode,
         }
+    }
+    pub fn set_test_mode(&mut self, test_mode: bool) {
+        self.test_mode = test_mode;
     }
     pub fn record(
         &mut self,

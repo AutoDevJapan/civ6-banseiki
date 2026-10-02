@@ -393,12 +393,7 @@ fn test_autoplay_emits_research_jsonl_for_each_observed_turn() {
     );
     assert_eq!(rows[1]["completed_techs"], json!(["TECH_A"]));
     assert_eq!(
-        rows[1]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
+        support_driver::object_keys(&rows[1]),
         [
             "alive",
             "civic_count",

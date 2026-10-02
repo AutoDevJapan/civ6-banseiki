@@ -306,6 +306,41 @@ fn duplicate_state_name_is_rejected_before_send() {
 }
 
 #[test]
+fn unicode_state_names_use_full_default_case_folding() {
+    let fake = FakeTuner::start(LuaReply::Ok, "17\0Straße\n18\nﬂ", false);
+    let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
+    assert_eq!(client.state_index("STRASSE", 1.0).unwrap(), 17);
+    assert_eq!(client.state_index("FL", 1.0).unwrap(), 18);
+    client.run_lua("STRASSE", "return true", 1.0).unwrap();
+    client.close();
+    let commands: Vec<_> = fake
+        .finish()
+        .into_iter()
+        .filter(|frame| frame.tag == COMMAND)
+        .collect();
+    assert_eq!(commands.len(), 1);
+    assert!(commands[0].payload.starts_with("CMD:17:"));
+}
+
+#[test]
+fn invalid_integer_ports_are_parsed_before_tuner_runtime_validation() {
+    for port in [
+        "0",
+        "-1",
+        "65536",
+        "18446744073709551616",
+        "-18446744073709551616",
+    ] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_civ6-tuner"))
+            .args(["states", "--port", port])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid port or timeout"));
+    }
+}
+
+#[test]
 fn lua_code_limit_counts_utf8_bytes_and_wrapper() {
     assert_eq!(lua_payload(17, "return true", "TOKEN"),
         "CMD:17:local __ok, __value = pcall(function()\nreturn true\nend)\nprint(\"TOKEN|\" .. (__ok and \"OK|\" or \"ERR|\") .. tostring(__value))");

@@ -2,10 +2,9 @@ use civ6_autotest_rs::metrics::{
     parse_research_sample, process_memory, research_sample_code, summarize_turns, ResearchMetrics,
     SaveLoadMetrics, TurnMetrics, RESEARCH_SAMPLE_CODE,
 };
+use civ6_reports_rs::research as research_report;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, fs, path::Path};
-#[path = "../src/research_report.rs"]
-mod research_report;
 
 fn memory(working: u64, private: u64) -> Value {
     json!({"working_set_bytes":working,"private_bytes":private})
@@ -248,6 +247,7 @@ fn report_counts_start_baseline_and_rejects_invalid_rows() {
     assert_eq!(rows[0]["baseline_factions"], 1);
     assert!(research_report::summarize(&path, "other")
         .unwrap_err()
+        .to_string()
         .contains("kind must be tech or civic"));
     fs::write(
         &path,
@@ -256,17 +256,27 @@ fn report_counts_start_baseline_and_rejects_invalid_rows() {
     .unwrap();
     assert!(research_report::summarize(&path, "tech")
         .unwrap_err()
+        .to_string()
         .contains("Invalid research row"));
 }
 #[cfg(windows)]
 #[test]
 fn stdlib_memory_api_samples_a_real_process() {
     let sample = process_memory(std::process::id()).unwrap();
+    assert_eq!(
+        sample
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        ["working_set_bytes", "private_bytes"].into_iter().collect()
+    );
     assert!(sample["working_set_bytes"].as_u64().unwrap() > 0);
     assert!(sample["private_bytes"].as_u64().unwrap() > 0);
 }
 #[cfg(not(windows))]
 #[test]
-fn process_memory_requires_windows() {
+fn stdlib_memory_api_samples_a_real_process() {
     assert!(process_memory(std::process::id()).is_err());
 }

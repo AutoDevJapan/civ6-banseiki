@@ -1,4 +1,4 @@
-use civ6_autotest_rs::tuner::{TunerClient, PORT};
+use civ6_autotest_rs::tuner::{PortArgument, TunerClient};
 use clap::{Parser, ValueEnum};
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -15,8 +15,8 @@ struct Args {
     state: String,
     #[arg(long)]
     code: Option<String>,
-    #[arg(long, default_value_t = PORT)]
-    port: u16,
+    #[arg(long, default_value = "4318", allow_hyphen_values = true)]
+    port: PortArgument,
 }
 
 fn main() -> std::process::ExitCode {
@@ -35,7 +35,7 @@ fn main() -> std::process::ExitCode {
 }
 
 fn run(args: Args) -> civ6_autotest_rs::Result<()> {
-    let mut client = TunerClient::connect(args.port, 5.0)?;
+    let mut client = TunerClient::connect(args.port.socket_port()?, 5.0)?;
     match args.command {
         Command::States => {
             println!("{}", client.identity);

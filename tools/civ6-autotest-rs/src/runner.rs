@@ -1,3 +1,4 @@
+use crate::tuner::state_name_eq;
 use crate::{
     judge, metrics, scenario,
     time::{Clock, SystemClock},
@@ -267,9 +268,8 @@ impl Runner {
         backend: Box<dyn Backend>,
         clock: Arc<dyn Clock>,
     ) -> Self {
-        let synthetic = scenario.get("test_mode").is_some_and(|v| v.is_object());
         let save_load_metrics =
-            metrics::SaveLoadMetrics::new(output.join("save-load-metrics.csv"), synthetic);
+            metrics::SaveLoadMetrics::new(output.join("save-load-metrics.csv"), false);
         Self {
             scenario,
             output,
@@ -366,7 +366,7 @@ impl Runner {
     pub fn log_since_same_generation(&self, name: &str, baseline: &Value) -> Result<String> {
         let path = self.logs.join(name);
         let mark = &baseline["files"][name];
-        let contents = match fs::read(&path) {
+        let mut file = match fs::File::open(&path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 if mark["inode"].is_null() {
@@ -378,7 +378,7 @@ impl Runner {
             }
             Err(e) => return Err(e.into()),
         };
-        let inode = judge::file_inode(&path)?;
+        let (contents, inode) = judge::read_log_handle(&mut file)?;
         if judge::log_marker_replaced(&contents, mark, inode) {
             return Err(Error::scenario(format!(
                 "{name} rotated or truncated during wait; outcome undecidable"
@@ -424,10 +424,8 @@ impl Runner {
             let present: Result<bool> = match kind {
                 "state" => {
                     let budget = self.budget(end, 5.0)?;
-                    self.states(budget).map(|s| {
-                        s.iter()
-                            .any(|v| v.eq_ignore_ascii_case(text(condition, "name")))
-                    })
+                    self.states(budget)
+                        .map(|s| s.iter().any(|v| state_name_eq(v, text(condition, "name"))))
                 }
                 "lua" => {
                     let budget = self.budget(end, 5.0)?;
@@ -440,13 +438,7 @@ impl Runner {
                         last = format!("Lua returned {v:?}");
                         v == condition
                             .get("equals")
-                            .map(|v| {
-                                if let Some(s) = v.as_str() {
-                                    s.to_lowercase()
-                                } else {
-                                    v.to_string().to_lowercase()
-                                }
-                            })
+                            .map(|v| python_value_string(v).to_lowercase())
                             .unwrap_or_else(|| "true".into())
                     })
                 }
@@ -510,7 +502,7 @@ impl Runner {
         }
     }
     pub fn unblock_ingame(&mut self, state: &str, deadline: f64, attempts: usize) -> Result<bool> {
-        if !state.eq_ignore_ascii_case("InGame") || attempts >= 3 {
+        if !state_name_eq(state, "InGame") || attempts >= 3 {
             return Ok(false);
         }
         self.disconnect();
@@ -537,7 +529,7 @@ impl Runner {
         if !self
             .states(budget)?
             .iter()
-            .any(|s| s.eq_ignore_ascii_case("InGameTopOptionsMenu"))
+            .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
         {
             return Ok(false);
         }
@@ -555,7 +547,7 @@ impl Runner {
         if !self
             .states(self.budget(deadline, 5.0)?)?
             .iter()
-            .any(|s| s.eq_ignore_ascii_case("AdvisorPopup"))
+            .any(|s| state_name_eq(s, "AdvisorPopup"))
         {
             return Ok(false);
         }
@@ -576,7 +568,7 @@ impl Runner {
         let states = self.states(self.budget(deadline, 5.0)?)?;
         let mut closed = vec![];
         for (state, call, label) in POPUP_CLOSERS {
-            if states.iter().any(|s| s.eq_ignore_ascii_case(state))
+            if states.iter().any(|s| state_name_eq(s, state))
                 && self.lua(
                     state,
                     &format!("if ContextPtr:IsHidden() then return false end\n{call}\nreturn true"),
@@ -731,8 +723,8 @@ impl Runner {
                 let states = self.states(self.budget(deadline, 5.0)?)?;
                 let state = states
                     .iter()
-                    .find(|s| s.eq_ignore_ascii_case("FrontEnd"))
-                    .or_else(|| states.iter().find(|s| s.eq_ignore_ascii_case("InGame")));
+                    .find(|s| state_name_eq(s, "FrontEnd"))
+                    .or_else(|| states.iter().find(|s| state_name_eq(s, "InGame")));
                 if let Some(state) = state {
                     match self.lua(
                         state,
@@ -838,7 +830,7 @@ impl Runner {
                     Err(e) if retryable(&e) => vec![],
                     Err(e) => return Err(e),
                 };
-                if states.iter().any(|s| s.eq_ignore_ascii_case("LoadScreen")) {
+                if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
                     self.lua(
                         "LoadScreen",
                         "OnActivateButtonClicked()\nreturn true",
@@ -857,7 +849,7 @@ impl Runner {
                 if self
                     .states(self.budget(end, 5.0)?)?
                     .iter()
-                    .any(|s| s.eq_ignore_ascii_case("InGame"))
+                    .any(|s| state_name_eq(s, "InGame"))
                 {
                     if self.lua(
                         "InGame",
@@ -1228,6 +1220,7 @@ impl Runner {
         }
         self.remaining(deadline)?;
         if recorded {
+            self.save_load_metrics.set_test_mode(self.test_mode);
             let row = self.save_load_metrics.record(
                 "save",
                 &name,
@@ -1272,6 +1265,7 @@ impl Runner {
                 "return tostring(Game.GetCurrentGameTurn())",
                 self.budget(deadline, 5.0)?,
             )?)?;
+            self.save_load_metrics.set_test_mode(self.test_mode);
             let row = self.save_load_metrics.record(
                 "load",
                 &name,
@@ -1333,6 +1327,68 @@ fn strings(v: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+fn python_value_string(v: &Value) -> String {
+    match v {
+        Value::Null => "None".into(),
+        Value::Bool(true) => "True".into(),
+        Value::Bool(false) => "False".into(),
+        Value::String(s) => s.clone(),
+        Value::Number(n) if n.is_f64() => {
+            let value = n.as_f64().unwrap();
+            if value != 0.0 && (value.abs() < 1e-4 || value.abs() >= 1e16) {
+                let scientific = format!("{value:e}");
+                let (mantissa, exponent) = scientific.split_once('e').unwrap();
+                format!("{mantissa}e{:+03}", exponent.parse::<i32>().unwrap())
+            } else {
+                let mut text = value.to_string();
+                if !text.contains('.') {
+                    text.push_str(".0");
+                }
+                text
+            }
+        }
+        Value::Number(n) => n.to_string(),
+        Value::Array(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(python_value_repr)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Object(items) => format!(
+            "{{{}}}",
+            items
+                .iter()
+                .map(|(k, v)| format!(
+                    "{}: {}",
+                    python_value_repr(&Value::String(k.clone())),
+                    python_value_repr(v)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+fn python_value_repr(v: &Value) -> String {
+    if let Value::String(s) = v {
+        let quote = if s.contains('\'') && !s.contains('"') {
+            '"'
+        } else {
+            '\''
+        };
+        format!(
+            "{quote}{}{quote}",
+            s.replace('\\', "\\\\")
+                .replace(quote, &format!("\\{quote}"))
+                .replace('\n', "\\n")
+                .replace('\r', "\\r")
+                .replace('\t', "\\t")
+        )
+    } else {
+        python_value_string(v)
+    }
 }
 const CLOSE_NOTEBOOKS: &str =
     "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true";

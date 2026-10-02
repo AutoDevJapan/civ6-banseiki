@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, File},
+    fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
@@ -32,12 +32,12 @@ pub fn default_log_dir() -> Result<PathBuf> {
     .join("Logs"))
 }
 #[cfg(unix)]
-pub fn file_inode(path: &Path) -> Result<u64> {
+pub fn file_inode_from_handle(file: &File) -> Result<u64> {
     use std::os::unix::fs::MetadataExt;
-    Ok(fs::metadata(path)?.ino())
+    Ok(file.metadata()?.ino())
 }
 #[cfg(windows)]
-pub fn file_inode(path: &Path) -> Result<u64> {
+pub fn file_inode_from_handle(file: &File) -> Result<u64> {
     use std::{ffi::c_void, os::windows::io::AsRawHandle};
     #[repr(C)]
     #[derive(Default)]
@@ -63,7 +63,6 @@ pub fn file_inode(path: &Path) -> Result<u64> {
     unsafe extern "system" {
         fn GetFileInformationByHandle(handle: *mut c_void, info: *mut FileInfo) -> i32;
     }
-    let file = File::open(path)?;
     let mut info = FileInfo::default();
     let ok = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) };
     if ok == 0 {
@@ -72,8 +71,19 @@ pub fn file_inode(path: &Path) -> Result<u64> {
     Ok((u64::from(info.index_high) << 32) | u64::from(info.index_low))
 }
 #[cfg(not(any(unix, windows)))]
-pub fn file_inode(_: &Path) -> Result<u64> {
+pub fn file_inode_from_handle(_: &File) -> Result<u64> {
     Err(Error::input("File index unavailable"))
+}
+pub fn file_inode(path: &Path) -> Result<u64> {
+    file_inode_from_handle(&File::open(path)?)
+}
+pub fn read_log_handle(file: &mut File) -> Result<(Vec<u8>, u64)> {
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
+    Ok((contents, file_inode_from_handle(file)?))
+}
+pub fn read_log_file(path: &Path) -> Result<(Vec<u8>, u64)> {
+    read_log_handle(&mut File::open(path)?)
 }
 
 pub fn snapshot_logs(log_dir: &Path) -> Result<Value> {
@@ -89,7 +99,7 @@ pub fn snapshot_logs(log_dir: &Path) -> Result<Value> {
             file.seek(SeekFrom::Start(size - n as u64))?;
             let mut tail = vec![0; n];
             file.read_exact(&mut tail)?;
-            files.insert(name.into(), json!({"offset":size,"inode":file_inode(&path)?,
+            files.insert(name.into(), json!({"offset":size,"inode":file_inode_from_handle(&file)?,
                 "prefix_length":n,"prefix_sha256":sha(&prefix),"tail_length":n,"tail_sha256":sha(&tail)}));
         } else {
             files.insert(
@@ -163,10 +173,8 @@ pub fn read_since(log_dir: &Path, baseline: &Value) -> Result<BTreeMap<String, S
             .get("files")
             .and_then(|v| v.get(name))
             .ok_or_else(|| Error::input(format!("Missing log baseline: {name}")))?;
-        result.insert(
-            name.into(),
-            slice_log_bytes(&fs::read(&path)?, mark, file_inode(&path)?),
-        );
+        let (contents, inode) = read_log_file(&path)?;
+        result.insert(name.into(), slice_log_bytes(&contents, mark, inode));
     }
     Ok(result)
 }

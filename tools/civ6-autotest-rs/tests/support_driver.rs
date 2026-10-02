@@ -15,6 +15,17 @@ use tempfile::TempDir;
 
 pub type Calls = Arc<Mutex<Vec<(String, String)>>>;
 
+pub fn object_keys(value: &Value) -> Vec<&str> {
+    let mut keys: Vec<_> = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys
+}
+
 #[derive(Default)]
 pub struct ManualClock {
     now: Mutex<f64>,
