@@ -1,5 +1,6 @@
+use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, new_lua, read_repo};
-use mlua::{FromLuaMulti, Lua, Table};
+use mlua::{Lua, Table};
 
 const CASTLE_SET: &str = "JAC_UNIFICATION_CITY_IS_CASTLE";
 const REBUILT: &str = "BUILDING_JAC_REBUILT_ON_CASTLE";
@@ -38,39 +39,42 @@ impl Pact {
     fn run(&self, script: &str) {
         exec(&self.0, script);
     }
-    fn eval<T: FromLuaMulti>(&self, expression: &str) -> T {
-        self.0.load(format!("return {expression}")).eval().unwrap()
+    fn strict_eval<T: FromLuaMulti>(&self, expression: &str) -> T {
+        self.0
+            .load(format!("return {expression}"))
+            .strict_eval()
+            .unwrap()
     }
     fn request(&self, event: &str, player: i64, target: Option<i64>) {
         let args = self.0.create_table().unwrap();
         args.set("Target", target).unwrap();
         self.0
             .globals()
-            .get::<mlua::Function>("FIRE")
+            .strict_get::<mlua::Function>("FIRE")
             .unwrap()
             .call::<()>((format!("JAC_UnificationPact{event}"), player, args))
             .unwrap();
     }
     fn lead(&self, player: i64) -> Option<i64> {
-        self.eval(&format!("Game:GetProperty('{PACT_LEAD_PREFIX}{player}')"))
+        self.strict_eval(&format!("Game:GetProperty('{PACT_LEAD_PREFIX}{player}')"))
     }
     fn result(&self, player: i64) -> Option<String> {
-        self.eval(&format!("Players[{player}]:GetProperty('{PACT_RESULT}')"))
+        self.strict_eval(&format!("Players[{player}]:GetProperty('{PACT_RESULT}')"))
     }
     fn assert_result(&self, player: i64, expected: &str) {
         assert_eq!(self.result(player).as_deref(), Some(expected));
     }
     fn marked(&self) -> Vec<(i64, i64)> {
-        self.eval::<Table>("BUILT")
-            .sequence_values::<Table>()
+        self.strict_eval::<Table>("BUILT")
+            .strict_sequence_values::<Table>()
             .map(|row| {
                 let row = row.unwrap();
-                (row.get(1).unwrap(), row.get(2).unwrap())
+                (row.strict_get(1).unwrap(), row.strict_get(2).unwrap())
             })
             .collect()
     }
     fn unified(&self) -> i64 {
-        self.eval(&format!("GameInfo.Buildings['{UNIFIED}'].Index"))
+        self.strict_eval(&format!("GameInfo.Buildings['{UNIFIED}'].Index"))
     }
     fn assert_marker(&self, plot: i64) {
         assert_eq!(self.marked(), vec![(self.unified(), plot)]);
@@ -82,8 +86,8 @@ impl Pact {
         self.run(&format!("FIRE('{event}', {args})"));
     }
     fn log(&self) -> Vec<String> {
-        self.eval::<Table>("LOG")
-            .sequence_values()
+        self.strict_eval::<Table>("LOG")
+            .strict_sequence_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
@@ -263,7 +267,7 @@ fn test_two_warring_members_both_leave() {
         .contains(&"JAC_Sengoku_UnificationPact: pact of 0 dissolved".into()));
     s.assert_result(DATE, "PROPOSED");
     assert_eq!(
-        s.eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         DATE
     );
 }
@@ -296,7 +300,7 @@ fn test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated() {
     s.ally(DATE, ODA);
     s.fire("OnGameTurnStarted", "16604");
     assert_eq!(
-        s.eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         DATE
     );
     s.assert_result(DATE, "PROPOSED");
@@ -312,7 +316,7 @@ fn test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated() {
     s.request("Accept", ODA, Some(DATE));
     assert_eq!((s.lead(ODA), s.lead(DATE)), (Some(DATE), Some(DATE)));
     assert_eq!(
-        s.eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         None
     );
 }
@@ -323,7 +327,7 @@ fn test_ai_does_not_propose_to_a_house_it_is_at_war_with() {
     s.run("WAR['0-1']=true");
     s.fire("OnGameTurnStarted", "16604");
     assert_eq!(
-        s.eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         None
     );
     assert_eq!(s.result(DATE), None);
@@ -336,7 +340,7 @@ fn test_ai_does_not_propose_below_the_share_or_without_an_alliance() {
     s.ally(ASHINA, SHIMAZU);
     s.fire("OnGameTurnStarted", "16604");
     assert_eq!(
-        s.eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_3')"),
+        s.strict_eval::<Option<i64>>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_3')"),
         None
     );
     assert_eq!(s.lead(ASHINA), None);
@@ -392,7 +396,7 @@ fn test_without_registered_castles_the_pact_pools_home_capitals() {
     s.assert_result(ODA, "JOINED");
     assert_eq!(s.lead(DATE), Some(ODA));
     assert_eq!(
-        s.eval::<i64>("Game:GetProperty('JAC_UNIFICATION_HOME_CAPITAL_2')"),
+        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_HOME_CAPITAL_2')"),
         10 * 32 + 16
     );
     assert_eq!(s.marked(), vec![]);

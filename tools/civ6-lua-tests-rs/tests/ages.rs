@@ -124,7 +124,7 @@ mod ledger_tests {
         w.turn(1);
         w.run("TRANSFER(FREE_CITIES,2,1)");
         w.turns(2, 3);
-        assert_eq!(w.j("{LEDGER().cities.plot102.owner,LEDGER().cities.plot102.original,LEDGER().cities.plot102.n}"),json!({"1":62,"2":0,"3":1}));
+        assert_eq!(w.j("{LEDGER().cities.plot102.owner,LEDGER().cities.plot102.original,LEDGER().cities.plot102.n}"),json!([62,0,1]));
         assert_eq!(w.j("LEDGER().houses.p62"), json!(null));
         w.run("CAPTURE(0,2,1)");
         w.turn(4);
@@ -157,8 +157,8 @@ mod ledger_tests {
         assert_eq!(w.plot_property(14, 12, "JAC_AGE_POLICY_TEMPLE"), json!(1));
         w.run("TRANSFER(FREE_CITIES,14,12)");
         assert_eq!(
-            w.plot_properties()["1214"],
-            json!([0, 0, 0, 0, 0, 0, 0, 0, 0])
+            w.plot_properties()[&civ6_lua_tests_rs::strict::Key::Integer(1214)],
+            vec![json!(0); 9]
         );
     }
     #[test]
@@ -695,10 +695,8 @@ mod ledger_tests {
         }
         assert_eq!(
             w.plot_properties()
-                .as_object()
-                .unwrap()
                 .values()
-                .flat_map(|v| v.as_array().unwrap()[5..].iter())
+                .flat_map(|v| v[5..].iter())
                 .filter(|v| **v == json!(1))
                 .count(),
             3
@@ -721,8 +719,8 @@ mod ledger_tests {
         assert_eq!(w.house(3, "policy"), json!("JAC_AGE_POLICY_TEMPLE"));
         for x in [1, 2] {
             assert_eq!(
-                w.plot_properties()[format!("{}", 100 + x)],
-                json!([0, 0, 0, 0, 0, 0, 0, 0, 0])
+                w.plot_properties()[&civ6_lua_tests_rs::strict::Key::Integer(100 + x)],
+                vec![json!(0); 9]
             );
         }
         for x in [12, 13, 14] {
@@ -858,10 +856,7 @@ mod ledger_tests {
         assert_eq!(w.snapshot(), before);
         assert_eq!(w.array("(function() local r={} for _,n in ipairs(NOTIFICATIONS) do r[#r+1]=n.kind end return r end)()"),vec![json!(2),json!(3),json!(2),json!(3)]);
         assert_eq!(w.array("(function() local r={} for _,n in ipairs(NOTIFICATIONS) do if n.data.JAC_DARK_POLICY_REIGN then r[#r+1]=n.data.JAC_DARK_POLICY_REIGN end end return r end)()"),vec![json!(1),json!(1)]);
-        assert_eq!(
-            w.j("NotificationManager.FindType(3,1):CanUserDismiss()"),
-            json!(false)
-        );
+        assert!(!w.truth("NotificationManager.FindType(3,1):CanUserDismiss()"));
     }
     #[test]
     fn test_load_does_not_count_again() {
@@ -886,7 +881,7 @@ mod dark_policy_screen_tests {
         w
     }
     fn shown(w: &World) -> bool {
-        w.j("not ContextPtr.hidden") == json!(true)
+        !w.truth("ContextPtr.hidden")
     }
     #[test]
     fn test_screen_lists_the_policies_and_a_click_applies_the_choice() {
@@ -952,10 +947,7 @@ mod dark_policy_screen_tests {
         w.turns_with_oath(67, 67);
         w.run("LOCAL_TURN_BEGIN(); LuaEvents.JAC_SengokuReignPopup_Closed(true); LuaEvents.JAC_SengokuDarkPolicy_Open(1)");
         assert!(!shown(&w));
-        assert_eq!(
-            w.j("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"),
-            json!(false)
-        );
+        assert!(!w.truth("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"));
         assert_eq!(
             [w.house(1, "policy"), w.house(1, "chosen")],
             [json!("JAC_AGE_POLICY_ELITE"), json!(null)]
@@ -966,13 +958,10 @@ mod dark_policy_screen_tests {
         let w = setup();
         w.turns_with_oath(1, 66);
         w.run("LuaEvents.JAC_SengokuReignPopup_Closed(true); TEST_NOTIFICATION=NotificationManager.FindType(3,1); OnClose(); PUBLISH()");
-        assert_eq!(w.j("TEST_NOTIFICATION.dismissed"), json!(false));
+        assert!(!w.truth("TEST_NOTIFICATION.dismissed"));
         w.run("LuaEvents.JAC_SengokuDarkPolicy_Open(1)");
-        assert_eq!(
-            w.j("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"),
-            json!(true)
-        );
-        assert_eq!(w.j("TEST_NOTIFICATION.dismissed"), json!(true));
+        assert!(w.truth("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"));
+        assert!(w.truth("TEST_NOTIFICATION.dismissed"));
         assert_eq!(
             [w.house(1, "policy"), w.house(1, "chosen")],
             [json!("JAC_AGE_POLICY_TEMPLE"), json!(1)]
@@ -983,7 +972,7 @@ mod dark_policy_screen_tests {
         let w = setup();
         w.turns_with_oath(1, 66);
         w.run("TEST_NOTIFICATION=NotificationManager.FindType(3,1); CHOOSE(1,{PolicyType='JAC_AGE_POLICY_TEMPLE',Reign=0}); PUBLISH()");
-        assert_eq!(w.j("TEST_NOTIFICATION.dismissed"), json!(false));
+        assert!(!w.truth("TEST_NOTIFICATION.dismissed"));
         assert_eq!(w.house(1, "chosen"), json!(null));
     }
     #[test]
@@ -992,16 +981,13 @@ mod dark_policy_screen_tests {
         w.run("NotificationManager.SendNotification(1,71,{MESSAGE='official'}); TEST_OFFICIAL=NotificationManager.FindType(71,1)");
         w.turns_with_oath(1, 66);
         w.run("TEST_CURRENT=NotificationManager.FindType(3,1); TEST_OTHER=NotificationManager.FindType(3,3); NotificationManager.SendNotification(1,3,{JAC_DARK_POLICY_REIGN=0}); TEST_STALE=NOTIFICATIONS[#NOTIFICATIONS]; PUBLISH()");
-        assert_eq!(w.j("TEST_STALE.dismissed"), json!(true));
-        assert_eq!(w.j("TEST_OFFICIAL.dismissed"), json!(false));
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(false));
-        assert_eq!(
-            w.j("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"),
-            json!(true)
-        );
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(true));
-        assert_eq!(w.j("TEST_OFFICIAL.dismissed"), json!(false));
-        assert_eq!(w.j("TEST_OTHER.dismissed"), json!(false));
+        assert!(w.truth("TEST_STALE.dismissed"));
+        assert!(!w.truth("TEST_OFFICIAL.dismissed"));
+        assert!(!w.truth("TEST_CURRENT.dismissed"));
+        assert!(w.truth("JAC_ChooseDarkPolicy('JAC_AGE_POLICY_TEMPLE')"));
+        assert!(w.truth("TEST_CURRENT.dismissed"));
+        assert!(!w.truth("TEST_OFFICIAL.dismissed"));
+        assert!(!w.truth("TEST_OTHER.dismissed"));
     }
     #[test]
     fn test_load_keeps_pending_notification_and_does_not_show_the_screen_automatically() {
@@ -1009,10 +995,7 @@ mod dark_policy_screen_tests {
         w.turns_with_oath(1, 66);
         w.run("LuaEvents.JAC_SengokuReignPopup_Closed(true); OnClose(); LOAD_SCREEN_CLOSE(); LOCAL_TURN_BEGIN()");
         assert!(!shown(&w));
-        assert_eq!(
-            w.j("NotificationManager.FindType(3,1).dismissed"),
-            json!(false)
-        );
+        assert!(!w.truth("NotificationManager.FindType(3,1).dismissed"));
         w.run("LuaEvents.JAC_SengokuDarkPolicy_Open(1)");
         assert!(shown(&w));
     }
@@ -1023,14 +1006,14 @@ mod dark_policy_screen_tests {
         w.run("TEST_OLD=LEDGER()");
         w.turns_with_oath(66, 66);
         w.run("TEST_CURRENT=NotificationManager.FindType(3,1); TEST_SAVED=LEDGER(); Game:SetProperty('JAC_AGES_LEDGER',TEST_OLD); PUBLISH()");
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(false));
+        assert!(!w.truth("TEST_CURRENT.dismissed"));
         w.run("Game:SetProperty('JAC_AGES_LEDGER',nil); PUBLISH()");
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(false));
+        assert!(!w.truth("TEST_CURRENT.dismissed"));
         w.run("Game:SetProperty('JAC_AGES_LEDGER',TEST_SAVED); PUBLISH()");
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(false));
+        assert!(!w.truth("TEST_CURRENT.dismissed"));
         w.turns_with_oath(67, 67);
         w.run("PUBLISH()");
-        assert_eq!(w.j("TEST_CURRENT.dismissed"), json!(true));
+        assert!(w.truth("TEST_CURRENT.dismissed"));
     }
     #[test]
     fn test_not_shown_for_a_house_that_is_not_dark() {

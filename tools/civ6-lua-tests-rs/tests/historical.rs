@@ -1,5 +1,6 @@
+use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, json_to_lua, new_lua, query_json, read_repo};
-use mlua::{FromLuaMulti, Lua, Table};
+use mlua::{Lua, Table};
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Map, Value as Json};
@@ -165,8 +166,11 @@ impl Events {
     fn run(&self, source: &str) {
         exec(&self.lua, source);
     }
-    fn eval<T: FromLuaMulti>(&self, source: &str) -> T {
-        self.lua.load(format!("return {source}")).eval().unwrap()
+    fn strict_eval<T: FromLuaMulti>(&self, source: &str) -> T {
+        self.lua
+            .load(format!("return {source}"))
+            .strict_eval()
+            .unwrap()
     }
     fn load_scripts(&self) {
         self.run(&read_repo(format!(
@@ -177,13 +181,13 @@ impl Events {
     fn tech(&self, name: &str) -> i64 {
         self.lua
             .load("return GameInfo.Technologies[...].Index")
-            .call(name)
+            .strict_call(name)
             .unwrap()
     }
     fn civic(&self, name: &str) -> i64 {
         self.lua
             .load("return GameInfo.Civics[...].Index")
-            .call(name)
+            .strict_call(name)
             .unwrap()
     }
     fn known(&self, player: i64, kind: &str, index: i64, value: Option<bool>) {
@@ -196,23 +200,23 @@ impl Events {
         let start = self
             .lua
             .globals()
-            .get::<mlua::Function>("START_TURN")
+            .strict_get::<mlua::Function>("START_TURN")
             .unwrap();
         for turn in first..=last {
             start.call::<()>(turn).unwrap();
         }
     }
     fn boosts(&self, kind: &str, index: i64) -> Vec<Boost> {
-        self.eval::<Table>("BOOSTS")
-            .sequence_values::<Table>()
+        self.strict_eval::<Table>("BOOSTS")
+            .strict_sequence_values::<Table>()
             .map(|b| {
                 let b = b.unwrap();
                 (
-                    b.get(1).unwrap(),
-                    b.get::<String>(2).unwrap(),
-                    b.get(3).unwrap(),
-                    b.get(4).unwrap(),
-                    b.get(5).unwrap(),
+                    b.strict_get(1).unwrap(),
+                    b.strict_get::<String>(2).unwrap(),
+                    b.strict_get(3).unwrap(),
+                    b.strict_get(4).unwrap(),
+                    b.strict_get(5).unwrap(),
                 )
             })
             .filter(|b| b.1 == kind && b.2 == index)
@@ -221,25 +225,25 @@ impl Events {
     fn prop(&self, player: i64, key: &str) -> Option<i64> {
         self.lua
             .load("local p,k=...; return Players[p]:GetProperty(k)")
-            .call((player, key))
+            .strict_call((player, key))
             .unwrap()
     }
     fn game<T: FromLuaMulti>(&self, key: &str) -> T {
         self.lua
             .load("return Game:GetProperty(...)")
-            .call(key)
+            .strict_call(key)
             .unwrap()
     }
     fn log(&self) -> Vec<String> {
-        self.eval::<Table>("LOG")
-            .sequence_values()
+        self.strict_eval::<Table>("LOG")
+            .strict_sequence_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
     fn raised(&self) -> Vec<String> {
-        self.eval::<Table>("RAISED")
-            .sequence_values::<Table>()
-            .map(|t| t.unwrap().get("Message").unwrap())
+        self.strict_eval::<Table>("RAISED")
+            .strict_sequence_values::<Table>()
+            .map(|t| t.unwrap().strict_get("Message").unwrap())
             .collect()
     }
 }
@@ -299,14 +303,14 @@ fn test_starting_knowledge_fires_no_event_on_turn_1() {
     ));
     s.run("NEW_GAME_INITIALIZED()");
     let granted = s
-        .eval::<Table>("Players")
-        .pairs::<i64, Table>()
+        .strict_eval::<Table>("Players")
+        .strict_pairs::<i64, Table>()
         .map(|row| {
             let (id, p) = row.unwrap();
             let count = |key| {
-                p.get::<Table>(key)
+                p.strict_get::<Table>(key)
                     .unwrap()
-                    .pairs::<i64, bool>()
+                    .strict_pairs::<i64, bool>()
                     .filter(|row| row.as_ref().unwrap().1)
                     .count()
             };
@@ -319,7 +323,7 @@ fn test_starting_knowledge_fires_no_event_on_turn_1() {
     );
     s.turns(1, 1);
     assert_eq!(s.game::<Option<i64>>("JAC_EVENTS_FIRE_COUNT"), None);
-    assert_eq!(s.eval::<Table>("BOOSTS").raw_len(), 0);
+    assert_eq!(s.strict_eval::<Table>("BOOSTS").raw_len(), 0);
     assert_eq!(
         s.log()
             .iter()
@@ -398,7 +402,7 @@ fn test_resource_events_boost_the_sites_research_and_reveal_nothing() {
     assert!(s
         .boosts("tech", mine)
         .contains(&(1, "tech".into(), mine, 1, sado)));
-    assert_eq!(s.eval::<Table>("REVEALED").raw_len(), 0);
+    assert_eq!(s.strict_eval::<Table>("REVEALED").raw_len(), 0);
     assert!(!s.log().iter().any(|l| l.contains("resource event=")));
 }
 #[test]
@@ -527,14 +531,14 @@ fn test_house_specific_name_only_for_its_house() {
     }
     s.turns(1, 1);
     let notes = s
-        .eval::<Table>("NOTES")
-        .sequence_values::<Table>()
+        .strict_eval::<Table>("NOTES")
+        .strict_sequence_values::<Table>()
         .filter_map(|t| {
             let t = t.unwrap();
-            let message = t.get::<String>(2).unwrap();
+            let message = t.strict_get::<String>(2).unwrap();
             message
                 .contains("KITANO")
-                .then(|| (t.get::<i64>(1).unwrap(), message))
+                .then(|| (t.strict_get::<i64>(1).unwrap(), message))
         })
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
@@ -562,7 +566,7 @@ fn test_no_double_firing_after_a_reload() {
     s.turns(1, 2);
     let count = s.game::<Option<i64>>("JAC_EVENTS_FIRE_COUNT");
     let fired = s.log().iter().filter(|l| l.contains("] fired ")).count();
-    let notes = s.eval::<Table>("NOTES").raw_len();
+    let notes = s.strict_eval::<Table>("NOTES").raw_len();
     s.run("RELOAD()");
     s.load_scripts();
     s.turns(2, 3);
@@ -571,7 +575,7 @@ fn test_no_double_firing_after_a_reload() {
         s.log().iter().filter(|l| l.contains("] fired ")).count(),
         fired
     );
-    assert_eq!(s.eval::<Table>("NOTES").raw_len(), notes);
+    assert_eq!(s.strict_eval::<Table>("NOTES").raw_len(), notes);
     assert_eq!(s.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO"), Some(1));
 }
 #[test]
@@ -627,20 +631,22 @@ fn test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens() {
             "LOC_JAC_EVENT_TENSHO_QUAKE_NAME[NEWLINE][NEWLINE]LOC_JAC_EVENT_TENSHO_QUAKE_ADVISOR"
         ]
     );
-    let item = s.eval::<Table>("RAISED[1]");
-    assert!(item.get::<bool>("ShowPortrait").unwrap());
+    let item = s.strict_eval::<Table>("RAISED[1]");
+    assert!(civ6_lua_tests_rs::strict::truthy(
+        &item.strict_get::<mlua::Value>("ShowPortrait").unwrap()
+    ));
     assert_eq!(
         (
-            item.get::<String>("Button1Text").unwrap(),
-            item.get::<i64>("OptionsNum").unwrap()
+            item.strict_get::<String>("Button1Text").unwrap(),
+            item.strict_get::<i64>("OptionsNum").unwrap()
         ),
         ("LOC_JAC_EVENT_ADVISOR_OK".into(), 1)
     );
     assert!(item
-        .get::<Option<mlua::Function>>("Button1Func")
+        .strict_get::<Option<mlua::Function>>("Button1Func")
         .unwrap()
         .is_some());
-    assert_eq!(item.get::<Table>("UITriggers").unwrap().raw_len(), 0);
+    assert_eq!(item.strict_get::<Table>("UITriggers").unwrap().raw_len(), 0);
     assert!(s
         .log()
         .contains(&"[JAC_EVENTS_UI] advisor event=JAC_EVENT_TENBUN_FAMINE player=0 turn=1".into()));
@@ -669,8 +675,8 @@ fn test_advisor_popup_for_each_hotseat_human_on_the_same_turn() {
         2
     );
     let mut keys = s
-        .eval::<Table>("JAC_EVENTS_ADVISOR_SHOWN")
-        .pairs::<String, bool>()
+        .strict_eval::<Table>("JAC_EVENTS_ADVISOR_SHOWN")
+        .strict_pairs::<String, bool>()
         .map(|r| r.unwrap().0)
         .filter(|k| k.contains("TENBUN"))
         .collect::<Vec<_>>();

@@ -1,11 +1,45 @@
+use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, json_to_lua, new_lua, read_repo};
-use mlua::{FromLuaMulti, IntoLuaMulti, Lua, Table};
+use mlua::{IntoLuaMulti, Lua, Table};
 use serde_json::{Map, Value as Json};
 use std::collections::BTreeMap;
 
 const UI: &str = "poc/JAC_PoC_BanseikiRuleset/UI";
 const DESC: &str = "LOC_JAC_TEST_PERIOD_DESCRIPTION";
 const ERA: &str = "LOC_JAC_TEST_PERIOD_NAME";
+
+fn moment_data(lua: &Lua) -> mlua::Result<(Table, String)> {
+    lua.load("return CHECK:GetMomentData(7)").strict_eval()
+}
+
+#[test]
+fn historic_moment_return_check_rejects_extra_results_and_numeric_text() {
+    let s = House::new(Some("CIVILIZATION_JAC_ODA"), "en_US", "");
+    exec(&s.lua, "CHECK={GetMomentData=function(self,id) return {ID=id,InstanceDescription='normal'},'second' end}");
+    let (first, second) = moment_data(&s.lua).unwrap();
+    assert_eq!(
+        (first.strict_get::<i64>("ID").unwrap(), second),
+        (7, "second".into())
+    );
+    for result in [
+        "{ID=id},'second',99",
+        "{ID=id},'second',nil",
+        "{ID=id},120",
+        "{ID=id}",
+    ] {
+        exec(
+            &s.lua,
+            &format!("CHECK.GetMomentData=function(self,id) return {result} end"),
+        );
+        assert!(moment_data(&s.lua).is_err(), "{result}");
+    }
+    exec(
+        &s.lua,
+        "CHECK.GetMomentData=function(self,id) return {ID='7'},'second' end",
+    );
+    let (first, _) = moment_data(&s.lua).unwrap();
+    assert!(first.strict_get::<i64>("ID").is_err());
+}
 
 fn load_texts(language: &str) -> BTreeMap<String, String> {
     let (generic, house, notification, moment) = match language {
@@ -104,27 +138,36 @@ impl House {
     fn lookup(&self, args: impl IntoLuaMulti) -> String {
         self.lua
             .load("return Locale.Lookup(...)")
-            .call(args)
+            .strict_call(args)
             .unwrap()
     }
     fn upper(&self, value: &str) -> String {
         self.lua
             .load("return Locale.ToUpper(...)")
-            .call(value)
+            .strict_call(value)
             .unwrap()
     }
     fn base_upper(&self, value: &str) -> String {
         self.lua
             .load("return JAC_HouseNamesBaseLocale.ToUpper(...)")
-            .call(value)
+            .strict_call(value)
             .unwrap()
     }
-    fn eval<T: FromLuaMulti>(&self, expr: &str) -> T {
-        self.lua.load(format!("return {expr}")).eval().unwrap()
+    fn strict_eval<T: FromLuaMulti>(&self, expr: &str) -> T {
+        self.lua
+            .load(format!("return {expr}"))
+            .strict_eval()
+            .unwrap()
+    }
+    fn truth(&self, expr: &str) -> bool {
+        self.lua
+            .load(format!("return {expr}"))
+            .python_truthy()
+            .unwrap()
     }
     fn strings(&self, expr: &str) -> Vec<String> {
-        self.eval::<Table>(expr)
-            .sequence_values()
+        self.strict_eval::<Table>(expr)
+            .strict_sequence_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
@@ -137,16 +180,16 @@ fn test_install_shadows_the_context_global_without_writing_the_engine_table() {
         s.strings("LOG"),
         vec!["[JAC_POC] houseNames context=Test result=installed"]
     );
-    assert!(s.eval::<bool>("Locale ~= ENGINE_LOCALE and JAC_HouseNamesBaseLocale == ENGINE_LOCALE"));
+    assert!(s.truth("Locale ~= ENGINE_LOCALE and JAC_HouseNamesBaseLocale == ENGINE_LOCALE"));
     assert_eq!(s.lookup(DESC), s.texts[&format!("{DESC}_HOUSE")]);
     assert_eq!(
         s.lua
             .load("return ENGINE_LOCALE.Lookup(...)")
-            .call::<String>(DESC)
+            .strict_call::<String>(DESC)
             .unwrap(),
         s.texts[DESC]
     );
-    assert!(s.eval::<bool>("Locale.Compare == ENGINE_LOCALE.Compare"));
+    assert!(s.truth("Locale.Compare == ENGINE_LOCALE.Compare"));
     exec(
         &s.lua,
         "include('JAC_HouseNames'); JAC_InstallHouseNames('Test')",
@@ -155,11 +198,11 @@ fn test_install_shadows_the_context_global_without_writing_the_engine_table() {
         s.strings("LOG").last().unwrap(),
         "[JAC_POC] houseNames context=Test result=already_installed"
     );
-    assert!(s.eval::<bool>("JAC_HouseNamesBaseLocale == ENGINE_LOCALE"));
+    assert!(s.truth("JAC_HouseNamesBaseLocale == ENGINE_LOCALE"));
     assert_eq!(
         s.lua
             .load("return Locale.Lookup(...)")
-            .call::<String>(DESC)
+            .strict_call::<String>(DESC)
             .unwrap(),
         s.texts[&format!("{DESC}_HOUSE")]
     );
@@ -206,7 +249,7 @@ fn test_other_houses_and_observers_keep_generic_names() {
         let engine = format!("You have discovered {generic}!");
         assert_eq!(&s.lookup(DESC), generic);
         assert_eq!(s.lookup(engine.as_str()), engine);
-        assert!(!s.eval::<bool>("JAC_LocalHouseHasNames()"));
+        assert!(!s.truth("JAC_LocalHouseHasNames()"));
     }
 }
 #[test]
@@ -221,11 +264,11 @@ fn test_load_screen_without_game_keeps_generic_names() {
     assert_eq!(
         &s.lua
             .load("return JAC_ApplyHouseNames(...)")
-            .call::<String>(generic.as_str())
+            .strict_call::<String>(generic.as_str())
             .unwrap(),
         generic
     );
-    assert!(!s.eval::<bool>("JAC_LocalHouseHasNames()"));
+    assert!(!s.truth("JAC_LocalHouseHasNames()"));
 }
 #[test]
 fn test_civilopedia_parts_receive_house_text_only_for_the_owner() {
@@ -289,29 +332,26 @@ fn test_historic_moment_descriptions_are_switched() {
     exec(&lua, &read_repo(format!("{UI}/JAC_HistoricMoments.lua")));
     let moments = lua
         .load("return CHECK:GetAllMomentsData(0,1)")
-        .eval::<Table>()
+        .strict_eval::<Table>()
         .unwrap();
-    let moment = moments.get::<Table>(1).unwrap();
+    let moment = moments.strict_get::<Table>(1).unwrap();
     assert_eq!(
-        moment.get::<String>("InstanceDescription").unwrap(),
+        moment.strict_get::<String>("InstanceDescription").unwrap(),
         format!("First civic of the {} era.", texts[&format!("{ERA}_HOUSE")])
     );
-    assert_eq!(moment.get::<i64>("Turn").unwrap(), 3);
-    let (first, second) = lua
-        .load("return CHECK:GetMomentData(7)")
-        .eval::<(Table, String)>()
-        .unwrap();
+    assert_eq!(moment.strict_get::<i64>("Turn").unwrap(), 3);
+    let (first, second) = moment_data(&lua).unwrap();
     assert_eq!(
-        first.get::<String>("InstanceDescription").unwrap(),
+        first.strict_get::<String>("InstanceDescription").unwrap(),
         texts[&format!("{ERA}_HOUSE")]
     );
     assert_eq!(
-        (first.get::<i64>("ID").unwrap(), second),
+        (first.strict_get::<i64>("ID").unwrap(), second),
         (7, "second".into())
     );
     assert!(lua
         .globals()
-        .get::<Option<Table>>("CHECK")
+        .strict_get::<Option<Table>>("CHECK")
         .unwrap()
         .is_some());
 }

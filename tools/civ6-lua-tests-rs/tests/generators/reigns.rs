@@ -51,7 +51,7 @@ impl Mt19937 {
         }
         let mut i = 1;
         for _ in 0..624 {
-            state[i] = state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(1664525);
+            state[i] ^= (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(1664525);
             i += 1;
             if i >= 624 {
                 state[0] = state[623];
