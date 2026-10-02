@@ -269,7 +269,12 @@ pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
     std::mem::forget(handle); // Ownership transferred to the process pin, including during pending termination.
     Ok(PinnedGame { game, handle: raw })
 }
-pub fn loading_evidence(game: GameProcess, logs: &Path, port: u16) -> Result<Value> {
+pub fn loading_evidence(
+    game: GameProcess,
+    logs: &Path,
+    port: u16,
+    session: &mut DiagnosticSession,
+) -> Result<Value> {
     let _game = pinned(game, 0x1000)?;
     let _window = own_window(game)?;
     if port != 4318 {
@@ -308,9 +313,37 @@ pub fn loading_evidence(game: GameProcess, logs: &Path, port: u16) -> Result<Val
             "current DX11 renderer startup evidence is missing",
         ));
     }
+    let image_path =
+        std::env::temp_dir().join(format!("civ6-loading-{}.json", uuid::Uuid::new_v4()));
+    struct Remove(PathBuf);
+    impl Drop for Remove {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+            let _ = fs::remove_file(self.0.with_extension("png"));
+        }
+    }
+    let _remove = Remove(image_path.clone());
+    let captured = worker("loading-screen", game, &image_path, session)?;
+    if captured["result"]["status"] != "ok" {
+        return Err(Error::input("current loading screen could not be observed"));
+    }
+    let mut bytes = Vec::new();
+    File::open(&image_path)?
+        .take(4097)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > 4096 {
+        return Err(Error::input("loading screen evidence exceeded size limit"));
+    }
+    let screen: Value = serde_json::from_slice(&bytes)?;
+    if screen["status"] != "recognized" {
+        return Err(Error::input(
+            "displayed image is not a confirmed initial loading screen",
+        ));
+    }
+    pinned(game, 0x1000)?;
     Ok(
         json!({"process_verified":true,"window_verified":true,"tuner_enabled":true,
-        "renderer_current":true,"classification":"new-process loading wait expired before FrontEnd"}),
+        "renderer_current":true,"classification":"new-process loading wait expired before FrontEnd","screen":screen}),
     )
 }
 
@@ -323,30 +356,136 @@ impl Drop for OwnedChild {
         }
     }
 }
+#[derive(Default)]
+pub struct DiagnosticSession {
+    // Keep the original OS handles until completion; never reopen an unconfirmed PID.
+    pending: Vec<(OwnedChild, bool)>,
+}
+impl DiagnosticSession {
+    fn before_reset(&mut self) -> Result<()> {
+        let mut unknown = false;
+        self.pending
+            .retain_mut(|(child, _)| match child.0.try_wait() {
+                Ok(Some(_)) => false,
+                Ok(None) => true,
+                Err(_) => {
+                    unknown = true;
+                    true
+                }
+            });
+        if unknown {
+            return Err(Error::input("diagnostic child exit could not be inspected"));
+        }
+        if self.pending.iter().any(|(_, gpu_probe)| !gpu_probe) {
+            return Err(Error::input(
+                "diagnostic writer or helper exit is unconfirmed; display recovery refused",
+            ));
+        }
+        // A terminating, owned, read-only NVIDIA probe can itself be stuck in the
+        // graphics stack. It remains pinned and must finish AFTER safe recovery.
+        Ok(())
+    }
+    pub fn finish(&mut self) -> Result<Value> {
+        let end = Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut unknown = false;
+            self.pending
+                .retain_mut(|(child, _)| match child.0.try_wait() {
+                    Ok(Some(_)) => false,
+                    Ok(None) => true,
+                    Err(_) => {
+                        unknown = true;
+                        true
+                    }
+                });
+            if unknown {
+                return Err(Error::input("diagnostic child exit could not be inspected"));
+            }
+            if self.pending.is_empty() {
+                return Ok(json!({"status":"all_exited"}));
+            }
+            if Instant::now() >= end {
+                return Err(Error::input(
+                    "owned diagnostic children did not exit; refusing another launch",
+                ));
+            }
+            time::check_interrupt()?;
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+fn stop_child(
+    mut child: OwnedChild,
+    session: &mut DiagnosticSession,
+    gpu_probe: bool,
+) -> Result<Value> {
+    let pid = child.0.id();
+    if child.0.kill().is_err() {
+        if matches!(child.0.try_wait(), Ok(Some(_))) {
+            return Ok(json!({"exit_confirmed":true,"pid":pid}));
+        }
+        session.pending.push((child, false));
+        return Err(Error::input(
+            "diagnostic child termination could not be requested",
+        ));
+    }
+    let end = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < end {
+        match child.0.try_wait() {
+            Ok(Some(_)) => return Ok(json!({"exit_confirmed":true,"pid":pid})),
+            Ok(None) => {}
+            Err(error) => {
+                session.pending.push((child, false));
+                return Err(error.into());
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Move the same handle into the session, rather than discarding ownership.
+    session.pending.push((child, gpu_probe));
+    Ok(
+        json!({"exit_confirmed":false,"termination_requested":true,"pid":pid,"owned_gpu_probe":gpu_probe}),
+    )
+}
 
 /// No pipes to deadlock, no shell, and only this call's child is ever terminated.
-fn bounded_command(mut command: Command, timeout: Duration) -> Result<Value> {
+fn bounded_command(
+    mut command: Command,
+    timeout: Duration,
+    session: &mut DiagnosticSession,
+    gpu_probe: bool,
+) -> Result<Value> {
     command.creation_flags(0x08000000).stdin(Stdio::null()); // CREATE_NO_WINDOW
     let started = Instant::now();
     let mut child = OwnedChild(command.spawn()?);
     loop {
-        if let Some(exit) = child.0.try_wait()? {
+        let exit = match child.0.try_wait() {
+            Ok(exit) => exit,
+            Err(error) => {
+                let _ = stop_child(child, session, false);
+                return Err(error.into());
+            }
+        };
+        if let Some(exit) = exit {
             return Ok(json!({"status":if exit.success() {"ok"} else {"failed"},
                 "exit_code":exit.code(),"elapsed_ms":started.elapsed().as_millis()}));
         }
         if started.elapsed() >= timeout {
-            let killed = child.0.kill().is_ok();
+            let termination = stop_child(child, session, gpu_probe)?;
             return Ok(
-                json!({"status":"timeout","child_termination_requested":killed,
-                "elapsed_ms":started.elapsed().as_millis()}),
+                json!({"status":"timeout","termination":termination,"elapsed_ms":started.elapsed().as_millis()}),
             );
         }
-        time::check_interrupt()?;
+        if let Err(error) = time::check_interrupt() {
+            let _ = stop_child(child, session, false);
+            return Err(error);
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }
 
-fn gpu_probe(output: &Path) -> Result<GpuSnapshot> {
+fn gpu_probe(output: &Path, session: &mut DiagnosticSession) -> Result<GpuSnapshot> {
     let result = (|| -> Result<GpuSnapshot> {
         let system =
             PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| "C:/Windows".into()));
@@ -360,14 +499,8 @@ fn gpu_probe(output: &Path) -> Result<GpuSnapshot> {
         .into_iter()
         .find(|path| path.is_file())
         .ok_or_else(|| Error::input("installed nvidia-smi is unavailable"))?;
-        let path = output.join(format!("gpu-{}.tmp", uuid::Uuid::new_v4()));
-        struct Remove(PathBuf);
-        impl Drop for Remove {
-            fn drop(&mut self) {
-                let _ = fs::remove_file(&self.0);
-            }
-        }
-        let _remove = Remove(path.clone());
+        // Retain partial output if a terminating GPU probe cannot finish until recovery.
+        let path = output.join("nvidia-state.xml");
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -377,7 +510,7 @@ fn gpu_probe(output: &Path) -> Result<GpuSnapshot> {
             .args(["-q", "-x"])
             .stdout(Stdio::from(file))
             .stderr(Stdio::null());
-        let status = bounded_command(command, Duration::from_secs(3))?;
+        let status = bounded_command(command, Duration::from_secs(3), session, true)?;
         if status["status"] != "ok" {
             return Ok(GpuSnapshot {
                 status: status["status"].as_str().unwrap_or("unknown").into(),
@@ -408,24 +541,67 @@ fn gpu_probe(output: &Path) -> Result<GpuSnapshot> {
     }
 }
 
-fn worker(kind: &str, game: GameProcess, output: &Path) -> Result<Value> {
+fn invoke_worker(
+    executable: &Path,
+    kind: &str,
+    game: GameProcess,
+    output: &Path,
+    session: &mut DiagnosticSession,
+) -> Result<Value> {
+    let mut command = Command::new(executable);
+    command
+        .arg(kind)
+        .arg(game.pid.to_string())
+        .arg(game.started.to_string())
+        .arg(output)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    bounded_command(
+        command,
+        Duration::from_secs(if kind == "gpu-idle" { 6 } else { 5 }),
+        session,
+        false,
+    )
+}
+fn worker(
+    kind: &str,
+    game: GameProcess,
+    output: &Path,
+    session: &mut DiagnosticSession,
+) -> Result<Value> {
     let result = (|| -> Result<Value> {
         let executable = std::env::current_exe()?.with_file_name("civ6-startup-diagnostics.exe");
         if !executable.is_file() {
             return Err(Error::input("native diagnostic worker was not built"));
         }
-        let mut command = Command::new(executable);
-        command
-            .arg(kind)
-            .arg(game.pid.to_string())
-            .arg(game.started.to_string())
-            .arg(output)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let status = bounded_command(
-            command,
-            Duration::from_secs(if kind == "gpu-idle" { 6 } else { 5 }),
-        )?;
+        let _binary = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&executable)?;
+        let identity_path =
+            std::env::temp_dir().join(format!("civ6-helper-{}.json", uuid::Uuid::new_v4()));
+        struct Remove(PathBuf);
+        impl Drop for Remove {
+            fn drop(&mut self) {
+                let _ = fs::remove_file(&self.0);
+            }
+        }
+        let _remove = Remove(identity_path.clone());
+        let identity = invoke_worker(&executable, "identity", game, &identity_path, session)?;
+        if identity["status"] != "ok" {
+            return Err(Error::input("diagnostic helper identity check failed"));
+        }
+        let mut bytes = Vec::new();
+        File::open(&identity_path)?
+            .take(4097)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > 4096 {
+            return Err(Error::input(
+                "diagnostic helper identity exceeded size limit",
+            ));
+        }
+        verify_helper_identity(&serde_json::from_slice(&bytes)?)?;
+        let status = invoke_worker(&executable, kind, game, output, session)?;
         Ok(
             json!({"operation":kind,"complete":status["status"]=="ok","result":status,"artifact":output.file_name().map(OsStr::to_string_lossy),
                 "bytes":fs::metadata(output).ok().map(|m|m.len())}),
@@ -435,7 +611,11 @@ fn worker(kind: &str, game: GameProcess, output: &Path) -> Result<Value> {
         other=>Ok(other.unwrap_or_else(|e|json!({"operation":kind,"status":"unavailable","complete":false,"reason":e.to_string()})))}
 }
 
-pub fn collect_diagnostics(game: GameProcess, output: &Path) -> Result<Value> {
+pub fn collect_diagnostics(
+    game: GameProcess,
+    output: &Path,
+    session: &mut DiagnosticSession,
+) -> Result<Value> {
     let _game = pinned(game, 0x1000)?;
     let rows = process_rows()?;
     let related: Vec<_> = rows
@@ -460,18 +640,23 @@ pub fn collect_diagnostics(game: GameProcess, output: &Path) -> Result<Value> {
     let memory = crate::metrics::process_memory(game.pid)
         .unwrap_or_else(|e| json!({"unavailable":e.to_string()}));
     // A dump is collected before screenshot APIs which may block on the display driver.
-    let dump = worker("dump", game, &output.join("startup.dmp"))?;
-    let screenshot = worker("screenshot", game, &output.join("startup.png"))?;
-    let gpu = gpu_probe(output)?;
+    let dump = worker("dump", game, &output.join("startup.dmp"), session)?;
+    let screenshot = worker("screenshot", game, &output.join("startup.png"), session)?;
+    let gpu = gpu_probe(output, session)?;
     Ok(
         json!({"process":game,"metadata":related,"memory":memory,"dump":dump,
         "screenshot":screenshot,"gpu":gpu,"display_safety":"requires fresh independent native PDH proof"}),
     )
 }
 
-pub fn reset_display(lease: &mut RecoveryLease, pin: &PinnedGame) -> Result<Value> {
+pub fn reset_display(
+    lease: &mut RecoveryLease,
+    pin: &PinnedGame,
+    session: &mut DiagnosticSession,
+) -> Result<Value> {
     lease.check()?;
     pin.check_remaining()?;
+    session.before_reset()?;
     let game = pin.game;
     let path = std::env::temp_dir().join(format!("civ6-idle-{}.json", uuid::Uuid::new_v4()));
     struct Remove(PathBuf);
@@ -481,7 +666,8 @@ pub fn reset_display(lease: &mut RecoveryLease, pin: &PinnedGame) -> Result<Valu
         }
     }
     let _remove = Remove(path.clone());
-    let worker_result = worker("gpu-idle", game, &path)?;
+    let worker_result = worker("gpu-idle", game, &path, session)?;
+    session.before_reset()?;
     let proof = (|| -> Result<IdleProof> {
         if worker_result["result"]["status"] != "ok" {
             return Err(Error::input(
@@ -551,10 +737,50 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
     }
     let path = Path::new(&args[3]);
     match args[0].as_str() {
+        "classify-file" => {
+            let mut bytes = Vec::new();
+            File::open(path)?
+                .take(crate::startup_screen::MAX_PNG_BYTES as u64 + 1)
+                .read_to_end(&mut bytes)?;
+            println!("{}", crate::startup_screen::classify_png(&bytes)?);
+            Ok(())
+        }
+        "loading-screen" => {
+            let _handle = pinned(game, 0x1000)?;
+            let hwnd = own_window(game)?;
+            let png = path.with_extension("png");
+            crate::capture::capture_owned_window(
+                &png,
+                hwnd,
+                game.pid,
+                Some(time::monotonic() + 3.0),
+            )?;
+            let mut bytes = Vec::new();
+            File::open(&png)?
+                .take(crate::startup_screen::MAX_PNG_BYTES as u64 + 1)
+                .read_to_end(&mut bytes)?;
+            let screen = crate::startup_screen::classify_png(&bytes)?;
+            pinned(game, 0x1000)?;
+            let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+            serde_json::to_writer(file, &screen)?;
+            Ok(())
+        }
+        "identity" => {
+            let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+            serde_json::to_writer(
+                file,
+                &json!({"protocol":1,"source_sha256":helper_identity()}),
+            )?;
+            Ok(())
+        }
         "gpu-idle" => {
             let proof = pdh::collect_idle_proof()?;
             let refusal = startup_idle::idle_refusal(&proof);
             println!("GPU_IDLE_POLICY={}", refusal.unwrap_or("allowed"));
+            if path == Path::new("-") {
+                println!("{}", serde_json::to_string(&proof)?);
+                return Ok(());
+            }
             let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
             use std::io::Write;
             file.write_all(&serde_json::to_vec(&proof)?)?;
@@ -590,5 +816,70 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
             )
         }
         _ => Err(Error::input("unknown native diagnostic operation")),
+    }
+}
+
+#[cfg(test)]
+mod supervision_tests {
+    use super::*;
+    fn fixture_command() -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "startup::platform::supervision_tests::diagnostic_child_fixture",
+                "--nocapture",
+            ])
+            .env("CIV6_DIAGNOSTIC_CHILD_FIXTURE", "1")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command
+    }
+    #[test]
+    fn diagnostic_child_fixture() {
+        if std::env::var("CIV6_DIAGNOSTIC_CHILD_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(Duration::from_secs(20));
+        }
+    }
+    #[test]
+    fn timeout_confirms_owned_child_exit_and_keeps_a_control_process_running() {
+        let mut control = OwnedChild(
+            fixture_command()
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap(),
+        );
+        let mut session = DiagnosticSession::default();
+        let result = bounded_command(
+            fixture_command(),
+            Duration::from_millis(50),
+            &mut session,
+            false,
+        )
+        .unwrap();
+        assert_eq!(result["status"], "timeout");
+        assert_eq!(result["termination"]["exit_confirmed"], true);
+        assert!(control.0.try_wait().unwrap().is_none());
+        assert_eq!(session.finish().unwrap()["status"], "all_exited");
+    }
+    #[test]
+    fn unconfirmed_writer_blocks_recovery_until_the_same_handle_exits() {
+        let child = OwnedChild(
+            fixture_command()
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap(),
+        );
+        let mut session = DiagnosticSession {
+            pending: vec![(child, false)],
+        };
+        assert!(session
+            .before_reset()
+            .unwrap_err()
+            .to_string()
+            .contains("exit is unconfirmed"));
+        session.pending[0].0 .0.kill().unwrap();
+        assert_eq!(session.finish().unwrap()["status"], "all_exited");
+        session.before_reset().unwrap();
     }
 }

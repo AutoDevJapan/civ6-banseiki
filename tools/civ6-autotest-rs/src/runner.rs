@@ -63,6 +63,9 @@ pub trait Backend: Send {
     fn startup_display_recovery(&mut self, _game: crate::startup::GameProcess) -> Result<Value> {
         Ok(json!({"status":"skipped","reason":"backend cannot prove display recovery safe"}))
     }
+    fn startup_finish_diagnostics(&mut self) -> Result<Value> {
+        Ok(json!({"status":"all_exited"}))
+    }
     fn connect(&mut self, _port: u16, _timeout: f64) -> Result<()> {
         Ok(())
     }
@@ -153,6 +156,7 @@ pub struct SystemBackend {
     startup_lease: Option<crate::startup::RecoveryLease>,
     launch_floor: Option<f64>,
     startup_pin: Option<crate::startup::PinnedGame>,
+    diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
@@ -170,14 +174,14 @@ impl Backend for SystemBackend {
         logs: &Path,
         port: u16,
     ) -> Result<Value> {
-        crate::startup::loading_evidence(game, logs, port)
+        crate::startup::loading_evidence(game, logs, port, &mut self.diagnostic_session)
     }
     fn startup_diagnostics(
         &mut self,
         game: crate::startup::GameProcess,
         output: &Path,
     ) -> Result<Value> {
-        crate::startup::collect_diagnostics(game, output)
+        crate::startup::collect_diagnostics(game, output, &mut self.diagnostic_session)
     }
     fn acquire_startup_lock(&mut self) -> Result<()> {
         self.startup_lease = Some(crate::startup::RecoveryLease::acquire()?);
@@ -210,7 +214,11 @@ impl Backend for SystemBackend {
                 .as_ref()
                 .filter(|pin| pin.game == game)
                 .ok_or_else(|| Error::input("startup process handle pin was lost"))?,
+            &mut self.diagnostic_session,
         )
+    }
+    fn startup_finish_diagnostics(&mut self) -> Result<Value> {
+        self.diagnostic_session.finish()
     }
     fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
         if self.client.is_none() {
@@ -967,6 +975,11 @@ impl Runner {
             "process":game,"trigger":{"launch_requested":true,"frontend_seen":false},
             "recovery_attempted":false,"reset":{"status":"skipped","reason":"not authorized yet"},
             "retry":{"status":"not_started"},"result":"diagnosing"});
+        println!(
+            "{} {}",
+            crate::startup::RECOVERY_MARKER,
+            json!({"phase":"diagnosing","process":game,"artifact":directory,"max_retries":1})
+        );
         self.diagnose_startup(game, &directory, &mut report, "attempt1")?;
         self.backend.startup_cancel_check()?;
         let evidence = match self
@@ -1005,6 +1018,7 @@ impl Runner {
             self.write_startup_report(&directory, &report)?;
             self.backend.startup_cancel_check()?;
             self.backend.check_startup_lock()?;
+            report["helpers"] = self.backend.startup_finish_diagnostics()?;
             if !self.backend.wait_exit(game.pid, self.clock.now() + 5.0)? {
                 return Err(Error::scenario("pinned startup process remains after display recovery; refusing another launch"));
             }
@@ -1027,9 +1041,11 @@ impl Runner {
                 report["retry"]["reason"] = json!(failure.to_string());
                 if second.loading_timeout && failure.kind == ErrorKind::Scenario {
                     if let Some(process) = second.process {
-                        self.diagnose_startup(process, &directory, &mut report, "attempt2")?;
+                        let diagnosis =
+                            self.diagnose_startup(process, &directory, &mut report, "attempt2");
                         // No reset or third launch, even if the retry has the same failure.
                         self.stop_startup_process(process, &mut report)?;
+                        diagnosis?;
                     }
                 }
             }

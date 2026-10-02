@@ -44,6 +44,22 @@ fn clear_idle() -> IdleProof {
     }
 }
 
+#[test]
+fn stale_or_missing_helper_identity_cannot_pass_the_driver_protocol() {
+    let good = json!({"protocol":1,"source_sha256":startup::helper_identity()});
+    startup::verify_helper_identity(&good).unwrap();
+    for bad in [
+        json!({}),
+        json!({"protocol":1,"source_sha256":"leftover-helper"}),
+        json!({"protocol":2,"source_sha256":startup::helper_identity()}),
+    ] {
+        assert!(startup::verify_helper_identity(&bad)
+            .unwrap_err()
+            .to_string()
+            .contains("does not match"));
+    }
+}
+
 #[derive(Default)]
 struct State {
     events: Vec<String>,

@@ -12,6 +12,36 @@ use std::{
 pub const RECOVERY_MARKER: &str = "STARTUP_RECOVERY_ATTEMPTED";
 pub const CHAIN_PID_ENV: &str = "CIV6_LIVE_CHAIN_PID";
 pub const LOCK_PATH_ENV: &str = "CIV6_LIVE_LOCK_PATH";
+/// Both executables embed the same source fingerprint; a leftover helper cannot pass.
+pub fn helper_identity() -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "{:x}",
+        Sha256::digest(
+            concat!(
+                include_str!("startup.rs"),
+                include_str!("startup_windows.rs"),
+                include_str!("startup_idle.rs"),
+                include_str!("startup_pdh.rs"),
+                include_str!("startup_screen.rs"),
+                include_str!("runner.rs"),
+                include_str!("capture.rs"),
+                include_str!("bin/civ6-startup-diagnostics.rs"),
+                include_str!("../Cargo.toml"),
+            )
+            .as_bytes()
+        )
+    )
+}
+pub fn verify_helper_identity(value: &Value) -> Result<()> {
+    if value["protocol"] != 1 || value["source_sha256"].as_str() != Some(helper_identity().as_str())
+    {
+        return Err(Error::input(
+            "diagnostic helper does not match this driver build",
+        ));
+    }
+    Ok(())
+}
 pub const LOG_LIMIT: u64 = 4 * 1024 * 1024;
 pub const STARTUP_LOGS: &[&str] = &[
     "Startup.log",
@@ -220,8 +250,17 @@ mod platform;
 #[cfg(windows)]
 pub use platform::{
     collect_diagnostics, diagnostic_worker, loading_evidence, pin_window_process, reset_display,
-    PinnedGame, RecoveryLease,
+    DiagnosticSession, PinnedGame, RecoveryLease,
 };
+#[cfg(not(windows))]
+#[derive(Default)]
+pub struct DiagnosticSession;
+#[cfg(not(windows))]
+impl DiagnosticSession {
+    pub fn finish(&mut self) -> Result<Value> {
+        Ok(json!({"status":"all_exited"}))
+    }
+}
 #[cfg(not(windows))]
 pub fn pin_window_process(_: isize, _: f64) -> Result<PinnedGame> {
     Err(Error::input("startup window identity requires Windows"))
@@ -249,15 +288,24 @@ impl RecoveryLease {
     }
 }
 #[cfg(not(windows))]
-pub fn loading_evidence(_: GameProcess, _: &Path, _: u16) -> Result<Value> {
+pub fn loading_evidence(
+    _: GameProcess,
+    _: &Path,
+    _: u16,
+    _: &mut DiagnosticSession,
+) -> Result<Value> {
     Err(Error::input("startup loading evidence requires Windows"))
 }
 #[cfg(not(windows))]
-pub fn collect_diagnostics(_: GameProcess, _: &Path) -> Result<Value> {
+pub fn collect_diagnostics(_: GameProcess, _: &Path, _: &mut DiagnosticSession) -> Result<Value> {
     Ok(json!({"status":"unsupported","reason":"native startup diagnostics require Windows"}))
 }
 #[cfg(not(windows))]
-pub fn reset_display(_: &mut RecoveryLease, _: &PinnedGame) -> Result<Value> {
+pub fn reset_display(
+    _: &mut RecoveryLease,
+    _: &PinnedGame,
+    _: &mut DiagnosticSession,
+) -> Result<Value> {
     Ok(json!({"status":"skipped","reason":"display recovery requires Windows"}))
 }
 #[cfg(not(windows))]

@@ -23,42 +23,65 @@ index 4f964c4..a0326ed 100644
                  r.print("  retry: restart_game failed, closing Civ6 and running again")?;
                  close_civ6(r)?;
 diff --git a/src/driver.rs b/src/driver.rs
-index c3b4ff0..3ba8850 100644
+index c3b4ff0..434e3db 100644
 --- a/src/driver.rs
 +++ b/src/driver.rs
-@@ -26,8 +26,11 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
+@@ -26,25 +26,35 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
              "cargo".into()
          }
      });
 -    let out = r.run(
 -        Call::new(args(&[
-+    let mut names = vec!["civ6-autotest", "civ6-tuner"];
-+    if worktree.join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs").is_file() {
-+        names.push("civ6-startup-diagnostics");
-+    }
-+    let mut argv = args(&[
-             &cargo,
-             "build",
-             "--locked",
-@@ -37,11 +40,12 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
-             &path(manifest),
-             "--target-dir",
-             &path(worktree.join("tools/target")),
+-            &cargo,
+-            "build",
+-            "--locked",
+-            "--release",
+-            "--message-format=json",
+-            "--manifest-path",
+-            &path(manifest),
+-            "--target-dir",
+-            &path(worktree.join("tools/target")),
 -            "--bin",
 -            "civ6-autotest",
 -            "--bin",
 -            "civ6-tuner",
 -        ]))
-+        ]);
+-        .timeout(1200.0)
+-        .managed(),
+-    )?;
++    let mut names = vec!["civ6-autotest", "civ6-tuner"];
++    let helper = worktree.join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
++    if worktree
++        .join("tools/civ6-autotest-rs/src/startup.rs")
++        .is_file()
++        && !helper.is_file()
++    {
++        return Err(
++            "Startup recovery is present but its diagnostic helper source is missing".into(),
++        );
++    }
++    if helper.is_file() {
++        names.push("civ6-startup-diagnostics");
++    }
++    let mut argv = args(&[
++        &cargo,
++        "build",
++        "--locked",
++        "--release",
++        "--message-format=json",
++        "--manifest-path",
++        &path(manifest),
++        "--target-dir",
++        &path(worktree.join("tools/target")),
++    ]);
 +    for name in &names {
 +        argv.extend(args(&["--bin", name]));
 +    }
-+    let out = r.run(
-+        Call::new(argv)
-         .timeout(1200.0)
-         .managed(),
-     )?;
-@@ -53,7 +57,7 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
++    let out = r.run(Call::new(argv).timeout(1200.0).managed())?;
+     if out.code != 0 {
+         return Err(format!(
+             "Rust driver build failed (exit {}): {} {}",
+@@ -53,7 +63,7 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
              tail(&out.stderr, 1600)
          ));
      }
@@ -113,10 +136,10 @@ index e123796..bd2af14 100644
              .stdout(Stdio::piped());
          #[cfg(windows)]
 diff --git a/tests/parity.rs b/tests/parity.rs
-index 578a941..20a78f0 100644
+index 578a941..2cbb701 100644
 --- a/tests/parity.rs
 +++ b/tests/parity.rs
-@@ -819,6 +819,24 @@ fn build_in_another_target_directory_rejects_stale_driver_files() {
+@@ -819,6 +819,64 @@ fn build_in_another_target_directory_rejects_stale_driver_files() {
          .contains("refusing a stale executable"));
  }
  
@@ -124,24 +147,64 @@ index 578a941..20a78f0 100644
 +fn startup_diagnostic_worker_is_built_and_its_provenance_is_required() {
 +    let f = Fixture::new();
 +    rust_driver_fixture(&f);
-+    let source = f.p.live().join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
++    let source =
++        f.p.live()
++            .join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
 +    fs::create_dir_all(source.parent().unwrap()).unwrap();
 +    fs::write(&source, "fn main() {}").unwrap();
-+    let filename = if cfg!(windows) { "civ6-startup-diagnostics.exe" } else { "civ6-startup-diagnostics" };
++    let filename = if cfg!(windows) {
++        "civ6-startup-diagnostics.exe"
++    } else {
++        "civ6-startup-diagnostics"
++    };
 +    let executable = f.p.live().join("tools/target/release").join(filename);
 +    fs::write(&executable, "old diagnostic worker").unwrap();
 +    let old_artifacts = cargo_artifacts(&f);
 +    let mut r = Fake::outputs(&[(&old_artifacts, "", 0)]);
-+    assert!(driver::prepare(&mut r, &f.p, &f.p.live()).unwrap_err().contains("refusing a stale executable"));
-+    assert!(r.calls[0].args.windows(2).any(|a| a == ["--bin", "civ6-startup-diagnostics"]));
-+    let artifacts = format!("{}\n{}", old_artifacts, json!({"reason":"compiler-artifact", "manifest_path":path(f.p.live().join(driver::MANIFEST)), "target":{"name":"civ6-startup-diagnostics","kind":["bin"]}, "executable":path(&executable)}));
-+    driver::prepare(&mut Fake::outputs(&[(&artifacts, "", 0)]), &f.p, &f.p.live()).unwrap();
++    assert!(driver::prepare(&mut r, &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("refusing a stale executable"));
++    assert!(r.calls[0]
++        .args
++        .windows(2)
++        .any(|a| a == ["--bin", "civ6-startup-diagnostics"]));
++    let artifacts = format!(
++        "{}\n{}",
++        old_artifacts,
++        json!({"reason":"compiler-artifact", "manifest_path":path(f.p.live().join(driver::MANIFEST)), "target":{"name":"civ6-startup-diagnostics","kind":["bin"]}, "executable":path(&executable)})
++    );
++    driver::prepare(
++        &mut Fake::outputs(&[(&artifacts, "", 0)]),
++        &f.p,
++        &f.p.live(),
++    )
++    .unwrap();
++}
++
++#[test]
++fn missing_startup_helper_source_refuses_existing_stale_binary_before_build() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let startup = f.p.live().join("tools/civ6-autotest-rs/src/startup.rs");
++    fs::create_dir_all(startup.parent().unwrap()).unwrap();
++    fs::write(startup, "pub fn recovery() {}").unwrap();
++    fs::write(
++        f.p.live()
++            .join("tools/target/release/civ6-startup-diagnostics.exe"),
++        "old helper",
++    )
++    .unwrap();
++    let mut runner = Fake::success();
++    assert!(driver::prepare(&mut runner, &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("source is missing"));
++    assert!(runner.calls.is_empty());
 +}
 +
  #[cfg(windows)]
  #[test]
  fn cancelled_build_waits_for_real_grandchildren_to_exit() {
-@@ -1166,6 +1184,44 @@ fn restart_retry_preserves_first_artifacts_and_closes_each_run() {
+@@ -1166,6 +1224,77 @@ fn restart_retry_preserves_first_artifacts_and_closes_each_run() {
      );
  }
  
@@ -159,15 +222,39 @@ index 578a941..20a78f0 100644
 +        ("", "", 0),
 +        ("STARTUP_RECOVERY_ATTEMPTED\n[FAIL] 1/ restart_game", "", 1),
 +    ]);
-+    assert_eq!(main(&mut r, &f.p, &["a:s.json".into(), "--stop-on-failure".into()]).unwrap(), 1);
-+    let drivers: Vec<_> = r.calls.iter().filter(|c| c.args[0] == "fixture-python").collect();
++    assert_eq!(
++        main(
++            &mut r,
++            &f.p,
++            &["a:s.json".into(), "--stop-on-failure".into()]
++        )
++        .unwrap(),
++        1
++    );
++    let drivers: Vec<_> = r
++        .calls
++        .iter()
++        .filter(|c| c.args[0] == "fixture-python")
++        .collect();
 +    assert_eq!(drivers.len(), 1);
-+    assert_eq!(drivers[0].env["CIV6_LIVE_CHAIN_PID"], std::process::id().to_string());
-+    assert_eq!(drivers[0].env["CIV6_LIVE_LOCK_PATH"], path(f.p.here.join("civ6.lock")));
++    assert_eq!(
++        drivers[0].env["CIV6_LIVE_CHAIN_PID"],
++        std::process::id().to_string()
++    );
++    assert_eq!(
++        drivers[0].env["CIV6_LIVE_LOCK_PATH"],
++        path(f.p.here.join("civ6.lock"))
++    );
 +    assert!(r.sleeps.is_empty());
 +    assert!(!f.root.join("artifacts-try1").exists());
-+    assert_eq!(read_text(artifacts.join("diagnostic.json")).unwrap(), "saved before shutdown");
-+    assert_eq!(r.calls.iter().filter(|c| c.args[0] == "taskkill").count(), 2);
++    assert_eq!(
++        read_text(artifacts.join("diagnostic.json")).unwrap(),
++        "saved before shutdown"
++    );
++    assert_eq!(
++        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
++        2
++    );
 +}
 +
 +#[test]
@@ -175,9 +262,18 @@ index 578a941..20a78f0 100644
 +    let key = "CIV6_LIVE_TEST_CHILD_ENV";
 +    let previous = std::env::var_os(key);
 +    let mut r = process::RealRunner;
-+    let out = r.run(Call::new(args(&["cmd.exe", "/d", "/c", "set CIV6_LIVE_TEST_CHILD_ENV"]))
-+        .env(key, "chain-owned")
-+        .timeout(5.0)).unwrap();
++    let out = r
++        .run(
++            Call::new(args(&[
++                "cmd.exe",
++                "/d",
++                "/c",
++                "set CIV6_LIVE_TEST_CHILD_ENV",
++            ]))
++            .env(key, "chain-owned")
++            .timeout(5.0),
++        )
++        .unwrap();
 +    assert_eq!(out.code, 0);
 +    assert_eq!(out.stdout, "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n");
 +    assert_eq!(std::env::var_os(key), previous);
