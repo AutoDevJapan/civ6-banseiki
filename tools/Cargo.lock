@@ -297,6 +297,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "civ6-migration-tests-rs"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "syn 2.0.119",
+ "tempfile",
+]
+
+[[package]]
 name = "civ6-reports-rs"
 version = "0.1.0"
 dependencies = [
