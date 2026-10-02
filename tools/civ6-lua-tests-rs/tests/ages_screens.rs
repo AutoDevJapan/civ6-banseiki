@@ -184,9 +184,9 @@ mod reign_popup_tests {
             ]
         );
         assert!(w.truth("POPUP.Controls.HeroicFlare.hidden"));
-        let score = w.j("LEDGER().history.r1.p1.score").as_i64().unwrap();
-        let golden = w.j("LEDGER().history.r1.p1.golden").as_i64().unwrap();
-        let dark = w.j("LEDGER().history.r1.p1.dark").as_i64().unwrap();
+        let score = w.j("LEDGER().history.r1.p1.score").python_i64().unwrap();
+        let golden = w.j("LEDGER().history.r1.p1.golden").python_i64().unwrap();
+        let dark = w.j("LEDGER().history.r1.p1.dark").python_i64().unwrap();
         assert_eq!(
             w.j("POPUP.Controls.Score.text"),
             json!(format!(
@@ -533,8 +533,8 @@ mod era_panel_tests {
             w.j("PANEL.Controls.EraRibbon.texture"),
             json!("Controls_AgesBanner_Normal")
         );
-        let golden = w.house(1, "next.golden").as_i64().unwrap();
-        let dark = w.house(1, "next.dark").as_i64().unwrap();
+        let golden = w.house(1, "next.golden").python_i64().unwrap();
+        let dark = w.house(1, "next.dark").python_i64().unwrap();
         assert_eq!(
             w.j("PANEL.Controls.GoldenThreshold.text"),
             json!(format!("{golden}+"))
@@ -663,9 +663,9 @@ mod era_panel_tests {
         assert_eq!(lines[0], "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT");
         assert!(lines.contains(&"LOC_JAC_AGE_PANEL_PARTS(LOC_JAC_REIGN_KOJI_NAME)"));
         assert!(lines[1].contains("LOC_JAC_OATH_ACTIVE"));
-        let score = w.j("LEDGER().history.r1.p1.score").as_i64().unwrap();
-        let golden = w.j("LEDGER().history.r1.p1.golden").as_i64().unwrap();
-        let dark = w.j("LEDGER().history.r1.p1.dark").as_i64().unwrap();
+        let score = w.j("LEDGER().history.r1.p1.score").python_i64().unwrap();
+        let golden = w.j("LEDGER().history.r1.p1.golden").python_i64().unwrap();
+        let dark = w.j("LEDGER().history.r1.p1.dark").python_i64().unwrap();
         assert_eq!(lines.last().unwrap(),&format!("[ICON_BULLET]LOC_JAC_AGE_PANEL_HISTORY_ROW(LOC_JAC_REIGN_KOJI_NAME,1555,LOC_JAC_AGE_NAME_DARK [ICON_GLORY_DARK_AGE],{score}) LOC_JAC_AGE_THRESHOLDS({golden},{dark})"));
     }
     #[test]

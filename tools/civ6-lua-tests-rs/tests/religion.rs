@@ -1,4 +1,4 @@
-use civ6_lua_tests_rs::strict::{ChunkExt, Data};
+use civ6_lua_tests_rs::strict::{assert_python_truth, truthy_results, ChunkExt, Data};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Function, Lua, MultiValue, Value};
 use rusqlite::Connection;
@@ -18,6 +18,42 @@ const TABLES: [&str; 6] = [
     "Outcomes",
     "Rules",
 ];
+
+#[test]
+fn rejection_requires_a_raw_lua_error_and_independently_decodable_unchanged_state() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    for returned in [
+        "function() end",
+        "(function() local t={};t.self=t;return t end)()",
+        "nil",
+        "false",
+    ] {
+        let h = Harness::new();
+        h.exec(&format!("rp.Probe=function() return {returned} end"));
+        assert!(h.raw_call("Probe", vec![]).is_ok());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| h.rejected("Probe", vec![]))).is_err(),
+            "{returned}"
+        );
+    }
+    let h = Harness::new();
+    h.exec("rp.Probe=function() error('intentional refusal') end");
+    h.rejected("Probe", vec![]);
+    h.exec("rp.Probe=function() rp.Snapshot=function() return function() end end; error('intentional refusal') end");
+    assert!(catch_unwind(AssertUnwindSafe(|| h.rejected("Probe", vec![]))).is_err());
+}
+
+#[test]
+fn founder_truth_and_recursive_research_equality_accept_numeric_booleans() {
+    let h = Harness::new();
+    h.f();
+    h.exec("local inspect=rp.Inspect; rp.Inspect=function(...) local s=inspect(...);s.founderDefeated=1;return s end; ENGINE['1'].boosted={['2']=1,['4']=1}");
+    assert_python_truth(&h.s()["founderDefeated"], true);
+    assert_eq!(h.engine("1")["boosted"], json!({"2":true,"4":true}));
+    h.exec("rp.CanPersecute=function() return {} end; rp.CompleteHero=function() return {} end");
+    assert!(h.call_truth("CanPersecute", vec![]));
+    assert!(h.call_truth("CompleteHero", vec![]));
+}
 
 #[test]
 fn export_comparison_detects_numeric_key_changes_and_restore_keeps_both_keys() {
@@ -165,15 +201,26 @@ impl Harness {
             .get(name)
             .unwrap()
     }
-    fn call_result(&self, name: &str, args: Vec<Json>) -> mlua::Result<Data> {
+    fn raw_call(&self, name: &str, args: Vec<Json>) -> mlua::Result<MultiValue> {
         let values = args.iter().map(|x| json_to_lua(&self.lua, x)).collect();
         self.function(name)
             .call::<MultiValue>(MultiValue::from_vec(values))
-            .and_then(Data::from_lupa_results)
     }
     fn call(&self, name: &str, args: Vec<Json>) -> Data {
-        self.call_result(name, args)
-            .unwrap_or_else(|e| panic!("{name}: {e}"))
+        Data::from_lupa_results(
+            self.raw_call(name, args)
+                .unwrap_or_else(|e| panic!("{name}: {e}")),
+        )
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+    fn call_truth(&self, name: &str, args: Vec<Json>) -> bool {
+        truthy_results(self.raw_call(name, args).unwrap())
+    }
+    fn truth(&self, expr: &str) -> bool {
+        self.lua
+            .load(format!("return {expr}"))
+            .python_truthy()
+            .unwrap()
     }
     fn exec(&self, code: &str) {
         self.lua
@@ -305,7 +352,7 @@ impl Harness {
         let before = self.snapshot();
         let writes = self.writes();
         assert!(
-            self.call_result(name, args).is_err(),
+            self.raw_call(name, args).is_err(),
             "{name} unexpectedly succeeded"
         );
         assert_eq!(self.snapshot(), before, "{name} changed saved state");
@@ -666,7 +713,7 @@ fn test_founder_defeat_keeps_believers_assets_and_other_faction() {
         (h.s()["followers"].clone(), h.s()["state"].clone()),
         (json!(4).into(), json!("PUBLIC").into())
     );
-    assert_eq!(h.s()["founderDefeated"], true);
+    assert_python_truth(&h.s()["founderDefeated"], true);
     assert_eq!(h.s()["assets"]["book"]["holder"], "EXILE_1");
     h.l();
     assert_eq!(
@@ -1085,7 +1132,8 @@ fn test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay(
         );
         let after = h.engine("1");
         for yield_name in ["gold", "faith", "science", "culture", "favor"] {
-            let delta = after[yield_name].as_f64().unwrap() - before[yield_name].as_f64().unwrap();
+            let delta =
+                after[yield_name].python_f64().unwrap() - before[yield_name].python_f64().unwrap();
             assert_eq!(
                 delta,
                 rewards[&outcome][yield_name].as_f64().unwrap_or(0.0),
@@ -1176,11 +1224,11 @@ fn test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material() {
     );
     assert_eq!(h.s()["discoveries"]["d"]["effect"]["boosts"], json!([3, 1]));
     assert_eq!(
-        h.engine("1")["science"].as_f64().unwrap() - before["science"].as_f64().unwrap(),
+        h.engine("1")["science"].python_f64().unwrap() - before["science"].python_f64().unwrap(),
         10.0
     );
     assert_eq!(
-        h.engine("1")["culture"].as_f64().unwrap() - before["culture"].as_f64().unwrap(),
+        h.engine("1")["culture"].python_f64().unwrap() - before["culture"].python_f64().unwrap(),
         10.0
     );
     assert!(h.s()["retiredAssets"]["book"].python_truthy());
@@ -1308,8 +1356,8 @@ fn test_absorption_rounds_once_worldwide_and_preserves_other_religions() {
         .iter()
         .map(|r| {
             (
-                r["Religion"].as_i64().unwrap(),
-                r["Followers"].as_i64().unwrap(),
+                r["Religion"].python_i64().unwrap(),
+                r["Followers"].python_i64().unwrap(),
             )
         })
         .collect();
@@ -1395,8 +1443,8 @@ fn test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted() {
             .iter()
             .map(|r| {
                 (
-                    r["Religion"].as_i64().unwrap(),
-                    r["Followers"].as_i64().unwrap(),
+                    r["Religion"].python_i64().unwrap(),
+                    r["Followers"].python_i64().unwrap(),
                 )
             })
             .collect();
@@ -1508,12 +1556,12 @@ fn test_bound_revival_creates_one_native_citizen_and_survives_load() {
     h.exec("ENGINE['0'].cities['0'].pressure={['43']=7168}; ENGINE['1'].cities['0'].pressure={['43']=4096}");
     call!(h, "BindEngineReligion", R1, 42);
     assert!(h.s()["lost"].python_truthy());
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.resolve(R1, "d", "REVIVE", json!({}));
     assert_eq!(call!(h, "NativeFollowers", R1), 1);
     assert_eq!(h.s()["followers"], 1);
     assert!(!h.s()["lost"].python_truthy());
-    assert_eq!(h.engine("1")["faith"].as_f64().unwrap(), before - 20.0);
+    assert_eq!(h.engine("1")["faith"].python_f64().unwrap(), before - 20.0);
     h.reload();
 }
 
@@ -1528,7 +1576,7 @@ fn test_inexact_engine_conversion_stays_pending_and_never_replays() {
     h.bind_absorption();
     h.exec("BAD_CONVERSION=true");
     let error = h
-        .call_result(
+        .raw_call(
             "ResolveDiscovery",
             vec![json!(R1), json!("d"), json!("ABSORB"), h.options(json!({}))],
         )
@@ -1568,9 +1616,12 @@ fn test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways(
     );
     assert!(!call!(h, "CanPersecute", 0, R1, 1, R2)[0].python_truthy());
     assert!(!call!(h, "CanPersecute", 1, R2, 0, R1)[0].python_truthy());
-    assert!(call!(h, "CanPersecute", 0, R2, 1, R2).python_truthy());
+    assert!(h.call_truth(
+        "CanPersecute",
+        vec![json!(0), json!(R2), json!(1), json!(R2)]
+    ));
     let error = h
-        .call_result(
+        .raw_call(
             "AssertCanPersecute",
             vec![json!(1), json!(R2), json!(0), json!(R1)],
         )
@@ -1605,8 +1656,14 @@ fn test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_res
             if cause == "war" { "false" } else { "true" }
         ));
         h.reload();
-        assert!(call!(h, "CanPersecute", 0, R1, 1, R2).python_truthy());
-        assert!(call!(h, "CanPersecute", 1, R2, 0, R1).python_truthy());
+        assert!(h.call_truth(
+            "CanPersecute",
+            vec![json!(0), json!(R1), json!(1), json!(R2)]
+        ));
+        assert!(h.call_truth(
+            "CanPersecute",
+            vec![json!(1), json!(R2), json!(0), json!(R1)]
+        ));
     }
 }
 
@@ -1709,12 +1766,12 @@ fn test_hidden_addin_activates_after_load_and_completes_pending_hero_once() {
     let mut h = Harness::new();
     pending_hero(&h);
     h.reload();
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.exec("HERO_UI_FRAME(0)");
     assert_eq!(hero_verification(&h), "PENDING");
     assert_eq!(h.engine("1")["faith"], before);
     h.exec("HERO_UI_LOAD_CLOSE(); HERO_UI_FRAME(0)");
-    assert!(!h.eval("HERO_UI_HIDDEN").python_truthy());
+    assert!(!h.truth("HERO_UI_HIDDEN"));
     assert_eq!(hero_verification(&h), "APPLIED");
     assert_eq!(h.engine("1")["faith"], before + 32.5);
     h.exec("HERO_UI_LOAD_CLOSE(); HERO_UI_FRAME(0)");
@@ -1758,7 +1815,7 @@ fn test_hero_reward_waits_for_ui_verification_and_survives_pending_save() {
     h.f();
     h.l();
     h.d();
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.resolve(R1, "d", "HERO", json!({}));
     assert_eq!(h.s()["discoveries"]["d"]["effects"], "PENDING");
     assert_eq!(h.engine("1")["faith"], before);
@@ -1776,10 +1833,10 @@ fn test_unverified_hero_claim_never_pays_faith() {
     h.f();
     h.l();
     h.d();
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.resolve(R1, "d", "HERO", json!({}));
     h.exec("ENGINE['0'].heroClaims['10']=0");
-    assert!(!call!(h, "CompleteHero", 1).python_truthy());
+    assert!(!h.call_truth("CompleteHero", vec![json!(1)]));
     assert_eq!(h.engine("1")["faith"], before);
     assert_eq!(h.s()["discoveries"]["d"]["effects"], "PENDING");
     h.exec("ENGINE['0'].heroClaims['10']=1; HERO_UI_TICK()");
@@ -1792,7 +1849,7 @@ fn test_hero_reward_waits_until_recipients_turn() {
     h.f();
     h.l();
     h.d();
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.resolve(R1, "d", "HERO", json!({}));
     h.exec("ENGINE['1'].active=false; HERO_UI_TICK(60)");
     assert_eq!(h.engine("1")["faith"], before);
@@ -1811,7 +1868,7 @@ fn test_hero_timeout_does_not_expire_another_players_inactive_reservation() {
     h.discovery("MONK", "MONK_1", R2, "book2", "d2", 1);
     h.resolve(R1, "d", "HERO", json!({"player":0}));
     h.resolve(R2, "d2", "HERO", json!({"player":1}));
-    let before = h.engine("1")["faith"].as_f64().unwrap();
+    let before = h.engine("1")["faith"].python_f64().unwrap();
     h.exec("ENGINE['1'].active=false; ENGINE['0'].heroClaims['10']=-1; HERO_UI_TICK(31)");
     assert_eq!(h.export()["heroes"]["1"]["verification"], "PENDING");
     h.exec("ENGINE['1'].active=true; HERO_UI_TICK(0)");
@@ -1828,7 +1885,7 @@ fn test_interrupted_hero_reward_cannot_replay_after_load() {
     let before = h.engine("1")["faith"].clone();
     h.resolve(R1, "d", "HERO", json!({}));
     h.exec("FAIL_EFFECT=true");
-    assert!(h.call_result("CompleteHero", vec![json!(1)]).is_err());
+    assert!(h.raw_call("CompleteHero", vec![json!(1)]).is_err());
     assert_eq!(hero_verification(&h), "APPLYING");
     h.reload();
     h.exec("HERO_UI_TICK()");
@@ -2170,7 +2227,7 @@ fn test_engine_refusal_and_missing_spawn_leave_pending_and_block_replay() {
         h.d();
         h.exec(&format!("{failure}=true"));
         assert!(h
-            .call_result(
+            .raw_call(
                 "ResolveDiscovery",
                 vec![json!(R1), json!("d"), json!(outcome), h.options(json!({}))]
             )
@@ -2197,7 +2254,7 @@ fn test_reservation_write_failure_has_no_engine_effect_and_receipt_failure_canno
         h.d();
         h.exec(&format!("FAIL_WRITE_AT=WRITES+{offset}"));
         assert!(h
-            .call_result(
+            .raw_call(
                 "ResolveDiscovery",
                 vec![json!(R1), json!("d"), json!("SELL"), h.options(json!({}))]
             )

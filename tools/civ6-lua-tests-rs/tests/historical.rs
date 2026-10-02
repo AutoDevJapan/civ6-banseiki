@@ -1,4 +1,4 @@
-use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
+use civ6_lua_tests_rs::strict::{truthy, ChunkExt, Data, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, json_to_lua, new_lua, query_json, read_repo};
 use mlua::{Lua, Table};
 use regex::Regex;
@@ -22,7 +22,6 @@ const TABLES: [&str; 6] = [
     "JAC_HistoricalEventModifiers",
     "JAC_HistoricalEventRenames",
 ];
-type Boost = (i64, String, i64, i64, i64);
 
 fn child_text<'a>(node: roxmltree::Node<'a, 'a>, name: &str) -> &'a str {
     node.children()
@@ -142,6 +141,46 @@ struct Events {
     lua: Lua,
     teppo: i64,
 }
+
+#[test]
+fn boosts_compare_whole_rows_and_include_original_string_keyed_rows() {
+    let s = Events::new();
+    s.turns(1, 30);
+    let expected = s.boosts("tech", s.teppo);
+    assert_eq!(expected.len(), 3);
+    s.lua.load("for _,row in pairs(BOOSTS) do if row[2]=='tech' and row[3]==... then BOOST_PROBE=row; return end end error('missing teppo boost')").call::<()>(s.teppo).unwrap();
+    for extra in ["BOOST_PROBE[6]=99", "BOOST_PROBE.extra=99"] {
+        s.run(extra);
+        assert_ne!(s.boosts("tech", s.teppo), expected);
+        s.run("BOOST_PROBE[6]=nil; BOOST_PROBE.extra=nil");
+    }
+    s.run("BOOSTS.extra=BOOST_PROBE");
+    assert_eq!(s.boosts("tech", s.teppo).len(), 4);
+    s.run("BOOSTS={unexpected=99}; REVEALED={[3]=99}");
+    assert!(!s
+        .strict_eval::<Table>("BOOSTS")
+        .all_entries_empty()
+        .unwrap());
+    assert!(!s
+        .strict_eval::<Table>("REVEALED")
+        .all_entries_empty()
+        .unwrap());
+}
+
+#[test]
+fn starting_knowledge_counts_python_truth_including_numeric_and_empty_table_values() {
+    let lua = new_lua();
+    let t = lua
+        .load("return {false,0,'',1,'false',{},true}")
+        .strict_eval::<Table>()
+        .unwrap();
+    assert_eq!(
+        t.strict_values::<mlua::Value>()
+            .filter(|v| truthy(v.as_ref().unwrap()))
+            .count(),
+        4
+    );
+}
 impl Events {
     fn new() -> Self {
         Self::with_data(tables())
@@ -206,26 +245,26 @@ impl Events {
             start.call::<()>(turn).unwrap();
         }
     }
-    fn boosts(&self, kind: &str, index: i64) -> Vec<Boost> {
+    fn boosts(&self, kind: &str, index: i64) -> Vec<Data> {
         self.strict_eval::<Table>("BOOSTS")
-            .strict_sequence_values::<Table>()
+            .strict_values::<Table>()
+            .filter(|b| {
+                let b = b.as_ref().unwrap();
+                b.strict_get::<Data>(2).unwrap() == kind
+                    && b.strict_get::<Data>(3).unwrap() == index
+            })
             .map(|b| {
                 let b = b.unwrap();
-                (
-                    b.strict_get(1).unwrap(),
-                    b.strict_get::<String>(2).unwrap(),
-                    b.strict_get(3).unwrap(),
-                    b.strict_get(4).unwrap(),
-                    b.strict_get(5).unwrap(),
-                )
+                Data::Results(b.strict_values().collect::<mlua::Result<_>>().unwrap())
             })
-            .filter(|b| b.1 == kind && b.2 == index)
             .collect()
     }
-    fn prop(&self, player: i64, key: &str) -> Option<i64> {
+    fn prop(&self, player: i64, key: &str) -> Data {
         self.lua
             .load("local p,k=...; return Players[p]:GetProperty(k)")
-            .strict_call((player, key))
+            .call::<mlua::MultiValue>((player, key))
+            .map(Data::from_lupa_results)
+            .unwrap()
             .unwrap()
     }
     fn game<T: FromLuaMulti>(&self, key: &str) -> T {
@@ -236,13 +275,13 @@ impl Events {
     }
     fn log(&self) -> Vec<String> {
         self.strict_eval::<Table>("LOG")
-            .strict_sequence_values()
+            .strict_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
     fn raised(&self) -> Vec<String> {
         self.strict_eval::<Table>("RAISED")
-            .strict_sequence_values::<Table>()
+            .strict_values::<Table>()
             .map(|t| t.unwrap().strict_get("Message").unwrap())
             .collect()
     }
@@ -252,13 +291,13 @@ impl Events {
 fn test_teppo_boosts_every_faction_without_the_tech_on_its_due_turn() {
     let s = Events::new();
     s.turns(1, 29);
-    assert_eq!(s.boosts("tech", s.teppo), vec![]);
+    assert_eq!(s.boosts("tech", s.teppo), Vec::<Data>::new());
     assert_eq!(s.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO"), Some(1));
     s.turns(30, 31);
     assert_eq!(
         s.boosts("tech", s.teppo),
         (1..=3)
-            .map(|p| (p, "tech".into(), s.teppo, 1, 30))
+            .map(|p| Data::from((p, "tech", s.teppo, 1_i64, 30_i64)))
             .collect::<Vec<_>>()
     );
     for player in [1, 2, 3] {
@@ -288,11 +327,11 @@ fn test_any_one_of_the_prerequisites_fires_the_event_early() {
     assert_eq!(
         s.boosts("civic", envoys)
             .iter()
-            .map(|b| b.0)
+            .map(|b| b[0].clone())
             .collect::<Vec<_>>(),
         vec![0, 2, 3]
     );
-    assert_eq!(s.boosts("civic", councils), vec![]);
+    assert_eq!(s.boosts("civic", councils), Vec::<Data>::new());
 }
 #[test]
 fn test_starting_knowledge_fires_no_event_on_turn_1() {
@@ -310,8 +349,8 @@ fn test_starting_knowledge_fires_no_event_on_turn_1() {
             let count = |key| {
                 p.strict_get::<Table>(key)
                     .unwrap()
-                    .strict_pairs::<i64, bool>()
-                    .filter(|row| row.as_ref().unwrap().1)
+                    .strict_pairs::<mlua::Value, mlua::Value>()
+                    .filter(|row| truthy(&row.as_ref().unwrap().1))
                     .count()
             };
             (id, (count("techs"), count("civics")))
@@ -322,8 +361,11 @@ fn test_starting_knowledge_fires_no_event_on_turn_1() {
         (0..CIVS.len() as i64).map(|id| (id, (4, 3))).collect()
     );
     s.turns(1, 1);
-    assert_eq!(s.game::<Option<i64>>("JAC_EVENTS_FIRE_COUNT"), None);
-    assert_eq!(s.strict_eval::<Table>("BOOSTS").raw_len(), 0);
+    assert_eq!(s.game::<Data>("JAC_EVENTS_FIRE_COUNT"), None);
+    assert!(s
+        .strict_eval::<Table>("BOOSTS")
+        .all_entries_empty()
+        .unwrap());
     assert_eq!(
         s.log()
             .iter()
@@ -353,7 +395,7 @@ fn test_an_engine_error_in_one_boost_does_not_stop_the_other_factions() {
     assert_eq!(
         s.boosts("tech", s.teppo)
             .iter()
-            .map(|b| b.0)
+            .map(|b| b[0].clone())
             .collect::<Vec<_>>(),
         vec![2, 3]
     );
@@ -375,7 +417,7 @@ fn test_a_failed_boost_is_left_unrecorded_and_retried_next_turn() {
     assert_eq!(
         s.boosts("tech", s.teppo)
             .iter()
-            .map(|b| (b.0, b.4))
+            .map(|b| (b[0].python_i64().unwrap(), b[4].python_i64().unwrap()))
             .collect::<Vec<_>>(),
         vec![(2, 30), (3, 30), (1, 31)]
     );
@@ -401,8 +443,11 @@ fn test_resource_events_boost_the_sites_research_and_reveal_nothing() {
     let mine = s.tech("TECH_JAC_SENGOKU_MINE_MANAGEMENT");
     assert!(s
         .boosts("tech", mine)
-        .contains(&(1, "tech".into(), mine, 1, sado)));
-    assert_eq!(s.strict_eval::<Table>("REVEALED").raw_len(), 0);
+        .contains(&Data::from((1_i64, "tech", mine, 1_i64, sado))));
+    assert!(s
+        .strict_eval::<Table>("REVEALED")
+        .all_entries_empty()
+        .unwrap());
     assert!(!s.log().iter().any(|l| l.contains("resource event=")));
 }
 #[test]
@@ -422,7 +467,7 @@ fn test_houses_rename_only_by_the_succession_civics() {
     );
     assert!(s
         .boosts("civic", truce)
-        .contains(&(0, "civic".into(), truce, 1, 160)));
+        .contains(&Data::from((0_i64, "civic", truce, 1_i64, 160_i64))));
     s.known(
         0,
         "civics",
@@ -532,7 +577,7 @@ fn test_house_specific_name_only_for_its_house() {
     s.turns(1, 1);
     let notes = s
         .strict_eval::<Table>("NOTES")
-        .strict_sequence_values::<Table>()
+        .strict_values::<Table>()
         .filter_map(|t| {
             let t = t.unwrap();
             let message = t.strict_get::<String>(2).unwrap();
@@ -564,18 +609,26 @@ fn test_no_double_firing_after_a_reload() {
         Some(true),
     );
     s.turns(1, 2);
-    let count = s.game::<Option<i64>>("JAC_EVENTS_FIRE_COUNT");
+    let count = s.game::<Data>("JAC_EVENTS_FIRE_COUNT");
     let fired = s.log().iter().filter(|l| l.contains("] fired ")).count();
-    let notes = s.strict_eval::<Table>("NOTES").raw_len();
+    let notes = s
+        .strict_eval::<Table>("NOTES")
+        .strict_values::<mlua::Value>()
+        .count();
     s.run("RELOAD()");
     s.load_scripts();
     s.turns(2, 3);
-    assert_eq!(s.game::<Option<i64>>("JAC_EVENTS_FIRE_COUNT"), count);
+    assert_eq!(s.game::<Data>("JAC_EVENTS_FIRE_COUNT"), count);
     assert_eq!(
         s.log().iter().filter(|l| l.contains("] fired ")).count(),
         fired
     );
-    assert_eq!(s.strict_eval::<Table>("NOTES").raw_len(), notes);
+    assert_eq!(
+        s.strict_eval::<Table>("NOTES")
+            .strict_values::<mlua::Value>()
+            .count(),
+        notes
+    );
     assert_eq!(s.prop(0, "JAC_EVENT_FIRED_JAC_EVENT_TEPPO"), Some(1));
 }
 #[test]
@@ -593,12 +646,12 @@ fn test_calendar_stages_follow_the_speeds_row_order() {
     );
     let s = Events::with_data(data);
     s.turns(1, 41);
-    assert_eq!(s.boosts("tech", s.teppo), vec![]);
+    assert_eq!(s.boosts("tech", s.teppo), Vec::<Data>::new());
     s.turns(42, 42);
     assert_eq!(
         s.boosts("tech", s.teppo)
             .iter()
-            .map(|b| b.0)
+            .map(|b| b[0].clone())
             .collect::<Vec<_>>(),
         vec![1, 2, 3]
     );
@@ -635,18 +688,22 @@ fn test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens() {
     assert!(civ6_lua_tests_rs::strict::truthy(
         &item.strict_get::<mlua::Value>("ShowPortrait").unwrap()
     ));
-    assert_eq!(
-        (
-            item.strict_get::<String>("Button1Text").unwrap(),
-            item.strict_get::<i64>("OptionsNum").unwrap()
-        ),
-        ("LOC_JAC_EVENT_ADVISOR_OK".into(), 1)
+    civ6_lua_tests_rs::strict::assert_python_eq(
+        &Data::from((
+            item.strict_get::<Data>("Button1Text").unwrap(),
+            item.strict_get::<Data>("OptionsNum").unwrap(),
+        )),
+        ("LOC_JAC_EVENT_ADVISOR_OK", 1_i64),
     );
+    assert!(!matches!(
+        item.strict_get::<mlua::Value>("Button1Func").unwrap(),
+        mlua::Value::Nil
+    ));
     assert!(item
-        .strict_get::<Option<mlua::Function>>("Button1Func")
+        .strict_get::<Table>("UITriggers")
         .unwrap()
-        .is_some());
-    assert_eq!(item.strict_get::<Table>("UITriggers").unwrap().raw_len(), 0);
+        .all_entries_empty()
+        .unwrap());
     assert!(s
         .log()
         .contains(&"[JAC_EVENTS_UI] advisor event=JAC_EVENT_TENBUN_FAMINE player=0 turn=1".into()));
@@ -676,7 +733,7 @@ fn test_advisor_popup_for_each_hotseat_human_on_the_same_turn() {
     );
     let mut keys = s
         .strict_eval::<Table>("JAC_EVENTS_ADVISOR_SHOWN")
-        .strict_pairs::<String, bool>()
+        .strict_pairs::<String, mlua::Value>()
         .map(|r| r.unwrap().0)
         .filter(|k| k.contains("TENBUN"))
         .collect::<Vec<_>>();

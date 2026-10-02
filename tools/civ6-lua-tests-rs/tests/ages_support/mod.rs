@@ -270,11 +270,14 @@ impl World {
             .unwrap()
     }
     pub fn array(&self, expr: &str) -> Vec<Data> {
+        self.values(expr)
+    }
+    pub fn values<T: civ6_lua_tests_rs::strict::FromLua>(&self, expr: &str) -> Vec<T> {
         self.lua
             .load(format!("return {expr}"))
             .strict_eval::<Table>()
             .unwrap()
-            .strict_sequence_values()
+            .strict_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }

@@ -102,9 +102,24 @@ fn inventory_parses_macro_ids_and_rejects_disabled_tests() {
     }
 }
 
-#[test]
-fn assertion_suites_reject_coercing_mlua_decoders_in_rust_syntax() {
+fn audit_assertion_source(source: &str) {
     use syn::visit::Visit;
+    fn coercing_type(ty: &syn::Type) -> bool {
+        struct Types(bool);
+        impl<'ast> Visit<'ast> for Types {
+            fn visit_type_path(&mut self, path: &'ast syn::TypePath) {
+                self.0 |= path.path.segments.iter().any(|part| {
+                    ["bool", "i64", "f64", "String"]
+                        .iter()
+                        .any(|name| part.ident == name)
+                });
+                syn::visit::visit_type_path(self, path);
+            }
+        }
+        let mut types = Types(false);
+        types.visit_type(ty);
+        types.0
+    }
     struct Boundary;
     impl<'ast> Visit<'ast> for Boundary {
         fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
@@ -124,23 +139,14 @@ fn assertion_suites_reject_coercing_mlua_decoders_in_rust_syntax() {
             let raw_value = |t: &syn::Type, expected: &str| matches!(t, syn::Type::Path(p) if p.path.segments.last().unwrap().ident == expected);
             let inferred_chunk_call = matches!(&*call.receiver, syn::Expr::MethodCall(receiver) if receiver.method == "load");
             match method.as_str() {
-                "eval" | "call" if !types.is_empty() => {
-                    assert!(
-                        types.iter().all(|t| raw_value(t, "MultiValue")
-                            || matches!(t,syn::Type::Tuple(tuple) if tuple.elems.is_empty())),
-                        "coercing mlua {method} decoder"
-                    );
-                }
-                "eval" | "call" if inferred_chunk_call => {
-                    panic!("inferred mlua {method} decoder")
-                }
+                "eval" | "call" if !types.is_empty() => assert!(
+                    types.iter().all(|t| raw_value(t, "MultiValue")
+                        || matches!(t,syn::Type::Tuple(tuple) if tuple.elems.is_empty())),
+                    "coercing mlua {method} decoder"
+                ),
+                "eval" | "call" if inferred_chunk_call => panic!("inferred mlua {method} decoder"),
                 "get" | "raw_get" if types.len() == 1 => {
-                    assert!(
-                        !["bool", "i64", "f64", "String"]
-                            .iter()
-                            .any(|name| raw_value(types[0], name)),
-                        "coercing table field decoder"
-                    );
+                    assert!(!coercing_type(types[0]), "coercing table field decoder")
                 }
                 "pairs" => assert!(
                     types.iter().all(|t| raw_value(t, "Value")),
@@ -152,20 +158,46 @@ fn assertion_suites_reject_coercing_mlua_decoders_in_rust_syntax() {
             syn::visit::visit_expr_method_call(self, call);
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    for name in [
-        "ages",
-        "ages_screens",
-        "assassin",
-        "court",
-        "historical",
-        "house",
-        "relations",
-        "religion",
-        "unification",
-        "ages_support/mod",
-    ] {
-        let source = std::fs::read_to_string(root.join(format!("{name}.rs"))).unwrap();
-        Boundary.visit_file(&syn::parse_file(&source).unwrap());
+    Boundary.visit_file(&syn::parse_file(source).unwrap());
+}
+
+#[test]
+fn assertion_suites_reject_coercing_mlua_decoders_in_rust_syntax() {
+    fn sources(path: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                sources(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
     }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let mut files = Vec::new();
+    sources(&root, &mut files);
+    assert!(!files.is_empty());
+    for path in files {
+        let source = std::fs::read_to_string(&path).unwrap();
+        let result = std::panic::catch_unwind(|| audit_assertion_source(&source));
+        assert!(result.is_ok(), "decoder audit failed: {}", path.display());
+    }
+}
+
+#[test]
+fn decoder_audit_rejects_nested_coercing_types_in_every_raw_boundary() {
+    for source in [
+        "fn f(){ table.get::<Option<bool>>(key); }",
+        "fn f(){ table.raw_get::<Option<String>>(key); }",
+        "fn f(){ table.get::<Option<Vec<(mlua::Value, f64)>>>(key); }",
+        "fn f(){ chunk.eval::<Option<bool>>(); }",
+        "fn f(){ function.call::<Option<(i64,String)>>(args); }",
+        "fn f(){ table.pairs::<mlua::Value, Option<String>>(); }",
+    ] {
+        assert!(
+            std::panic::catch_unwind(|| audit_assertion_source(source)).is_err(),
+            "{source}"
+        );
+    }
+    audit_assertion_source("fn f(){ chunk.eval::<mlua::MultiValue>(); function.call::<mlua::MultiValue>(args); table.get::<Option<mlua::Value>>(key); table.strict_get::<Option<bool>>(key); }");
 }

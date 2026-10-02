@@ -167,7 +167,7 @@ impl House {
     }
     fn strings(&self, expr: &str) -> Vec<String> {
         self.strict_eval::<Table>(expr)
-            .strict_sequence_values()
+            .strict_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
