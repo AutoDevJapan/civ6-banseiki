@@ -82,7 +82,7 @@ end
 
 local function KindName(kind)
   local known = { UNIT=true, PERSON=true, HERO=true, GREAT_PERSON=true,
-    ITEM=true, UNLOCK=true, RELIGION=true, LEADER=true }
+    ITEM=true, UNLOCK=true, RELIGION=true, LEADER=true, GOVERNOR=true }
   return known[kind] and L("KIND_" .. kind) or L("UNKNOWN", tostring(kind))
 end
 
@@ -218,6 +218,7 @@ local function ChooseOwner(id)
 end
 
 local function Resolve()
+  if flow and flow.Phase == "APPLYING" and CanSend() then return Send("RESOLVE") end
   if not AllChosen() or not CanSend() then return false end
   return Send("RESOLVE")
 end
@@ -371,7 +372,8 @@ Draw = function()
   end
   targets = ordered
 
-  Controls.ConfirmButton:SetHide(flow.Phase ~= "CHOICE" and flow.Phase ~= "RESULT")
+  Controls.ConfirmButton:SetHide(flow.Phase ~= "CHOICE" and flow.Phase ~= "RESULT"
+    and flow.Phase ~= "APPLYING")
   if flow.Phase == "CHOICE" then
     Controls.ConfirmButton:SetText(L("CONFIRM"))
     Controls.ConfirmButton:SetDisabled(not complete or not CanSend())
@@ -382,6 +384,11 @@ Draw = function()
     Controls.ConfirmButton:SetDisabled(not CanSend())
     Controls.Hint:SetText(L("ACK_HINT"))
     AddTarget("ack", Acknowledge)
+  elseif flow.Phase == "APPLYING" then
+    Controls.ConfirmButton:SetText(L("CONTINUE"))
+    Controls.ConfirmButton:SetDisabled(not CanSend())
+    Controls.Hint:SetText(L("WAIT_HINT"))
+    AddTarget("continue", Resolve)
   else
     Controls.Hint:SetText(L(flow.Phase == "BLOCKED" and "BLOCKED_HINT" or "WAIT_HINT"))
   end
@@ -481,7 +488,7 @@ JAC_AbsorptionFlow_UI = {
 Controls.OpenButton:RegisterCallback(Mouse.eLClick, Open)
 Controls.CloseButton:RegisterCallback(Mouse.eLClick, Close)
 Controls.ConfirmButton:RegisterCallback(Mouse.eLClick, function()
-  if flow and flow.Phase == "CHOICE" then Resolve()
+  if flow and (flow.Phase == "CHOICE" or flow.Phase == "APPLYING") then Resolve()
   elseif flow and flow.Phase == "RESULT" then Acknowledge() end
 end)
 ContextPtr:SetInputHandler(function(input)

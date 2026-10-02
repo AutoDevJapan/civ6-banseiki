@@ -144,6 +144,12 @@
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="ja_JP"><Text>偉人</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="en_US"><Text>Great Person</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="ru_RU"><Text>Великий человек</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="ja_JP"><Text>総督</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="en_US"><Text>Governor</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="ru_RU"><Text>Губернатор</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ja_JP"><Text>移管を続ける</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="en_US"><Text>Continue transfer</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ru_RU"><Text>Продолжить передачу</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ja_JP"><Text>所持品</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="en_US"><Text>Item</Text></Row>
   <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ru_RU"><Text>Предмет</Text></Row>
