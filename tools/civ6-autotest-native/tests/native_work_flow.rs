@@ -339,6 +339,7 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
         local A=TEST_ABSORPTION
         local F=TEST_FLOW
         local reads=assert(ExposedMembers.JAC_HeroReadAPI)
+        local R=A.Rules
         assert(reads.ReadCity(2,CITIES[12].id,'LOYALTY')==87)
         local cities=Players[2].GetCities
         Players[2].GetCities=function(self)
@@ -359,6 +360,21 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
         assert(not pcall(F.ResumeWorldFor,1,'world:dormant',waiting.WaitingFor))
         assert(not pcall(F.ResumeWorldFor,2,'world:dormant',waiting.WaitingFor),
           'unpublished Hero was resumed')
+        local ownedCities=Players[2].cities
+        local pending=R.Copy(A.GetState().Recoveries['recovery:world:dormant'])
+        Players[2].cities={};Players[2].IsAlive=function() return true end
+        assert(pcall(F.Tick),'cityless recipient stopped the world tick')
+        local blocked=F.GetWorld('world:dormant')
+        assert(blocked.Status=='BLOCKED' and blocked.Recipient==2
+          and blocked.WaitingFor==waiting.WaitingFor)
+        assert(R.Equal(pending,A.GetState().Recoveries['recovery:world:dormant'])
+          and HERO_CREATIONS==1,'lost recipient changed the pending native Hero')
+        assert(pcall(F.Tick) and F.GetWorld('world:dormant').Status=='BLOCKED')
+        Game.props=R.Copy(Game.props)
+        Players[2].cities=ownedCities
+        local ok,why=pcall(F.Tick)
+        local resumed=F.GetWorld('world:dormant')
+        assert(ok and resumed.Status=='CLAIMED',tostring(why)..':'..resumed.Status..':'..tostring(resumed.Error))
         UI_CACHE_READY=true
         Events.GameCoreEventPublishComplete.Emit()
         local world=F.GetWorld('world:dormant')

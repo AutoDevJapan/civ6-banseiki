@@ -41,6 +41,13 @@ local function State()
   return state
 end
 local function Save(state) Game:SetProperty(KEY, R.Copy(state)) end
+local function HasSurvivingCity(owner)
+  local player = type(owner) == "number" and Players[owner]
+  return player and player:IsAlive() and player:GetCities():GetCount() > 0
+end
+local function ValidReturnOwner(flow, owner)
+  return owner ~= flow.From and owner ~= flow.To and HasSurvivingCity(owner)
+end
 local function Clamp(value, lo, hi) return math.max(lo, math.min(hi, value)) end
 local function DebugAllowed()
   return Game:GetProperty(TEST_KEY) == 1 and GameConfiguration
@@ -413,10 +420,7 @@ function F.Select(actor, id, assetID, action, returnOwner)
   assert(not entry.EscapeOutcome, "escaped asset cannot be selected")
   assert(IsAllowed(entry, action), "action is not allowed for this asset")
   if action == "RETURN" then
-    assert(type(returnOwner) == "number" and returnOwner ~= flow.From
-      and returnOwner ~= flow.To and Players[returnOwner]
-      and Players[returnOwner]:IsAlive()
-      and Players[returnOwner]:GetCities():GetCount() > 0,
+    assert(ValidReturnOwner(flow, returnOwner),
       "return requires a living third party with a city")
   else assert(returnOwner == nil, "return owner only applies to RETURN") end
   -- All checks precede the mutation; a rejected change preserves the old one.
@@ -573,6 +577,18 @@ function F.Resolve(actor, id)
     Save(state)
     return R.Copy(flow)
   end
+  local invalidReturn = false
+  for _, entry in ipairs(flow.Entries) do
+    if not entry.EscapeOutcome and entry.SelectedAction == "RETURN"
+      and not ValidReturnOwner(flow, entry.ReturnOwner) then
+      entry.SelectedAction, entry.ReturnOwner = nil, nil
+      invalidReturn = true
+    end
+  end
+  if invalidReturn then
+    Save(state) -- no final rolls or asset mutations; the human can choose again
+    return R.Copy(flow)
+  end
   for _, entry in ipairs(flow.Entries) do
     if not entry.EscapeOutcome then
       entry.ActionChance = ActionChance(flow, entry)
@@ -726,8 +742,13 @@ local function MajorOnPlot(plot)
   return found
 end
 local function ClaimWorld(state, world, winner)
-  assert(Players[winner] and Players[winner]:IsAlive() and Players[winner]:IsMajor()
-    and Players[winner]:GetCities():GetCount() > 0, "reward winner needs a city")
+  if not HasSurvivingCity(winner) or not Players[winner]:IsMajor() then
+    if world.Recipient ~= nil and world.Recipient == winner then
+      world.Status, world.Error = "BLOCKED", "reward recipient needs a surviving city"
+      Save(state) -- retain the recipient, publication token and native recovery intent
+    end
+    return
+  end
   if world.Status == "WAIT_CLEAR" then
     world.Status, world.Recipient = "CLAIMED", winner
     world.ClearedTurn = Game.GetCurrentGameTurn()
@@ -829,9 +850,11 @@ function F.Tick()
         end
       end
     elseif world.Status == "BLOCKED" and world.Recipient ~= nil then
-      world.Status, world.Error = "CLAIMED", nil
-      Save(state)
-      ClaimWorld(state, world, world.Recipient)
+      if HasSurvivingCity(world.Recipient) and Players[world.Recipient]:IsMajor() then
+        world.Status, world.Error = "CLAIMED", nil
+        Save(state)
+        ClaimWorld(state, world, world.Recipient)
+      end
     elseif world.Status == "CLAIMED" then
       ClaimWorld(state, world, world.Recipient)
     end

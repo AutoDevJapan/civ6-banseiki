@@ -1179,6 +1179,43 @@ fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
+fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected()
+-> mlua::Result<()> {
+    let lua = flow_world()?;
+    prepare_choices(&lua)?;
+    lua.load(
+        r#"
+        local A,F=TEST_ABSORPTION,TEST_FLOW
+        CHOOSE_ALL('stale-return')
+        F.Select(2,'stale-return','artifact','RETURN',3)
+        F.Select(2,'stale-return','collection','RETURN',0)
+        local beforeRolls=#RANDOM_CALLS
+        local beforeSpawns,beforeKills,beforeTransfers=SPAWNS,KILLS,TRANSFERS
+        Players[3].cities={};Players[3].IsAlive=function() return true end
+        Game.props=A.Rules.Copy(Game.props)
+        local result=F.Resolve(2,'stale-return')
+        assert(result.Phase=='CHOICE' and result.AppliedPlan==nil)
+        assert(#RANDOM_CALLS==beforeRolls and SPAWNS==beforeSpawns
+          and KILLS==beforeKills and TRANSFERS==beforeTransfers)
+        assert(A.GetState().Transactions['stale-return']==nil)
+        for _,entry in ipairs(result.Entries) do
+          assert(not entry.Rolls or not entry.Rolls.P3_SUCCESS)
+          if entry.ID=='artifact' then
+            assert(entry.SelectedAction==nil and entry.ReturnOwner==nil)
+          elseif entry.ID=='collection' then
+            assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==0)
+          else assert(entry.EscapeOutcome or entry.SelectedAction) end
+        end
+        F.Select(2,'stale-return','artifact','RETURN',0)
+        local complete=F.Resolve(2,'stale-return')
+        assert(complete.Phase=='RESULT',tostring(complete.Error))
+        assert(A.GetRoster(0).artifact and A.GetRoster(0).collection)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
 -> mlua::Result<()> {
     let lua = flow_world()?;

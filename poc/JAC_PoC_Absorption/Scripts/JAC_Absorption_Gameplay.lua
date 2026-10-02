@@ -1950,7 +1950,11 @@ local function ObserveRecoveredHero(state, intent, token, class, origin)
   local reads = ExposedMembers.JAC_HeroReadAPI
   local observed = reads and reads.GetObservation and reads.GetObservation(observationToken)
   if not observed or type(observed.Claim) ~= "number"
-    or type(observed.Origin) ~= "table" then return false end
+    or type(observed.Origin) ~= "table" then
+    intent.Status = "WAITING_UI"
+    Save(state)
+    return false
+  end
   local city = observed.Origin.player == intent.Owner
     and Players[intent.Owner]:GetCities():FindID(observed.Origin.id)
   if observed.Claim ~= intent.Owner or not city
