@@ -2,14 +2,20 @@ use civ6_autotest_rs::judge::{default_log_dir, judge, print_table, read_since, s
 use clap::Parser;
 use std::{fs, path::PathBuf, process::ExitCode};
 
+mod support;
+
 #[derive(Parser)]
-#[command(about = "Judge Civ VI PoC logs from a byte-offset baseline")]
+#[command(
+    about = "Judge Civ VI PoC logs from a byte-offset baseline",
+    infer_long_args = true,
+    args_override_self = true
+)]
 struct Args {
-    #[arg(long)]
+    #[arg(long, value_parser = support::path_value_parser())]
     logs: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, value_parser = support::path_value_parser())]
     baseline: Option<PathBuf>,
-    #[arg(long, help = "Write baseline before a manual run, then exit")]
+    #[arg(long, value_parser = support::path_value_parser(), help = "Write baseline before a manual run, then exit")]
     snapshot: Option<PathBuf>,
     #[arg(long, default_value="bundle0", value_parser=["bundle0","generic","growth","japan_map"])]
     profile: String,
@@ -58,6 +64,75 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("Cannot judge logs: {e}");
             ExitCode::from(2)
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "support/parser_tests.rs"]
+mod parser_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compat_judge_prefixes_match_argparse() {
+        parser_tests::assert_long_prefixes::<Args>(
+            &["civ6-judge"],
+            &[
+                ("--logs", &["logs"]),
+                ("--baseline", &["baseline.json"]),
+                ("--snapshot", &["snapshot.json"]),
+                ("--profile", &["generic"]),
+                ("--expected-units", &["2"]),
+            ],
+        );
+    }
+
+    #[test]
+    fn compat_judge_last_values_preserve_paths_choices_and_counts() {
+        let args = Args::try_parse_from([
+            "civ6-judge",
+            "--logs",
+            "old",
+            "--l=",
+            "--baseline",
+            "old",
+            "--b",
+            "",
+            "--snapshot",
+            "old",
+            "--s",
+            "",
+            "--profile",
+            "bundle0",
+            "--p",
+            "growth",
+            "--expected-units",
+            "1",
+            "--e",
+            "2",
+        ])
+        .unwrap();
+        for path in [args.logs, args.baseline, args.snapshot] {
+            assert_eq!(path, Some(PathBuf::from(".")));
+        }
+        assert_eq!(args.profile, "growth");
+        assert_eq!(args.expected_units, Some(2));
+    }
+
+    #[test]
+    fn compat_judge_each_choice_and_numeric_occurrence_is_validated() {
+        for args in [
+            vec!["civ6-judge", "--expected-units", "", "--e", "2"],
+            vec!["civ6-judge", "--expected-units", "1.5", "--e", "2"],
+            vec!["civ6-judge", "--profile", "gen", "--p", "generic"],
+            vec!["civ6-judge", "--profile", "", "--p", "generic"],
+            vec!["civ6-judge", "--profile", "other", "--p", "generic"],
+            vec!["civ6-judge", "--logs-extra", "logs"],
+        ] {
+            parser_tests::assert_parse_error::<Args>(&args);
         }
     }
 }
