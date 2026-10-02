@@ -24,19 +24,19 @@ PR #87の実機3本は、同じ候補 `402bb309f05178d85e0e7adc591b33b612002ac1`
 
 統合時は modinfo にこの Lua を `AddGameplayScripts`、LoadOrder 210 として追加し、`Files` にも登録する。既存の移管 Lua の LoadOrder 200 の後に動かす。画面からは `F.Get(id)` / `F.GetPending(playerID)` の返すコピーを読み、`UI.RequestPlayerOperation(localPlayer, PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_AbsorptionFlow_Operation', Command='SELECT'/'RESOLVE'/'ACK', FlowID=id, AssetID=assetID, Action=action, ReturnOwner=owner})` を送る。`F.Begin(plan)` はゲーム側の吸収発生箇所が呼ぶ。選択の変更は `CHOICE` 中だけ、結果は `RESULT` 中に残り、`ACK` 後に `DONE` となる。`APPLYING` で旧 PoC の公開待ちが生じたら、公開値の準備後に同じ `RESOLVE` を送る。
 
-一次判定は人物、英雄、偉人、当主、総督人格、品物と一般部隊の各行に対し、IDの昇順で `Game.GetRandNum(10000, label)` を呼ぶ。対象が離脱した場合は種類別の逃亡・隠遁・離反・潜伏・散逸から二度目のラベル付き判定で一つ選ぶ。選択後の各行は行為別の成否を一度判定し、失敗した行だけ一次判定を再実行する。二度目に残った人物は捕縛、英雄は保護、偉人は登用、品物は接収に確定する。AIは人物を登用、英雄を再契約、偉人を登用、品物を移管、一般部隊を編入する。偉人・総督人格を科学や文化などに換えない。
-
-暫定の一次離脱率は征服24%、小国懐柔14%、合併7%。忠誠50を基点に1点当たり0.22ポイント、関係値1点当たり0.12ポイントを加減し、保護・再契約は5ポイント減らす。品物の率は0.75倍、失敗後の再判定には5ポイントを加える。行為の基礎成功率は `ACTION` 表で命名し、征服で7ポイント減、小国懐柔で変化なし、合併で6ポイント増とする。いずれも暫定の数値で、SSOTの確定バランスとは扱わない。
-
-離脱した人物・品物は、元の個体と肖像・能力・所属記録を旧 PoC のアーカイブに残し、2手番後に最寄りの未使用の蛮族野営地か集落に報酬を結びつける。該当する場所がなければ、未所有の空き陸地を座標と区画番号の順序で選んで集落を置く。配置に失敗した場所は記録して次の手番に別の候補を試す。除去または集落報酬の実イベントと取得部隊の所有者を照合し、その所有者に一度だけ復帰させる。偉人は公式 `CreatePerson` の個人IDと残り回数を照合し、英雄は `HeroesManager.CreateHero`、請求権、召喚元、寿命と行動回数を照合する。失敗した英雄の継承は原因を残して自害とする。再出現の候補個体と記録はゲームプロパティに保存し、ロード後に二重生成しない。
+三段階判定の順序、方式別・行為別の暫定確率、AI の選択、世界での再登場経路は [SSOT 9.1](../spec/ssot/09-assimilation-religion.md#91-勢力吸収) に置く。実装は `Scripts/JAC_Absorption_Rules.lua` の `FLOW_*` と `Scripts/JAC_Absorption_Flow.lua` が担う。偉人は公式 `CreatePerson` の個人 ID と残り回数を照合し、英雄は `HeroesManager.CreateHero`、請求権、召喚元、寿命と行動回数を照合する。再出現の候補個体と記録はゲームプロパティに保存し、ロード後に二重生成しない。
 
 使用済み偉人・建設・布教回数で公開された復元手段がない場合は、元個体を消す前に `BLOCKED` で止める。判定だけを成功扱いにして失わせない。請求権だけ残った休眠英雄は、請求権だけを付け替える公式Setterがないため、登用の移管エラーを理由付き自害として記録する。潜伏・離反した休眠英雄は報酬で `CreateHero` を試し、請求権・召喚元を照合する。根拠は公式 `DLC/Babylon/UI/Additions/HeroesPopup.lua:79-119,210-280`、`Base/Assets/UI/Tuner/TunerMapPanel.lua:190` と、上記の実機吸収48・英雄再召喚49の旧 PoC 結果。ただし後者は新しい離脱・再登場経路の成功を示さない。
 
-公式 Great Work が元都市に入っている場合は開始前に停止する。公開されたゲーム側 API では作品を都市の枠から取り出して世界報酬へ退避できず、そのまま散逸扱いにすると都市と報酬へ二重に残るためである。台帳で管理する独自の品物・Artifact は行ごとに判定する。公式作品の別個体化は未実装であり、これを含む「全品物で完成」とは報告しない。
+公式 Great Work の移動は実機 API の検証中。公式 `Base/Assets/UI/GreatWorksOverview.lua:836-914` は `PlayerOperations.MOVE_GREAT_WORK` に移動元・移動先の都市 ID、建物 ID、作品 index、移動先枠を渡す。同ファイルの移動判定と `Base/Assets/Gameplay/Data/GreatWorks.xml:226-242` の適合表は、枠の種類と考古遺物の制約を示す。この画面側操作だけでは第三者への返還や野営地の保管を証明できない。`Scripts/JAC_Absorption_Gameplay.lua` の診断口で、ゲーム側の作品実体操作と保存後の確認を実機調査する。実装・試験が終わるまで公式作品の散逸や返還を成功と報告しない。
+
+読み取り診断は `tools/civ6-autotest/scenarios/absorption-native-work-probe.json`。候補 Lua を配置した実機で既存の保存データを開き、`A.NativeWorkCapabilities(owner)` の結果を出す。Rust ドライバーの `--check` は4手順と Lua 構文を確認済みで、実機操作はまだ行っていない。
 
 再登場した公式英雄が寿命で退役した後の人物結合には、旧移管用の `A.BeginHeroRecall` ではなく `A.BeginRecoveredHeroRecall(recallID,recoveryToken)`、公式の信仰購入、`A.CompleteRecoveredHeroRecall(recallID)` を使う。請求権と召喚元、新しい個体IDを確認してから同じ人物記録を結ぶ。画面・検証側は購入後にこの境界を呼ぶ。
 
-方式別の都市効果は、この新フローからの移管だけに適用する暫定値。征服は移管時の忠誠-15と3手番の摩擦-2/手番、小国懐柔は-5と2手番の摩擦-1/手番、合併は0。公式 `DLC/Expansion2/Data/Expansion1_GlobalParameters.xml:55,89-99` は扇動の基礎忠誠-15、戦闘移管後50、文化的帰属による移管後100、上限100を定義する。ここでの追加変化はその規模以内に置いた独自の暫定政策である。ゲーム側の `ChangeLoyalty` は公式 `DLC/BlackDeathScenario/Scripts/BlackDeathScenario_UnitCommands.lua:171,235` に実例がある。
+新しい英雄の回収は `Recoveries[token].AwaitingUI` を保存し、画面側が `ObservationToken` と英雄クラスを `JAC_HeroReadAPI.Observe` に渡した後で請求権と召喚元を判定する。未公開の段階は `WAITING_UI` のまま再開でき、死亡判定にしない。画面側の観測接続と実機試験は統合時に必要。
+
+方式別の都市効果は、この新フローからの移管だけに適用する。数値と公式忠誠値との比較は [SSOT 9.1](../spec/ssot/09-assimilation-religion.md#91-勢力吸収) に置く。ゲーム側の `ChangeLoyalty` は公式 `DLC/BlackDeathScenario/Scripts/BlackDeathScenario_UnitCommands.lua:171,235` に実例がある。
 
 検証用の強制値は明示的な `Game:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',1)`、かつ `GameConfiguration.IsAnyMultiplayer()==false` の場合だけ `F.DebugSetRoll(flowID,assetID,stage,0..9999)` と `F.DebugSetSpawnDelay(0..2)` で設定する。強制値でも本来の `Game.GetRandNum` をラベル付きで必ず呼び、生値・適用値を保存する。通常UIには検証操作を置かない。三段階フロー、再登場、方式別忠誠の実機成功はまだ主張しない。
 

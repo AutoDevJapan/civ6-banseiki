@@ -23,6 +23,40 @@ R.LEADER_REPRESENTATION_POC = "PERSISTENT_PERSON_WITH_GENERAL_PROXY"
 R.NATIVE_HERO_POLICY_POC = "TRANSFER_OR_ARCHIVE_SUICIDE_WITH_CAUSE"
 R.ENTRY_MODES = { CONQUEST = true, SMALL_STATE = true, MERGER = true }
 
+-- SSOT 9.1 provisional flow policy; all rates are basis points (0..10000).
+R.FLOW_FIRST_ESCAPE = { CONQUEST = 2400, SMALL_STATE = 1400, MERGER = 700 }
+R.FLOW_METHOD_ACTION = { CONQUEST = -700, SMALL_STATE = 0, MERGER = 600 }
+R.FLOW_ACTION_SUCCESS = {
+  CAPTURE = 8800, RECRUIT = 6800, SUBMIT = 7800, EXECUTE = 9500,
+  PROTECT = 8200, RECONTRACT = 7000, SUICIDE = 9500,
+  TRANSFER = 9400, LOOT = 8800, SEIZE = 8600, RETURN = 9000,
+  SURRENDER = 9100, INCORPORATE = 8500, DISSOLVE = 9500,
+  INHERIT = 10000, PRESERVE = 10000,
+}
+R.FLOW_RATE = {
+  RollRange = 10000, AttitudeMinimum = 0, AttitudeMaximum = 100,
+  NeutralAttitude = 50, LoyaltyEscapeWeight = 22, RelationEscapeWeight = 12,
+  ProtectedEscapeDelta = -500, BrokenEscapeDelta = 500,
+  ItemEscapeNumerator = 3, ItemEscapeDenominator = 4,
+  RetryEscapeDelta = 500, EscapeMaximum = 9500,
+  LoyaltyActionWeight = 15, RelationActionWeight = 10,
+  ActionMinimum = 500, ActionMaximum = 9900,
+  WorldDelayTurns = 2,
+}
+
+function R.UnitKind(unit)
+  local person = unit:GetProperty(R.PERSON_KEY)
+  if unit.IsHero and unit:IsHero() then return "HERO" end
+  local info = assert(GameInfo.Units[unit:GetType()], "unknown unit definition")
+  if info.UnitType == "UNIT_GREAT_GENERAL" or unit:GetProperty("JAC_POC_GROWTHUI_WARLORD") then
+    return "PERSON"
+  end
+  if person and person.Kind then return person.Kind end
+  local gp = unit:GetGreatPerson()
+  if gp and gp:GetIndividual() >= 0 then return "GREAT_PERSON" end
+  return "UNIT"
+end
+
 -- Database rows supply the dispositions, so a missing/invalid decision fails before mutation.
 function R.Destination(kind, outcome)
   assert(type(outcome) == "string", "explicit disposition required for " .. kind)

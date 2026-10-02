@@ -1,0 +1,39 @@
+{
+  "name": "Absorption native Great Work API availability on the saved PR87 game",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": ["dfa0717e-4d0b-4370-b693-27fc6758571b"]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "jac-absorption-after-turn-absorb-34-0675c70c359e",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption)\nlocal selected,first=nil,nil\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n local ok,slots=pcall(A.OwnedGreatWorkSlots,owner)\n if ok and #slots>0 then selected=owner;first=slots[1];break end\nend\nselected=selected or Game.GetLocalPlayer()\nlocal ok,core=pcall(A.NativeWorkCapabilities,selected)\nlocal result={SelectedOwner=selected,FirstWork=first,GameplayOK=ok,Gameplay=ok and core or nil,GameplayError=not ok and tostring(core) or nil,UI={}}\nfor _,pair in ipairs({{'RequestPlayerOperation',UI},{'RequestPlayerOperation',Game},{'GetWorkingDeal',DealManager},{'GetPossibleDealItems',DealManager}}) do\n local name,object=pair[1],pair[2]\n local present,value=pcall(function() return object and object[name] end)\n result.UI[#result.UI+1]={Object=object==UI and 'UI' or object==Game and 'Game' or 'DealManager',Method=name,Available=present and type(value)=='function'}\nend\nfor _,name in ipairs({'MOVE_GREAT_WORK','PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST','PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT'}) do\n result.UI[name]=PlayerOperations and PlayerOperations[name]~=nil or false\nend\nprint('[JAC_NATIVE_WORK_API] '..A.Canonical(result))\nreturn A.Canonical(result)"
+    }
+  ]
+}

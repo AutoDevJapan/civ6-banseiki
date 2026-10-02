@@ -8,17 +8,9 @@ local KEY = "JAC_ABSORPTION_FLOW_V1"
 local DEBUG_KEY = "JAC_ABSORPTION_FLOW_DEBUG_V1"
 local TEST_KEY = "JAC_ABSORPTION_FLOW_TEST_MODE"
 
--- Explicitly provisional basis points. Relationship and loyalty are clamped
--- to 0..100; contract offsets model a protected or broken commitment.
-local FIRST = { CONQUEST = 2400, SMALL_STATE = 1400, MERGER = 700 }
-local METHOD_ACTION = { CONQUEST = -700, SMALL_STATE = 0, MERGER = 600 }
-local ACTION = {
-  CAPTURE = 8800, RECRUIT = 6800, SUBMIT = 7800, EXECUTE = 9500,
-  PROTECT = 8200, RECONTRACT = 7000, SUICIDE = 9500,
-  TRANSFER = 9400, LOOT = 8800, SEIZE = 8600, RETURN = 9000,
-  SURRENDER = 9100, INCORPORATE = 8500, DISSOLVE = 9500,
-  INHERIT = 10000, PRESERVE = 10000,
-}
+local FIRST, METHOD_ACTION, ACTION = R.FLOW_FIRST_ESCAPE,
+  R.FLOW_METHOD_ACTION, R.FLOW_ACTION_SUCCESS
+local RATE = R.FLOW_RATE
 local CHOICES = {
   UNIT = { "SURRENDER", "INCORPORATE", "DISSOLVE" },
   PERSON = { "CAPTURE", "RECRUIT", "SUBMIT", "EXECUTE" },
@@ -62,12 +54,12 @@ local function Roll(state, flow, entry, stage)
   entry.Rolls = entry.Rolls or {}
   if entry.Rolls[stage] then return entry.Rolls[stage].Used end
   local label = "JAC absorption " .. stage .. " " .. flow.ID .. "/" .. entry.ID
-  local raw = Game.GetRandNum(10000, label)
+  local raw = Game.GetRandNum(RATE.RollRange, label)
   local debug = DebugState()
   local key = flow.ID .. ":" .. entry.ID .. ":" .. stage
   local forced = debug and debug.Rolls[key]
   local used = forced == nil and raw or forced
-  assert(type(used) == "number" and used >= 0 and used < 10000, "invalid roll")
+  assert(type(used) == "number" and used >= 0 and used < RATE.RollRange, "invalid roll")
   entry.Rolls[stage] = { Raw = raw, Used = used, Label = label,
     Debug = forced ~= nil, Turn = Game.GetCurrentGameTurn() }
   Save(state) -- durably journal the call before an asset transition
@@ -75,28 +67,37 @@ local function Roll(state, flow, entry, stage)
 end
 local function Attitude(entry, recipient)
   local source = entry.Source or {}
-  local loyalty = Clamp(tonumber(source.Loyalty) or 50, 0, 100)
+  local loyalty = Clamp(tonumber(source.Loyalty) or RATE.NeutralAttitude,
+    RATE.AttitudeMinimum, RATE.AttitudeMaximum)
   local relation = source.Relations and source.Relations[tostring(recipient)]
     or source.Relationship
-  relation = Clamp(tonumber(relation) or 50, 0, 100)
+  relation = Clamp(tonumber(relation) or RATE.NeutralAttitude,
+    RATE.AttitudeMinimum, RATE.AttitudeMaximum)
   local contract = source.Contract
-  local contractOffset = (contract == "PROTECT" or contract == "RECONTRACT") and -500
-    or contract == "BROKEN" and 500 or 0
+  local contractOffset = (contract == "PROTECT" or contract == "RECONTRACT")
+      and RATE.ProtectedEscapeDelta
+    or contract == "BROKEN" and RATE.BrokenEscapeDelta or 0
   return loyalty, relation, contractOffset
 end
 local function FirstChance(flow, entry, retry)
   local loyalty, relation, contract = Attitude(entry, flow.To)
-  local base = FIRST[flow.Mode] + (50 - loyalty) * 22 + (50 - relation) * 12 + contract
-  if entry.Kind == "ITEM" then base = math.floor(base * 0.75) end
-  if retry then base = base + 500 end
-  return Clamp(base, 0, 9500)
+  local base = FIRST[flow.Mode]
+    + (RATE.NeutralAttitude - loyalty) * RATE.LoyaltyEscapeWeight
+    + (RATE.NeutralAttitude - relation) * RATE.RelationEscapeWeight + contract
+  if entry.Kind == "ITEM" then
+    base = math.floor(base * RATE.ItemEscapeNumerator / RATE.ItemEscapeDenominator)
+  end
+  if retry then base = base + RATE.RetryEscapeDelta end
+  return Clamp(base, 0, RATE.EscapeMaximum)
 end
 local function ActionChance(flow, entry)
   local loyalty, relation, contract = Attitude(entry, flow.To)
   local base = assert(ACTION[entry.SelectedAction], "action chance missing")
-  if entry.Kind == "UNLOCK" or entry.Kind == "RELIGION" then return 10000 end
-  return Clamp(base + METHOD_ACTION[flow.Mode] + (loyalty - 50) * 15
-    + (relation - 50) * 10 - contract, 500, 9900)
+  if entry.Kind == "UNLOCK" or entry.Kind == "RELIGION" then return RATE.RollRange end
+  return Clamp(base + METHOD_ACTION[flow.Mode]
+    + (loyalty - RATE.NeutralAttitude) * RATE.LoyaltyActionWeight
+    + (relation - RATE.NeutralAttitude) * RATE.RelationActionWeight - contract,
+    RATE.ActionMinimum, RATE.ActionMaximum)
 end
 local function ResolveEscape(state, flow, entry, prefix)
   local roll = Roll(state, flow, entry, prefix .. "_ESCAPE")
@@ -106,16 +107,9 @@ local function ResolveEscape(state, flow, entry, prefix)
   if roll >= chance then return nil end
   local options = assert(ESCAPE[entry.Kind], "escape list missing")
   local branch = Roll(state, flow, entry, prefix .. "_BRANCH")
-  return options[math.floor(branch * #options / 10000) + 1]
+  return options[math.floor(branch * #options / RATE.RollRange) + 1]
 end
-local function UnitKind(unit)
-  local person = unit:GetProperty(R.PERSON_KEY)
-  if unit.IsHero and unit:IsHero() then return "HERO" end
-  if person and person.Kind then return person.Kind end
-  local gp = unit:GetGreatPerson()
-  if gp and gp:GetIndividual() >= 0 then return "GREAT_PERSON" end
-  return "UNIT"
-end
+local UnitKind = R.UnitKind
 local function NativePersonID(owner, unit)
   local person = unit:GetProperty(R.PERSON_KEY)
   return person and person.ID or ("native-person:" .. owner .. ":" .. unit:GetID())
@@ -132,11 +126,6 @@ local function Portrait(kind, unit, record)
   return nil
 end
 local function Inventory(plan)
-  -- Native Great Works cannot be removed from a city's slot by the published
-  -- gameplay API. Treating one as a scattered roster ITEM while leaving its
-  -- native work in the transferred city would duplicate it. Stop before rolls.
-  assert(next(A.OwnedGreatWorks(plan.From)) == nil,
-    "native Great Works need a lossless scatter/recovery adapter")
   local roster, entries, linked = A.GetRoster(plan.From), {}, {}
   for id, record in pairs(roster) do
     if record.Unit and record.Unit.Owner == plan.From and record.Unit.ID >= 0 then
@@ -154,15 +143,33 @@ local function Inventory(plan)
     if kind ~= "UNIT" then id = id or NativePersonID(plan.From, unit) end
     id = id or ("unit:" .. plan.From .. ":" .. unit:GetID())
     local record = roster[id] or unit:GetProperty(R.PERSON_KEY)
+    if record and record.Kind ~= kind and kind == "PERSON"
+      and (record.Kind == "UNIT" or record.Kind == "GREAT_PERSON") then
+      record = R.Copy(record)
+      record.FormerKind, record.Kind = record.Kind, "PERSON"
+    end
     if record then assert(record.Kind == kind, "linked identity/unit kind mismatch") end
     assert(not found[id], "duplicate absorption asset ID")
     found[id] = true
     local info = GameInfo.Units[unit:GetType()]
+    local source = record and R.Copy(record)
+    if not source and kind == "PERSON" then
+      local warlord = unit:GetProperty("JAC_POC_GROWTHUI_WARLORD")
+      local gp = unit:GetGreatPerson()
+      source = { ID = id, Kind = kind, Owner = plan.From, UnitType = info.UnitType,
+        Warlord = R.Copy(warlord), NativeIndividual = gp and gp:GetIndividual() or -1,
+        Abilities = A.UnitAbilityLabels(unit) }
+      if warlord then
+        source.Personality, source.Trait = warlord.Personality, warlord.Trait
+        source.Equipment = R.Copy(warlord.Equipment)
+      end
+    end
     entries[#entries + 1] = {
       ID = id, Kind = kind, Name = record and record.Name or unit:GetName()
         or info.Name or info.UnitType,
       Portrait = Portrait(kind, unit, record), AllowedActions = R.Copy(assert(CHOICES[kind])),
-      Source = R.Copy(record), UnitID = unit:GetID(), UnitType = info.UnitType,
+      Source = source, UnitID = unit:GetID(), UnitType = info.UnitType,
+      Abilities = A.UnitAbilityLabels(unit, record),
     }
   end
   for _, id in ipairs(R.Keys(roster)) do
@@ -174,9 +181,25 @@ local function Inventory(plan)
       entries[#entries + 1] = { ID = id, Kind = record.Kind,
         Name = record.Name or record.LeaderType or id,
         Portrait = Portrait(record.Kind, nil, record),
-        AllowedActions = R.Copy(CHOICES[record.Kind]), Source = R.Copy(record) }
+        AllowedActions = R.Copy(CHOICES[record.Kind]), Source = R.Copy(record),
+        Abilities = R.Copy(record.Abilities or record.Ability or record.Traits or record.Trait) }
       found[id] = true
     end
+  end
+  for _, work in ipairs(A.OwnedGreatWorkSlots(plan.From)) do
+    local id = "native-work:" .. tostring(work.Index)
+    assert(not found[id] and not roster[id], "native Great Work identity collision")
+    entries[#entries + 1] = {
+      ID = id, Kind = "ITEM", Name = work.Name or work.GreatWorkType or id,
+      Portrait = work.GreatWorkType and "ICON_" .. work.GreatWorkType,
+      AllowedActions = R.Copy(CHOICES.ITEM),
+      Source = { ID = id, Kind = "ITEM", Owner = plan.From,
+        Type = work.ObjectType or "NATIVE_GREAT_WORK", NativeWork = R.Copy(work) },
+      NativeWork = R.Copy(work),
+      Abilities = work.Effects and #work.Effects > 0 and R.Copy(work.Effects)
+        or work.ObjectType and { work.ObjectType } or nil,
+    }
+    found[id] = true
   end
   -- Native claim-only Heroes can outlive their Unit. Keep the same generated
   -- identity as A.Prepare; a linked roster record has already been listed.
@@ -198,6 +221,8 @@ local function Inventory(plan)
         assert(not found[id], "native Hero identity collision")
         entries[#entries + 1] = { ID = id, Kind = "HERO", Name = def.Name or def.HeroClassType,
           Portrait = "ICON_" .. def.UnitType, AllowedActions = R.Copy(CHOICES.HERO),
+          Abilities = GameInfo.Units[def.UnitType] and GameInfo.Units[def.UnitType].Description
+            and { GameInfo.Units[def.UnitType].Description } or nil,
           Source = { ID = id, Kind = "HERO", Owner = plan.From,
             HeroClassType = def.HeroClassType }, DormantClass = def.Index }
         found[id] = true
@@ -208,7 +233,8 @@ local function Inventory(plan)
   assert(not found[leaderID], "leader identity collision")
   entries[#entries + 1] = {
     ID = leaderID, Kind = "GREAT_PERSON",
-    Name = PlayerConfigurations[plan.From]:GetLeaderTypeName(),
+    Name = (GameInfo.Leaders and GameInfo.Leaders[PlayerConfigurations[plan.From]:GetLeaderTypeName()]
+      or {}).Name or PlayerConfigurations[plan.From]:GetLeaderTypeName(),
     Portrait = "ICON_" .. PlayerConfigurations[plan.From]:GetLeaderTypeName(),
     AllowedActions = R.Copy(CHOICES.GREAT_PERSON),
     Source = { ID = leaderID, Kind = "GREAT_PERSON", Owner = plan.From,
@@ -256,14 +282,16 @@ function F.DebugSetRoll(flowID, assetID, stage, value)
   assert(stage == "P1_ESCAPE" or stage == "P1_BRANCH" or stage == "P3_SUCCESS"
     or stage == "P3_RETRY_ESCAPE" or stage == "P3_RETRY_BRANCH", "unknown debug stage")
   assert(type(value) == "number" and value == math.floor(value)
-    and value >= 0 and value < 10000, "debug roll outside 0..9999")
+    and value >= 0 and value < RATE.RollRange, "debug roll outside 0..9999")
   local debug = DebugState()
   debug.Rolls[flowID .. ":" .. tostring(assetID) .. ":" .. stage] = value
   Game:SetProperty(DEBUG_KEY, R.Copy(debug))
 end
 function F.DebugSetSpawnDelay(turns)
   assert(DebugAllowed(), "absorption debug delay requires explicit single-player test mode")
-  assert(turns == 0 or turns == 1 or turns == 2, "debug spawn delay outside 0..2")
+  assert(type(turns) == "number" and turns == math.floor(turns)
+    and turns >= 0 and turns <= RATE.WorldDelayTurns,
+    "debug spawn delay outside 0..2")
   local debug = DebugState()
   debug.Delay = turns
   Game:SetProperty(DEBUG_KEY, R.Copy(debug))
@@ -334,7 +362,8 @@ function F.Begin(plan)
   local fingerprint = {}
   for _, entry in ipairs(entries) do
     fingerprint[#fingerprint + 1] = { ID = entry.ID, Kind = entry.Kind,
-      UnitID = entry.UnitID, UnitType = entry.UnitType }
+      UnitID = entry.UnitID, UnitType = entry.UnitType,
+      NativeWork = R.Copy(entry.NativeWork) }
   end
   local flow = { ID = plan.ID, From = plan.From, To = plan.To, Mode = plan.Mode,
     Turn = Game.GetCurrentGameTurn(), Phase = "CHOICE", Request = R.Copy(plan),
@@ -392,7 +421,8 @@ local function InventoryStillMatches(flow)
   local actual = {}
   for _, entry in ipairs(entries) do
     actual[#actual + 1] = { ID = entry.ID, Kind = entry.Kind,
-      UnitID = entry.UnitID, UnitType = entry.UnitType }
+      UnitID = entry.UnitID, UnitType = entry.UnitType,
+      NativeWork = R.Copy(entry.NativeWork) }
   end
   if not R.Equal(actual, flow.Inventory) or not R.Equal(roster, flow.RosterAtBegin) then
     return false, "absorption inventory changed after first rolls"
@@ -404,12 +434,13 @@ local function BuildPlan(flow)
   plan.EntryConditionsMet = true
   plan.RelationsResolved = true
   plan.FlowPolicy = true
-  plan.Units, plan.Assets = {}, {}
+  plan.Units, plan.Assets, plan.NativeWorks = {}, {}, {}
   for _, entry in ipairs(flow.Entries) do
     local outcome = assert(entry.FinalOutcome, "unresolved absorption result")
     local decision = { Outcome = outcome }
     if outcome == "RETURN" then decision.ReturnOwner = assert(entry.ReturnOwner) end
     if entry.Leader then plan.Leader = decision
+    elseif entry.NativeWork then plan.NativeWorks[entry.NativeWork.Index] = R.Copy(decision)
     else
       if entry.UnitID then
         plan.Units[R.UnitKey(flow.From, entry.UnitID)] = R.Copy(decision)
@@ -425,7 +456,7 @@ end
 
 local function QueueEscapes(state, flow, tx)
   local debug = DebugState()
-  local delay = debug and debug.Delay or 2
+  local delay = debug and debug.Delay or RATE.WorldDelayTurns
   for _, entry in ipairs(flow.Entries) do
     if entry.FinalOutcome and ESCAPE[entry.Kind] then
       local escaping = false
@@ -442,12 +473,14 @@ local function QueueEscapes(state, flow, tx)
               break
             end
           end
-          local origin = snapshot and { X = snapshot.X, Y = snapshot.Y }
+          local origin = entry.NativeWork and { X = entry.NativeWork.X, Y = entry.NativeWork.Y }
+            or snapshot and { X = snapshot.X, Y = snapshot.Y }
             or tx.Cities and tx.Cities[1] and { X = tx.Cities[1].X, Y = tx.Cities[1].Y }
           assert(origin, "escaped asset has no world origin")
           state.World[key] = { ID = key, FlowID = flow.ID, AssetID = entry.ID,
             Kind = entry.Kind, Outcome = entry.FinalOutcome, Origin = origin,
-            Snapshot = snapshot, DueTurn = Game.GetCurrentGameTurn() + delay,
+            Snapshot = snapshot, NativeWork = R.Copy(entry.NativeWork),
+            DueTurn = Game.GetCurrentGameTurn() + delay,
             Status = "WAIT_SITE", SpawnAttempts = 0 }
           Save(state)
         end
@@ -682,7 +715,15 @@ local function ClaimWorld(state, world, winner)
     Save(state)
     return
   end
-  world.Status = result.Status == "SUICIDE" and "SUICIDE" or "COMPLETE"
+  if result.Status == "WAITING_UI" then
+    world.WaitingFor = result.ObservationToken
+    Save(state)
+    return
+  end
+  assert(result.Status == "SUICIDE" or result.Status == "COMPLETE",
+    "recovery has an unresolved native state")
+  world.Status = result.Status
+  world.WaitingFor = nil
   world.Cause = result.Cause
   Save(state)
 end

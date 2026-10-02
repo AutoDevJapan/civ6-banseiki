@@ -145,22 +145,101 @@ local function PalaceWorks(city)
 end
 A.PalaceWorks = PalaceWorks
 
-local function OwnedGreatWorks(owner)
-  local works = {}
+function A.OwnedGreatWorkSlots(owner)
+  local works, seen = {}, {}
   for _, city in Players[owner]:GetCities():Members() do
     local buildings = city:GetBuildings()
     for info in GameInfo.Buildings() do
       if buildings:HasBuilding(info.Index) then
         for slot = 0, WorkSlots(city, info.Index) - 1 do
-          local work = WorkInSlot(city, info.Index, slot)
-          if work and work >= 0 then works[work] = true end
+          local index = WorkInSlot(city, info.Index, slot)
+          if index and index >= 0 then
+            assert(not seen[index], "native Great Work occupies multiple source slots")
+            seen[index] = true
+            local workType = buildings.GetGreatWorkTypeFromIndex
+              and buildings:GetGreatWorkTypeFromIndex(index)
+            local definition = workType and GameInfo.GreatWorks[workType]
+            local provenance = Game.GetGreatWorkDataFromIndex
+              and Game.GetGreatWorkDataFromIndex(index)
+            local creator = Game.GetGreatWorkPlayer and Game.GetGreatWorkPlayer(index)
+            local effects = {}
+            if definition and GameInfo.GreatWork_YieldChanges then
+              for row in GameInfo.GreatWork_YieldChanges() do
+                if row.GreatWorkType == definition.GreatWorkType then
+                  effects[#effects + 1] = row.YieldType .. " " .. tostring(row.YieldChange)
+                end
+              end
+            end
+            if definition and definition.Tourism and definition.Tourism ~= 0 then
+              effects[#effects + 1] = "TOURISM " .. tostring(definition.Tourism)
+            end
+            table.sort(effects)
+            works[#works + 1] = { Index = index, Owner = owner, CityID = city:GetID(),
+              X = city:GetX(), Y = city:GetY(), Building = info.Index,
+              BuildingType = info.BuildingType, Slot = slot,
+              GreatWorkType = definition and definition.GreatWorkType,
+              ObjectType = definition and definition.GreatWorkObjectType,
+              Name = definition and definition.Name,
+              CreatorName = provenance and provenance.CreatorName ~= ""
+                and provenance.CreatorName or nil,
+              TurnCreated = provenance and provenance.TurnCreated,
+              CreatedByPlayer = creator, Effects = effects }
+          end
         end
       end
     end
   end
+  table.sort(works, function(a, b) return a.Index < b.Index end)
+  return works
+end
+local function OwnedGreatWorks(owner)
+  local works = {}
+  for _, work in ipairs(A.OwnedGreatWorkSlots(owner)) do works[work.Index] = true end
   return works
 end
 A.OwnedGreatWorks = OwnedGreatWorks
+
+-- Read-only game-core probe. The UI's MOVE_GREAT_WORK request proves only the
+-- normal same-owner drag operation; native setters need real runtime evidence.
+function A.NativeWorkCapabilities(owner)
+  local player = assert(Players[owner], "native-work probe player missing")
+  local city = assert(player:GetCities():GetCapitalCity(), "native-work probe city missing")
+  local objects = { Game = Game, CityBuildings = city:GetBuildings(), City = city,
+    CityManager = CityManager, CityCollection = player:GetCities(),
+    PlayerCulture = player:GetCulture() }
+  local result = { Owner = owner, CityID = city:GetID(), Methods = {},
+    Operations = {}, NativeSlots = A.OwnedGreatWorkSlots(owner) }
+  if Game.GetCulture then
+    local ok, culture = pcall(Game.GetCulture)
+    if not ok or culture == nil then ok, culture = pcall(Game.GetCulture, Game) end
+    if ok and culture then objects.GameCulture = culture end
+    result.GameCultureRead = ok and culture ~= nil
+  end
+  local names = { "CreateGreatWork", "CreateGreatWorkInSlot", "DestroyGreatWork",
+    "RemoveGreatWork", "DeleteGreatWork", "MoveGreatWork", "TransferGreatWork",
+    "SetGreatWork", "SetGreatWorkInSlot", "SetGreatWorkPlayer",
+    "GetGreatWorkInSlot", "GetGreatWorkSlotType", "GetNumGreatWorkSlots",
+    "GetGreatWorkTypeFromIndex", "GetGreatWorkDataFromIndex",
+    "GetGreatWorkPlayer", "GetGreatWorkType", "GetGreatWorkTypeFromIndex",
+    "GetGreatWorksInCity", "CreateCity", "TransferCity", "DestroyCity",
+    "Create", "Destroy" }
+  for label, object in pairs(objects) do
+    local available = {}
+    for _, name in ipairs(names) do
+      local ok, value = pcall(function() return object[name] end)
+      if ok and type(value) == "function" then available[#available + 1] = name end
+    end
+    result.Methods[label] = available
+  end
+  if PlayerOperations then
+    for _, name in ipairs({ "MOVE_GREAT_WORK", "PARAM_PLAYER_ONE", "PARAM_CITY_SRC",
+      "PARAM_CITY_DEST", "PARAM_BUILDING_SRC", "PARAM_BUILDING_DEST",
+      "PARAM_GREAT_WORK_INDEX", "PARAM_SLOT" }) do
+      if PlayerOperations[name] ~= nil then result.Operations[name] = tostring(PlayerOperations[name]) end
+    end
+  end
+  return result
+end
 
 -- The installed engine separates game mutations from UI-only manager getters.
 -- UI closures keep their own engine context; they return only scalars/component IDs.
@@ -344,6 +423,41 @@ local function AssertSupportedUnitState(unit)
   assert(not rockBand, "unsupported unit state: RockBand:" .. info.UnitType)
 end
 
+local function UnitAbilityCounts(unit)
+  local result = {}
+  local ability = unit.GetAbility and unit:GetAbility()
+  if ability and ability.GetAbilityCount and GameInfo.UnitAbilities then
+    for row in GameInfo.UnitAbilities() do
+      local count = ability:GetAbilityCount(row.UnitAbilityType)
+      if count and count > 0 then result[row.UnitAbilityType] = count end
+    end
+  end
+  return result
+end
+
+function A.UnitAbilityLabels(unit, record)
+  local result, seen = {}, {}
+  local function Add(value)
+    if type(value) == "table" then
+      if value.Name then Add(value.Name)
+      else for _, part in ipairs(value) do Add(part) end end
+    elseif type(value) == "string" and value ~= "" and not seen[value] then
+      seen[value] = true
+      result[#result + 1] = value
+    end
+  end
+  if record then Add(record.Abilities or record.Ability) end
+  for _, name in ipairs(R.Keys(UnitAbilityCounts(unit))) do
+    local row = GameInfo.UnitAbilities[name]
+    Add(row and (row.Description or row.Name) or name)
+  end
+  local gp = unit:GetGreatPerson()
+  local individual = gp and gp:GetIndividual() or -1
+  local definition = individual >= 0 and GameInfo.GreatPersonIndividuals[individual]
+  if definition then Add(definition.ActionEffectTextOverride or definition.BirthEffectTextOverride) end
+  return result
+end
+
 local function SnapshotUnit(unit, publishedSpread)
   AssertSupportedUnitState(unit)
   local info = assert(GameInfo.Units[unit:GetType()], "unknown unit type")
@@ -352,7 +466,7 @@ local function SnapshotUnit(unit, publishedSpread)
   local individual = greatPerson and greatPerson:GetIndividual() or -1
   local person = unit:GetProperty(R.PERSON_KEY)
   assert(not hero or not person or person.Kind == "HERO", "native Hero/person kind mismatch")
-  local kind = hero and "HERO" or person and person.Kind or (individual >= 0 and "GREAT_PERSON" or "UNIT")
+  local kind = R.UnitKind(unit)
   local experience = unit:GetExperience()
   local promotions = {}
   for row in GameInfo.UnitPromotions() do
@@ -368,7 +482,7 @@ local function SnapshotUnit(unit, publishedSpread)
     XP = experience and experience:GetExperiencePoints() or nil, Promotions = promotions, Formation = unit:GetMilitaryFormation(),
     BuildCharges = unit:GetBuildCharges(), SpreadCharges = publishedSpread ~= nil and publishedSpread or SpreadCharges(unit), Religion = religion,
     Properties = Properties(unit, unitKeys), PropertyKeys = R.Copy(unitKeys), RebindKeys = RebindKeys(unitRebinders),
-    Name = unit:GetName(),
+    Name = unit:GetName(), AbilityCounts = UnitAbilityCounts(unit),
   }
 end
 A.SnapshotUnit = SnapshotUnit
@@ -520,7 +634,8 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   end
   local tx = { ID = plan.ID, From = plan.From, To = plan.To, Mode = plan.Mode,
     Turn = Game.GetCurrentGameTurn(), Request = R.Copy(plan), Status = "PREPARED", Units = {}, UnitMap = {}, Cities = {}, Plots = {},
-    SourceRoster = GetRoster(plan.From), TargetRoster = GetRoster(plan.To), Decisions = {}, HeroResults = {}, Adapters = {} }
+    SourceRoster = GetRoster(plan.From), TargetRoster = GetRoster(plan.To), Decisions = {}, HeroResults = {},
+    NativeWorks = {}, Adapters = {} }
   local generatedDecisions, heroOrigins, dormant = {}, {}, {}
   tx.OriginalSourceRoster = R.Copy(tx.SourceRoster)
   for _, unit in ipairs(Units(plan.From)) do
@@ -533,7 +648,30 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       assert(type(publishedSpread) == "number", "published donor spread charges must be a number")
     end
     local snap = SnapshotUnit(unit, publishedSpread)
+    if snap.Kind == "PERSON" then
+      local unitPerson = snap.Properties[R.PERSON_KEY]
+      if unitPerson and unitPerson.Kind ~= "PERSON" then
+        assert(unitPerson.Kind == "UNIT" or unitPerson.Kind == "GREAT_PERSON",
+          "native person's Unit record has an incompatible kind")
+        unitPerson.FormerKind, unitPerson.Kind = unitPerson.Kind, "PERSON"
+      end
+      for _, asset in pairs(tx.SourceRoster) do
+        if asset.Unit and asset.Unit.Owner == tx.From and asset.Unit.ID == snap.ID
+          and asset.Kind ~= "PERSON" then
+          assert(asset.Kind == "UNIT" or asset.Kind == "GREAT_PERSON",
+            "native person's roster record has an incompatible kind")
+          asset.FormerKind, asset.Kind = asset.Kind, "PERSON"
+        end
+      end
+    end
     local decision = Decision((plan.Units or {})[R.UnitKey(plan.From, snap.ID)])
+    if snap.Kind == "PERSON" and decision.Outcome == "INCORPORATE"
+      and (snap.Type == "UNIT_GREAT_GENERAL"
+        or snap.Properties.JAC_POC_GROWTHUI_WARLORD) then
+      -- Older direct PoC plans used the unit disposition before these native
+      -- people were classified. Preserve that request as a person recruitment.
+      decision.RequestedOutcome, decision.Outcome = "INCORPORATE", "RECRUIT"
+    end
     snap.Outcome = decision.Outcome
     snap.Destination = DestinationOwner(snap.Kind, snap.Outcome, decision, tx)
     snap.RequestedDestination = snap.Destination
@@ -563,7 +701,15 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
         local id = person and person.ID or ("native-person:" .. tx.From .. ":" .. snap.ID)
         assert(not tx.SourceRoster[id], "native person ID collision")
         tx.SourceRoster[id] = person and R.Copy(person) or {
-          ID = id, Kind = snap.Kind, Owner = tx.From, NativeIndividual = snap.Individual, UnitType = snap.Type }
+          ID = id, Kind = snap.Kind, Owner = tx.From, NativeIndividual = snap.Individual,
+          UnitType = snap.Type, Abilities = A.UnitAbilityLabels(unit),
+          Warlord = R.Copy(snap.Properties.JAC_POC_GROWTHUI_WARLORD) }
+        if not person and tx.SourceRoster[id].Warlord then
+          local warlord = tx.SourceRoster[id].Warlord
+          tx.SourceRoster[id].Personality = warlord.Personality
+          tx.SourceRoster[id].Trait = warlord.Trait
+          tx.SourceRoster[id].Equipment = R.Copy(warlord.Equipment)
+        end
         tx.SourceRoster[id].Unit = { Owner = tx.From, ID = snap.ID }
         generatedDecisions[id] = decision
       end
@@ -577,6 +723,32 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
         end
       end
     end
+  end
+  local seenNative = {}
+  for _, work in ipairs(A.OwnedGreatWorkSlots(plan.From)) do
+    local id = "native-work:" .. work.Index
+    seenNative[id] = true
+    local decision = Decision((plan.NativeWorks or {})[work.Index] or "TRANSFER")
+    local destination = DestinationOwner("ITEM", decision.Outcome, decision, tx)
+    -- A donor city must still be transferred. A non-absorber disposition must
+    -- move the original work out of its native slot before that city changes owner.
+    assert(destination == tx.To,
+      "native Great Work needs a verified physical move before city transfer: " .. id)
+    local asset = tx.SourceRoster[id] or { ID = id, Kind = "ITEM", Owner = tx.From }
+    assert(asset.Kind == "ITEM" and asset.Owner == tx.From
+      and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
+      "native Great Work roster identity mismatch: " .. id)
+    asset.NativeWork, asset.Type = R.Copy(work), work.ObjectType or "NATIVE_GREAT_WORK"
+    asset.Name = asset.Name or work.Name or work.GreatWorkType or id
+    asset.City = { Owner = tx.From, X = work.X, Y = work.Y }
+    tx.SourceRoster[id] = asset
+    generatedDecisions[id] = decision
+    tx.NativeWorks[#tx.NativeWorks + 1] = { ID = id, Source = R.Copy(work),
+      Outcome = decision.Outcome, Destination = destination }
+  end
+  for id, asset in pairs(tx.SourceRoster) do
+    assert(not asset.NativeWork or seenNative[id],
+      "tracked native Great Work is absent from source city slots: " .. id)
   end
   -- Claimed heroes without a Unit have no supported claim-only transfer. Keep their
   -- available native state and any existing person record as explicit suicide history.
@@ -745,6 +917,17 @@ local function RestoreUnit(unit, snap, coreOnly)
   for _, promotion in ipairs(snap.Promotions or {}) do
     if not xp:HasPromotion(promotion) then xp:SetPromotion(promotion) end
   end
+  if snap.AbilityCounts and next(snap.AbilityCounts) then
+    local ability = unit:GetAbility()
+    assert(ability and ability.GetAbilityCount and ability.ChangeAbilityCount,
+      "native Unit ability API unavailable after transfer")
+    for _, name in ipairs(R.Keys(snap.AbilityCounts)) do
+      local current = ability:GetAbilityCount(name) or 0
+      if current ~= snap.AbilityCounts[name] then
+        ability:ChangeAbilityCount(name, snap.AbilityCounts[name] - current)
+      end
+    end
+  end
   if snap.XP then xp:ChangeExperience(snap.XP - xp:GetExperiencePoints()) end
   if snap.Religion and snap.Religion >= 0 then
     local religion = unit:GetReligion()
@@ -843,6 +1026,13 @@ local function VerifyUnit(unit, snap, coreOnly)
     assert((religion and religion:GetReligionType() or -1) == snap.Religion, "unit religion changed")
   end
   for _, promotion in ipairs(snap.Promotions or {}) do assert(unit:GetExperience():HasPromotion(promotion), "promotion lost") end
+  if snap.AbilityCounts and next(snap.AbilityCounts) then
+    local ability = assert(unit:GetAbility(), "native Unit ability API unavailable during verification")
+    for _, name in ipairs(R.Keys(snap.AbilityCounts)) do
+      assert(ability:GetAbilityCount(name) == snap.AbilityCounts[name],
+        "native Unit ability lost: " .. name)
+    end
+  end
 end
 
 local function Spawn(snap)
@@ -1041,6 +1231,9 @@ local function MovedAssets(tx)
     local decision = tx.Decisions[id]
     record.OriginalOwner = record.OriginalOwner or tx.From
     record.Owner, record.Outcome = decision.Owner, decision.Outcome
+    if record.NativeWork and decision.Owner == tx.To then
+      record.NativeWork.Owner = tx.To
+    end
     if record.Kind == "ITEM" and record.City and decision.Owner ~= tx.To then
       record.FormerCity = R.Copy(tx.SourceRoster[id].City or record.City)
       if decision.Owner < 0 then
@@ -1122,6 +1315,18 @@ local function Verify(tx, state, exactUnits)
     end
   end
   local greatWorks = OwnedGreatWorks(tx.To)
+  local nativeSlots = {}
+  for _, work in ipairs(A.OwnedGreatWorkSlots(tx.To)) do nativeSlots[work.Index] = work end
+  for _, snap in ipairs(tx.NativeWorks or {}) do
+    local work = assert(nativeSlots[snap.Source.Index],
+      "transferred native Great Work index absent from absorber: " .. snap.ID)
+    assert(not snap.Source.GreatWorkType or not work.GreatWorkType
+      or work.GreatWorkType == snap.Source.GreatWorkType,
+      "native Great Work type changed during city transfer: " .. snap.ID)
+    assert(snap.Source.CreatedByPlayer == nil
+      or work.CreatedByPlayer == snap.Source.CreatedByPlayer,
+      "native Great Work creator changed during city transfer: " .. snap.ID)
+  end
   for _, snap in ipairs(tx.Cities) do
     local city = CityManager.GetCityAt(snap.X, snap.Y)
     assert(city and city:GetOwner() == tx.To, "city transfer failed")
@@ -1569,6 +1774,34 @@ local function AbortRecoveredHero(state, intent, token, cause, candidate)
   Save(state)
   return R.Copy(intent)
 end
+
+local function ObserveRecoveredHero(state, intent, token, class, origin)
+  if intent.NativeVerified then return true end
+  assert(intent.CandidateID, "recovered Hero has no candidate to observe")
+  local observationToken = token .. ":created:" .. intent.CandidateID
+  if not intent.AwaitingUI then
+    intent.AwaitingUI, intent.ObservationToken, intent.HeroClass = true, observationToken, class
+    intent.Status = "WAITING_UI"
+    Save(state)
+    return false
+  end
+  assert(intent.ObservationToken == observationToken,
+    "recovered Hero observation candidate changed")
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local observed = reads and reads.GetObservation and reads.GetObservation(observationToken)
+  if not observed or type(observed.Claim) ~= "number"
+    or type(observed.Origin) ~= "table" then return false end
+  local city = observed.Origin.player == intent.Owner
+    and Players[intent.Owner]:GetCities():FindID(observed.Origin.id)
+  if observed.Claim ~= intent.Owner or not city
+    or city:GetX() ~= origin.X or city:GetY() ~= origin.Y then
+    return nil, "RECOVERED_HERO_PUBLISHED_CLAIM_OR_ORIGIN_MISMATCH"
+  end
+  intent.AwaitingUI, intent.NativeVerified = nil, true
+  intent.Status = "STAGED"
+  Save(state)
+  return true
+end
 function A.RecoverArchived(id, owner, token, original)
   assert((type(id) == "string" or type(id) == "number")
     and type(token) == "string" and type(owner) == "number",
@@ -1670,6 +1903,12 @@ function A.RecoverArchived(id, owner, token, original)
       Save(state)
     end
     assert(not intent.CandidateID or intent.CandidateID == found:GetID(), "recovery candidate changed")
+    if snap.Hero then
+      local ready, cause = ObserveRecoveredHero(state, intent, token, snap.Hero.Class,
+        snap.Hero.Origin)
+      if cause then return AbortRecoveredHero(state, intent, token, cause, found) end
+      if not ready then return R.Copy(intent) end
+    end
     if found:GetX() < 0 or found:GetY() < 0 then
       local capital = assert(Players[owner]:GetCities():GetCapitalCity(), "recovery staging city missing")
       UnitManager.PlaceUnit(found, capital:GetX(), capital:GetY())
@@ -1737,6 +1976,9 @@ function A.RecoverArchived(id, owner, token, original)
     unit:SetProperty(R.TOKEN_KEY, token)
     intent.CandidateID, intent.Status = unit:GetID(), "STAGED"
     Save(state)
+    local ready, cause = ObserveRecoveredHero(state, intent, token, native.Class, origin)
+    if cause then return AbortRecoveredHero(state, intent, token, cause, unit) end
+    if not ready then return R.Copy(intent) end
     local current = HeroOrigin(manager, native.Class)
     if manager:GetHeroClaimPlayer(native.Class) ~= owner or current.Owner ~= owner
       or current.X ~= origin.X or current.Y ~= origin.Y then
