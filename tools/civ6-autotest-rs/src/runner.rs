@@ -882,10 +882,18 @@ impl Runner {
                     {
                         self.close_options_menu(end)?;
                         self.dismiss_advisor(end)?;
-                        self.remaining(end)?;
-                        return Ok(true);
+                        if self.lua(
+                            "InGame",
+                            "return not UI.IsGameCoreBusy()",
+                            self.budget(end, 5.0)?,
+                        )? == "true"
+                        {
+                            self.remaining(end)?;
+                            return Ok(true);
+                        }
                     }
-                    last = "InGame exists; waiting for the local player".into();
+                    last =
+                        "InGame exists; waiting for the local player and an idle game core".into();
                 } else {
                     last = "InGame state not available yet".into();
                     self.disconnect();
@@ -1108,11 +1116,12 @@ impl Runner {
             }
             "ui_lua" => {
                 let mut attempts = 0;
+                let lua_timeout = step["lua_timeout"].as_f64().unwrap_or(5.0);
                 let value = loop {
                     match self.lua(
                         text(step, "state_name"),
                         text(step, "code"),
-                        self.budget(deadline, 5.0)?,
+                        self.budget(deadline, lua_timeout)?,
                     ) {
                         Ok(v) => break v,
                         Err(e)

@@ -26,6 +26,45 @@ fn turn_backend() -> FakeBackend {
 }
 
 #[test]
+fn test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline() {
+    let step = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":30});
+    scenario::validate_scenario(&json!({"name":"slow native mutation","steps":[step]})).unwrap();
+    for value in [
+        json!(0),
+        json!(-1),
+        json!(true),
+        json!("30"),
+        json!(null),
+        json!(601),
+        json!(1e300),
+    ] {
+        let invalid = json!({"name":"invalid wait","steps":[{"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":value}]});
+        let err = scenario::validate_scenario(&invalid).unwrap_err();
+        assert!(err.message.contains("lua_timeout"), "{err}");
+    }
+    for (lua_timeout, step_timeout, expected) in [
+        (None, None, 5.0),
+        (Some(30.0), None, 30.0),
+        (Some(30.0), Some(17.0), 17.0),
+        (Some(0.25), None, 0.25),
+        (Some(600.0), None, 120.0),
+    ] {
+        let mut step =
+            json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true"});
+        if let Some(value) = lua_timeout {
+            step["lua_timeout"] = json!(value);
+        }
+        if let Some(value) = step_timeout {
+            step["timeout"] = json!(value);
+        }
+        let mut h = Harness::new(json!({}), FakeBackend::new());
+        h.runner.run_step(&step).unwrap();
+        assert_eq!(h.calls(), [("GameCore_Tuner".into(), "return true".into())]);
+        assert_eq!(*h.timeouts.lock().unwrap(), [expected]);
+    }
+}
+
+#[test]
 fn test_shortened_turns_require_explicit_test_mode() {
     let mut h = Harness::new(json!({}), turn_backend());
     let step = json!({"action":"end_turn","turns":10,"test_turns":1});

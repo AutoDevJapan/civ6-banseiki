@@ -68,7 +68,7 @@ pub fn load_xml(db: &Connection, text: &str, tables: &BTreeSet<String>) -> Resul
         let name = identifier(table.tag_name().name());
         for op in table.children().filter(Node::is_element) {
             match op.tag_name().name() {
-                "Row" | "Replace" => {
+                "Row" | "Replace" | "InsertOrIgnore" => {
                     let row = fields(op);
                     let verb = if op.has_tag_name("Replace") {
                         "INSERT OR REPLACE"
@@ -420,6 +420,30 @@ mod sengoku_cascade_tests {
             .query_map([], |r| r.get::<_, String>(0))?
             .collect::<rusqlite::Result<_>>()?;
         Ok(out)
+    }
+
+    #[test]
+    fn xml_insert_or_ignore_loads_new_rows_without_replacing_existing_rows() -> Result<()> {
+        let db = Connection::open_in_memory()?;
+        db.execute_batch("CREATE TABLE Kinds (Kind TEXT PRIMARY KEY, Label TEXT NOT NULL);")?;
+        let tables = BTreeSet::from(["Kinds".to_owned()]);
+        load_xml(
+            &db,
+            "<GameData><Kinds><Row Kind='A' Label='original'/><Replace Kind='A' Label='replaced'/><InsertOrIgnore Kind='A' Label='ignored'/><InsertOrIgnore Kind='B' Label='loaded'/></Kinds></GameData>",
+            &tables,
+        )?;
+        let rows: BTreeMap<String, String> = db
+            .prepare("SELECT Kind, Label FROM Kinds ORDER BY Kind")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        assert_eq!(
+            rows,
+            BTreeMap::from([
+                ("A".into(), "replaced".into()),
+                ("B".into(), "loaded".into()),
+            ])
+        );
+        Ok(())
     }
 
     #[test]

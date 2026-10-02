@@ -106,6 +106,7 @@ fn test_load_wait_sends_one_escape_even_if_ingame_state_exists() {
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
         .unwrap();
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    assert_eq!(lua_count(&f, "UI.IsGameCoreBusy"), 1);
     assert_eq!(
         f.trace().presses,
         vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
@@ -125,7 +126,49 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
     let t = f.trace();
     assert_eq!(t.lua[0].0, "LoadScreen");
     assert!(t.lua[0].1.contains("OnActivateButtonClicked()"));
+    assert_eq!(lua_count(&f, "UI.IsGameCoreBusy"), 1);
     assert!(t.presses.is_empty());
+}
+
+#[test]
+fn test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "LoadScreen".into(),
+            "InGame".into(),
+            "InGameTopOptionsMenu".into(),
+        ])
+    });
+    let busy_reads = Arc::new(Mutex::new(0_usize));
+    let reads = busy_reads.clone();
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("UI.IsGameCoreBusy") {
+            assert_eq!(code, "return not UI.IsGameCoreBusy()");
+            let mut count = reads.lock().unwrap();
+            *count += 1;
+            return Ok((*count >= 3).to_string());
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(*busy_reads.lock().unwrap(), 3);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 3);
+    assert_eq!(lua_count(&f, "CloseImmediately()"), 3);
+    let codes: Vec<_> = f.trace().lua.into_iter().map(|(_, code, _)| code).collect();
+    for (index, code) in codes.iter().enumerate() {
+        if code == "return not UI.IsGameCoreBusy()" {
+            assert!(codes[..index]
+                .iter()
+                .any(|code| code.contains("CloseImmediately()")));
+        }
+    }
 }
 
 #[test]

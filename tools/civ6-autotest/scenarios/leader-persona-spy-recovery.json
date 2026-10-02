@@ -1,0 +1,268 @@
+{
+  "name": "Continuation ONLY after observed native neutralization: save/load, unassigned recovery, five-turn reassignment",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('NEUTRALIZED')",
+      "capture_as": "BOUNDARY_NEUTRALIZED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "capture_as": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Boundary-Neutralized"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-Boundary-Neutralized",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[Game.GetLocalPlayer()]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('NEUTRALIZED')",
+      "equals_capture": "BOUNDARY_NEUTRALIZED"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return ExposedMembers.JAC_PersonaBoundary.Check(s.native.neutralized>0 and 'NEUTRALIZED' or 'RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('ASSIGN'); return 'queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_ASSIGN' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_ASSIGN'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return s.native.cityOwner==s.owner and s.native.cityID==s.target.id"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('ESTABLISHING')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('ESTABLISHING')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('ESTABLISHING')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('ESTABLISHING')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('ESTABLISHING')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return tostring((Game:GetProperty('JAC_PERSONA_'..c.leader..'_MERIT')))",
+      "equals_capture": "BOUNDARY_STOPPED_MERIT"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('SETTLED')"
+    }
+  ]
+}

@@ -365,7 +365,9 @@ fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
     let mut h = Harness::new(json!({}), fake);
     assert_eq!(
         h.runner
-            .run_step(&json!({"action":"ui_lua","state_name":"InGame","code":"return 1"}))
+            .run_step(
+                &json!({"action":"ui_lua","state_name":"InGame","code":"return 1","lua_timeout":30})
+            )
             .unwrap_err()
             .kind,
         ErrorKind::LuaResponseUnknown
@@ -377,4 +379,5 @@ fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
             .collect::<Vec<_>>(),
         ["InGame"]
     );
+    assert_eq!(*h.timeouts.lock().unwrap(), [30.0]);
 }

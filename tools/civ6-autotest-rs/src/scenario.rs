@@ -209,6 +209,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "ui_lua" => {
+                if step.get("lua_timeout").is_some_and(|v| {
+                    !v.as_f64()
+                        .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 600.0)
+                }) {
+                    return Err(fail(
+                        "lua_timeout must be finite and between 0 and 600 seconds".into(),
+                    ));
+                }
                 if !step["state_name"].is_string()
                     || !step["code"].as_str().is_some_and(|s| !s.trim().is_empty())
                 {

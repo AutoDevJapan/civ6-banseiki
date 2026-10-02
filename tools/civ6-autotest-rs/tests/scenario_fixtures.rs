@@ -41,6 +41,66 @@ fn embedded_lua(step: &Value) -> Option<&str> {
 }
 
 #[test]
+fn persona_boundary_scenarios_validate_without_operating_the_game() {
+    let lua = Lua::new();
+    for name in [
+        "leader-persona-city-loss-15km.json",
+        "leader-persona-spy-access-15km.json",
+        "leader-persona-spy-recovery.json",
+    ] {
+        let data = scenario(name);
+        validate_scenario(&data).unwrap();
+        assert_eq!(data["strict_lua_errors"], true, "{name}");
+        assert!(steps(&data)
+            .iter()
+            .all(|step| !["restart_game", "autoplay"].contains(&step["action"].as_str().unwrap())));
+        for step in steps(&data) {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+    }
+    let data = scenario("leader-persona-spy-recovery.json");
+    let recovery = steps(&data);
+    assert!(code(&recovery[0]).contains("Check('NEUTRALIZED')"));
+    assert_eq!(recovery[0]["capture_as"], recovery[6]["equals_capture"]);
+    assert_eq!(
+        recovery
+            .iter()
+            .filter(|step| action(step, "end_turn"))
+            .count(),
+        13
+    );
+    assert!(code(recovery.last().unwrap()).contains("Check('SETTLED')"));
+    assert!(recovery
+        .iter()
+        .all(|step| !["configure", "start_game", "enable_mods"]
+            .contains(&step["action"].as_str().unwrap())));
+}
+
+#[test]
+fn persona_native_eligibility_diagnostic_validates_without_operating_the_game() {
+    let data = scenario("leader-persona-native-eligibility-15km.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["strict_lua_errors"], true);
+    let turns: Vec<_> = steps(&data)
+        .iter()
+        .filter(|step| action(step, "end_turn"))
+        .map(|step| step["turns"].as_i64().unwrap())
+        .collect();
+    assert_eq!(turns, [1]);
+    assert!(steps(&data)
+        .iter()
+        .all(|step| !["restart_game", "autoplay"].contains(&step["action"].as_str().unwrap())));
+    let lua = Lua::new();
+    for step in steps(&data) {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
 fn ages_every_chunk_is_followed_by_a_full_previous_era_record() {
     let data = scenario("ages-probe.json");
     let s = steps(&data);
