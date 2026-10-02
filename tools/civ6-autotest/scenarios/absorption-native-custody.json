@@ -164,7 +164,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local p=Players[Game.GetLocalPlayer()];local site;for i=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(i);if q:GetOwner()==p:GetID() and not q:IsWater() and not q:IsMountain() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then site={X=q:GetX(),Y=q:GetY(),Index=i};break end end;assert(site,'no native cache site');ExposedMembers.JAC_CustodyProbeSite=function() return site end;return 'selected native cache site '..site.Index",
+      "code": "local p=Players[Game.GetLocalPlayer()];local site;local choices=0;for i=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(i);if q:GetOwner()==p:GetID() and not q:IsWater() and not q:IsMountain() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then choices=choices+1;local valid=q:IsValidFoundLocation();if valid then site={X=q:GetX(),Y=q:GetY(),Index=i};break end end end;assert(site,'no legal native cache city site; empty owned candidates='..choices);ExposedMembers.JAC_CustodyProbeSite=function() return site end;return 'selected legal native cache site '..site.Index",
       "action": "ui_lua"
     },
     {
