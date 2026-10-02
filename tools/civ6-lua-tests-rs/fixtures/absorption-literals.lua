@@ -22,6 +22,7 @@ GameInfo = {
   HeroClasses = setmetatable({[0]={Index=0,HeroClassType='HEROCLASS_JAC_WARLORD_A',UnitType='UNIT_HERO_JAC_WARLORD_A'},
     [1]={Index=1,HeroClassType='HEROCLASS_JAC_WARLORD_B',UnitType='UNIT_HERO_JAC_WARLORD_B'}},
     {__call=function(t) return rows({t[0],t[1]}) end}),
+  GreatPersonIndividuals = {[42]={Index=42,GreatPersonClassType='GREAT_PERSON_CLASS_GENERAL',ActionCharges=2}},
   Religions = {[5]={ReligionType="RELIGION_TEST"}},
   Technologies = {TECH_TEST={Index=11}}, Civics = {CIVIC_TEST={Index=12}}
 }
@@ -71,6 +72,13 @@ for owner=0,3 do
   Players[owner]=p
   PlayerConfigurations[owner]={GetLeaderTypeName=function() return "LEADER_TEST_"..owner end}
 end
+PlayerManager={GetAlive=function()
+  local result={};for _,player in pairs(Players) do
+    if player.IsAlive and player:IsAlive() then result[#result+1]=player end
+  end
+  table.sort(result,function(a,b) return a:GetID()<b:GetID() end)
+  return result
+end}
 function UNIT(owner,id,kind,x)
   local u=prop({owner=owner,id=id,kind=TYPE[kind],x=x or 4,y=0,damage=0,moves=2,xp=0,individual=-1,
     promotions={},formation=0,gpcharges=2,build=kind=="UNIT_BUILDER" and 3 or 0,spread=kind=="UNIT_MISSIONARY" and 3 or 0,religion=-1,
@@ -137,7 +145,9 @@ function CITY(owner,x,pop,faith)
   end} end
   city.GetBuildings=function() return {
     HasBuilding=function(_,id) return (id==1 and city.monument) or (id==0 and city.palace==true) end,IsPillaged=function() return false end,
-    GetNumGreatWorkSlots=function() return 1 end,GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007 end
+    GetNumGreatWorkSlots=function() return 1 end,
+    -- Every city has its own native work index, as in a real save.
+    GetGreatWorkInSlot=function(_,id) return id==0 and (city.palaceWork or -1) or 1007+city.x end
   } end
   city.ChangeLoyalty=function(self,n) self.loyalty=self.loyalty+n end
   city.GetReligion=function(self) return {GetReligionsInCity=function()
@@ -303,7 +313,7 @@ function print() end
   },
   ["AbsorptionTests.test_non_transfer_branches_keep_original_snapshots_and_detach_person_references"]={
     -- source line 327, literal 1
-    [==[PLAN.Units['1:3']='ESCAPE';PLAN.Units['1:8']='RETIRE';PLAN.Units['1:11']='HIDE';PLAN.Assets.hero='HIDE'
+    [==[PLAN.Units['1:3']='RETIRE';PLAN.Units['1:8']='RETIRE';PLAN.Units['1:11']='HIDE';PLAN.Assets.hero='HIDE'
           PLAN.Units['1:12']='RETIRE';PLAN.Assets.person='RETIRE';PLAN.Assets.artifact='SCATTER';PLAN.Assets.unlock='PRESERVE';PLAN.Leader='EXILE' ]==],
     -- source line 330, literal 2
     [==[test-absorption]==],
@@ -1122,7 +1132,7 @@ function print() end
     -- source line 937, literal 3
     [==[local a=ExposedMembers.JAC_Absorption
           local r=a.GetState().Archive['native-hero:1:HEROCLASS_JAC_WARLORD_A']
-          assert(r and r.Outcome=='SUICIDE' and r.SuicideCause=='DORMANT_CLAIM')
+          assert(r and r.Outcome=='SUICIDE' and r.SuicideCause=='DORMANT_CLAIM_SETTER_UNAVAILABLE')
           assert(a.GetState().Transactions['test-absorption'].HeroResults[r.ID].Outcome=='SUICIDE')
           assert(r.NativeHero.ClaimOwner==1 and r.NativeHero.Origin.X==4 and r.NativeUnit==nil)
           assert(r.Unit==nil and a.GetRoster(2)[r.ID]==nil and a.Verify('test-absorption',true))
@@ -1140,7 +1150,7 @@ function print() end
     -- source line 954, literal 2
     [==[local a=ExposedMembers.JAC_Absorption
           local r=a.GetState().Archive.dormant
-          assert(r.Outcome=='SUICIDE' and r.RequestedOutcome=='PROTECT' and r.SuicideCause=='DORMANT_CLAIM')
+          assert(r.Outcome=='SUICIDE' and r.RequestedOutcome=='PROTECT' and r.SuicideCause=='DORMANT_CLAIM_SETTER_UNAVAILABLE')
           assert(r.FormerUnit.ID==777 and not r.Unit and r.Contract=='PROTECT' and r.Relations.friend==31)
           assert(r.NativeHero.ClaimOwner==1 and r.NativeHero.Origin.X==4)
           assert(r.HistoricalNativeHero.Lifespan==9)
@@ -1804,7 +1814,7 @@ function print() end
           local majors={};for id=0,21 do
             local n=id;majors[#majors+1]={GetID=function() return n end}
           end
-          PlayerManager={GetAliveMajors=function() return majors end}
+          PlayerManager.GetAliveMajors=function() return majors end
           local makeUnit=UNIT
           UNIT=function(...)
             local u=makeUnit(...)
@@ -2198,8 +2208,12 @@ function print() end
           end
           PlayerConfigurations[3].GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_OTHER_3' end
           GameInfo.Yields={YIELD_FAITH={Index=6}}
-          GameInfo.GreatWorks={[0]={GreatWorkObjectType='GREATWORKOBJECT_HERO'}}
-          Game.GetGreatWorkType=function(id) assert(id==1007);return 0 end
+          GameInfo.GreatWorks={[0]={GreatWorkObjectType='GREATWORKOBJECT_HERO'},
+            [1]={GreatWorkObjectType='GREATWORKOBJECT_WRITING'}}
+          Game.GetGreatWorkType=function(id)
+            assert(id==1007 or id==1011 or id==1015 or id==1019 or id==1023)
+            return id==1011 and 0 or 1
+          end
           GameInfo.Eras=setmetatable({[0]={Index=0,ChronologyIndex=0},[1]={Index=1,ChronologyIndex=1}},
             {__call=function(t) local n=-1;return function() n=n+1;return t[n] end end})
           GLOBAL_ERA=0
@@ -2542,7 +2556,7 @@ function print() end
     -- source line 2086, literal 3
     [==[CITIES[4].monument=false]==],
     -- source line 2087, literal 4
-    [==[city buildings/Great Works changed]==],
+    [==[transferred native Great Work index absent from absorber: native-work:1011]==],
     -- source line 2088, literal 5
     [==[test-absorption]==],
     -- source line 2089, literal 6
@@ -2651,7 +2665,7 @@ function print() end
           CityManager.TransferCity=function(city,owner) transfer(city,owner);city.palace=false end
         ]==],
     -- source line 2173, literal 2
-    [==[Palace Great Work lost]==],
+    [==[transferred native Great Work index absent from absorber: native-work:9001]==],
     -- source line 2175, literal 3
     [==[test-absorption]==],
     -- source line 2176, literal 4

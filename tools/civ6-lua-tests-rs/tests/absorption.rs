@@ -5,10 +5,10 @@ use civ6_lua_tests_rs::strict::{self, ChunkExt, Data, FromLua, TableExt};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Function, Lua, MultiValue, Table, Value};
 use regex::Regex;
-use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
 #[path = "support/inventory.rs"]
 mod inventory;
@@ -380,15 +380,16 @@ fn boundaries(lua: &Lua) {
 }
 
 fn outcomes() -> Vec<Json> {
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER)")
-        .unwrap();
-    db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
-        .unwrap();
-    query_json(
-        &db,
-        "SELECT Kind,Outcome,Destination FROM JAC_AbsorptionOutcomes",
-    )
+    static ROWS: LazyLock<Vec<Json>> = LazyLock::new(|| {
+        let db = civ6_lua_tests_rs::official::official_db();
+        db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
+            .unwrap();
+        query_json(
+            &db,
+            "SELECT Kind,Outcome,Destination FROM JAC_AbsorptionOutcomes",
+        )
+    });
+    ROWS.clone()
 }
 
 struct Harness {
@@ -704,12 +705,16 @@ fn node<'a>(root: roxmltree::Node<'a, 'a>, path: &str) -> roxmltree::Node<'a, 'a
     })
 }
 fn package_units() {
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER); INSERT INTO Units VALUES ('UNIT_MISSIONARY',0),('UNIT_APOSTLE',0),('UNIT_HERO_HERCULES',0),('UNIT_WARRIOR',1);").unwrap();
+    let db = civ6_lua_tests_rs::official::official_db();
+    db.execute_batch("UPDATE Units SET CanTrain=0 WHERE UnitType IN ('UNIT_MISSIONARY','UNIT_APOSTLE'); UPDATE Units SET CanTrain=1 WHERE UnitType='UNIT_WARRIOR';").unwrap();
+    let other_units = query_json(
+        &db,
+        "SELECT UnitType,CanTrain FROM Units WHERE UnitType<>'UNIT_MISSIONARY' ORDER BY UnitType",
+    );
     db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
         .unwrap();
     let actual: BTreeMap<String, i64> = db
-        .prepare("SELECT UnitType,CanTrain FROM Units")
+        .prepare("SELECT UnitType,CanTrain FROM Units WHERE UnitType IN ('UNIT_MISSIONARY','UNIT_APOSTLE','UNIT_WARRIOR')")
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap()
@@ -720,10 +725,10 @@ fn package_units() {
         BTreeMap::from([
             ("UNIT_MISSIONARY".into(), 1),
             ("UNIT_APOSTLE".into(), 0),
-            ("UNIT_HERO_HERCULES".into(), 0),
             ("UNIT_WARRIOR".into(), 1)
         ])
     );
+    assert_eq!(query_json(&db, "SELECT UnitType,CanTrain FROM Units WHERE UnitType<>'UNIT_MISSIONARY' ORDER BY UnitType"), other_units);
     let source = read_repo(format!("{MOD}/JAC_PoC_Absorption.modinfo"));
     let doc = roxmltree::Document::parse(&source).unwrap();
     let action = node(doc.root_element(), "InGameActions/UpdateDatabase");
@@ -756,6 +761,9 @@ fn package_manifest() {
             "Text/JAC_Absorption_Text.xml",
             "Scripts/JAC_Absorption_Rules.lua",
             "Scripts/JAC_Absorption_Gameplay.lua",
+            "Scripts/JAC_Absorption_Flow.lua",
+            "UI/JAC_AbsorptionFlow.lua",
+            "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
             "UI/JAC_Absorption_HeroKeys.xml"
         ])
@@ -797,7 +805,7 @@ fn package_text() {
             .insert(row.attribute("Language").unwrap().to_owned(), text)
             .is_none());
     }
-    assert_eq!(texts.len(), 4);
+    assert_eq!(texts.len(), 110);
     for languages in texts.values() {
         assert_eq!(
             languages.keys().cloned().collect::<BTreeSet<_>>(),
