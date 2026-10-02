@@ -313,6 +313,172 @@ fn test_steam_launch_retries_when_prior_session_blocks_first_uri() {
 }
 
 #[test]
+fn test_failed_new_launch_releases_its_helper_before_next_steam_request() {
+    let clock = Arc::new(ManualClock::default());
+    let state = Arc::new(Mutex::new((0, false)));
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let events = fake.events.clone();
+    let cleanup_state = state.clone();
+    fake.on_close_orphans = Box::new(move || {
+        let mut state = cleanup_state.lock().unwrap();
+        if state.1 {
+            state.1 = false;
+            events
+                .lock()
+                .unwrap()
+                .push("closed failed launch helper".into());
+            Ok(vec![99])
+        } else {
+            Ok(Vec::new())
+        }
+    });
+    let launch_state = state.clone();
+    fake.on_launch = Box::new(move || {
+        let mut state = launch_state.lock().unwrap();
+        assert!(!state.1, "Steam is still blocked by the crashed launch");
+        state.0 += 1;
+        state.1 = state.0 == 1;
+        Ok(())
+    });
+    let wait_clock = clock.clone();
+    fake.on_window = Box::new(move |deadline| {
+        wait_clock.advance(deadline - wait_clock.at());
+        if state.lock().unwrap().0 < 2 {
+            Err(Error::input("first launch crashed"))
+        } else {
+            Ok(123)
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock;
+    h.runner.launch_steam_and_wait(120.0).unwrap();
+    let events: Vec<_> = h
+        .events()
+        .into_iter()
+        .filter(|event| event == "launch" || event == "closed failed launch helper")
+        .collect();
+    assert_eq!(events, ["launch", "closed failed launch helper", "launch"]);
+}
+
+#[test]
+fn test_helper_cleanup_exhausting_deadline_sends_no_steam_request() {
+    let clock = Arc::new(ManualClock::default());
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    fake.on_close_orphans = Box::new(|| Ok(vec![99]));
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    let error = h.runner.launch_steam_and_wait(5.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.message.contains("deadline expired"), "{error}");
+    assert_eq!(clock.at(), 5.0);
+    assert!(
+        h.events().is_empty(),
+        "no launch or window query after cleanup used the deadline"
+    );
+}
+
+#[test]
+fn test_four_launch_requests_still_wait_for_delayed_window_until_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let wait_clock = clock.clone();
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let events = fake.events.clone();
+    fake.on_close_orphans = Box::new(move || {
+        events.lock().unwrap().push("cleanup".into());
+        Ok(Vec::new())
+    });
+    fake.on_window = Box::new(move |deadline| {
+        wait_clock.advance(deadline - wait_clock.at());
+        if wait_clock.at() < 230.0 {
+            Err(Error::input("Steam launch is still pending"))
+        } else {
+            Ok(123)
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    h.runner.launch_steam_and_wait(420.0).unwrap();
+    assert_eq!(clock.at(), 230.0);
+    let events: Vec<_> = h
+        .events()
+        .into_iter()
+        .filter(|event| event == "cleanup" || event == "launch")
+        .collect();
+    assert_eq!(
+        events,
+        ["cleanup", "launch", "cleanup", "launch", "cleanup", "launch", "cleanup", "launch"]
+    );
+}
+
+#[test]
+fn test_exhausted_launch_requests_fail_at_the_supplied_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let wait_clock = clock.clone();
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    fake.on_window = Box::new(move |deadline| {
+        wait_clock.advance(deadline - wait_clock.at());
+        Err(Error::input("no window"))
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    let error = h.runner.launch_steam_and_wait(420.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error
+        .message
+        .contains("after 4 Steam launch attempts within the deadline"));
+    assert_eq!(clock.at(), 420.0);
+    assert_eq!(
+        h.events().iter().filter(|event| *event == "launch").count(),
+        4
+    );
+}
+
+#[test]
+fn helper_cleanup_manual_launch_prevents_duplicate_steam_request() {
+    let clock = Arc::new(ManualClock::default());
+    let cleaned = Arc::new(Mutex::new(false));
+    let process_cleaned = cleaned.clone();
+    let mut fake = FakeBackend::new().process(move |_| {
+        Ok(if *process_cleaned.lock().unwrap() {
+            Some((12, 100.0))
+        } else {
+            None
+        })
+    });
+    fake.on_close_orphans = Box::new(move || {
+        *cleaned.lock().unwrap() = true;
+        Ok(vec![99])
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    h.runner.launch_steam_and_wait(120.0).unwrap();
+    assert_eq!(clock.at(), 8.0);
+    assert_eq!(h.events(), ["window", "dx11:123"]);
+}
+
+#[test]
+fn restart_cleans_helpers_before_waiting_for_steam_to_release_session() {
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let events = fake.events.clone();
+    let mut first = true;
+    fake.on_close_orphans = Box::new(move || {
+        events.lock().unwrap().push("cleanup".into());
+        let closed = if first { vec![99] } else { Vec::new() };
+        first = false;
+        Ok(closed)
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.restart_game(360.0).unwrap();
+    assert_eq!(h.clock.at(), 16.0);
+    let events: Vec<_> = h
+        .events()
+        .into_iter()
+        .filter(|event| event == "cleanup" || event == "launch")
+        .collect();
+    assert_eq!(events, ["cleanup", "cleanup", "launch"]);
+}
+
+#[test]
 fn test_single_process_waits_for_exiting_process_to_disappear() {
     let mut fake = NativeFixture::new(&[&[1, 2], &[1, 2], &[2]]);
     assert_eq!(

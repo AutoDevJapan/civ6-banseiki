@@ -1,7 +1,7 @@
 #[cfg(not(windows))]
 use civ6_autotest_rs::ErrorKind;
 use civ6_autotest_rs::{
-    restart::{self, LifecycleBackend},
+    restart::{self, LifecycleBackend, ProcessRow},
     Error, Result,
 };
 use serde_json::json;
@@ -35,6 +35,8 @@ struct MockLifecycle {
     window_error: Option<String>,
     events: Vec<String>,
     clock: f64,
+    process_rows: Vec<ProcessRow>,
+    reporter_open_fails: bool,
 }
 impl LifecycleBackend for MockLifecycle {
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
@@ -77,6 +79,34 @@ impl LifecycleBackend for MockLifecycle {
         self.events.push("reporter".into());
         Ok(())
     }
+    fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
+        self.events.push("rows".into());
+        Ok(self.process_rows.clone())
+    }
+    fn open_reporter(&mut self, pid: u32) -> Result<Option<isize>> {
+        self.events.push(format!("open:{pid}"));
+        Ok((!self.reporter_open_fails).then_some(200))
+    }
+    fn reporter_image(&mut self, handle: isize, pid: u32) -> Result<String> {
+        self.events.push(format!("image:{handle}:{pid}"));
+        if self.reporter_error {
+            return Err(Error::input(format!(
+                "Cannot verify Civ VI helper process {pid}"
+            )));
+        }
+        Ok(self.reporter_path.clone().unwrap())
+    }
+    fn terminate_reporter_handle(&mut self, handle: isize, pid: u32) -> Result<()> {
+        self.events.push(format!("terminate:{handle}:{pid}"));
+        if let Some(message) = &self.reporter_terminate_error {
+            return Err(Error::input(message.clone()));
+        }
+        self.reporter_terminated.push(pid);
+        Ok(())
+    }
+    fn close_reporter_handle(&mut self, handle: isize) {
+        self.events.push(format!("close:{handle}"));
+    }
     fn launch_uri(&mut self, uri: &str) -> Result<()> {
         self.uri.push(uri.into());
         self.events.push("launch".into());
@@ -96,6 +126,148 @@ impl LifecycleBackend for MockLifecycle {
     }
     fn sleep(&mut self, seconds: f64) {
         self.clock += seconds;
+    }
+}
+
+fn orphan_reporter(image: &str) -> MockLifecycle {
+    MockLifecycle {
+        process_rows: vec![ProcessRow {
+            pid: 42,
+            name: "firaxisbugreporter.exe".into(),
+            parent_pid: 41,
+        }],
+        reporter_path: Some(image.into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_only_verified_orphan_helper_is_closed() {
+    for image in [
+        REPORTER.to_string(),
+        "C:/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe".into(),
+        REPORTER.to_uppercase(),
+    ] {
+        let mut b = orphan_reporter(&image);
+        assert_eq!(restart::close_orphaned_civ_reporters_with(&mut b).unwrap(), [42]);
+        assert_eq!(b.reporter_terminated, [42]);
+        assert_eq!(b.events, ["rows", "open:42", "image:200:42", "terminate:200:42", "close:200"]);
+    }
+    let mut b = orphan_reporter(REPORTER);
+    b.process_rows.push(ProcessRow {
+        pid: 17,
+        name: "firaxisbugreporter.exe".into(),
+        parent_pid: 16,
+    });
+    assert_eq!(
+        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+        [42, 17]
+    );
+    assert_eq!(b.reporter_terminated, [42, 17]);
+}
+
+#[test]
+fn test_live_game_parent_preserves_reporter() {
+    for parent_name in ["civilizationvi_dx12.exe", "other-parent.exe"] {
+        let mut b = orphan_reporter("unused");
+        b.process_rows.push(ProcessRow {
+            pid: 41,
+            name: parent_name.into(),
+            parent_pid: 1,
+        });
+        assert_eq!(
+            restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+            Vec::<u32>::new()
+        );
+        assert_eq!(b.events, ["rows"]);
+        assert!(b.reporter_terminated.is_empty());
+    }
+}
+
+#[test]
+fn test_same_named_other_program_is_preserved() {
+    for image in [
+        "C:/OtherApp/FiraxisBugReporter.exe",
+        "C:/Not Sid Meier's Civilization VI/Base/Binaries/Win64Steam/FiraxisBugReporter.exe",
+        "C:/Steam/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/Other/FiraxisBugReporter.exe",
+    ] {
+        let mut b = orphan_reporter(image);
+        assert_eq!(restart::close_orphaned_civ_reporters_with(&mut b).unwrap(), Vec::<u32>::new());
+        assert!(b.reporter_terminated.is_empty());
+        assert_eq!(b.events, ["rows", "open:42", "image:200:42", "close:200"]);
+    }
+}
+
+#[test]
+fn test_game_appearing_during_inspection_preserves_reporter() {
+    let mut b = orphan_reporter(REPORTER);
+    b.process_rows.push(ProcessRow {
+        pid: 43,
+        name: "firaxisbugreporter.exe".into(),
+        parent_pid: 1,
+    });
+    b.civ_script = VecDeque::from([BTreeSet::new(), BTreeSet::from([41])]);
+    assert_eq!(
+        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+        Vec::<u32>::new()
+    );
+    assert!(b.reporter_terminated.is_empty());
+    assert_eq!(b.events, ["rows", "open:42", "image:200:42", "close:200"]);
+    let mut b = orphan_reporter(REPORTER);
+    b.process_rows.push(ProcessRow {
+        pid: 43,
+        name: "firaxisbugreporter.exe".into(),
+        parent_pid: 1,
+    });
+    b.civ_script = VecDeque::from([BTreeSet::new(), BTreeSet::new(), BTreeSet::from([41])]);
+    assert_eq!(
+        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+        [42]
+    );
+    assert_eq!(b.reporter_terminated, [42]);
+    assert_eq!(b.events.last().unwrap(), "close:200");
+}
+
+#[test]
+fn test_running_game_prevents_all_cleanup() {
+    let mut b = orphan_reporter(REPORTER);
+    b.civ = BTreeSet::from([41]);
+    assert_eq!(
+        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+        Vec::<u32>::new()
+    );
+    assert!(b.events.is_empty());
+    assert!(b.reporter_terminated.is_empty());
+}
+
+#[test]
+fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_skipped() {
+    let mut b = orphan_reporter(REPORTER);
+    b.reporter_open_fails = true;
+    assert_eq!(
+        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
+        Vec::<u32>::new()
+    );
+    assert_eq!(b.events, ["rows", "open:42"]);
+    for image_failure in [true, false] {
+        let mut b = orphan_reporter(REPORTER);
+        b.reporter_error = image_failure;
+        b.reporter_terminate_error = Some("Could not close orphan Civ VI helper 42".into());
+        let error = restart::close_orphaned_civ_reporters_with(&mut b).unwrap_err();
+        assert!(error.message.contains(if image_failure {
+            "Cannot verify"
+        } else {
+            "Could not close"
+        }));
+        assert_eq!(b.events.last().unwrap(), "close:200");
+        assert_eq!(
+            b.events
+                .iter()
+                .filter(|event| *event == "close:200")
+                .count(),
+            1
+        );
+        assert!(b.reporter_terminated.is_empty());
     }
 }
 

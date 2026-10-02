@@ -173,9 +173,10 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
         &mut ids,
     );
     assert!(ids.contains("BD7A82C5-6B38-4B69-A7F5-8DC9AF534249"));
+    assert!(ids.contains("61320778-2E75-4C11-9009-94101B519ABA"));
     assert_eq!(
         ids.len(),
-        12,
+        13,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -494,6 +495,22 @@ fn malformed_huge_turn_counters_fail_closed() {
 fn shipped_scenario_inventory_and_json_are_intact() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let expected:BTreeSet<_>="assassin-leader-save-load.json banseiki-ruleset.json bundle0-load-save.json clans-notebooks.json clans-house-names.json clans-both-ai.json custom-clans.json leader-portraits.json growth-notebooks.json sengoku-trees.json sengoku-starting-knowledge.json sengoku-calendar.json unification-victory.json unification-registry-15km.json unification-pact.json sengoku-house-names-oda.json sengoku-house-names-takeda.json sengoku-alliances.json ages-probe.json sengoku-ages.json sengoku-dark-policy.json sengoku-ages-screens.json historical-events-15km.json religion-persistence.json religion-pressure-probe.json religion-hero-delay.json house-crests.json japan-map-20km.json japan-map-15km.json japan-map-20km-takeda.json japan-map-15km-takeda.json japan-1534-relations.json probe-ally-vision.json probe-alliance-type.json probe-alliance-expiry.json probe-end-alliance.json japan-1534-relations-settlers.json japan-1534-feud-ui.json japan-resources.json japan-no-world-congress.json japan-city-names.json japan-house-city-names.json japan-map-setup-screen.json japan-map-15km-settlers.json japan-map-15km-200turn.json japan-15km-200turn-full.json japan-15km-200turn-tuning.json japan-prosperous-15km.json court-arbitration.json court-arbitration-human.json court-arbitration-ai.json probe-make-peace.json probe-era-timing-standard.json probe-era-timing-quick.json sengoku-era-reigns.json sengoku-oaths-oda.json japan-15km-20turn-full-metrics.json japan-15km-300turn-full-metrics.json sengoku-era-reigns-epic.json sengoku-era-reigns-marathon.json sengoku-era-reigns-beyond-nine.json great-people-zero-musicians.json resources-calendar-epic.json".split_whitespace().map(str::to_string).collect();
+    let expected: BTreeSet<_> = expected
+        .into_iter()
+        .chain(
+            [
+                "absorption-japan.json",
+                "absorption-hero-recall.json",
+                "absorption-priest-diagnostic.json",
+                "absorption-faith-precision.json",
+                "absorption-hero-window-diagnostic.json",
+                "absorption-japan-native.json",
+            ]
+            .into_iter()
+            .map(str::to_string),
+        )
+        .collect();
+    assert_eq!(expected.len(), 69);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
@@ -504,6 +521,19 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(folder.join(name)).unwrap()).unwrap();
         assert!(value.is_object(), "{name}");
+        civ6_autotest_rs::scenario::validate_scenario(&value).unwrap();
+        let lua = mlua::Lua::new();
+        for (index, step) in value["steps"].as_array().unwrap().iter().enumerate() {
+            for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
+                .into_iter()
+                .flatten()
+            {
+                lua.load(code)
+                    .set_name(format!("{name}: step {}", index + 1))
+                    .into_function()
+                    .unwrap();
+            }
+        }
     }
     let growth: serde_json::Value =
         serde_json::from_slice(&fs::read(folder.join("growth-notebooks.json")).unwrap()).unwrap();

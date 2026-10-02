@@ -71,6 +71,8 @@ pub struct FakeBackend {
     pub on_stale: Box<dyn FnMut() -> Result<Vec<String>> + Send>,
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
 }
 impl FakeBackend {
     pub fn new() -> Self {
@@ -99,6 +101,8 @@ impl FakeBackend {
             on_stale: Box::new(|| Ok(vec![])),
             on_exit: Box::new(|_| Ok(true)),
             on_require: Box::new(|| Ok(())),
+            on_launch: Box::new(|| Ok(())),
+            on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
     }
     pub fn lua(mut self, f: impl FnMut(&str, &str) -> Result<String> + Send + 'static) -> Self {
@@ -146,7 +150,10 @@ impl Backend for FakeBackend {
     }
     fn launch(&mut self) -> Result<()> {
         self.events.lock().unwrap().push("launch".into());
-        Ok(())
+        (self.on_launch)()
+    }
+    fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
+        (self.on_close_orphans)()
     }
     fn wait_window(&mut self, deadline: f64) -> Result<isize> {
         self.events.lock().unwrap().push("window".into());
