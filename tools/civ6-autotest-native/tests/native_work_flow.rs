@@ -32,6 +32,44 @@ fn load_hero_keys(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
+fn native_work_metadata_survives_ui_only_getters() -> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        for _,city in pairs(CITIES) do
+          local original=city.GetBuildings
+          city.GetBuildings=function(self)
+            local buildings=original(self)
+            buildings.GetGreatWorkInSlot=function(_,building)
+              return city:GetX()==4 and building==1 and 1007 or -1
+            end
+            return buildings
+          end
+        end
+        GameInfo.GreatWorks={[3]={GreatWorkType='GREATWORK_TEST_RELIC',
+          GreatWorkObjectType='GREATWORKOBJECT_RELIC',Name='LOC_TEST_RELIC',Tourism=8}}
+        ExposedMembers.JAC_HeroReadAPI={ReadNativeWork=function(owner,id,index)
+          assert(owner==1 and id==CITIES[4]:GetID() and index==1007)
+          return {Type=3,CreatorName='Original creator',TurnCreated=2,CreatedByPlayer=0}
+        end}
+        assert(CITIES[4]:GetBuildings().GetGreatWorkTypeFromIndex==nil)
+        local works=ExposedMembers.JAC_Absorption.OwnedGreatWorkSlots(1)
+        assert(#works==1 and works[1].Index==1007)
+        local work=works[1]
+        assert(work.GreatWorkType=='GREATWORK_TEST_RELIC' and work.Name=='LOC_TEST_RELIC')
+        assert(work.ObjectType=='GREATWORKOBJECT_RELIC' and work.Effects[1]=='TOURISM 8')
+        assert(work.CreatedByPlayer==0 and work.CreatorName=='Original creator'
+          and work.TurnCreated==2,'native work provenance was lost across UI reads')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::Result<()> {
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(lua.create_table()?)?;

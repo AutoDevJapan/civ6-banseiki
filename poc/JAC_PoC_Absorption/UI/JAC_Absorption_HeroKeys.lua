@@ -43,6 +43,14 @@ local function PublishHeroKeys()
       assert(method == "FAITH_BALANCE", "unsupported UI player read")
       return uiPlayers[owner]:GetReligion():GetFaithBalance()
     end
+    reads.ReadNativeWork = function(owner, id, index)
+      local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
+      local buildings = city:GetBuildings()
+      return { Type = buildings:GetGreatWorkTypeFromIndex(index),
+        CreatorName = buildings:GetCreatorNameFromIndex(index),
+        TurnCreated = buildings:GetTurnFromIndex(index),
+        CreatedByPlayer = uiGame.GetGreatWorkPlayer(index) }
+    end
     reads.ReadCity = function(owner, id, method, building, slot, extra)
       local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
       if method == "RELIGIONS" then

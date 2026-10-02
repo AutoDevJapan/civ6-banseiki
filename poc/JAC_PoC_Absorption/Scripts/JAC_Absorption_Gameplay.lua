@@ -225,10 +225,16 @@ function A.OwnedGreatWorkSlots(owner)
             seen[index] = true
             local workType = buildings.GetGreatWorkTypeFromIndex
               and buildings:GetGreatWorkTypeFromIndex(index)
+            local reads = ExposedMembers.JAC_HeroReadAPI
+            local published = reads and reads.ReadNativeWork
+              and reads.ReadNativeWork(owner, city:GetID(), index)
+            workType = workType or published and published.Type
             local definition = workType and GameInfo.GreatWorks[workType]
             local provenance = Game.GetGreatWorkDataFromIndex
               and Game.GetGreatWorkDataFromIndex(index)
             local creator = Game.GetGreatWorkPlayer and Game.GetGreatWorkPlayer(index)
+            provenance = published or provenance
+            creator = published and published.CreatedByPlayer or creator
             local effects = {}
             if definition and GameInfo.GreatWork_YieldChanges then
               for row in GameInfo.GreatWork_YieldChanges() do
