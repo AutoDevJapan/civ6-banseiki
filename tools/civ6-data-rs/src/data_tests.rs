@@ -353,10 +353,12 @@ mod test_resources {
         ("RESOURCE_SILK", "IMPROVEMENT_PLANTATION"),
     ];
 
-    fn official_prereqs() -> (
+    type OfficialPrereqs = (
         BTreeMap<String, Option<String>>,
         BTreeMap<(String, String), Option<String>>,
-    ) {
+    );
+
+    fn official_prereqs() -> OfficialPrereqs {
         let base = game_xml(BASE_RESOURCES);
         let mut resources = base
             .select("Resources/Row")

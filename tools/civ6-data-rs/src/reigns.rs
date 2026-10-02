@@ -512,7 +512,9 @@ fn calendar_from(data: &Value) -> Result<(i64, SpeedStages)> {
     Ok((START_YEAR, result))
 }
 
-pub fn calendar(repo: &Repository) -> Result<(i64, BTreeMap<String, Vec<(i64, i64)>>)> {
+pub type CalendarStages = BTreeMap<String, Vec<(i64, i64)>>;
+
+pub fn calendar(repo: &Repository) -> Result<(i64, CalendarStages)> {
     calendar_from(&load(repo)?)
 }
 
