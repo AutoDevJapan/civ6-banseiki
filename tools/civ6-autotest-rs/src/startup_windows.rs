@@ -862,6 +862,7 @@ mod supervision_tests {
     }
     #[test]
     fn timeout_confirms_owned_child_exit_and_keeps_a_control_process_running() {
+        let _exclusive = time::INTERRUPT_TEST_LOCK.lock().unwrap();
         let mut control = OwnedChild(
             fixture_command()
                 .creation_flags(0x08000000)
@@ -883,6 +884,7 @@ mod supervision_tests {
     }
     #[test]
     fn unconfirmed_writer_blocks_recovery_until_the_same_handle_exits() {
+        let _exclusive = time::INTERRUPT_TEST_LOCK.lock().unwrap();
         let child = OwnedChild(
             fixture_command()
                 .creation_flags(0x08000000)

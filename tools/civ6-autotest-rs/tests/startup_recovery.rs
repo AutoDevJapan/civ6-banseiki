@@ -102,6 +102,8 @@ struct Game {
     deny_lock: bool,
     resist_shutdown: bool,
     reset_clears_pending: bool,
+    reset_exit_delay: f64,
+    pending_exit_at: Option<f64>,
     gpu: GpuSnapshot,
     idle: IdleProof,
 }
@@ -251,6 +253,12 @@ impl Backend for Game {
         Ok(())
     }
     fn wait_exit(&mut self, _: u32, end: f64) -> Result<bool> {
+        if self.pending_exit_at.is_some_and(|at| at <= end) {
+            let at = self.pending_exit_at.take().unwrap();
+            self.clock.advance((at - self.clock.at()).max(0.0));
+            self.state.lock().unwrap().alive = None;
+            return Ok(true);
+        }
         if self.resist_shutdown && self.state.lock().unwrap().alive.is_some() {
             self.clock.advance((end - self.clock.at()).max(0.0));
             return Ok(false);
@@ -266,7 +274,11 @@ impl Backend for Game {
             state.events.push("reset:sent".into());
             if self.reset_clears_pending {
                 assert_eq!(state.alive, Some((game.pid, game.started)));
-                state.alive = None;
+                if self.reset_exit_delay > 0.0 {
+                    self.pending_exit_at = Some(self.clock.at() + self.reset_exit_delay);
+                } else {
+                    state.alive = None;
+                }
             }
             Ok(json!({"status":"sent","method":"Win+Ctrl+Shift+B"}))
         }
@@ -307,6 +319,8 @@ impl Fixture {
             deny_lock: false,
             resist_shutdown: false,
             reset_clears_pending: false,
+            reset_exit_delay: 0.0,
+            pending_exit_at: None,
             gpu: clear_gpu(),
             idle: clear_idle(),
         };
@@ -339,6 +353,20 @@ impl Fixture {
             .unwrap();
         serde_json::from_slice(&fs::read(directory.path().join("recovery.json")).unwrap()).unwrap()
     }
+}
+
+#[test]
+fn slow_display_recovery_finishes_pinned_shutdown_before_one_retry() {
+    let mut fixture = Fixture::new(|game| {
+        game.resist_shutdown = true;
+        game.reset_clears_pending = true;
+        game.reset_exit_delay = 12.0;
+    });
+    fixture.runner.restart_game(20.0).unwrap();
+    let events = fixture.events();
+    assert_eq!(count(&events, "launch"), 2);
+    assert_eq!(count(&events, "reset:sent"), 1);
+    assert_eq!(fixture.report()["retry"]["status"], "succeeded");
 }
 fn count(events: &[String], value: &str) -> usize {
     events.iter().filter(|s| s.as_str() == value).count()

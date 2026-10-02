@@ -1019,7 +1019,7 @@ impl Runner {
             self.backend.startup_cancel_check()?;
             self.backend.check_startup_lock()?;
             report["helpers"] = self.backend.startup_finish_diagnostics()?;
-            if !self.backend.wait_exit(game.pid, self.clock.now() + 5.0)? {
+            if !self.backend.wait_exit(game.pid, self.clock.now() + 30.0)? {
                 return Err(Error::scenario("pinned startup process remains after display recovery; refusing another launch"));
             }
             if self.backend.single_process(0.0)?.is_some() {
