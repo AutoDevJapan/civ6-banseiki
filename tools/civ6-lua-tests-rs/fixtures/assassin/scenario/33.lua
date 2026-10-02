@@ -1,0 +1,1 @@
+ city/unit/leader/slot consequences verified'

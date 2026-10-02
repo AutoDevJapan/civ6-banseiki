@@ -1,0 +1,6 @@
+
+
+-- Owner decision U-3b: the official great people of the Industrial to Future eras do not appear in the
+-- Sengoku pack (they would arrive with 天正 to 寛永). Deleting their Types rows cascades to
+-- GreatPersonIndividuals (01_GameplaySchema.sql:1519,1566) and on to their great works, action and birth
+-- modifiers and the journalism visibility source (ON DELETE CASCADE, :1012,1573,1579,1598).
