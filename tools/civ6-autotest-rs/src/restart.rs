@@ -240,6 +240,13 @@ pub fn restart_reason(
 }
 
 /// Injectable process operations keep all lifecycle decisions testable without Civ VI.
+#[derive(Clone, Debug)]
+pub struct ProcessRow {
+    pub pid: u32,
+    pub name: String,
+    pub parent_pid: u32,
+}
+
 pub trait LifecycleBackend {
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>>;
     fn process_start(&mut self, pid: u32) -> Result<f64>;
@@ -247,6 +254,19 @@ pub trait LifecycleBackend {
     fn reporter_ids(&mut self) -> Result<BTreeSet<u32>>;
     fn reporter_path(&mut self, pid: u32) -> Result<Option<String>>;
     fn terminate_reporter(&mut self, pid: u32) -> Result<()>;
+    fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
+        Err(Error::input("backend cannot enumerate helper processes"))
+    }
+    fn open_reporter(&mut self, _pid: u32) -> Result<Option<isize>> {
+        Err(Error::input("backend cannot pin helper processes"))
+    }
+    fn reporter_image(&mut self, _handle: isize, _pid: u32) -> Result<String> {
+        Err(Error::input("backend cannot inspect pinned helpers"))
+    }
+    fn terminate_reporter_handle(&mut self, _handle: isize, _pid: u32) -> Result<()> {
+        Err(Error::input("backend cannot terminate pinned helpers"))
+    }
+    fn close_reporter_handle(&mut self, _handle: isize) {}
     fn launch_uri(&mut self, uri: &str) -> Result<()>;
     fn find_window(&mut self) -> Result<isize>;
     fn process_name(&mut self, hwnd: isize) -> Result<String>;
@@ -352,6 +372,59 @@ pub fn close_orphan_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> 
     Ok(())
 }
 
+fn is_civ_reporter_image(path: &str) -> bool {
+    let parts: Vec<_> = path
+        .rsplit(['\\', '/'])
+        .filter(|part| !part.is_empty() && *part != ".")
+        .take(5)
+        .collect();
+    parts.len() == 5
+        && parts
+            .iter()
+            .zip([
+                "firaxisbugreporter.exe",
+                "win64steam",
+                "binaries",
+                "base",
+                "sid meier's civilization vi",
+            ])
+            .all(|(actual, expected)| actual.eq_ignore_ascii_case(expected))
+}
+
+pub fn close_orphaned_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> Result<Vec<u32>> {
+    if !backend.civ_ids()?.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = backend.process_rows()?;
+    let present: BTreeSet<_> = rows.iter().map(|row| row.pid).collect();
+    let mut closed = Vec::new();
+    for row in rows {
+        if row.name != "firaxisbugreporter.exe" || present.contains(&row.parent_pid) {
+            continue;
+        }
+        let Some(handle) = backend.open_reporter(row.pid)? else {
+            continue;
+        };
+        // Validate and terminate the same pinned process, even if its PID is reused.
+        let manual_launch = (|| -> Result<bool> {
+            if !is_civ_reporter_image(&backend.reporter_image(handle, row.pid)?) {
+                return Ok(false);
+            }
+            if !backend.civ_ids()?.is_empty() {
+                return Ok(true);
+            }
+            backend.terminate_reporter_handle(handle, row.pid)?;
+            closed.push(row.pid);
+            Ok(false)
+        })();
+        backend.close_reporter_handle(handle);
+        if manual_launch? {
+            return Ok(closed);
+        }
+    }
+    Ok(closed)
+}
+
 pub fn launch_via_steam_with<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
     close_orphan_civ_reporters_with(backend)?;
     backend.launch_uri(STEAM_URI)
@@ -397,6 +470,13 @@ mod win {
     use super::*;
     use crate::click::{self, image_path, with_process};
     use std::ptr;
+    use windows_sys::Win32::{
+        Foundation::{GetLastError, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+        System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            TH32CS_SNAPPROCESS,
+        },
+    };
     #[repr(C)]
     #[derive(Default)]
     struct FileTime {
@@ -516,6 +596,64 @@ mod win {
                 Ok(())
             })
         }
+        fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
+            let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+            if snapshot.is_null() || snapshot == INVALID_HANDLE_VALUE {
+                return Err(Error::input("Could not enumerate Civ VI helper processes"));
+            }
+            let result = (|| {
+                let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
+                entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+                if unsafe { Process32FirstW(snapshot, &mut entry) } == 0 {
+                    return Err(Error::input("Could not read Civ VI helper process list"));
+                }
+                let mut rows = Vec::new();
+                loop {
+                    let end = entry
+                        .szExeFile
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(entry.szExeFile.len());
+                    rows.push(ProcessRow {
+                        pid: entry.th32ProcessID,
+                        name: String::from_utf16_lossy(&entry.szExeFile[..end]).to_lowercase(),
+                        parent_pid: entry.th32ParentProcessID,
+                    });
+                    if unsafe { Process32NextW(snapshot, &mut entry) } == 0 {
+                        if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
+                            return Err(Error::input(
+                                "Civ VI helper process list became unavailable",
+                            ));
+                        }
+                        return Ok(rows);
+                    }
+                }
+            })();
+            unsafe {
+                CloseHandle(snapshot as isize);
+            }
+            result
+        }
+        fn open_reporter(&mut self, pid: u32) -> Result<Option<isize>> {
+            Ok(click::open_process(pid, 0x1001))
+        }
+        fn reporter_image(&mut self, handle: isize, pid: u32) -> Result<String> {
+            image_path(handle)
+                .map_err(|_| Error::input(format!("Cannot verify Civ VI helper process {pid}")))
+        }
+        fn terminate_reporter_handle(&mut self, handle: isize, pid: u32) -> Result<()> {
+            if unsafe { TerminateProcess(handle, 1) } == 0 {
+                return Err(Error::input(format!(
+                    "Could not close orphan Civ VI helper {pid}"
+                )));
+            }
+            Ok(())
+        }
+        fn close_reporter_handle(&mut self, handle: isize) {
+            unsafe {
+                CloseHandle(handle);
+            }
+        }
         fn launch_uri(&mut self, uri: &str) -> Result<()> {
             let wide: Vec<u16> = uri.encode_utf16().chain(std::iter::once(0)).collect();
             if unsafe { ShellExecuteW(0, ptr::null(), wide.as_ptr(), ptr::null(), ptr::null(), 1) }
@@ -548,6 +686,9 @@ mod win {
     pub fn close_orphan_civ_reporters() -> Result<()> {
         close_orphan_civ_reporters_with(&mut WindowsLifecycle)
     }
+    pub fn close_orphaned_civ_reporters() -> Result<Vec<u32>> {
+        close_orphaned_civ_reporters_with(&mut WindowsLifecycle)
+    }
     pub fn launch_via_steam() -> Result<()> {
         launch_via_steam_with(&mut WindowsLifecycle)
     }
@@ -560,8 +701,9 @@ mod win {
 }
 #[cfg(windows)]
 pub use win::{
-    close_orphan_civ_reporters, launch_via_steam, require_dx11_window, single_civ_process,
-    terminate_civ_process, wait_for_civ_window, wait_for_exit,
+    close_orphan_civ_reporters, close_orphaned_civ_reporters, launch_via_steam,
+    require_dx11_window, single_civ_process, terminate_civ_process, wait_for_civ_window,
+    wait_for_exit,
 };
 #[cfg(not(windows))]
 fn unsupported<T>() -> Result<T> {
@@ -581,6 +723,10 @@ pub fn terminate_civ_process(_: u32, _: f64) -> Result<()> {
 }
 #[cfg(not(windows))]
 pub fn close_orphan_civ_reporters() -> Result<()> {
+    unsupported()
+}
+#[cfg(not(windows))]
+pub fn close_orphaned_civ_reporters() -> Result<Vec<u32>> {
     unsupported()
 }
 #[cfg(not(windows))]

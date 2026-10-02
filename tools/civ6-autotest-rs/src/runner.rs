@@ -37,6 +37,9 @@ pub trait Backend: Send {
     fn launch(&mut self) -> Result<()> {
         Err(Error::input("backend cannot launch Steam"))
     }
+    fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
+        Ok(Vec::new())
+    }
     fn wait_window(&mut self, _deadline: f64) -> Result<isize> {
         Err(Error::input("backend has no Civ VI window"))
     }
@@ -143,6 +146,9 @@ impl Backend for SystemBackend {
     }
     fn launch(&mut self) -> Result<()> {
         crate::restart::launch_via_steam()
+    }
+    fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
+        crate::restart::close_orphaned_civ_reporters()
     }
     fn wait_window(&mut self, deadline: f64) -> Result<isize> {
         crate::restart::wait_for_civ_window(deadline)
@@ -688,12 +694,24 @@ impl Runner {
                 }
                 Err(e) => return Err(e),
             };
-            if !present && now >= next_launch {
-                if attempts >= 4 {
-                    return Err(Error::scenario(format!(
-                        "Steam did not start Civ VI after {attempts} attempts; last: {last}"
-                    )));
+            if !present && now >= next_launch && attempts < 4 {
+                let closed = self.backend.close_orphaned_reporters()?;
+                if !closed.is_empty() {
+                    println!("Closed helpers from failed launch: {closed:?}");
+                    self.clock.sleep(self.budget(deadline, 8.0)?);
+                    match self.backend.single_process(0.0) {
+                        Ok(Some(_)) => continue,
+                        Err(e)
+                            if e.kind == ErrorKind::Input
+                                && e.message.starts_with("Multiple Civ VI processes found") =>
+                        {
+                            continue
+                        }
+                        Err(e) => return Err(e),
+                        Ok(None) => {}
+                    }
                 }
+                self.remaining(deadline)?;
                 self.backend.launch()?;
                 attempts += 1;
                 next_launch = now + 45.0;
@@ -712,7 +730,7 @@ impl Runner {
             }
         }
         Err(Error::scenario(format!(
-            "Civ VI window did not appear after Steam launch; last: {last}"
+            "Civ VI window did not appear after {attempts} Steam launch attempts within the deadline; last: {last}"
         )))
     }
     pub fn restart_game(&mut self, timeout: f64) -> Result<String> {
@@ -776,6 +794,11 @@ impl Runner {
             return Err(Error::scenario(
                 "A Civ VI process appeared before Steam relaunch",
             ));
+        }
+        let closed = self.backend.close_orphaned_reporters()?;
+        if !closed.is_empty() {
+            println!("Closed orphan Civ VI helpers: {closed:?}");
+            self.clock.sleep(self.budget(deadline, 8.0)?);
         }
         self.launch_steam_and_wait(deadline)?;
         if self.owner_start {
