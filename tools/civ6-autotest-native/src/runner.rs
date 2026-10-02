@@ -1480,8 +1480,9 @@ mod tests {
         let boundary: Value = serde_json::from_str(RETURN_BOUNDARY).unwrap();
         let ordinary_steps = ordinary["steps"].as_array().unwrap();
         let boundary_steps = boundary["steps"].as_array().unwrap();
-        assert_eq!(boundary_steps.len(), 35);
+        assert_eq!(boundary_steps.len(), 70);
         assert_eq!(&boundary_steps[..29], &ordinary_steps[..29]);
+        assert_eq!(&boundary_steps[35..69], &ordinary_steps[29..63]);
         validate(&boundary).unwrap();
     }
     #[test]
