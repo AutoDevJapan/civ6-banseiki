@@ -251,8 +251,10 @@ fn related_errors(content: &str) -> Vec<String> {
                 .copied()
                 .unwrap_or("");
             let block = error_block(&lines, *i);
-        own_path(&block) || own_path(source) || block.to_lowercase().contains(JAPAN_MAP_ID)
-            || source.to_lowercase().contains(JAPAN_MAP_ID)
+            own_path(&block)
+                || own_path(source)
+                || block.to_lowercase().contains(JAPAN_MAP_ID)
+                || source.to_lowercase().contains(JAPAN_MAP_ID)
         })
         .map(|(_, l)| (*l).into())
         .collect()
@@ -424,17 +426,25 @@ fn bundle0_checks(logs: &BTreeMap<String, String>) -> Vec<Check> {
             .map(|(_, m)| m)
             .collect();
         if let (Some(previous), Some(following)) = (before.last(), after.first()) {
-            let num = |m: &regex::Captures<'_>, i: usize| m[i].parse::<u64>().unwrap_or(u64::MAX);
-            saved = num(&state, 1) == num(previous, 2)
-                && num(&state, 2) == num(previous, 1)
-                && num(&state, 3) == num(previous, 3);
-            next = num(following, 1) == num(&state, 2).saturating_add(1)
-                && num(following, 2) == num(&state, 1)
-                && num(following, 3) == num(&state, 3).saturating_add(1);
+            let nums = |m: &regex::Captures<'_>| -> Option<[u64; 3]> {
+                Some([m[1].parse().ok()?, m[2].parse().ok()?, m[3].parse().ok()?])
+            };
+            if let (
+                Some([first, last, count]),
+                Some([prev_turn, prev_first, prev_count]),
+                Some([post_turn, post_first, post_count]),
+            ) = (nums(&state), nums(previous), nums(following))
+            {
+                saved = first == prev_first && last == prev_turn && count == prev_count;
+                next = last.checked_add(1) == Some(post_turn)
+                    && post_first == first
+                    && count.checked_add(1) == Some(post_count);
+            }
             progress = before.len() >= 2
-                && before
-                    .windows(2)
-                    .all(|p| num(p[1], 3) == num(p[0], 3).saturating_add(1));
+                && before.windows(2).all(|p| match (nums(p[0]), nums(p[1])) {
+                    (Some(a), Some(b)) => a[2].checked_add(1) == Some(b[2]),
+                    _ => false,
+                });
         }
     }
     checks.extend([

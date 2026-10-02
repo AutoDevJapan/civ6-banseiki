@@ -1,13 +1,10 @@
 //! Turn timing, process memory, save/load measurements and research samples.
+#[cfg(windows)]
+use crate::ErrorKind;
 use crate::{time, Error, Result};
 use regex::Regex;
 use serde_json::{json, Value};
-use std::{
-    collections::BTreeSet,
-    fs::OpenOptions,
-    io::Write,
-    path::PathBuf,
-};
+use std::{collections::BTreeSet, fs::OpenOptions, io::Write, path::PathBuf};
 
 fn append_jsonl(path: &PathBuf, row: &Value) -> Result<()> {
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
@@ -431,9 +428,10 @@ pub fn process_memory(pid: u32) -> Result<Value> {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
         if handle.is_null() {
-            return Err(Error::input(format!(
-                "Cannot open Civ VI process {pid} for memory sample"
-            )));
+            return Err(Error::new(
+                ErrorKind::Io,
+                format!("Cannot open Civ VI process {pid} for memory sample"),
+            ));
         }
         let mut counters: PROCESS_MEMORY_COUNTERS_EX = std::mem::zeroed();
         counters.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
@@ -444,9 +442,10 @@ pub fn process_memory(pid: u32) -> Result<Value> {
         );
         CloseHandle(handle);
         if ok == 0 {
-            return Err(Error::input(format!(
-                "Cannot sample Civ VI process {pid} memory"
-            )));
+            return Err(Error::new(
+                ErrorKind::Io,
+                format!("Cannot sample Civ VI process {pid} memory"),
+            ));
         }
         Ok(
             json!({"working_set_bytes":counters.WorkingSetSize,"private_bytes":counters.PrivateUsage}),
