@@ -168,6 +168,8 @@ pub mod cascade;
 #[cfg(test)]
 mod data_tests;
 pub mod events;
+#[cfg(test)]
+mod hero_tests;
 pub mod oaths;
 pub mod reigns;
 pub mod trees;

@@ -1,0 +1,25 @@
+{
+  "provenance": "Required Heroes & Legends data for the eight tests introduced by 8ff592e. Copied from the installed official Babylon DLC. UTF-8 BOM, if present, removed and CRLF normalized to LF; all other source text retained. Tests always read checked-in fixtures and never inspect the game installation.",
+  "origin_commit": "8ff592e8c04e3ea836119491f6b89fe143966851",
+  "test_source": "tests/test_banseiki_heroes.py",
+  "base_sources_manifest": "game-sources.json",
+  "base_seed": {
+    "schemas": [
+      "Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql",
+      "Base/Assets/Gameplay/Data/Schema/02_AddTriggers.sql"
+    ],
+    "xml": "Base/Assets/Gameplay/Data/*.xml",
+    "xml_count": 82,
+    "operations": "Only direct Row elements; unsupported Base-schema columns filtered case-insensitively; INSERT OR IGNORE; true/false converted to 1/0."
+  },
+  "files": [
+    {
+      "path": "DLC/Babylon/Data/Babylon_Heroes_MODE.xml",
+      "sha256": "1985dd6efc5c789440b48c8ee932d9ea75d422d8fe1ff12c5681b89fd00f005e",
+      "size_bytes": 112419,
+      "installed_source": "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Babylon/Data/Babylon_Heroes_MODE.xml",
+      "installed_source_sha256": "300cd257e39bead706aecedda8c431e094c2374535bbed7d0d816bb282165185",
+      "installed_source_size_bytes": 113630
+    }
+  ]
+}
