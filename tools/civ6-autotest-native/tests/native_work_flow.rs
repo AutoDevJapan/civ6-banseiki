@@ -399,3 +399,160 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
     )
     .exec()
 }
+
+fn native_scenario(name: &str) -> serde_json::Value {
+    let source = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../civ6-autotest/scenarios")
+            .join(name),
+    )
+    .expect("native experiment scenario");
+    serde_json::from_str(&source).expect("valid native scenario JSON")
+}
+
+#[test]
+fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
+    let lua = Lua::new();
+    let mut checked = 0;
+    for name in [
+        "absorption-native-custody.json",
+        "absorption-native-deal.json",
+        "absorption-native-work-probe.json",
+    ] {
+        let scenario = native_scenario(name);
+        for step in scenario["steps"].as_array().expect("scenario steps") {
+            for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
+                .into_iter()
+                .flatten()
+            {
+                lua.load(code).set_name(name).into_function()?;
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked >= 25, "experiment scripts were not collected");
+    Ok(())
+}
+
+// This fixture tests the scenario's physical oracle, not engine API availability.
+// No operation in this fixture moves a work; nil dispatch and events alone must
+// never be accepted as physical success.
+fn native_matrix_oracle() -> mlua::Result<Lua> {
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        ExposedMembers={}
+        Game={GetProperty=function() return {} end,GetLocalPlayer=function() return 1 end}
+        local function city(owner,id,x)
+          local c={owner=owner,id=id,x=x,slots={[1]={[0]=-1,[1]=-1},[2]={[0]=-1,[1]=-1}}}
+          function c:GetOwner() return self.owner end
+          function c:GetID() return self.id end
+          function c:GetX() return self.x end
+          function c:GetY() return 0 end
+          function c:GetBuildings()
+            return {
+              HasBuilding=function() return true end,
+              GetNumGreatWorkSlots=function() return 2 end,
+              GetGreatWorkInSlot=function(_,b,s) return c.slots[b][s] end,
+              GetGreatWorkTypeFromIndex=function() return 1 end,
+              GetGreatWorkSlotType=function() return 1 end
+            }
+          end
+          return c
+        end
+        ORACLE_CITIES={city(1,10,1),city(1,20,2),city(2,30,3),city(3,40,4)}
+        ORACLE_CITIES[1].slots[1][0]=0
+        Players={}
+        for owner=1,3 do
+          local owned={}
+          for _,c in ipairs(ORACLE_CITIES) do if c.owner==owner then owned[#owned+1]=c end end
+          Players[owner]={GetCities=function()
+            return {Members=function() local i=0;return function() i=i+1;return owned[i] end end}
+          end}
+        end
+        PlayerManager={GetAliveIDs=function() return {1,2} end,GetFreeCitiesPlayerID=function() return 3 end}
+        CityManager={GetCityAt=function(x,y) return ORACLE_CITIES[x] end}
+        GameInfo={
+          Buildings=function() local i=0;return function() i=i+1;if i<=2 then return {Index=i} end end end,
+          GreatWorks={[1]={GreatWorkObjectType='GREATWORKOBJECT_RELIC'}},
+          GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}},
+          GreatWork_ValidSubTypes=function()
+            local once=false;return function()
+              if not once then once=true;return {GreatWorkSlotType='GREATWORKSLOT_RELIC',GreatWorkObjectType='GREATWORKOBJECT_RELIC'} end
+            end
+          end
+        }
+        Events={GreatWorkMoved={Add=function(fn) ORACLE_EVENT=fn end}}
+        PlayerOperations={}
+        for _,name in ipairs({'PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST',
+          'PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT','MOVE_GREAT_WORK'}) do
+          PlayerOperations[name]=name
+        end
+        UI={RequestPlayerOperation=function(actor,operation,params)
+          assert(actor==1 and params.PARAM_PLAYER_ONE==1 and params.PARAM_GREAT_WORK_INDEX==0)
+          return nil
+        end}
+        ORACLE_SOURCE={Owner=1,City=10,X=1,Y=0,Building=1,Slot=0}
+        ORACLE_DEST={Owner=1,City=20,X=2,Y=0,Building=1,Slot=0}
+        "#,
+    )
+    .exec()?;
+    let scenario = native_scenario("absorption-native-custody.json");
+    let helper = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .find(|code| code.contains("function M.Check("))
+        .expect("physical oracle");
+    let prefix = helper
+        .split("\nlocal found\n")
+        .next()
+        .expect("oracle prefix");
+    assert!(
+        prefix.len() < helper.len(),
+        "fixture must not dispatch the experiment"
+    );
+    lua.load(prefix).exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn native_matrix_requires_unique_exact_index_and_empty_source() -> mlua::Result<()> {
+    let lua = native_matrix_oracle()?;
+    lua.load(
+        r#"
+        local M=ExposedMembers.JAC_NativeMatrix
+        local s,d=ORACLE_SOURCE,ORACLE_DEST
+        assert(not M.Check('unchanged',0,s,d))
+        assert(M.Request('nil-dispatch',1,1,0,s,d))
+        ORACLE_EVENT(0,1,10,20)
+        assert(not M.Verify(),'nil return or unrelated event proved movement')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=0
+        assert(M.Verify(),'exact index zero in destination was rejected')
+        ORACLE_CITIES[1].slots[1][0]=0
+        assert(not pcall(M.Verify),'duplicate source index was accepted')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[4].slots[1][0]=0
+        assert(not pcall(M.Verify),'duplicate index in Free Cities was ignored')
+        ORACLE_CITIES[4].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=7
+        assert(not pcall(M.Verify),'replacement work was accepted')
+        ORACLE_CITIES[2].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][1]=0
+        assert(not pcall(M.Verify),'wrong physical slot was accepted')
+        ORACLE_CITIES[2].slots[1][1]=-1
+        ORACLE_CITIES[3].slots[1][0]=0
+        assert(not pcall(M.Verify),'wrong physical owner was accepted')
+        ORACLE_CITIES[3].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=0
+        ORACLE_CITIES[1].slots[1][0]=7
+        assert(not pcall(M.Verify),'nonempty source was accepted')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[2].id=99
+        assert(not pcall(M.Verify),'stale city ID after transfer was accepted')
+        "#,
+    )
+    .exec()
+}
