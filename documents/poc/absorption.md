@@ -22,6 +22,12 @@ PR #87の実機3本は、同じ候補 `402bb309f05178d85e0e7adc591b33b612002ac1`
 
 PR #96は、公式Great Workの物理的な散逸・第三者返還・回収が未完成のため、マージ条件を満たしていない。吸収先以外へ出す作品は、都市や部隊の変更前に停止する。同じ作品indexを保った移動と回収を実装・実証してから、この必須項目を解消する。
 
+2026-10-03の担当は実機を4回試した。`absorb-flow-18`はゲーム開始後、取引診断が存在しない作品種別getterを呼んで停止した。画面側の建物の公式getterへ修正した。`absorb-flow-19`では、都市間距離と通行条件を満たす区画8282に都市を生成できたが、診断のassertへ都市オブジェクトを渡したため停止した。文字列に直した`absorb-flow-20`は12/15手順を通過し、既存都市の作品index 0を保管都市へ移す操作を要求した。しかし30秒後も保管枠に作品が現れず、都市の第三者移管まで進めなかった。都市生成の成功を作品移動の成功と扱わない。
+
+`absorb-flow-21`はメインメニューへの接続待ちで420秒後に0/10手順で停止した。Lua.logは初期化1行だけで、読み取り専用のFireTuner照会も応答しなかった。今回の担当は4試行の上限に達したため、共有チェーンの自動再試行待ちで中断し、5回目を開始しなかった。自分のCiv6は終了し、共有ロックは次の担当へ渡った。成果物は共有実機フォルダの`tools/civ6-autotest/artifacts/absorb-flow-18`〜`-21`、検査記録は`D:/CC/Work/shepherd96-20261003/`にある。これらは後続のレビュー修正を統合した候補の実機結果ではない。
+
+回収処理は、公式作品の同じindexが存続プレイヤーの枠にちょうど1件あり、取得者が所有していることを確かめてから記録を確定する。取得者以外に残る作品、所在不明、重複、来歴の変化は中断し、元の記録と回収意図を保持する。成功時は首都へ割り当てたと仮定せず、実際の都市と枠を記録する。この検査は実体移動の実装に代わるものではない。
+
 2026-10-02の旧候補の実機`absorb-flow-12`は94/94手順とログ判定5/5が成功した。一次離脱、人間用の選択画面、強制失敗と再判定、独自品物の回収、都市忠誠と文化摩擦、各段階の保存・読込を確認した。公式作品の実体移動は、この成功に含まれない。
 
 mainのRust移行を統合した候補では、ワークスペース検査1199件と吸収専用の独立検査80件が全て成功し、省略は0件だった。旧吸収の120メソッドと117個の埋込assertを保持し、その125検査も通過した。追加シナリオ5本は固定一覧へ登録し、形式と全Lua構文を確認した。Rustの書式検査とreleaseビルド、吸収専用ツールのClippyも成功した。ワークスペース全体のClippyを追加で実行したところ、main由来の式・型などの形式指摘で停止した。必須CIは書式・全検査・releaseビルド・全シナリオ検査であり、全体のClippy成功は主張しない。
@@ -30,9 +36,11 @@ mainのRust移行を統合した候補では、ワークスペース検査1199�
 
 2026-10-02 21:32時点で、直接取引の実機`absorb-flow-16-try1`と`absorb-flow-16`は起動時のFrontEnd応答待ちで0/10手順に失敗した。Civ6は読み込み画面から進まず、FireTunerは有効でも接続先が現れなかった。MODの参照先は存在し、Lua.logは初期化1行だけだった。生成されたキャッシュを保存して退避した`absorb-flow-17-try1`も、同じ起動段階で0/15手順に失敗した。`absorb-flow-17`は再起動中で、作品の移動や都市生成の成否は未確認である。最新の終了結果と残るシナリオは[PR #96](https://github.com/AutoDevJapan/civ6-banseiki/pull/96)に記録する。
 
-`Scripts/JAC_Absorption_Flow.lua` は、旧 PoC の `ExposedMembers.JAC_Absorption.Apply` に全資産の確定結果を渡す前段を実装する。ゲーム側の読み取り専用公開口は `ExposedMembers.JAC_AbsorptionFlow`。画面操作は `GameEvents.JAC_AbsorptionFlow_Operation` への `EXECUTE_SCRIPT` で届け、イベントが渡す実際のプレイヤーIDを検証する。読込時も `Game` プロパティから選択・結果を復元する。旧 PoC の `WAITING_UI` は `F.Resume(id)`、または同一の `RESOLVE` 操作を画面側の値公開後に呼んで続行する。再送では保存済みの判定値を使う。
+`Scripts/JAC_Absorption_Flow.lua` は、ゲーム処理内の `JAC_AbsorptionGameplay.Apply` に全資産の確定結果を渡す前段を実装する。ゲーム側の読み取り専用公開口は `ExposedMembers.JAC_AbsorptionFlow`。画面操作は `GameEvents.JAC_AbsorptionFlow_Operation` への `EXECUTE_SCRIPT` で届け、イベントが渡す実際のプレイヤーIDを検証する。読込時も `Game` プロパティから選択・結果を復元する。旧 PoC の `WAITING_UI` はゲーム処理内の `F.Resume(id)`、または同一の `RESOLVE` 操作を画面側の値公開後に呼んで続行する。再送では保存済みの判定値を使う。
 
-統合時は modinfo にこの Lua を `AddGameplayScripts`、LoadOrder 210 として追加し、`Files` にも登録する。既存の移管 Lua の LoadOrder 200 の後に動かす。画面からは `F.Get(id)` / `F.GetPending(playerID)` の返すコピーを読み、`UI.RequestPlayerOperation(localPlayer, PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_AbsorptionFlow_Operation', Command='SELECT'/'RESOLVE'/'ACK', FlowID=id, AssetID=assetID, Action=action, ReturnOwner=owner})` を送る。`F.Begin(plan)` はゲーム側の吸収発生箇所が呼ぶ。選択の変更は `CHOICE` 中だけ、結果は `RESULT` 中に残り、`ACK` 後に `DONE` となる。`APPLYING` で旧 PoC の公開待ちが生じたら、公開値の準備後に同じ `RESOLVE` を送る。
+modinfoはLoadOrder 200の入口`Scripts/JAC_Absorption_Entry.lua`を1件だけ登録し、移管処理とフローを同じゲーム処理コンテキストへ順にincludeする。変更関数はその中の`JAC_AbsorptionGameplay`と`JAC_AbsorptionFlowGameplay`に置き、画面へ公開しない。既存の吸収シナリオも、FireTunerから変更関数を使う手順とそのコルーチンをこの入口のコンテキストで実行する。入口の状態名と更新したシナリオは、今回の4試行の後に統合したため実機で未確認である。
+
+画面からは `F.Get(id)` / `F.GetPending(playerID)` の返すコピーを読み、`UI.RequestPlayerOperation(localPlayer, PlayerOperations.EXECUTE_SCRIPT, {OnStart='JAC_AbsorptionFlow_Operation', Command='SELECT'/'RESOLVE'/'ACK', FlowID=id, AssetID=assetID, Action=action, ReturnOwner=owner})` を送る。`F.Begin(plan)` は同じゲーム処理コンテキストの吸収発生箇所が呼ぶ。選択の変更は `CHOICE` 中だけ、結果は `RESULT` 中に残り、`ACK` 後に `DONE` となる。`APPLYING` で公開待ちが生じたら、UIが公開完了を操作イベントで知らせ、ゲーム処理が保存済みの処理を再開する。AIの吸収先もこの再開の対象となる。
 
 三段階判定の順序、方式別・行為別の暫定確率、AI の選択、世界での再登場経路は [SSOT 9.1](../spec/ssot/09-assimilation-religion.md#91-勢力吸収) に置く。実装は `Scripts/JAC_Absorption_Rules.lua` の `FLOW_*` と `Scripts/JAC_Absorption_Flow.lua` が担う。偉人は公式 `CreatePerson` の個人 ID と残り回数を照合し、英雄は `HeroesManager.CreateHero`、請求権、召喚元、寿命と行動回数を照合する。再出現の候補個体と記録はゲームプロパティに保存し、ロード後に二重生成しない。
 

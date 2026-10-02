@@ -158,7 +158,7 @@
       "action": "wait_for"
     },
     {
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "local p=Players[Game.GetLocalPlayer()];local q=Map.GetPlot(p:GetCities():GetCapitalCity():GetX(),p:GetCities():GetCapitalCity():GetY());local values={};for _,name in ipairs({'GetOwner','GetTerrainType','GetImprovementType','GetDistrictType','IsCity','IsWater','IsMountain','IsImpassable'}) do local ok,v=pcall(function() return q[name](q) end);values[#values+1]=name..'='..(ok and tostring(v) or (tostring(v):gsub('[%c].*',''))) end;print('[JAC_PLOT_CORE_API] '..table.concat(values,','));return table.concat(values,',')",
       "action": "ui_lua"
     },
@@ -168,8 +168,8 @@
       "action": "ui_lua"
     },
     {
-      "state_name": "GameCore_Tuner",
-      "code": "local p=Players[Game.GetLocalPlayer()];local coords=assert(ExposedMembers.JAC_CustodyProbeSite());local site=Map.GetPlotByIndex(coords.Index);local before={};for _,w in ipairs(ExposedMembers.JAC_Absorption.OwnedGreatWorkSlots(p:GetID())) do before[w.Index]=true end;local cap=p:GetCities():GetCapitalCity();local b=assert(GameInfo.Buildings['BUILDING_JAC_ABSORPTION_CACHE']);if not cap:GetBuildings():HasBuilding(b.Index) then cap:GetBuildQueue():CreateIncompleteBuilding(b.Index,Map.GetPlot(cap:GetX(),cap:GetY()):GetIndex(),100) end;p:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC');local count=p:GetCities():GetCount();local ok,created=pcall(function() return p:GetCities():Create(coords.X,coords.Y) end);print('[JAC_NATIVE_CACHE_CREATE_API] ok='..tostring(ok)..' result='..tostring(created)..' current='..tostring(CityManager.GetCityAt(coords.X,coords.Y)));assert(ok,tostring(created));Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',{Owner=p:GetID(),BeforeCityCount=count,Source={X=cap:GetX(),Y=cap:GetY(),ID=cap:GetID()},Cache={X=coords.X,Y=coords.Y},Building=b.Index,Before=before});print('[JAC_NATIVE_CACHE_CREATE_REQUEST] before='..count..' after='..p:GetCities():GetCount());return 'requested native cache creation before checking publication'",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local p=Players[Game.GetLocalPlayer()];local coords=assert(ExposedMembers.JAC_CustodyProbeSite());local site=Map.GetPlotByIndex(coords.Index);local before={};for _,w in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(p:GetID())) do before[w.Index]=true end;local cap=p:GetCities():GetCapitalCity();local b=assert(GameInfo.Buildings['BUILDING_JAC_ABSORPTION_CACHE']);if not cap:GetBuildings():HasBuilding(b.Index) then cap:GetBuildQueue():CreateIncompleteBuilding(b.Index,Map.GetPlot(cap:GetX(),cap:GetY()):GetIndex(),100) end;p:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC');local count=p:GetCities():GetCount();local ok,created=pcall(function() return p:GetCities():Create(coords.X,coords.Y) end);print('[JAC_NATIVE_CACHE_CREATE_API] ok='..tostring(ok)..' result='..tostring(created)..' current='..tostring(CityManager.GetCityAt(coords.X,coords.Y)));assert(ok,tostring(created));Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',{Owner=p:GetID(),BeforeCityCount=count,Source={X=cap:GetX(),Y=cap:GetY(),ID=cap:GetID()},Cache={X=coords.X,Y=coords.Y},Building=b.Index,Before=before});print('[JAC_NATIVE_CACHE_CREATE_REQUEST] before='..count..' after='..p:GetCities():GetCount());return 'requested native cache creation before checking publication'",
       "action": "ui_lua"
     },
     {
@@ -184,11 +184,11 @@
     {
       "action": "ui_lua",
       "code": "local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE');local c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y),'native cache absent after publication');assert(c:GetOwner()==t.Owner);c:GetBuildQueue():CreateIncompleteBuilding(t.Building,Map.GetPlot(t.Cache.X,t.Cache.Y):GetIndex(),100);t.Cache.ID=c:GetID();Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t);return 'native cache published; granted an actual relic'",
-      "state_name": "GameCore_Tuner"
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE');local p=Players[t.Owner];local found;for _,city in p:GetCities():Members() do for b in GameInfo.Buildings() do if city:GetBuildings():HasBuilding(b.Index) then for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do local w=city:GetBuildings():GetGreatWorkInSlot(b.Index,slot);if w and w>=0 and not t.Before[w] then assert(not found);found={Index=w,City=city:GetID(),Building=b.Index,Slot=slot} end end end end end;assert(found,'real relic not placed');assert(found.City~=t.Cache.ID,'relic must move from an existing city into custody');ExposedMembers.JAC_CustodyProbeRead=function() return found end;local params={};params[PlayerOperations.PARAM_PLAYER_ONE]=t.Owner;params[PlayerOperations.PARAM_CITY_SRC]=found.City;params[PlayerOperations.PARAM_CITY_DEST]=t.Cache.ID;params[PlayerOperations.PARAM_BUILDING_SRC]=found.Building;params[PlayerOperations.PARAM_BUILDING_DEST]=t.Building;params[PlayerOperations.PARAM_GREAT_WORK_INDEX]=found.Index;params[PlayerOperations.PARAM_SLOT]=0;UI.RequestPlayerOperation(t.Owner,PlayerOperations.MOVE_GREAT_WORK,params);return 'requested actual native relic move '..found.Index",
+      "code": "local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE');local p=Players[t.Owner];local cache=assert(p:GetCities():FindID(t.Cache.ID),'cache not published');assert(cache:GetBuildings():HasBuilding(t.Building),'cache building not published');assert(cache:GetBuildings():GetNumGreatWorkSlots(t.Building)==1,'cache has no native slot');local found;for _,city in p:GetCities():Members() do for b in GameInfo.Buildings() do if city:GetBuildings():HasBuilding(b.Index) then for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do local w=city:GetBuildings():GetGreatWorkInSlot(b.Index,slot);if w and w>=0 and not t.Before[w] then assert(not found);found={Index=w,City=city:GetID(),Building=b.Index,Slot=slot} end end end end end;assert(found,'real relic not placed');assert(found.City~=t.Cache.ID,'relic must move from an existing city into custody');ExposedMembers.JAC_CustodyProbeRead=function() return found end;local params={};params[PlayerOperations.PARAM_PLAYER_ONE]=t.Owner;params[PlayerOperations.PARAM_CITY_SRC]=found.City;params[PlayerOperations.PARAM_CITY_DEST]=t.Cache.ID;params[PlayerOperations.PARAM_BUILDING_SRC]=found.Building;params[PlayerOperations.PARAM_BUILDING_DEST]=t.Building;params[PlayerOperations.PARAM_GREAT_WORK_INDEX]=found.Index;params[PlayerOperations.PARAM_SLOT]=0;UI.RequestPlayerOperation(t.Owner,PlayerOperations.MOVE_GREAT_WORK,params);return 'requested actual native relic move '..found.Index",
       "action": "ui_lua"
     },
     {
@@ -201,7 +201,7 @@
       "action": "wait_for"
     },
     {
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE');local r=assert(ExposedMembers.JAC_CustodyProbeRead());local free=assert(PlayerManager.GetFreeCitiesPlayerID());local c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y));Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE_WORK',{Index=r.Index,Free=free});CityManager.TransferCity(c,free);assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y):GetOwner()==free);return 'transferred native cache city to Free Cities '..free",
       "action": "ui_lua"
     },

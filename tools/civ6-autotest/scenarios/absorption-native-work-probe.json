@@ -13,7 +13,9 @@
         "403be889-1455-4de7-967b-ad54c0ff3431",
         "61320778-2e75-4c11-9009-94101b519aba"
       ],
-      "disable_ids": ["dfa0717e-4d0b-4370-b693-27fc6758571b"]
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
     },
     {
       "action": "load",
@@ -32,8 +34,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption)\nlocal selected,first=nil,nil\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n local ok,slots=pcall(A.OwnedGreatWorkSlots,owner)\n if ok and #slots>0 then selected=owner;first=slots[1];break end\nend\nselected=selected or Game.GetLocalPlayer()\nlocal ok,core=pcall(A.NativeWorkCapabilities,selected)\nlocal result={SelectedOwner=selected,FirstWork=first,GameplayOK=ok,Gameplay=ok and core or nil,GameplayError=not ok and tostring(core) or nil,UI={}}\nfor _,pair in ipairs({{'RequestPlayerOperation',UI},{'RequestPlayerOperation',Game},{'GetWorkingDeal',DealManager},{'GetPossibleDealItems',DealManager}}) do\n local name,object=pair[1],pair[2]\n local present,value=pcall(function() return object and object[name] end)\n result.UI[#result.UI+1]={Object=object==UI and 'UI' or object==Game and 'Game' or 'DealManager',Method=name,Available=present and type(value)=='function'}\nend\nfor _,name in ipairs({'MOVE_GREAT_WORK','PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST','PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT'}) do\n result.UI[name]=PlayerOperations and PlayerOperations[name]~=nil or false\nend\nprint('[JAC_NATIVE_WORK_API] '..A.Canonical(result))\nreturn A.Canonical(result)"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal selected,first=nil,nil\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n local ok,slots=pcall(A.OwnedGreatWorkSlots,owner)\n if ok and #slots>0 then selected=owner;first=slots[1];break end\nend\nselected=selected or Game.GetLocalPlayer()\nlocal ok,core=pcall(A.NativeWorkCapabilities,selected)\nlocal result={SelectedOwner=selected,FirstWork=first,GameplayOK=ok,Gameplay=ok and core or nil,GameplayError=not ok and tostring(core) or nil,UI={}}\nfor _,pair in ipairs({{'RequestPlayerOperation',UI},{'RequestPlayerOperation',Game},{'GetWorkingDeal',DealManager},{'GetPossibleDealItems',DealManager}}) do\n local name,object=pair[1],pair[2]\n local present,value=pcall(function() return object and object[name] end)\n result.UI[#result.UI+1]={Object=object==UI and 'UI' or object==Game and 'Game' or 'DealManager',Method=name,Available=present and type(value)=='function'}\nend\nfor _,name in ipairs({'MOVE_GREAT_WORK','PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST','PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT'}) do\n result.UI[name]=PlayerOperations and PlayerOperations[name]~=nil or false\nend\nprint('[JAC_NATIVE_WORK_API] '..A.Canonical(result))\nreturn A.Canonical(result)"
     }
   ]
 }

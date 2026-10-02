@@ -34,13 +34,13 @@
     },
     {
       "action": "ui_lua",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'",
-      "state_name": "GameCore_Tuner"
+      "code": "local A=assert(JAC_AbsorptionGameplay);assert(A.GetState().Transactions['japan-live-absorption'].Status=='COMPLETE','wrong checkpoint');return 'verified completed absorption checkpoint'",
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "ui_lua",
       "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));Players[e.To]:GetReligion():ChangeFaithBalance(1000000);return 'AI recall rejection fixtures funded'",
-      "state_name": "GameCore_Tuner"
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "ui_lua",
@@ -59,13 +59,13 @@
     },
     {
       "action": "ui_lua",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1')\nlocal m=assert(A.GetHeroesManager());local class=GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'].Index\nlocal record=assert(A.GetRoster(e.To)['live:hero']);local u=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(u:IsHero() and u:GetHeroClassType()==class,'recall death fixture is not a native hero')\nlocal origin=m:GetHeroOriginCityID(class);local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nGame:SetProperty('JAC_ABSORPTION_LIVE_RECALL_V1',{Owner=e.To,EraBefore=Game.GetEras():GetCurrentEra(),Class=class,CityID=city:GetID(),X=city:GetX(),Y=city:GetY(),Record=A.Canonical(record)})\nUnitManager.Kill(u)\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nassert(m:GetHeroClaimPlayer(class)==e.To,'native death lost absorber recall rights')\nassert(A.Canonical(A.GetRoster(e.To)['live:hero'])==Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1').Record,'death lost contract/loyalty/relations')\nreturn 'native Warlord A retired for engine recall eligibility probe; faith funded'\n",
-      "state_name": "GameCore_Tuner"
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1')\nlocal m=assert(A.GetHeroesManager());local class=GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'].Index\nlocal record=assert(A.GetRoster(e.To)['live:hero']);local u=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(u:IsHero() and u:GetHeroClassType()==class,'recall death fixture is not a native hero')\nlocal origin=m:GetHeroOriginCityID(class);local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nGame:SetProperty('JAC_ABSORPTION_LIVE_RECALL_V1',{Owner=e.To,EraBefore=Game.GetEras():GetCurrentEra(),Class=class,CityID=city:GetID(),X=city:GetX(),Y=city:GetY(),Record=A.Canonical(record)})\nUnitManager.Kill(u)\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nassert(m:GetHeroClaimPlayer(class)==e.To,'native death lost absorber recall rights')\nassert(A.Canonical(A.GetRoster(e.To)['live:hero'])==Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1').Record,'death lost contract/loyalty/relations')\nreturn 'native Warlord A retired for engine recall eligibility probe; faith funded'\n",
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "ui_lua",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())",
-      "state_name": "GameCore_Tuner"
+      "code": "local A=assert(JAC_AbsorptionGameplay);ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ=function() return A.Rules.Copy(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1')) end;return A.Canonical(ExposedMembers.JAC_NATIVE_RECALL_CHECKPOINT_READ())",
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "wait_for",
@@ -78,8 +78,8 @@
     },
     {
       "action": "ui_lua",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.Owner]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.Owner]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.Owner and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers",
-      "state_name": "GameCore_Tuner"
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.Owner]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.Owner]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.Owner and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers",
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "ui_lua",
