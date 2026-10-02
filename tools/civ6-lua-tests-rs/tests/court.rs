@@ -1,11 +1,10 @@
-use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
+use civ6_lua_tests_rs::strict::{assert_boolean_identity, ChunkExt, Data, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, json_to_lua, new_lua, read_repo, repo_root};
 use mlua::{Lua, Table};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use serde_json::{json, Value as Json};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
 
 const MOD: &str = "poc/JAC_PoC_CourtArbitration/";
 const FIXTURE: &str = "tools/civ6-lua-tests-rs/fixtures/court/";
@@ -37,11 +36,14 @@ mod fidelity_regressions {
         let h = Court::scenario();
         h.run(&fixture("overlay_setup.lua"));
         h.run(&mod_source("UI/JAC_CourtArbitrationPanel.lua"));
-        h.eq("ContextPtr:IsHidden()", false);
+        h.identity("ContextPtr:IsHidden()", false);
         h.run("ContextPtr.IsHidden=function() return nil end");
-        assert!(catch_unwind(AssertUnwindSafe(|| h.eq("ContextPtr:IsHidden()", false))).is_err());
+        assert!(catch_unwind(AssertUnwindSafe(
+            || h.identity("ContextPtr:IsHidden()", false)
+        ))
+        .is_err());
         h.run("ContextPtr.IsHidden=function() return false end");
-        h.eq("ContextPtr:IsHidden()", false);
+        h.identity("ContextPtr:IsHidden()", false);
     }
 
     #[test]
@@ -191,8 +193,20 @@ impl Court {
             .unwrap_or_else(|error| panic!("{expression}: {error}"))
     }
 
-    fn eq<T: FromLuaMulti + PartialEq + Debug>(&self, expression: &str, expected: T) {
-        assert_eq!(self.strict_eval::<T>(expression), expected, "{expression}");
+    fn eq(&self, expression: &str, expected: impl Into<Data>) {
+        let actual = self
+            .lua
+            .load(format!("return {expression}"))
+            .python_eval()
+            .unwrap();
+        let expected = expected.into();
+        assert!(
+            actual.python_eq(&expected),
+            "{expression}: actual {actual:?}, expected {expected:?}"
+        );
+    }
+    fn identity(&self, expression: &str, expected: bool) {
+        assert_boolean_identity(&self.strict_eval::<Data>(expression), expected);
     }
     fn truth(&self, expression: &str, expected: bool) {
         assert_eq!(
@@ -219,7 +233,7 @@ impl Court {
             .globals()
             .strict_get::<Table>("LOG")
             .unwrap()
-            .strict_sequence_values::<String>()
+            .strict_values::<String>()
             .collect::<mlua::Result<Vec<_>>>()
             .unwrap()
     }
@@ -753,7 +767,7 @@ mod arbitration_turn_tests {
         h.eq("Game:GetProperty('JAC_ARB_TRUCE_0_1')", None::<i64>);
         h.eq("Game:GetProperty('JAC_ARB_AWAIT_0_1')", 30_i64);
         h.log_has("[JAC_ARB] SAFETY NET accepted pair=0-1 turn=2 truce_turns=30 power=3 peace=deferred reason=min_war");
-        h.eq("(function() for _,n in ipairs(NOTES) do if n[3]=='LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY' then return true end end return false end)()", true);
+        h.eq("(function() for _,n in pairs(NOTES) do if n[3]=='LOC_JAC_ARB_NOTIFY_ACCEPTED_DEFERRED_SUMMARY' then return true end end return false end)()", true);
         h.eq(
             "select(2,JAC_ARB.CheckRequest(0,0,1))",
             "AWAITING_PEACE".to_string(),
@@ -860,7 +874,7 @@ mod subjugation_order_tests {
         h.truth("JAC_ARB.HasJoined(0,1,2)", true);
         h.truth("JAC_ARB.HasJoined(3,1,2)", false);
         h.truth("JAC_ARB.HasJoined(2,1,2)", false);
-        h.eq("(function() local n=0; for _,v in ipairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_REFUSED_NAME' then n=n+1 end end return n end)()", 4_i64);
+        h.eq("(function() local n=0; for _,v in pairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_REFUSED_NAME' then n=n+1 end end return n end)()", 4_i64);
         h.run("NEAR['1_3']=true");
         h.advance();
         h.truth("JAC_ARB.HasJoined(3,1,3)", true);
@@ -910,7 +924,7 @@ mod subjugation_order_tests {
         );
         h.eq("Players[1]:GetProperty('JAC_ARB_OUTLAW_UNTIL'), Players[0]:GetProperty('JAC_ARB_JOINED_1'), Players[2]:GetProperty('JAC_ARB_JOINED_1')", (None::<i64>, None::<i64>, None::<i64>));
         h.log_has("[JAC_ARB] subjugation ended target=1 turn=13");
-        h.eq("(function() local a,n={},0; for _,v in ipairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME' then a[v[1]]=true; n=n+1 end end return n==3 and a[0]==true and a[1]==true and a[2]==true and a[3]==nil end)()", true);
+        h.eq("(function() local a,n={},0; for _,v in pairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_ORDER_ENDED_NAME' then a[v[1]]=true; n=n+1 end end return n==3 and a[0]==true and a[1]==true and a[2]==true and a[3]==nil end)()", true);
         h.run("JOIN(2,1)");
         h.log_has("[JAC_ARB] rejected join player=2 target=1 reason=NO_ORDER");
     }
@@ -927,7 +941,7 @@ mod subjugation_order_tests {
             (600_i64, ouchi_before + 10, otomo_before - 10),
         );
         h.log_has(&format!("[JAC_ARB] subjugation capture player=0 target=1 city=7 turn=2 gold=+200 legitimacy={} target_legitimacy={}", ouchi_before + 10, otomo_before - 10));
-        h.eq("(function() local n=0; for _,v in ipairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_CAPTURE_NAME' then n=n+1 end end return n end)()", 4_i64);
+        h.eq("(function() local n=0; for _,v in pairs(NOTES) do if v[2]=='LOC_JAC_ARB_NOTIFY_CAPTURE_NAME' then n=n+1 end end return n end)()", 4_i64);
         let mori_gold: i64 = h.strict_eval("Players[3].gold");
         h.run("CONQUER(3,1,103)");
         h.eq(
@@ -1349,9 +1363,9 @@ mod live_scenario_on_stubs_tests {
             let h = Court::scenario();
             h.run(&fixture("overlay_setup.lua"));
             h.run(&read_repo(&source));
-            h.eq("ContextPtr:IsHidden()", false);
+            h.identity("ContextPtr:IsHidden()", false);
             h.run(&format!("Controls.{toggle}:DoLeftClick()"));
-            h.eq(&format!("Controls.{panel}:IsHidden()"), false);
+            h.identity(&format!("Controls.{panel}:IsHidden()"), false);
             if panel == "Panel" {
                 h.eq(
                     "#Controls.Rows.instances, Controls.Rows.instances[1].Root:GetSizeY()",
@@ -1359,7 +1373,7 @@ mod live_scenario_on_stubs_tests {
                 );
             }
             h.run(&format!("Controls.{close}:DoLeftClick()"));
-            h.eq(&format!("Controls.{panel}:IsHidden()"), true);
+            h.identity(&format!("Controls.{panel}:IsHidden()"), true);
         }
     }
 }

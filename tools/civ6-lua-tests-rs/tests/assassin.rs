@@ -1,4 +1,4 @@
-use civ6_lua_tests_rs::strict::ChunkExt;
+use civ6_lua_tests_rs::strict::{assert_python_eq, ChunkExt, Data};
 use civ6_lua_tests_rs::{new_lua, read_repo, repo_root};
 use mlua::{Lua, Value as LuaValue};
 use regex::Regex;
@@ -17,7 +17,7 @@ const SCENARIO: &str = "tools/civ6-autotest/scenarios/assassin-leader-save-load.
 fn parallel_production_assertion_rejects_extra_results_and_nil_or_string_false() {
     let h = Harness::new();
     h.run("assert(A.StartProduction(0,10))");
-    assert_eq!(h.parallel_result().unwrap(), (false, "PRODUCING".into()));
+    assert_python_eq(&h.parallel_result().unwrap(), (false, "PRODUCING"));
     for result in [
         "false,'PRODUCING',99",
         "false,'PRODUCING',nil",
@@ -25,10 +25,16 @@ fn parallel_production_assertion_rejects_extra_results_and_nil_or_string_false()
         "'false','PRODUCING'",
     ] {
         h.run(&format!("A.StartProduction=function() return {result} end"));
-        assert!(h.parallel_result().is_err(), "{result}");
+        let actual = h.parallel_result().unwrap();
+        assert!(
+            !actual.python_eq(&Data::from((false, "PRODUCING"))),
+            "{result}"
+        );
     }
     h.run("A.StartProduction=function() return false,'PRODUCING' end");
-    assert_eq!(h.parallel_result().unwrap(), (false, "PRODUCING".into()));
+    assert_python_eq(&h.parallel_result().unwrap(), (false, "PRODUCING"));
+    h.run("A.StartProduction=function() return 0,'PRODUCING' end");
+    assert_python_eq(&h.parallel_result().unwrap(), (false, "PRODUCING"));
 }
 
 fn case_segments(name: &str) -> Vec<String> {
@@ -110,10 +116,10 @@ impl Harness {
             "expected {expected:?}, got {error}"
         );
     }
-    fn parallel_result(&self) -> mlua::Result<(bool, String)> {
+    fn parallel_result(&self) -> mlua::Result<Data> {
         self.lua
             .load("return A.StartProduction(0,11)")
-            .strict_eval()
+            .python_eval()
     }
 }
 
@@ -240,7 +246,7 @@ mod assassin_lua_tests {
             .unwrap();
         assert!(first);
         let second = h.parallel_result().unwrap();
-        assert_eq!(second, (false, "PRODUCING".into()));
+        assert_python_eq(&second, (false, "PRODUCING"));
         let other = h
             .lua
             .load("return A.StartProduction(1,10)")

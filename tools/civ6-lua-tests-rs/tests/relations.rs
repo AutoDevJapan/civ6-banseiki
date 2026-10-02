@@ -1,4 +1,4 @@
-use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
+use civ6_lua_tests_rs::strict::{ChunkExt, Data, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::{Lua, Table};
 
@@ -41,14 +41,14 @@ impl Relations {
     }
     fn log(&self) -> Vec<String> {
         self.strict_eval::<Table>("LOG")
-            .strict_sequence_values()
+            .strict_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
     fn assert_no_remake(&self) {
         assert_eq!(
-            self.strict_eval::<i64>("COUNT('SetHasAllied')"),
-            self.strict_eval::<i64>("MADE")
+            self.strict_eval::<Data>("COUNT('SetHasAllied')"),
+            self.strict_eval::<Data>("MADE")
         );
     }
 }
@@ -58,7 +58,7 @@ fn test_lapsed_start_alliances_are_not_re_made_and_turn_false() {
     let s = Relations::new();
     s.turn(31);
     assert_eq!(
-        s.strict_eval::<i64>("Game:GetProperty('JAC_1534_ALLIANCE_HOJO-IMAGAWA')"),
+        s.strict_eval::<Data>("Game:GetProperty('JAC_1534_ALLIANCE_HOJO-IMAGAWA')"),
         1
     );
     s.lapse();
@@ -126,8 +126,8 @@ fn test_end_marks_the_pair_ended_and_the_alliance_lapses_at_the_limit() {
         &"[JAC_1534_RELATIONS] start alliance lapsed R02 HOJO-IMAGAWA on turn 32".into()
     ));
     s.assert_no_remake();
-    assert_eq!(s.strict_eval::<i64>("COUNT('DeclareWarOn')"), 0);
-    assert_eq!(s.strict_eval::<i64>("COUNT('MakePeaceWith')"), 0);
+    assert_eq!(s.strict_eval::<Data>("COUNT('DeclareWarOn')"), 0);
+    assert_eq!(s.strict_eval::<Data>("COUNT('MakePeaceWith')"), 0);
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_a_war_started_elsewhere_ends_the_alliance_without_a_second_war_or_peace(
     s.turn(5);
     assert!(!s.truth("API.IsStartAllianceActive('HOJO','IMAGAWA')"));
     s.turn(6);
-    assert_eq!(s.strict_eval::<i64>("COUNT('DeclareWarOn')"), 0);
-    assert_eq!(s.strict_eval::<i64>("COUNT('MakePeaceWith')"), 0);
+    assert_eq!(s.strict_eval::<Data>("COUNT('DeclareWarOn')"), 0);
+    assert_eq!(s.strict_eval::<Data>("COUNT('MakePeaceWith')"), 0);
     assert!(s.truth("WAR[HOJO_IMAGAWA]"));
 }

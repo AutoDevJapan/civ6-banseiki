@@ -1,5 +1,7 @@
 use civ6_lua_tests_rs::new_lua;
-use civ6_lua_tests_rs::strict::{ChunkExt, Data, Key, TableExt};
+use civ6_lua_tests_rs::strict::{
+    assert_boolean_identity, assert_python_eq, assert_python_truth, ChunkExt, Data, Key, TableExt,
+};
 use mlua::{Table, Value};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -248,4 +250,152 @@ fn snapshot_rejects_cycles_but_accepts_shared_tables() {
             .unwrap(),
         json!({"a":{"score":1},"b":{"score":1}})
     );
+}
+
+#[test]
+fn python_equality_recurses_through_numeric_booleans_without_coercing_text_or_nil() {
+    let lua = new_lua();
+    for code in ["return true", "return 1", "return 1.0"] {
+        assert_python_eq(&lua.load(code).python_eval().unwrap(), true);
+        assert_python_eq(&lua.load(code).python_eval().unwrap(), 1_i64);
+    }
+    for code in ["return false", "return 0", "return -0.0"] {
+        assert_python_eq(&lua.load(code).python_eval().unwrap(), false);
+        assert_python_eq(&lua.load(code).python_eval().unwrap(), 0_i64);
+    }
+    assert_python_eq(
+        &lua.load("return {boosted={['2']=1,['4']=true}, parts={false,1.0}}")
+            .python_eval()
+            .unwrap(),
+        json!({"boosted":{"2":true,"4":1},"parts":[0,true]}),
+    );
+    assert_python_eq(
+        &lua.load("return 0,'PRODUCING'").python_eval().unwrap(),
+        (false, "PRODUCING"),
+    );
+    assert_python_eq(
+        &lua.load("return true,false,{flag=1}")
+            .python_eval()
+            .unwrap(),
+        (1_i64, 0_i64, json!({"flag":true})),
+    );
+    for code in [
+        "return '0'",
+        "return 'false'",
+        "return nil",
+        "return",
+        "return 0.5",
+        "return {}",
+        "return 0,nil",
+    ] {
+        assert!(
+            !lua.load(code)
+                .python_eval()
+                .unwrap()
+                .python_eq(&Data::Boolean(false)),
+            "{code}"
+        );
+    }
+    assert_ne!(
+        lua.load("return {flag='1'}").python_eval().unwrap(),
+        json!({"flag":true})
+    );
+    assert_ne!(
+        lua.load("return {flag=1,extra=99}").python_eval().unwrap(),
+        json!({"flag":true})
+    );
+    assert_ne!(
+        lua.load("return {0,'PRODUCING'}").python_eval().unwrap(),
+        Data::from((false, "PRODUCING"))
+    );
+}
+
+#[test]
+fn plain_container_truth_and_raw_lupa_table_truth_are_distinct_from_identity() {
+    let lua = new_lua();
+    for code in [
+        "return false",
+        "return nil",
+        "return 0",
+        "return ''",
+        "return {}",
+    ] {
+        assert_python_truth(&lua.load(code).python_eval().unwrap(), false);
+    }
+    for code in [
+        "return 1",
+        "return 'false'",
+        "return {0}",
+        "return {flag=false}",
+        "return false,nil",
+    ] {
+        assert_python_truth(&lua.load(code).python_eval().unwrap(), true);
+    }
+    assert!(lua.load("return {}").python_truthy().unwrap());
+    assert_boolean_identity(&lua.load("return false").python_eval().unwrap(), false);
+    for code in [
+        "return 0",
+        "return nil",
+        "return 'false'",
+        "return {}",
+        "return false,nil",
+        "return",
+    ] {
+        let value = lua.load(code).python_eval().unwrap();
+        assert!(
+            std::panic::catch_unwind(|| assert_boolean_identity(&value, false)).is_err(),
+            "{code}"
+        );
+    }
+}
+
+#[test]
+fn values_enumerate_complete_sparse_and_string_keyed_rows_and_empty_checks_use_pairs() {
+    let lua = new_lua();
+    let empty = lua.load("return {}").strict_eval::<Table>().unwrap();
+    assert!(empty.all_entries_empty().unwrap());
+    for code in [
+        "return {unexpected=99}",
+        "return {[3]=99}",
+        "return {[false]=99}",
+    ] {
+        let table = lua.load(code).strict_eval::<Table>().unwrap();
+        assert!(!table.all_entries_empty().unwrap(), "{code}");
+        assert_eq!(
+            table
+                .strict_values::<Data>()
+                .collect::<mlua::Result<Vec<_>>>()
+                .unwrap(),
+            [Data::Integer(99)]
+        );
+    }
+    let rows = lua
+        .load("return {[1]={1,2},[3]={3,4},extra={5,6}}")
+        .strict_eval::<Table>()
+        .unwrap()
+        .strict_values::<Table>()
+        .collect::<mlua::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(rows.len(), 3);
+    for code in ["return {1,2,99}", "return {[1]=1,[2]=2,extra=99}"] {
+        let row = lua.load(code).strict_eval::<Table>().unwrap();
+        let actual = Data::Results(row.strict_values().collect::<mlua::Result<_>>().unwrap());
+        assert_ne!(actual, Data::from((1_i64, 2_i64)), "{code}");
+    }
+}
+
+#[test]
+fn successful_raw_calls_can_fail_decoding_without_becoming_lua_execution_errors() {
+    let lua = new_lua();
+    for code in ["return function() end", "local t={};t.self=t;return t"] {
+        let raw = lua
+            .load(code)
+            .call::<mlua::MultiValue>(())
+            .expect("successful raw Lua call");
+        assert!(Data::from_lupa_results(raw).is_err(), "{code}");
+    }
+    assert!(lua
+        .load("error('intentional refusal')")
+        .call::<mlua::MultiValue>(())
+        .is_err());
 }

@@ -1,4 +1,4 @@
-use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
+use civ6_lua_tests_rs::strict::{ChunkExt, Data, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, exec_args, new_lua, read_repo};
 use mlua::{Lua, Table};
 
@@ -13,6 +13,23 @@ const ASHINA: i64 = 2;
 const SHIMAZU: i64 = 3;
 
 struct Pact(Lua);
+
+#[test]
+fn marker_comparison_includes_all_row_values_and_all_outer_entries() {
+    let s = Pact::new(false);
+    s.run("BUILT={{1,2}}");
+    let expected = vec![Data::from((1_i64, 2_i64))];
+    assert_eq!(s.marked(), expected);
+    for extra in ["BUILT[1][3]=99", "BUILT[1].extra=99"] {
+        s.run(extra);
+        assert_ne!(s.marked(), expected);
+        s.run("BUILT[1][3]=nil; BUILT[1].extra=nil");
+    }
+    s.run("BUILT.extra={1,2}");
+    assert_eq!(s.marked().len(), 2);
+    s.run("BUILT={{true,2.0}}");
+    assert_eq!(s.marked(), expected);
+}
 impl Pact {
     fn new(no_castles: bool) -> Self {
         let lua = new_lua();
@@ -56,7 +73,13 @@ impl Pact {
             .unwrap();
     }
     fn lead(&self, player: i64) -> Option<i64> {
-        self.strict_eval(&format!("Game:GetProperty('{PACT_LEAD_PREFIX}{player}')"))
+        let value: Data =
+            self.strict_eval(&format!("Game:GetProperty('{PACT_LEAD_PREFIX}{player}')"));
+        if value.is_null() {
+            None
+        } else {
+            Some(value.python_i64().expect("numeric pact leader"))
+        }
     }
     fn result(&self, player: i64) -> Option<String> {
         self.strict_eval(&format!("Players[{player}]:GetProperty('{PACT_RESULT}')"))
@@ -64,12 +87,12 @@ impl Pact {
     fn assert_result(&self, player: i64, expected: &str) {
         assert_eq!(self.result(player).as_deref(), Some(expected));
     }
-    fn marked(&self) -> Vec<(i64, i64)> {
+    fn marked(&self) -> Vec<Data> {
         self.strict_eval::<Table>("BUILT")
-            .strict_sequence_values::<Table>()
+            .strict_values::<Table>()
             .map(|row| {
                 let row = row.unwrap();
-                (row.strict_get(1).unwrap(), row.strict_get(2).unwrap())
+                Data::Results(row.strict_values().collect::<mlua::Result<_>>().unwrap())
             })
             .collect()
     }
@@ -77,7 +100,7 @@ impl Pact {
         self.strict_eval(&format!("GameInfo.Buildings['{UNIFIED}'].Index"))
     }
     fn assert_marker(&self, plot: i64) {
-        assert_eq!(self.marked(), vec![(self.unified(), plot)]);
+        assert_eq!(self.marked(), vec![Data::from((self.unified(), plot))]);
     }
     fn ally(&self, a: i64, b: i64) {
         self.run(&format!("ALLIED['{a}-{b}']=true; ALLIED['{b}-{a}']=true"));
@@ -87,7 +110,7 @@ impl Pact {
     }
     fn log(&self) -> Vec<String> {
         self.strict_eval::<Table>("LOG")
-            .strict_sequence_values()
+            .strict_values()
             .collect::<mlua::Result<_>>()
             .unwrap()
     }
@@ -125,7 +148,7 @@ fn test_ai_joins_only_when_allied_and_the_lead_capital_is_marked_when_the_pact_h
     s.request("Propose", ODA, Some(DATE));
     s.assert_result(ODA, "JOINED");
     assert_eq!((s.lead(ODA), s.lead(DATE)), (Some(ODA), Some(ODA)));
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("DATE_CASTLE.owner=1");
     s.fire("CityBuilt", "1,0,25,14");
     s.assert_marker(5 * 32 + 6);
@@ -175,7 +198,10 @@ fn test_rebuilt_city_on_a_razed_castle_does_not_block_the_pact() {
     s.run("CITY(2,25,14)");
     s.fire("CityBuilt", "2,0,25,14");
     s.request("Propose", ODA, Some(DATE));
-    assert_eq!(s.marked().last(), Some(&(s.unified(), 5 * 32 + 6)));
+    assert_eq!(
+        s.marked().last(),
+        Some(&Data::from((s.unified(), 5_i64 * 32 + 6)))
+    );
 }
 #[test]
 fn test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win() {
@@ -185,7 +211,7 @@ fn test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win() {
     s.run("CITIES[5*32+25].owner=0; CITIES[5*32+25].capital=false; Players[1].dead=true");
     s.fire("CityConquered", "0,1,0,25,5");
     assert_eq!((s.lead(ODA), s.lead(SHIMAZU)), (Some(ODA), Some(ODA)));
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("DATE_CASTLE.owner=0");
     s.fire("CityConquered", "0,2,0,25,14");
     s.assert_marker(5 * 32 + 6);
@@ -267,7 +293,7 @@ fn test_two_warring_members_both_leave() {
         .contains(&"JAC_Sengoku_UnificationPact: pact of 0 dissolved".into()));
     s.assert_result(DATE, "PROPOSED");
     assert_eq!(
-        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<Data>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         DATE
     );
 }
@@ -279,13 +305,13 @@ fn test_a_pact_of_two_dissolves_when_they_go_to_war() {
     s.request("Propose", ODA, Some(DATE));
     s.run("WAR['0-1']=true; DATE_CASTLE.owner=0");
     s.fire("CityConquered", "0,2,0,25,14");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("CITIES[5*32+25].owner=0");
     s.fire("CityConquered", "0,1,0,25,5");
     assert_eq!((s.lead(ODA), s.lead(DATE)), (None, None));
     s.assert_result(ODA, "DISSOLVED");
     s.assert_result(DATE, "AT_WAR");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
 }
 #[test]
 fn test_ai_proposes_to_an_allied_ai_when_they_hold_enough_castles() {
@@ -300,7 +326,7 @@ fn test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated() {
     s.ally(DATE, ODA);
     s.fire("OnGameTurnStarted", "16604");
     assert_eq!(
-        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
+        s.strict_eval::<Data>("Game:GetProperty('JAC_UNIFICATION_PACT_PROPOSAL_0')"),
         DATE
     );
     s.assert_result(DATE, "PROPOSED");
@@ -359,7 +385,7 @@ fn test_an_ended_start_alliance_does_not_pool() {
     let s = Pact::new(false);
     s.run("Game:SetProperty('JAC_1534_ALLIANCE_ASHINA-DATE',false); CITIES[5*32+6].owner=2; CITIES[14*32+6].owner=2");
     s.fire("OnGameTurnStarted", "16604");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
 }
 #[test]
 fn test_a_start_alliance_tie_goes_to_the_lowest_id() {
@@ -384,7 +410,7 @@ fn test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact() {
     s.run("CITIES[5*32+25].owner=2; Players[1].dead=true");
     s.fire("CityConquered", "2,1,0,25,5");
     s.fire("OnGameTurnStarted", "16604");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.request("Propose", ODA, Some(DATE));
     s.assert_result(ODA, "INVALID");
 }
@@ -396,13 +422,13 @@ fn test_without_registered_castles_the_pact_pools_home_capitals() {
     s.assert_result(ODA, "JOINED");
     assert_eq!(s.lead(DATE), Some(ODA));
     assert_eq!(
-        s.strict_eval::<i64>("Game:GetProperty('JAC_UNIFICATION_HOME_CAPITAL_2')"),
+        s.strict_eval::<Data>("Game:GetProperty('JAC_UNIFICATION_HOME_CAPITAL_2')"),
         10 * 32 + 16
     );
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("CITIES[10*32+16].owner=1; CITIES[10*32+16].capital=false; Players[2].dead=true");
     s.fire("CityConquered", "1,2,0,16,10");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("CITIES[3*32+3].owner=0; CITIES[3*32+3].capital=false; Players[3].dead=true");
     s.fire("CityConquered", "0,3,0,3,3");
     s.assert_marker(5 * 32 + 6);
@@ -415,10 +441,10 @@ fn test_home_capitals_count_only_once_every_major_has_founded() {
     s.run("CITIES[10*32+16].owner=0; CITIES[10*32+16].capital=false");
     s.ally(ODA, DATE);
     s.request("Propose", ODA, Some(DATE));
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("CITY(3,3,3,true)");
     s.fire("CityBuilt", "3,0,3,3");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.run("CITIES[3*32+3].owner=1");
     s.fire("CityConquered", "1,3,0,3,3");
     s.assert_marker(5 * 32 + 6);
@@ -442,7 +468,7 @@ fn test_lead_eliminated_tie_goes_to_the_lowest_id_who_can_then_take_members() {
     s.pact_of_oda_date_ashina();
     s.eliminate_oda(SHIMAZU, SHIMAZU);
     assert_eq!((s.lead(DATE), s.lead(ASHINA)), (Some(DATE), Some(DATE)));
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     s.request("Propose", DATE, Some(SHIMAZU));
     s.request("Accept", SHIMAZU, Some(DATE));
     assert_eq!(s.lead(SHIMAZU), Some(DATE));
@@ -456,7 +482,7 @@ fn test_pact_with_no_survivor_is_gone() {
     s.run("Players[1].dead=true");
     s.eliminate_oda(ASHINA, ASHINA);
     s.fire("OnGameTurnStarted", "16604");
-    assert_eq!(s.marked(), vec![]);
+    assert_eq!(s.marked(), Vec::<Data>::new());
     assert!(!s.log().iter().any(|line| line.contains("leads the pact")));
     s.request("Propose", ODA, Some(SHIMAZU));
     s.assert_result(ODA, "INVALID");

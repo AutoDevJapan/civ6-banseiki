@@ -1,4 +1,4 @@
-//! Assertion boundary: inspect Lua kinds and result counts before decoding.
+//! Separate raw Lua execution, Python equality/truth, and exact-kind decoding.
 //! Snapshot tables retain their key types, including throughout save/load.
 
 use mlua::{Chunk, Function, IntoLua, IntoLuaMulti, Lua, MultiValue, Table, Value};
@@ -117,6 +117,7 @@ impl<T: FromLua> FromLua for Option<T> {
 pub trait ChunkExt {
     fn strict_eval<T: FromLuaMulti>(self) -> mlua::Result<T>;
     fn strict_call<T: FromLuaMulti>(self, args: impl IntoLuaMulti) -> mlua::Result<T>;
+    fn python_eval(self) -> mlua::Result<Data>;
     fn python_truthy(self) -> mlua::Result<bool>;
 }
 impl ChunkExt for Chunk<'_> {
@@ -125,6 +126,9 @@ impl ChunkExt for Chunk<'_> {
     }
     fn strict_call<T: FromLuaMulti>(self, args: impl IntoLuaMulti) -> mlua::Result<T> {
         T::from_results(self.call::<MultiValue>(args)?)
+    }
+    fn python_eval(self) -> mlua::Result<Data> {
+        Data::from_lupa_results(self.eval::<MultiValue>()?)
     }
     fn python_truthy(self) -> mlua::Result<bool> {
         Ok(truthy_results(self.eval::<MultiValue>()?))
@@ -154,6 +158,10 @@ pub trait TableExt {
     fn strict_get<T: FromLua>(&self, key: impl IntoLua) -> mlua::Result<T>;
     fn strict_pairs<K: FromLua, V: FromLua>(&self) -> impl Iterator<Item = mlua::Result<(K, V)>>;
     fn strict_sequence_values<T: FromLua>(&self) -> impl Iterator<Item = mlua::Result<T>>;
+    /// Lupa's table.values(): enumerate the original pairs, including sparse
+    /// integer and string keys, before projecting or decoding any values.
+    fn strict_values<T: FromLua>(&self) -> impl Iterator<Item = mlua::Result<T>>;
+    fn all_entries_empty(&self) -> mlua::Result<bool>;
 }
 impl TableExt for Table {
     fn strict_get<T: FromLua>(&self, key: impl IntoLua) -> mlua::Result<T> {
@@ -164,6 +172,16 @@ impl TableExt for Table {
             let (key, value) = pair?;
             Ok((K::from_value(key)?, V::from_value(value)?))
         })
+    }
+    fn strict_values<T: FromLua>(&self) -> impl Iterator<Item = mlua::Result<T>> {
+        self.pairs::<Value, Value>()
+            .map(|pair| T::from_value(pair?.1))
+    }
+    fn all_entries_empty(&self) -> mlua::Result<bool> {
+        Ok(self
+            .pairs::<Value, Value>()
+            .collect::<mlua::Result<Vec<_>>>()?
+            .is_empty())
     }
     fn strict_sequence_values<T: FromLua>(&self) -> impl Iterator<Item = mlua::Result<T>> {
         // Check the complete key set first; ipairs alone silently stops at holes.
@@ -193,6 +211,15 @@ pub enum Key {
     Fraction(u64),
 }
 impl Key {
+    fn python_eq(&self, other: &Self) -> bool {
+        let data = |key: &Self| match key {
+            Self::Integer(n) => Data::Integer(*n),
+            Self::String(s) => Data::String(s.clone()),
+            Self::Boolean(b) => Data::Boolean(*b),
+            Self::Fraction(n) => Data::Number(f64::from_bits(*n)),
+        };
+        data(self).python_eq(&data(other))
+    }
     fn from_value(value: Value) -> mlua::Result<Self> {
         match value {
             Value::Integer(n) => Ok(Self::Integer(n)),
@@ -231,9 +258,23 @@ pub enum Data {
 }
 impl PartialEq for Data {
     fn eq(&self, other: &Self) -> bool {
+        self.python_eq(other)
+    }
+}
+impl Data {
+    /// unittest.assertEqual uses Python numeric equality recursively:
+    /// True == 1 and False == 0, but neither equals a string or None.
+    /// Lists and multi-return tuples remain distinct, and arity is exact.
+    pub fn python_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Missing, Self::Missing) | (Self::Nil, Self::Nil) => true,
             (Self::Boolean(a), Self::Boolean(b)) => a == b,
+            (Self::Boolean(a), Self::Integer(b)) | (Self::Integer(b), Self::Boolean(a)) => {
+                i64::from(*a) == *b
+            }
+            (Self::Boolean(a), Self::Number(b)) | (Self::Number(b), Self::Boolean(a)) => {
+                f64::from(u8::from(*a)) == *b
+            }
             (Self::Integer(a), Self::Integer(b)) => a == b,
             (Self::Number(a), Self::Number(b)) => a == b,
             (Self::Integer(a), Self::Number(b)) | (Self::Number(b), Self::Integer(a)) => {
@@ -242,7 +283,22 @@ impl PartialEq for Data {
             (Self::String(a), Self::String(b)) => a == b,
             (Self::Array(a), Self::Array(b)) => a == b,
             (Self::Object(a), Self::Object(b)) => a == b,
-            (Self::Table(a), Self::Table(b)) => a == b,
+            (Self::Table(a), Self::Table(b)) => {
+                let mut unmatched: Vec<_> = b.iter().collect();
+                a.len() == b.len()
+                    && a.iter().all(|(key, value)| {
+                        if let Some(index) =
+                            unmatched.iter().position(|(other_key, other_value)| {
+                                key.python_eq(other_key) && value.python_eq(other_value)
+                            })
+                        {
+                            unmatched.remove(index);
+                            true
+                        } else {
+                            false
+                        }
+                    })
+            }
             (Self::Results(a), Self::Results(b)) => a == b,
             _ => false,
         }
@@ -250,31 +306,7 @@ impl PartialEq for Data {
 }
 impl PartialEq<Json> for Data {
     fn eq(&self, other: &Json) -> bool {
-        match other {
-            Json::Null => matches!(self, Self::Nil),
-            Json::Bool(b) => self.as_bool() == Some(*b),
-            Json::String(s) => self.as_str() == Some(s.as_str()),
-            Json::Number(n) => {
-                if let Some(n) = n.as_i64() {
-                    self.as_i64() == Some(n)
-                } else {
-                    match self {
-                        Self::Integer(actual) => {
-                            i64::from_value(Value::Number(n.as_f64().unwrap()))
-                                .is_ok_and(|n| *actual == n)
-                        }
-                        Self::Number(actual) => Some(*actual) == n.as_f64(),
-                        _ => false,
-                    }
-                }
-            }
-            Json::Array(expected) => {
-                matches!(self,Self::Array(actual) if actual.len()==expected.len() && actual.iter().zip(expected).all(|(a,b)| a==b))
-            }
-            Json::Object(expected) => {
-                matches!(self,Self::Object(actual) if actual.len()==expected.len() && expected.iter().all(|(key,value)| actual.get(key).is_some_and(|a| a==value)))
-            }
-        }
+        self.python_eq(&Self::from(other.clone()))
     }
 }
 impl PartialEq<Data> for Json {
@@ -284,6 +316,11 @@ impl PartialEq<Data> for Json {
 }
 macro_rules! scalar_eq {
     ($t:ty, $variant:ident) => {
+        impl From<$t> for Data {
+            fn from(value: $t) -> Self {
+                Self::$variant(value)
+            }
+        }
         impl PartialEq<$t> for Data {
             fn eq(&self, other: &$t) -> bool {
                 *self == Self::$variant(*other)
@@ -294,6 +331,65 @@ macro_rules! scalar_eq {
 scalar_eq!(i64, Integer);
 scalar_eq!(f64, Number);
 scalar_eq!(bool, Boolean);
+impl From<String> for Data {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+impl From<&str> for Data {
+    fn from(value: &str) -> Self {
+        Self::String(value.into())
+    }
+}
+impl<T: Into<Data>> From<Option<T>> for Data {
+    fn from(value: Option<T>) -> Self {
+        value.map(Into::into).unwrap_or(Self::Nil)
+    }
+}
+impl<T: Into<Data>> From<Vec<T>> for Data {
+    fn from(value: Vec<T>) -> Self {
+        Self::Array(value.into_iter().map(Into::into).collect())
+    }
+}
+impl PartialEq<Option<i64>> for Data {
+    fn eq(&self, other: &Option<i64>) -> bool {
+        self.python_eq(&Self::from(*other))
+    }
+}
+macro_rules! python_tuples {
+    ($(($($t:ident),+)),+ $(,)?) => {$ (
+        impl<$($t: Into<Data>),+> From<($($t,)+)> for Data {
+            #[allow(non_snake_case)]
+            fn from(($($t,)+): ($($t,)+)) -> Self { Self::Results(vec![$($t.into()),+]) }
+        }
+    )+};
+}
+python_tuples!(
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, F)
+);
+
+pub fn assert_python_eq(actual: &Data, expected: impl Into<Data>) {
+    let expected = expected.into();
+    assert!(
+        actual.python_eq(&expected),
+        "Python equality failed: actual {actual:?}, expected {expected:?}"
+    );
+}
+
+pub fn assert_python_truth(actual: &Data, expected: bool) {
+    assert_eq!(actual.python_truthy(), expected, "Python truth: {actual:?}");
+}
+
+pub fn assert_boolean_identity(actual: &Data, expected: bool) {
+    assert!(
+        matches!(actual, Data::Boolean(value) if *value == expected),
+        "expected boolean {expected}, got {actual:?}"
+    );
+}
 impl PartialEq<&str> for Data {
     fn eq(&self, other: &&str) -> bool {
         self.as_str() == Some(*other)
@@ -442,11 +538,25 @@ impl Data {
             _ => None,
         }
     }
+    /// A numeric operand in a Python assertion may be bool (a subclass of int).
+    /// Keep this separate from exact-kind decoding and boolean identity.
+    pub fn python_i64(&self) -> Option<i64> {
+        match self {
+            Self::Boolean(b) => Some(i64::from(*b)),
+            _ => self.as_i64(),
+        }
+    }
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Integer(n) => Some(*n as f64),
             Self::Number(n) => Some(*n),
             _ => None,
+        }
+    }
+    pub fn python_f64(&self) -> Option<f64> {
+        match self {
+            Self::Boolean(b) => Some(f64::from(u8::from(*b))),
+            _ => self.as_f64(),
         }
     }
     pub fn as_bool(&self) -> Option<bool> {

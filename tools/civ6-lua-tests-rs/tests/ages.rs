@@ -2,7 +2,97 @@ mod ages_support;
 #[path = "generators/reigns.rs"]
 mod reigns_generator;
 use ages_support::*;
+use civ6_lua_tests_rs::strict::{assert_boolean_identity, Data, TableExt};
+use mlua::Table;
 use serde_json::json;
+
+fn notification_rows(w: &World) -> Vec<Data> {
+    w.values::<Table>("NOTES")
+        .into_iter()
+        .map(|row| Data::Results(row.strict_values().collect::<mlua::Result<_>>().unwrap()))
+        .collect()
+}
+
+fn notification_fields(w: &World) -> (Vec<Data>, Vec<Data>) {
+    let notifications = w.values::<Table>("NOTIFICATIONS");
+    let kinds = notifications
+        .iter()
+        .map(|n| n.strict_get("kind").unwrap())
+        .collect();
+    let reigns = notifications
+        .iter()
+        .map(|n| {
+            n.strict_get::<Table>("data")
+                .unwrap()
+                .strict_get::<Data>("JAC_DARK_POLICY_REIGN")
+                .unwrap()
+        })
+        .filter(|reign| !reign.is_null())
+        .collect();
+    (kinds, reigns)
+}
+
+fn policy_row_names(w: &World) -> Vec<Data> {
+    w.values::<Table>("ROWS")
+        .into_iter()
+        .map(|row| {
+            row.strict_get::<Table>("Name")
+                .unwrap()
+                .strict_get("text")
+                .unwrap()
+        })
+        .collect()
+}
+
+fn choice_drop_reasons(w: &World) -> Vec<String> {
+    w.values::<String>("LOG")
+        .into_iter()
+        .filter(|line| line.contains("choice dropped"))
+        .map(|line| line.rsplit(": ").next().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn notification_comparison_includes_all_row_values_and_string_keyed_notes() {
+    let w = World::new();
+    w.turns(1, 66);
+    let expected = Data::from((
+        0_i64,
+        2_i64,
+        "LOC_JAC_REIGN_KOJI_NOTIFICATION",
+        "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT",
+        66_i64,
+    ));
+    assert!(notification_rows(&w).contains(&expected));
+    for extra in ["NOTES[1][6]=99", "NOTES[1].extra=99"] {
+        w.run(extra);
+        assert!(!notification_rows(&w).contains(&expected));
+        w.run("NOTES[1][6]=nil;NOTES[1].extra=nil");
+    }
+    w.run("NOTES.extra=NOTES[1]");
+    assert_eq!(notification_rows(&w).len(), 5);
+}
+
+#[test]
+fn original_notifications_rows_and_logs_are_enumerated_before_projection() {
+    let w = World::new();
+    w.ui_base();
+    w.run(&mod_text("UI/JAC_SengokuDarkPolicy.lua"));
+    w.turns_with_oath(1, 66);
+    w.run("LOCAL_TURN_BEGIN(); LuaEvents.JAC_SengokuReignPopup_Closed(true)");
+    let names = policy_row_names(&w);
+    assert_eq!(names.len(), 4);
+    w.run("ROWS.extra=ROWS[1]");
+    assert_eq!(policy_row_names(&w).len(), 5);
+    assert_ne!(policy_row_names(&w), names);
+    let fields = notification_fields(&w);
+    assert_eq!(fields.0.len(), 4);
+    w.run("NOTIFICATIONS.extra=NOTIFICATIONS[1]");
+    assert_eq!(notification_fields(&w).0.len(), 5);
+    assert_ne!(notification_fields(&w), fields);
+    w.run("LOG={['extra']='choice dropped: unexpected'}");
+    assert_eq!(choice_drop_reasons(&w), ["unexpected"]);
+}
 
 fn sql_rows(db: &rusqlite::Connection, sql: &str) -> Vec<Vec<serde_json::Value>> {
     let mut stmt = db.prepare(sql).unwrap_or_else(|e| panic!("{sql}: {e}"));
@@ -212,9 +302,9 @@ mod ledger_tests {
             vec![json!(0); 4]
         );
         assert_eq!(w.j("LEDGER().allies['2-3']"), json!("none"));
-        assert_eq!(
-            w.j("Game:GetProperty('JAC_1534_ALLIANCE_HOJO-IMAGAWA')"),
-            json!(false)
+        assert_boolean_identity(
+            &w.j("Game:GetProperty('JAC_1534_ALLIANCE_HOJO-IMAGAWA')"),
+            false,
         );
     }
     #[test]
@@ -374,13 +464,21 @@ mod ledger_tests {
         );
         assert_eq!(w.j("LEDGER().history.r7"), json!(null));
         assert_eq!(w.j("LEDGER().reign"), json!(6));
-        assert_eq!(w.j("#NOTES"), json!(24));
-        assert_eq!(w.j("(function() for _,n in ipairs(NOTES) do if n[1]==0 and n[2]==2 and n[3]=='LOC_JAC_REIGN_KOJI_NOTIFICATION' and n[4]=='LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT' and n[5]==66 then return true end end return false end)()"),json!(true));
-        let headings = w.j(
-            "(function() local h={} for _,n in ipairs(NOTES) do h[n[3]]=true end return h end)()",
-        );
+        let notes = notification_rows(&w);
+        assert_eq!(notes.len(), 24);
+        assert!(notes.contains(&Data::from((
+            0_i64,
+            2_i64,
+            "LOC_JAC_REIGN_KOJI_NOTIFICATION",
+            "LOC_JAC_AGE_DARK_ELITE_ANNOUNCEMENT",
+            66_i64
+        ))));
+        let headings = notes
+            .iter()
+            .map(|n| (n[2].as_str().unwrap().to_string(), Data::Boolean(true)))
+            .collect();
         assert_eq!(
-            headings,
+            Data::Object(headings),
             json!({"LOC_JAC_REIGN_KOJI_NOTIFICATION":true,"LOC_JAC_REIGN_EIROKU_NOTIFICATION":true,"LOC_JAC_REIGN_GENKI_NOTIFICATION":true,"LOC_JAC_REIGN_TENSHO_NOTIFICATION":true,"LOC_JAC_REIGN_BUNROKU_NOTIFICATION":true,"LOC_JAC_REIGN_KEICHO_NOTIFICATION":true})
         );
     }
@@ -481,7 +579,7 @@ mod ledger_tests {
         w.run("FRIENDS['2-3']=true");
         w.turns(6, 8);
         assert_eq!(w.house(2, "score"), json!(0));
-        assert_eq!(w.j("(function() local n=0 for _,x in ipairs(LOG) do if string.find(x,'no gameplay HasDeclaredFriendship',1,true) then n=n+1 end end return n end)()"),json!(1));
+        assert_eq!(w.j("(function() local n=0 for _,x in pairs(LOG) do if string.find(x,'no gameplay HasDeclaredFriendship',1,true) then n=n+1 end end return n end)()"),json!(1));
         w.run("ALLIED['2-3']=true");
         w.turn(9);
         assert_eq!(w.parts(2), json!({"ally":2}));
@@ -596,7 +694,7 @@ mod ledger_tests {
             ],
             [json!(2), json!(73), json!(12), json!(1)]
         );
-        assert_eq!(w.j("(function() for _,line in ipairs(LOG) do if string.find(line,'judged reign=REIGN_EIROKU turn=73 length=12 era=2 engineEra=1',1,true) then return true end end return false end)()"),json!(true));
+        assert_eq!(w.j("(function() for _,line in pairs(LOG) do if string.find(line,'judged reign=REIGN_EIROKU turn=73 length=12 era=2 engineEra=1',1,true) then return true end end return false end)()"),json!(true));
     }
     #[test]
     fn test_reigns_are_the_engine_eras_in_order() {
@@ -769,7 +867,7 @@ mod ledger_tests {
         w.turns(67, 72);
         assert_eq!(w.house(1, "policy"), json!("JAC_AGE_POLICY_PIRATE"));
         assert_eq!(w.policy_flags(5, 5)["PIRATE"], json!([1, 1]));
-        assert_eq!(w.j("(function() for _,line in ipairs(LOG) do if string.find(line,'already chosen',1,true) then return true end end return false end)()"),json!(true));
+        assert_eq!(w.j("(function() for _,line in pairs(LOG) do if string.find(line,'already chosen',1,true) then return true end end return false end)()"),json!(true));
         w.turn(73);
         assert_eq!(
             [w.house(1, "age"), w.house(1, "policy")],
@@ -801,7 +899,18 @@ mod ledger_tests {
         w.choose(62, Some("JAC_AGE_POLICY_PIRATE"), 1);
         w.run("CHOOSE(1,nil)");
         assert_eq!(w.snapshot(), before);
-        assert_eq!(w.array("(function() local r={} for _,line in ipairs(LOG) do if string.find(line,'choice dropped',1,true) then r[#r+1]=string.match(line,': (.*)$') end end return r end)()"),vec![json!("not dark"),json!("unknown policy"),json!("unknown policy"),json!("stale period 0"),json!("no house"),json!("stale period nil")]);
+        let reasons = choice_drop_reasons(&w);
+        assert_eq!(
+            reasons,
+            [
+                "not dark",
+                "unknown policy",
+                "unknown policy",
+                "stale period 0",
+                "no house",
+                "stale period nil"
+            ]
+        );
     }
     #[test]
     fn test_choice_before_the_first_judgement_is_dropped() {
@@ -833,7 +942,7 @@ mod ledger_tests {
         let before = w.snapshot();
         w.choose(1, Some("JAC_AGE_POLICY_TEMPLE"), 1);
         assert_eq!(w.snapshot(), before);
-        assert_eq!(w.j("(function() for _,line in ipairs(LOG) do if string.find(line,'not judgement turn',1,true) then return true end end return false end)()"),json!(true));
+        assert_eq!(w.j("(function() for _,line in pairs(LOG) do if string.find(line,'not judgement turn',1,true) then return true end end return false end)()"),json!(true));
         assert_eq!(w.house(1, "chosen"), json!(null));
     }
     #[test]
@@ -854,8 +963,9 @@ mod ledger_tests {
         let before = w.snapshot();
         w.choose(0, Some("JAC_AGE_POLICY_TEMPLE"), 1);
         assert_eq!(w.snapshot(), before);
-        assert_eq!(w.array("(function() local r={} for _,n in ipairs(NOTIFICATIONS) do r[#r+1]=n.kind end return r end)()"),vec![json!(2),json!(3),json!(2),json!(3)]);
-        assert_eq!(w.array("(function() local r={} for _,n in ipairs(NOTIFICATIONS) do if n.data.JAC_DARK_POLICY_REIGN then r[#r+1]=n.data.JAC_DARK_POLICY_REIGN end end return r end)()"),vec![json!(1),json!(1)]);
+        let (kinds, reigns) = notification_fields(&w);
+        assert_eq!(kinds, vec![json!(2), json!(3), json!(2), json!(3)]);
+        assert_eq!(reigns, vec![json!(1), json!(1)]);
         assert!(!w.truth("NotificationManager.FindType(3,1):CanUserDismiss()"));
     }
     #[test]
@@ -892,7 +1002,16 @@ mod dark_policy_screen_tests {
         w.turns_with_oath(66, 66);
         w.run("LOCAL_TURN_BEGIN(); LuaEvents.JAC_SengokuReignPopup_Closed(true)");
         assert!(shown(&w));
-        assert_eq!(w.array("(function() local r={} for _,row in ipairs(ROWS) do r[#r+1]=row.Name.text end return r end)()"),vec![json!("LOC_JAC_AGE_POLICY_VALOR_NAME"),json!("LOC_JAC_AGE_POLICY_ELITE_NAME"),json!("LOC_JAC_AGE_POLICY_PIRATE_NAME"),json!("LOC_JAC_AGE_POLICY_TEMPLE_NAME")]);
+        let names = policy_row_names(&w);
+        assert_eq!(
+            names,
+            vec![
+                json!("LOC_JAC_AGE_POLICY_VALOR_NAME"),
+                json!("LOC_JAC_AGE_POLICY_ELITE_NAME"),
+                json!("LOC_JAC_AGE_POLICY_PIRATE_NAME"),
+                json!("LOC_JAC_AGE_POLICY_TEMPLE_NAME")
+            ]
+        );
         assert_eq!(
             w.j("ROWS[3].Description.text"),
             json!("LOC_JAC_AGE_POLICY_PIRATE_DESCRIPTION")
