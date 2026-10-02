@@ -883,7 +883,7 @@ const CASCADE_DOC_HEADER: &str = r#"## 公式ツリー削除に伴う連鎖削�
 - `ON DELETE SET NULL`（前提が空＝最初から解放）：01_GameplaySchema.sql の Adjacency_YieldChanges:40-43、Features:1259-1260、Resources:2342-2343、Resource_Harvests:2367
 - `ON DELETE SET DEFAULT`（既定値 NULL＝同上）：01_GameplaySchema.sql の Buildings:473,475、Districts:1056-1057、Governments:1467、Improvements:1752-1753、Policies.PrereqCivic:2168、Projects:2201-2202、Units:2903-2917
 
-Districts・Governments・Policies・Projects・StartingCivics・Resources の研究ゲートと Units・Buildings・Improvements の残す行は従来どおり `JAC_Sengoku_Unlocks.sql` と `JAC_Sengoku_Resources.sql` で付け替える。それ以外で実害がある行は生成ファイル `Data/JAC_Sengoku_Cascade.sql`（`CASCADE_REMAPS`）が削除前に戦国ノードへ付け替える。監査は `cargo run --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit`（公式 Base＋GS のデータで戦国SQLを外部キー有効のまま実行し、公式ツリーの削除だけによる差分を出す）、固定は `tests/test_sengoku_cascade.py`。他の DLC と他の MOD は監査の対象外。「暫定」は設計案に記載がなく、同じ時代枠（公式 Era ID と戦国の期の対応）と内容の近さで選んだもの。「決定」はオーナーが決めたもの（SSOT 3.2）。GS は防衛協定と研究協定を `Expansion2_RemoveData.xml` で削除済みのため対象外。
+Districts・Governments・Policies・Projects・StartingCivics・Resources の研究ゲートと Units・Buildings・Improvements の残す行は従来どおり `JAC_Sengoku_Unlocks.sql` と `JAC_Sengoku_Resources.sql` で付け替える。それ以外で実害がある行は生成ファイル `Data/JAC_Sengoku_Cascade.sql`（`CASCADE_REMAPS`）が削除前に戦国ノードへ付け替える。監査は `cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin sengoku-cascade-audit`（公式 Base＋GS のデータで戦国SQLを外部キー有効のまま実行し、公式ツリーの削除だけによる差分を出す）、固定は `tools/civ6-data-rs/src/cascade.rs`、関連する静的検査は `tools/civ6-data-rs/src/data_tests.rs`。他の DLC と他の MOD は監査の対象外。「暫定」は設計案に記載がなく、同じ時代枠（公式 Era ID と戦国の期の対応）と内容の近さで選んだもの。「決定」はオーナーが決めたもの（SSOT 3.2）。GS は防衛協定と研究協定を `Expansion2_RemoveData.xml` で削除済みのため対象外。
 
 ### 付け替えた行
 
