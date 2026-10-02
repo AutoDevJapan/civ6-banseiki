@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Kinds>
+        <Delete Kind="KIND_GOVERNMENT"/>
+    </Kinds>
+    <Types>
+        <Delete Type="BELIEF_GODDESS_OF_THE_HARVEST"/>
+        <Delete Type="BELIEF_ORAL_TRADITION"/>
+        <Delete Type="BELIEF_CHURCH_PROPERTY"/>
+        <Delete Type="BELIEF_BURIAL_GROUNDS"/>
+        <Delete Type="CIVILIZATION_AMSTERDAM"/>
+        <Delete Type="CIVILIZATION_SEOUL"/>
+        <Delete Type="GOSSIP_ERA_CHANGED"/>
+        <Delete Type="GREAT_PERSON_INDIVIDUAL_GENGHIS_KHAN"/>
+        <Delete Type="LEADER_MINOR_CIV_AMSTERDAM"/>
+        <Delete Type="LEADER_MINOR_CIV_SEOUL"/>
+        <Delete Type="POLICY_MERITOCRACY"/>
+        <Delete Type="MINOR_CIV_CARTHAGE_TRAIT"/>
+        <Delete Type="MINOR_CIV_JERUSALEM_TRAIT"/>
+        <Delete Type="MINOR_CIV_PRESLAV_TRAIT"/>
+        <Delete Type="MINOR_CIV_STOCKHOLM_TRAIT"/>
+        <Delete Type="MINOR_CIV_VILNIUS_TRAIT"/>
+        <Delete Type="POLICY_ARSENAL_OF_DEMOCRACY"/>
+        <Delete Type="POLICY_PATRIOTIC_WAR"/>
+        <Delete Type="POLICY_POLICE_STATE"/>
+        <Delete Type="POLICY_SACK"/>
+        <Delete Type="CIVILIZATION_CARTHAGE"/>
+        <Delete Type="CIVILIZATION_STOCKHOLM"/>
+        <Delete Type="CIVILIZATION_TORONTO"/>
+        <Delete Type="TECH_FUTURE_TECH"/>
+        <!-- We are removing this but re-adding it elsewhere. Leaving it in causes indexing issues apparently. It needs to go at the end of the list now... -->
+    </Types>
+    <Boosts>
+        <Delete TechnologyType="TECH_SAILING"/>
+        <Delete TechnologyType="TECH_ASTROLOGY"/>
+        <Delete TechnologyType="TECH_IRRIGATION"/>
+        <Delete TechnologyType="TECH_ARCHERY"/>
+        <Delete TechnologyType="TECH_WRITING"/>
+        <Delete TechnologyType="TECH_MASONRY"/>
+        <Delete TechnologyType="TECH_BRONZE_WORKING"/>
+        <Delete TechnologyType="TECH_THE_WHEEL"/>
+        <Delete TechnologyType="TECH_CELESTIAL_NAVIGATION"/>
+        <Delete TechnologyType="TECH_CURRENCY"/>
+        <Delete TechnologyType="TECH_HORSEBACK_RIDING"/>
+        <Delete TechnologyType="TECH_IRON_WORKING"/>
+        <Delete TechnologyType="TECH_SHIPBUILDING"/>
+        <Delete TechnologyType="TECH_MATHEMATICS"/>
+        <Delete TechnologyType="TECH_CONSTRUCTION"/>
+        <Delete TechnologyType="TECH_ENGINEERING"/>
+        <Delete TechnologyType="TECH_MILITARY_TACTICS"/>
+        <Delete TechnologyType="TECH_APPRENTICESHIP"/>
+        <Delete TechnologyType="TECH_STIRRUPS"/>
+        <Delete TechnologyType="TECH_MACHINERY"/>
+        <Delete TechnologyType="TECH_EDUCATION"/>
+        <Delete TechnologyType="TECH_MILITARY_ENGINEERING"/>
+        <Delete TechnologyType="TECH_CASTLES"/>
+        <Delete TechnologyType="TECH_CARTOGRAPHY"/>
+        <Delete TechnologyType="TECH_MASS_PRODUCTION"/>
+        <Delete TechnologyType="TECH_BANKING"/>
+        <Delete TechnologyType="TECH_GUNPOWDER"/>
+        <Delete TechnologyType="TECH_PRINTING"/>
+        <Delete TechnologyType="TECH_SQUARE_RIGGING"/>
+        <Delete TechnologyType="TECH_ASTRONOMY"/>
+        <Delete TechnologyType="TECH_METAL_CASTING"/>
+        <Delete TechnologyType="TECH_SIEGE_TACTICS"/>
+        <Delete TechnologyType="TECH_INDUSTRIALIZATION"/>
+        <Delete TechnologyType="TECH_SCIENTIFIC_THEORY"/>
+        <Delete TechnologyType="TECH_BALLISTICS"/>
+        <Delete TechnologyType="TECH_MILITARY_SCIENCE"/>
+        <Delete TechnologyType="TECH_STEAM_POWER"/>
+        <Delete TechnologyType="TECH_SANITATION"/>
+        <Delete TechnologyType="TECH_ECONOMICS"/>
+        <Delete TechnologyType="TECH_RIFLING"/>
+        <Delete TechnologyType="TECH_FLIGHT"/>
+        <Delete TechnologyType="TECH_REPLACEABLE_PARTS"/>
+        <Delete TechnologyType="TECH_STEEL"/>
+        <Delete TechnologyType="TECH_ELECTRICITY"/>
+        <Delete TechnologyType="TECH_RADIO"/>
+        <Delete TechnologyType="TECH_CHEMISTRY"/>
+        <Delete TechnologyType="TECH_COMBUSTION"/>
+        <Delete TechnologyType="TECH_ADVANCED_FLIGHT"/>
+        <Delete TechnologyType="TECH_ROCKETRY"/>
+        <Delete TechnologyType="TECH_ADVANCED_BALLISTICS"/>
+        <Delete TechnologyType="TECH_COMBINED_ARMS"/>
+        <Delete TechnologyType="TECH_PLASTICS"/>
+        <Delete TechnologyType="TECH_COMPUTERS"/>
+        <Delete TechnologyType="TECH_NUCLEAR_FISSION"/>
+        <Delete TechnologyType="TECH_SYNTHETIC_MATERIALS"/>
+        <Delete TechnologyType="TECH_TELECOMMUNICATIONS"/>
+        <Delete TechnologyType="TECH_SATELLITES"/>
+        <Delete TechnologyType="TECH_GUIDANCE_SYSTEMS"/>
+        <Delete TechnologyType="TECH_LASERS"/>
+        <Delete TechnologyType="TECH_COMPOSITES"/>
+        <Delete TechnologyType="TECH_STEALTH_TECHNOLOGY"/>
+        <Delete TechnologyType="TECH_ROBOTICS"/>
+        <Delete TechnologyType="TECH_NUCLEAR_FUSION"/>
+        <Delete TechnologyType="TECH_NANOTECHNOLOGY"/>
+        <Delete CivicType="CIVIC_CRAFTSMANSHIP"/>
+        <Delete CivicType="CIVIC_FOREIGN_TRADE"/>
+        <Delete CivicType="CIVIC_MILITARY_TRADITION"/>
+        <Delete CivicType="CIVIC_STATE_WORKFORCE"/>
+        <Delete CivicType="CIVIC_EARLY_EMPIRE"/>
+        <Delete CivicType="CIVIC_MYSTICISM"/>
+        <Delete CivicType="CIVIC_GAMES_RECREATION"/>
+        <Delete CivicType="CIVIC_POLITICAL_PHILOSOPHY"/>
+        <Delete CivicType="CIVIC_DRAMA_POETRY"/>
+        <Delete CivicType="CIVIC_MILITARY_TRAINING"/>
+        <Delete CivicType="CIVIC_DEFENSIVE_TACTICS"/>
+        <Delete CivicType="CIVIC_RECORDED_HISTORY"/>
+        <Delete CivicType="CIVIC_THEOLOGY"/>
+        <Delete CivicType="CIVIC_NAVAL_TRADITION"/>
+        <Delete CivicType="CIVIC_FEUDALISM"/>
+        <Delete CivicType="CIVIC_COLONIALISM"/>
+        <Delete CivicType="CIVIC_CIVIL_SERVICE"/>
+        <Delete CivicType="CIVIC_MERCENARIES"/>
+        <Delete CivicType="CIVIC_MEDIEVAL_FAIRES"/>
+        <Delete CivicType="CIVIC_GUILDS"/>
+        <Delete CivicType="CIVIC_DIVINE_RIGHT"/>
+        <Delete CivicType="CIVIC_EXPLORATION"/>
+        <Delete CivicType="CIVIC_HUMANISM"/>
+        <Delete CivicType="CIVIC_DIPLOMATIC_SERVICE"/>
+        <Delete CivicType="CIVIC_REFORMED_CHURCH"/>
+        <Delete CivicType="CIVIC_MERCANTILISM"/>
+        <Delete CivicType="CIVIC_THE_ENLIGHTENMENT"/>
+        <Delete CivicType="CIVIC_CIVIL_ENGINEERING"/>
+        <Delete CivicType="CIVIC_NATIONALISM"/>
+        <Delete CivicType="CIVIC_OPERA_BALLET"/>
+        <Delete CivicType="CIVIC_NATURAL_HISTORY"/>
+        <Delete CivicType="CIVIC_URBANIZATION"/>
+        <Delete CivicType="CIVIC_SCORCHED_EARTH"/>
+        <Delete CivicType="CIVIC_CONSERVATION"/>
+        <Delete CivicType="CIVIC_MOBILIZATION"/>
+        <Delete CivicType="CIVIC_MASS_MEDIA"/>
+        <Delete CivicType="CIVIC_CAPITALISM"/>
+        <Delete CivicType="CIVIC_NUCLEAR_PROGRAM"/>
+        <Delete CivicType="CIVIC_SUFFRAGE"/>
+        <Delete CivicType="CIVIC_TOTALITARIANISM"/>
+        <Delete CivicType="CIVIC_CLASS_STRUGGLE"/>
+        <Delete CivicType="CIVIC_COLD_WAR"/>
+        <Delete CivicType="CIVIC_PROFESSIONAL_SPORTS"/>
+        <Delete CivicType="CIVIC_CULTURAL_HERITAGE"/>
+        <Delete CivicType="CIVIC_RAPID_DEPLOYMENT"/>
+        <Delete CivicType="CIVIC_SPACE_RACE"/>
+        <Delete CivicType="CIVIC_GLOBALIZATION"/>
+        <Delete CivicType="CIVIC_SOCIAL_MEDIA"/>
+    </Boosts>
+    <Civilizations>
+        <Delete CivilizationType="CIVILIZATION_AMSTERDAM"/>
+        <Delete CivilizationType="CIVILIZATION_SEOUL"/>
+        <Delete CivilizationType="CIVILIZATION_CARTHAGE"/>
+        <Delete CivilizationType="CIVILIZATION_STOCKHOLM"/>
+        <Delete CivilizationType="CIVILIZATION_TORONTO"/>
+    </Civilizations>
+    <District_Adjacencies>
+        <Delete DistrictType="DISTRICT_INDUSTRIAL_ZONE" YieldChangeId="Mine_Production"/>
+    </District_Adjacencies>
+    <GovernmentBonusNames>
+        <Delete/>
+    </GovernmentBonusNames>
+    <GreatPersonIndividuals>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_SUDIRMAN"/>
+    </GreatPersonIndividuals>
+    <GreatPersonIndividualActionModifiers>
+        <!-- Admirals-->
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_DOMAIN_MILITARY_IN_TILE"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_TOGO_HEIHACHIRO" ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE_UNIT_BONUS" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_DOMAIN_MILITARY_IN_TILE"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_RAJENDRA_CHOLA" ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_RAJENDRA_CHOLA" ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE_PLUNDER_BONUS" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ZHENG_HE" ModifierId="GREATPERSON_ZHENG_HE_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_FRANCIS_DRAKE" ModifierId="GREATPERSON_FRANCIS_DRAKE_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHING_SHIH" ModifierId="GREATPERSON_CHING_SHIH_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_GRACE_HOPPER" ModifierId="GREATPERSON_GRACE_HOPPER_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_CHESTER_NIMITZ" ModifierId="GREATPERSON_CHESTER_NIMITZ_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_HORATIO_NELSON" ModifierId="GREATPERSON_HORATIO_NELSON_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <!--Engineers-->
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_MIMAR_SINAN" ModifierId="GREATPERSON_CITY_HOUSING_SMALL" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_MIMAR_SINAN" ModifierId="GREATPERSON_CITY_AMENITIES_SMALL" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <!--Generals-->
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_AETHELFLAED" ModifierId="GREATPERSON_AETHELFLAED_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_SAMORI_TURE" ModifierId="GREATPERSON_SAMORI_TURE_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_SIMON_BOLIVAR" ModifierId="GREATPERSON_SIMON_BOLIVAR_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_PLAYER"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_SUDIRMAN" ModifierId="GREATPERSON_SUDIRMAN_ACTIVE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_DOMAIN_MILITARY_IN_TILE"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_SUDIRMAN" ModifierId="GREATPERSON_SUDIRMAN_ACTIVE_UNIT_BONUS" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_DOMAIN_MILITARY_IN_TILE"/>
+        <!--Merchants-->
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_IRENE_OF_ATHENS" ModifierId="GREATPERSON_GRANT_PLOT_RESOURCE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_IRENE_OF_ATHENS" ModifierId="GREATPERSON_EXTRA_TRADE_ROUTE_CAPACITY" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_UNIT_GREATPERSON"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_ADAM_SMITH" ModifierId="GREATPERSON_ECONOMIC_POLICY_SLOT" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+        <Delete GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_JOHN_ROCKEFELLER" ModifierId="GREATPERSON_GRANT_OIL" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+    </GreatPersonIndividualActionModifiers>
+    <Leaders>
+        <Delete LeaderType="LEADER_MINOR_CIV_AMSTERDAM"/>
+        <Delete LeaderType="LEADER_MINOR_CIV_SEOUL"/>
+        <!--<Delete LeaderType="LEADER_MINOR_CIV_CARTHAGE"/>-->
+        <!--<Delete LeaderType="LEADER_MINOR_CIV_STOCKHOLM"/>-->
+        <Delete LeaderType="LEADER_MINOR_CIV_TORONTO"/>
+    </Leaders>
+    <MajorStartingUnits>
+        <Delete Era="ERA_ANCIENT" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_CLASSICAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_MEDIEVAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_RENAISSANCE" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_INDUSTRIAL" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_MODERN" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_ATOMIC" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+        <Delete Era="ERA_INFORMATION" Unit="UNIT_SETTLER" AiOnly="true" MinDifficulty="DIFFICULTY_EMPEROR" DifficultyDelta="0.5"/>
+    </MajorStartingUnits>
+    <Policies>
+        <Delete PolicyType="POLICY_POLICE_STATE"/>
+        <Delete PolicyType="POLICY_ARSENAL_OF_DEMOCRACY"/>
+        <Delete PolicyType="POLICY_PATRIOTIC_WAR"/>
+    </Policies>
+    <PolicyModifiers>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEFOODTOALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEPRODUCTIONTOALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEFOODFROMALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEPRODUCTIONFROMALLY"/>
+        <Delete ModifierId="FINESTHOUR_MODERN_AIRFIGHTER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_ATOMIC_AIRFIGHTER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_MODERN_AIRBOMBER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_ATOMIC_AIRBOMBER_PRODUCTION"/>
+        <Delete ModifierId="FREEMARKET_DOUBLEMARKET"/>
+        <Delete ModifierId="FREEMARKET_DOUBLEBANK"/>
+        <Delete ModifierId="FREEMARKET_DOUBLESTOCKEXCHANGE"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEAMPHITHEATER"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEMUSEUMART"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEMUSEUMARTIFACT"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEBROADCASTCENTER"/>
+        <Delete ModifierId="PATRIOTICWAR_MODERN_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="PATRIOTICWAR_ATOMIC_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="PATRIOTICWAR_INFORMATION_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="POLICESTATE_LOSEAMENITY"/>
+        <Delete ModifierId="POLICESTATE_SPYDEFENSE"/>
+        <Delete ModifierId="RATIONALISM_DOUBLELIBRARY"/>
+        <Delete ModifierId="RATIONALISM_DOUBLEUNIVERSITY"/>
+        <Delete ModifierId="RATIONALISM_DOUBLERESEARCHLABS"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESHRINE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLETEMPLE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLECATHEDRAL"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEDAREMEHR"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEGURDWARA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEMEETINGHOUSE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEMOSQUE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEPAGODA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESTUPA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESYNAGOGUE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEWAT"/>
+        <Delete ModifierId="MACHIAVELLIANISM_ROCKETRYTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SOURCESTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_HEISTTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_PARTISANSTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SABOTAGETIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SIPHONTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_STEALTECHTIME"/>
+        <Delete ModifierId="MILITARYRESEARCH_MILITARY_ACADEMY_SCIENCE_MODIFIER"/>
+        <Delete ModifierId="MILITARYRESEARCH_SEAPORT_SCIENCE_MODIFIER"/>
+        <Delete ModifierId="NEWDEAL_MAINTENANCECOST"/>
+        <Delete ModifierId="PUBLICTRANSPORT_FARMREPLACEGOLD"/>
+        <Delete ModifierId="ECOMMERCE_INTERNATIONALTRADEPRODUCTION"/>
+        <Delete ModifierId="ECOMMERCE_INTERNATIONALTRADEGOLD"/>
+        <Delete ModifierId="PUBLICTRANSPORT_FARMREPLACEGOLD"/>
+        <Delete ModifierId="LAISSEZFAIRE_GREATMERCHANTPOINTS"/>
+        <Delete ModifierId="NOBELPRIZE_GREATSCIENTISTPOINTS"/>
+        <Delete ModifierId="MILITARYORGANIZATION_GREATGENERALPOINTS"/>
+        <Delete ModifierId="INVENTION_GREATENGINEERPOINTS"/>
+    </PolicyModifiers>
+    <ObsoletePolicies>
+        <Delete PolicyType="POLICY_LIBERALISM" ObsoletePolicy="POLICY_NEW_DEAL"/>
+        <Delete PolicyType="POLICY_FINEST_HOUR" ObsoletePolicy="POLICY_STRATEGIC_AIR_FORCE"/>
+    </ObsoletePolicies>
+    <TraitModifiers>
+        <Delete TraitType="MINOR_CIV_SCIENTIFIC_TRAIT" ModifierId="MINOR_CIV_SCIENTIFIC_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_SCIENTIFIC_TRAIT" ModifierId="MINOR_CIV_SCIENTIFIC_LARGE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_RELIGIOUS_TRAIT" ModifierId="MINOR_CIV_RELIGIOUS_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_RELIGIOUS_TRAIT" ModifierId="MINOR_CIV_RELIGIOUS_LARGE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_TRADE_TRAIT" ModifierId="MINOR_CIV_TRADE_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_TRADE_TRAIT" ModifierId="MINOR_CIV_TRADE_LARGE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_CULTURAL_TRAIT" ModifierId="MINOR_CIV_CULTURAL_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_CULTURAL_TRAIT" ModifierId="MINOR_CIV_CULTURAL_LARGE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_MILITARISTIC_TRAIT" ModifierId="MINOR_CIV_MILITARISTIC_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_MILITARISTIC_TRAIT" ModifierId="MINOR_CIV_MILITARISTIC_LARGE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_INDUSTRIAL_TRAIT" ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_BUILDING"/>
+        <Delete TraitType="MINOR_CIV_INDUSTRIAL_TRAIT" ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete TraitType="MINOR_CIV_INDUSTRIAL_TRAIT" ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_BUILDING"/>
+        <Delete TraitType="MINOR_CIV_INDUSTRIAL_TRAIT" ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete TraitType="MINOR_CIV_CARTHAGE_TRAIT" ModifierId="MINOR_CIV_CARTHAGE_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_ALUMINUM_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_COAL_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_HORSES_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_IRON_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_NITER_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_OIL_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_HATTUSA_TRAIT" ModifierId="MINOR_CIV_HATTUSA_UNIQUE_INFLUENCE_URANIUM_RESOURCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_GENERAL_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ADMIRAL_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ENGINEER_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_MERCHANT_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_PROPHET_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_SCIENTIST_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_WRITER_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ARTIST_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_STOCKHOLM_TRAIT" ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_MUSICIAN_POINTS_BONUS"/>
+        <Delete TraitType="MINOR_CIV_PRESLAV_TRAIT" ModifierId="MINOR_CIV_PRESLAV_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete TraitType="MINOR_CIV_VILNIUS_TRAIT" ModifierId="MINOR_CIV_VILNIUS_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_HOLY_SITE"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_CAMPUS"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_ENCAMPMENT"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_COMMERCIAL_HUB"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_ENTERTAINMENT_COMPLEX"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_THEATER"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_INDUSTRIAL_ZONE"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_AQUEDUCT"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_NEIGHBORHOOD"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_SPACEPORT"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_AERODROME"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_WONDER"/>
+        <Delete TraitType="TRAIT_CIVILIZATION_ITERU" ModifierId="TRAIT_FLOODPLAINS_VALID_GOVERNMENT"/>
+        <Delete TraitType="TRAIT_LEADER_PAX_BRITANNICA" ModifierId="TRAIT_FREE_MELEE_UNIT_NON_HOME_CONTINENT"/>
+        <Delete TraitType="TRAIT_LEADER_PAX_BRITANNICA" ModifierId="TRAIT_FREE_MELEE_UNIT_FOREIGN_ROYAL_NAVY_DOCKYARD"/>
+    </TraitModifiers>
+    <Modifiers>
+        <Delete ModifierId="AUTOCRACY_CULTURE"/>
+        <Delete ModifierId="AUTOCRACY_FAITH"/>
+        <Delete ModifierId="AUTOCRACY_FOOD"/>
+        <Delete ModifierId="AUTOCRACY_GOLD"/>
+        <Delete ModifierId="AUTOCRACY_PRODUCTION"/>
+        <Delete ModifierId="AUTOCRACY_SCIENCE"/>
+        <Delete ModifierId="AUTOCRACY_WONDERS"/>
+        <Delete ModifierId="AUTOCRACY_WONDERS_ACCUMULATING"/>
+        <Delete ModifierId="CLASSICAL_REPUBLIC_AMENITY"/>
+        <Delete ModifierId="CLASSICAL_REPUBLIC_GREAT_PEOPLE"/>
+        <Delete ModifierId="CLASSICAL_REPUBLIC_GREAT_PEOPLE_ACCUMULATING"/>
+        <Delete ModifierId="COMMUNISM_ALL_PRODUCTION"/>
+        <Delete ModifierId="COMMUNISM_ALL_PRODUCTION_ACCUMULATING"/>
+        <Delete ModifierId="COMMUNISM_DEFENSE"/>
+        <Delete ModifierId="DEMOCRACY_DISTRICT_PROCESSES"/>
+        <Delete ModifierId="DEMOCRACY_DISTRICT_PROCESSES_ACCUMULATING"/>
+        <Delete ModifierId="DEMOCRACY_PATRONAGE_GOLD_DISCOUNT"/>
+        <Delete ModifierId="FASCISM_ATTACK"/>
+        <Delete ModifierId="FASCISM_UNIT_PRODUCTION"/>
+        <Delete ModifierId="FASCISM_UNIT_PRODUCTION_ACCUMULATING"/>
+        <Delete ModifierId="MERCHANT_REPUBLIC_GOLD_PURCHASE"/>
+        <Delete ModifierId="MERCHANT_REPUBLIC_GOLD_PURCHASE_ACCUMULATING"/>
+        <Delete ModifierId="MERCHANT_REPUBLIC_TRADE_ROUTES"/>
+        <Delete ModifierId="MONARCHY_WALLSPRODUCTION"/>
+        <Delete ModifierId="MONARCHY_CASTLEPRODUCTION"/>
+        <Delete ModifierId="MONARCHY_STARFORTPRODUCTION"/>
+        <Delete ModifierId="MONARCHY_ENVOYS"/>
+        <Delete ModifierId="MONARCHY_ENVOYS_ACCUMULATING"/>
+        <Delete ModifierId="OLIGARCHY_MELEE"/>
+        <Delete ModifierId="OLIGARCHY_UNIT_EXPERIENCE"/>
+        <Delete ModifierId="OLIGARCHY_UNIT_EXPERIENCE_ACCUMULATING"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_ACCUMULATING"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_ANTI_CAVALRY"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_HEAVY_CAVALRY"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_HEAVY_CHARIOT"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_LIGHT_CAVALRY"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_LIGHT_CHARIOT"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_MELEE"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_RANGED"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_RANGED_CAVALRY"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_RECON"/>
+        <Delete ModifierId="THEOCRACY_FAITH_PURCHASE_SIEGE"/>
+        <Delete ModifierId="THEOCRACY_RELIGIOUS"/>
+        <!-- Replacing America's Civilization bonus -->
+        <Delete ModifierId="TRAIT_AUTOCRACY_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_OLIGARCHY_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_CLASSICAL_REPUBLIC_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_MONARCHY_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_THEOCRACY_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_MERCHANT_REPUBLIC_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_FASCISM_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_COMMUNISM_BONUS_RATE"/>
+        <Delete ModifierId="TRAIT_DEMOCRACY_BONUS_RATE"/>
+        <Delete ModifierId="CIVIC_GOLD_THROUGH_CITIES"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_HOLY_SITE"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_CAMPUS"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_ENCAMPMENT"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_COMMERCIAL_HUB"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_ENTERTAINMENT_COMPLEX"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_THEATER"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_INDUSTRIAL_ZONE"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_AQUEDUCT"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_NEIGHBORHOOD"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_SPACEPORT"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_AERODROME"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_WONDER"/>
+        <Delete ModifierId="TRAIT_FLOODPLAINS_VALID_GOVERNMENT"/>
+        <Delete ModifierId="TRAIT_FREE_MELEE_UNIT_NON_HOME_CONTINENT"/>
+        <Delete ModifierId="TRAIT_FREE_MELEE_UNIT_FOREIGN_ROYAL_NAVY_DOCKYARD"/>
+        <!-- Updating City-States-->
+        <Delete ModifierId="MINOR_CIV_SCIENTIFIC_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_SCIENTIFIC_LARGE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_RELIGIOUS_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_RELIGIOUS_LARGE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_TRADE_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_TRADE_LARGE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_CULTURAL_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_CULTURAL_LARGE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_MILITARISTIC_MEDIUM_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_MILITARISTIC_LARGE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_BUILDING"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_BUILDING"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_SCIENTIFIC_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_SCIENTIFIC_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_SCIENTIFIC_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_RELIGIOUS_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_RELIGIOUS_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_RELIGIOUS_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_TRADE_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_TRADE_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_TRADE_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_CULTURAL_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_CULTURAL_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_CULTURAL_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_MILITARISTIC_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_MILITARISTIC_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_MILITARISTIC_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY_BUILDING"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_SMALL_INFLUENCE_BONUS_PAPAL_PRIMACY_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY_BUILDING"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_MEDIUM_INFLUENCE_BONUS_PAPAL_PRIMACY_DISTRICT"/>
+        <Delete ModifierId="MINOR_CIV_INDUSTRIAL_LARGE_INFLUENCE_BONUS_PAPAL_PRIMACY_BUILDING"/>
+        <Delete ModifierId="MINOR_CIV_CARTHAGE_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_CARTHAGE_TRADE_ROUTE_CAPACITY_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_GENERAL_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_GENERAL_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ADMIRAL_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_ADMIRAL_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ENGINEER_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_ENGINEER_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_MERCHANT_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_MERCHANT_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_PROPHET_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_PROPHET_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_SCIENTIST_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_SCIENTIST_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_WRITER_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_WRITER_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_ARTIST_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_ARTIST_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_UNIQUE_INFLUENCE_GREAT_MUSICIAN_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_STOCKHOLM_GREAT_MUSICIAN_POINTS_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_PRESLAV_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_PRESLAV_ABILITY_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_VILNIUS_UNIQUE_INFLUENCE_BONUS"/>
+        <Delete ModifierId="MINOR_CIV_VILNIUS_CIVIC_BOOST_BONUS"/>
+        <!-- Updating District-->
+        <Delete ModifierId="ROYAL_NAVY_DOCKYARD_TRADE_ROUTE_CAPACITY"/>
+        <Delete ModifierId="COMMERCIAL_HUB_TRADE_ROUTE_CAPACITY"/>
+        <Delete ModifierId="HARBOR_TRADE_ROUTE_CAPACITY"/>
+        <!-- Updating Great People-->
+        <Delete ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_TOGO_HEIHACHIRO_ACTIVE_UNIT_BONUS"/>
+        <Delete ModifierId="GREATPERSON_AETHELFLAED_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_SAMORI_TURE_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_SIMON_BOLIVAR_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_SUDIRMAN_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_SUDIRMAN_ACTIVE_UNIT_BONUS"/>
+        <Delete ModifierId="GREATPERSON_SUDIRMAN_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_SUDIRMAN_ACTIVE_UNIT_BONUS"/>
+        <Delete ModifierId="GREATPERSON_CHING_SHIH_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_GRACE_HOPPER_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_RAJENDRA_CHOLA_ACTIVE_PLUNDER_BONUS"/>
+        <Delete ModifierId="GREATPERSON_FRANCIS_DRAKE_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_ZHENG_HE_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_CHESTER_NIMITZ_ACTIVE"/>
+        <Delete ModifierId="GREATPERSON_HORATIO_NELSON_ACTIVE"/>
+        <!-- Updating Policies-->
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEFOODTOALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEPRODUCTIONTOALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEFOODFROMALLY"/>
+        <Delete ModifierId="ARSENALOFDEMOCRACY_TRADEROUTEPRODUCTIONFROMALLY"/>
+        <Delete ModifierId="FINESTHOUR_MODERN_AIRFIGHTER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_ATOMIC_AIRFIGHTER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_MODERN_AIRBOMBER_PRODUCTION"/>
+        <Delete ModifierId="FINESTHOUR_ATOMIC_AIRBOMBER_PRODUCTION"/>
+        <Delete ModifierId="FREEMARKET_DOUBLEMARKET"/>
+        <Delete ModifierId="FREEMARKET_DOUBLEBANK"/>
+        <Delete ModifierId="FREEMARKET_DOUBLESTOCKEXCHANGE"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEAMPHITHEATER"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEMUSEUMART"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEMUSEUMARTIFACT"/>
+        <Delete ModifierId="GRANDOPERA_DOUBLEBROADCASTCENTER"/>
+        <Delete ModifierId="NEWDEAL_MAINTENANCECOST"/>
+        <Delete ModifierId="PATRIOTICWAR_MODERN_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="PATRIOTICWAR_ATOMIC_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="PATRIOTICWAR_INFORMATION_SUPPORT_PRODUCTION"/>
+        <Delete ModifierId="POLICESTATE_LOSEAMENITY"/>
+        <Delete ModifierId="RATIONALISM_DOUBLELIBRARY"/>
+        <Delete ModifierId="RATIONALISM_DOUBLEUNIVERSITY"/>
+        <Delete ModifierId="RATIONALISM_DOUBLERESEARCHLABS"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESHRINE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLETEMPLE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLECATHEDRAL"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEDAREMEHR"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEGURDWARA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEMEETINGHOUSE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEMOSQUE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEPAGODA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESTUPA"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLESYNAGOGUE"/>
+        <Delete ModifierId="SIMULTANEUM_DOUBLEWAT"/>
+        <Delete ModifierId="INVENTION_GREATENGINEERPOINTS"/>
+        <Delete ModifierId="MACHIAVELLIANISM_ROCKETRYTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SOURCESTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_HEISTTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_PARTISANSTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SABOTAGETIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_SIPHONTIME"/>
+        <Delete ModifierId="MACHIAVELLIANISM_STEALTECHTIME"/>
+        <Delete ModifierId="MILITARYRESEARCH_MILITARY_ACADEMY_SCIENCE_MODIFIER"/>
+        <Delete ModifierId="MILITARYRESEARCH_SEAPORT_SCIENCE_MODIFIER"/>
+        <Delete ModifierId="PUBLICTRANSPORT_FARMREPLACEGOLD"/>
+        <Delete ModifierId="VARU_NEGATIVE_COMBAT"/>
+        <Delete ModifierId="VARU_NEGATIVE_COMBAT_MODIFIER"/>
+        <!-- Updating Beliefs-->
+        <Delete ModifierId="RIVER_GODDESS_HOLY_SITE_AMENITY"/>
+        <Delete ModifierId="RIVER_GODDESS_HOLY_SITE_AMENITY_MODIFIER"/>
+        <Delete ModifierId="DIVINE_SPARK_CAMPUS"/>
+        <Delete ModifierId="DIVINE_SPARK_CAMPUS_MODIFIER"/>
+        <Delete ModifierId="DIVINE_SPARK_THEATER"/>
+        <Delete ModifierId="DIVINE_SPARK_THEATER_MODIFIER"/>
+        <Delete ModifierId="GOD_OF_CRAFTSMEN_STRATEGIC_MINE_PRODUCTION"/>
+        <Delete ModifierId="GOD_OF_CRAFTSMEN_STRATEGIC_MINE_PRODUCTION_MODIFIER"/>
+        <Delete ModifierId="GODDESS_OF_FESTIVALS_PLANTATION_TAG_FOOD"/>
+        <Delete ModifierId="GODDESS_OF_FESTIVALS_PLANTATION_TAG_FOOD_MODIFIER"/>
+        <Delete ModifierId="EARTH_GODDESS_APPEAL_FAITH"/>
+        <Delete ModifierId="EARTH_GODDESS_APPEAL_FAITH_MODIFIER"/>
+    </Modifiers>
+    <RequirementSets>
+        <Delete RequirementSetId="CITY_HAS_1_SPECIALTY_DISTRICT"/>
+    </RequirementSets>
+    <Requirements>
+        <Delete RequirementId="REQUIRES_CITY_HAS_1_SPECIALTY_DISTRICT"/>
+    </Requirements>
+    <GameCapabilities>
+        <Delete GameCapability="CAPABILITY_GOVERNMENTS_LEGACY_BONUSES"/>
+    </GameCapabilities>
+    <ModifierStrings>
+        <Delete ModifierId="CAPTURE_PRIZE_SHIPS"/>
+        <Delete ModifierId="CAPTURE_COMBAT_UNITS_AS_WORKERS"/>
+        <Delete ModifierId="VARU_NEGATIVE_COMBAT_MODIFIER"/>
+    </ModifierStrings>
+    <CivilopediaPages>
+        <Delete PageId="DIPLO_10"/>
+        <Delete PageId="TRADE_6"/>
+        <Delete PageId="COMBAT_11"/>
+    </CivilopediaPages>
+    <CityNames>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_VICTORIA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_BELO_HORIZONTE"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_GOIANIA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_DUQUE_DE_CAXIAS"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_CAMPO_GRANDE"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_PARNAIBA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_FLORIANOPOLIS"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_NOVA_IGUACU"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_SAO_BERNARDO_DO_CAMPO"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_JOAO_PESSOA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_OSASCO"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_JABOATAO_DOS_GUARARAPES"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_SAO_JOSE_DOS_CAMPOS"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_CONTAGEM"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_UBERLANDIA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_ARACAJU"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_CUIABA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_FEIRA_DE_SANTANA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_JUIZ_DE_FORA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_JOINVILLE"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_MACAPA"/>
+        <Delete CivilizationType="CIVILIZATION_BRAZIL" CityName="LOC_CITY_NAME_JUNDIAI"/>
+    </CityNames>
+    <DiplomacySelections>
+        <Delete Key="CHOICE_IGNORE"/>
+    </DiplomacySelections>
+    <TechnologyPrereqs>
+        <Delete Technology="TECH_CARTOGRAPHY" PrereqTech="TECH_SHIPBUILDING"/>
+        <Delete Technology="TECH_MASS_PRODUCTION" PrereqTech="TECH_SHIPBUILDING"/>
+    </TechnologyPrereqs>
+    <Resource_ValidFeatures>
+        <Delete ResourceType="RESOURCE_NITER" FeatureType="FEATURE_FLOODPLAINS"/>
+    </Resource_ValidFeatures>
+    <StartingBuildings>
+        <Delete Era="ERA_INFORMATION" Building="BUILDING_FACTORY" District="DISTRICT_INDUSTRIAL_ZONE"/>
+        <Delete Era="ERA_INFORMATION" Building="BUILDING_STOCK_EXCHANGE" District="DISTRICT_COMMERCIAL_HUB"/>
+    </StartingBuildings>
+    <CivilizationTraits>
+        <Delete CivilizationType="CIVILIZATION_ENGLAND" TraitType="TRAIT_CIVILIZATION_DOUBLE_ARCHAEOLOGY_SLOTS"/>
+    </CivilizationTraits>
+    <BuildingModifiers>
+        <Delete>
+            <BuildingType>BUILDING_BIG_BEN</BuildingType>
+            <ModifierId>BIG_BEN_DOUBLE_GOLD</ModifierId>
+        </Delete>
+    </BuildingModifiers>
+    <Improvement_Adjacencies>
+        <Delete ImprovementType="IMPROVEMENT_COLOSSAL_HEAD" YieldChangeId="ColossalHead_FaithForest"/>
+        <Delete ImprovementType="IMPROVEMENT_COLOSSAL_HEAD" YieldChangeId="ColossalHead_FaithJungle"/>
+    </Improvement_Adjacencies>
+    <Adjacency_YieldChanges>
+        <Delete ID="ColossalHead_FaithForest" Description="Placeholder" YieldType="YIELD_FAITH" YieldChange="1" TilesRequired="2" AdjacentFeature="FEATURE_FOREST"/>
+        <Delete ID="ColossalHead_FaithJungle" Description="Placeholder" YieldType="YIELD_FAITH" YieldChange="1" TilesRequired="2" AdjacentFeature="FEATURE_JUNGLE"/>
+        <Delete ID="GreatWall_Gold" Description="Placeholder" YieldType="YIELD_GOLD" YieldChange="1" TilesRequired="1" AdjacentImprovement="IMPROVEMENT_GREAT_WALL" PrereqTech="TECH_MASONRY"/>
+        <Delete ID="GreatWall_Culture" Description="Placeholder" YieldType="YIELD_CULTURE" YieldChange="1" TilesRequired="1" AdjacentImprovement="IMPROVEMENT_GREAT_WALL" PrereqTech="TECH_CASTLES"/>
+    </Adjacency_YieldChanges>
+    <Improvement_Tourism>
+        <Delete ImprovementType="IMPROVEMENT_COLOSSAL_HEAD" TourismSource="TOURISMSOURCE_CULTURE" PrereqTech="TECH_FLIGHT" ScalingFactor="100"/>
+    </Improvement_Tourism>
+    <Improvement_BonusYieldChanges>
+        <Delete Id="14" ImprovementType="IMPROVEMENT_COLOSSAL_HEAD" YieldType="YIELD_CULTURE" BonusYieldChange="1" PrereqCivic="CIVIC_HUMANISM"/>
+        <Delete Id="12" ImprovementType="IMPROVEMENT_QUARRY" YieldType="YIELD_GOLD" BonusYieldChange="2" PrereqTech="TECH_BANKING"/>
+        <Delete Id="9" ImprovementType="IMPROVEMENT_PASTURE" YieldType="YIELD_PRODUCTION" BonusYieldChange="1" PrereqTech="TECH_ROBOTICS"/>
+        <Delete Id="2" ImprovementType="IMPROVEMENT_CAMP" YieldType="YIELD_GOLD" BonusYieldChange="1" PrereqTech="TECH_SYNTHETIC_MATERIALS"/>
+    </Improvement_BonusYieldChanges>
+    <Improvement_ValidTerrains>
+        <Delete ImprovementType="IMPROVEMENT_SPHINX" TerrainType="TERRAIN_SNOW"/>
+        <Delete ImprovementType="IMPROVEMENT_SPHINX" TerrainType="TERRAIN_SNOW_HILLS"/>
+    </Improvement_ValidTerrains>
+    <ImprovementModifiers>
+        <Delete ModifierId="LUMBER_MILL_RIVERADJACENCY_PRODUCTION"/>
+    </ImprovementModifiers>
+    <UnitReplaces>
+        <Delete CivUniqueUnitType="UNIT_EGYPTIAN_CHARIOT_ARCHER" ReplacesUnitType="UNIT_HEAVY_CHARIOT"/>
+    </UnitReplaces>
+    <Beliefs>
+        <Delete BeliefType="BELIEF_GODDESS_OF_THE_HARVEST"/>
+        <Delete BeliefType="BELIEF_ORAL_TRADITION"/>
+        <Delete BeliefType="BELIEF_CHURCH_PROPERTY"/>
+        <Delete BeliefType="BELIEF_BURIAL_GROUNDS"/>
+    </Beliefs>
+    <BeliefModifiers>
+        <Delete ModifierId="RIVER_GODDESS_HOLY_SITE_AMENITY"/>
+        <Delete ModifierId="DIVINE_SPARK_CAMPUS"/>
+        <Delete ModifierId="DIVINE_SPARK_THEATER"/>
+        <Delete ModifierId="GOD_OF_CRAFTSMEN_STRATEGIC_MINE_PRODUCTION"/>
+        <Delete ModifierId="GODDESS_OF_FESTIVALS_PLANTATION_TAG_FOOD"/>
+        <Delete ModifierId="EARTH_GODDESS_APPEAL_FAITH"/>
+        <Delete ModifierId="CHURCH_PROPERTY_GOLD_CITY"/>
+        <Delete ModifierId="CROSS_CULTURAL_DIALOGUE_SCIENCE_FOREIGN_FOLLOWER"/>
+        <Delete ModifierId="PILGRIMAGE_FAITH_FOREIGN_CITY"/>
+        <Delete ModifierId="TITHE_GOLD_FOLLOWER"/>
+        <Delete ModifierId="WORLD_CHURCH_CULTURE_FOREIGN_FOLLOWER"/>
+        <Delete ModifierId="WORK_ETHIC_FOLLOWER_PRODUCTION"/>
+        <Delete ModifierId="LADY_OF_THE_REEDS_PRODUCTION"/>
+        <Delete ModifierId="FEED_THE_WORLD_TEMPLE_FOOD"/>
+        <Delete ModifierId="FEED_THE_WORLD_SHRINE_FOOD"/>
+        <Delete ModifierId="RELIGIOUS_COMMUNITY_SHRINE_HOUSING"/>
+        <Delete ModifierId="RELIGIOUS_COMMUNITY_TEMPLE_HOUSING"/>
+        <Delete ModifierId="RELIGIOUS_COMMUNITY_STAVE_HOUSING"/>
+        <Delete ModifierId="BURIAL_GROUNDS_CULTURE_BOMB_TRIGGER_HOLY_SITE"/>
+    </BeliefModifiers>
+    <TypeTags>
+        <Delete Type="ABILITY_ENABLE_WALL_ATTACK" Tag="CLASS_BATTERING_RAM"/>
+        <Delete Type="ABILITY_BYPASS_WALLS" Tag="CLASS_SIEGE_TOWER"/>
+    </TypeTags>
+</GameInfo>

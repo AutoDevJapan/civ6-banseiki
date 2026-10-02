@@ -1,0 +1,19 @@
+[package]
+name = "civ6-lua-tests-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mlua = { version = "0.11", features = ["lua51", "vendored", "serialize"] }
+regex = "1"
+roxmltree = "0.21"
+rusqlite = { version = "0.37", features = ["bundled", "functions"] }
+flate2 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1"
+icu_properties = { version = "2.3", default-features = false, features = ["compiled_data"] }
+
+[dev-dependencies]
+civ6-data-rs = { path = "../civ6-data-rs" }
+syn = { version = "2", features = ["full", "visit"] }

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+    <Types>
+        <Row Type="CAPABILITY_WORLD_CONGRESS" Kind="KIND_CAPABILITY" />
+        <Row Type="CAPABILITY_RANDOM_EVENTS" Kind="KIND_CAPABILITY" />
+        <!-- World Climate -->
+        <Row Type="CAPABILITY_WORLD_CLIMATE" Kind="KIND_CAPABILITY" />
+        <Row Type="CAPABILITY_WORLD_CLIMATE_VIEW" Kind="KIND_CAPABILITY" />
+    <!-- Mini-map panel lenses -->
+    <Row Type="CAPABILITY_LENS_POWER" Kind="KIND_CAPABILITY"/>
+    </Types>
+
+    <GameCapabilities>
+        <Row GameCapability="CAPABILITY_WORLD_CONGRESS" />
+        <Row GameCapability="CAPABILITY_RANDOM_EVENTS"/>
+
+        <!-- World Climate -->
+        <Row GameCapability="CAPABILITY_WORLD_CLIMATE"/>
+        <Row GameCapability="CAPABILITY_WORLD_CLIMATE_VIEW"/>
+
+    <!-- Mini-map panel lenses -->
+    <Row GameCapability="CAPABILITY_LENS_POWER" />
+    </GameCapabilities>
+
+    <GameCapabilityDependencies>
+        <Row GameCapability="CAPABILITY_WORLD_CLIMATE_VIEW" DependsOnCapability="CAPABILITY_WORLD_CLIMATE"/>
+    </GameCapabilityDependencies>
+</GameData>

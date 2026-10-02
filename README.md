@@ -23,6 +23,7 @@ Sid Meier's Civilization VI の周回育成型トータルコンバージョン 
 | [`documents/spec/data/`](documents/spec/data/) | SSOT から作られるデータ（領土関係・タイル割当候補の JSON） |
 | [`documents/research/`](documents/research/) | 調査記録（実装の準備度、プレイヤー枠の候補など） |
 | [`poc/`](poc/) | PoC 用の検証 MOD（手順と結果は `documents/poc/README.md`） |
+| [`tools/Cargo.toml`](tools/Cargo.toml) | Rust の実行ツール・生成ツール・Lua を含むテストの workspace |
 | [`documents/questions.md`](documents/questions.md) | オーナーの判断が必要な事項 |
 | [`documents/repository-rules.md`](documents/repository-rules.md) | リポジトリルール |
 
@@ -33,3 +34,5 @@ MOD 本体・マップ・ゲーム外の常駐アプリなどの実装用ディ�
 - 必ず [リポジトリルール](documents/repository-rules.md) を読んで従う
 - 仕様は SSOT だけに書く。SSOT は大きいので、[索引](documents/README.md) から必要な節のファイルだけを読む
 - `main` に直接コミットせず、作業ブランチから PR を作る
+
+ツールとテストは Rust を使用する。`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` で検査し、シナリオの実行方法は [検証ドライバー](documents/poc/autotest.md) を参照する。

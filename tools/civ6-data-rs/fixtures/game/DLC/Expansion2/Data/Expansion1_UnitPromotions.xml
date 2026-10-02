@@ -1,0 +1,94 @@
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <!--Spy-->
+        <Row Type="PROMOTION_SPY_SMEAR_CAMPAIGN" Kind="KIND_PROMOTION"/>
+        <Row Type="PROMOTION_SPY_COVERT_ACTION" Kind="KIND_PROMOTION"/>
+        <Row Type="PROMOTION_SPY_LICENSE_TO_KILL" Kind="KIND_PROMOTION"/>
+    </Types>
+    <!-- Promotion Tags, these are defined in the Units.XML -->
+    <UnitPromotions>
+        <!--Spy-->
+        <Row UnitPromotionType="PROMOTION_SPY_SMEAR_CAMPAIGN" Name="LOC_PROMOTION_SPY_SMEAR_CAMPAIGN_NAME" Description="LOC_PROMOTION_SPY_SMEAR_CAMPAIGN_DESCRIPTION" Level="1" PromotionClass="PROMOTION_CLASS_SPY"/>
+        <Row UnitPromotionType="PROMOTION_SPY_COVERT_ACTION" Name="LOC_PROMOTION_SPY_COVERT_ACTION_NAME" Description="LOC_PROMOTION_SPY_COVERT_ACTION_DESCRIPTION" Level="1" PromotionClass="PROMOTION_CLASS_SPY"/>
+        <Row UnitPromotionType="PROMOTION_SPY_LICENSE_TO_KILL" Name="LOC_PROMOTION_SPY_LICENSE_TO_KILL_NAME" Description="LOC_PROMOTION_SPY_LICENSE_TO_KILL_DESCRIPTION" Level="1" PromotionClass="PROMOTION_CLASS_SPY"/>
+    </UnitPromotions>
+    <UnitPromotionModifiers>
+        <!--Spy-->
+        <Row>
+            <UnitPromotionType>PROMOTION_SPY_SMEAR_CAMPAIGN</UnitPromotionType>
+            <ModifierId>SPY_SMEAR_CAMPAIGN</ModifierId>
+        </Row>
+        <Row>
+            <UnitPromotionType>PROMOTION_SPY_COVERT_ACTION</UnitPromotionType>
+            <ModifierId>SPY_COVERT_ACTION</ModifierId>
+        </Row>
+        <Row>
+            <UnitPromotionType>PROMOTION_SPY_LICENSE_TO_KILL</UnitPromotionType>
+            <ModifierId>SPY_LICENSE_TO_KILL</ModifierId>
+        </Row>
+    </UnitPromotionModifiers>
+    <Modifiers>
+        <!--Spy-->
+        <Row>
+            <ModifierId>SPY_SMEAR_CAMPAIGN</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNIT_ADJUST_SPY_OPERATION_CHANCE</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>SPY_COVERT_ACTION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNIT_ADJUST_SPY_OPERATION_CHANCE</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>SPY_LICENSE_TO_KILL</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_UNIT_ADJUST_SPY_OPERATION_CHANCE</ModifierType>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <!--Spy-->
+        <Row>
+            <ModifierId>SPY_SMEAR_CAMPAIGN</ModifierId>
+            <Name>OperationType</Name>
+            <Value>UNITOPERATION_SPY_FABRICATE_SCANDAL</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_SMEAR_CAMPAIGN</ModifierId>
+            <Name>Offensive</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_SMEAR_CAMPAIGN</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_COVERT_ACTION</ModifierId>
+            <Name>OperationType</Name>
+            <Value>UNITOPERATION_SPY_FOMENT_UNREST</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_COVERT_ACTION</ModifierId>
+            <Name>Offensive</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_COVERT_ACTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_LICENSE_TO_KILL</ModifierId>
+            <Name>OperationType</Name>
+            <Value>UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_LICENSE_TO_KILL</ModifierId>
+            <Name>Offensive</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>SPY_LICENSE_TO_KILL</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+    </ModifierArguments>
+</GameInfo>

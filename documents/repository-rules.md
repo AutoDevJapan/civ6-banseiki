@@ -33,6 +33,8 @@
 
 ## エージェントの使い方
 
+Python は使用しない。実行ツール、生成ツール、テストは Rust で実装し、`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` で検査する。MOD の Lua は mlua に組み込んだ Lua 5.1 で全件を実行し、Lua の検査を省略しない（2026年10月2日、オーナー指示）。
+
 1. サブエージェントには Codex CLI の GPT-6-Sol（推論強度 ultra または max）や GPT-6-Luna（max）を積極的に使う
    - 例：`codex exec -m gpt-6-sol -c model_reasoning_effort='"max"' -s workspace-write --skip-git-repo-check -C <作業フォルダ> -o <出力ファイル> - < <プロンプト>`
    - 読むだけの作業は `-s read-only`、GPT-6-Luna は `-m gpt-6-luna` にする

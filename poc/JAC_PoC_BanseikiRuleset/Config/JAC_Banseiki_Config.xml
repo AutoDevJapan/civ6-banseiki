@@ -11,6 +11,7 @@
 		<Row Ruleset="RULESET_JAC_BANSEIKI" ParameterId="PlayerLeader" Domain="Players:Expansion2_Players"/>
 	</RulesetDomainOverrides>
 	<Parameters>
+		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="GameMode_Heroes" Name="LOC_GAMEMODE_HEROES_NAME" Description="LOC_GAMEMODE_HEROES_DESCRIPTION" Domain="bool" DefaultValue="1" ReadOnly="1" ConfigurationGroup="Game" ConfigurationId="GAMEMODE_HEROES" NameArrayConfigurationId="GAMEMODES_ENABLED_NAMES" GroupId="GameModes" SortIndex="100"/>
 		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="NoGoodyHuts" Name="LOC_GAME_NO_GOODY_HUTS" Description="" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="GAME_NO_GOODY_HUTS" GroupId="AdvancedOptions" SortIndex="2010"/>
 		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="NoBarbarians" Name="LOC_GAME_NO_BARBARIANS" Description="" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="GAME_NO_BARBARIANS" GroupId="AdvancedOptions" SortIndex="2010"/>
 		<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="AlliesShareVisibility" Name="LOC_GAME_ALLIES_SHARE_VISIBILITY" Description="LOC_GAME_ALLIES_SHARE_VISIBILITY_DESCRIPTION" Domain="bool" DefaultValue="1" ConfigurationGroup="Game" ConfigurationId="GAME_ALLIES_SHARE_VISIBILITY" GroupId="AdvancedOptions" SortIndex="2010"/>

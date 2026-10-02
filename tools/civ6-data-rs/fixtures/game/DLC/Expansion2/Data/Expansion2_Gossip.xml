@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Edward Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="GOSSIP_POWERED_CITY" Kind="KIND_GOSSIP"/>
+        <Row Type="GOSSIP_RANDOM_EVENT" Kind="KIND_GOSSIP"/>
+        <Row Type="GOSSIP_ROCK_CONCERT" Kind="KIND_GOSSIP"/>
+        <Row Type="GOSSIP_SPY_BREACH_DAM" Kind="KIND_GOSSIP"/>
+        <Row Type="GOSSIP_SPY_CAPTURED" Kind="KIND_GOSSIP"/>
+    </Types>
+    <Visibilities_XP2>
+        <Row VisibilityType="VISIBILITY_NONE"/>
+        <Row VisibilityType="VISIBILITY_LIMITED"/>
+        <Row VisibilityType="VISIBILITY_FULL"/>
+        <Row VisibilityType="VISIBILITY_SECRET" EspionageViewCapital="true"/>
+        <Row VisibilityType="VISIBILITY_TOP_SECRET" EspionageViewAll="true"/>
+    </Visibilities_XP2>
+    <DiplomaticVisibilitySources>
+        <Delete VisibilitySourceType="SOURCE_GREAT_PERSON_JOURNALISM"/>
+        <Row VisibilitySourceType="SOURCE_HIGHLEVEL_SPY" Description="LOC_VIZSOURCE_HIGHLEVEL_SPY" ActionDescription="LOC_VIZSOURCE_ACTION_HIGHLEVEL_SPY" GossipString="LOC_GOSSIP_SOURCE_HIGHLEVEL_SPY" FromCitizen="true" Spy="true" LevelRequired="3"/>
+        <Row VisibilitySourceType="SOURCE_GREAT_PERSON_JOURNALISM" Description="LOC_VIZSOURCE_GREAT_PERSON_JOURNALISM" ActionDescription="LOC_VIZSOURCE_ACTION_GREAT_PERSON_JOURNALISM" GossipString="LOC_GOSSIP_SOURCE_GREAT_PERSON_JOURNALISM" FromCitizen="true" GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_MARY_KATHERINE_GODDARD"/>
+    </DiplomaticVisibilitySources>
+    <Gossips>
+        <Update>
+            <Where GossipType="GOSSIP_CONSTRUCT_BUILDING"/>
+            <Set>
+                <ErasUntilObsolete>1</ErasUntilObsolete>
+            </Set>
+        </Update>
+        <Update>
+            <Where GossipType="GOSSIP_CONSTRUCT_DISTRICT"/>
+            <Set>
+                <ErasUntilObsolete>1</ErasUntilObsolete>
+            </Set>
+        </Update>
+        <Update>
+            <Where GossipType="GOSSIP_DECLARED_FRIENDSHIP"/>
+            <Set>
+                <Filter>true</Filter>
+            </Set>
+        </Update>
+        <Update>
+            <Where GossipType="GOSSIP_POLICY_ENACTED"/>
+            <Set>
+                <ErasUntilObsolete>1</ErasUntilObsolete>
+            </Set>
+        </Update>
+        <Update>
+            <Where GossipType="GOSSIP_TRAIN_UNIT"/>
+            <Set>
+                <ErasUntilObsolete>1</ErasUntilObsolete>
+            </Set>
+        </Update>
+        <Row GossipType="GOSSIP_POWERED_CITY" VisibilityLevel="2" Message="LOC_GOSSIP_POWERED_CITY" GroupType="CITY"/>
+        <Row GossipType="GOSSIP_RANDOM_EVENT" VisibilityLevel="2" Message="LOC_GOSSIP_RANDOM_EVENT" GroupType="CLIMATE"/>
+        <Row GossipType="GOSSIP_ROCK_CONCERT" VisibilityLevel="2" Message="LOC_GOSSIP_ROCK_CONCERT" GroupType="CULTURE"/>
+        <Row GossipType="GOSSIP_SPY_BREACH_DAM" VisibilityLevel="3" Message="LOC_GOSSIP_SPY_DAM_BREACHED_DETECTED" GroupType="ESPIONAGE"/>
+        <Row GossipType="GOSSIP_SPY_CAPTURED" VisibilityLevel="2" Message="LOC_GOSSIP_SPY_CAPTURED" GroupType="ESPIONAGE"/>
+    </Gossips>
+</GameInfo>

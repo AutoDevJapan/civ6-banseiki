@@ -1,11 +1,13 @@
 # 戦国パックの時代（黄金期・暗黒期）第1段階（JAC_PoC_SengokuTrees）
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 [時代の設計](../research/sengoku-ages.md) §10 の 1（データ）・2（ゲームプレイ Lua の「武功の台帳」）・3（UI：改元の画面と時代スコアの画面。下の「改元の画面と時代スコアの画面」）・4（自動テスト）を実装した PoC。置き場は設計どおり `poc/JAC_PoC_SengokuTrees` で、条件は既存と同じ `RULESET_JAC_BANSEIKI`（地図では絞らない。戦国パックの他の仕組みと同じくルールセット全体に効く。SSOT 3.2 は時代を戦国パックの仕組みとして書いており、地図の条件は無い）。点・閾値・効果の数値はすべて**暫定**。
 
-- データ：`Data/JAC_Sengoku_Ages.sql`（手書き。既存の `JAC_Sengoku_Unlocks.sql` などと同じく生成スクリプトは使わない。設計の表から作る生成物ではないため）、`Data/JAC_Sengoku_Ages_Icons.xml`、`Text/JAC_Sengoku_Ages_Text.xml`（ja・en・ru）。改元の表の行と元号の名前・見出しだけは生成物：`Data/JAC_Sengoku_Reigns.sql`・`Text/JAC_Sengoku_Reigns_Text.xml`（`python tools/generate_sengoku_reigns.py`、元は `documents/spec/data/sengoku-reigns.json`。`--check` で古いと失敗する）
+- データ：`Data/JAC_Sengoku_Ages.sql`（手書き。既存の `JAC_Sengoku_Unlocks.sql` などと同じく生成スクリプトは使わない。設計の表から作る生成物ではないため）、`Data/JAC_Sengoku_Ages_Icons.xml`、`Text/JAC_Sengoku_Ages_Text.xml`（ja・en・ru）。改元の表の行と元号の名前・見出しだけは生成物：`Data/JAC_Sengoku_Reigns.sql`・`Text/JAC_Sengoku_Reigns_Text.xml`（`cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-reigns --`、元は `documents/spec/data/sengoku-reigns.json`。`--check` で古いと失敗する）
 - ゲームプレイ Lua：`Scripts/JAC_Sengoku_Ages.lua`
 - UI Lua：`UI/JAC_SengokuDarkPolicy.lua`・`.xml`（暗黒期の政策の選択画面。下の「暗黒期の政策の選択」）、`UI/JAC_SengokuReignPopup.lua`・`.xml`（改元の画面）、`UI/JAC_EraProgressPanel_Sengoku.lua`（時代スコアの画面。公式の画面への差分）、`UI/JAC_SengokuAgesView.lua`（画面が共有する台帳の読み方と文の組み立て）、`UI/JAC_ActionPanel_Sengoku.lua`（右下の時代の目盛りの説明を元号にする。下の「時代の名前（元号）」）
-- テスト：`tests/test_sengoku_ages.py`（公式データを読むデータの断面と、lupa で台帳と選択画面を動かす単体テスト）、`tests/test_sengoku_ages_screens.py`（lupa で改元の画面と時代スコアの画面を台帳の上で動かす単体テスト）
+- テスト：`tools/civ6-lua-tests-rs/tests/ages.rs`（公式データを読むデータの断面と、mlua で台帳と選択画面を動かす単体テスト）、`tools/civ6-lua-tests-rs/tests/ages_screens.rs`（mlua で改元の画面と時代スコアの画面を台帳の上で動かす単体テスト）
 - 実機シナリオ：`tools/civ6-autotest/scenarios/sengoku-ages.json`（2026-09-30 に PASS。後から足した確認は未実行。下の「実機確認」）、`sengoku-dark-policy.json`（暗黒期の政策の選択。以前の版は2026-09-30 に PASS。2026-10-01 dark-policy-at-reign-07 で全47手順に PASS）、`sengoku-ages-screens.json`（改元の画面・時代の目盛りの説明・時代スコアの画面。2026-10-01 dark-policy-at-reign-08 で全28手順に PASS）
 
 ## オーナー判断 L（2026-09-30、旧 Q36〜Q39）
@@ -118,7 +120,7 @@
 
 成果物は共用実機作業フォルダー `civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/<実行ID>/` の `steps.jsonl`、`Lua.log`、`Modding.log` と画像。追加のゲーム設定・シナリオでは検証していない。
 
-**実機の結果**：dark-policy-at-reign-07（2026-10-01）は全47手順、dark-policy-at-reign-08 は全28手順に PASS。両方とも53f4f4bをcommit・pushしてから、指定の `live_chain.py` で実行した。終了ボタン・終了キー・Shift＋Enter・自動終了の阻止、未選択と選択済みの保存・読み込み、保存した通知からの再開、都市の旗、重複・期限外の要求の拒否を確認した。終了を止める判定はエンジンの `UI.CanEndTurn` ではなく、実際の ActionPanel と保存台帳を検査している。英語の政策画面は dark-policy-at-reign-05/07 の画像で4候補と右下の政策選択の表示を確認した。日本語・ロシア語の本文の折り返しとマルチプレイは別途未確認。日本地図は世界会議なし。終了タイマーや他のMODが本体へ直接終了を要求する経路は、今回のUIガードの検証範囲外。
+**実機の結果**：dark-policy-at-reign-07（2026-10-01）は全47手順、dark-policy-at-reign-08 は全28手順に PASS。両方とも53f4f4bをcommit・pushしてから、指定の `live_chain.exe` で実行した。終了ボタン・終了キー・Shift＋Enter・自動終了の阻止、未選択と選択済みの保存・読み込み、保存した通知からの再開、都市の旗、重複・期限外の要求の拒否を確認した。終了を止める判定はエンジンの `UI.CanEndTurn` ではなく、実際の ActionPanel と保存台帳を検査している。英語の政策画面は dark-policy-at-reign-05/07 の画像で4候補と右下の政策選択の表示を確認した。日本語・ロシア語の本文の折り返しとマルチプレイは別途未確認。日本地図は世界会議なし。終了タイマーや他のMODが本体へ直接終了を要求する経路は、今回のUIガードの検証範囲外。
 
 ## 改元の画面と時代スコアの画面（後続3、[設計](../research/sengoku-ages.md) §8）
 
@@ -127,8 +129,8 @@
 1. **改元の画面**（`UI/JAC_SengokuReignPopup.lua`・`.xml`）：改元のターンに、自分の家の判定を出す。見出しは「改元」「天文から弘治へ（1555年）」の2行（公式 `LOC_ERA_REVIEW_POPUP_TITLE` と同じく `[NEWLINE]` で分ける。1行では英語・ロシア語が枠を超えて切れた）、帯はその家の年齢（黄金期・英雄期・通常期・暗黒期とアイコン）、「天文の期の武功：N点」と閾値（黄金期は何点以上、暗黒期は何点未満）、年齢の効果（暗黒期は割り当てた政策の効果）。絵と組み立ては公式の時代の振り返り `EraReviewPopup` と同じで、年齢ごとに羊皮紙・枠・帯（`Ages_Parchment*`・`Ages_Frame*`・`Ages_BannerLong*`）を替え、英雄期は光（`Ages_FrameGlow`）を出す
 2. **出す時機**：自分の手番の始まり（`Events.LocalPlayerTurnBegin`。公式の `EraCompletePopup` と同じ）と自動進行の終わり（`LuaEvents.AutoPlayEnd`）に、今の期の判定のターンが今のターンなら出す。1つの改元はこのセッションで1回だけ。読み込み直後には出さない（公式の `EraCompletePopup` と同じ）。手番の終わりに閉じる
 3. **暗黒期の政策の選択との順番**：改元の画面が出ている間は選択画面を出さない。閉じると（選択待ちなら）選択画面が出る。暗黒期で選択待ちの家には、閉じるボタンが「暗黒期の政策を選ぶ」になる（`LuaEvents.JAC_SengokuReignPopup_Shown`・`_Closed`）。手番の終わりで閉じたときは選択画面を出さない（手番の外では送れない）
-4. **時代スコアの画面**（`UI/JAC_EraProgressPanel_Sengoku.lua`）：入口は公式のまま（画面上部の時代のボタン、`PartialScreenHooks_Expansion1.lua:40-56`）。家固有名の差し替え `JAC_PoC_BanseikiRuleset/UI/JAC_EraProgressPanel.lua` が公式の `EraProgressPanel` を読んだ後に `include("JAC_EraProgressPanel_", true)` で読む（別の差し替えを作らない。§8）。台帳がある間は、公式の `Refresh` の後で次の欄を台帳の中身に置き換える：題（「武功と改元」。英語・ロシア語は Merit and Eras・Заслуги и эпохи。枠の題は公式の「Era Progress」「Ход эпохи」程度の長さしか入らず、Merit and Era Names は切れた）、時代の名前（「弘治の世（1555年〜）」）、次の改元までのターン、今の期の武功、自分の家の年齢（帯）、他の家の年齢（公式の一覧を、その呼び出しの間だけ `Game.GetEras()` を台帳の年齢に替えて作り直す。公式の年齢は止めてあり、そのままでは全家が通常になる。家紋は公式 `CivilizationIcon.lua:42-65` が `ICON_` + 文明種別を36pxで引く。家紋の画像が BLP に無いと「?」になる：実機 ages-screens-01 は、MOD を置いた作業フォルダの `JAC_CustomCivs_Icons.blp` が家紋（#54）より前に作られていたため全家が「?」だった。`tools/civ6-autotest/scenario.py` は実行前に、有効な MOD のアイコンアトラスの画像がその MOD の BLP に全部あるかを確かめ、無ければ `python tools/jac_art/build_art.py` での作り直しを求めて止まる）、次の改元の閾値と今の見込み（チェックの印。暗黒期の家は黄金の行が英雄期になる）、下段（年齢の効果、今の期の内訳：他家の本拠の奪取・旧領の奪還・城の奪取・家を滅ぼす・同盟・技術と社会制度・史実の出来事、これまでの改元：元号と年・年齢・武功・閾値）。遅代の後は次の改元までのターンと閾値を隠す
-5. **自動テストの driver**：`scenario.py` の `POPUP_CLOSERS` に `JAC_SengokuReignPopup` の `OnClose()` を足した（選択画面より先に閉じる。閉じると選択画面が出るので、同じ回に続けて閉じる）。どちらの画面も入力を奪わないので、閉じなくても autoplay は止まらない
+4. **時代スコアの画面**（`UI/JAC_EraProgressPanel_Sengoku.lua`）：入口は公式のまま（画面上部の時代のボタン、`PartialScreenHooks_Expansion1.lua:40-56`）。家固有名の差し替え `JAC_PoC_BanseikiRuleset/UI/JAC_EraProgressPanel.lua` が公式の `EraProgressPanel` を読んだ後に `include("JAC_EraProgressPanel_", true)` で読む（別の差し替えを作らない。§8）。台帳がある間は、公式の `Refresh` の後で次の欄を台帳の中身に置き換える：題（「武功と改元」。英語・ロシア語は Merit and Eras・Заслуги и эпохи。枠の題は公式の「Era Progress」「Ход эпохи」程度の長さしか入らず、Merit and Era Names は切れた）、時代の名前（「弘治の世（1555年〜）」）、次の改元までのターン、今の期の武功、自分の家の年齢（帯）、他の家の年齢（公式の一覧を、その呼び出しの間だけ `Game.GetEras()` を台帳の年齢に替えて作り直す。公式の年齢は止めてあり、そのままでは全家が通常になる。家紋は公式 `CivilizationIcon.lua:42-65` が `ICON_` + 文明種別を36pxで引く。家紋の画像が BLP に無いと「?」になる：実機 ages-screens-01 は、MOD を置いた作業フォルダの `JAC_CustomCivs_Icons.blp` が家紋（#54）より前に作られていたため全家が「?」だった。`tools/civ6-autotest-rs/src/runner.rs` は実行前に、有効な MOD のアイコンアトラスの画像がその MOD の BLP に全部あるかを確かめ、無ければ `cargo run --locked --manifest-path tools/Cargo.toml --bin jac-build-art --` での作り直しを求めて止まる）、次の改元の閾値と今の見込み（チェックの印。暗黒期の家は黄金の行が英雄期になる）、下段（年齢の効果、今の期の内訳：他家の本拠の奪取・旧領の奪還・城の奪取・家を滅ぼす・同盟・技術と社会制度・史実の出来事、これまでの改元：元号と年・年齢・武功・閾値）。遅代の後は次の改元までのターンと閾値を隠す
+5. **自動テストの driver**：`civ6-autotest` の `POPUP_CLOSERS` に `JAC_SengokuReignPopup` の `OnClose()` を足した（選択画面より先に閉じる。閉じると選択画面が出るので、同じ回に続けて閉じる）。どちらの画面も入力を奪わないので、閉じなくても autoplay は止まらない
 6. 自動テスト用に、改元の画面は最後に出した改元を `JAC_REIGN_POPUP_LAST`（閉じた後も残る）に、時代スコアの画面は最後に出した中身を `JAC_AGES_PANEL_VIEW` に残す。`JAC_ShowReignPopup(true)` は最後の改元を出し直す
 
 実機シナリオ `sengoku-ages-screens.json`（設定は `sengoku-dark-policy.json` と同じ。15 km 史実領土版、22勢力、武田が人間。改元直前に武田の点を −1000 にするテスト用の操作で暗黒期にし、実際の ActionPanel の終了入力で改元する）。dark-policy-at-reign-08（2026-10-01）で全28手順に PASS：
@@ -162,20 +164,20 @@
 ## テスト
 
 ```powershell
-python -m unittest tests.test_sengoku_ages
+cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
 ```
 
 - データの断面（公式の Civ6 が入っている環境だけ）：§4.2 の最終値、`ModifierId` 列を持つ全表で時代スコアの Modifier の取り付けが 0 件、公式の年齢の忠誠・暗黒/黄金の政策（実在する政策に限る）・黄金時代の宣戦が無い、改元の表が JSON の47行と同じ順・年月、効果の Modifier・要件・能力が実在し、要件が読む旗は台帳が書く名前だけ、テキストが3言語そろう
-- 暗黒期の政策の選択（lupa）：家ごとの既定と表に無い文明の既定、選択で旗が切り替わり要の都市が1つ、同じ期の2回目・暗黒期でない家・表に無い政策・前の期の画面・台帳に無いプレイヤー・引数なしを捨てる、判定前の選択を捨てる、次の期にまた既定に戻り選べる、読み込み後も選択が残る。画面（UI Lua を同じ Lua に読み込む）：判定前は出ない、判定後に4行と今の政策、「選ぶ」で要求が届いて台帳と旗が変わり画面が閉じる、選んだ後は出ない（ActionPanelの実装を使い、ボタン・終了キー・Shift＋Enter・自動終了の阻止と、同期済み台帳での解除を単体・実機で検査する）、手番の前は送らず開いたまま、閉じた後は同じターンの通知から再表示、次のターン・暗黒期でない家には出ない
-- 自動テストの driver（`tools/civ6-autotest/tests/test_diplomacy.py`）：autoplay の途中で出た選択の画面を `OnClose()` で閉じて最後まで進む。改元の画面を閉じ、それで開いた選択の画面も同じ回に閉じる
-- 改元の画面と時代スコアの画面（`tests/test_sengoku_ages_screens.py`、lupa。台帳は本物のゲームプレイ Lua、画面はコンテキストごとのグローバルで読み込む）：改元の前は出ない、弘治のターンに1回だけ出て中身（見出し・年齢の絵・武功と閾値・効果）が台帳どおり、自動進行の終わりでも出る、出し直しと `OnClose()`、暗黒期の家はボタンが替わり閉じると選択画面が出る（出ている間は選択画面が出ない）、手番の終わりでは選択画面を出さない、暗黒の後の英雄期の絵、操作中のプレイヤーがいなければ出さない、台帳を書かない。時代スコアの画面：台帳の前は公式のまま、天文の期の欄（元号・次の改元まで・武功・閾値・見込み・内訳）、弘治の後（過去の改元の行、他の家の年齢を台帳から、英雄期の見出し、`Game` が元に戻る）、遅代の後は残りターンと閾値を隠す、令和の期の見込みは点によらず暗黒期、まとめた期の改元の画面は締めた期の元号を出す、台帳を書かない。時代の目盛りの説明：台帳の前は公式のまま、天文と弘治の元号と次の改元までのターン、遅代はターンなし、台帳を書かない。見込みの閾値が次の判定と一致すること（`test_sengoku_ages.py`）
+- 暗黒期の政策の選択（mlua と Lua 5.1）：家ごとの既定と表に無い文明の既定、選択で旗が切り替わり要の都市が1つ、同じ期の2回目・暗黒期でない家・表に無い政策・前の期の画面・台帳に無いプレイヤー・引数なしを捨てる、判定前の選択を捨てる、次の期にまた既定に戻り選べる、読み込み後も選択が残る。画面（UI Lua を同じ Lua に読み込む）：判定前は出ない、判定後に4行と今の政策、「選ぶ」で要求が届いて台帳と旗が変わり画面が閉じる、選んだ後は出ない（ActionPanelの実装を使い、ボタン・終了キー・Shift＋Enter・自動終了の阻止と、同期済み台帳での解除を単体・実機で検査する）、手番の前は送らず開いたまま、閉じた後は同じターンの通知から再表示、次のターン・暗黒期でない家には出ない
+- 自動テストの driver（`tools/civ6-autotest-rs/tests`）：autoplay の途中で出た選択の画面を `OnClose()` で閉じて最後まで進む。改元の画面を閉じ、それで開いた選択の画面も同じ回に閉じる
+- 改元の画面と時代スコアの画面（`tools/civ6-lua-tests-rs/tests/ages_screens.rs`、mlua と Lua 5.1。台帳は本物のゲームプレイ Lua、画面はコンテキストごとのグローバルで読み込む）：改元の前は出ない、弘治のターンに1回だけ出て中身（見出し・年齢の絵・武功と閾値・効果）が台帳どおり、自動進行の終わりでも出る、出し直しと `OnClose()`、暗黒期の家はボタンが替わり閉じると選択画面が出る（出ている間は選択画面が出ない）、手番の終わりでは選択画面を出さない、暗黒の後の英雄期の絵、操作中のプレイヤーがいなければ出さない、台帳を書かない。時代スコアの画面：台帳の前は公式のまま、天文の期の欄（元号・次の改元まで・武功・閾値・見込み・内訳）、弘治の後（過去の改元の行、他の家の年齢を台帳から、英雄期の見出し、`Game` が元に戻る）、遅代の後は残りターンと閾値を隠す、令和の期の見込みは点によらず暗黒期、まとめた期の改元の画面は締めた期の元号を出す、台帳を書かない。時代の目盛りの説明：台帳の前は公式のまま、天文と弘治の元号と次の改元までのターン、遅代はターンなし、台帳を書かない。見込みの閾値が次の判定と一致すること（`tools/civ6-lua-tests-rs/tests/ages.rs`）
 - 台帳の単体テスト（lupa。設計 §10 の 4 の一覧）：奪取の区分、キーの重複防止、同じ城を同じターンに A→B→A、A→B→A→B と奪い合ってそのつど点、閾値の式（期の長さ・都市数・過去の年齢・暗黒の切り捨てと下限 0・黄金の下限 2）と英雄期、同盟の1期1回と同じチームの 0 点、開始時の同盟（ターン32の期限切れを台帳が先・後の両方で 0 点、そのターンに外交で結び直せばどちらの順でも 2 点、プロパティが `false` の後に残る同盟も 0 点、エンジンが解いた後に外交で結べば 2 点）、出来事の点（1家1回、改元のターンのフラグは新しい期、どちらのスクリプトが先でも同じ）、読み込み後に数え直さない、占領してすぐ破却した城の点と滅亡の点、自由都市に移った城の記録が残り、元の家が取り戻すと旧領・都市国家から他家の本拠を奪うと本拠の点（主要勢力以外は点を持たず、その城の旗は 0）、占領イベントと差分で二重に数えない、移管の `CityBuilt` で点を付けない、開拓者から始めた家の本拠、プロパティを書く関数の冪等と要の都市が家ごとに1つ、改元のターンが暦どおり、通知、実機（2026-09-29）の弘治の点と都市数の22家が黄金 3・通常 19・暗黒 0 に分かれる（K=1 では全家が暗黒期）、実機 health-200-01 の6回の改元の点で、旧式が記録どおりの割合を返し、今の式ではどの期も暗黒期が 1/3 以下で通常期が最多。友好宣言（新しく結んだ組に1点ずつ・1期1回、同盟と合わせて 1 + 2 点、開始時の関係と同じチームと初期化時の組は 0 点、ゲームプレイ側に呼び出しが無ければ 0 点でログ1回）、改元の表（47行、日付の順、令和の100年後に遅代）、全5速度で改元のターンが生成スクリプトと一致し同じターンに入らない、同じターンの改元をまとめて1回だけ判定、遅代で全家が暗黒期（点 1000 でも。英雄期にならず、政策を選べ、以後は判定しない）、生成物が最新
 
 ## 実機確認（メインセッションで実行）
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-ages.json --check
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-ages.json --output tools/civ6-autotest/artifacts/sengoku-ages-01
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-ages.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-ages.json --output tools/civ6-autotest/artifacts/sengoku-ages-01
 ```
 
 実行の記録（2026-09-29〜30）：

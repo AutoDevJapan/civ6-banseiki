@@ -1,0 +1,746 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index f09865d..5c272e0 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -7,7 +7,7 @@ edition = "2021"
+ serde_json = { version = "1", features = ["preserve_order"] }
+ regex = "1"
+ chrono = "0.4"
+-windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
++windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_Security"] }
+ 
+ [[bin]]
+ name = "live_chain"
+
+diff --git a/src/chain.rs b/src/chain.rs
+index 6e73bf3..4f964c4 100644
+--- a/src/chain.rs
++++ b/src/chain.rs
+@@ -122,14 +122,9 @@ pub fn ensure_responsive_civ6(r: &mut impl Runner, p: &Paths) -> Result<&'static
+         return Ok("absent");
+     }
+     for _ in 0..3 {
+-        let out = r.run(
+-            Call::new(args(&[
+-                &p.python,
+-                &path(p.wt.join("driver/tools/civ6-autotest/tuner.py")),
+-                "states",
+-            ]))
+-            .timeout(30.0),
+-        )?;
++        let mut argv = driver::tuner(p, &p.live())?;
++        argv.push("states".into());
++        let out = r.run(Call::new(argv).timeout(30.0))?;
+         if out.code == 0 {
+             break;
+         }
+@@ -421,7 +416,8 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+             "live",
+             name,
+             scenario,
+-        ]));
++        ]))
++        .managed();
+         let mut out = r.run(command.clone())?;
+         if out.stdout.trim().lines().count() < 2 {
+             // Civ6 locks mod files while running; close it and retry the checkout once (live 2026-09-29).
+@@ -445,14 +441,13 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+         r.print(&format!("START {name} {scenario} civ6={responsive}"))?;
+         // Use the driver of the branch under test: main's driver has moved past the old driver-diplo worktree
+         // (popup closers from #65, save dismissing the tutorial advisor from #64).
+-        let mut argv = args(&[
+-            &p.python,
+-            &path(p.live().join("tools/civ6-autotest/scenario.py")),
++        let mut argv = driver::scenario(p, &p.live())?;
++        argv.extend(args(&[
+             live_json,
+             "--no-auto-restart",
+             "--output",
+             artifacts,
+-        ]);
++        ]));
+         if test_mode {
+             argv.push("--test-mode".into());
+         }
+diff --git a/src/driver.rs b/src/driver.rs
+new file mode 100644
+index 0000000..c3b4ff0
+--- /dev/null
++++ b/src/driver.rs
+@@ -0,0 +1,122 @@
++//! Build and run the driver from the checked-out branch, never an installed copy.
++use crate::*;
++use std::path::{Path, PathBuf};
++
++pub const MANIFEST: &str = "tools/civ6-autotest-rs/Cargo.toml";
++
++fn binary(worktree: &Path, name: &str) -> PathBuf {
++    let name = if cfg!(windows) {
++        format!("{name}.exe")
++    } else {
++        name.into()
++    };
++    worktree.join("tools/target/release").join(name)
++}
++
++/// Rebuild even when the previous branch left a binary in the target directory.
++pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), String> {
++    let manifest = worktree.join(MANIFEST);
++    if !manifest.is_file() {
++        return Ok(());
++    }
++    let cargo = std::env::var("CC_LIVE_CARGO").unwrap_or_else(|_| {
++        if cfg!(windows) {
++            path(p.profile.join(".cargo/bin/cargo.exe"))
++        } else {
++            "cargo".into()
++        }
++    });
++    let out = r.run(
++        Call::new(args(&[
++            &cargo,
++            "build",
++            "--locked",
++            "--release",
++            "--message-format=json",
++            "--manifest-path",
++            &path(manifest),
++            "--target-dir",
++            &path(worktree.join("tools/target")),
++            "--bin",
++            "civ6-autotest",
++            "--bin",
++            "civ6-tuner",
++        ]))
++        .timeout(1200.0)
++        .managed(),
++    )?;
++    if out.code != 0 {
++        return Err(format!(
++            "Rust driver build failed (exit {}): {} {}",
++            out.code,
++            tail(&out.stdout, 800),
++            tail(&out.stderr, 1600)
++        ));
++    }
++    for name in ["civ6-autotest", "civ6-tuner"] {
++        let expected = binary(worktree, name);
++        if !expected.is_file() {
++            return Err(format!("Rust driver build did not produce {name}"));
++        }
++        let expected = expected.canonicalize().map_err(|e| e.to_string())?;
++        let manifest = worktree
++            .join(MANIFEST)
++            .canonicalize()
++            .map_err(|e| e.to_string())?;
++        let built_here = out
++            .stdout
++            .lines()
++            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
++            .any(|message| {
++                message["reason"] == "compiler-artifact"
++                    && message["target"]["name"] == name
++                    && message["target"]["kind"]
++                        .as_array()
++                        .is_some_and(|k| k.iter().any(|v| v == "bin"))
++                    && message["manifest_path"]
++                        .as_str()
++                        .and_then(|s| Path::new(s).canonicalize().ok())
++                        .as_ref()
++                        == Some(&manifest)
++                    && message["executable"]
++                        .as_str()
++                        .and_then(|s| Path::new(s).canonicalize().ok())
++                        .as_ref()
++                        == Some(&expected)
++            });
++        if !built_here {
++            return Err(format!(
++                "Cargo did not report {name} from this branch at {}; refusing a stale executable",
++                expected.display()
++            ));
++        }
++    }
++    Ok(())
++}
++
++pub fn scenario(p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
++    command(p, worktree, "civ6-autotest", "scenario.py")
++}
++
++pub fn tuner(p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
++    command(p, worktree, "civ6-tuner", "tuner.py")
++}
++
++fn command(p: &Paths, worktree: &Path, name: &str, legacy: &str) -> Result<Vec<String>, String> {
++    if worktree.join(MANIFEST).is_file() {
++        let executable = binary(worktree, name);
++        if !executable.is_file() {
++            return Err(format!(
++                "Rust driver is present but {} has not been built",
++                executable.display()
++            ));
++        }
++        Ok(vec![path(executable)])
++    } else {
++        // Only old branches without a Rust driver retain their legacy command.
++        Ok(args(&[
++            &p.python,
++            &path(worktree.join("tools/civ6-autotest").join(legacy)),
++        ]))
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index df6b008..c9a228c 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,6 +1,8 @@
+ pub mod chain;
++pub mod driver;
+ pub mod fairness;
+ pub mod process;
++mod process_tree;
+ pub mod review;
+ pub mod ship;
+ pub use process::{Call, Output, Runner};
+diff --git a/src/process.rs b/src/process.rs
+index 11317cb..e123796 100644
+--- a/src/process.rs
++++ b/src/process.rs
+@@ -17,6 +17,7 @@ pub struct Call {
+     pub timeout: Option<f64>,
+     pub merge_stderr: bool,
+     pub creationflags: u32,
++    pub kill_tree: bool,
+ }
+ impl Call {
+     pub fn new(args: Vec<String>) -> Self {
+@@ -25,6 +26,7 @@ impl Call {
+             timeout: None,
+             merge_stderr: false,
+             creationflags: CREATE_NO_WINDOW,
++            kill_tree: false,
+         }
+     }
+     pub fn timeout(mut self, seconds: f64) -> Self {
+@@ -35,6 +37,11 @@ impl Call {
+         self.merge_stderr = true;
+         self
+     }
++    /// Contain a build and all descendants until it completes or is cancelled.
++    pub fn managed(mut self) -> Self {
++        self.kill_tree = true;
++        self
++    }
+ }
+ #[derive(Clone, Debug, Default)]
+ pub struct Output {
+@@ -121,13 +128,14 @@ impl Runner for RealRunner {
+             let (mut source, sink) = std::io::pipe().map_err(|e| e.to_string())?;
+             cmd.stdout(Stdio::from(sink.try_clone().map_err(|e| e.to_string())?))
+                 .stderr(Stdio::from(sink));
+-            let mut child = cmd.spawn().map_err(|e| e.to_string())?;
++            let (mut child, mut tree) =
++                crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
+             drop(cmd);
+             let reader = thread::spawn(move || {
+                 let mut b = Vec::new();
+                 source.read_to_end(&mut b).map(|_| b)
+             });
+-            let code = wait(&mut child, call.timeout)?;
++            let code = wait(&mut child, &mut tree, call.timeout)?;
+             let bytes = reader
+                 .join()
+                 .map_err(|_| "stdout reader failed")?
+@@ -139,7 +147,8 @@ impl Runner for RealRunner {
+             });
+         }
+         cmd.stderr(Stdio::piped());
+-        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
++        let (mut child, mut tree) =
++            crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
+         let mut stdout = child.stdout.take().unwrap();
+         let mut stderr = child.stderr.take().unwrap();
+         let out = thread::spawn(move || {
+@@ -150,7 +159,7 @@ impl Runner for RealRunner {
+             let mut b = Vec::new();
+             stderr.read_to_end(&mut b).map(|_| b)
+         });
+-        let status = wait(&mut child, call.timeout)?;
++        let status = wait(&mut child, &mut tree, call.timeout)?;
+         Ok(Output {
+             code: status,
+             stdout: decode(
+@@ -193,13 +202,19 @@ fn decode(b: &[u8]) -> String {
+         .replace("\r\n", "\n")
+         .replace('\r', "\n")
+ }
+-fn wait(child: &mut std::process::Child, timeout: Option<f64>) -> Result<i32, String> {
++fn wait(
++    child: &mut std::process::Child,
++    tree: &mut crate::process_tree::Tree,
++    timeout: Option<f64>,
++) -> Result<i32, String> {
+     let start = Instant::now();
+     loop {
+         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
++            tree.stop(child)?;
+             return Ok(s.code().unwrap_or(1));
+         }
+         if interrupted().is_err() || timeout.is_some_and(|t| start.elapsed().as_secs_f64() >= t) {
++            tree.stop(child)?;
+             let _ = child.kill();
+             let _ = child.wait();
+             return Err(if INTERRUPTED.load(Ordering::SeqCst) {
+diff --git a/src/process_tree.rs b/src/process_tree.rs
+new file mode 100644
+index 0000000..38244f4
+--- /dev/null
++++ b/src/process_tree.rs
+@@ -0,0 +1,186 @@
++//! Scope build processes to one operation, including grandchildren.
++use std::process::{Child, Command};
++
++#[cfg(windows)]
++mod platform {
++    use super::*;
++    use std::{
++        os::windows::{io::AsRawHandle, process::CommandExt},
++        time::{Duration, Instant},
++    };
++    use windows_sys::Win32::{
++        Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE},
++        System::{
++            Diagnostics::ToolHelp::{
++                CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD,
++                THREADENTRY32,
++            },
++            JobObjects::{
++                AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicAccountingInformation,
++                JobObjectExtendedLimitInformation, QueryInformationJobObject,
++                SetInformationJobObject, TerminateJobObject,
++                JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
++                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
++            },
++            Threading::{OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME},
++        },
++    };
++
++    pub struct Tree(Option<HANDLE>);
++    impl Drop for Tree {
++        fn drop(&mut self) {
++            if let Some(job) = self.0.take() {
++                unsafe {
++                    CloseHandle(job);
++                }
++            }
++        }
++    }
++    fn error() -> String {
++        std::io::Error::last_os_error().to_string()
++    }
++
++    impl Tree {
++        pub fn spawn(
++            cmd: &mut Command,
++            flags: u32,
++            managed: bool,
++        ) -> Result<(Child, Self), String> {
++            if !managed {
++                cmd.creation_flags(flags);
++                return cmd
++                    .spawn()
++                    .map(|child| (child, Self(None)))
++                    .map_err(|e| e.to_string());
++            }
++            let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
++            if job.is_null() {
++                return Err(error());
++            }
++            let tree = Self(Some(job));
++            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
++            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
++            if unsafe {
++                SetInformationJobObject(
++                    job,
++                    JobObjectExtendedLimitInformation,
++                    &limits as *const _ as *const _,
++                    std::mem::size_of_val(&limits) as u32,
++                )
++            } == 0
++            {
++                return Err(error());
++            }
++            // Assign the child before any application code can create grandchildren.
++            cmd.creation_flags(flags | CREATE_SUSPENDED);
++            let mut child = cmd.spawn().map_err(|e| e.to_string())?;
++            if unsafe { AssignProcessToJobObject(job, child.as_raw_handle() as HANDLE) } == 0 {
++                let reason = error();
++                let _ = child.kill();
++                let _ = child.wait();
++                return Err(format!("Could not contain build process: {reason}"));
++            }
++            if let Err(reason) = resume(child.id()) {
++                unsafe {
++                    TerminateJobObject(job, 1);
++                }
++                let _ = child.wait();
++                return Err(reason);
++            }
++            Ok((child, tree))
++        }
++
++        pub fn stop(&mut self, child: &mut Child) -> Result<(), String> {
++            let Some(job) = self.0 else {
++                return Ok(());
++            };
++            if unsafe { TerminateJobObject(job, 1) } == 0 {
++                return Err(error());
++            }
++            let _ = child.wait();
++            let deadline = Instant::now() + Duration::from_secs(30);
++            loop {
++                let mut accounting: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION =
++                    unsafe { std::mem::zeroed() };
++                if unsafe {
++                    QueryInformationJobObject(
++                        job,
++                        JobObjectBasicAccountingInformation,
++                        &mut accounting as *mut _ as *mut _,
++                        std::mem::size_of_val(&accounting) as u32,
++                        std::ptr::null_mut(),
++                    )
++                } == 0
++                {
++                    return Err(error());
++                }
++                if accounting.ActiveProcesses == 0 {
++                    return Ok(());
++                }
++                if Instant::now() >= deadline {
++                    return Err("Build process descendants did not exit".into());
++                }
++                std::thread::sleep(Duration::from_millis(10));
++            }
++        }
++    }
++
++    fn resume(pid: u32) -> Result<(), String> {
++        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
++        if snapshot == INVALID_HANDLE_VALUE {
++            return Err(error());
++        }
++        let mut entry: THREADENTRY32 = unsafe { std::mem::zeroed() };
++        entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
++        let mut found = unsafe { Thread32First(snapshot, &mut entry) } != 0;
++        while found {
++            if entry.th32OwnerProcessID == pid {
++                let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
++                unsafe {
++                    CloseHandle(snapshot);
++                }
++                if thread.is_null() {
++                    return Err(error());
++                }
++                let count = unsafe { ResumeThread(thread) };
++                let reason = if count == u32::MAX {
++                    Some(error())
++                } else {
++                    None
++                };
++                unsafe {
++                    CloseHandle(thread);
++                }
++                return reason.map_or(Ok(()), Err);
++            }
++            found = unsafe { Thread32Next(snapshot, &mut entry) } != 0;
++        }
++        unsafe {
++            CloseHandle(snapshot);
++        }
++        Err("Could not find the suspended build process thread".into())
++    }
++}
++
++#[cfg(not(windows))]
++mod platform {
++    use super::*;
++    pub struct Tree;
++    impl Tree {
++        pub fn spawn(cmd: &mut Command, _: u32, managed: bool) -> Result<(Child, Self), String> {
++            if managed {
++                return Err(
++                    "This Windows-only live tool requires Windows process-tree containment".into(),
++                );
++            }
++            cmd.spawn()
++                .map(|child| (child, Self))
++                .map_err(|e| e.to_string())
++        }
++        pub fn stop(&mut self, _: &mut Child) -> Result<(), String> {
++            Ok(())
++        }
++    }
++}
++
++pub use platform::Tree;
+diff --git a/src/ship.rs b/src/ship.rs
+index ab6e129..322f2a1 100644
+--- a/src/ship.rs
++++ b/src/ship.rs
+@@ -151,6 +151,7 @@ pub fn live(
+     if restart && steps.first().ok_or("scenario has no steps")?["action"] != "restart_game" {
+         steps.insert(0, json!({"action":"restart_game","timeout":420}));
+     }
++    driver::prepare(r, p, &live)?;
+     let mut run = 1;
+     while live
+         .join(format!("tools/civ6-autotest/artifacts/{name}-{run:02}"))
+diff --git a/tests/parity.rs b/tests/parity.rs
+index 9234741..578a941 100644
+--- a/tests/parity.rs
++++ b/tests/parity.rs
+@@ -652,6 +652,243 @@ fn chain_stop_on_failure_retains_exit_code_and_cleans() {
+     );
+     assert!(!f.p.here.join("civ6.lock").exists());
+ }
++
++fn rust_driver_fixture(f: &Fixture) {
++    let live = f.p.live();
++    let manifest = live.join(driver::MANIFEST);
++    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
++    fs::write(
++        manifest,
++        "[package]\nname='civ6-autotest-rs'\nversion='0.1.0'\n",
++    )
++    .unwrap();
++    for name in ["civ6-autotest", "civ6-tuner"] {
++        let name = if cfg!(windows) {
++            format!("{name}.exe")
++        } else {
++            name.into()
++        };
++        let executable = live.join("tools/target/release").join(name);
++        fs::create_dir_all(executable.parent().unwrap()).unwrap();
++        fs::write(executable, "fixture executable").unwrap();
++    }
++}
++
++fn cargo_artifacts(f: &Fixture) -> String {
++    ["civ6-autotest", "civ6-tuner"].iter().map(|name| {
++        let filename = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
++        json!({"reason":"compiler-artifact", "manifest_path":path(f.p.live().join(driver::MANIFEST)), "target":{"name":name,"kind":["bin"]}, "executable":path(f.p.live().join("tools/target/release").join(filename))}).to_string()
++    }).collect::<Vec<_>>().join("\n")
++}
++
++#[test]
++fn rust_driver_is_rebuilt_from_checked_out_branch_and_never_uses_python() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let artifacts = cargo_artifacts(&f);
++    let mut r = Fake::outputs(&[(&artifacts, "", 0), (&artifacts, "", 0)]);
++    driver::prepare(&mut r, &f.p, &f.p.live()).unwrap();
++    driver::prepare(&mut r, &f.p, &f.p.live()).unwrap();
++    assert_eq!(r.calls.len(), 2);
++    for call in &r.calls {
++        assert!(call
++            .args
++            .windows(2)
++            .any(|a| a == ["--manifest-path", &path(f.p.live().join(driver::MANIFEST))]));
++        assert!(call
++            .args
++            .windows(2)
++            .any(|a| a == ["--target-dir", &path(f.p.live().join("tools/target"))]));
++        assert!(call
++            .args
++            .windows(2)
++            .any(|a| a == ["--bin", "civ6-autotest"]));
++        assert!(call.args.windows(2).any(|a| a == ["--bin", "civ6-tuner"]));
++        assert!(call.args.contains(&"--locked".into()));
++        assert!(call.kill_tree);
++        assert!(call.args.contains(&"--message-format=json".into()));
++    }
++    let scenario = driver::scenario(&f.p, &f.p.live()).unwrap();
++    assert_eq!(scenario.len(), 1);
++    assert!(scenario[0].contains("tools"));
++    assert!(!scenario[0].contains("fixture-python"));
++    let tuner = driver::tuner(&f.p, &f.p.live()).unwrap();
++    assert_eq!(tuner.len(), 1);
++    assert!(tuner[0].contains("civ6-tuner"));
++}
++
++#[test]
++fn rust_driver_build_failure_keeps_legacy_driver_unused_even_with_stale_binary() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let mut r = Fake::outputs(&[("compiler output", "compile error", 42)]);
++    let error = driver::prepare(&mut r, &f.p, &f.p.live()).unwrap_err();
++    assert!(error.contains("42"));
++    assert!(error.contains("compile error"));
++    assert_eq!(r.calls.len(), 1);
++    assert_ne!(r.calls[0].args[0], "fixture-python");
++}
++
++#[test]
++fn rust_driver_missing_binary_is_an_error_instead_of_a_legacy_fallback() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let executable = driver::scenario(&f.p, &f.p.live()).unwrap().remove(0);
++    fs::remove_file(executable).unwrap();
++    assert!(driver::scenario(&f.p, &f.p.live())
++        .unwrap_err()
++        .contains("not been built"));
++    assert!(driver::prepare(&mut Fake::success(), &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("did not produce"));
++}
++
++#[test]
++fn branches_without_rust_driver_keep_their_own_legacy_commands() {
++    let f = Fixture::new();
++    let mut r = Fake::success();
++    driver::prepare(&mut r, &f.p, &f.p.live()).unwrap();
++    assert!(r.calls.is_empty());
++    assert_eq!(
++        driver::scenario(&f.p, &f.p.live()).unwrap(),
++        args(&[
++            "fixture-python",
++            &path(f.p.live().join("tools/civ6-autotest/scenario.py"))
++        ])
++    );
++    assert_eq!(
++        driver::tuner(&f.p, &f.p.live()).unwrap(),
++        args(&[
++            "fixture-python",
++            &path(f.p.live().join("tools/civ6-autotest/tuner.py"))
++        ])
++    );
++}
++
++#[test]
++fn chain_passes_legacy_flags_and_artifact_paths_to_rust_driver() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let mut r = ready_chain(&f, 0);
++    assert_eq!(
++        cli(&mut r, &f.p, &["name:s.json".into(), "--test-mode".into()]).unwrap(),
++        0
++    );
++    let expected = driver::scenario(&f.p, &f.p.live()).unwrap().remove(0);
++    let scenario = r.calls.iter().find(|c| c.args[0] == expected).unwrap();
++    assert_eq!(
++        scenario.args,
++        vec![
++            expected,
++            path(f.root.join("scenario.json")),
++            "--no-auto-restart".into(),
++            "--output".into(),
++            path(f.root.join("artifacts")),
++            "--test-mode".into()
++        ]
++    );
++    assert!(scenario.merge_stderr);
++    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
++    assert_eq!(
++        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
++        4
++    );
++    assert!(!f.p.here.join("civ6.lock").exists());
++}
++
++#[test]
++fn responsive_game_probe_uses_branch_rust_tuner() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let mut r = Fake::outputs(&[("\"CivilizationVI.exe\",\"11\"", "", 0)]);
++    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
++    let tuner = driver::tuner(&f.p, &f.p.live()).unwrap().remove(0);
++    assert_eq!(r.calls[1].args, vec![tuner, "states".into()]);
++    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
++    assert_eq!(r.sleeps, vec![45.0]);
++}
++
++#[test]
++fn build_in_another_target_directory_rejects_stale_driver_files() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    let stale_message = cargo_artifacts(&f).replace("release", "configured-target/release");
++    let mut r = Fake::outputs(&[(&stale_message, "", 0)]);
++    assert!(driver::prepare(&mut r, &f.p, &f.p.live())
++        .unwrap_err()
++        .contains("refusing a stale executable"));
++}
++
++#[cfg(windows)]
++#[test]
++fn cancelled_build_waits_for_real_grandchildren_to_exit() {
++    use windows_sys::Win32::{
++        Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER},
++        System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
++    };
++    let f = Fixture::new();
++    let marker = f.root.join("grandchild.pid");
++    let escaped = path(&marker).replace('\'', "''");
++    let script = format!("$info = New-Object System.Diagnostics.ProcessStartInfo; $info.FileName = 'cmd.exe'; $info.Arguments = '/d /c ping 127.0.0.1 -n 31 > nul'; $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $child = [System.Diagnostics.Process]::Start($info); [System.IO.File]::WriteAllText('{escaped}', [string]$child.Id); Start-Sleep -Seconds 30");
++    let result = process::RealRunner.run(
++        Call::new(args(&["powershell", "-NoProfile", "-Command", &script]))
++            .managed()
++            .timeout(5.0),
++    );
++    assert!(result.unwrap_err().contains("timed out"));
++    let pid: u32 = read_text(marker).unwrap().parse().unwrap();
++    unsafe {
++        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
++        if handle.is_null() {
++            assert_eq!(GetLastError(), ERROR_INVALID_PARAMETER);
++        } else {
++            let mut code = 259;
++            let success = GetExitCodeProcess(handle, &mut code);
++            CloseHandle(handle);
++            assert_ne!(success, 0);
++            assert_ne!(code, 259, "Grandchild survived the cancelled build");
++        }
++    }
++}
++
++#[test]
++fn ship_builds_checked_out_rust_driver_before_publishing_scenario_and_artifacts() {
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    f.json(
++        "wt/live/tools/civ6-autotest/scenarios/s.json",
++        json!({"name":"s","steps":[{"action":"pause","seconds":1}]}),
++    );
++    let artifacts = cargo_artifacts(&f);
++    let mut r = Fake::outputs(&[("", "", 0), ("", "", 0), ("", "", 0), (&artifacts, "", 0)]);
++    let (scenario, _) = ship::live(&mut r, &f.p, "name", "s.json", true).unwrap();
++    assert_eq!(&r.calls[0].args[3..5], &["fetch", "-q"]);
++    assert_eq!(&r.calls[1].args[3..5], &["checkout", "-q"]);
++    assert_eq!(&r.calls[2].args[3..5], &["merge", "-q"]);
++    assert!(r.calls[3].args.contains(&"build".into()));
++    assert!(r.calls[3].kill_tree);
++    assert_eq!(r.printed.len(), 2);
++    assert!(std::path::Path::new(&scenario).is_file());
++
++    let f = Fixture::new();
++    rust_driver_fixture(&f);
++    f.json(
++        "wt/live/tools/civ6-autotest/scenarios/s.json",
++        json!({"name":"s","steps":[{"action":"pause","seconds":1}]}),
++    );
++    let mut r = Fake::outputs(&[
++        ("", "", 0),
++        ("", "", 0),
++        ("", "", 0),
++        ("", "build failed", 1),
++    ]);
++    assert!(ship::live(&mut r, &f.p, "name", "s.json", true)
++        .unwrap_err()
++        .contains("build failed"));
++    assert!(r.printed.is_empty());
++    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
++    assert!(!f.p.temp.join("live_name_01.json").exists());
++}
+ #[test]
+ fn preparation_failure_retries_once_and_stops() {
+     let f = Fixture::new();

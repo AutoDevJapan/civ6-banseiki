@@ -1,0 +1,97 @@
+<GameInfo>
+    <Types>
+        <Row Type="GOODYHUT_DIPLOMACY" Kind="KIND_GOODY_HUT"/>
+    </Types>
+    <GoodyHuts>
+        <Row GoodyHutType="GOODYHUT_DIPLOMACY" Weight="100"/>
+    </GoodyHuts>
+    <GoodyHutSubTypes>
+        <!-- Diplomacy-->
+        <Row GoodyHut="GOODYHUT_DIPLOMACY" SubTypeGoodyHut="GOODYHUT_GOVERNOR_TITLE" Description="LOC_GOODYHUT_DIPLOMACY_GOVERNOR_TITLE_DESCRIPTION" Weight="15" Turn="30" ModifierID="GOODY_DIPLOMACY_GRANT_GOVERNOR_TITLE"/>
+        <Row GoodyHut="GOODYHUT_DIPLOMACY" SubTypeGoodyHut="GOODYHUT_ENVOY" Description="LOC_GOODYHUT_DIPLOMACY_ENVOY_DESCRIPTION" Weight="40" ModifierID="GOODY_DIPLOMACY_GRANT_ENVOY"/>
+        <Row GoodyHut="GOODYHUT_DIPLOMACY" SubTypeGoodyHut="GOODYHUT_FAVOR" Description="LOC_GOODYHUT_DIPLOMACY_FAVOR_DESCRIPTION" Weight="45" Turn="30" ModifierID="GOODY_DIPLOMACY_GRANT_FAVOR"/>
+        <!-- Military-->
+        <Row GoodyHut="GOODYHUT_MILITARY" SubTypeGoodyHut="GOODYHUT_RESOURCES" Description="LOC_GOODYHUT_MILITARY_RESOURCES_DESCRIPTION" Weight="20" ModifierID="GOODY_MILITARY_ADJUST_STRATEGIC_RESOURCES"/>
+        <Update>
+            <Where SubTypeGoodyHut="GOODYHUT_GRANT_SCOUT"/>
+            <Set>
+                <Weight>35</Weight>
+            </Set>
+        </Update>
+        <Update>
+            <Where SubTypeGoodyHut="GOODYHUT_GRANT_EXPERIENCE"/>
+            <Set>
+                <Weight>20</Weight>
+            </Set>
+        </Update>
+        <Update>
+            <Where SubTypeGoodyHut="GOODYHUT_HEAL"/>
+            <Set>
+                <Weight>25</Weight>
+            </Set>
+        </Update>
+    </GoodyHutSubTypes>
+    <GoodyHutSubTypes_XP2>
+        <Row SubTypeGoodyHut="GOODYHUT_LARGE_GOLD"/>
+        <Row SubTypeGoodyHut="GOODYHUT_MEDIUM_GOLD"/>
+        <Row SubTypeGoodyHut="GOODYHUT_SMALL_GOLD"/>
+        <Row SubTypeGoodyHut="GOODYHUT_LARGE_FAITH"/>
+        <Row SubTypeGoodyHut="GOODYHUT_MEDIUM_FAITH"/>
+        <Row SubTypeGoodyHut="GOODYHUT_SMALL_FAITH"/>
+        <Row SubTypeGoodyHut="GOODYHUT_ENVOY" CityState="true"/>
+        <Row SubTypeGoodyHut="GOODYHUT_RESOURCES" StrategicResources="true"/>
+    </GoodyHutSubTypes_XP2>
+    <Modifiers>
+        <!-- Diplomacy-->
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_GOVERNOR_TITLE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_GOVERNOR_POINTS</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_ENVOY</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_GRANT_INFLUENCE_TOKEN</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADD_FAVOR</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+        <!-- Military-->
+        <Row>
+            <ModifierId>GOODY_MILITARY_ADJUST_STRATEGIC_RESOURCES</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADJUST_MOST_ADVANCED_STRATEGIC_RESOURCE_COUNT</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <!-- Diplomacy-->
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_GOVERNOR_TITLE</ModifierId>
+            <Name>Delta</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_ENVOY</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>GOODY_DIPLOMACY_GRANT_FAVOR</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+        </Row>
+        <!-- Military-->
+        <Row>
+            <ModifierId>GOODY_MILITARY_ADJUST_STRATEGIC_RESOURCES</ModifierId>
+            <Name>Amount</Name>
+            <Value>20</Value>
+            <Type>ScaleByGameSpeed</Type>
+        </Row>
+    </ModifierArguments>
+</GameInfo>

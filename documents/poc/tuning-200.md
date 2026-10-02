@@ -12,8 +12,8 @@
 - 実行は共通ロックを通す。一度きりの実行記録は元の作業フォルダの `.tuning-runtime/` に保存し、Gitには入れない。
 
 ```powershell
-python D:/CC/Tools/civ6-live/live_chain.py feat/tuning-200:japan-15km-200turn-tuning.json --stop-on-failure
-python tools/civ6-autotest/tuning_report.py ../live/tools/civ6-autotest/artifacts/tuning-200-03 --json documents/poc/data/tuning-200-03.json
+D:/CC/Tools/civ6-live/live_chain.exe feat/tuning-200:japan-15km-200turn-tuning.json --stop-on-failure
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-tuning-report -- ../live/tools/civ6-autotest/artifacts/tuning-200-03 --json documents/poc/data/tuning-200-03.json
 ```
 
 生の成果物は `../live/tools/civ6-autotest/artifacts/tuning-200-03/` と隣の `.log`。[集計JSON](data/tuning-200-03.json)には年齢の全129件、5回の観測、裁定の件数、ログ内の位置とSHA-256を残す。生のログを丸ごと公開しない。

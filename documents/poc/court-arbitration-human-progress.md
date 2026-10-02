@@ -20,7 +20,7 @@ AI の請求は未実装のため、請求と費用の控除はテスト用に�
 
 ## 実機結果
 
-`python D:/CC/Tools/civ6-live/live_chain.py feat/arbitration-ui-live:court-arbitration-human.json --test-mode` で実行した。今回の実機シナリオは4回。01と03の最初の起動は本体が現れず停止し、同じ実行の起動再試行で続行した。起動だけの失敗記録も `-try1` フォルダに保存した。
+`D:/CC/Tools/civ6-live/live_chain.exe feat/arbitration-ui-live:court-arbitration-human.json --test-mode` で実行した。今回の実機シナリオは4回。01と03の最初の起動は本体が現れず停止し、同じ実行の起動再試行で続行した。起動だけの失敗記録も `-try1` フォルダに保存した。
 
 成果物は共有の実機用 worktree の `tools/civ6-autotest/artifacts/<実行 ID>/`。各実行の `steps.jsonl`、`result.json`、`Lua.log`、`Modding.log`、画像を残している。
 

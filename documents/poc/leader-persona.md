@@ -227,7 +227,7 @@ G/は下のインストールディレクトリ。
 実機検証は次のシナリオで行う。最新結果は末尾の再開記録に記載する。
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/leader-persona-15km.json
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/leader-persona-15km.json
 ```
 
 北条を人間、伊達・織田・上杉憲政を含む21人をAIにする日本15 kmの史実領土開始。110ステップ、実際に進めるのは14ターン（伊達の定着5＋功績の獲得4＋転任先での定着5）。end_turnのturnsを使い、複数ターンでも共通の期限内で順に終える。起動・新規ゲーム・保存と読込は実機ドライバーが行う。
@@ -281,7 +281,7 @@ tests/test_leader_persona.pyは公式GSデータと戦国ツリー削除後のSQ
 再開コマンド（先にpushする。実行上限に達したら結果をPRへ記録し、次の担当が続行する）:
 
 ```powershell
-python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json --stop-on-failure
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-15km.json --stop-on-failure
 ```
 
 成果の場所は `civ6-banseiki-wt/live/tools/civ6-autotest/artifacts/leaderperson-01`、`leaderperson-02`、`leaderperson-03`。不具合が残る間はこの作業フォルダを保持する。追加検証の回数や再試行は担当が判断し、オーナーの許可待ちにはしない。
@@ -332,7 +332,7 @@ leaderperson-06は人物加入の途中で5秒以内に応答がなくなり、�
 成果は共有live作業フォルダのtools/civ6-autotest/artifacts/leaderperson-04〜07。各フォルダのLua.log、Modding.log、steps.jsonl、隣の.logに保存した。再開は先にpushし、共通ロックを使う次のコマンドで行う。
 
 ```powershell
-python D:/CC/Tools/civ6-live/live_chain.py leaderperson:leader-persona-15km.json --stop-on-failure --test-mode
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-15km.json --stop-on-failure --test-mode
 ```
 
 オーナーの判断待ちはない。前回の追加検証の許可依頼は閉じ、共有ToDo #150は継続作業として残す。
@@ -583,4 +583,16 @@ UI側で取得する本体状態は、従来の `CanAppoint()` から `CanAppoin
 
 同等代替の先行診断は別ブランチprobe/pr86-title-proxyで作成中であり、このPRの機能実装へは取り込んでいない。人物を標準候補から外し、都市に配置できない支払い専用総督の公式任命・昇進で称号を消費する候補である。公式MODIFIER_PLAYER_ADJUST_PROPERTYを各段階の取得証跡に使い、Gameplayだけで支払いを人物へ直列に割り当てる候補を作った。モデル上の費用1/2/3・途中再開・二重割当防止は実Lua10検査に成功したが、AIの無断支出とネイティブ取得証跡の実機挙動は未確認である。取得証跡、配置、忠誠、スパイによる活動不能まで同等性を確認してから採否を決める。
 
-進行中の実機資源はPR87が保有しているため、予約を維持してコード・検査・レビューを継続する。旧担当の実機4回上限は今回へ適用しない。稼働中のCiv6やジョブを停止せず、他担当のゲームと作業フォルダーは変更しない。共有ToDo324/407を主項目とし、古い150/218/234/244/262の重複する追跡を集約した。未達の実機確認は消していない。
+実機の排他は live_chain.exe で取得する。各テスト後に、その実行器が Civ6 を終了する。新しい担当は実機を最大4回実行し、上限では未完了のシナリオと理由を PR に記録する。共有ToDo324/407を主項目とし、古い150/218/234/244/262の重複する追跡を集約した。未達の実機確認は消していない。
+
+## Rust の検査基盤との統合（2026-10-02）
+
+main の Rust 移行を統合した。Python の検査・実行器は復活させず、人物化と境界診断の検査を Rust と Lua fixture へ移した。元の検査名と Rust 側の検査の対応を固定一覧で照合する。以前の Python 検査の件数は過去の結果であり、今回の Rust 検査の合格とは区別する。
+
+読込後はメニューと助言画面を閉じ、ゲーム側の処理が終わってから操作を再開する。Lua の待ち時間を指定する処理と、XML の InsertOrIgnore を読み込む監査も Rust へ移す。人物化と境界診断を MOD・シナリオの固定一覧へ追加する。
+
+境界診断を実行した後でも、人物化の通し・開始比較・任命資格診断には検証用 MOD が混入しないよう、境界診断用 MOD を明示的に無効化する。都市喪失とスパイの独立診断では、その MOD を有効にする。main で追加された吸収 MOD も、新規ゲームを開始する5本すべてで明示的に無効化する。
+
+実機は live_chain.exe が排他を取得し、push したブランチの Rust 実行器をビルドして実行する。各テスト後に Civ6 を終了する。AI の未加入任命はまだ未解決であり、今回の移行や以前の 112/113 手順の成功から解決を推定しない。実行結果と残るシナリオは PR #86 のコメントへ記録する。
+
+統合後の指定検査は1325件成功し、失敗0件・除外0件だった。元の119件と固定対応表の検査を含む。6本のシナリオの --check と整形・差分検査も成功した。実機の結果はこの自動検査と区別し、PR #86 に記録する。

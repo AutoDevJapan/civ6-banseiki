@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="IMPROVEMENT_FISHERY" Kind="KIND_IMPROVEMENT"/>
+        <Row Type="IMPROVEMENT_CITY_PARK" Kind="KIND_IMPROVEMENT"/>
+    </Types>
+    <Improvements>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" Name="LOC_IMPROVEMENT_FISHERY_NAME" Description="LOC_IMPROVEMENT_FISHERY_DESCRIPTION" Icon="ICON_IMPROVEMENT_FISHERY" PlunderType="PLUNDER_HEAL" PlunderAmount="50" Buildable="true" PrereqTech="TECH_SAILING" Domain="DOMAIN_SEA" TraitType="TRAIT_CIVILIZATION_NO_PLAYER" Housing="1" TilesRequired="2"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" Name="LOC_IMPROVEMENT_CITY_PARK_NAME" Description="LOC_IMPROVEMENT_CITY_PARK_DESCRIPTION" Icon="ICON_IMPROVEMENT_CITY_PARK" PlunderType="PLUNDER_HEAL" PlunderAmount="50" Buildable="true" PrereqCivic="CIVIC_GAMES_RECREATION" TraitType="TRAIT_CIVILIZATION_NO_PLAYER" Appeal="2" SameAdjacentValid="false"/>
+    </Improvements>
+    <Improvement_Adjacencies>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" YieldChangeId="Fishery_SeaResourceAdjacency"/>
+    </Improvement_Adjacencies>
+    <Improvement_ValidResources>
+        <Row ImprovementType="IMPROVEMENT_FISHING_BOATS" ResourceType="RESOURCE_AMBER"/>
+        <Row ImprovementType="IMPROVEMENT_FISHING_BOATS" ResourceType="RESOURCE_TURTLES" MustRemoveFeature="false"/>
+        <Row ImprovementType="IMPROVEMENT_MINE" ResourceType="RESOURCE_AMBER" MustRemoveFeature="false"/>
+        <Row ImprovementType="IMPROVEMENT_PLANTATION" ResourceType="RESOURCE_OLIVES" MustRemoveFeature="false"/>
+        <Update>
+            <Where ImprovementType="IMPROVEMENT_FISHING_BOATS" ResourceType="RESOURCE_FISH"/>
+            <Set>
+                <MustRemoveFeature>false</MustRemoveFeature>
+            </Set>
+        </Update>
+    </Improvement_ValidResources>
+    <Improvement_ValidTerrains>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" TerrainType="TERRAIN_COAST"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_DESERT"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_TUNDRA"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_PLAINS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_GRASS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_SNOW"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_DESERT_HILLS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_TUNDRA_HILLS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_PLAINS_HILLS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_GRASS_HILLS"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TerrainType="TERRAIN_SNOW_HILLS"/>
+    </Improvement_ValidTerrains>
+    <Improvement_ValidBuildUnits>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" UnitType="UNIT_BUILDER"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" UnitType="UNIT_BUILDER"/>
+    </Improvement_ValidBuildUnits>
+    <Improvement_YieldChanges>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" YieldType="YIELD_FOOD" YieldChange="1"/>
+        <Row ImprovementType="IMPROVEMENT_FISHERY" YieldType="YIELD_PRODUCTION" YieldChange="0"/>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" YieldType="YIELD_CULTURE" YieldChange="1"/>
+    </Improvement_YieldChanges>
+    <Improvement_Tourism>
+        <Row ImprovementType="IMPROVEMENT_CITY_PARK" TourismSource="TOURISMSOURCE_CULTURE" PrereqTech="TECH_FLIGHT" ScalingFactor="100"/>
+    </Improvement_Tourism>
+    <Adjacency_YieldChanges>
+        <Row ID="Fishery_SeaResourceAdjacency" Description="Placeholder" YieldType="YIELD_FOOD" YieldChange="1" TilesRequired="1" AdjacentSeaResource="true"/>
+    </Adjacency_YieldChanges>
+    <Modifiers>
+        <Row>
+            <ModifierId>CITY_PARK_WATER_AMENITY</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_CITY_ADJUST_IMPROVEMENT_AMENITY</ModifierType>
+            <SubjectRequirementSetId>ADJACENT_TO_WATER_REQUIREMENTS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>FISHERY_GOVERNOR_PRODUCTION</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_PLOT_ADJUST_PLOT_YIELDS</ModifierType>
+            <SubjectRequirementSetId>CITY_HAS_GOVERNOR_PROMOTION_AQUACULTURE</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>CITY_PARK_GOVERNOR_CULTURE</ModifierId>
+            <ModifierType>MODIFIER_SINGLE_PLOT_ADJUST_PLOT_YIELDS</ModifierType>
+            <SubjectRequirementSetId>CITY_HAS_GOVERNOR_PROMOTION_PARKS_RECREATION</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>FISHERY_GOVERNOR_PRODUCTION</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_PRODUCTION</Value>
+        </Row>
+        <Row>
+            <ModifierId>FISHERY_GOVERNOR_PRODUCTION</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <ModifierId>CITY_PARK_GOVERNOR_CULTURE</ModifierId>
+            <Name>YieldType</Name>
+            <Value>YIELD_CULTURE</Value>
+        </Row>
+        <Row>
+            <ModifierId>CITY_PARK_GOVERNOR_CULTURE</ModifierId>
+            <Name>Amount</Name>
+            <Value>3</Value>
+        </Row>
+        <Row>
+            <ModifierId>CITY_PARK_WATER_AMENITY</ModifierId>
+            <Name>Amount</Name>
+            <Value>1</Value>
+        </Row>
+    </ModifierArguments>
+    <ImprovementModifiers>
+        <Row>
+            <ImprovementType>IMPROVEMENT_FISHERY</ImprovementType>
+            <ModifierId>FISHERY_GOVERNOR_PRODUCTION</ModifierId>
+        </Row>
+        <Row>
+            <ImprovementType>IMPROVEMENT_CITY_PARK</ImprovementType>
+            <ModifierId>CITY_PARK_GOVERNOR_CULTURE</ModifierId>
+        </Row>
+        <Row>
+            <ImprovementType>IMPROVEMENT_CITY_PARK</ImprovementType>
+            <ModifierId>CITY_PARK_WATER_AMENITY</ModifierId>
+        </Row>
+    </ImprovementModifiers>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_GLOBALIZATION_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CIVIL_SERVICE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>ADJACENT_TO_WATER_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ANY</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_GLOBALIZATION</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_CIVIC</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_CIVIL_SERVICE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_CIVIC</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_COAST</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_ADJACENT_TO_COAST</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_LAKE</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_ADJACENT_TO_LAKE</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_GLOBALIZATION</RequirementId>
+            <Name>CivicType</Name>
+            <Value>CIVIC_GLOBALIZATION</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_CIVIL_SERVICE</RequirementId>
+            <Name>CivicType</Name>
+            <Value>CIVIC_CIVIL_SERVICE</Value>
+        </Row>
+    </RequirementArguments>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_GLOBALIZATION_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_HAS_GLOBALIZATION</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CIVIL_SERVICE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_HAS_CIVIL_SERVICE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>ADJACENT_TO_WATER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_COAST</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>ADJACENT_TO_WATER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_LAKE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>ADJACENT_TO_WATER_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_RIVER</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+</GameInfo>

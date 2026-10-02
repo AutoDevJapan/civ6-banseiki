@@ -1,6 +1,14 @@
 # PoC の検証記録
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状態を明記する。検証用の MOD は `poc/` にあり、本番の MOD（SSOT 15.1 の構成）とは分けている。
+
+## JAC_PoC_Absorption：勢力吸収（束2）
+
+同じ候補402bb309で、日本吸収absorb-48は133/133、英雄再召喚absorb-49は102/102、宣教師診断absorb-50は14/14手順と各3件のログ判定に成功した。全資産の移管、生存中と同時代の拒否、次時代の公式購入と人物の再結合、5件の保存復元、宣教師の2生成経路と1実手番後の生存を確認した。
+
+日本の元127受入に準備5手順を加え、全3本に標準の再起動1手順を加えた。Rust製ドライバーで検証し、単体検査61件は省略0件で成功した。詳細と残る検証範囲は [吸収PoC](absorption.md)、[Rust検証ドライバー](autotest-native.md)、[再開記録](../worklogs/pr87-recovery-20261002.md) に記録する。検証モードで日本74・英雄62ターンを省略しており、連続性能やマルチプレイの成功とは扱わない。
 
 ## JAC_PoC_Assassin：暗殺者（束2）
 
@@ -31,6 +39,21 @@ SSOT 16.1 の PoC の手順と結果。実機検証待ちの項目もその状�
 ```powershell
 New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments'))\My Games\Sid Meier's Civilization VI\Mods\JAC_PoC_Bundle0" -Target "<リポジトリ>\poc\JAC_PoC_Bundle0"
 ```
+
+## JAC_PoC_BanseikiRuleset：英傑武将の本体
+
+万世紀では公式の「英雄と伝説」モードを必須とし、公式の既存英雄12種は発見・召喚・購入の対象から外す。仕組みの検証には、独自の「無名の英傑（歩兵）」「無名の英傑（騎兵）」を使う。実装は `Data/JAC_Banseiki_Heroes.sql` にあり、適用条件は万世紀ルールセットかつ英雄モード有効の場合だけである。
+
+この2種は吸収・寿命・再召喚を検証するための定義であり、歴史上の武将の名簿や固有能力、効果量の最終仕様を決めない。吸収と自害の記録は [吸収PoC](absorption.md) で検証する。旧英雄を含む過去のセーブへの移行は未検証なので、新規ゲームから試す。同じ定義での保存・読み込みは吸収シナリオの検査対象である。
+
+### 画像と外見
+
+| 用途 | 作品 | 作者と年 | 所蔵と出典 | ライセンス | 元ファイル |
+|---|---|---|---|---|---|
+| 英傑武将の地図上の外見 | Civ6の通常の戦士・騎乗兵 | Firaxis Games、2016 | 導入済みCiv6の `Base/ArtDefs/Units.artdef` の戦士・騎乗兵の定義 | ゲーム本体の素材。モデル・画像の実体は複製せず、既存素材を参照する定義だけを収録 | `ArtDefs/Units.artdef` の独自Unit名2件 |
+| 英傑武将のアイコン・肖像 | Civ6の通常の戦士・騎乗兵のアイコン | Firaxis Games、2016 | `Base/Assets/UI/Icons/Icons_Units.xml` の `ICON_UNIT_WARRIOR` と `ICON_UNIT_HORSEMAN` | ゲーム本体の素材。画像画素を複製せず、既存アトラスの位置を参照 | `Data/JAC_Banseiki_Hero_Icons.sql` |
+
+寿命・所有者・人物記録の保存を先に検証するため、PoCでは通常部隊の外見を共用する。公式英雄のキャラクターモデルや肖像は流用しない。独自の武将の外見は、人物の顔ぶれが決まってから制作する。
 
 ## JAC_PoC_JapanMapScale：1534年開始状態（現行）
 
@@ -69,9 +92,9 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 
 英語 UI の実機画面（`leader-portraits` シナリオ、2026-09-29）で、日本マップの都市名の一部が □□□ の豆腐文字になった。首都（NAGOYA・OKAZAKI など）は正常だった。原因は、史実領土版の地図（20 km・15 km）の `Cities.Name` に首都以外の34都市の日本語名をそのまま書き込んでいたこと。Civ6 は LOC タグでない地図の都市名を翻訳せずにそのまま表示し、英語・ロシア語のフォントには漢字・かなのグリフがない。首都22件は `LOC_JAC_1534_CAPITAL_<勢力>` を使っていたため正常だった。表示名の上書き（`JAC_CivNameOverride.lua`）は武田の家名だけを扱い、都市名には関係しない。
 
-修正として、全56都市の `Cities.Name` を LOC タグにした。首都は従来どおり `LOC_JAC_1534_CAPITAL_<勢力>`、それ以外は `LOC_JAC_1534_CITY_<城ID>`（城 ID は `japan-1534-start.json`）。日英露の行は `write_custom_civs.py` が `JAC_Japan1534_Text.xml` に書き出す。英語はヘボン式の城名（例：桑実寺正覚院 → Kuwanomi-dera、後瀬山城 → Nochiseyama）、ロシア語はポリワノフ式のキリル文字で、首都のロシア語名もキリル文字にそろえた。訳名の表は `generate.py` の `CASTLE_NAMES` で、草案の城の構成が変わると生成時に止まる。既存の地図2枚は地形を作り直さず、`manifest.json` の都市（位置・所有者）に対して `Cities.Name` だけを書き換えた（生成器の出力と同じ値）。
+修正として、全56都市の `Cities.Name` を LOC タグにした。首都は従来どおり `LOC_JAC_1534_CAPITAL_<勢力>`、それ以外は `LOC_JAC_1534_CITY_<城ID>`（城 ID は `japan-1534-start.json`）。日英露の行は `tools/civ6-assets-rs/src/write_custom_civs.rs` が `JAC_Japan1534_Text.xml` に書き出す。英語はヘボン式の城名（例：桑実寺正覚院 → Kuwanomi-dera、後瀬山城 → Nochiseyama）、ロシア語はポリワノフ式のキリル文字で、首都のロシア語名もキリル文字にそろえた。訳名の表は `tools/civ6-assets-rs/src/generate.rs` の `CASTLE_NAMES` で、草案の城の構成が変わると生成時に止まる。既存の地図2枚は地形を作り直さず、`manifest.json` の都市（位置・所有者）に対して `Cities.Name` だけを書き換えた（生成器の出力と同じ値）。
 
-同種の問題（指導者名・勢力名・家名・手帳の文言）も洗い出したが、地図の都市名以外に LOC タグでない日本語の表示名はなかった。`tests/test_localized_names.py` は、使われている `LOC_JAC_*` タグすべてに en_US・ja_JP・ru_RU の行があること、ja_JP 以外の行と地図・SQL・Lua・XML（ja_JP の行と modinfo の `<ja_JP>` を除く）に漢字・かながないこと、地図の都市名がすべて LOC タグであることを検査する。実機では `japan-city-names.json` が15 km史実領土版で全56都市のバナー文字列を読み、日本語以外の UI では漢字・かなを含まないこと、LOC タグのまま表示されていないことを確かめる。2026-09-30 に英語 UI で再実機（`city-name-glyphs-02`）を実行し、合格した。全56都市のバナーがローマ字の訳名で表示され、漢字・かなは含まれなかった。残る確認項目は、ロシア語 UI と日本語 UI での実機確認。都市ごとに期待どおりの名前が付いているかの照合は、生成器とテストによる静的な検査だけで確かめている。
+同種の問題（指導者名・勢力名・家名・手帳の文言）も洗い出したが、地図の都市名以外に LOC タグでない日本語の表示名はなかった。`tools/civ6-data-rs/src/data_tests.rs` は、使われている `LOC_JAC_*` タグすべてに en_US・ja_JP・ru_RU の行があること、ja_JP 以外の行と地図・SQL・Lua・XML（ja_JP の行と modinfo の `<ja_JP>` を除く）に漢字・かながないこと、地図の都市名がすべて LOC タグであることを検査する。実機では `japan-city-names.json` が15 km史実領土版で全56都市のバナー文字列を読み、日本語以外の UI では漢字・かなを含まないこと、LOC タグのまま表示されていないことを確かめる。2026-09-30 に英語 UI で再実機（`city-name-glyphs-02`）を実行し、合格した。全56都市のバナーがローマ字の訳名で表示され、漢字・かなは含まれなかった。残る確認項目は、ロシア語 UI と日本語 UI での実機確認。都市ごとに期待どおりの名前が付いているかの照合は、生成器とテストによる静的な検査だけで確かめている。
 
 ### 史実領土版の実機結果と都市消失の修正（2026-09-29）
 
@@ -114,7 +137,7 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 
 `poc/` の MOD のうち、この設定に当てはまるものをすべて有効にして（万世紀・CustomCivs・GrowthUI・戦国ツリー・JapanMapScale・HistoricalEvents・CourtArbitration。Bundle0 は他の日本シナリオと同じく無効、試験用の `JAC_Test_UnificationMap` は対象外）、15 km 史実地図・22勢力で200ターンを自動進行する。人間の席は `japan-prosperous-15km.json` と同じ大内（滅亡で打ち切られにくい）。`allow_human_elimination` は有効なので、人間の勢力が滅んでも最後まで進む。
 
-`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-15km-200turn-full.json` で実行する。50ターンごとに要約を2行出す。要約はエラーにならず、失敗した場合も `summary failed: <理由>` を返す。
+`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/japan-15km-200turn-full.json` で実行する。50ターンごとに要約を2行出す。要約はエラーにならず、失敗した場合も `summary failed: <理由>` を返す。
 
 1. `GameCore_Tuner` の行：`T+<経過ターン> engine=<内部ターン> alive=<生存勢力数> dead=[滅亡した家] cities=[家=都市数,…] ages reign=<改元の番号>:<ReignType> last(G/N/D/H)=<直近の判定の黄金/通常/暗黒/英雄の家数> events=<史実イベントの発火数> alliances=<今同盟している主要勢力の組の数> arb pending=<審理中> truce=<停戦中の組> await=<講和待ちの組> peace=<講和させた組> outlaw=<討伐対象の家> lastReq=<最後の請求ターン> winner=<勝利チーム。未決は -1>`。値を返さない呼び出しは `nil` と出す（Lua 5.1 の `tostring()` は引数なしだとエラーになるため、要約は `S(v)` で包む）
 2. `InGame` の行：`year=<暦の表示> localPlayer=<操作プレイヤー> officialEraScore=<公式の時代スコアの合計>`。万世紀では公式の時代スコアは常に0なので、`OK` 以外（`NONZERO [家ID=値,…]`）は不具合として扱う
@@ -161,7 +184,7 @@ SSOT 3.1 は開始日の同盟関係を合わせると定めるが、現行地�
 
 新規20勢力に専用肖像・家紋がまだないため、上の仮画像を割り当てた。共用する織田肖像は他の20人の史実肖像ではない。画面で「?」を避けるには、CustomCivs 節のアートビルドで作る BLP 3個を MOD とともに配置する必要がある。配布前に各勢力の絵へ差し替え、画像の利用条件を確定する。BLP は Git 管理外。
 
-再生成・静的検査は `python tools/japan_map_scale/generate.py`（地図を再生成しない場合は `python tools/japan_map_scale/write_support.py`）、`python tools/japan_map_scale/write_custom_civs.py`、`python -m unittest discover -s tools/japan_map_scale/tests`、`python -m unittest discover -s tools/civ6-autotest/tests`。今回の静的検査は前者25件成功、後者98件成功。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリに書き込めないため、作業ツリー内で権限を継承する一時ディレクトリを使った。テスト中の Civ6 起動表示はモックであり、実際の Civ6 と Steam は起動していない。
+再生成・静的検査は `cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-generate --`（地図を再生成しない場合は `cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-support -- support`）、`cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-support -- custom-civs`、`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`、`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`。今回の静的検査は前者25件成功、後者98件成功。後者はこの環境で `tempfile` の通常の `0700` 作成ディレクトリに書き込めないため、作業ツリー内で権限を継承する一時ディレクトリを使った。テスト中の Civ6 起動表示はモックであり、実際の Civ6 と Steam は起動していない。
 
 15 km史実領土版の統合実機では、織田を人間として56都市・首都22・全陸領有・開拓者0・通行・忠誠心・50ターン進行・従来の保存比較・ロード後1ターン・ログと性能を確認した。
 
@@ -210,20 +233,19 @@ Civ6 は都市から3タイル以内に別の都市を建てられない（`CITY
 | 日本以外の陸の除外 | Natural Earth 10m admin-0 countries, v5.1.1 | 同上 | [Natural Earth Admin 0](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/10m-admin-0-countries/) | 同上 | `tools/japan_map_scale/cache/ne_10m_admin_0_countries.zip` |
 | 標高 | ETOPO 2022 60 arc-second ice surface elevation、日本周辺の3分抽出 | NOAA NCEI、2022 | [NOAA ETOPO 2022](https://www.ncei.noaa.gov/products/etopo-global-relief-model)、[抽出元 ERDDAP](https://oceanwatch.pifsc.noaa.gov/erddap/griddap/ETOPO_2022_v1_60s.html) | [NOAA メタデータの CC0 1.0](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ngdc.mgg.dem%3Aetopo_2022) | `tools/japan_map_scale/cache/etopo_2022_japan_3arcmin.csv` |
 
-取得物はすべて Git 除外の `tools/japan_map_scale/cache/` に保存し、生成器が SHA-256 を照合する。公式 Civ6 の `Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map` は SQLite **スキーマだけ**の参照元で、公式の地形・画像は生成物へ複製しない。Python の標準ライブラリだけで生成できる。4つの生成マップはいずれも10 MB未満なので Git に収録する。
+取得物はすべて Git 除外の `tools/japan_map_scale/cache/` に保存し、生成器が SHA-256 を照合する。公式 Civ6 の `Base/Assets/Maps/EarthMaps/WorldMapHuge.Civ6Map` は SQLite **スキーマだけ**の参照元で、公式の地形・画像は生成物へ複製しない。Rust の生成器で再生成できる。4つの生成マップはいずれも10 MB未満なので Git に収録する。
 
 サイズの根拠：公式 Huge は手元の `Base/Assets/Gameplay/Data/Maps.xml` で106×66。付属 `WorldMapHuge.Civ6Map` には130×66の静的マップ例がある。[YnAMP の作者による設定文](https://github.com/Gedemon/Civ6-YnAMP/blob/master/Configuration/ConfigText.xml)では Enormous が128×80、Giant が180×94で終盤不安定、230×116はフルサイズでロード不可と記される。25 km は公式 Huge に近い6,820タイル、20 km は Enormous に近い10,318タイルになる。ただし盤面の縦横比もAI・GSの処理も異なるため、これらは受け入れ保証ではない。
 
 ### 再生成・検証手順
 
 ```powershell
-python tools/japan_map_scale/generate.py
-python -m unittest discover -s tools/japan_map_scale/tests -v
-python -m unittest discover -s tools/civ6-autotest/tests -v
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-map-40km.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-generate --
+cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/japan-map-40km.json --check
 ```
 
-実機では共通の準備に従って `poc/JAC_PoC_JapanMapScale` を `Mods/JAC_PoC_JapanMapScale` から参照できるようにする。シナリオは万世紀ルールセット・カスタム勢力・成長 UI・本 MOD を有効にし、Bundle0 を無効にする。都市国家は0にする。万世紀の設定画面に「日本列島 40/30/25/20 km」4候補が出ることと日英露の表示を確かめる。各 `japan-map-<km>km.json` を `scenario.py` で別の `--output` ディレクトリへ実行する。再実行時は JSON 内の `save` と `load` の名前を両方新しい名前にする。シナリオは22人の指導者と開始地点（自分の本拠から1タイル以内）、都市国家0、50ターンの自動進行、セーブ、ロード、ロード後の生存勢力数、ロード後1ターンを確認する。`autoplay-metrics-1.jsonl` と `-2.jsonl` に観測したターンごとの経過秒数・作業セット・プライベートメモリを残し、飛ばしたターンは `duration_seconds: null` とする。`steps.jsonl` に保存・ロード所要時間も残り、`judge_profile=japan_map` は本 MOD のゲーム内テキストの適用と `Database.log`・`Modding.log` エラーを検出する。フロントエンドの Config 適用ログは実行前の基準位置より古いことがあるため、設定画面の候補表示とシナリオで選んだ地図の実寸を別途確認する。ログの無関係な本体エラーは切り分けて記録する。
+実機では共通の準備に従って `poc/JAC_PoC_JapanMapScale` を `Mods/JAC_PoC_JapanMapScale` から参照できるようにする。シナリオは万世紀ルールセット・カスタム勢力・成長 UI・本 MOD を有効にし、Bundle0 を無効にする。都市国家は0にする。万世紀の設定画面に「日本列島 40/30/25/20 km」4候補が出ることと日英露の表示を確かめる。各 `japan-map-<km>km.json` を `civ6-autotest` で別の `--output` ディレクトリへ実行する。再実行時は JSON 内の `save` と `load` の名前を両方新しい名前にする。シナリオは22人の指導者と開始地点（自分の本拠から1タイル以内）、都市国家0、50ターンの自動進行、セーブ、ロード、ロード後の生存勢力数、ロード後1ターンを確認する。`autoplay-metrics-1.jsonl` と `-2.jsonl` に観測したターンごとの経過秒数・作業セット・プライベートメモリを残し、飛ばしたターンは `duration_seconds: null` とする。`steps.jsonl` に保存・ロード所要時間も残り、`judge_profile=japan_map` は本 MOD のゲーム内テキストの適用と `Database.log`・`Modding.log` エラーを検出する。フロントエンドの Config 適用ログは実行前の基準位置より古いことがあるため、設定画面の候補表示とシナリオで選んだ地図の実寸を別途確認する。ログの無関係な本体エラーは切り分けて記録する。
 
 ### 実機結果（2026-09-29、20 km）
 
@@ -313,23 +335,23 @@ MOD の内容：
 
 公式 `Base/Assets/UI/PartialScreenHooks.xml` では各フックの背景は `LaunchBar_Hook_ButtonSmall.dds` を使う 40×40 の `Button`、図柄はその子の 26×26 の `Image`（`Anchor="C,C"`、`Offset="0,-1"`）。`PartialScreenHooks.lua` の `AddScreenHook` は `ScreenHookImage:SetTexture(texture)` だけを行い、図柄のスプライト位置や状態オフセットを変えない。XP1/XP2 の `PartialScreenHooks_Expansion1.lua` が追加する Era も同じ関数を使う。ゲーム本体の図柄名は WorldRankings、CityStates、Trade、Espionage、Era、Reports の各 `LaunchBar_Hook_*`。SDK の `Civ6Docs.html` によれば、`Image` の既定の `StretchMode=None` は原寸表示して枠外を切り、`Button` 背景だけが状態に応じて縦方向へ 40px ずつずれる（通常、ホバー、押下、無効）。したがって手帳の DDS は状態ストリップではなく、26×26 の単一の透過画像として生成する。
 
-`tools/jac_art/build_art.py` は PR #20 で `main` に追加済みで、このリポジトリから実行できる。GrowthUI の MOD フォルダが存在すると手帳 DDS も生成し、フォルダが無い場合はその工程をスキップして CustomCivs のアート生成を続ける。
+`tools/civ6-assets-rs/src/build_art.rs` は PR #20 で `main` に追加済みで、このリポジトリから実行できる。GrowthUI の MOD フォルダが存在すると手帳 DDS も生成し、フォルダが無い場合はその工程をスキップして CustomCivs のアート生成を続ける。
 
 ```powershell
 $env:JAC_ART_LOCAL = 'C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local'
 $env:JAC_GROWTH_MOD = (Join-Path (Get-Location) 'poc\JAC_PoC_GrowthUI')
-python tools/jac_art/build_art.py
+cargo run --locked --manifest-path tools/Cargo.toml --bin jac-build-art --
 ```
 
-このスクリプトは両 PoC のアートを生成する。Python の Pillow、ローカルアートストア内の各原本、および Civ6 SDK Asset Cooker が必要。`JAC_GROWTH_MOD` は GrowthUI の別配置先を使う場合に設定する。
+Rust の実行器は両 PoC のアートを生成する。画像の原本と Civ6 SDK Asset Cooker が必要。`JAC_GROWTH_MOD` は GrowthUI の別配置先を使う場合に設定する。
 
 手帳アイコンの入力はローカルアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`（この PC では `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\JAC_PoC_GrowthUI\Originals\notebooks_generated.png`）、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。生成画像の来歴と利用条件は後段の CustomCivs 節「画像」に記録する。
 
-2026-09-29 の位置修正：従来は 54px 以内の本を 64×64 DDS の中央に配置していたため、26×26 の `Image` では左上だけが切り出され、本が右下へずれて見えた。原本の透過範囲を 24×24 以内に縮小し、26×26 の透明キャンバス中央へ配置する方式に変更した。再生成後の DDS は 26×26、アルファ範囲は `(1,1)-(24,25)`、四隅は完全透明。`Mods/JAC_PoC_GrowthUI` のジャンクションをこの `notebooks-icon` worktree に向け、`JAC_GROWTH_MOD` を指定して `build_art.py` を実行した。Civ6 の再起動後に Gathering Storm の新規ゲームで確認した（再起動前は旧 DDS が表示キャッシュに残った）。
+2026-09-29 の位置修正：従来は 54px 以内の本を 64×64 DDS の中央に配置していたため、26×26 の `Image` では左上だけが切り出され、本が右下へずれて見えた。原本の透過範囲を 24×24 以内に縮小し、26×26 の透明キャンバス中央へ配置する方式に変更した。再生成後の DDS は 26×26、アルファ範囲は `(1,1)-(24,25)`、四隅は完全透明。`Mods/JAC_PoC_GrowthUI` のジャンクションをこの `notebooks-icon` worktree に向け、`JAC_GROWTH_MOD` を指定して `jac-build-art` を実行した。Civ6 の再起動後に Gathering Storm の新規ゲームで確認した（再起動前は旧 DDS が表示キャッシュに残った）。
 
 実機では公式アイコンと手帳の `Image` がすべて 26×26、縦の画面内オフセットが 39 で一致し、手帳は Era と Reports の間に表示された。`civ6-autotest` の開始シナリオ 4/4 手順と JAC エラー判定 2/2 件が成功。FireTuner から手帳ボタンの `DoLeftClick()` を2回呼び、手帳の開閉も確認した。右上バーを切り出して4倍に拡大した証跡は `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\final-01\ingame-v3\notebooks-normal-closeup-x4.png`、`notebooks-hover-offset40-closeup-x4.png`、`notebooks-pressed-offset80-closeup-x4.png`。後二者は入力ドライバのマウス移動が Civ6 のホバー判定に届かなかったため、ゲーム内の手帳 `Button` に背景テクスチャの縦オフセット 40px／80px を一時指定して撮影し、最後に 0px へ戻した。通常・ホバー・押下の背景表示で本の図柄は同じ中央位置を保った。実際のポインター入力によるホバー遷移はこの検証では確認できていない。
 
-2026-09-30 の大きさ調整：オーナーから「手帳のアイコンが両隣より大きすぎる」との指摘を受け、図柄の最大辺を 24px から 16px に縮めた（`build_art.py` の `NOTEBOOKS_GLYPH`）。公式の図柄は BLP 内にあり取り出せないため、上記の実機画像 `04-normal-full.png`（等倍）で、26×26 枠内の金色の画素を数えて測った。World Rankings は幅23×高さ18・223px、Era は20×22・175px、Reports は14×17・181px。旧手帳は23×24・約470px で、面積が両隣の2倍を超えていた。本は塗りつぶしの形で線画より重く見えるため、外形でなく面積を両隣の平均（約190px）に合わせ、15×16・約205px とした。`tools/jac_art/tests` の `test_notebooks_glyph_matches_official_neighbours` が、DDS の図柄の幅・高さが公式3種の範囲（±1px）に入り、面積が平均の±15%に収まり、中心が枠の中央から1px以内であることを検査する。比較画像は Git 除外の `tools/jac_art/build/previews/notebooks-button-vs-neighbours.png`（同じ実機画像の手帳ボタンの図柄を消し、新しい DDS を重ねたもの。背景の消し跡は合成による）。実機での見え方は `leader-portraits.json` シナリオの `notebooks-hook-bar-closeup.png` で確認する（未実施）。
+2026-09-30 の大きさ調整：オーナーから「手帳のアイコンが両隣より大きすぎる」との指摘を受け、図柄の最大辺を 24px から 16px に縮めた（`jac-build-art` の `NOTEBOOKS_GLYPH`）。公式の図柄は BLP 内にあり取り出せないため、上記の実機画像 `04-normal-full.png`（等倍）で、26×26 枠内の金色の画素を数えて測った。World Rankings は幅23×高さ18・223px、Era は20×22・175px、Reports は14×17・181px。旧手帳は23×24・約470px で、面積が両隣の2倍を超えていた。本は塗りつぶしの形で線画より重く見えるため、外形でなく面積を両隣の平均（約190px）に合わせ、15×16・約205px とした。`tools/jac_art/tests` の `test_notebooks_glyph_matches_official_neighbours` が、DDS の図柄の幅・高さが公式3種の範囲（±1px）に入り、面積が平均の±15%に収まり、中心が枠の中央から1px以内であることを検査する。比較画像は Git 除外の `tools/jac_art/build/previews/notebooks-button-vs-neighbours.png`（同じ実機画像の手帳ボタンの図柄を消し、新しい DDS を重ねたもの。背景の消し跡は合成による）。実機での見え方は `leader-portraits.json` シナリオの `notebooks-hook-bar-closeup.png` で確認する（未実施）。
 
 ### 互換性
 
@@ -471,7 +493,7 @@ MOD の内容：
 | 外交画面の肖像 | `FALLBACK_NEUTRAL_JAC_<指導者>`（`Leaders.artdef` の `Leader_BLP_Entry`・`Leader_Background_BLP_Entry` は、公式の 2D 専用指導者 `DLC/WarMachineScenario/ArtDefs/Leaders.artdef` と同じく空にする） | 外交画面 |
 | 外交画面の背景 | `LEADER_JAC_<指導者>_DIPLOMACY_BACKGROUND`（1600×1000）を `DiplomacyInfo` に指定。仮指導者20人は織田の背景を共用し、`LeaderScene` の標準レターボックスを22人で隠す | 外交画面 |
 
-`tools/jac_art/build_art.py` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。20人の仮指導者アイコンは織田のアトラス0番を、文明アイコンはゲーム本体の日本文明アトラス12番を参照し、ロード・外交画像も織田のテクスチャを共用する。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
+`tools/civ6-assets-rs/src/build_art.rs` の CustomCivs 用パッケージには、アイコンアトラス34点（指導者8＋文明13＋能力13）、指導者画像6点（各指導者のロード肖像・ロード背景・外交背景）、フォールバック画像2点が入り、テクスチャ合計は **42点**。20人の仮指導者アイコンは織田のアトラス0番を、文明アイコンはゲーム本体の日本文明アトラス12番を参照し、ロード・外交画像も織田のテクスチャを共用する。GrowthUI が無い場合、コンタクトシートも同じ42点を並べる（GrowthUI がある場合は別途手帳画像を1点加える）。先行記載の「41」は数え違いであり、コンタクトシートとパッケージで数え方が違うわけではない。スクリプトの定義・出力数はいずれも42点。
 
 ### 画像の成功条件
 
@@ -511,11 +533,11 @@ MOD の内容：
 
 `ingame/` は背景・肖像修正前、`ingame-v2/` は修正後にゲームを再起動して撮影した結果。再起動前のセッションでは新しい `ReplaceUIScript` が未適用で黒帯が残ったため、修正後の判定には使っていない。
 
-再生成には Python 3、Pillow、Civ6 SDK の Asset Cooker が必要。ビルドに使う Python に Pillow が無ければ `python -m pip install Pillow` で導入する。Asset Cooker の既定の場所は `C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker`。別の場所にある場合は、`Civ6AssetCooker_FinalRelease.exe` と `Civ6.cfg` を含むディレクトリを環境変数 `JAC_COOKER_DIR` に指定する（PowerShell 例：`$env:JAC_COOKER_DIR = 'D:\Steam\steamapps\common\Sid Meier''s Civilization VI SDK\AssetModTools\Cooker'`）。その後 `python tools/jac_art/build_art.py` を実行する。
+再生成には Rust と Civ6 SDK の Asset Cooker が必要。画像の処理は Rust のライブラリで行う。Asset Cooker の既定の場所は `C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI SDK\AssetModTools\Cooker`。別の場所にある場合は、`Civ6AssetCooker_FinalRelease.exe` と `Civ6.cfg` を含むディレクトリを環境変数 `JAC_COOKER_DIR` に指定する（PowerShell 例：`$env:JAC_COOKER_DIR = 'D:\Steam\steamapps\common\Sid Meier''s Civilization VI SDK\AssetModTools\Cooker'`）。その後 `cargo run --locked --manifest-path tools/Cargo.toml --bin jac-build-art --` を実行する。
 
 CustomCivs の入力元はローカルの `civ6-art-local/JAC_PoC_CustomCivs/Originals/`。既定ではリポジトリの `../civ6-art-local` を使い、この複数 worktree 配置では `../../civ6-art-local` を検出する。任意の場所は `JAC_ART_LOCAL` で指定できる。GrowthUI が `<リポジトリ>/poc/JAC_PoC_GrowthUI` にある場合だけ、`civ6-art-local/JAC_PoC_GrowthUI/Originals/` から手帳 DDS を作る。別の場所にある GrowthUI は `JAC_GROWTH_MOD` で指定する。GrowthUI フォルダが無い場合は手帳工程をスキップし、CustomCivs 単独で完了する。
 
-Pillow で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 の先行ビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` と全テクスチャの PNG・コンタクトシートは、この作業ツリー内の `tools/jac_art/build/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。ビルド後に `python -m unittest discover -s tools/jac_art/tests -v` を実行すると、FrontEnd の22行から参照するアイコン・肖像とゲーム内のフォールバックを、ローカルの Civ6 本体アイコン定義と生成済み BLP に照らして検査する。ゲーム本体が標準の Steam インストール先にない場合は `CIV6_INSTALL_DIR` を設定する。
+Rust の画像処理で単色背景から人物・手帳を透過処理し、指導者の円形アイコン、家紋・能力の白いアルファマスクと各サイズのアトラスを作る。外交背景は元の城内画像を16:10へ切り出す。SDK の Asset Cooker は3個の BLP を一時ディレクトリに生成する。3個すべての更新時刻・容量・テクスチャ名を検証してから MOD 内の BLP を置き換えるため、Cooker が途中で失敗しても配置済みの BLP は残る。2026-09-29 の先行ビルドでは GrowthUI 不在のままスキップし、3 BLP の再生成が成功した。中間 `.dds`・`.tex`・`.xlp` と全テクスチャの PNG・コンタクトシートは、この作業ツリー内の `tools/jac_art/build/` に置く。元画像・Cooker 出力・手帳 DDS は Git 管理外とし、MOD を配布・実機検証する端末では事前にビルドする。ビルド後に `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` を実行すると、FrontEnd の22行から参照するアイコン・肖像とゲーム内のフォールバックを、ローカルの Civ6 本体アイコン定義と生成済み BLP に照らして検査する。ゲーム本体が標準の Steam インストール先にない場合は `CIV6_INSTALL_DIR` を設定する。
 
 今回の「?」の調査では、2026-09-29 14:31 の `ArtDef.log` に `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` の `Unable to resolve Package` が記録され、実機側の CustomCivs MOD フォルダに BLP がなかった。`FrontEndActions` の `UpdateIcons` と `UpdateArt` は適用されているため、画像名の登録だけでは画素を読み込めない。公式の Portugal DLC と同じく、設定画面には `UpdateArt` と `UpdateIcons` を用い、BLP に収録した UI テクスチャを `.dep` の `UITexture` ライブラリで参照する。UI 用スクリプトの `ImportFiles` はこの画像のロード経路ではない。今回の作業ツリーでは BLP 3個を再生成し、GrowthUI があるため43点のコンタクトシートと手帳 DDS も作った。これらは Git 除外で作業ツリー内にあり、実機の MOD フォルダには配置していない。実機の再表示確認は未実施。
 
@@ -534,7 +556,7 @@ Antigravity 追加利用規約の第6項は第三者ソフトウェア経由の�
 | 用途 | 作品 | 作者・年 | 所蔵・出典 | ライセンス・利用条件 | 元ファイル |
 |---|---|---|---|---|---|
 | 織田信秀・武田信虎の指導者アイコン | 両名の新規生成肖像 | Gemini 3.1 Flash Image、2026-09-29 | ローカル OpenCodex。公式 Civ6 指導者画は画風参照のみ | 上記の規約・公開条件 | `oda_nobuhide_portrait.jpg`・`takeda_nobutora_portrait.jpg` |
-| ロード画面・外交画面の人物 | 単色背景で新規生成した両名の立ち姿 | 同上 | 同上。Pillow で透過 | 同上 | `oda_nobuhide_figure.png`・`takeda_nobutora_figure.png` |
+| ロード画面・外交画面の人物 | 単色背景で新規生成した両名の立ち姿 | 同上 | 同上。Rust の画像処理で透過 | 同上 | `oda_nobuhide_figure.png`・`takeda_nobutora_figure.png` |
 | ロード画面・外交画面の背景 | 尾張・甲斐の城内を新規生成 | 同上 | 同上 | 同上 | `oda_nobuhide_background.png`・`takeda_nobutora_background.png` |
 | 文明アイコン | 織田木瓜・武田菱を新規生成 | 同上 | 伝統家紋を参照し、新規に描画された画像をアルファマスク化 | 同上 | `oda_mokko_generated.png`・`takeda_bishi_generated.png` |
 | 能力アイコン | 織田の軍旗、武田の馬、信秀の軍配扇、信虎の兜を新規生成 | 同上 | 両家の家紋・人物像を参照し、各能力欄へ個別登録 | 同上 | `oda_clan_ability_generated.png`・`takeda_clan_ability_generated_v2.png`・`oda_nobuhide_ability_generated.png`・`takeda_nobutora_ability_generated.png` |
@@ -604,7 +626,7 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 
 各ノードの解放先・残るTODO・実装した2件のBoostは[照合表](sengoku-tree-unlocks.md)。公式定義を参照したGSの時代・気候・世界会議・AI・勝利設定への処理と未検証事項は[互換処理メモ](sengoku-tree-compatibility.md)。戦国ツリーPoCが有効なBanseikiでは、専用の空の勝利ドメイン、公式勝利7種の設定値とゲーム側の既定値の無効化、`TURNLIMIT_NONE` と最大ターン0で統一前の公式勝利を防ぐ。ターン上限は Banseiki 本体の `GAME_TURN_LIMIT` の設定更新を上書きする（`ConfigurationUpdates` には一意キーがなく、行を足すと `TURNLIMIT_GAMESPEED` と競合する）。登録済み全城（琉球王国・アイヌを含む）の支配による天下統一勝利は `VICTORY_JAC_SENGOKU_UNIFICATION` として実装した（[天下統一 PoC](unification-victory.md)）。2026-09-30 の実機で、検証地図の破却・再建・移管を経て織田の天下統一が成立すること（unify-15）と、15 km 地図が登録城56で始まること（unify-16）を確認した。開拓者開始・通常地図の本拠の条件、チーム・同盟での合算、マルチプレイは未確認。約200ターンの年表示は未実装。
 
-設計表から `python tools/generate_sengoku_trees.py` でSQL・翻訳・アイコン・照合表を生成する。`python -m unittest` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、開始時に与える技術4・社会制度3を持つこと、その次に研究できる技術と制度の進捗を検査する（開始時の知識を与える前は最初のノードを研究させていたが、与えた後は研究済みで経路が得られず失敗していた。実機 sengoku-cascade-deletes-03）。
+設計表から `cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-trees --` でSQL・翻訳・アイコン・照合表を生成する。`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` は62 ID、前提DAGと到達性、配置重複、費用、3言語キー、SQLの模擬適用、勝利設定と公式勝利無効化を検査する。`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-trees.json --check` はシナリオJSONだけを検査する。ゲームを起動する版のシナリオは、ゲーム作成画面と同じく設定を組み立ててターン上限が `TURNLIMIT_NONE` になること、Banseiki開始、公式勝利が無効でゲーム内の終了ターン（`Game.GetGameEndTurn()`）が0であること、両公式ツリー画面の候補、開始時に与える技術4・社会制度3を持つこと、その次に研究できる技術と制度の進捗を検査する（開始時の知識を与える前は最初のノードを研究させていたが、与えた後は研究済みで経路が得られず失敗していた。実機 sengoku-cascade-deletes-03）。
 
 **2026-09-29 の提示された実機結果：** `RULESET_JAC_BANSEIKI` と日本マップでゲームがロードし、戦国技術32件・社会制度30件、公式技術・制度行0件、Gathering Stormの仕組みの存在を確認。50ターンの自動進行とセーブ／ロードが成功した。今回の公式勝利無効化を加える前の結果である。
 

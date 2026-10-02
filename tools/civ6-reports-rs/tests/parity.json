@@ -1,0 +1,176 @@
+[
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_outcomes_costs_clamping_and_sources",
+    "rust_test": "arbitration_report::test_outcomes_costs_clamping_and_sources"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_missing_or_duplicate_cost_prevents_complete_measurement",
+    "rust_test": "arbitration_report::test_missing_or_duplicate_cost_prevents_complete_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_missing_or_early_ruling_and_missing_refusal_loss_are_detected",
+    "rust_test": "arbitration_report::test_missing_or_early_ruling_and_missing_refusal_loss_are_detected"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_empowered_third_party_request_at_120_is_detected",
+    "rust_test": "arbitration_report::test_empowered_third_party_request_at_120_is_detected"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_pending_final_turn_is_counted_without_claiming_a_ruling",
+    "rust_test": "arbitration_report::test_pending_final_turn_is_counted_without_claiming_a_ruling"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_requester_and_pair_interval_violations_are_detected",
+    "rust_test": "arbitration_report::test_requester_and_pair_interval_violations_are_detected"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_test_clock_jump_never_counts_as_uninterrupted_measurement",
+    "rust_test": "arbitration_report::test_test_clock_jump_never_counts_as_uninterrupted_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_reloaded_log_is_not_an_uninterrupted_measurement",
+    "rust_test": "arbitration_report::test_reloaded_log_is_not_an_uninterrupted_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_missing_or_failed_result_is_not_complete",
+    "rust_test": "arbitration_report::test_missing_or_failed_result_is_not_complete"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_nominal_cost_must_match_actual_balance_delta",
+    "rust_test": "arbitration_report::test_nominal_cost_must_match_actual_balance_delta"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_weariness_coverage_is_visible_even_without_requests",
+    "rust_test": "arbitration_report::test_weariness_coverage_is_visible_even_without_requests"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_weariness_missing_duplicate_or_mismatched_samples_prevent_completion",
+    "rust_test": "arbitration_report::test_weariness_missing_duplicate_or_mismatched_samples_prevent_completion"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_refusal_cost_must_match_each_respondent_and_pair",
+    "rust_test": "arbitration_report::test_refusal_cost_must_match_each_respondent_and_pair"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_scenario_generator_matches_fixture_and_compiles_every_gameplay_step",
+    "rust_test": "arbitration_report::test_scenario_generator_matches_fixture_and_compiles_every_gameplay_step"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_saved_snapshot_preserves_nested_ai_state_and_missing_properties",
+    "rust_test": "arbitration_report::test_saved_snapshot_preserves_nested_ai_state_and_missing_properties"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_snapshot_checks_saved_costs_instead_of_native_ai_spending_during_load",
+    "rust_test": "arbitration_report::test_snapshot_checks_saved_costs_instead_of_native_ai_spending_during_load"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_arbitration_report.py",
+    "class": "ArbitrationReportTests",
+    "test": "test_all_live_gameplay_steps_run_with_save_restore_on_lupa",
+    "rust_test": "arbitration_report::test_all_live_gameplay_steps_run_with_save_restore_on_lupa"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_counts_ages_policies_and_case_vs_respondent_outcomes",
+    "rust_test": "tuning_report::test_counts_ages_policies_and_case_vs_respondent_outcomes"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_duplicate_judgment_is_rejected",
+    "rust_test": "tuning_report::test_duplicate_judgment_is_rejected"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_completion_requires_target_and_passed_judge",
+    "rust_test": "tuning_report::test_completion_requires_target_and_passed_judge"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_completion_rejects_missing_failed_synthetic_and_reloaded_results",
+    "rust_test": "tuning_report::test_completion_rejects_missing_failed_synthetic_and_reloaded_results"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_observer_handles_engine_functions_returning_no_values",
+    "rust_test": "tuning_report::test_observer_handles_engine_functions_returning_no_values"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_variant_preserves_original_settings_and_progression",
+    "rust_test": "tuning_report::test_variant_preserves_original_settings_and_progression"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_coverage_checks_saved_player_rosters_for_every_reign",
+    "rust_test": "tuning_report::test_coverage_checks_saved_player_rosters_for_every_reign"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_five_repeated_checkpoints_are_not_complete",
+    "rust_test": "tuning_report::test_five_repeated_checkpoints_are_not_complete"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_missing_saved_rosters_do_not_prove_complete_measurement",
+    "rust_test": "tuning_report::test_missing_saved_rosters_do_not_prove_complete_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_missing_player_in_both_history_and_log_is_not_complete",
+    "rust_test": "tuning_report::test_missing_player_in_both_history_and_log_is_not_complete"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_survivors_are_reconciled_with_dated_elimination_events",
+    "rust_test": "tuning_report::test_survivors_are_reconciled_with_dated_elimination_events"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuning_report.py",
+    "class": "TuningReportTests",
+    "test": "test_missing_house_fields_and_era_fields_are_not_complete",
+    "rust_test": "tuning_report::test_missing_house_fields_and_era_fields_are_not_complete"
+  }
+]

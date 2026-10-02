@@ -1,5 +1,7 @@
 # 日本マップ：1534年の関係を開始時の外交状態へ反映する
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 [SSOT 3.1](../spec/ssot/03-map-and-scale.md#31-日本列島)の「1534年の史実の同盟・婚姻・主従の関係と、敵対・不仲の関係を、開始時の外交状態に反映する」の実装メモ。関係の調査は [`research/japan-1534-relations.md`](../research/japan-1534-relations.md)、データは [`spec/data/japan-1534-relations.json`](../spec/data/japan-1534-relations.json)。
 
 ## 実装
@@ -9,7 +11,7 @@
 - 味方の8組は、組ごとの Game プロパティ `JAC_1534_ALLIANCE_<勢力A>-<勢力B>`（勢力名を辞書順に並べる。例 `JAC_1534_ALLIANCE_HOJO-IMAGAWA`）に、開始時の同盟を結んだターン（数値。続いている印を兼ねる）か、終わったこと（期限切れ・イベント・交戦）を示す `false` を残す。セーブに残るので、ロード後も同じ判定になる
 - 念のため `Events.LoadScreenClose` でも、プロパティがなく開始ターンのままなら適用する。セーブのロードでは開始ターンを過ぎているか、プロパティが残っているので適用しない
 - 勢力はプレイヤー番号ではなく文明名 `CIVILIZATION_JAC_<名前>` で引く。プレイヤー順を入れ替えた構成（武田が人間など）でも同じ組に適用する
-- Lua の表は JSON の適用分の写し。`tests/test_japan_1534_relations.py` が一致を確かめる
+- Lua の表は JSON の適用分の写し。`tools/civ6-data-rs/src/data_tests.rs` が一致を確かめる
 
 ## Civ6 の外交状態への対応
 
@@ -30,7 +32,7 @@
    - エンジンは、結んだターン + 期限 + 1 ターン目（開始ターン1・期限30なら32ターン目）へ切り替わるときに同盟を解く。解くのは `OnGameTurnStarted` より前（実機 `diplo-16`・`diplo-17`）
    - 毎ターンの初め（`GameEvents.OnGameTurnStarted`）に `TrackStartAlliances` が、プロパティが数値の組を `RELATIONS` の順に見て、`HasAllied` が偽になった最初のターンにプロパティを `false` にし、Lua.log に `[JAC_1534_RELATIONS] start alliance lapsed R02 HOJO-IMAGAWA on turn 32` の形で出す。同盟は結び直さない。全員で同じ順・同じ結果になり、マルチプレイでもゲームプレイの状態として同期する
    - 期限切れの後に同じ組が外交で結んだ同盟は、開始時の同盟ではなく通常の同盟（プロパティは `false` のまま）。時代の台帳（`JAC_Sengoku_Ages.lua`）はプロパティが数値で同盟中の組を点にせず、期限切れの後に結び直した同盟は点にする（[時代の設計](../research/sengoku-ages.md) §5.4）
-   - 通常の外交での同盟：戦国パックは公式の社会制度を消すが、`DiplomaticActions` の `InitiatorPrereqCivic`・`TargetPrereqCivic` = `CIVIC_CIVIL_SERVICE` の行は、社会制度 C11「誓約と同盟」`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` に付け替える（`tools/generate_sengoku_trees.py` の `CASCADE_REMAPS` の先頭2件、`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Cascade.sql:6`・`:8`、#59）。同盟の更新 `DIPLOACTION_RENEW_ALLIANCE` もこの前提を持つ7種に入る（`tests/test_sengoku_cascade.py` の `ALLIANCES`）ので、同盟の結び直しと更新はどちらも C11 で解放される。AI は自分で判断する
+   - 通常の外交での同盟：戦国パックは公式の社会制度を消すが、`DiplomaticActions` の `InitiatorPrereqCivic`・`TargetPrereqCivic` = `CIVIC_CIVIL_SERVICE` の行は、社会制度 C11「誓約と同盟」`CIVIC_JAC_SENGOKU_OATHS_AND_ALLIANCES` に付け替える（`tools/civ6-data-rs/src/trees.rs` の `CASCADE_REMAPS` の先頭2件、`poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Cascade.sql:6`・`:8`、#59）。同盟の更新 `DIPLOACTION_RENEW_ALLIANCE` もこの前提を持つ7種に入る（`tools/civ6-data-rs/src/data_tests.rs` の `ALLIANCES`）ので、同盟の結び直しと更新はどちらも C11 で解放される。AI は自分で判断する
    - 残る影響：人間の家の同盟が切れると、その人間に「同盟の期限切れ」の通知 `NOTIFICATION_DIPLO_ALLIANCE_EXPIRED` が出る（`Base/Assets/Gameplay/Data/Notifications.xml:230`）。公式の通常の同盟と同じ動きなので、そのままにする
    - 確認項目：期限の前に AI が同盟の更新（C11 が要る）で延ばすと `HasAllied` が偽にならないので、プロパティは数値のまま（開始時の同盟の扱い）続く。台帳では点にならない（更新は新しい同盟ではない）ので実害は無い。更新の申し込みがスクリプトで結んだ同盟（種類の既定値）でも出るかは未測定
 2. 終わった扱いにする入口（将来のイベントの仕組みが呼ぶ）：`ExposedMembers.JAC_Japan1534Relations.EndStartAlliance("HOJO", "IMAGAWA")`。組の順は問わない。組のプロパティを `false` にするだけ。スクリプトから同盟をすぐに解く手段は無い（実機 `diplo-17`・`end-alliance-01`。下記「すぐに解く方法の調査」）ので、同盟と視界の共有は期限切れまで残る。宣戦は挟まない。終わらせたら `true`、続いていなかったら `false` を返す。`IsStartAllianceActive(勢力A, 勢力B)` で続いているかを読める。ゲームプレイのスクリプトから呼ぶ（UI から呼ぶとマルチプレイで同期しない）。`ExposedMembers` の公式の使い方は `Base/Assets/UI/MapTacks.lua:8`〜`:9`、同じ MOD の前例は `Scripts/JAC_Resources.lua:172`
@@ -65,7 +67,7 @@
 - 減衰しない：`InitialValue` だけを付け、`ReductionTurns` を付けない。公式の `AGENDA_SAME_GOVERNMENT`（`Base/Assets/Gameplay/Data/Agendas.xml:813`・`:2247`）と同じく、条件（相手がその文明）が成り立つ間は値が変わらない。時間で薄まる `STANDARD_DIPLOMACY_JOINT_WAR`（`Base/Assets/Gameplay/Data/Leaders.xml:3160`〜`:3177`、`ReductionTurns` = 20）とは別の作り。因縁が解消する仕組み（和睦の儀式など）は作らない（MVP）
 - 開始時から効く：修正値は特性の付与と同時に有効になる（実機で開始ターンに -10 の行が出ることを確認済み）。ただし AI が相手を知らないと表示されないため、Lua が22家すべてを互いに `SetHasMet` で出会い済みにする
 - 適用範囲：`Data/JAC_Japan_Feuds.xml` を `UpdateDatabase` で史実の領土の2種にだけ読み込む（開拓者からでは特性・修正値が存在しない）
-- 生成：`tools/japan_map_scale/write_feuds.py` が JSON の敵対（`hostility`、high・medium、開始日を含むもの）から生成する。テストが JSON・XML・modinfo の一致を確かめる
+- 生成：`tools/civ6-assets-rs/src/write_feuds.rs` が JSON の敵対（`hostility`、high・medium、開始日を含むもの）から生成する。テストが JSON・XML・modinfo の一致を確かめる
 
 公式ファイルの根拠（公式フォルダ内）
 
@@ -157,7 +159,7 @@
 
 結論：スクリプトから同盟をすぐに解く手段は無い。強制の宣戦は戦争にはなるが、同盟（`HasAllied`・期限）はそのまま残り、講和すると視界の共有も戻る。戦争を挟む E1 は採らず、`EndStartAlliance` は宣戦しない形（組を終わった扱いにし、期限切れで解ける）に戻した。確認項目：E1 の講和後、ターン6以降に外交の状態が同盟へ戻るかは未測定。
 
-模擬実行：`tests/test_japan_1534_relations_lua.py`（`uv run --no-project --with lupa python -m unittest tests.test_japan_1534_relations_lua`）。期限切れの組を結び直さずプロパティを `false` にする、その後に外交で結び直した同盟を開始時の同盟と扱わない、終えた組は宣戦も講和もせず期限切れまで同盟が残る、別の理由で交戦中の組は終わりとして扱い宣戦も講和もしない、を確かめる
+模擬実行：`tools/civ6-lua-tests-rs/tests/relations.rs`（`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`）。期限切れの組を結び直さずプロパティを `false` にする、その後に外交で結び直した同盟を開始時の同盟と扱わない、終えた組は宣戦も講和もせず期限切れまで同盟が残る、別の理由で交戦中の組は終わりとして扱い宣戦も講和もしない、を確かめる
 
 ## オーナー判断（2026-09-29 Discord・セットA）
 
@@ -204,7 +206,7 @@
 
 1. 出会い：上記のとおり、開始時に22家が互いに出会い済み
 2. アクセスレベル：上記の `TRAIT_JAC_1534_ACCESS`（全22家に「限定的」）。関係の理由（「1534年の因縁」を含む）が最初から見える。出所の行は `TraitType` でこの特性に結ぶ（結ばない行では実機でアクセスレベルが 0 のままだった）。実機で「限定的」になり、外交画面の関係欄に「-10 1534年の因縁」が出ることを確認済み
-3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組と島津・琉球（オーナー判断H）を開始時に通常の同盟（`SetHasAllied`）にする。Rise and Fall 以降、種類の無い同盟だけでは視界を共有しない（上記の根拠 10）。そこで味方の組の12家（北条・今川・大内・毛利・伊達・蘆名・足利・六角・朝倉・尼子・島津・琉球）に、プンドメーカーと同じ「全同盟で視界を共有する」修正値 `JAC_1534_ALLY_SHARED_VIS`（`MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS`、`ShareVis`=`true`、根拠 13）を特性 `TRAIT_JAC_1534_ALLY_VISION` で付ける（`Data/JAC_Japan_Feuds.xml`、`write_feuds.py` が JSON の味方の組から生成）。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値も 1 のまま（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`）。テストが既定値 1、特性を持つ12家、Lua が味方の組だけを同盟にすることを確かめる
+3. 味方の視界共有（オーナー判断G「そのうち、味方の視界が共有されてる感じで」）：史実の同盟・婚姻・主従の7組と島津・琉球（オーナー判断H）を開始時に通常の同盟（`SetHasAllied`）にする。Rise and Fall 以降、種類の無い同盟だけでは視界を共有しない（上記の根拠 10）。そこで味方の組の12家（北条・今川・大内・毛利・伊達・蘆名・足利・六角・朝倉・尼子・島津・琉球）に、プンドメーカーと同じ「全同盟で視界を共有する」修正値 `JAC_1534_ALLY_SHARED_VIS`（`MODIFIER_PLAYER_ADJUST_ALLIANCES_SHARED_VIS`、`ShareVis`=`true`、根拠 13）を特性 `TRAIT_JAC_1534_ALLY_VISION` で付ける（`Data/JAC_Japan_Feuds.xml`、`tools/civ6-assets-rs/src/write_feuds.rs` が JSON の味方の組から生成）。ルールセットのパラメータ `GAME_ALLIES_SHARE_VISIBILITY` の既定値も 1 のまま（`poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml:16`）。テストが既定値 1、特性を持つ12家、Lua が味方の組だけを同盟にすることを確かめる
    - 副作用：修正値は「その家の全同盟」に効くので、12家が後で結ぶ通常の同盟も、レベルに関係なく視界を共有する。修正値は外せないので、開始時の同盟が終わった後も残る。オーナー判断I（下記）で、軍事同盟から始める扱いの近似として受け入れた
    - 同盟にした理由：視界の共有をエンジンに任せられる。ユニットが動いても即時に共有され、セーブにも同盟の状態として残り、マルチプレイでもゲームプレイの状態として同期する。各ターンにタイルの見え方を Lua で写す方式は、ターン中の移動が反映されず、写した分をセーブ・ロードをまたいで正しく取り消す必要がある
    - 副作用：同盟国どうしは外交のアクセスレベルが1段上がる（公式の出所 `Ally`。全員の「限定的」に加えて「開放」になる）、互いに正式な宣戦ができない、同盟ポイントが貯まる

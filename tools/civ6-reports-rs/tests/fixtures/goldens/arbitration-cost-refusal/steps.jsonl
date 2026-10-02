@@ -1,0 +1,6 @@
+{"status":"OK","action":"0/18 autoplay","detail":"autoplay completed 50 turns"}
+{"status":"OK","action":"1/18 autoplay","detail":"autoplay completed 50 turns"}
+{"status":"OK","action":"2/18 autoplay","detail":"autoplay completed 50 turns"}
+{"status":"OK","action":"3/18 autoplay","detail":"autoplay completed 50 turns"}
+{"status":"OK","action":"18/18 ui_lua","detail":"return=T+201 surviving majors=22"}
+{"status":"OK","action":"judge","detail":"8/8 PASS"}

@@ -8,13 +8,17 @@
 /.cursor/rules/godd-stack.mdc
 # <<< GoDD managed local files <<<
 
-# tools/jac_art/build_art.py の中間ファイル
+# Rust の画像生成ツールの中間ファイル
 /tools/jac_art/build/
 /poc/JAC_PoC_CustomCivs/ArtSource/Originals/
 /poc/JAC_PoC_CustomCivs/Platforms/
 __pycache__/
-# Generated UI texture, rebuilt from civ6-art-local by tools/jac_art/build_art.py
+# Generated UI texture, rebuilt from civ6-art-local by jac-build-art
 /poc/JAC_PoC_GrowthUI/UI/Textures/*.dds
 
 # Japan map source downloads and generated diagnostics
 /tools/japan_map_scale/cache/
+
+# Rust tools and their test artifacts
+/tools/target/
+/tools/civ6-*-rs/target/

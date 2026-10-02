@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+    <!-- Merge Civilizations and Leaders into a single tab to get more space. -->
+    <CivilopediaSections>
+        <Delete SectionId="LEADERS" />
+        <Update>
+            <Where SectionId="CIVILIZATIONS"/>
+            <Set Name="LOC_PEDIA_CIVILIZATIONS_LEADERS_TITLE"/>
+        </Update>
+    </CivilopediaSections>
+    <CivilopediaPageGroups>
+        <Row SectionID="CIVILIZATIONS" PageGroupId="CIVILIZATIONS" Name="LOC_PEDIA_PAGEGROUP_CIVILIZATIONS_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="10"/>
+        <Row SectionID="CIVILIZATIONS" PageGroupId="LEADERS" Name="LOC_PEDIA_PAGEGROUP_LEADERS_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="20"/>
+    </CivilopediaPageGroups>
+    <CivilopediaPages>
+        <Delete SectionId="CIVILIZATIONS" />
+        <Row SectionId="CIVILIZATIONS" PageId="CIVILIZATIONS_INTRO" PageGroupId="CIVILIZATIONS" PageLayoutId="Simple"  Name="LOC_PEDIA_PAGE_INTRO_TITLE" TextKeyPrefix="LOC_PEDIA_CIVILIZATIONS_PAGE_INTRO" Tooltip="" SortIndex="0" />
+        <Row SectionId="CIVILIZATIONS" PageId="LEADERS_INTRO" PageGroupId="LEADERS" PageLayoutId="Simple"  Name="LOC_PEDIA_PAGE_INTRO_TITLE" TextKeyPrefix="LOC_PEDIA_LEADERS_PAGE_INTRO" Tooltip="" SortIndex="0" />
+    </CivilopediaPages>
+    <CivilopediaPageQueries>
+        <Delete SectionId="CIVILIZATIONS" />
+        <Row SectionId="CIVILIZATIONS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT CivilizationType as PageId, "CIVILIZATIONS" as PageGroupId, "Civilization" as PageLayoutId, Name, null as Tooltip FROM Civilizations where StartingCivilizationLevelType = "CIVILIZATION_LEVEL_FULL_CIV"</SQL>
+        </Row>
+        <Row SectionId="CIVILIZATIONS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" TextKeyPrefixColumn="TextKeyPrefix" SortIndex="10">
+            <SQL>SELECT distinct Leaders.LeaderType AS PageId, "LEADERS" AS PageGroupId, "Leader" AS PageLayoutId, Leaders.Name, null AS Tooltip, "LOC_PEDIA_LEADERS_PAGE" as TextKeyPrefix FROM Leaders INNER JOIN CivilizationLeaders on CivilizationLeaders.LeaderType = Leaders.LeaderType INNER JOIN Civilizations ON CivilizationLeaders.CivilizationType = Civilizations.CivilizationType WHERE Civilizations.StartingCivilizationLevelType = "CIVILIZATION_LEVEL_FULL_CIV"</SQL>
+        </Row>
+    </CivilopediaPageQueries>
+
+    <!-- Tweak government policies to group dark age policies differently -->
+    <CivilopediaPageGroups>
+        <Row SectionID="GOVERNMENTS" PageGroupId="DARK_POLICIES" Name="LOC_GOVT_POLICY_TYPE_DARKAGE" Tooltip="" VisibleIfEmpty="false" SortIndex="55" />
+    </CivilopediaPageGroups>
+    <CivilopediaPageQueries>
+        <Delete SectionId="GOVERNMENTS" />
+        <Row SectionId="GOVERNMENTS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT GovernmentType as PageId, "Government" as PageGroupId, "Government" as PageLayoutId, Name, null as Tooltip FROM Governments</SQL>
+        </Row>
+        <Row SectionId="GOVERNMENTS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT Policies.PolicyType as PageId, GovernmentSlotType as PageGroupId, "Policy" as PageLayoutId, Name, null as Tooltip FROM Policies LEFT OUTER JOIN Policies_XP1 on Policies.PolicyType = Policies_XP1.PolicyType WHERE Policies_XP1.RequiresDarkAge IS NULL or Policies_XP1.RequiresDarkAge &lt;&gt; 1</SQL>
+        </Row>
+        <Row SectionId="GOVERNMENTS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT Policies.PolicyType as PageId, "DARK_POLICIES" as PageGroupId, "Policy" as PageLayoutId, Name, null as Tooltip FROM Policies LEFT OUTER JOIN Policies_XP1 on Policies.PolicyType = Policies_XP1.PolicyType WHERE Policies_XP1.RequiresDarkAge = 1</SQL>
+        </Row>
+    </CivilopediaPageQueries>
+
+
+        <!-- Populate additional data. -->
+    <CivilopediaSections>
+        <Row SectionId="GOVERNORS" Name="LOC_PEDIA_GOVERNORS_TITLE" Icon="ICON_CIVILOPEDIA_GOVERNORS" SortIndex="170" />
+        <Row SectionId="MOMENTS" Name="LOC_PEDIA_MOMENTS_TITLE" Icon="ICON_CIVILOPEDIA_HISTORIC_MOMENTS" SortIndex="180" />
+    </CivilopediaSections>
+    <CivilopediaPageGroups>
+        <Row SectionID="CONCEPTS" PageGroupId="EXPANSION" Name="LOC_PEDIA_CONCEPTS_PAGEGROUP_EXPANSION_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="5"/>
+        <Row SectionID="GOVERNORS" PageGroupId="GOVERNORS" Name="LOC_PEDIA_GOVERNORS_PAGEGROUP_GOVERNORS_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="10"/>
+        <Row SectionID="MOMENTS" PageGroupId="MAJOR" Name="LOC_PEDIA_MOMENTS_PAGEGROUP_MAJOR_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="10"/>
+        <Row SectionID="MOMENTS" PageGroupId="MINOR" Name="LOC_PEDIA_MOMENTS_PAGEGROUP_MINOR_NAME" Tooltip="" VisibleIfEmpty="false" SortIndex="20"/>
+    </CivilopediaPageGroups>
+    <CivilopediaPageGroupQueries>
+        <Row SectionId="GOVERNORS" SQL="SELECT GovernorType AS PageGroupId, printf(&quot;{LOC_PEDIA_GOVERNORS_PAGEGROUP_PROMOTIONS_NAME &lt;&lt; {%s}}&quot;,ShortTitle) AS Name FROM Governors" SortIndex="20" />
+    </CivilopediaPageGroupQueries>
+    <CivilopediaPages>
+        <Row SectionId="CONCEPTS" PageId="PRIDE_MOMENTS_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_PRIDE_MOMENTS_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="10"/>
+        <Row SectionId="CONCEPTS" PageId="GOLDEN_AGES_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_GOLDEN_AGES_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="20"/>
+        <Row SectionId="CONCEPTS" PageId="DEDICATIONS" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_DEDICATIONS_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="30"/>
+        <Row SectionId="CONCEPTS" PageId="LOYALTY_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_LOYALTY_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="40"/>
+        <Row SectionId="CONCEPTS" PageId="GOVERNORS_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_GOVERNORS_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="50"/>
+        <Row SectionId="CONCEPTS" PageId="ALLIANCES_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_ALLIANCES_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="60"/>
+        <Row SectionId="CONCEPTS" PageId="EMERGENCY_ALLIANCES_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_EMERGENCY_ALLIANCES_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="70"/>
+        <Row SectionId="CONCEPTS" PageId="FREE_CITIES_1" PageGroupId="EXPANSION" PageLayoutId="Simple"  Name="LOC_PEDIA_CONCEPTS_PAGE_FREE_CITIES_1_CHAPTER_CONTENT_TITLE" Tooltip="" SortIndex="80"/>
+        <Row SectionId="GOVERNORS" PageId="INTRO" PageLayoutId="Simple"  Name="LOC_PEDIA_PAGE_INTRO_TITLE" Tooltip="" TextKeyPrefix="LOC_PEDIA_CONCEPTS_PAGE_GOVERNORS_1" SortIndex="10"/>
+        <Row SectionId="MOMENTS" PageId="INTRO" PageLayoutId="Simple"  Name="LOC_PEDIA_PAGE_INTRO_TITLE" TextKeyPrefix="LOC_PEDIA_CONCEPTS_PAGE_PRIDE_MOMENTS_1" Tooltip="" SortIndex="10"/>
+
+    </CivilopediaPages>
+    <CivilopediaPageQueries>
+        <Row SectionId="GOVERNORS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT GovernorType as PageId, "GOVERNORS" as PageGroupId, 'Governor' as PageLayoutId, printf("{%s} ({%s})", Name, ShortTitle) as Name, null as Tooltip FROM Governors</SQL>
+        </Row>
+        <Row SectionId="GOVERNORS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndexColumn="SortIndex" SortIndex="10">
+            <SQL>SELECT GovernorPromotionType as PageId, GovernorType as PageGroupId, 'GovernorPromotion' as PageLayoutId, Name, null as Tooltip, Level as SortIndex FROM GovernorPromotions inner join GovernorPromotionSets on GovernorPromotions.GovernorPromotionType = GovernorPromotionSets.GovernorPromotion</SQL>
+        </Row>
+        <Row SectionId="MOMENTS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT MomentType AS PageId, "MAJOR" AS PageGroupId, 'HistoricMoment' AS PageLayoutId, Name, null AS Tooltip FROM Moments WHERE InterestLevel &gt;= 2</SQL>
+        </Row>
+        <Row SectionId="MOMENTS" PageGroupIdColumn="PageGroupId" TooltipColumn="Tooltip" SortIndex="10">
+            <SQL>SELECT MomentType AS PageId, "MINOR" AS PageGroupId, 'HistoricMoment' AS PageLayoutId, Name, null AS Tooltip FROM Moments WHERE InterestLevel &lt; 2</SQL>
+        </Row>
+    </CivilopediaPageQueries>
+    <CivilopediaPageLayouts>
+        <Row PageLayoutId="Governor" ScriptTemplate="Governor" />
+        <Row PageLayoutId="GovernorPromotion" ScriptTemplate="GovernorPromotion" />
+        <Row PageLayoutId="HistoricMoment" ScriptTemplate="HistoricMoment" />
+    </CivilopediaPageLayouts>
+    <CivilopediaPageLayoutChapters>
+        <Row PageLayoutId="Governor" ChapterId="HISTORY" SortIndex="10"/>
+        <Row PageLayoutId="GovernorPromotion" ChapterId="HISTORY" SortIndex="10"/>
+    </CivilopediaPageLayoutChapters>
+    <CivilopediaPageSearchTermQueries>
+        <Row>
+            <SQL>SELECT "GOVERNORS" AS SectionId, GovernorType AS PageId, ShortTitle AS Term FROM Governors</SQL>
+        </Row>
+    </CivilopediaPageSearchTermQueries>
+</GameInfo>

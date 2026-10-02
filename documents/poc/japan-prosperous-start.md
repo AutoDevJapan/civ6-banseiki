@@ -1,5 +1,7 @@
 # 日本マップの「栄えた1534年開始」の実装（SSOT 3.1・Q28 オプション①）
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 > **位置づけ：PoC の実装記録。** 仕様の正本は [SSOT 3.1](../spec/ssot/03-map-and-scale.md)。規模の推定の根拠は [調査](../research/japan-1534-prosperity.md) と [japan-1534-prosperity.json](../spec/data/japan-1534-prosperity.json)。
 > 対象は史実の領土で始める日本マップ2種（`JAC_Japan_15km.Civ6Map`・`JAC_Japan_20km.Civ6Map`）だけ。開拓者から始める2種（`*_Settlers.Civ6Map`）は変えていない。
 
@@ -16,7 +18,7 @@
 
 ## 2. 規模の見直し（7b・8b）
 
-Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数値の史料が見つからなかった家は、推定のまま理由を書いた。値は `tools/japan_map_scale/prosperity.py` の `FACTIONS`、JSON の `direct_koku_basis`。
+Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数値の史料が見つからなかった家は、推定のまま理由を書いた。値は `tools/civ6-assets-rs/src/prosperity.rs` の `FACTIONS`、JSON の `direct_koku_basis`。
 
 | 勢力 | 旧（万石 低/中/高・信頼度） | 新 | 確かめたこと（出典） |
 |---|---|---|---|
@@ -35,7 +37,7 @@ Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数
 
 ## 3. 地図に置いたもの
 
-生成は `tools/japan_map_scale/prosper_start.py`。`generate.py` が史実開始の地図を書いた直後に `apply()` を呼ぶ。規則（人口・区域の種類・守備隊・予備隊の数・初期金）は `prosperity.py` の `city_plan()`・`faction_reserves()`・`starting_gold()`。
+生成は `tools/civ6-assets-rs/src/prosper_start.rs`。`tools/civ6-assets-rs/src/generate.rs` が史実開始の地図を書いた直後に `apply()` を呼ぶ。規則（人口・区域の種類・守備隊・予備隊の数・初期金）は `tools/civ6-assets-rs/src/prosperity.rs` の `city_plan()`・`faction_reserves()`・`starting_gold()`。
 
 ### 3.1 都市
 
@@ -88,7 +90,7 @@ Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数
 
 ## 4. テスト
 
-`python -m unittest discover -s tools/japan_map_scale/tests`（`tests/test_prosper_start.py`）：
+`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`（`tools/civ6-assets-rs/tests`）：
 
 1. 階層ごとの合計（勢力数・人口・部隊・区域・壁・改善・金）が上の表と一致し、本拠人口・1家あたりの部隊・金が A > B ≧ C > D。
 2. 全都市の中心にその家の守備隊がちょうど1体（本拠・主要城は槍兵、支城は戦士）。
@@ -96,13 +98,13 @@ Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数
 4. 区域・建物・改善が §3.1 の規則どおり（所有・距離・野営地の隣接禁止・港は海岸・資源なし・戦国ツリーで残る建物と改善だけ・区域の建物は対応する区域の上）。
 5. 京都の人口6と寺社・商業（20km は商業のみ）、各家の初期金。
 6. 開拓者版の地図に部隊・改善・金・建物がない。
-7. **決定性**：地図の写しに `apply()` を2回かけても、中身が収録済みの地図と同じ。`generate.py` を2回実行しても地図・manifest・シナリオのハッシュが同じ（手元で確認）。
+7. **決定性**：地図の写しに `apply()` を2回かけても、中身が収録済みの地図と同じ。`tools/civ6-assets-rs/src/generate.rs` を2回実行しても地図・manifest・シナリオのハッシュが同じ（手元で確認）。
 8. 実機シナリオが最新で、ドライバの検証を通る。開始時の確認が読み込み時の記録を読む。開始時の確認に埋め込んだ家ごとの建物の種類別の数が、収録済みの地図の `Buildings` と一致する。最後の手順が、滅亡か本拠の喪失で失敗する。
-9. 読み込み時の記録のスクリプトが史実開始の2種だけで動く（modinfo の条件）。`test_generate.py` で初期ユニットの表の全削除も確かめる。
+9. 読み込み時の記録のスクリプトが史実開始の2種だけで動く（modinfo の条件）。`tools/civ6-assets-rs/tests` で初期ユニットの表の全削除も確かめる。
 
 ## 5. 実機確認（メインセッションで実行）
 
-シナリオ `tools/civ6-autotest/scenarios/japan-prosperous-15km.json`（検証：`python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/japan-prosperous-15km.json --check`）。
+シナリオ `tools/civ6-autotest/scenarios/japan-prosperous-15km.json`（検証：`cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/japan-prosperous-15km.json --check`）。
 
 1. 開始直後（手順4）：全22家の都市数・人口・軍事部隊数・区域数・壁の数・改善数・種類別の建物数（宮殿・土塁・穀倉・区域の建物すべて）が地図どおりか、全都市の中心に自家の軍事部隊がちょうど1体いるか、軍事部隊が2体いるタイルがないか、金が地図の値以上かを確かめ、違えば止まる。戻り値は `家 都市/人口/部隊/区域/壁/改善/金` の並び。
    - 値はその時点の盤面ではなく、ゲームプレイスクリプト `poc/JAC_PoC_JapanMapScale/Scripts/JAC_Japan_StartState.lua` が読み込み時（1ターン目の処理の前、新規ゲームのときだけ）に Game プロパティ `JAC_JAPAN_START_STATE`（建物は `JAC_JAPAN_START_BUILDINGS`）へ書いた記録を読む。AI は UI 側の確認より先に1ターン目を動かすため（§5.1）。記録がなければ `no start state recorded`／`no start buildings recorded` で止まる。
@@ -134,7 +136,7 @@ Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数
 3. 3家の金の減り方は 233.5・233・235 でそろう。弓兵（生産力60、`Base/Assets/Gameplay/Data/Units.xml:779`）の標準速度での購入額240から1ターン分の収入を引いた値に合う（購入額の式は `GlobalParameters.xml:334,465` の GOLD_PURCHASE_MULTIPLIER・PURCHASE_DIVISOR。240 は標準速度で広く知られた購入額で、この環境の画面と式では未確認）。
 4. 伊達の守備隊・予備隊は、地図の位置からちょうど1タイル動いた位置にいた（戦士 (150,39)→(151,38)、(150,43)→(150,42) など6体）。地図の `Units` は全都市の中心に1体、1タイル1体（§4 の2・3）。
 
-対応：確認を読み込み時の記録に切り替え（§5 の1）、初期ユニットの表を全削除（§3.2 の5）。地図の行は変えていない（`prosper_start.py` を再実行しても中身は同一）。初期金は地図の `Treasury` がそのまま効いているため、Lua で金を設定し直す処理は入れていない。
+対応：確認を読み込み時の記録に切り替え（§5 の1）、初期ユニットの表を全削除（§3.2 の5）。地図の行は変えていない（`tools/civ6-assets-rs/src/prosper_start.rs` を再実行しても中身は同一）。初期金は地図の `Treasury` がそのまま効いているため、Lua で金を設定し直す処理は入れていない。
 
 ## 6. 入れていないもの
 
@@ -147,12 +149,12 @@ Wikipedia 日本語版を curl で取得して確かめた（2026-09-29）。数
 ## 7. 再生成
 
 ```
-python tools/japan_map_scale/generate.py        # 地図4種・manifest・設定・シナリオ（本機能も含む）
-python tools/japan_map_scale/prosperity.py      # 調査 JSON（地図を読む）
-python tools/japan_map_scale/prosper_start.py   # 収録済みの地図2種に再適用し、シナリオを書き直す
+cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-generate --        # 地図4種・manifest・設定・シナリオ（本機能も含む）
+cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-prosperity --      # 調査 JSON（地図を読む）
+cargo run --locked --manifest-path tools/Cargo.toml --bin japan-map-prosper-start --   # 収録済みの地図2種に再適用し、シナリオを書き直す
 ```
 
-`generate.py` は Natural Earth・ETOPO の取得物を `tools/japan_map_scale/cache/` に置く（ハッシュ固定、Git 管理外）。
+`tools/civ6-assets-rs/src/generate.rs` は Natural Earth・ETOPO の取得物を `tools/japan_map_scale/cache/` に置く（ハッシュ固定、Git 管理外）。
 
 ## 縮尺について
 

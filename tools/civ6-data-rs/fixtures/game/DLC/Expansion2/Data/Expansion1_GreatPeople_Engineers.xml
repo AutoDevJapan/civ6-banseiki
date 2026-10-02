@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Anton Strenger (Firaxis Games) -->
+<GameInfo>
+    <GreatPersonIndividuals>
+        <Update>
+            <Where GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_MIMAR_SINAN"/>
+            <Set>
+                <ActionCharges>1</ActionCharges>
+            </Set>
+        </Update>
+    </GreatPersonIndividuals>
+    <GreatPersonIndividualActionModifiers>
+        <Row GreatPersonIndividualType="GREAT_PERSON_INDIVIDUAL_MIMAR_SINAN" ModifierId="GREATPERSON_CULTURE_BOMB_TRIGGER_INDUSTRIAL_ZONE" AttachmentTargetType="GREAT_PERSON_ACTION_ATTACHMENT_TARGET_DISTRICT_IN_TILE"/>
+    </GreatPersonIndividualActionModifiers>
+    <Modifiers>
+        <!-- Unique Action Modifiers, different for each individual -->
+        <Row>
+            <ModifierId>GREATPERSON_CULTURE_BOMB_TRIGGER_INDUSTRIAL_ZONE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_ADD_CULTURE_BOMB_TRIGGER</ModifierType>
+            <RunOnce>true</RunOnce>
+            <Permanent>true</Permanent>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>GREATPERSON_CULTURE_BOMB_TRIGGER_INDUSTRIAL_ZONE</ModifierId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_INDUSTRIAL_ZONE</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <Row ModifierId="GREATPERSON_CULTURE_BOMB_TRIGGER_INDUSTRIAL_ZONE" Context="Summary" Text="LOC_GREATPERSON_CULTURE_BOMB_TRIGGER_INDUSTRIAL_ZONE"/>
+    </ModifierStrings>
+</GameInfo>

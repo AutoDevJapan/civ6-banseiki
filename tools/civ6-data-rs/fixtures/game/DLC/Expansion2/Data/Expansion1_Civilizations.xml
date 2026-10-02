@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="CIVILIZATION_ANTIOCH" Kind="KIND_CIVILIZATION"/>
+        <Row Type="CIVILIZATION_BABYLON" Kind="KIND_CIVILIZATION"/>
+        <Row Type="CIVILIZATION_FREE_CITIES" Kind="KIND_CIVILIZATION"/>
+        <Row Type="TRAIT_CIVILIZATION_NO_PLAYER" Kind="KIND_TRAIT"/>
+        <!-- Free Cities Diplomacy -->
+        <Row Type="DIPLO_STATE_FREE_CITIES_NEUTRAL" Kind="KIND_DIPLOMATIC_STATE"/>
+    </Types>
+    <TypeProperties>
+        <Row Type="CIVILIZATION_ANTIOCH" Name="CityStateCategory" Value="TRADE"/>
+        <Row Type="CIVILIZATION_BABYLON" Name="CityStateCategory" Value="SCIENTIFIC"/>
+    </TypeProperties>
+    <CivilizationLevels>
+        <Row CivilizationLevelType="CIVILIZATION_LEVEL_FREE_CITIES" CanFoundCities="false" CanAnnexTilesWithCulture="false" CanAnnexTilesWithGold="false" CanAnnexTilesWithReceivedInfluence="false" CanEarnGreatPeople="false" CanGiveInfluence="false" CanReceiveInfluence="false" CanBuildWonders="false" StartingTilesForCity="0" IgnoresUnitStrategicResourceRequirements="false"/>
+    </CivilizationLevels>
+    <Civilizations>
+        <!--City-States -->
+        <Row CivilizationType="CIVILIZATION_ANTIOCH" Name="LOC_CIVILIZATION_ANTIOCH_NAME" Description="LOC_CIVILIZATION_ANTIOCH_DESCRIPTION" Adjective="LOC_CIVILIZATION_ANTIOCH_ADJECTIVE" StartingCivilizationLevelType="CIVILIZATION_LEVEL_CITY_STATE" RandomCityNameDepth="1"/>
+        <Row CivilizationType="CIVILIZATION_BABYLON" Name="LOC_CIVILIZATION_BABYLON_NAME" Description="LOC_CIVILIZATION_BABYLON_DESCRIPTION" Adjective="LOC_CIVILIZATION_BABYLON_ADJECTIVE" StartingCivilizationLevelType="CIVILIZATION_LEVEL_CITY_STATE" RandomCityNameDepth="1"/>
+        <!-- Free cities -->
+        <Row CivilizationType="CIVILIZATION_FREE_CITIES" Name="LOC_CIVILIZATION_FREE_CITIES_NAME" Description="LOC_CIVILIZATION_FREE_CITIES_DESCRIPTION" Adjective="LOC_CIVILIZATION_FREE_CITIES_ADJECTIVE" StartingCivilizationLevelType="CIVILIZATION_LEVEL_FREE_CITIES" RandomCityNameDepth="1"/>
+    </Civilizations>
+    <CivilizationLeaders>
+        <Row CivilizationType="CIVILIZATION_ANTIOCH" LeaderType="LEADER_MINOR_CIV_ANTIOCH" CapitalName="LOC_CITY_NAME_ANTIOCH"/>
+        <Row CivilizationType="CIVILIZATION_BABYLON" LeaderType="LEADER_MINOR_CIV_BABYLON" CapitalName="LOC_CITY_NAME_BABYLON"/>
+        <Row CivilizationType="CIVILIZATION_FREE_CITIES" LeaderType="LEADER_FREE_CITIES" CapitalName="LOC_CITY_NAME_ULUNDI"/>
+    </CivilizationLeaders>
+    <Traits>
+        <Row TraitType="TRAIT_CIVILIZATION_NO_PLAYER" Name="LOC_TRAIT_CIVILIZATION_NO_PLAYER_NAME"/>
+    </Traits>
+    <TraitModifiers>
+        <Row>
+            <TraitType>TRAIT_CIVILIZATION_FOUNDING_FATHERS</TraitType>
+            <ModifierId>TRAIT_ALL_DIPLO_POLICY_ARE_WILDCARDS</ModifierId>
+        </Row>
+        <Row>
+            <TraitType>TRAIT_CIVILIZATION_TREASURE_FLEET</TraitType>
+            <ModifierId>TRAIT_MISSION_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+        </Row>
+        <Row>
+            <TraitType>TRAIT_CIVILIZATION_ITERU</TraitType>
+            <ModifierId>TRAIT_FLOODPLAINS_VALID_GOVERNMENT</ModifierId>
+        </Row>
+    </TraitModifiers>
+    <Modifiers>
+        <Row>
+            <ModifierId>TRAIT_ALL_DIPLO_POLICY_ARE_WILDCARDS</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CULTURE_REPLACE_GOVERNMENT_SLOTS</ModifierType>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_MISSION_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_IDENTITY_PER_TURN</ModifierType>
+            <SubjectRequirementSetId>REQUIREMENTS_PLOT_ADJACENT_MISSION_FOREIGN_CONTINENT</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_FLOODPLAINS_VALID_GOVERNMENT</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_CITIES_ADJUST_VALID_FEATURES_DISTRICTS</ModifierType>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Row>
+            <ModifierId>TRAIT_ALL_DIPLO_POLICY_ARE_WILDCARDS</ModifierId>
+            <Name>ReplacedGovernmentSlotType</Name>
+            <Value>SLOT_DIPLOMATIC</Value>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_ALL_DIPLO_POLICY_ARE_WILDCARDS</ModifierId>
+            <Name>AddedGovernmentSlotType</Name>
+            <Value>SLOT_WILDCARD</Value>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_ALL_DIPLO_POLICY_ARE_WILDCARDS</ModifierId>
+            <Name>ReplacesAll</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_MISSION_IDENTITY_PER_TURN_MODIFIER</ModifierId>
+            <Name>Amount</Name>
+            <Value>2</Value>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_FLOODPLAINS_VALID_GOVERNMENT</ModifierId>
+            <Name>DistrictType</Name>
+            <Value>DISTRICT_GOVERNMENT</Value>
+        </Row>
+        <Row>
+            <ModifierId>TRAIT_FLOODPLAINS_VALID_GOVERNMENT</ModifierId>
+            <Name>FeatureType</Name>
+            <Value>FEATURE_FLOODPLAINS</Value>
+        </Row>
+    </ModifierArguments>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CAMPUS_HAPPY_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CAMPUS_ECSTATIC_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_INDUSTRIAL_ZONE_HAPPY_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_INDUSTRIAL_ZONE_ECSTATIC_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>OPPONENT_IS_IN_GOLDEN_AGE_FREE_CITY_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ANY</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_IS_OCCUPIED_REQUIREMENTS</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_POTTERY_AND_CAPITAL</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GARRISON_CORPS_OR_ARMY_REQUIREMENT</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ANY</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_PLOT_ADJACENT_MISSION_FOREIGN_CONTINENT</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_FOUNDED</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_NOT_FOUNDED</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_POTTERY</RequirementId>
+            <Name>TechnologyType</Name>
+            <Value>TECH_POTTERY</Value>
+        </Row>
+        <Row>
+            <RequirementId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENT</RequirementId>
+            <Name>Type</Name>
+            <Value>GOLDEN</Value>
+        </Row>
+        <Row>
+            <RequirementId>CITY_IS_OCCUPIED_REQUIREMENT</RequirementId>
+            <Name>OnlyOwnersCity</Name>
+            <Value>false</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_CORPS</RequirementId>
+            <Name>MilitaryFormation</Name>
+            <Value>CORPS_MILITARY_FORMATION</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_ARMY</RequirementId>
+            <Name>MilitaryFormation</Name>
+            <Value>ARMY_MILITARY_FORMATION</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_MISSION</RequirementId>
+            <Name>ImprovementType</Name>
+            <Value>IMPROVEMENT_MISSION</Value>
+        </Row>
+    </RequirementArguments>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_PLAYER_HAS_POTTERY</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_HAS_TECHNOLOGY</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_OPPONENT_ERA_AGE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>OPPONENT_IS_FREE_CITY_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_OPPONENT_IS_FREE_CITY</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>CITY_IS_OCCUPIED_REQUIREMENT</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_OCCUPIED</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_CORPS</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_GARRISON_UNIT</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_ARMY</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_HAS_GARRISON_UNIT</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_MISSION</RequirementId>
+            <RequirementType>REQUIREMENT_PLOT_ADJACENT_IMPROVEMENT_TYPE_MATCHES</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_WAS_FOUNDED</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_IS_ORIGINAL_OWNER</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_CITY_WAS_NOT_FOUNDED</RequirementId>
+            <RequirementType>REQUIREMENT_CITY_IS_ORIGINAL_OWNER</RequirementType>
+            <Inverse>true</Inverse>
+        </Row>
+    </Requirements>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CAMPUS_HAPPY_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_CAMPUS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_CAMPUS_ECSTATIC_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_CAMPUS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_INDUSTRIAL_ZONE_HAPPY_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_INDUSTRIAL_ZONE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_INDUSTRIAL_ZONE_ECSTATIC_REQUIREMENTS</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_INDUSTRIAL_ZONE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENTS</RequirementSetId>
+            <RequirementId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>OPPONENT_IS_IN_GOLDEN_AGE_FREE_CITY_REQUIREMENTS</RequirementSetId>
+            <RequirementId>OPPONENT_IS_IN_GOLDEN_AGE_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>OPPONENT_IS_IN_GOLDEN_AGE_FREE_CITY_REQUIREMENTS</RequirementSetId>
+            <RequirementId>OPPONENT_IS_FREE_CITY_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_IS_OCCUPIED_REQUIREMENTS</RequirementSetId>
+            <RequirementId>CITY_IS_OCCUPIED_REQUIREMENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_POTTERY_AND_CAPITAL</RequirementSetId>
+            <RequirementId>REQUIRES_PLAYER_HAS_POTTERY</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_POTTERY_AND_CAPITAL</RequirementSetId>
+            <RequirementId>REQUIRES_CAPITAL_CITY</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GARRISON_CORPS_OR_ARMY_REQUIREMENT</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_CORPS</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GARRISON_CORPS_OR_ARMY_REQUIREMENT</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_GARRISON_ARMY</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_PLOT_ADJACENT_MISSION_FOREIGN_CONTINENT</RequirementSetId>
+            <RequirementId>REQUIRES_PLOT_ADJACENT_TO_MISSION</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>REQUIREMENTS_PLOT_ADJACENT_MISSION_FOREIGN_CONTINENT</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_IS_NOT_OWNER_CAPITAL_CONTINENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_FOUNDED</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_WAS_FOUNDED</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_FOUNDED</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_GOVERNOR</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_NOT_FOUNDED</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_WAS_NOT_FOUNDED</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>CITY_HAS_GOVERNOR_NOT_FOUNDED</RequirementSetId>
+            <RequirementId>REQUIRES_CITY_HAS_GOVERNOR</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <CityNames>
+        <!-- City-States-->
+        <Row CivilizationType="CIVILIZATION_ANTIOCH" CityName="LOC_CITY_NAME_ANTIOCH"/>
+        <Row CivilizationType="CIVILIZATION_BABYLON" CityName="LOC_CITY_NAME_BABYLON"/>
+    </CityNames>
+    <!-- Diplomatic considerations for the free cities players. Kept trivial for now, with the intent that we can change it if need be -->
+    <DiplomaticStartStates>
+        <Row PlayerCivLevel="CIVILIZATION_LEVEL_FULL_CIV" OpponentCivLevel="CIVILIZATION_LEVEL_FREE_CITIES" DiplomaticStateType="DIPLO_STATE_FREE_CITIES_NEUTRAL"/>
+        <Row PlayerCivLevel="CIVILIZATION_LEVEL_CITY_STATE" OpponentCivLevel="CIVILIZATION_LEVEL_FREE_CITIES" DiplomaticStateType="DIPLO_STATE_FREE_CITIES_NEUTRAL"/>
+        <Row PlayerCivLevel="CIVILIZATION_LEVEL_FREE_CITIES" OpponentCivLevel="CIVILIZATION_LEVEL_FULL_CIV" DiplomaticStateType="DIPLO_STATE_FREE_CITIES_NEUTRAL"/>
+        <Row PlayerCivLevel="CIVILIZATION_LEVEL_FREE_CITIES" OpponentCivLevel="CIVILIZATION_LEVEL_CITY_STATE" DiplomaticStateType="DIPLO_STATE_FREE_CITIES_NEUTRAL"/>
+    </DiplomaticStartStates>
+    <DiplomaticStates>
+        <Row StateType="DIPLO_STATE_FREE_CITIES_NEUTRAL" Name="LOC_EMPTY"/>
+    </DiplomaticStates>
+</GameInfo>

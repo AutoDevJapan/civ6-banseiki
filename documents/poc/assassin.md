@@ -1,5 +1,7 @@
 # 暗殺者 PoC（束2、SSOT 9.5）
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 正本は [9.5](../spec/ssot/09-assimilation-religion.md) と [16.1 の暗殺者行](../spec/ssot/16-roadmap.md)。この記録は仕様の追加ではない。未決の効果量は `JAC_Assassin_Rules.lua` の `PROVISIONAL` に集め、オーナーの決定として扱わない。
 
 実装は `poc/JAC_PoC_Assassin/`。万世紀ルールセットと、日本15/20 kmの史実領土版・開拓者版の組合せだけでデータ・Gameplay・UIを読み込む。戦国ツリーの LoadOrder 200 より後の350で追加する。オーナー回答はSSOT 9.5へ反映し、回答済みのQ73〜Q78は質問リストから除去する。
@@ -114,7 +116,7 @@ UnitにはGame Propertyで連番を発行した個体トークンを保存する
 | VFSの同名Lua衝突回避 | `DLC/Expansion2/Expansion2.modinfo` の `UI/Replacements/CitySupport.lua` インポート。Gameplayは `JAC_Assassin_Gameplay.lua`、UIは `JAC_AssassinPanel.lua` に分離 |
 | 本体の友好度変更 | `Debug/Diplomacy.ltp:33` の `GetAi_Diplomacy():AdjustBaseDiplomacy` はTuner例。通常Gameplayで動くとは断言しないため呼ばない |
 | 本体の不平・非難・開戦理由 | 不平は `DLC/Expansion2/UI/Additions/DiplomacyActionView_WorldCongressTab.lua:42` の読取だけ確認。非難は `Base/Assets/UI/DiplomacyActionView.lua:469` のUIセッションで、Gameplayからの第三国強制経路ではない。`DLC/NubiaScenario/Scripts/NubiaScenario.lua:172` は実際の開戦であり理由の付与ではない。未検証のSetterを作らない |
-| 吸収の都市所有移管 | `CityManager.TransferCity(city,recipient)` は既存実機で確認済み（[天下統一PoC](unification-victory.md):15,82,86、`tools/generate_unification_victory.py:277`）。公式 `DLC/Expansion2/Binaries/Win64/GameCore_XP2_Release.dll` の登録文字列（オフセット14318752）。公式Luaの同じ呼出し例は未発見なので、ここはテキスト行での根拠がない。`Debug/City.ltp:277` のFree Cities用APIとは区別する。暗殺者による移管は要実機確認 |
+| 吸収の都市所有移管 | `CityManager.TransferCity(city,recipient)` は既存実機で確認済み（[天下統一PoC](unification-victory.md):15,82,86、`tools/civ6-data-rs/src/unification.rs:277`）。公式 `DLC/Expansion2/Binaries/Win64/GameCore_XP2_Release.dll` の登録文字列（オフセット14318752）。公式Luaの同じ呼出し例は未発見なので、ここはテキスト行での根拠がない。`Debug/City.ltp:277` のFree Cities用APIとは区別する。暗殺者による移管は要実機確認 |
 | 0都市での敗北・旧AI停止 | `Base/Assets/Gameplay/Data/Victories.xml:441` の敗北条件。最後の都市を移す前に全Unitを解散。自然敗北・旧AI終了とロード後の退役は要実機確認 |
 | 指導者・国名の本体差替の限界 | `Base/Assets/UI/WorldBuilderPlayerEditor.lua:1250` の交換操作はWorldBuilder専用。通常Gameplayへ持ち込まない。PoCは人物IDと国名を独自UIへ表示する |
 | Great Personの人物と再付与 | `DLC/NubiaScenario/Scripts/NubiaScenario.lua:106` の `GetGreatPerson():GetIndividual()` と `Game.GetGreatPeople():GrantPerson`。吸収aでは再付与せず人物登録簿へ渡す。ネイティブ技能・Governor任命は未接続 |
@@ -129,13 +131,13 @@ PoC画像は公式スカウトのアイコンを参照するだけで、公式DD
 
 ## 検査と実機シナリオ
 
-`tests/test_assassin_lua.py` はlupaを必須インポートし、Luaテストをskipしない。育成100／20と5速度、各ターンの延長・短縮、20ターン下限と完成後10ターンの境界、2都市・2Unit、全成功率、成否と発覚の4組合せ、暗殺者消失、全分岐の処理・受入先消失・偉人の二重所属防止・保存復元を検査する。追加の検査は、自由都市の本体API呼出しと人物履歴、受入国の全6要因と同盟・同点・未取得項目、外交支持の多い1国が支持のない多数国を上回る採決、テストフック無効時の不変性・選択時計・ロード後再計算と次ターン完了である。
+`tools/civ6-lua-tests-rs/tests/assassin.rs` はmlua に Lua 5.1 を組み込み、Lua のテストを毎回実行する。育成100／20と5速度、各ターンの延長・短縮、20ターン下限と完成後10ターンの境界、2都市・2Unit、全成功率、成否と発覚の4組合せ、暗殺者消失、全分岐の処理・受入先消失・偉人の二重所属防止・保存復元を検査する。追加の検査は、自由都市の本体API呼出しと人物履歴、受入国の全6要因と同盟・同点・未取得項目、外交支持の多い1国が支持のない多数国を上回る採決、テストフック無効時の不変性・選択時計・ロード後再計算と次ターン完了である。
 
-実機シナリオは `tools/civ6-autotest/scenarios/assassin-leader-save-load.json`（88手順、**ターン終了は18回**）。実機チェーンは再起動を1手順加えるため89手順になる。`tools/generate_assassin_poc.py` の `build_scenario()` が同じデータを返し、テストでJSON全体の一致とターン数を検査する。assassin-04で人間のターン終了に約150秒かかったため、各手順の待機上限は600秒にする。18回ならターン処理の目安は約45分で、保存・ロード・開始の時間は別にかかる。
+実機シナリオは `tools/civ6-autotest/scenarios/assassin-leader-save-load.json`（88手順、**ターン終了は18回**）。実機チェーンは再起動を1手順加えるため89手順になる。`tools/civ6-data-rs/src/assassin.rs` の `build_scenario()` が同じデータを返し、テストでJSON全体の一致とターン数を検査する。assassin-04で人間のターン終了に約150秒かかったため、各手順の待機上限は600秒にする。18回ならターン処理の目安は約45分で、保存・ロード・開始の時間は別にかかる。
 
 1. 日本15 km・万世紀・22家、織田家を人間として開始。AI松平家への成功・未発覚・自由都市分裂を強制し、育成と任務をアクティブ手番の同期操作で開始する。Unit生成APIの戻り値は使わずID差から見つける。通常100／最短20、1都市制限・別Unitの任務拒否を検査する。
 2. ターンを1回ずつ進めて治安と外交関係の変化で育成期限100→120→110→120→70を検査する。途中のsave→メニュー→loadで育成の全フィールドと任務のロール・スナップショット・処理計画を比較する。その後だけ期限を短縮し、次の実ターンで育成と自由都市移管を解決する。各都市の実所有者、旧枠の実際の敗北、旧軍の除去、存命偉人の無所属履歴を検査する。
-3. 完成時の全国育成ロックが完成+10であることを検査し、全都市で開始を拒否する。2回目のsave→loadで国の履歴・人物・自由都市の所有とロック状態を比較する。保存した本来の+9拒否／+10許可を規則関数で確認した後、ロックだけを短縮する。短縮後も直前は全都市で拒否し、実ターンで境界に達した後、別都市で通常の20ターン期限を検査してから短縮・完成する。**100／70／20ターンの実経過は短縮しており、通常の経過時間の境界はlupaで検証する。**
+3. 完成時の全国育成ロックが完成+10であることを検査し、全都市で開始を拒否する。2回目のsave→loadで国の履歴・人物・自由都市の所有とロック状態を比較する。保存した本来の+9拒否／+10許可を規則関数で確認した後、ロックだけを短縮する。短縮後も直前は全都市で拒否し、実ターンで境界に達した後、別都市で通常の20ターン期限を検査してから短縮・完成する。**100／70／20ターンの実経過は短縮しており、通常の経過時間の境界は mlua で検証する。**
 4. 別々のAI国で継承・吸収・採決を実行し、各計画の固定を確認してから次の実ターンで解決する。Great Personの除去と後継者の照合、候補の原値から式を独立に計算した最大得点の受入国、全都市移管・Unit解散・人物加入・旧枠敗北を検査する。採決は外交支持の多い1国の継承票が多数国の自由都市票を上回るように本体のFavorを変え、任務中に票とFavorを変えても結果が変わらないことを確認する。テスト用に変えたFavorは検査後に戻す。
 5. 継承で存続する今川家のUnitを別の暗殺者で狙い、成功／失敗×発覚／未発覚の4組合せで暗殺者を解決前に除去する。各任務の期限だけを短縮する。対象生存、取消済み結果、固定の友好-10・不平+25が一度だけ適用、開戦理由・第三国非難なし、元の全国待機保持を検査する。次の任務の前には待機も短縮し、1回の実ターンで期限を通過する。
 6. 3回目のsave→loadで全国家履歴・人物・計画・状態・罰則の値と適用済み任務一覧を保存前の値に比較する。ロード直後と次のターンで二重適用・旧枠の復活がないことを検査する。最後にテストモードを解除し、フックが状態を変えないことを確認する。

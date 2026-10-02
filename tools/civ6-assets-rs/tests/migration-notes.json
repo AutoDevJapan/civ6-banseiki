@@ -1,0 +1,111 @@
+{
+  "record_context": "このJSONは担当者が統合前に行った検査と引き継ぎの記録。現在のCargo.lockは追跡済みで、Pythonの79ファイルは削除済み。主担当の最終workspace検査は1199件成功。最新の手順と実機記録はdocuments/rust-migration.mdを参照する。",
+  "scope": "tools/civ6-assets-rs",
+  "adopted_uncommitted_port": true,
+  "baseline": {
+    "assets_old_methods": 49,
+    "data_old_methods": 166,
+    "runnable_old_scripts": 11,
+    "production_bins": 8,
+    "start_1534": "Library module; the original has no runnable main entry point."
+  },
+  "shared_production": {
+    "dependency": "civ6-data-rs",
+    "asset_dependencies_git_blob": "ee4e75f80268216642554bb233f76b300cb8ffe2",
+    "reused": [
+      "SEATS",
+      "art::LEADER_ORDER",
+      "art::SUBJECTS",
+      "art::filename",
+      "art::prompt",
+      "art::leaders",
+      "art::atlas",
+      "city_names",
+      "feuds"
+    ],
+    "reverse_dependency": false
+  },
+  "verified": {
+    "test_command": "cargo test --manifest-path tools/Cargo.toml -p civ6-assets-rs -p civ6-data-rs --locked --offline --jobs 2 -- --test-threads=2",
+    "assets_tests_passed": 66,
+    "data_unit_tests_passed": 183,
+    "data_cli_tests_passed": 2,
+    "total_passed": 251,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 0,
+    "format": "rustfmt --edition 2021 --check on every Rust file in this crate: passed",
+    "clippy_command": "cargo clippy --manifest-path tools/Cargo.toml -p civ6-assets-rs --locked --offline --jobs 2 --all-targets --no-deps -- -D warnings",
+    "clippy": "passed",
+    "native_map_cli": {
+      "command": "japan-map-generate --cache <isolated-cache> --output <isolated-fixture>/Maps",
+      "source_hashes_verified": true,
+      "official_schema": "Installed Civ6 WorldMapHuge.Civ6Map, opened read-only",
+      "20km": {
+        "width": 154,
+        "height": 67,
+        "land_tiles": 1082,
+        "historical_bytes": 532480,
+        "settler_bytes": 516096
+      },
+      "15km": {
+        "width": 204,
+        "height": 88,
+        "land_tiles": 1906,
+        "historical_bytes": 745472,
+        "settler_bytes": 716800
+      },
+      "outputs": "Four SQLite maps, four Lua entry points, manifest.json and JAC_ResourceSites.lua in an isolated fixture directory"
+    },
+    "portrait_cli": "Rust subprocess fixture checks ChatGPT OAuth acceptance, API-key and no-login rejection, sanitized environment, relative paths, all-image validation and existing-output recovery. It never calls an image service.",
+    "cooker": "Rust subprocess fixture checks arguments, absolute paths, output name inventory and failure propagation; real SDK output name-table prefixes are also checked by the old art assertions.",
+    "cli_compatibility": {
+      "cli_tests_passed": 9,
+      "long_options_tested": 27,
+      "standard_output_spellings": [
+        "relative",
+        "absolute",
+        "dot components"
+      ],
+      "unrelated_exports_tested": [
+        "standard directory absent",
+        "standard directory present"
+      ],
+      "portrait_choices_validated": 22,
+      "portrait_unknown_exit_code": 2,
+      "legacy_portrait_only_alias": "--o",
+      "source_cache_zip_sha256": "3cba719eda6335ea7c968ed40e17b7c597d4eac7b3ec9b9f351f6f817277e6e6"
+    }
+  },
+  "main_integration": {
+    "todo_616": "Keep doing until main completes the overall migration and live gate.",
+    "unchanged_out_of_scope": [
+      "tools/Cargo.lock (pre-existing untracked workspace lock)",
+      "original Python tools and driver",
+      "MOD artifacts"
+    ],
+    "remaining_checks": [
+      "Main reviews this follow-up and removes the retained Python originals only after all Must findings are resolved. SDK cooking and official OAuth image generation remain main-owned."
+    ],
+    "upstream_clippy_diagnostics": [
+      {
+        "file": "tools/civ6-data-rs/src/reigns.rs",
+        "line": 515,
+        "lint": "type_complexity",
+        "suggestion": "Give the calendar return map a type alias."
+      },
+      {
+        "file": "tools/civ6-data-rs/src/unification.rs",
+        "line": 416,
+        "lint": "manual_range_contains",
+        "diagnostics": 2,
+        "suggestion": "Use (0..WIDTH).contains(&nx) and (0..HEIGHT).contains(&ny)."
+      }
+    ],
+    "reported_live_gate": {
+      "source": "Main report",
+      "rust11": "PASS",
+      "rust12": "PASS"
+    }
+  }
+}

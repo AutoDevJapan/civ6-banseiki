@@ -25,7 +25,7 @@
 
 getter は1つずつ `pcall` で呼び、無いものは `absent`、失敗は `ERR(...)` と書いて先へ進む（GameCore にどの getter があるかも結果の一部）。例外として、`InGame` の最初の手順は前提が崩れていれば止める：ルールセット、テスト MOD の `Eras_XP1` と `NEXT_ERA_TURN_COUNTDOWN` が効いていること、指定の速度、開始日が1534年（戦国の暦）。前提が崩れた記録は読み違いのもとになるため。
 
-このテスト MOD は、`disable_ids` の指定がない手順では、一度有効にすると残る。影響を検証地図に限り、同じ地図を使う `unification-victory.json`・`unification-pact.json` は `disable_ids` でこの MOD を切る（`tests/test_era_timing_probe.py` が検査する）。依存する基礎 MOD を無効化する手順でも、先にこのテスト MOD を無効化する。
+このテスト MOD は、`disable_ids` の指定がない手順では、一度有効にすると残る。影響を検証地図に限り、同じ地図を使う `unification-victory.json`・`unification-pact.json` は `disable_ids` でこの MOD を切る（`tools/civ6-autotest-rs/tests` が検査する）。依存する基礎 MOD を無効化する手順でも、先にこのテスト MOD を無効化する。
 
 ## 準備（オーナー）
 
@@ -38,8 +38,8 @@ New-Item -ItemType Junction -Path "$([Environment]::GetFolderPath('MyDocuments')
 ## 実行
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-timing-standard.json --output tools/civ6-autotest/artifacts/probe-era-timing-standard-01
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-timing-quick.json --output tools/civ6-autotest/artifacts/probe-era-timing-quick-01
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/probe-era-timing-standard.json --output tools/civ6-autotest/artifacts/probe-era-timing-standard-01
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/probe-era-timing-quick.json --output tools/civ6-autotest/artifacts/probe-era-timing-quick-01
 ```
 
 ## 読み方（結果で決まること）
@@ -69,7 +69,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 ### 時代の表（`Data/JAC_Sengoku_Eras.sql`）
 
-`tools/generate_sengoku_reigns.py` が改元の表（`documents/spec/data/sengoku-reigns.json`）から作る。
+`tools/civ6-data-rs/src/reigns.rs` が改元の表（`documents/spec/data/sengoku-reigns.json`）から作る。
 
 1. 天文から遅代までの 48 の元号を 1 つずつ時代にする。公式の 9 つの時代は ID を残して最初の 9 つの元号（天文・弘治・永禄・元亀・天正・文禄・慶長・元和・寛永）の名前にする（ID を消すと参照する行が連鎖して消える）。残りの 39 は `ERA_JAC_<ID>`（`ChronologyIndex` 10〜48）を足す
 2. 時代の名前は `LOC_JAC_ERA_<ID>_NAME`（「弘治の世」「Kōji Era」「Эпоха Кодзи」、台帳の画面の `LOC_JAC_AGE_ERA_NAME` と同じ形）。説明も同じキー。公式の書式は `LOC_GAME_ERA_DESC` = `{1_EraName}`、予告は「{2_EraName}終了まで{1}ターン」なので、そのまま元号の名前が出る
@@ -98,7 +98,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 エンジンは `Eras_XP1` のターンを速度の `CostMultiplier`（`Base/Assets/Gameplay/Data/GameSpeeds.xml`：オンライン 50・迅速 67・標準 100・叙事詩 150・マラソン 300）で縮め伸ばしする（切り捨て、最短 2）。以前の暦（迅速 6・オンライン 8 か月／ターン、叙事詩・マラソンは 2 段階）では、改元の月を含む暦のターンとエンジンの時代の始まりが、迅速・オンラインで最大 −13・−14 ターン、叙事詩で −793、マラソンで −1556 ターンずれていた。
 
-標準以外の暦は、`tools/generate_sengoku_reigns.py` が改元の表とエンジンの時代の長さから作る（`Data/JAC_Sengoku_Calendar.xml` も生成物になった）。
+標準以外の暦は、`tools/civ6-data-rs/src/reigns.rs` が改元の表とエンジンの時代の長さから作る（`Data/JAC_Sengoku_Calendar.xml` も生成物になった）。
 
 1. 各時代の最初のターンの日付は、その改元の月か、その 2 か月前まで（そのターンが改元の月を含む）。遅代は改元の月ちょうど
 2. 時代の間のターンは、その元号の月数をなるべく均等に分ける（1 ターンの月数は隣どうしで 1 か月違いの 2 種類を交互に。長い元号は約 8 ターン以上の区切りごとに交互）
@@ -124,7 +124,7 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 ### ツリーの時代
 
-各列を、設計の 4 期（1534〜1542・1543〜1567・1568〜1581・1582〜1600 年、[ツリー設計](../research/sengoku-tech-civic-tree.md) §1・§4）の年を列で3等分した中央の年月の元号に入れる（`tools/generate_sengoku_trees.py` の `column_era`）。列 1〜5 は天文（列5 は 1555年7月）、6 は永禄（1563年11月）、7 は元亀（1570年5月）、8〜11 は天正、12 は慶長（1597年11月）。ツリーの画面は技術・社会制度のある時代だけを並べる（`Base/Assets/UI/Screens/TechTree.lua:1452-1476`）ので、見出しは天文・永禄・元亀・天正・慶長の5つ。公式の研究費の補正（今の時代より後の時代の項目 +20%、前の時代の項目 −20%。`Expansion2_GlobalParameters.xml:48-50,244-246`）は元号で効く。各家の時代（`Player:GetEra()`）も研究した項目の元号で進む。
+各列を、設計の 4 期（1534〜1542・1543〜1567・1568〜1581・1582〜1600 年、[ツリー設計](../research/sengoku-tech-civic-tree.md) §1・§4）の年を列で3等分した中央の年月の元号に入れる（`tools/civ6-data-rs/src/trees.rs` の `column_era`）。列 1〜5 は天文（列5 は 1555年7月）、6 は永禄（1563年11月）、7 は元亀（1570年5月）、8〜11 は天正、12 は慶長（1597年11月）。ツリーの画面は技術・社会制度のある時代だけを並べる（`Base/Assets/UI/Screens/TechTree.lua:1452-1476`）ので、見出しは天文・永禄・元亀・天正・慶長の5つ。公式の研究費の補正（今の時代より後の時代の項目 +20%、前の時代の項目 −20%。`Expansion2_GlobalParameters.xml:48-50,244-246`）は元号で効く。各家の時代（`Player:GetEra()`）も研究した項目の元号で進む。
 
 4 期の名前（領国の基盤・技術交流と領国競争・統一への広域戦・統一事業）と、織田の家固有名「天下布武と広域戦」は無くなった（[家固有名](house-names.md)）。「天下布武」は、誓約を実装するときに織田家の固有の誓約3つのうち1つの名前にする（オーナー判断 U-1「a」、2026-09-30。SSOT 3.2、[時代の設計](../research/sengoku-ages.md) §7.2）。それまではどこにも表示しない。今、戦国パックに登録した家固有名は無い。「天下布武」は後続の[家固有の誓約](sengoku-oaths.md)で織田の1候補として実装し、ツリーの時代名には戻さない。
 
@@ -137,10 +137,10 @@ python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/probe-era-t
 
 ### 検査
 
-- `python tools/generate_sengoku_reigns.py --check`（暦 `Data/JAC_Sengoku_Calendar.xml` も含む）、`python tools/generate_sengoku_trees.py --check`
-- `tests/test_sengoku_ages.py`：公式のデータに重ねた時代の表（48、年代順、各 2 ターン以上、標準速度で改元の手番 = 時代の始まり、遅代は終わらない、`NEXT_ERA_TURN_COUNTDOWN` = 1、ツリーの時代が列の順、産業〜未来の偉人が無く連鎖先も残らない、遺物は享保、外部キー）、全速度で改元の手番＝時代の始まり（差 0、最初のターンは改元の月の 2 か月前まで、暦の行の主キーが重ならない）、台帳（エンジンの時代が変わった手番の判定、全速度の判定の手番が生成器と同じ）
-- `tests/test_sengoku_trees.py`：列の元号、`tests/test_sengoku_ages_screens.py`：公式の新しい時代の画面を出さない
-- 実機シナリオ `tools/civ6-autotest/scenarios/sengoku-era-reigns.json`（15 km 日本地図、標準速度、75 ターン）：時代の表、ツリーの見出し、エンジンの時代が弘治（66）・永禄（73）ちょうどで変わること（GameCore と InGame）、台帳の判定、改元の画面が1回ずつ出て公式の画面は出ないこと、公式の時代スコアと年齢が止まったままのこと。改元の画面は、`JAC_REIGN_POPUP_LAST` で出た改元（元号・ターン・年齢・点が台帳どおり）を確かめ、自動進行の間にドライバが閉じていれば（`scenario.py` の `POPUP_CLOSERS`）`JAC_ShowReignPopup(true)` で出し直してから、見出し・年齢・点の文を確かめて閉じる
+- `cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-reigns -- --check`（暦 `Data/JAC_Sengoku_Calendar.xml` も含む）、`cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-trees -- --check`
+- `tools/civ6-lua-tests-rs/tests/ages.rs`：公式のデータに重ねた時代の表（48、年代順、各 2 ターン以上、標準速度で改元の手番 = 時代の始まり、遅代は終わらない、`NEXT_ERA_TURN_COUNTDOWN` = 1、ツリーの時代が列の順、産業〜未来の偉人が無く連鎖先も残らない、遺物は享保、外部キー）、全速度で改元の手番＝時代の始まり（差 0、最初のターンは改元の月の 2 か月前まで、暦の行の主キーが重ならない）、台帳（エンジンの時代が変わった手番の判定、全速度の判定の手番が生成器と同じ）
+- `tools/civ6-data-rs/src/data_tests.rs`：列の元号、`tools/civ6-lua-tests-rs/tests/ages_screens.rs`：公式の新しい時代の画面を出さない
+- 実機シナリオ `tools/civ6-autotest/scenarios/sengoku-era-reigns.json`（15 km 日本地図、標準速度、75 ターン）：時代の表、ツリーの見出し、エンジンの時代が弘治（66）・永禄（73）ちょうどで変わること（GameCore と InGame）、台帳の判定、改元の画面が1回ずつ出て公式の画面は出ないこと、公式の時代スコアと年齢が止まったままのこと。改元の画面は、`JAC_REIGN_POPUP_LAST` で出た改元（元号・ターン・年齢・点が台帳どおり）を確かめ、自動進行の間にドライバが閉じていれば（`civ6-autotest` の `POPUP_CLOSERS`）`JAC_ShowReignPopup(true)` で出し直してから、見出し・年齢・点の文を確かめて閉じる
 
 実機 `era-equals-reign-03`（2026-09-30）：エンジンの時代は弘治（66）・永禄（73）ちょうどで変わり、台帳は両方を判定し、公式の画面は出なかった。永禄の改元の画面の確認だけが「画面が開いていない」で失敗した（弘治では画面が開いたまま残っていたが、永禄では自動進行の間にドライバが閉じた）。上の出し直しに直した。再実行の `era-equals-reign-07`（2026-09-30）で全手順が通り、弘治・永禄の改元の画面の元号・年齢・点が台帳と一致した。同じ日に `sengoku-house-names-oda`・`-takeda`・`sengoku-ages`（読み込み直後の黄金の生産効果を含む）・`sengoku-ages-screens`・`historical-events-15km`・`court-arbitration`・`sengoku-trees` も通った（`era-equals-reign-10`〜`-16`）。
 

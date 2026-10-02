@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Kinds>
+        <Row Kind="KIND_LOYALTY_LEVEL"/>
+    </Kinds>
+    <Types>
+        <Row Type="LOYALTY_LEVEL_0" Kind="KIND_LOYALTY_LEVEL"/>
+        <Row Type="LOYALTY_LEVEL_1" Kind="KIND_LOYALTY_LEVEL"/>
+        <Row Type="LOYALTY_LEVEL_2" Kind="KIND_LOYALTY_LEVEL"/>
+        <Row Type="LOYALTY_LEVEL_3" Kind="KIND_LOYALTY_LEVEL"/>
+    </Types>
+    <LoyaltyLevels>
+        <Row LoyaltyLevelType="LOYALTY_LEVEL_0" LoyaltyMax="25" LoyaltyMin="0" YieldChange="-1.0" GrowthChange="0.0" IdentityChange="0.25" Name="LOC_LOYALTY_LEVEL_0_NAME" Description="LOC_LOYALTY_LEVEL_0_DESCRIPTION"/>
+        <Row LoyaltyLevelType="LOYALTY_LEVEL_1" LoyaltyMax="50" LoyaltyMin="26" YieldChange="-0.5" GrowthChange="0.25" IdentityChange="0.5" Name="LOC_LOYALTY_LEVEL_1_NAME" Description="LOC_LOYALTY_LEVEL_1_DESCRIPTION"/>
+        <Row LoyaltyLevelType="LOYALTY_LEVEL_2" LoyaltyMax="75" LoyaltyMin="51" YieldChange="-0.25" GrowthChange="0.75" IdentityChange="0.75" Name="LOC_LOYALTY_LEVEL_2_NAME" Description="LOC_LOYALTY_LEVEL_2_DESCRIPTION"/>
+        <Row LoyaltyLevelType="LOYALTY_LEVEL_3" LoyaltyMax="100" LoyaltyMin="76" YieldChange="0" GrowthChange="1.0" IdentityChange="0.0" Name="LOC_LOYALTY_LEVEL_3_NAME" Description="LOC_LOYALTY_LEVEL_3_DESCRIPTION"/>
+    </LoyaltyLevels>
+</GameInfo>

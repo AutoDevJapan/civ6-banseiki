@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <Types>
+    <Row Type="PSEUDOYIELD_GOVERNOR" Kind="KIND_PSEUDOYIELD"/>
+  </Types>
+  <PseudoYields>
+    <!-- Note: Dark Age point is the value of avoiding getting that point. We assume no AI's will be deliberately seeking a dark age -->
+    <Row PseudoYieldType="PSEUDOYIELD_GOLDENAGE_POINT" DefaultValue="1"/>
+    <Row PseudoYieldType="PSEUDOYIELD_GOVERNOR" DefaultValue="2"/>
+  </PseudoYields>
+</GameInfo>

@@ -21,7 +21,7 @@ SSOT（[`documents/spec/ssot/`](../spec/ssot/)）と手元の Civ6 環境、Civ6
 |---|---|
 | Civ6 本体 | Steam 版（AppID 289070）。`C:\Program Files (x86)\Steam\steamapps\common\Sid Meier's Civilization VI`。実行ファイルの版は 1.0.12.68（2024-06-26） |
 | 拡張・DLC | Rise and Fall（`Expansion1`）、Gathering Storm（`Expansion2`）、New Frontier Pass 系と各種シナリオ・リーダーパックを含む37件 |
-| 公式開発ツール（SDK、AppID 404350） | 導入済み（2026-09-28 時点）。Cooker（`AssetModTools\Cooker`）をコマンドラインで動かして BLP を作れることを確認した（`tools/jac_art/build_art.py`） |
+| 公式開発ツール（SDK、AppID 404350） | 導入済み（2026-09-28 時点）。Cooker（`AssetModTools\Cooker`）をコマンドラインで動かして BLP を作れることを確認した（`tools/civ6-assets-rs/src/build_art.rs`） |
 | ユーザーデータ | `Documents\My Games\Sid Meier's Civilization VI\`（`Mods`・`Saves` あり。`Mods` は空） |
 | ログ・設定 | `%LOCALAPPDATA%\Firaxis Games\Sid Meier's Civilization VI\`（`Logs\`、`AppOptions.txt`、`Mods.sqlite`） |
 | デバッグ設定 | `AppOptions.txt` は `EnableTuner 0`、`EnableDebugMenu 0`、`EnableWorldBuilder 1` |

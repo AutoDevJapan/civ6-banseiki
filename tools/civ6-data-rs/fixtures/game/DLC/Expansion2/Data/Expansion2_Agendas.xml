@@ -1,0 +1,869 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSPY v2004 rel. 2 U (http://www.xmlspy.com) by Ed Beach (Firaxis Games) -->
+<GameInfo>
+    <Types>
+        <Row Type="TRAIT_AGENDA_EXPANSIONIST" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_FLAT_EARTHER" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_GREAT_WHITE_FLEET" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_INTOLERANT" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_PREFER_NODIPLOVP" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_PREFER_NOFAVOR" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_PREFER_PILLAGE" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_PREFER_NOTOURISM" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_TURTLER" Kind="KIND_TRAIT"/>
+        <Row Type="TRAIT_AGENDA_ZEALOT" Kind="KIND_TRAIT"/>
+    </Types>
+    <AiLists>
+        <Row ListType="CounterReformerInquisitionPreference" AgendaType="TRAIT_AGENDA_INTOLERANT" System="TriggeredTrees"/>
+        <Row ListType="CounterReformerInquisitorPreference" AgendaType="TRAIT_AGENDA_INTOLERANT" System="Units"/>
+        <Row ListType="LastVikingKingCoastSettlement" AgendaType="TRAIT_AGENDA_GREAT_WHITE_FLEET" System="PlotEvaluations"/>
+        <Row ListType="LastVikingKingHarborPreference" AgendaType="TRAIT_AGENDA_GREAT_WHITE_FLEET" System="Districts"/>
+        <Row ListType="LastVikingKingNavalPreference" AgendaType="TRAIT_AGENDA_GREAT_WHITE_FLEET" System="PseudoYields"/>
+    </AiLists>
+    <Traits>
+        <Row TraitType="TRAIT_AGENDA_EXPANSIONIST"/>
+        <Row TraitType="TRAIT_AGENDA_FLAT_EARTHER"/>
+        <Row TraitType="TRAIT_AGENDA_GREAT_WHITE_FLEET"/>
+        <Row TraitType="TRAIT_AGENDA_INTOLERANT"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NODIPLOVP"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOFAVOR"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_PILLAGE"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOTOURISM"/>
+        <Row TraitType="TRAIT_AGENDA_TURTLER"/>
+        <Row TraitType="TRAIT_AGENDA_ZEALOT"/>
+    </Traits>
+    <Agendas>
+        <Update>
+            <Where AgendaType="AGENDA_ENVIRONMENTALIST"/>
+            <Set>
+                <Description>LOC_AGENDA_KAITIAKITANGA_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Update>
+            <Where AgendaType="AGENDA_MONEY_GRUBBER"/>
+            <Set>
+                <Description>LOC_AGENDA_LORD_OF_MINES_DESCRIPTION</Description>
+            </Set>
+        </Update>
+        <Row AgendaType="AGENDA_DEMAGOGUE" Name="LOC_AGENDA_DEMAGOGUE_NAME" Description="LOC_AGENDA_DEMAGOGUE_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_DESTINATION_CIV" Name="LOC_AGENDA_DESTINATION_CIV_NAME" Description="LOC_AGENDA_DESTINATION_CIV_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_EXPANSIONIST" Name="LOC_AGENDA_EXPANSIONIST_NAME" Description="LOC_AGENDA_OPTIMUS_PRINCEPS_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_FLAT_EARTHER" Name="LOC_AGENDA_FLAT_EARTHER_NAME" Description="LOC_AGENDA_FLAT_EARTHER_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_GREAT_WHITE_FLEET" Name="LOC_AGENDA_GREAT_WHITE_FLEET_NAME" Description="LOC_AGENDA_LAST_VIKING_KING_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_INTOLERANT" Name="LOC_AGENDA_INTOLERANT_NAME" Description="LOC_AGENDA_COUNTER_REFORMER_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_LIBERTARIAN" Name="LOC_AGENDA_LIBERTARIAN_NAME" Description="LOC_AGENDA_LIBERTARIAN_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_PILLAGER" Name="LOC_AGENDA_PILLAGER_NAME" Description="LOC_AGENDA_PILLAGER_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_TURTLER" Name="LOC_AGENDA_TURTLER_NAME" Description="LOC_AGENDA_TURTLER_DESCRIPTION"/>
+        <Row AgendaType="AGENDA_ZEALOT" Name="LOC_AGENDA_ZEALOT_NAME" Description="LOC_AGENDA_ZEALOT_DESCRIPTION"/>
+    </Agendas>
+    <RandomAgendas>
+        <Row AgendaType="AGENDA_DEMAGOGUE"/>
+        <Row AgendaType="AGENDA_DESTINATION_CIV"/>
+        <Row AgendaType="AGENDA_EXPANSIONIST"/>
+        <Row AgendaType="AGENDA_FLAT_EARTHER"/>
+        <Row AgendaType="AGENDA_GREAT_WHITE_FLEET"/>
+        <Row AgendaType="AGENDA_INTOLERANT"/>
+        <Row AgendaType="AGENDA_LIBERTARIAN"/>
+        <Row AgendaType="AGENDA_PILLAGER"/>
+        <Row AgendaType="AGENDA_TURTLER"/>
+        <Row AgendaType="AGENDA_ZEALOT"/>
+    </RandomAgendas>
+    <ExclusiveAgendas>
+        <Row AgendaOne="AGENDA_OPTIMUS_PRINCEPS" AgendaTwo="AGENDA_EXPANSIONIST"/>
+        <Row AgendaOne="AGENDA_LAST_VIKING_KING" AgendaTwo="AGENDA_GREAT_WHITE_FLEET"/>
+        <Row AgendaOne="AGENDA_PARANOID" AgendaTwo="AGENDA_GREAT_WHITE_FLEET"/>
+        <Row AgendaOne="AGENDA_COUNTER_REFORMER" AgendaTwo="AGENDA_INTOLERANT"/>
+        <Row AgendaOne="AGENDA_SYCOPHANT" AgendaTwo="AGENDA_SYMPATHIZER"/>
+        <Row AgendaOne="AGENDA_ENVIRONMENTALIST" AgendaTwo="AGENDA_EXPLOITATIVE"/>
+    <Row AgendaOne="AGENDA_ENTHUSIASTIC_DISCIPLE" AgendaTwo="AGENDA_INTOLERANT"/>
+    </ExclusiveAgendas>
+  <AgendaTraits>
+        <Row AgendaType="AGENDA_DEMAGOGUE" TraitType="TRAIT_AGENDA_PREFER_NOFAVOR"/>
+        <Row AgendaType="AGENDA_DESTINATION_CIV" TraitType="TRAIT_AGENDA_PREFER_NOTOURISM"/>
+        <Row AgendaType="AGENDA_EXPANSIONIST" TraitType="TRAIT_AGENDA_EXPANSIONIST"/>
+        <Row AgendaType="AGENDA_FLAT_EARTHER" TraitType="TRAIT_AGENDA_FLAT_EARTHER"/>
+        <Row AgendaType="AGENDA_GREAT_WHITE_FLEET" TraitType="TRAIT_AGENDA_GREAT_WHITE_FLEET"/>
+        <Row AgendaType="AGENDA_INTOLERANT" TraitType="TRAIT_AGENDA_INTOLERANT"/>
+        <Row AgendaType="AGENDA_LIBERTARIAN" TraitType="TRAIT_AGENDA_PREFER_NODIPLOVP"/>
+        <Row AgendaType="AGENDA_PILLAGER" TraitType="TRAIT_AGENDA_PREFER_PILLAGE"/>
+        <Row AgendaType="AGENDA_TURTLER" TraitType="TRAIT_AGENDA_TURTLER"/>
+        <Row AgendaType="AGENDA_ZEALOT" TraitType="TRAIT_AGENDA_ZEALOT"/>
+    </AgendaTraits>
+    <TraitModifiers>
+        <Row TraitType="TRAIT_AGENDA_PREFER_INCOME" ModifierId="AGENDA_MONEY_GRUBBER"/>
+        <Row TraitType="TRAIT_AGENDA_EXPANSIONIST" ModifierId="AGENDA_EXPANSIONIST"/>
+        <Row TraitType="TRAIT_AGENDA_FLAT_EARTHER" ModifierId="AGENDA_FLAT_EARTHER"/>
+        <Row TraitType="TRAIT_AGENDA_GREAT_WHITE_FLEET" ModifierId="AGENDA_GREAT_WHITE_FLEET"/>
+        <Row TraitType="TRAIT_AGENDA_INTOLERANT" ModifierId="AGENDA_INTOLERANT_SAME_RELIGION"/>
+        <Row TraitType="TRAIT_AGENDA_INTOLERANT" ModifierId="AGENDA_INTOLERANT_ENCROACHING_RELIGION"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NODIPLOVP" ModifierId="AGENDA_HIGH_DIPLOVP"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NODIPLOVP" ModifierId="AGENDA_LOW_DIPLOVP"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOFAVOR" ModifierId="AGENDA_HIGH_FAVOR"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOFAVOR" ModifierId="AGENDA_LOW_FAVOR"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOTOURISM" ModifierId="AGENDA_HIGH_TOURISM"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_NOTOURISM" ModifierId="AGENDA_LOW_TOURISM"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_PILLAGE" ModifierId="AGENDA_HIGH_PILLAGE"/>
+        <Row TraitType="TRAIT_AGENDA_PREFER_PILLAGE" ModifierId="AGENDA_LOW_PILLAGE"/>
+        <Row TraitType="TRAIT_AGENDA_TURTLER" ModifierId="AGENDA_TURTLER"/>
+        <Row TraitType="TRAIT_AGENDA_ZEALOT" ModifierId="AGENDA_ZEALOT"/>
+    </TraitModifiers>
+    <Modifiers>
+        <Delete ModifierId="AGENDA_HIGH_INCOME"/>
+        <Delete ModifierId="AGENDA_LOW_INCOME"/>
+        <Update>
+            <Where ModifierId="AGENDA_ENVIRONMENT"/>
+            <Set>
+                <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_KAITIAKITANGA</ModifierType>
+            </Set>
+        </Update>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_LORD_OF_MINES</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_OPTIMUS_PRINCEPS</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_LAST_VIKING_KING</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_FLAT_EARTHER</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_DIPLOVP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_DIPLOVP</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_DIPLOVP</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_DIPLOVP</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_FAVOR</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_FAVOR</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_FAVOR</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_TOURISM</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_TOURISM</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_TOURISM</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_PILLAGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_HIGH_PILLAGE</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_SAME_RELIGION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_SAME_RELIGION</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_ENCROACHING_RELIGION</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_ENCROACHING_RELIGION</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_PILLAGE</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_SIMPLE_MODIFIER</ModifierType>
+            <SubjectRequirementSetId>PLAYER_HAS_LOW_PILLAGE</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_TURTLER</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_TURTLER</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ZEALOT</ModifierId>
+            <ModifierType>MODIFIER_PLAYER_DIPLOMACY_AGENDA_ZEALOT</ModifierType>
+            <OwnerRequirementSetId>ON_TURN_STARTED</OwnerRequirementSetId>
+            <SubjectRequirementSetId>PLAYER_IS_MAJOR_CIV_KNOWN_30_TURNS</SubjectRequirementSetId>
+        </Row>
+    </Modifiers>
+    <ModifierArguments>
+        <Delete ModifierId="AGENDA_ENVIRONMENT"/>
+        <Delete ModifierId="AGENDA_HIGH_INCOME"/>
+        <Delete ModifierId="AGENDA_LOW_INCOME"/>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_KAITIAKITANGA_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>60</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>40</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ENVIRONMENT</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_LORD_OF_MINES_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>TopPercentage</Name>
+            <Value>65</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>BottomPercentage</Name>
+            <Value>30</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_MONEY_GRUBBER</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_EXPANSIONIST_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <Name>TopTerritoryBonus</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <Name>BetterTerritoryBonus</Name>
+            <Value>4</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_EXPANSIONIST</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_EXPANSIONIST</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_GREAT_WHITE_FLEET_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <Name>TopMilitaryBonus</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <Name>BetterMilitaryBonus</Name>
+            <Value>4</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_GREAT_WHITE_FLEET</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_GREAT_WHITE_FLEET</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_FLAT_EARTHER_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>DiploModForCircumnavigation</Name>
+            <Value>-2</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>DiploModPerSpaceport</Name>
+            <Value>-1</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>DiploModPerSpaceProject</Name>
+            <Value>-1</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_FLAT_EARTHER</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_FLAT_EARTHER</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_SAME_RELIGION</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_SAME_RELIGION</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_INTOLERANT_SAME_RELIGION</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_SAME_RELIGION</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_INTOLERANT_SAME</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_SAME_RELIGION</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_ENCROACHING_RELIGION</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-8</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_ENCROACHING_RELIGION</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_INTOLERANT_ENCROACHING_RELIGION</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_ENCROACHING_RELIGION</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_INTOLERANT_ENCROACHING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_INTOLERANT_ENCROACHING_RELIGION</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_TURTLER</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_TURTLER_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_TURTLER</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>4</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_TURTLER</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_TURTLER</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ZEALOT</ModifierId>
+            <Name>StatementKey</Name>
+            <!-- Note: Value not actually used, just has to have something so we know this is a kudo/warning -->
+            <Value>AGENDA_ZEALOT_WARNING</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ZEALOT</ModifierId>
+            <Name>TopRankingDiploMod</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ZEALOT</ModifierId>
+            <Name>BottomRankingDiploMod</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_ZEALOT</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_DIPLOVP</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_DIPLOVP</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_HIGH_DIPLOVP</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_DIPLOVP</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_HIGH_DIPLOVP</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_DIPLOVP</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_DIPLOVP</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_DIPLOVP</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_LOW_DIPLOVP</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_DIPLOVP</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_LOW_DIPLOVP</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_DIPLOVP</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_FAVOR</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_FAVOR</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_HIGH_FAVOR</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_FAVOR</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_HIGH_FAVOR</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_FAVOR</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_FAVOR</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_FAVOR</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_LOW_FAVOR</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_FAVOR</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_LOW_FAVOR</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_FAVOR</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_TOURISM</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_TOURISM</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_HIGH_TOURISM</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_TOURISM</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_HIGH_TOURISM</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_TOURISM</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_TOURISM</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_TOURISM</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_LOW_TOURISM</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_TOURISM</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_LOW_TOURISM</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_TOURISM</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_PILLAGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_PILLAGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_KUDO_LEADER_ANY_REASON_AGENDA_HIGH_PILLAGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_PILLAGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_HIGH_PILLAGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_HIGH_PILLAGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_PILLAGE</ModifierId>
+            <Name>InitialValue</Name>
+            <Value>-6</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_PILLAGE</ModifierId>
+            <Name>StatementKey</Name>
+            <Value>LOC_DIPLO_WARNING_LEADER_ANY_REASON_AGENDA_LOW_PILLAGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_PILLAGE</ModifierId>
+            <Name>SimpleModifierDescription</Name>
+            <Value>LOC_DIPLO_MODIFIER_DESCRIPTION_LOW_PILLAGE</Value>
+        </Row>
+        <Row>
+            <ModifierId>AGENDA_LOW_PILLAGE</ModifierId>
+            <Name>HiddenAgenda</Name>
+            <Value>true</Value>
+        </Row>
+    </ModifierArguments>
+    <ModifierStrings>
+        <Row ModifierId="AGENDA_MONEY_GRUBBER" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_EXPANSIONIST" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_FLAT_EARTHER" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_GREAT_WHITE_FLEET" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_INTOLERANT_SAME_RELIGION" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_INTOLERANT_ENCROACHING_RELIGION" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_HIGH_DIPLOVP" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LOW_DIPLOVP" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_HIGH_FAVOR" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LOW_FAVOR" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_HIGH_TOURISM" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LOW_TOURISM" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_HIGH_PILLAGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_LOW_PILLAGE" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_TURTLER" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+        <Row ModifierId="AGENDA_ZEALOT" Context="Sample" Text="LOC_TOOLTIP_SAMPLE_DIPLOMACY_ALL"/>
+    </ModifierStrings>
+    <RequirementSets>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_DIPLOVP</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_DIPLOVP</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_FAVOR</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_FAVOR</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_TOURISM</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_TOURISM</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_PILLAGE</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_PILLAGE</RequirementSetId>
+            <RequirementSetType>REQUIREMENTSET_TEST_ALL</RequirementSetType>
+        </Row>
+    </RequirementSets>
+    <RequirementSetRequirements>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_DIPLOVP</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_DIPLOVP</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_DIPLOVP</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_FAVOR</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_FAVOR</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_FAVOR</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_TOURISM</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_TOURISM</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_TOURISM</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_HIGH_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_HIGH_PILLAGE</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_MAJOR_CIV_OPPONENT</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_MET_30_TURNS_AGO</RequirementId>
+        </Row>
+        <Row>
+            <RequirementSetId>PLAYER_HAS_LOW_PILLAGE</RequirementSetId>
+            <RequirementId>REQUIRES_HAS_LOW_PILLAGE</RequirementId>
+        </Row>
+    </RequirementSetRequirements>
+    <Requirements>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_DIPLOVP</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_DIPLO_VP_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_DIPLOVP</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_DIPLO_VP_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_FAVOR</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_FAVOR_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_FAVOR</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_FAVOR_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_TOURISM</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_TOURISM_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_TOURISM</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_TOURISM_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_PILLAGE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_PILLAGE_LEAD</RequirementType>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_PILLAGE</RequirementId>
+            <RequirementType>REQUIREMENT_PLAYER_PILLAGE_LEAD</RequirementType>
+        </Row>
+    </Requirements>
+    <RequirementArguments>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_DIPLOVP</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_DIPLOVP</RequirementId>
+            <Name>Ratio</Name>
+            <Value>1.5</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_DIPLOVP</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>1</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_DIPLOVP</RequirementId>
+            <Name>Ratio</Name>
+            <Value>-1.5</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_FAVOR</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_FAVOR</RequirementId>
+            <Name>Ratio</Name>
+            <Value>1.3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_FAVOR</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>10</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_FAVOR</RequirementId>
+            <Name>Ratio</Name>
+            <Value>-1.3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_TOURISM</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_TOURISM</RequirementId>
+            <Name>Ratio</Name>
+            <Value>1.3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_TOURISM</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>100</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_TOURISM</RequirementId>
+            <Name>Ratio</Name>
+            <Value>-1.3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_PILLAGE</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>5</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_HIGH_PILLAGE</RequirementId>
+            <Name>Ratio</Name>
+            <Value>1.3</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_PILLAGE</RequirementId>
+            <Name>MinimumDelta</Name>
+            <Value>5</Value>
+        </Row>
+        <Row>
+            <RequirementId>REQUIRES_HAS_LOW_PILLAGE</RequirementId>
+            <Name>Ratio</Name>
+            <Value>-1.3</Value>
+        </Row>
+    </RequirementArguments>
+</GameInfo>

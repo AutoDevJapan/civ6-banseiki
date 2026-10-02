@@ -1,0 +1,1760 @@
+[
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_every_chunk_is_followed_by_a_full_previous_era_record",
+    "rust_test": "ages_every_chunk_is_followed_by_a_full_previous_era_record",
+    "assertions": "Every autoplay chunk records all 22 players, the same chunk length, no swallowed Lua error",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_chunk_length_is_guarded_by_the_minimum_era_length",
+    "rust_test": "ages_chunk_length_is_guarded_by_the_minimum_era_length",
+    "assertions": "Guard equals longest chunk; ruleset and alive-major guards",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_api_listing_separates_not_enumerable_from_absent",
+    "rust_test": "ages_api_listing_separates_not_enumerable_from_absent",
+    "assertions": "Three distinct listing outputs",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_changed_since_last_boundary",
+    "rust_test": "ages_changed_since_last_boundary",
+    "assertions": "Extracted Lua expression run against five boundary cases for every record; never skipped",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_ages_probe.py",
+    "class": "AgesProbeTests",
+    "test": "test_moments_cover_all_players",
+    "rust_test": "ages_moments_cover_all_players",
+    "assertions": "Final UI step queries moments for players 0–21",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+    "class": "BanseikiRulesetStaticTests",
+    "test": "test_audited_exclusion_is_exact_and_applies_to_every_banseiki_slot",
+    "rust_test": "banseiki_ruleset::audited_exclusion_is_exact_and_applies_to_every_banseiki_slot",
+    "assertions": "Registered SQL, exact Sejong exclusion, executable SQLite filters for three slots, human pool and official ruleset",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_banseiki_ruleset.py",
+    "class": "BanseikiRulesetStaticTests",
+    "test": "test_duplicate_policy_and_runtime_scenario_cover_same_civilization",
+    "rust_test": "banseiki_ruleset::duplicate_policy_and_runtime_scenario_cover_same_civilization",
+    "assertions": "Both duplicate settings and before/after start checks including Greece leaders",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_stall_with_pending_dedication_chooses_closes_and_resumes",
+    "rust_test": "test_stall_with_pending_dedication_chooses_closes_and_resumes",
+    "assertions": "誓約を1回選び Escape を1回押して再開する",
+    "rust_target": "driver_dedication"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_repeated_dedication_is_bounded_then_fails",
+    "rust_test": "test_repeated_dedication_is_bounded_then_fails",
+    "assertions": "選択3回、再開上限、Escape 3回以下で停止する",
+    "rust_target": "driver_dedication"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_dedication.py",
+    "class": "DedicationTest",
+    "test": "test_no_pending_dedication_keeps_old_restart_behaviour",
+    "rust_test": "test_no_pending_dedication_keeps_old_restart_behaviour",
+    "assertions": "誓約がなければ従来の再開上限で止め、Escape を押さない",
+    "rust_target": "driver_dedication"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_statement_after_final_turn_retries_only_idempotent_handler_cleanup",
+    "rust_test": "test_statement_after_final_turn_retries_only_idempotent_handler_cleanup",
+    "assertions": "最終ターン後の応答喪失で後処理だけ2回、開始は1回、外交画面を閉じる",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump",
+    "rust_test": "test_test_mode_counts_from_core_when_ui_turn_is_stale_after_jump",
+    "assertions": "UI の古い1ターンではなく GameCore の63から65を数える",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_statement_mid_autoplay_is_closed_and_autoplay_completes",
+    "rust_test": "test_statement_mid_autoplay_is_closed_and_autoplay_completes",
+    "assertions": "中断画面を閉じて目標6まで進み、開始を再送しない",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_repeated_early_stops_by_statements_resume_without_using_restart_budget",
+    "rust_test": "test_repeated_early_stops_by_statements_resume_without_using_restart_budget",
+    "assertions": "3画面を閉じ、3回再開してターン6に達する",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_deal_proposal_is_refused_before_the_statement_view_closes",
+    "rust_test": "test_deal_proposal_is_refused_before_the_statement_view_closes",
+    "assertions": "取引提案を先に断り、次に声明を閉じる。公式ハンドラを使う",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_status_query_starved_by_statement_closes_it_and_asks_again",
+    "rust_test": "test_status_query_starved_by_statement_closes_it_and_asks_again",
+    "assertions": "状態応答を塞ぐ声明を閉じ、ターン4まで進む",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_dark_age_policy_choice_is_closed_without_holding_autoplay",
+    "rust_test": "test_dark_age_policy_choice_is_closed_without_holding_autoplay",
+    "assertions": "暗黒時代画面を閉じ、ターン3に達する",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_oath_choice_is_closed_after_reign_without_selecting_official_dedications",
+    "rust_test": "test_oath_choice_is_closed_after_reign_without_selecting_official_dedications",
+    "assertions": "改元画面の後で現れる誓約画面を閉じる",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens",
+    "rust_test": "test_era_name_change_screen_is_closed_then_the_dark_policy_choice_it_opens",
+    "assertions": "改元画面、その終了時に開く暗黒時代画面の順で閉じる",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "DiplomacyDuringAutoplayTests",
+    "test": "test_screen_that_keeps_reopening_is_bounded",
+    "rust_test": "test_screen_that_keeps_reopening_is_bounded",
+    "assertions": "再表示が続く場合は26画面で上限エラーにする",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_wait_closes_statement_and_polls_again",
+    "rust_test": "test_wait_closes_statement_and_polls_again",
+    "assertions": "InGame 応答喪失時に声明を閉じ、1/3 回の記録を残して再照会する",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_wait_still_fails_when_nothing_was_open_or_retries_run_out",
+    "rust_test": "test_wait_still_fails_when_nothing_was_open_or_retries_run_out",
+    "assertions": "閉じる画面がない場合と3回使い切った場合に未知応答エラーを返す",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_diplomacy.py",
+    "class": "StarvedInGameStepTests",
+    "test": "test_ui_lua_is_never_replayed_after_it_may_have_run",
+    "rust_test": "test_ui_lua_is_never_replayed_after_it_may_have_run",
+    "assertions": "応答喪失後も UI Lua の送信は1回に留める",
+    "rust_target": "driver_diplomacy"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_shortened_turns_require_explicit_test_mode",
+    "rust_test": "test_shortened_turns_require_explicit_test_mode",
+    "assertions": "通常は10回、テストモードでは1回だけターンを送る",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_configuration_clears_test_mode_on_ordinary_runs",
+    "rust_test": "test_configuration_clears_test_mode_on_ordinary_runs",
+    "assertions": "0/1 の設定値と有効 MOD 更新 Lua を送る",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_end_turn_honours_count_default_and_shared_deadline",
+    "rust_test": "test_end_turn_honours_count_default_and_shared_deadline",
+    "assertions": "2回と既定の1回、同じ期限の残り時間、失敗時は再送しない",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_end_turn_rejects_invalid_counts",
+    "rust_test": "test_end_turn_rejects_invalid_counts",
+    "also_rust_tests": [
+      "scenario_fixtures::driver_end_turn_rejects_invalid_counts"
+    ],
+    "assertions": "Five invalid `turns` and `test_turns` values each",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_build_setup_checks_every_player_after_refresh",
+    "rust_test": "test_build_setup_checks_every_player_after_refresh",
+    "also_rust_tests": [
+      "scenario_fixtures::driver_build_setup_checks_every_player_after_refresh"
+    ],
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_build_setup_defaults_on_for_banseiki_only",
+    "rust_test": "test_build_setup_defaults_on_for_banseiki_only",
+    "also_rust_tests": [
+      "scenario_fixtures::driver_build_setup_defaults_on_for_banseiki_only"
+    ],
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_start_turn_guard",
+    "rust_test": "test_start_turn_guard",
+    "assertions": "他ルールでは照会せず、専用ルールでは開始ターン1だけを許す",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_output_scoped_save_name_and_exact_name",
+    "rust_test": "test_output_scoped_save_name_and_exact_name",
+    "assertions": "出力別の名前、ロードとの一致、80文字上限、正確な名前、上書き前の停止",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_save_dismisses_blocking_advisor_before_saving",
+    "rust_test": "test_save_dismisses_blocking_advisor_before_saving",
+    "assertions": "オプション画面、助言画面、保存 Lua の順序と保存ファイルの実在",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_flag_validation",
+    "rust_test": "test_flag_validation",
+    "also_rust_tests": [
+      "scenario_fixtures::driver_flag_validation"
+    ],
+    "assertions": "`build_setup`, `research_metrics`, `allow_human_elimination`, `exact_name` type errors",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_allow_elimination_observes_target_and_records_turn",
+    "rust_test": "test_allow_elimination_observes_target_and_records_turn",
+    "assertions": "目標ターン3と最初の消滅観測ターン2を結果と JSONL に記録する",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_research_samples_and_report_use_first_observed_completion",
+    "rust_test": "research_samples_and_report_use_first_observed_completion",
+    "assertions": "Lua research API strings, sorted slot code, six JSONL rows, first observed completion, civic summary, changed-slot and invalid-count errors.",
+    "rust_target": "metrics_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_autoplay_emits_research_jsonl_for_each_observed_turn",
+    "rust_test": "test_autoplay_emits_research_jsonl_for_each_observed_turn",
+    "assertions": "1/2/3 ターンの研究行、完了技術と成果物名を確認する",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_new_scenarios_check_requested_states",
+    "rust_test": "driver_new_scenarios_check_requested_states",
+    "assertions": "Setup screen, settler map, 200-turn plan, Banseiki and research safeguards",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_driver_features.py",
+    "class": "DriverFeatureTests",
+    "test": "test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event",
+    "rust_test": "test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event",
+    "assertions": "再開を1回だけ送り、完了印を先に消し、新しい終了イベントでターン4まで進む",
+    "rust_target": "driver_features"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_transitive_dependents_are_disabled_first_once_and_reported",
+    "rust_test": "test_transitive_dependents_are_disabled_first_once_and_reported",
+    "also_rust_tests": [
+      "enable_mods::transitive_dependents_are_disabled_first_once_and_reported"
+    ],
+    "assertions": "Leaf, middle, sibling, base order and exact returned list; requested enable, unrelated disabled MOD, one update",
+    "rust_target": "driver_dispatch"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_traversal_includes_enabled_descendants_of_a_disabled_intermediate",
+    "rust_test": "traversal_includes_enabled_descendants_of_a_disabled_intermediate",
+    "assertions": "Disabled intermediate is traversed; only leaf and base disabled; unrelated selection intact",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_requested_dependents_are_preserved_and_conflicts_fail_before_mutations",
+    "rust_test": "requested_dependents_are_preserved_and_conflicts_fail_before_mutations",
+    "assertions": "Both initial leaf states; conflict error; no mutation; base and leaf selection intact",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_dependency_cycle_fails_before_mutations",
+    "rust_test": "dependency_cycle_fails_before_mutations",
+    "assertions": "Cycle error and no disable mutation",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_disable_verifies_the_engine_state_and_names_the_failed_mod",
+    "rust_test": "disable_verifies_the_engine_state_and_names_the_failed_mod",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_no_disable_targets_leaves_unrelated_mods_enabled",
+    "rust_test": "test_no_disable_targets_leaves_unrelated_mods_enabled",
+    "also_rust_tests": [
+      "enable_mods::no_disable_targets_leaves_unrelated_mods_enabled"
+    ],
+    "assertions": "Empty disabled report, no disable calls, prerequisite and requested MOD enabled",
+    "rust_target": "driver_dispatch"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_late_disable_rejection_is_detected_before_any_settings_change",
+    "rust_test": "late_disable_rejection_is_detected_before_any_settings_change",
+    "assertions": "Late preflight error; no enable/disable mutations; original selection intact",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_missing_enable_target_fails_before_disabling_other_mods",
+    "rust_test": "missing_enable_target_fails_before_disabling_other_mods",
+    "assertions": "Missing target named before any disable; prerequisite/dependent still enabled",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_engine_refusal_restores_changes_without_enabling_disabled_intermediates",
+    "rust_test": "engine_refusal_restores_changes_without_enabling_disabled_intermediates",
+    "assertions": "Leaf disabled then restored; base and leaf enabled; initially disabled middle and keep stay disabled",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_failed_restoration_identifies_the_mod_still_disabled",
+    "rust_test": "failed_restoration_identifies_the_mod_still_disabled",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_late_enable_failure_restores_disabled_and_newly_enabled_mods",
+    "rust_test": "late_enable_failure_restores_disabled_and_newly_enabled_mods",
+    "assertions": "Enable refusal names keep; all five original states restored; one update",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_implicitly_enabled_prerequisite_is_restored_when_enable_throws",
+    "rust_test": "implicitly_enabled_prerequisite_is_restored_when_enable_throws",
+    "assertions": "Exception after prerequisite enable; leaf/base/off disable order; four final states",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_enable_failure_without_disable_targets_restores_the_selection",
+    "rust_test": "enable_failure_without_disable_targets_restores_the_selection",
+    "assertions": "Refusal names keep; base, keep and sibling restored",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_enable_mods.py",
+    "class": "EnableModsTests",
+    "test": "test_enable_and_disable_overlap_is_case_insensitive",
+    "rust_test": "enable_and_disable_overlap_is_case_insensitive",
+    "assertions": "Validation rejects mixed-case overlap",
+    "rust_target": "enable_mods"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_every_single_turn_is_logged_in_both_contexts",
+    "rust_test": "era_every_single_turn_is_logged_in_both_contexts",
+    "assertions": "At least 15 one-turn chunks and two logger contexts per speed",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_speeds_differ_only_in_speed",
+    "rust_test": "era_speeds_differ_only_in_speed",
+    "assertions": "Probe MOD and exact step equality after speed normalization",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_setup_guard_matches_the_test_mod_sql",
+    "rust_test": "era_setup_guard_matches_the_test_mod_sql",
+    "assertions": "SQL era limits equal Lua guard; countdown parameter",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_other_scenarios_on_the_test_map_disable_the_probe_mod",
+    "rust_test": "era_other_scenarios_on_the_test_map_disable_the_probe_mod",
+    "assertions": "Every matching JSON, special beyond-nine enable and tail flag",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraTimingProbeTests",
+    "test": "test_gamecore_logger_never_raises_and_reports_changes",
+    "rust_test": "era_gamecore_logger_never_raises_and_reports_changes",
+    "assertions": "Real Lua execution, absent/raising getters, first and changed records, exact printed sequence",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_era_timing_probe.py",
+    "class": "EraReignsScenarioTests",
+    "test": "test_checked_turns_are_the_generated_era_starts",
+    "rust_test": "era_checked_turns_are_the_generated_era_starts",
+    "assertions": "Committed generated era SQL yields 66/73/110; scenario map, MOD disable, era and ledger checks, total 75 turns",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_every_scale_scenario_is_valid",
+    "rust_test": "japan_every_scale_scenario_is_valid",
+    "assertions": "Both scales, generated configuration order and 22 slots, capture names, city/territory/loyalty and reload checks",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_takeda_variant_checks_selected_faction_and_full_initial_territory",
+    "rust_test": "japan_takeda_variant_checks_selected_faction_and_full_initial_territory",
+    "assertions": "Both scales, four steps, sole Takeda human, territory and capital checks",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_resource_scenario_matches_the_manifest_on_the_adopted_15km_map",
+    "rust_test": "japan_resource_scenario_matches_the_manifest_on_the_adopted_15km_map",
+    "assertions": "Manifest and map, nine deferred resources, all Lua tuples, calendar checks, 24 turns",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_rejects_bad_map_file_and_metrics_flag",
+    "rust_test": "japan_rejects_bad_map_file_and_metrics_flag",
+    "assertions": "Invalid map path and nonboolean metrics rejected",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_capture_and_compare_lua_results",
+    "rust_test": "test_capture_and_compare_lua_results",
+    "assertions": "Lua の取得値を保存し、同値を受理、異値を拒否する",
+    "rust_target": "driver_japan"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_turn_metrics_preserve_missing_samples",
+    "rust_test": "test_turn_metrics_preserve_missing_samples",
+    "assertions": "欠測ターンと時間 null、実測2件、欠測1件を保存する",
+    "rust_target": "driver_japan"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_autoplay_writes_turn_and_memory_samples",
+    "rust_test": "test_autoplay_writes_turn_and_memory_samples",
+    "assertions": "ターン1/2/3、メモリ100バイト、実測2件と欠測0件を保存する",
+    "rust_target": "driver_japan"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_autoplay_reports_eliminated_human_instead_of_overshoot",
+    "rust_test": "test_autoplay_reports_eliminated_human_instead_of_overshoot",
+    "assertions": "人間消滅をターン超過より先に報告する",
+    "rust_target": "driver_japan"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_map_log_profile_detects_mod_errors",
+    "rust_test": "test_map_log_profile_detects_mod_errors",
+    "rust_target": "japan_log_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_japan_map.py",
+    "class": "JapanMapScenarioTests",
+    "test": "test_following_file_diagnostic_belongs_to_error",
+    "rust_test": "test_following_file_diagnostic_belongs_to_error",
+    "rust_target": "japan_log_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_bundle0_success_and_unrelated_database_error",
+    "rust_test": "bundle0_success_and_unrelated_database_error",
+    "assertions": "≥9 checks pass; unrelated database error is ignored.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_restored_state_mismatch_fails",
+    "rust_test": "restored_state_mismatch_fails",
+    "assertions": "Saved-state mismatch fails the named check.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_action_fails",
+    "rust_test": "missing_action_fails",
+    "assertions": "Missing script action fails.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_generic_errors_include_stack_and_api_error",
+    "rust_test": "generic_errors_include_stack_and_api_error",
+    "assertions": "Exact two generic failures, including stack context.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_jac_icon_or_texture_fails",
+    "rust_test": "missing_jac_icon_or_texture_fails",
+    "assertions": "Official icon ignored; JAC icon rejected.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_missing_jac_texture_fails",
+    "rust_test": "missing_jac_texture_fails",
+    "assertions": "Two JAC textures counted; unrelated texture ignored.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_error_none_is_not_a_failure",
+    "rust_test": "error_none_is_not_a_failure",
+    "assertions": "`error=none` passes.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_database_error_with_mod_context_fails",
+    "rust_test": "database_error_with_mod_context_fails",
+    "assertions": "Following file diagnostic attributes an error to JAC.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_success_and_restored_mismatch",
+    "rust_test": "growth_success_and_restored_mismatch",
+    "assertions": "≥12 passing checks; changed restored XP fails.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_expected_two_units_in_assignment_restore_and_journal",
+    "rust_test": "growth_expected_two_units_in_assignment_restore_and_journal",
+    "assertions": "Two units pass; missing assignment, missing restore and wrong journal each fail.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_growth_ignores_unrelated_game_error_and_catches_target_ui_error",
+    "rust_test": "growth_ignores_unrelated_game_error_and_catches_target_ui_error",
+    "assertions": "Exact sets of failed checks for unrelated and JAC UI errors.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_japan_map_fails_on_congress_dependent_ui_error",
+    "rust_test": "japan_map_fails_on_congress_dependent_ui_error",
+    "assertions": "Four Congress/GS path cases fail after unrelated base error passes.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_baseline_excludes_old_lines_and_handles_truncate",
+    "rust_test": "baseline_excludes_old_lines_and_handles_truncate",
+    "assertions": "Append, truncate and new inode slices.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_baseline_detects_same_inode_rewrite_past_old_offset",
+    "rust_test": "baseline_detects_same_inode_rewrite_past_old_offset",
+    "assertions": "Append and same-inode rewrite with changed tail hash.",
+    "rust_target": "judge_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "JudgeTests",
+    "test": "test_shipped_scenarios_validate_offline",
+    "rust_test": "test_shipped_scenarios_validate_offline",
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_judge.py",
+    "class": "AutoplayTests",
+    "test": "test_event_and_transient_inactive_state_do_not_complete_or_restart_early",
+    "rust_test": "test_event_and_transient_inactive_state_do_not_complete_or_restart_early",
+    "assertions": "古い終了イベントと一時停止では完了扱い・再起動をせず、状態を5回照会してターン4で終える",
+    "rust_target": "driver_japan"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_fast_forward_uses_core_clock_and_discards_stale_ui_measurement",
+    "rust_test": "test_fast_forward_uses_core_clock_and_discards_stale_ui_measurement",
+    "also_rust_tests": [
+      "metrics_parity::fast_forward_uses_core_clock_and_discards_stale_ui_measurement"
+    ],
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_fast_forward_csv_files_warn_against_continuous_performance_comparison",
+    "rust_test": "fast_forward_csv_files_warn_against_continuous_performance_comparison",
+    "assertions": "Both CSV files have `True` test mode and `False` performance validity.",
+    "rust_target": "metrics_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_csv_and_summary_keep_skipped_turns_and_untimed_intervals_explicit",
+    "rust_test": "csv_and_summary_keep_skipped_turns_and_untimed_intervals_explicit",
+    "assertions": "Exact CSV columns, observed/missed counts, duration and memory statistics, backward-turn error.",
+    "rust_target": "metrics_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_first_interval_starts_before_autoplay_response",
+    "rust_test": "first_interval_starts_before_autoplay_response",
+    "assertions": "First interval is 4.0 seconds from explicit start timestamp.",
+    "rust_target": "metrics_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_stdlib_memory_api_samples_a_real_process",
+    "rust_test": "stdlib_memory_api_samples_a_real_process",
+    "assertions": "Real current-process working set and private bytes on Windows; Linux test checks explicit unsupported result.",
+    "rust_target": "metrics_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_save_load_measure_actual_file_and_wait_until_ready",
+    "rust_test": "test_save_load_measure_actual_file_and_wait_until_ready",
+    "also_rust_tests": [
+      "metrics_parity::save_load_measure_actual_file_and_wait_until_ready"
+    ],
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_result_keeps_partial_measurements_on_failed_run",
+    "rust_test": "test_result_keeps_partial_measurements_on_failed_run",
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_save_load_flags_require_boolean",
+    "rust_test": "test_save_load_flags_require_boolean",
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_result_separates_continuous_memory_from_post_load_memory",
+    "rust_test": "test_result_separates_continuous_memory_from_post_load_memory",
+    "also_rust_tests": [
+      "metrics_parity::result_separates_continuous_memory_from_post_load_memory"
+    ],
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_interruption_is_recorded_and_summary_write_error_does_not_replace_it",
+    "rust_test": "test_interruption_is_recorded_and_summary_write_error_does_not_replace_it",
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_metrics.py",
+    "class": "MeasurementTests",
+    "test": "test_metric_groups_are_validated",
+    "rust_test": "test_metric_groups_are_validated",
+    "rust_target": "driver_measurement"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_scenario_is_valid_starts_as_oda_and_checks_load_before_advancing",
+    "rust_test": "oath_scenario_is_valid_starts_as_oda_and_checks_load_before_advancing",
+    "assertions": "Validation, 22 players and sole Oda human, post-load GameCore checks",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_every_embedded_lua_step_and_wait_compiles",
+    "rust_test": "oath_every_embedded_lua_step_and_wait_compiles",
+    "assertions": "Every code or Lua wait compiles; at least 12 chunks",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_automatic_popup_assertion_cannot_force_a_missing_screen_open",
+    "rust_test": "oath_automatic_popup_assertion_cannot_force_a_missing_screen_open",
+    "assertions": "Executed popup Lua fails with the expected message when hidden",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_oaths.py",
+    "class": "OathScenarioTests",
+    "test": "test_fast_forward_runs_engine_jump_with_scope_checks_and_keeps_source_intact",
+    "rust_test": "test_fast_forward_runs_engine_jump_with_scope_checks_and_keeps_source_intact",
+    "rust_target": "driver_fast_forward"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_only_civ6_reporter_is_closed_without_a_running_game",
+    "rust_test": "only_civ6_reporter_is_closed_without_running_game",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "Civ6 の報告プロセスだけを閉じる。大文字のパスも扱い、別ゲームと起動中の Civ6 は保持する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_running_game_keeps_reporters",
+    "rust_test": "running_game_keeps_reporters",
+    "assertions": "ゲーム起動中は報告プロセスへ触れない。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_unreadable_reporter_is_not_terminated",
+    "rust_test": "unreadable_reporter_is_not_terminated",
+    "assertions": "実行ファイルの確認が失敗したら終了させない。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_exited_reporter_is_ignored",
+    "rust_test": "exited_reporter_is_ignored",
+    "assertions": "列挙後に終了した報告プロセスは無視する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_remaining_reporter_that_cannot_be_opened_stops_launch",
+    "rust_test": "remaining_reporter_that_cannot_open_stops_launch",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "残存プロセスを開けなければ Steam 起動を止める。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_reporter_must_finish_exiting_before_launch",
+    "rust_test": "reporter_must_finish_exiting_before_launch",
+    "assertions": "待機結果の成功・時間切れ・失敗を区別し、終了待ち失敗時は起動しない。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_steam_launch_clears_reporters_before_sending_uri",
+    "rust_test": "steam_launch_clears_reporters_before_sending_dx11_uri",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "報告プロセス処理が先、Steam の `option2` URI が後。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "CrashReporterTests",
+    "test": "test_close_failure_stops_steam_launch",
+    "rust_test": "close_failure_stops_steam_launch",
+    "assertions": "報告プロセス終了失敗時は URI を送らない。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "DX11LaunchTests",
+    "test": "test_only_dx11_window_is_accepted_after_launch",
+    "rust_test": "only_dx11_window_is_accepted_after_launch",
+    "assertions": "`CivilizationVI.exe` のみ受け入れ、DX12 と他の実行ファイルを拒否する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "DX11LaunchTests",
+    "test": "test_unreadable_window_is_not_accepted",
+    "rust_test": "unreadable_window_is_not_accepted",
+    "assertions": "実行ファイル確認の失敗を伝える。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_freshness_decision_uses_strictly_newer_mod_file",
+    "rust_test": "freshness_decision_uses_strictly_newer_mod_file",
+    "assertions": "未起動、更新時刻が前・同時・後、MOD ファイル無しを判別する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_mod_scan_resolves_folder_and_finds_newest_file",
+    "rust_test": "mod_scan_resolves_folder_and_finds_newest_file",
+    "assertions": "UUID 大文字小文字、フォルダ解決、最新ファイルの時刻と再起動理由。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_missing_or_duplicate_enabled_mod_is_rejected",
+    "rust_test": "missing_or_duplicate_enabled_mod_is_rejected",
+    "assertions": "未導入 ID と重複 ID を拒否する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_atlas_images_missing_from_the_mod_packages_are_reported",
+    "rust_test": "atlas_images_missing_from_mod_packages_are_reported",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "XML の atlas、単体 DDS、BLP 内の画像名を照合する。",
+    "rust_target": "restart_parity"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "FreshnessTests",
+    "test": "test_stale_art_stops_before_restart",
+    "rust_test": "test_stale_art_stops_before_restart",
+    "assertions": "古い画像を検出したとき、再起動と最初の手順を実行せず、失敗ログに画像名と `build_art.py` を残す。検出ロジックは上記 atlas テストが確認する。",
+    "rust_target": "driver_dispatch"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_wrong_steam_executable_stops_before_click_or_tuner",
+    "rust_test": "test_wrong_steam_executable_stops_before_click_or_tuner",
+    "assertions": "DX11 の実行ファイルが違えばクリックと Lua 送信の前に停止する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_action_validation",
+    "rust_test": "test_restart_action_validation",
+    "assertions": "正常な再起動設定を許し、無効な期限と余計な MOD 指定を拒否する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_auto_restart_precedes_first_step_and_log_baseline",
+    "rust_test": "test_auto_restart_precedes_first_step_and_log_baseline",
+    "assertions": "古いゲームを先に再起動し、その後のログ位置を基準にする",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_no_auto_restart_skips_freshness_query",
+    "rust_test": "test_no_auto_restart_skips_freshness_query",
+    "assertions": "自動再起動無効時は MOD の鮮度照会と起動をしない",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_still_stale_after_restart_stops_before_first_step",
+    "rust_test": "test_still_stale_after_restart_stops_before_first_step",
+    "assertions": "再起動後も古ければ最初のステップ前に失敗を記録する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_action_launches_and_clicks_verified_window",
+    "rust_test": "test_restart_action_launches_and_clicks_verified_window",
+    "assertions": "起動、窓確認、DX11 確認、クリックの順序と回数を確認する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_frontend_probe_reconnects_after_unknown_read_only_reply",
+    "rust_test": "test_frontend_probe_reconnects_after_unknown_read_only_reply",
+    "assertions": "読み取り照会の応答不明後に切断して再照会する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_frontend_probe_clicks_again_if_movie_still_plays",
+    "rust_test": "test_frontend_probe_clicks_again_if_movie_still_plays",
+    "assertions": "オープニングが続けば12秒後にもう一度クリックする",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
+    "rust_test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
+    "assertions": "起動窓が出ない状態が続けば Steam 起動を2回試す",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_single_process_waits_for_exiting_process_to_disappear",
+    "rust_test": "test_single_process_waits_for_exiting_process_to_disappear",
+    "also_rust_tests": [
+      "restart_parity::single_process_waits_for_exiting_process_to_disappear"
+    ],
+    "assertions": "重複プロセスが消えるまで待ち、残った PID と開始時刻を返す",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_single_process_still_refuses_when_duplicates_persist",
+    "rust_test": "test_single_process_still_refuses_when_duplicates_persist",
+    "assertions": "重複が残れば入力エラーで拒否する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_window_wait_ignores_transient_duplicate_processes",
+    "rust_test": "test_window_wait_ignores_transient_duplicate_processes",
+    "also_rust_tests": [
+      "restart_parity::window_wait_ignores_transient_duplicate_processes"
+    ],
+    "assertions": "一時的な重複の後で単一のゲーム窓を認識する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_steam_wait_does_not_launch_again_during_process_overlap",
+    "rust_test": "test_steam_wait_does_not_launch_again_during_process_overlap",
+    "assertions": "起動中の重複を認め、Steam 起動は1回にする",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_first_restart_action_can_start_stopped_game_with_auto_disabled",
+    "rust_test": "test_first_restart_action_can_start_stopped_game_with_auto_disabled",
+    "assertions": "自動再起動無効でも最初の再起動アクションで起動できる",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_requests_ui_quit_before_steam_launch",
+    "rust_test": "test_restart_requests_ui_quit_before_steam_launch",
+    "assertions": "UI へ終了を要求してから起動し、強制終了はしない",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_forces_only_same_process_after_grace",
+    "rust_test": "test_restart_forces_only_same_process_after_grace",
+    "assertions": "同一 PID と開始時刻のゲームだけを猶予後に強制終了する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_without_process_launches_then_waits_for_frontend",
+    "rust_test": "test_restart_without_process_launches_then_waits_for_frontend",
+    "assertions": "起動、窓、クリック、メインメニュー照会の順で進む",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_restart_still_refuses_when_several_processes_persist",
+    "rust_test": "test_restart_still_refuses_when_several_processes_persist",
+    "assertions": "重複が続く場合は終了も起動もしない",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_restart.py",
+    "class": "RestartActionTests",
+    "test": "test_run_launches_civ_when_not_running_and_first_step_needs_game",
+    "rust_test": "test_run_launches_civ_when_not_running_and_first_step_needs_game",
+    "assertions": "ゲーム停止時に最初の通常ステップの前で起動する",
+    "rust_target": "driver_restart"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_owner_start_opens_setup_without_hosting_and_waits_long",
+    "rust_test": "test_owner_start_opens_setup_without_hosting_and_waits_long",
+    "assertions": "Advanced Setup path, no HostGame/default reset, 3600-second transition deadline.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_sends_one_escape_even_if_ingame_state_exists",
+    "rust_test": "test_load_wait_sends_one_escape_even_if_ingame_state_exists",
+    "assertions": "One Escape; local-player predicate must change from false to true.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus",
+    "rust_test": "test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus",
+    "assertions": "LoadScreen Lua activates Begin Game; no key input.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_never_sends_escape_before_load_complete_log",
+    "rust_test": "test_load_wait_never_sends_escape_before_load_complete_log",
+    "assertions": "Timeout without a new load-complete line; no state query or key.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_sends_begin_game_escape_only_once",
+    "rust_test": "test_load_wait_sends_begin_game_escape_only_once",
+    "assertions": "Later InGame availability does not send a second Escape.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_reconnects_when_frontend_state_list_is_stale",
+    "rust_test": "test_load_wait_reconnects_when_frontend_state_list_is_stale",
+    "assertions": "Stale FrontEnd state is disconnected before InGame confirmation; one Escape.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_load_wait_timeout_never_repeats_escape",
+    "rust_test": "test_load_wait_timeout_never_repeats_escape",
+    "assertions": "Timeout after one Escape never repeats input.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_lua_errors_stop_without_retrying_mutations",
+    "rust_test": "test_transition_lua_errors_stop_without_retrying_mutations",
+    "assertions": "Unknown and confirmed Lua errors both stop; options-menu close mutation once; no sleep/retry.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_detects_lua_log_rotation_and_truncation_before_input",
+    "rust_test": "test_transition_detects_lua_log_rotation_and_truncation_before_input",
+    "assertions": "Both rotation and truncation are undecidable before any state query or key.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_detects_lua_log_rotation_after_escape",
+    "rust_test": "test_transition_detects_lua_log_rotation_after_escape",
+    "assertions": "Generation change after exactly one Escape is undecidable.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_rejects_same_inode_rewrite_even_if_log_grows",
+    "rust_test": "test_transition_rejects_same_inode_rewrite_even_if_log_grows",
+    "assertions": "Same file identity with rewritten prefix/tail is undecidable; no key.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_run_creates_missing_output_parents_but_rejects_existing_run",
+    "rust_test": "test_run_creates_missing_output_parents_but_rejects_existing_run",
+    "assertions": "Nested output is created; second run rejects existing leaf; step log exists.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_multiple_civ_processes_stop_run_before_tuner_access",
+    "rust_test": "test_multiple_civ_processes_stop_run_before_tuner_access",
+    "assertions": "Duplicate-process error ends run before tuner access and records run failure.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_failed_cold_start_is_reported_before_tuner_access",
+    "rust_test": "test_failed_cold_start_is_reported_before_tuner_access",
+    "assertions": "Failed launch is recorded once before tuner access; failure text is retained.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_unreachable_tuner_reports_connection_failure",
+    "rust_test": "test_unreachable_tuner_reports_connection_failure",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_paths_reject_drives_absolute_and_parent_escape",
+    "rust_test": "test_screenshot_paths_reject_drives_absolute_and_parent_escape",
+    "assertions": "Drive-relative, drive-absolute, UNC, rooted and parent traversal paths reject; valid relative path accepts.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_rejects_resolved_path_outside_output",
+    "rust_test": "test_screenshot_rejects_resolved_path_outside_output",
+    "assertions": "Directory link/junction escaping output rejects before capture.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_screenshot_fails_if_capture_finishes_after_deadline",
+    "rust_test": "test_screenshot_fails_if_capture_finishes_after_deadline",
+    "assertions": "Capture receives the deadline once; late completion fails.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_nonfinite_timeouts_are_rejected",
+    "rust_test": "test_nonfinite_timeouts_are_rejected",
+    "assertions": "Boolean, zero, negative, string and null timeouts reject; finite positive accepts. JSON rejects infinity, NaN and overflowing numbers at parse/number construction.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_scenario_validates_lua_code_before_running",
+    "rust_test": "test_scenario_validates_lua_code_before_running",
+    "assertions": "NUL and UTF-8 oversize reject for ui_lua and Lua wait; exact byte limit accepts.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_manual_wait_has_no_step_deadline_or_timeout_option",
+    "rust_test": "test_manual_wait_has_no_step_deadline_or_timeout_option",
+    "assertions": "Manual step has no timeout option and does not read the clock.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_wait_caps_state_and_lua_queries_to_remaining_time",
+    "rust_test": "test_wait_caps_state_and_lua_queries_to_remaining_time",
+    "assertions": "State and Lua backend timeouts are positive and at most the wait budget.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_lua_wait_unknown_reply_fails_without_reexecution",
+    "rust_test": "test_lua_wait_unknown_reply_fails_without_reexecution",
+    "assertions": "Unknown InGame result is not resent; popup probe may run; no sleep.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_lua_wait_confirmed_error_fails_without_reexecution",
+    "rust_test": "test_lua_wait_confirmed_error_fails_without_reexecution",
+    "assertions": "Confirmed Lua error propagates after one call, without sleep.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_pre_send_framing_error_is_logged_as_step_failure",
+    "rust_test": "test_pre_send_framing_error_is_logged_as_step_failure",
+    "assertions": "ui_lua and Lua wait each log one failed step and exact framing error.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_pre_send_failure_is_logged_without_waiting",
+    "rust_test": "test_transition_pre_send_failure_is_logged_without_waiting",
+    "assertions": "Start and load mutations each send once; connection error logged; no transition key.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_transition_waits_after_unknown_reply_without_resending",
+    "rust_test": "test_transition_waits_after_unknown_reply_without_resending",
+    "assertions": "Start and load observe a fresh load-complete line after unknown reply; mutation once.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_unknown_transition_without_read_only_confirmation_is_undecidable",
+    "rust_test": "test_unknown_transition_without_read_only_confirmation_is_undecidable",
+    "assertions": "Unknown reply without log confirmation times out as undecidable; no key.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_confirmed_transition_lua_error_never_enters_wait",
+    "rust_test": "test_confirmed_transition_lua_error_never_enters_wait",
+    "assertions": "Start and load confirmed Lua errors stop after one mutation; no transition input.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_exit_to_menu_waits_for_state_before_lua_predicate",
+    "rust_test": "test_exit_to_menu_waits_for_state_before_lua_predicate",
+    "assertions": "Exit mutation, disconnect, state wait and FrontEnd Lua predicate occur in order.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_log_wait_requires_new_line_and_does_not_reuse_a_match",
+    "rust_test": "test_log_wait_requires_new_line_and_does_not_reuse_a_match",
+    "assertions": "Old line times out; one new line succeeds once; consumed line cannot satisfy next wait.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_log_wait_stops_if_generation_changes",
+    "rust_test": "test_log_wait_stops_if_generation_changes",
+    "assertions": "Rewritten log generation rejects as undecidable.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_later_step_cannot_reuse_previous_steps_log_line",
+    "rust_test": "test_later_step_cannot_reuse_previous_steps_log_line",
+    "assertions": "Step 2 passes on new line; step 4 fails after fresh step baseline; no launch.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_oserror_after_autoplay_start_attempts_cleanup_without_replay",
+    "rust_test": "test_oserror_after_autoplay_start_attempts_cleanup_without_replay",
+    "assertions": "I/O error after one start mutation triggers one cleanup, without replay.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
+    "rust_test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
+    "assertions": "Unknown/confirmed errors at start/status each preserve one start mutation and no cleanup mutation.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_closes_successive_ai_statements_without_repeating_action",
+    "rust_test": "test_end_turn_closes_successive_ai_statements_without_repeating_action",
+    "assertions": "Two successive diplomacy screens close; turn advances 7→8; end-turn action once.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_reopening_diplomacy_has_a_fixed_limit",
+    "rust_test": "test_end_turn_reopening_diplomacy_has_a_fixed_limit",
+    "assertions": "The 26th screen trips the fixed limit.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_end_turn_honours_turns_and_rejects_invalid_values",
+    "rust_test": "test_end_turn_honours_turns_and_rejects_invalid_values",
+    "assertions": "Three requested turns and one default turn each act once; zero, negative, string and fraction reject.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "ScenarioSafetyTests",
+    "test": "test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects",
+    "rust_test": "test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects",
+    "assertions": "Expired budgets after notebook close prevent autoplay activation and end-turn input.",
+    "rust_target": "driver_safety"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_during_focus_sends_no_key",
+    "rust_test": "deadline_expiring_during_focus_sends_no_key",
+    "assertions": "フォーカス待ちで期限が切れたら送信しない。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_after_key_mapping_sends_no_window_key",
+    "rust_test": "deadline_expiring_after_key_mapping_sends_no_window_key",
+    "assertions": "キー変換後、送信直前に期限を確認する。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_deadline_expiring_after_foreground_check_sends_no_sendinput_key",
+    "rust_test": "deadline_expiring_after_foreground_check_sends_no_sendinput_key",
+    "assertions": "前面確認後に期限が切れたら SendInput しない。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_key_before_deadline_is_sent",
+    "rust_test": "key_before_deadline_is_sent_in_both_modes",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "窓向けキーと SendInput が各々押下・解放を一度ずつ送る。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_foreground_mismatch_sends_no_keys_or_clicks",
+    "rust_test": "foreground_mismatch_sends_no_keys_or_clicks",
+    "assertions": "前面不一致ではキー、カーソル移動、クリックを送らない。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_releases_after_foreground_changes",
+    "rust_test": "window_key_releases_after_foreground_changes",
+    "assertions": "フォーカス変化後も対象窓へキー解放を送る。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_targets_verified_game_while_background",
+    "rust_test": "window_key_targets_verified_game_while_background",
+    "assertions": "背景でも確認済み HWND にだけ窓向けキーを送る。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_key_rechecks_target_before_background_input",
+    "rust_test": "window_key_rechecks_target_before_background_input",
+    "assertions": "HWND の変化で送信を中止する。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_sendinput_fallback_checks_foreground_and_releases_key",
+    "rust_test": "sendinput_fallback_releases_key_after_focus_loss",
+    "also_rust_tests": [
+      null
+    ],
+    "assertions": "押下後に前面が変わってもキーを解放する。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_input_error_is_logged_as_step_failure",
+    "rust_test": "test_input_error_is_logged_as_step_failure",
+    "assertions": "Input エラーを手順失敗として記録する。入力モジュールが `ErrorKind::Input` を返す点は上記期限テストが確認する。",
+    "rust_target": "driver_dispatch"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_failed_foreground_activation_sends_no_input",
+    "rust_test": "failed_foreground_activation_sends_no_input",
+    "assertions": "前面化できなければ送信しない。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_window_must_have_unique_civ_executable",
+    "rust_test": "window_must_have_unique_civ_executable",
+    "assertions": "DX11/DX12 窓だけを数え、補助プロセスや複数窓を拒否する。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_hidden_second_civ_process_blocks_input_before_window_scan",
+    "rust_test": "hidden_second_civ_process_blocks_input_before_window_scan",
+    "assertions": "隠れた二つ目のゲームプロセスを先に拒否する。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_safety.py",
+    "class": "InputSafetyTests",
+    "test": "test_process_snapshot_counts_both_civ_executables",
+    "rust_test": "process_snapshot_counts_both_civ_executables",
+    "assertions": "プロセス名を大文字小文字を無視して照合し、DX11 と DX12 を数える。",
+    "rust_target": "native_input"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_status_query_retries_after_timeout",
+    "rust_test": "test_status_query_retries_after_timeout",
+    "assertions": "状態照会を2回行い、古い接続を破棄する",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_advisor_dismissal_retries_after_timeout",
+    "rust_test": "test_advisor_dismissal_retries_after_timeout",
+    "assertions": "助言画面の処理を一過性の応答喪失後に再試行する",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_research_query_retries_after_timeout",
+    "rust_test": "test_research_query_retries_after_timeout",
+    "assertions": "研究照会の応答喪失を1回再試行する",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_gives_up_only_after_deadline",
+    "rust_test": "test_gives_up_only_after_deadline",
+    "assertions": "期限まで複数回試み、未知応答エラーで停止する",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_stale_research_snapshot_stops_at_deadline",
+    "rust_test": "test_stale_research_snapshot_stops_at_deadline",
+    "assertions": "古いターンの研究標本を採用せず、ちょうど期限で止まる",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_lua_error_is_not_retried",
+    "rust_test": "test_lua_error_is_not_retried",
+    "assertions": "確定した Lua エラーは1回で返す",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_transient_timeouts.py",
+    "class": "TransientTimeoutTests",
+    "test": "test_state_changing_lua_is_not_replayed",
+    "rust_test": "test_state_changing_lua_is_not_replayed",
+    "assertions": "状態を変える Lua は応答不明でも再送しない",
+    "rust_target": "driver_transient"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_round_trip_fragmented_and_named_state",
+    "rust_test": "round_trip_fragmented_and_named_state",
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_lua_error_is_reported",
+    "rust_test": "lua_error_is_reported_without_retry",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_missing_ack_is_not_replayed",
+    "rust_test": "missing_ack_is_unknown_and_not_replayed",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_missing_state_fails_before_lua_send",
+    "rust_test": "missing_state_fails_before_lua_send",
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_send_failure_is_classified_as_unknown",
+    "rust_test": "tuner::tests::failed_command_write_is_unknown_even_if_no_bytes_arrive",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "lib"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_reject_oversized_frame",
+    "rust_test": "rejects_oversized_frame",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_empty_frame_is_skipped_not_fatal",
+    "rust_test": "empty_frame_is_not_fatal",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_tuner.py",
+    "class": "FramingTests",
+    "test": "test_send_nul_is_rejected",
+    "rust_test": "send_nul_is_rejected_before_network_write",
+    "also_rust_tests": [
+      null
+    ],
+    "rust_target": "tuner_protocol"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_run_rejects_invalid_metadata_even_without_a_fast_forward_step",
+    "rust_test": "test_run_rejects_invalid_metadata_even_without_a_fast_forward_step",
+    "also_rust_tests": [
+      "scenario_fixtures::verification_run_rejects_invalid_metadata_even_without_a_fast_forward_step"
+    ],
+    "rust_target": "driver_fast_forward"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_lost_jump_acknowledgment_marks_count_unknown_and_never_replays",
+    "rust_test": "test_lost_jump_acknowledgment_marks_count_unknown_and_never_replays",
+    "rust_target": "driver_fast_forward"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_invalid_test_mode_is_rejected_before_any_game_call",
+    "rust_test": "test_invalid_test_mode_is_rejected_before_any_game_call",
+    "also_rust_tests": [
+      "scenario_fixtures::verification_invalid_test_mode_is_rejected_before_any_game_call"
+    ],
+    "rust_target": "driver_fast_forward"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_fast_forward_processes_every_era_boundary_before_skipping_again",
+    "rust_test": "test_fast_forward_processes_every_era_boundary_before_skipping_again",
+    "rust_target": "driver_fast_forward"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_scenario_localization_keys_exist_in_mod_text",
+    "rust_test": "verification_scenario_localization_keys_exist_in_mod_text",
+    "assertions": "Scan MOD XML tags and every relevant Lua chunk; undefined keys empty",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics",
+    "rust_test": "verification_fast_forward_keeps_checkpoints_without_claiming_continuous_metrics",
+    "assertions": "Exact 50×6+1 chunks, test metadata, renamed metrics, preserved save/load and source",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_all_new_chunks_validate_and_compile_as_lua",
+    "rust_test": "verification_all_new_chunks_validate_and_compile_as_lua",
+    "assertions": "Seven scenarios validate, strict flag, every embedded Lua chunk compiles",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_full_map_measurements_cover_continuous_play_and_both_reloads",
+    "rust_test": "verification_full_map_measurements_cover_continuous_play_and_both_reloads",
+    "assertions": "20/300 turn plans, 22 players, metrics groups, save/load checkpoints and snapshots",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_saved_state_snapshot_uses_indexed_city_iterator_and_detects_changes",
+    "rust_test": "verification_saved_state_snapshot_uses_indexed_city_iterator_and_detects_changes",
+    "assertions": "Real Lua snapshot determinism and mutation/error cases",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger",
+    "rust_test": "verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger",
+    "assertions": "Exactly 34 Lua checks with accepted state and rejected turn, era and ledger mutations",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_optional_tail_is_scoped_hidden_and_preserves_endless_last_era",
+    "rust_test": "verification_optional_tail_is_scoped_hidden_and_preserves_endless_last_era",
+    "assertions": "MOD criteria, hidden parameter, probe flag, executable SQLite tail SQL, 47 two-turn eras and endless Chidai",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_resource_calendar_calls_actual_getter_and_rejects_wrong_year",
+    "rust_test": "verification_resource_calendar_calls_actual_getter_and_rejects_wrong_year",
+    "assertions": "Six executable Lua checks, 1534/1540/1543, wrong-year rejection and GameCore isolation",
+    "rust_target": "scenario_fixtures"
+  },
+  {
+    "source": "tools/civ6-autotest/tests/test_verification_scenarios.py",
+    "class": "VerificationScenarioTests",
+    "test": "test_strict_judge_rejects_official_screen_errors",
+    "rust_test": "test_strict_judge_rejects_official_screen_errors",
+    "rust_target": "driver_measurement"
+  }
+]
