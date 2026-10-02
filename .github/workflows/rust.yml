@@ -1,0 +1,37 @@
+name: Rust tools and Lua tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install Rust
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
+      - name: Check formatting
+        run: cargo fmt --manifest-path tools/Cargo.toml --all -- --check
+      - name: Run all Rust and Lua tests
+        run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+      - name: Build all tools
+        run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+      - name: Check existing scenario JSON
+        shell: pwsh
+        run: |
+          $driver = if ($IsWindows) { './tools/target/release/civ6-autotest.exe' } else { './tools/target/release/civ6-autotest' }
+          $scenarios = @(Get-ChildItem -LiteralPath tools/civ6-autotest/scenarios -Filter '*.json')
+          if ($scenarios.Count -eq 0) { throw 'No scenarios found' }
+          foreach ($scenario in $scenarios) {
+            & $driver $scenario.FullName --check
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

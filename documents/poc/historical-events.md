@@ -2,13 +2,13 @@
 
 SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究を終えた勢力はその年より早く使える」「史実の年が来たとき、関係する研究を終えていない勢力には、その研究へのひらめき（ブースト）だけを与える」「史実イベントは、暦の月までできるだけ合わせて起こす」「家名の切り替えは、長尾→上杉、松平→徳川、本能寺の変の後の織田→羽柴→豊臣を同じ仕組みで行う」と、3.1「因縁は和睦を促すイベント（ひらめきを与え、助言役のポップアップで知らせる）で解消へ導く」を、データ駆動で実装した PoC。`RULESET_JAC_BANSEIKI` のときだけ有効になる。地図では絞らない：史実の出来事は戦国パックの機能（SSOT 3.2）で、戦国パック（ツリー・暦。`JAC_PoC_SengokuTrees`）も万世紀ルールセットだけを条件にどの地図でも動くため、それに合わせる。日本マップ限定なのは資源の予約地点だけで、それは下の「資源を伴う出来事」のとおり資源 MOD が置き、出来事は置かない。
 
-出来事の一覧は [`spec/data/sengoku-events.json`](../spec/data/sengoku-events.json)（61件。設計は [research/sengoku-events.md](../research/sengoku-events.md)）が正本で、`tools/generate_sengoku_events.py` がそこから SQL と文言を生成する（手で編集しない）。
+出来事の一覧は [`spec/data/sengoku-events.json`](../spec/data/sengoku-events.json)（61件。設計は [research/sengoku-events.md](../research/sengoku-events.md)）が正本で、`tools/civ6-data-rs/src/events.rs` がそこから SQL と文言を生成する（手で編集しない）。
 
 - MOD：`poc/JAC_PoC_HistoricalEvents`（ID `f6398d3b-707c-4d0a-8b19-e68333efa200`）
 - 依存：Gathering Storm、万世紀ルールセット、CustomCivs（長尾家などと家名表示の上書き）、戦国ツリー（前提技術・社会制度の ID）
-- 生成：`python tools/generate_sengoku_events.py`（`--check` で生成物が最新かを確かめる）。出力は `Data/JAC_HistoricalEvents_Sengoku.sql` と `Text/JAC_HistoricalEvents_Text.xml`
+- 生成：`cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-events --`（`--check` で生成物が最新かを確かめる）。出力は `Data/JAC_HistoricalEvents_Sengoku.sql` と `Text/JAC_HistoricalEvents_Text.xml`
 - 実機シナリオ：`tools/civ6-autotest/scenarios/historical-events-15km.json`（採用縮尺の 15 km 地図。SSOT 3.4）
-- 静的テスト：`tests/test_historical_events.py`。Lupa のテスト：`tests/test_historical_events_lua.py`（ゲームプレイ側と助言ポップアップの UI）
+- 静的テスト：`tools/civ6-data-rs/src/data_tests.rs`。Lupa のテスト：`tools/civ6-lua-tests-rs/tests/historical.rs`（ゲームプレイ側と助言ポップアップの UI）
 
 ## 動き
 
@@ -56,7 +56,7 @@ SSOT 3.2「史実の出来事は史実の年に起き、先に関係する研究
 | 四万十川の戦い `EV_SHIMANTO` | C02 国人盟約 | C10 軍役帳、T10 | C10（変更なし） |
 | 上杉謙信の死去と御館の乱 `EV_KENSHIN_DEATH` | C02 国人盟約 | C11 | C11（変更なし） |
 
-ゲームプレイ側の Lua には、開始時に持っていた前提を無視する仕組みは入れていない（開始時の知識を各勢力のプロパティに記録して保存・ロードをまたいで持つ必要があり、データ側で防げるため）。`tests/test_historical_events_lua.py` が実際の付与スクリプトを動かしてターン1に何も起きないことを確かめる。
+ゲームプレイ側の Lua には、開始時に持っていた前提を無視する仕組みは入れていない（開始時の知識を各勢力のプロパティに記録して保存・ロードをまたいで持つ必要があり、データ側で防げるため）。`tools/civ6-lua-tests-rs/tests/historical.rs` が実際の付与スクリプトを動かしてターン1に何も起きないことを確かめる。
 
 `Boosts` の行が無いとひらめきは発動できないため、ツリー側に行の無い29件の技術・社会制度に仮の行（`BOOST_TRIGGER_NONE_LATE_GAME_CRITICAL_TECH`、40%、`LOC_JAC_EVENT_BOOST_PLACEHOLDER`）を足している（**暫定**）。この種類は公式でも自然には満たされない（`Base/Assets/Gameplay/Data/Technologies.xml:440,505`）ので、出来事のひらめき以外で発動しない。以前の仮の行（ガレー船の生産で発動）は、まとめてガレー船1隻で発動してしまうため替えた。ツリー側に行がある T09・T10 は足さない。実際のひらめき条件はツリー側で決める。
 
@@ -70,7 +70,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 - 標準速度（4か月/ターン＝1年3ターン）では、月が無い出来事は `ターン = (年 - 1534) × 3 + 1`。例：天文の大飢饉1540年はターン19、鉄砲伝来1543年9月はターン30、長尾→上杉1561年4月はターン83、本能寺の変1582年6月はターン147、豊臣姓の下賜1586年10月はターン160。61件はすべて200ターン以内
 - ほかの速度も同じ表で自動的に換算する。1年あたりのターン数は Online 1.5、Quick 2、Epic 4（200ターンまで。以後6）、Marathon 6（200ターンまで。以後12）
 - 暦の月（SSOT 3.2）：`Month` は一覧の `month`。一覧は史料の和暦の日付を西暦に換算した月（1582年10月4日まではユリウス暦、以後はグレゴリオ暦。一覧の `_schema.month_note`）を持つので、そのまま使う。画面は年だけを表示する（SSOT 3.2）ので、月は発生ターンにだけ効く
-- 静的テスト（`tests/test_historical_events.py`）は、暦の XML から同じ換算を Python で再計算し、全速度で「換算したターンの暦上の年が出来事の年で、その前のターンは前の年」と「月を指定したら、そのターンで初めてその月に達する」を確かめる
+- 静的テスト（`tools/civ6-data-rs/src/data_tests.rs`）は、暦の XML から同じ換算を Rust で再計算し、全速度で「換算したターンの暦上の年が出来事の年で、その前のターンは前の年」と「月を指定したら、そのターンで初めてその月に達する」を確かめる
 
 ## 家名の段階
 
@@ -104,7 +104,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 - 変換（アダプター）は `UI/JAC_HistoricalEventsAdvisor.lua`（`InGame` に足す、部品の無いコンテキスト）。公式のチュートリアルと同じく `hstructure AdvisorItem` を宣言して `hmake` で組み立てる（`TutorialUIRoot.lua:38-52,216-229`。公式の FIXME のとおり、宣言は使う側の各ファイルに同じものを置く）。本文は「出来事名＋改行＋助言の文」を `Locale.Lookup` した文字列（`TutorialUIRoot.lua:366` と同じく引いてから渡す）。ボタンは1つ（「承知した」）で、押すと閉じるだけ。コールバックを自前で持つので、チュートリアルの `AdvisorPopup_ClearActive` は呼ばれない。助言役の顔（`ShowPortrait=true`）付きの吹き出しで出る
 - 出すのはローカルのプレイヤーだけ：`Game.GetLocalPlayer()` のプレイヤーのフラグ（`JAC_EVENT_FIRED_`／`JAC_EVENT_BOOSTED_` の早い方）が今のターンの出来事だけを出す。フラグは対象の勢力にしか付かないので、AI の出来事やほかの端末のプレイヤーの出来事は出ない。UI はゲームの状態を書かない
 - 出すきっかけは `Events.LocalPlayerTurnBegin`（ターン開始の処理でフラグが付いた後）と `Events.LocalPlayerChanged`（オートプレイから人間に戻ったとき）。公式の `ActionPanel.lua:1333-1334` と同じ2つ。同じ出来事は1セッションで1回だけ出す。オートプレイ中はローカルのプレイヤーがいない（`-1`）ので出さない
-- 自動操作を止めない：ポップアップは公式のコンテキストなので、ドライバの既存の閉じ処理（`scenario.py` の `_dismiss_advisor`。`IsBlockingInput()` のとき `OnHideAdvisorDialog()`）がオートプレイ・ターン終了・ロードの前後で閉じる。新しいポップアップのコンテキストは足していないので、ドライバの変更は要らない
+- 自動操作を止めない：ポップアップは公式のコンテキストなので、ドライバの既存の閉じ処理（`civ6-autotest` の `_dismiss_advisor`。`IsBlockingInput()` のとき `OnHideAdvisorDialog()`）がオートプレイ・ターン終了・ロードの前後で閉じる。新しいポップアップのコンテキストは足していないので、ドライバの変更は要らない
 - ひらめきは、年が来たときに未研究の勢力へ `reason=year` で与える（上の「動き」）。先に研究していた勢力には、ひらめきは無く、ポップアップと通知だけが出る
 - 和睦を薦める10件を1534年の因縁に対応づけて因縁を解消する処理は、因縁の実装側で行う（設計 §2.6）。この PoC は知らせるだけ
 
@@ -129,7 +129,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 
 - 技術：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:761-784`。`player:GetTechs():HasBeenBoosted` で未発動を確かめ、`player:GetTechs():TriggerBoost(techIndex, 1)`（コメント「ゴーディハット由来として発動」）。UI 側の判定は `Base/Assets/UI/Panels/TechBoostsPanel.lua:91`（`HasTech`／`HasBoostBeenTriggered`／`CanTriggerBoost`）
 - 社会制度：`DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:556`（ゲームプレイ側）が `player:GetCulture():HasBoostBeenTriggered` を使う。`GetCulture():TriggerBoost(civicIndex, 1)` を呼ぶ公式の Lua 例は見つからなかった（**要実機確認**。実機シナリオの伊達家の塵芥集（ターン8）で確かめる）
-- ゲームプレイ側では `CanTriggerBoost` が無い（UI 側だけ）。実機（events-06）で `function expected instead of nil` になり、1勢力目で止まって誰にもひらめきが入らなかった。ひらめきの有無は `GameInfo.Boosts` の行で判定し、未発動かは `HasBoostBeenTriggered` で確かめ、呼び出しは `pcall` で囲む（エラーはログの `boost=tech=error:...` に残し、ほかの勢力・出来事の処理は続ける）。`tests/test_historical_events_lua.py` がゲームプレイ側のメソッドだけのスタブでターンを進めて確かめる
+- ゲームプレイ側では `CanTriggerBoost` が無い（UI 側だけ）。実機（events-06）で `function expected instead of nil` になり、1勢力目で止まって誰にもひらめきが入らなかった。ひらめきの有無は `GameInfo.Boosts` の行で判定し、未発動かは `HasBoostBeenTriggered` で確かめ、呼び出しは `pcall` で囲む（エラーはログの `boost=tech=error:...` に残し、ほかの勢力・出来事の処理は続ける）。`tools/civ6-lua-tests-rs/tests/historical.rs` がゲームプレイ側のメソッドだけのスタブでターンを進めて確かめる
 - 代替（不採用）：モディファイア `MODIFIER_PLAYER_GRANT_SPECIFIC_TECH_BOOST`（`Base/Assets/Gameplay/Data/Modifiers.xml:2499-2503`）は技術のひらめきだけで、社会制度用の同種は無い。両方を同じ経路で扱うため Lua の API にした
 
 ## 決定事項（オーナー回答）
@@ -186,7 +186,7 @@ Civ6 の公式 Lua には年を数値で返す API が無く、暦は表示用�
 ## 実機確認（メインセッションで実行）
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/historical-events-15km.json --output tools/civ6-autotest/artifacts/historical-events-run-03
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/historical-events-15km.json --output tools/civ6-autotest/artifacts/historical-events-run-03
 ```
 
 有効にする MOD は `japan-resources.json` と同じ5つに、この MOD を足したもの。15 km 史実領土版・22勢力・織田が人間（設定は `build_setup` で組み立てる）。ログの待ち合わせは前の手順より後の行しか見ないため、確認は状態（プロパティ・UI の表）で行う。

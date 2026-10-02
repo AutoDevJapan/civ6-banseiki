@@ -1,5 +1,7 @@
 # PoC 束2：宗教持続
 
+実行コマンドは Rust 版に更新している。移行前の検証結果は旧実行器での記録として残す。
+
 オーナーの2026-10-01 16:07 JSTのDiscord回答を、再興と発見後の8分岐に反映した。仕様の正本は[SSOT 9.2・9.3](../spec/ssot/09-assimilation-religion.md)。以下の9件は提案から削除済みで、確定回答の反映表とする。D8の宗教・教義・人物の内容は未決のまま扱う。
 
 | 回答 | 反映した結果 |
@@ -103,25 +105,24 @@ Gameplayの外交支持は`Player:GetDiplomacy():GetFavor/ChangeFavor`を使う�
 `religion-hero-delay.json` は、英雄の寿命情報を検証ドライバーで一時的に隠し、30秒の期限後の回復を検査する35手順の追加シナリオである。首都に記念碑を用意し、公式の「神王」の信仰Modifierをプレイヤーに付けて、実際の毎ターンの信仰創出量が正になるまで待つ。期限後も予約と未払いを保ち、フレームごとの照会が停止したことを呼出し回数で検査する。寿命の読取を戻した後、ゴールドを1増やす実際のゲーム更新で確認を再開し、実際の信仰報酬が創出量の10倍であることを確かめる。後続の更新と保存・読込の後にも報酬が重複しないことを検査する。エンジン自体が寿命の反映を遅らせた証拠とは扱わない。Modifierの定義と値は公式 `Base/Assets/Gameplay/Data/Policies.xml:541-542,1976-1983`、プレイヤーへの適用例は `DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1204-1205`。
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-hero-delay.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-hero-delay.json --check
 ```
 
 ```powershell
-python -m unittest discover -s tests -t .
-python -m unittest discover -s tools/civ6-autotest/tests
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --check
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-hero-delay.json --check
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pressure-probe.json --check
+cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-persistence.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-hero-delay.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-pressure-probe.json --check
 ```
 
-宗教のテストはlupaを必須importし、スキップしない。SQLと実際のLuaを使い、9件の効果、材料消費・再利用、Eurekaの選択、市民数の切り上げ、資金の移転、宗教同盟の双方向の制限と終了、公式英雄の型、予約中の失敗、AIと旧保存を検査する。市民の圧力から人数を算出するスタブは動作条件を模したものにすぎず、エンジンの丸めの証明ではない。JSONと新しいLua VMによる保存の模擬も、Civ6の保存の代用ではない。
+宗教のテストは mlua に Lua 5.1 を組み込み、毎回実行する。SQLと実際のLuaを使い、9件の効果、材料消費・再利用、Eurekaの選択、市民数の切り上げ、資金の移転、宗教同盟の双方向の制限と終了、公式英雄の型、予約中の失敗、AIと旧保存を検査する。市民の圧力から人数を算出するスタブは動作条件を模したものにすぎず、エンジンの丸めの証明ではない。JSONと新しいLua VMによる保存の模擬も、Civ6の保存の代用ではない。
 
 実機ではMODを配置して、次の3シナリオを実行する。
 
 ```powershell
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-hero-delay.json --test-mode
-python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/religion-pressure-probe.json --test-mode
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-persistence.json --test-mode
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-hero-delay.json --test-mode
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/religion-pressure-probe.json --test-mode
 ```
 
 万世紀・織田／武田・小地図・標準速度で開始し、公式Heroes & Legendsを有効化する。100ステップ、10回のsave→メニュー→load。日・英・露の表示も確認する。創始と市民変換の準備には標準の番号付きカスタム宗教を2件使い、D8の宗教・教義の内容にはしない。

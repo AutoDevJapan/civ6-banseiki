@@ -1,6 +1,6 @@
 # 各家の都市名（2026-09-30）
 
-日本マップの22勢力（`CIVILIZATION_JAC_*`）が新しく建てる都市に、その家の領国・周辺の史実の地名を付ける。データは [`spec/data/japan-city-name-pools.json`](../spec/data/japan-city-name-pools.json)、生成は `tools/japan_map_scale/write_city_names.py`、出力は `poc/JAC_PoC_CustomCivs/Data/JAC_CityNames_Gameplay.sql` と `Text/JAC_CityNames_Text.xml`。
+日本マップの22勢力（`CIVILIZATION_JAC_*`）が新しく建てる都市に、その家の領国・周辺の史実の地名を付ける。データは [`spec/data/japan-city-name-pools.json`](../spec/data/japan-city-name-pools.json)、生成は `tools/civ6-assets-rs/src/write_city_names.rs`、出力は `poc/JAC_PoC_CustomCivs/Data/JAC_CityNames_Gameplay.sql` と `Text/JAC_CityNames_Text.xml`。
 
 ## 不具合と原因
 
@@ -21,7 +21,7 @@
 4. 公式の日本の都市名の複製をやめた。首都（`SortIndex` -1）は従来どおり各勢力の定義の隣に置く
 5. `RandomCityNameDepth` を22勢力とも3にした。各家の一覧は本拠に近い地名から並べてあり、窓を小さくすると序盤の都市が本拠の近くの地名になる。10のままだと本拠から遠い地名が早く出やすい
 
-表示名：日本語は漢字（アイヌはカタカナ）。英語は長音記号なしのヘボン式、ロシア語はポリワノフ式キリル文字で、どちらも読み（かな）から生成器が機械的に作る。地図の城名（#56、`generate.py` の `CASTLE_NAMES`）と同じ表記の規則（例：ほうじょう → Hojo／Ходзё、すんぷ → Sunpu／Сумпу）。
+表示名：日本語は漢字（アイヌはカタカナ）。英語は長音記号なしのヘボン式、ロシア語はポリワノフ式キリル文字で、どちらも読み（かな）から生成器が機械的に作る。地図の城名（#56、`tools/civ6-assets-rs/src/generate.rs` の `CASTLE_NAMES`）と同じ表記の規則（例：ほうじょう → Hojo／Ходзё、すんぷ → Sunpu／Сумпу）。
 
 ## 出典
 
@@ -31,7 +31,7 @@
 
 ## 検査
 
-- `tests/test_city_names.py`：22勢力すべてに家固有の都市名が25件以上あること、JAC 以外のタグ（公式の `LOC_CITY_NAME_*`）や他文明からの `INSERT ... SELECT` がないこと、家の中で重複がないこと、すべてのタグに日英露の行があること、上の重複禁止、`RandomCityNameDepth`、modinfo の読み込み順、生成物がデータと一致すること、各地名に出典があること、ローマ字化の例
+- `tools/civ6-data-rs/src/data_tests.rs`：22勢力すべてに家固有の都市名が25件以上あること、JAC 以外のタグ（公式の `LOC_CITY_NAME_*`）や他文明からの `INSERT ... SELECT` がないこと、家の中で重複がないこと、すべてのタグに日英露の行があること、上の重複禁止、`RandomCityNameDepth`、modinfo の読み込み順、生成物がデータと一致すること、各地名に出典があること、ローマ字化の例
 - 実機シナリオ `tools/civ6-autotest/scenarios/japan-house-city-names.json`：15 km 史実領土版を開始し、FireTuner のゲームプレイ側で22勢力それぞれに都市を1つ建てる（`PlayerCities:Create`、公式の `Base/Assets/UI/Tuner/TunerMapPanel.lua:119` と同じ呼び出し）。付いた名前がその家の固有の一覧（`SortIndex` 0〜999）にあることを確かめる。未実機
 
 ## 実機確認項目

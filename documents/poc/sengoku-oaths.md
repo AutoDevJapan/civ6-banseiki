@@ -44,7 +44,7 @@ SSOT [3.2](../spec/ssot/03-map-and-scale.md#32-時代パック)の「各家に�
 
 ## 3. データ・Modifier・UI・AI
 
-元データは [66件のカタログ](data/sengoku-oaths.json)。`python tools/generate_sengoku_oaths.py` が SQL と3言語の名前・黄金効果・達成条件を生成し、`--check` が更新漏れを検査する。`JAC_SengokuOaths` の OathType と CivilizationType が所有を表し、`JAC_SengokuOathAges` が選べる4種の年齢、`JAC_SengokuOathEffects` が各誓約の ModifierId を結ぶ。CustomCivsが後から読まれる場合にもSQLを通すため、CivilizationTypeの外部キーは持たず、テストで登録済み22家との一致を確認する。表に無い文明には誓約を作らない。
+元データは [66件のカタログ](data/sengoku-oaths.json)。`cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-oaths --` が SQL と3言語の名前・黄金効果・達成条件を生成し、`--check` が更新漏れを検査する。`JAC_SengokuOaths` の OathType と CivilizationType が所有を表し、`JAC_SengokuOathAges` が選べる4種の年齢、`JAC_SengokuOathEffects` が各誓約の ModifierId を結ぶ。CustomCivsが後から読まれる場合にもSQLを通すため、CivilizationTypeの外部キーは持たず、テストで登録済み22家との一致を確認する。表に無い文明には誓約を作らない。
 
 プレイヤーIDと誓約IDの順を固定して、全都市の旗 `<OathType>_ON` を `REQUIREMENT_PLOT_PROPERTY_MATCHES` の `PropertyMinimum=1` で読む（公式 `DLC/CivRoyaleScenario/Data/CivRoyaleScenario_Civilizations.xml:388-407`）。旗は台帳の保存と同じ処理で、ターン開始・確定・捕獲・都市建設／移管に書き直す。所有者が変わった城では古い家の66個の旗を消し、今の家の選択だけを付ける。
 
@@ -336,10 +336,10 @@ AIは乱数を使わず、表示順を同点の順位とする。戦争中は軍
 
 ## 5. 検査と実機シナリオ
 
-- `python -m unittest discover -s tests -t .`：公式GSのスキーマへ重ねた66候補・年齢・効果・外部キー・ルールセット境界・翻訳・生成物、Luaで捕獲と研究の重複防止、改元の失効、他家／古い期／重複／個数違いの拒否、英雄の一括確定、AIと答えない人間の選択、保存後のスクリプト読み込み直し、実際に描画した3候補とボタンの操作を検査する。今回のLuaテストはlupaを直接読み込み、無ければ失敗する。
-- `python -m unittest discover -s tools/civ6-autotest/tests`：既存の進行・保存・自動進行の安全確認と、誓約画面を閉じられること、シナリオの構成とLuaの構文を検査する。
-- `python tools/generate_sengoku_oaths.py --check`：カタログとSQL／翻訳の一致。
-- `python tools/civ6-autotest/scenario.py tools/civ6-autotest/scenarios/sengoku-oaths-oda.json --check`：シナリオの形式を検査する。実機合格の意味ではない。
+- `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`：公式GSのスキーマへ重ねた66候補・年齢・効果・外部キー・ルールセット境界・翻訳・生成物、Luaで捕獲と研究の重複防止、改元の失効、他家／古い期／重複／個数違いの拒否、英雄の一括確定、AIと答えない人間の選択、保存後のスクリプト読み込み直し、実際に描画した3候補とボタンの操作を検査する。Lua のテストは mlua に Lua 5.1 を組み込んで実行する。
+- `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`：既存の進行・保存・自動進行の安全確認と、誓約画面を閉じられること、シナリオの構成とLuaの構文を検査する。
+- `cargo run --locked --manifest-path tools/Cargo.toml --bin generate-sengoku-oaths -- --check`：カタログとSQL／翻訳の一致。
+- `cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/sengoku-oaths-oda.json --check`：シナリオの形式を検査する。実機合格の意味ではない。
 
 実機では **`sengoku-oaths-oda.json`** を主セッションから実行する。15km日本地図で織田を人間として開始し、最初の改元まで進める。選んだ誓約の強い効果を必ず検査するため、65ターン目だけテスト用に織田の台帳の点を1000へ設定する。この点の操作で年齢判定を検査済みとは主張せず、既存の改元判定を黄金期の条件で通す。
 
