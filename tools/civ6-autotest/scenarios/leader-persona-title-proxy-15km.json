@@ -1,0 +1,673 @@
+{
+  "name": "PR86 alternative payment diagnostic: cannot-assign governor, official accounting, 21 real AI turns",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2",
+        "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0",
+        "a1faab65-5371-4e25-9a46-7522075f865d"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 or not Players[0]:IsHuman() or UI.IsGameCoreBusy() then error('baseline is not ready for human operations') end; local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do n=n+1 end; if n~=22 then error('baseline needs the same 22 factions') end; return 'baseline has 22 factions and idle game core'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local count=0; for row in GameInfo.JAC_LeaderPersonas() do if GameInfo.Governors[row.GovernorType] then error('persona remains an engine candidate: '..row.LeaderType) end; count=count+1 end; if count~=22 then error('missing persona definitions') end; local r=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; if not r or not GameInfo.GovernorsCannotAssign[r.GovernorType].CannotAssign then error('payment governor is assignable') end; return '22 personas excluded from native candidates; payment governor cannot be assigned'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if GameConfiguration.IsAnyMultiplayer() or Game.GetLocalPlayer()~=0 or UI.IsGameCoreBusy() then error('single-player title fixture not ready') end; UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_TitleProxyGiveTitles'}); return 'requested native title budget in synchronized Gameplay'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetProperty('JAC_PROXY_TITLES_READY') == 1 and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local n=0; local def=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then n=n+1; local gs=p:GetGovernors(); if gs:HasGovernor(def.Hash) or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_'..p:GetID()) then error('native AI spent a title on the payment proxy: '..p:GetID()) end; if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<3 then error('AI title budget vanished') end end end; if n~=21 then error('AI house inventory changed') end; return '21 AI native turns completed without proxy appointment or spending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyPrepareFixture() then error('real Great Person fixture denied') end; return 'fixture requested on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetProperty('JAC_PROXY_FIXTURE_READY')==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('REQUEST', 'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA') then error('payment request inactive') end; return 'UI frame requested cost 3 reservation'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q then return false end; for _,r in ipairs(q.requests) do if r.leader=='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA' then return r.cost==3 and r.status=='PENDING' end end; return false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('REQUEST', 'LEADER_JAC_ODA_NOBUHIDE') then error('payment request inactive') end; return 'UI frame requested cost 1 reservation'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q then return false end; for _,r in ipairs(q.requests) do if r.leader=='LEADER_JAC_ODA_NOBUHIDE' then return r.cost==1 and r.status=='PENDING' end end; return false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('REQUEST', 'LEADER_JAC_DATE_TANEMUNE') then error('payment request inactive') end; return 'UI frame requested cost 2 reservation'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q then return false end; for _,r in ipairs(q.requests) do if r.leader=='LEADER_JAC_DATE_TANEMUNE' then return r.cost==2 and r.status=='PENDING' end end; return false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if #q.requests~=3 then error('three serialized payments missing') end; return 'costs 3 1 2 all reserved without shared titles'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==0"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,0)==1"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-Native-Unallocated"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-Native-Unallocated"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=0 or q.requests[1].status~='PENDING' or ExposedMembers.JAC_TitleProxyReceipt(0,0)~=1 then error('native payment was not restored before allocation') end; local g=Players[0]:GetGovernors(); if g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('unallocated native expense lost or repeated') end; return 'native expense and pending allocation restored without a second charge'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('official accounting differs after 1 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,0 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,1)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=1 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=1 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 1 payments'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-After-Appointment"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-After-Appointment"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+1 then error('official accounting differs after 1 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,0 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,1)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=1 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=1 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 1 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,1)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+2 then error('official accounting differs after 2 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,1 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,2)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=2 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=2 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 2 payments'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-PR86-Proxy-Partial-Payment"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-PR86-Proxy-Partial-Payment"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+2 then error('official accounting differs after 2 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,1 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,2)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=2 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=2 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 2 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); Game:SetProperty('JAC_PROXY_SERIAL_BEFORE_DUPLICATE',q.serial); local serial=JAC_ProxyRequest('LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'); Game:SetProperty('JAC_PROXY_EXPECTED_REQUEST_SERIAL',serial); return 'duplicate requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "if Players[0]:GetProperty('JAC_PROXY_REQUEST_SERIAL')~=Game:GetProperty('JAC_PROXY_EXPECTED_REQUEST_SERIAL') then return false end; local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.serial==Game:GetProperty('JAC_PROXY_SERIAL_BEFORE_DUPLICATE') and Players[0]:GetProperty('JAC_PROXY_REQUEST_RESULT')=='PENDING'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,2)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==3"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+3 then error('official accounting differs after 3 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,2 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,3)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=3 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=3 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 3 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); Game:SetProperty('JAC_PROXY_SERIAL_BEFORE_DUPLICATE',q.serial); local serial=JAC_ProxyRequest('LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'); Game:SetProperty('JAC_PROXY_EXPECTED_REQUEST_SERIAL',serial); return 'duplicate requested'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "if Players[0]:GetProperty('JAC_PROXY_REQUEST_SERIAL')~=Game:GetProperty('JAC_PROXY_EXPECTED_REQUEST_SERIAL') then return false end; return Players[0]:GetProperty('JAC_PROXY_REQUEST_RESULT')=='ALREADY_PAID'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==3"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,3)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==4"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+4 then error('official accounting differs after 4 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,3 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,4)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=4 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=4 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 4 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==4"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,4)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==5"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+5 then error('official accounting differs after 5 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,4 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,5)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=5 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=5 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 5 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('BEGIN') then error('stage preparation inactive') end; return 'preparation scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.flight and q.flight.stage==5"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('PAY') then error('payment frame inactive') end; return 'PAY scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_TitleProxyReceipt(0,5)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_TitleProxy_View",
+      "code": "if not JAC_ProxyOnFrame('ADVANCE') then error('payment frame inactive') end; return 'ADVANCE scheduled on UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); return q and q.cursor==6"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+6 then error('official accounting differs after 6 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,5 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,6)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=6 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=6 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 6 payments'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if not ExposedMembers.JAC_TitleProxyPaid(0,'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA') or not ExposedMembers.JAC_TitleProxyPaid(0,'LEADER_JAC_ODA_NOBUHIDE') or not ExposedMembers.JAC_TitleProxyPaid(0,'LEADER_JAC_DATE_TANEMUNE') then error('costs 3 1 2 are not each fully paid') end; return 'official six payments allocated once to three real joined people'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local n=0; local def=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then n=n+1; local gs=p:GetGovernors(); if gs:HasGovernor(def.Hash) or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_'..p:GetID()) then error('native AI spent a title on the payment proxy: '..p:GetID()) end; if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<3 then error('AI title budget vanished') end end end; if n~=21 then error('AI house inventory changed') end; return '21 AI native turns completed without proxy appointment or spending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local gs=Players[0]:GetGovernors();\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PROXY_TOTAL_0') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PROXY_SPENT_0')+6 then error('official accounting differs after 6 payments') end;\nlocal proxy=GameInfo.Governors['GOVERNOR_JAC_TITLE_PROXY']; local native=gs:HasGovernor(proxy.Hash) and gs:GetGovernor(proxy.Hash); if not native or native:GetAssignedCity() then error('payment proxy has an assigned city or no native instance') end; for _,city in Players[0]:GetCities():Members() do if gs:CanAssignGovernor(proxy.Hash,city) then error('engine permits payment proxy assignment') end end; local total,spent=ExposedMembers.JAC_TitleProxyAccounting(0); if total~=gs:GetGovernorPoints() or spent~=gs:GetGovernorPointsSpent() then error('GameCore cannot read official accounting') end;\nfor stage=0,5 do if ExposedMembers.JAC_TitleProxyReceipt(0,stage)~=1 then error('native receipt absent in GameCore: '..stage) end end;\nif ExposedMembers.JAC_TitleProxyReceipt(0,6)==1 then error('unpaid native stage has a receipt') end;\nlocal q=Game:GetProperty('JAC_PROXY_PAYMENT_QUEUE_0'); if not q or q.cursor~=6 then error('persistent payment cursor differs') end;\nlocal allocated={}; for _,r in ipairs(q.requests) do for _,stage in ipairs(r.payments) do if allocated[stage] then error('same official payment allocated twice') end; allocated[stage]=r.leader end end;\nlocal count=0; for stage in pairs(allocated) do count=count+1 end; if count~=6 then error('allocation count differs') end;\nfor _,leader in ipairs({'LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_DATE_TANEMUNE'}) do\n local r=GameInfo.JAC_LeaderPersonas[leader]; local n=0; local ut=GameInfo.Units[GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'].UnitType];\n for _,u in Players[0]:GetUnits():Members() do if u:GetType()==ut.Index then local gp=u:GetGreatPerson(); local def=gp and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if def and def.GreatPersonIndividualType==r.PersonType then n=n+1 end end end;\n if n~=1 then error('real Great Person fixture lost during candidate payment') end;\nend;\nreturn 'native receipt, official accounting and unique allocation verified after 6 payments'"
+    }
+  ]
+}

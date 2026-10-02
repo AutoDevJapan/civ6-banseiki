@@ -11,6 +11,8 @@ use serde_json::{json, Value};
 use support_fixture::{action, code, compile_lua, expect_error, lua_error, root, scenario, steps};
 
 const PROBE_MOD: &str = "57a3af09-fb38-41da-b367-818de11a995c";
+const TITLE_PROXY_MOD: &str = "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb";
+const NATIVE_SLOTS_MOD: &str = "a1faab65-5371-4e25-9a46-7522075f865d";
 const NEW_SCENARIOS: [&str; 7] = [
     "japan-15km-20turn-full-metrics.json",
     "japan-15km-300turn-full-metrics.json",
@@ -96,6 +98,124 @@ fn persona_native_eligibility_diagnostic_validates_without_operating_the_game() 
     for step in steps(&data) {
         if let Some(source) = embedded_lua(step) {
             compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
+fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
+    let lua = Lua::new();
+    for (name, expected_steps) in [
+        ("leader-persona-title-proxy-15km.json", 85),
+        ("leader-persona-native-slots-15km.json", 36),
+        ("leader-persona-native-slots-activation-15km.json", 25),
+    ] {
+        let data = scenario(name);
+        validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!(steps(&data).len(), expected_steps, "{name}");
+        assert_eq!(data["strict_lua_errors"], true, "{name}");
+        assert!(data["steps"][0]["ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == TITLE_PROXY_MOD));
+        assert!(steps(&data).iter().all(|step| !action(step, "autoplay")));
+        for step in steps(&data) {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+    }
+    let title = scenario("leader-persona-title-proxy-15km.json");
+    assert!(title["steps"][0]["disable_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == NATIVE_SLOTS_MOD));
+    assert!(steps(&title)
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .all(|code| !code.contains("SetCulturalProgress")));
+    assert!(
+        steps(&title)
+            .iter()
+            .any(|step| code_if_ui(step)
+                .is_some_and(|code| code.contains("JAC_TitleProxyGiveTitles")))
+    );
+
+    for (name, receipt_step) in [
+        ("leader-persona-native-slots-15km.json", 15),
+        ("leader-persona-native-slots-activation-15km.json", 24),
+    ] {
+        let data = scenario(name);
+        let steps = steps(&data);
+        assert!(data["steps"][0]["ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == NATIVE_SLOTS_MOD));
+        assert_eq!(code(&steps[8]), "return JAC_SlotsAssertAI(true)", "{name}");
+        assert_eq!(
+            code(&steps[receipt_step]),
+            "return JAC_SlotsRequireUnassignedReceipt()",
+            "{name}"
+        );
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|step| action(step, "end_turn"))
+                .map(|step| step["turns"].as_i64().unwrap())
+                .collect::<Vec<_>>(),
+            [1, 4, 1],
+            "{name}"
+        );
+    }
+    let main = scenario("leader-persona-native-slots-15km.json");
+    let main_steps = steps(&main);
+    assert!(main_steps[..15].iter().all(|step| !action(step, "save")));
+    assert_eq!(
+        main_steps
+            .iter()
+            .filter(|step| action(step, "save"))
+            .count(),
+        2
+    );
+    assert_eq!(
+        main_steps
+            .iter()
+            .filter(|step| action(step, "load"))
+            .count(),
+        2
+    );
+    for phase in ["UNASSIGNED", "SETTLED"] {
+        assert!(main_steps.iter().any(|step| code_if_ui(step)
+            .is_some_and(|code| code.contains(&format!("JAC_SlotsCheckReload('{phase}')")))));
+    }
+    assert!(code(main_steps.last().unwrap()).contains("JAC_SlotsRequireUnassignedReceipt()"));
+}
+
+fn code_if_ui(step: &Value) -> Option<&str> {
+    action(step, "ui_lua").then(|| code(step))
+}
+
+#[test]
+fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
+    for name in [
+        "leader-persona-15km.json",
+        "leader-persona-baseline-15km.json",
+        "leader-persona-native-eligibility-15km.json",
+        "leader-persona-city-loss-15km.json",
+        "leader-persona-spy-access-15km.json",
+        "leader-persona-title-proxy-15km.json",
+    ] {
+        let data = scenario(name);
+        let disabled = data["steps"][0]["disable_ids"].as_array().unwrap();
+        let enabled = data["steps"][0]["ids"].as_array().unwrap();
+        assert!(disabled.iter().any(|id| id == NATIVE_SLOTS_MOD), "{name}");
+        assert!(!enabled.iter().any(|id| id == NATIVE_SLOTS_MOD), "{name}");
+        if name != "leader-persona-title-proxy-15km.json" {
+            assert!(disabled.iter().any(|id| id == TITLE_PROXY_MOD), "{name}");
+            assert!(!enabled.iter().any(|id| id == TITLE_PROXY_MOD), "{name}");
         }
     }
 }

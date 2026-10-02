@@ -176,9 +176,11 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     assert!(ids.contains("61320778-2E75-4C11-9009-94101B519ABA"));
     assert!(ids.contains("91CF7B65-54BB-4F69-A452-19A65527CDE2"));
     assert!(ids.contains("4A72B1C0-958B-4BD5-81E4-A094F86CE643"));
+    assert!(ids.contains("5D4393C0-C02A-48BF-83D2-7B6839D4E5CB"));
+    assert!(ids.contains("A1FAAB65-5371-4E25-9A46-7522075F865D"));
     assert_eq!(
         ids.len(),
-        15,
+        17,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -504,6 +506,9 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "leader-persona-15km.json",
                 "leader-persona-baseline-15km.json",
                 "leader-persona-native-eligibility-15km.json",
+                "leader-persona-title-proxy-15km.json",
+                "leader-persona-native-slots-15km.json",
+                "leader-persona-native-slots-activation-15km.json",
                 "leader-persona-city-loss-15km.json",
                 "leader-persona-spy-access-15km.json",
                 "leader-persona-spy-recovery.json",
@@ -518,7 +523,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 75);
+    assert_eq!(expected.len(), 78);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

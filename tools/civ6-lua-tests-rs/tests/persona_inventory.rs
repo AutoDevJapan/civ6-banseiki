@@ -179,3 +179,24 @@ fn persona_inventory_preserves_all_119_original_methods() {
         assert_eq!(actual, expected, "{}", source.display());
     }
 }
+
+#[test]
+fn persona_inventory_registers_eight_new_native_probe_methods_separately() {
+    // The historical 119-row correspondence above remains immutable. PR86's
+    // test-only candidate has its own fixed inventory and Lua 5.1 fixture.
+    let path = repo_root().join("tools/civ6-lua-tests-rs/tests/persona_native_slots.rs");
+    let expected: BTreeSet<_> = [
+        "test_diagnostic_mods_are_separate_map_scoped_packages",
+        "test_official_sql_keeps_production_personas_until_diagnostic_mods_are_loaded",
+        "test_all_six_diagnostic_lua_sources_execute_in_lua_51",
+        "test_diagnostic_lua_never_publishes_engine_receipts",
+        "test_first_real_turn_requires_three_titles_and_no_ai_spending_or_appointment",
+        "test_type_specific_appointment_getter_is_independent_of_persona_ui",
+        "test_unassigned_receipt_cannot_be_inferred_from_official_spending_or_diagnostic_property",
+        "test_city_receipt_requires_real_five_turn_clock_and_reload_equality",
+    ]
+    .into_iter()
+    .map(|name| format!("persona_native_slots::{name}"))
+    .collect();
+    assert_eq!(inventory::resolve(&path, "persona_native_slots"), expected);
+}
