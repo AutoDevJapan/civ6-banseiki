@@ -57,3 +57,7 @@ cargo build --locked --offline --jobs 2 -p civ6-autotest-rs --bins
 ```
 
 これらは `tools/` を作業ディレクトリにして実行する。この担当ではCiv6を起動しておらず、実機での保存・読込成功を示す結果ではない。
+
+## MOD の Lua 検査
+
+MOD の Lua と構造を確認する元の358項目を、tools/civ6-lua-tests-rs の Rust テストへ統合した。mlua に組み込んだ Lua 5.1 で、この作業フォルダの MOD を実行する。対応一覧と追加の検査は同じ Cargo workspace で実行し、Lua の検査を省略しない。公式 Gathering Storm のデータベースを使う検査は、入力の出所とハッシュを fixtures/official/provenance.json に記録した固定データへ、現在の MOD の SQL を適用する。

@@ -1,0 +1,6 @@
+
+
+-- New eras. The other Eras columns and the per-era rows of Eras_XP1 (LiberatedEnvoys) and Eras_XP2 copy
+-- ERA_FUTURE, the last official era (DLC/Expansion2/Data/Expansion2_Eras.xml:7,73,
+-- DLC/Expansion2/Data/Expansion1_Eras.xml:12). No other per-era table needs a row for an era that is not a
+-- start era (documents/poc/era-equals-reign.md).

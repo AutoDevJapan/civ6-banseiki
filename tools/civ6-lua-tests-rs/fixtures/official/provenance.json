@@ -1,0 +1,30 @@
+{
+  "capture_date": "2026-10-02",
+  "loader": "src/official.rs::installed_official_db",
+  "snapshot": "pre_sengoku.sql.gz",
+  "snapshot_sha256": "440e704bae141eb00cf30ae83dec79a7b4612b8ef1614cf4096464b1e0508ec3",
+  "inputs": [
+    {
+      "source": "Base/Assets/Gameplay/Data/Schema/01_GameplaySchema.sql",
+      "sha256": "d56906e7f67c09193b431843432bc21d62e86c32f3f46c14eae9dedbe69084e0"
+    },
+    {
+      "source": "Base/Assets/Gameplay/Data/Schema/02_AddTriggers.sql",
+      "sha256": "3226e930e6dc087d163c5d6f6968652a0a1180c64d58daa04a3b1c50d4f1787c"
+    },
+    {
+      "source": "DLC/Expansion2/Expansion2.modinfo",
+      "sha256": "b528a7c25f5977aed1ace8a54a0828025e061d880685d347c8bcf5ccd1473d87"
+    },
+    {
+      "source": "DLC/Expansion2/Data/Expansion2_Schema.sql",
+      "sha256": "9355a7eb967f5adba021b1846e782c267483b3d2744a7a9becdd62334b091850"
+    }
+  ],
+  "components": [
+    "Expansion2Core",
+    "Expansion2CoreContent",
+    "Expansion2MajorContent"
+  ],
+  "scope": "Official base plus Gathering Storm gameplay database before any repository MOD SQL; tests apply current Sengoku SQL at runtime."
+}

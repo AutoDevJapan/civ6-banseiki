@@ -1,0 +1,2150 @@
+[
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_absorption_freezes_recipient_transfers_cities_disbands_and_preserves_people",
+    "rust_test": "assassin::assassin_lua_tests::test_absorption_freezes_recipient_transfers_cities_disbands_and_preserves_people"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_absorption_never_recreates_dead_registered_gp_under_a_unit_token",
+    "rust_test": "assassin::assassin_lua_tests::test_absorption_never_recreates_dead_registered_gp_under_a_unit_token"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_absorption_people_have_one_identity_and_dead_leaders_never_rejoin",
+    "rust_test": "assassin::assassin_lua_tests::test_absorption_people_have_one_identity_and_dead_leaders_never_rejoin"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_actor_disappearance_prevents_ghost_success",
+    "rust_test": "assassin::assassin_lua_tests::test_actor_disappearance_prevents_ghost_success"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_actor_loss_cancels_all_four_outcomes_but_always_applies_fixed_penalty_once",
+    "rust_test": "assassin::assassin_lua_tests::test_actor_loss_cancels_all_four_outcomes_but_always_applies_fixed_penalty_once"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_actual_completion_and_exact_lock_boundary",
+    "rust_test": "assassin::assassin_lua_tests::test_actual_completion_and_exact_lock_boundary"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_all_post_death_outcomes_round_trip_without_reapplying_assets",
+    "rust_test": "assassin::assassin_lua_tests::test_all_post_death_outcomes_round_trip_without_reapplying_assets"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_all_six_success_rates_and_corrections",
+    "rust_test": "assassin::assassin_lua_tests::test_all_six_success_rates_and_corrections"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_base_100_and_minimum_20_for_all_speeds",
+    "rust_test": "assassin::assassin_lua_tests::test_base_100_and_minimum_20_for_all_speeds"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_blocked_spawn_lock_begins_at_actual_completion",
+    "rust_test": "assassin::assassin_lua_tests::test_blocked_spawn_lock_begins_at_actual_completion"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_branch_weights_use_security_unrest_strength_relations_and_candidates",
+    "rust_test": "assassin::assassin_lua_tests::test_branch_weights_use_security_unrest_strength_relations_and_candidates"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_builder_hero_gp_and_assassin_are_classified_by_real_unit",
+    "rust_test": "assassin::assassin_lua_tests::test_builder_hero_gp_and_assassin_are_classified_by_real_unit"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_cancel_does_not_clear_existing_completion_lock",
+    "rust_test": "assassin::assassin_lua_tests::test_cancel_does_not_clear_existing_completion_lock"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_cancellation_cannot_transfer_elapsed_progress",
+    "rust_test": "assassin::assassin_lua_tests::test_cancellation_cannot_transfer_elapsed_progress"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_command_wait_cannot_be_bypassed_by_unit_or_country",
+    "rust_test": "assassin::assassin_lua_tests::test_command_wait_cannot_be_bypassed_by_unit_or_country"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_congress_ballots_freeze_favor_weight_and_tie_goes_to_free_cities",
+    "rust_test": "assassin::assassin_lua_tests::test_congress_ballots_freeze_favor_weight_and_tie_goes_to_free_cities"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_diplomacy_changes_recalculate_training_with_worst_living_major",
+    "rust_test": "assassin::assassin_lua_tests::test_diplomacy_changes_recalculate_training_with_worst_living_major"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_distances_target_periods_and_rounding",
+    "rust_test": "assassin::assassin_lua_tests::test_distances_target_periods_and_rounding"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_dynamic_training_round_trip_keeps_start_speed_and_current_inputs",
+    "rust_test": "assassin::assassin_lua_tests::test_dynamic_training_round_trip_keeps_start_speed_and_current_inputs"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_earlier_pending_save_migrates_plan_without_new_rng",
+    "rust_test": "assassin::assassin_lua_tests::test_earlier_pending_save_migrates_plan_without_new_rng"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_eliminated_country_finishes_saved_jobs_and_fixed_penalties",
+    "rust_test": "assassin::assassin_lua_tests::test_eliminated_country_finishes_saved_jobs_and_fixed_penalties"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_eliminated_human_slot_cancels_saved_training_after_reload_without_retransferring",
+    "rust_test": "assassin::assassin_lua_tests::test_eliminated_human_slot_cancels_saved_training_after_reload_without_retransferring"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_equivalent_favor_vote_is_available_without_test_mode_on_japan_map",
+    "rust_test": "assassin::assassin_lua_tests::test_equivalent_favor_vote_is_available_without_test_mode_on_japan_map"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_every_factor_and_security_direction",
+    "rust_test": "assassin::assassin_lua_tests::test_every_factor_and_security_direction"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_failure_and_detection_independently_share_penalty_once",
+    "rust_test": "assassin::assassin_lua_tests::test_failure_and_detection_independently_share_penalty_once"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_favor_vote_weight_outvotes_more_nations_and_is_frozen_at_command",
+    "rust_test": "assassin::assassin_lua_tests::test_favor_vote_weight_outvotes_more_nations_and_is_frozen_at_command"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_fixed_failure_detection_penalties_survive_target_disappearance",
+    "rust_test": "assassin::assassin_lua_tests::test_fixed_failure_detection_penalties_survive_target_disappearance"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_forced_outcome_only_works_with_explicit_test_flag",
+    "rust_test": "assassin::assassin_lua_tests::test_forced_outcome_only_works_with_explicit_test_flag"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips",
+    "rust_test": "assassin::assassin_lua_tests::test_full_generated_live_sequence_resolves_in_18_real_ticks_and_round_trips"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_later_leader_death_updates_people_registry_and_cannot_revive_predecessor",
+    "rust_test": "assassin::assassin_lua_tests::test_later_leader_death_updates_people_registry_and_cannot_revive_predecessor"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_leader_death_splits_all_cities_disbands_units_and_archives_people",
+    "rust_test": "assassin::assassin_lua_tests::test_leader_death_splits_all_cities_disbands_units_and_archives_people"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_final_check_rejects_penalty_added_during_load",
+    "rust_test": "assassin::assassin_lua_tests::test_live_final_check_rejects_penalty_added_during_load"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_fixture_retries_unplaced_unit_without_killing_existing_units",
+    "rust_test": "assassin::assassin_lua_tests::test_live_fixture_retries_unplaced_unit_without_killing_existing_units"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_fixture_reveals_hidden_target_without_disabling_gameplay_visibility",
+    "rust_test": "assassin::assassin_lua_tests::test_live_fixture_reveals_hidden_target_without_disabling_gameplay_visibility"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_fixture_reveals_unit_tile_separately_from_known_capital",
+    "rust_test": "assassin::assassin_lua_tests::test_live_fixture_reveals_unit_tile_separately_from_known_capital"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_parking_keeps_identity_requires_test_mode_and_preserves_other_assassins",
+    "rust_test": "assassin::assassin_lua_tests::test_live_parking_keeps_identity_requires_test_mode_and_preserves_other_assassins"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_trained_unit_check_rejects_unplaced_missing_or_wrong_type_unit",
+    "rust_test": "assassin::assassin_lua_tests::test_live_trained_unit_check_rejects_unplaced_missing_or_wrong_type_unit"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_training_check_requires_one_new_unit_and_rejects_reused_id",
+    "rust_test": "assassin::assassin_lua_tests::test_live_training_check_requires_one_new_unit_and_rejects_reused_id"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_unit_watch_accepts_witnessed_native_death_and_removes_observers",
+    "rust_test": "assassin::assassin_lua_tests::test_live_unit_watch_accepts_witnessed_native_death_and_removes_observers"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_unit_watch_rejects_survivor_damage_movement_and_loss",
+    "rust_test": "assassin::assassin_lua_tests::test_live_unit_watch_rejects_survivor_damage_movement_and_loss"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_live_unit_watch_rejects_unexplained_loss_or_replacement",
+    "rust_test": "assassin::assassin_lua_tests::test_live_unit_watch_rejects_unexplained_loss_or_replacement"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_lost_absorption_recipient_falls_back_without_new_draw",
+    "rust_test": "assassin::assassin_lua_tests::test_lost_absorption_recipient_falls_back_without_new_draw"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_lost_city_releases_only_the_production_reservation",
+    "rust_test": "assassin::assassin_lua_tests::test_lost_city_releases_only_the_production_reservation"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_lost_successor_falls_back_without_selecting_next_candidate",
+    "rust_test": "assassin::assassin_lua_tests::test_lost_successor_falls_back_without_selecting_next_candidate"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_minimum_is_elapsed_time_even_with_extreme_bonuses",
+    "rust_test": "assassin::assassin_lua_tests::test_minimum_is_elapsed_time_even_with_extreme_bonuses"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_missing_target_does_not_redirect_or_reroll",
+    "rust_test": "assassin::assassin_lua_tests::test_missing_target_does_not_redirect_or_reroll"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_multiple_cities_reject_parallel_production",
+    "rust_test": "assassin::assassin_lua_tests::test_multiple_cities_reject_parallel_production"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_names_are_assigned_by_confirmed_country_not_whole_map",
+    "rust_test": "assassin::assassin_lua_tests::test_names_are_assigned_by_confirmed_country_not_whole_map"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_non_major_person_targets_are_rejected_in_core_without_excluding_units",
+    "rust_test": "assassin::assassin_lua_tests::test_non_major_person_targets_are_rejected_in_core_without_excluding_units"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_notification_exception_cannot_duplicate_production_or_penalties",
+    "rust_test": "assassin::assassin_lua_tests::test_notification_exception_cannot_duplicate_production_or_penalties"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_one_active_mission_even_after_wait_expires",
+    "rust_test": "assassin::assassin_lua_tests::test_one_active_mission_even_after_wait_expires"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_only_full_stack_reaches_wait_one",
+    "rust_test": "assassin::assassin_lua_tests::test_only_full_stack_reaches_wait_one"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_outcome_roll_is_at_start_and_not_at_resolution",
+    "rust_test": "assassin::assassin_lua_tests::test_outcome_roll_is_at_start_and_not_at_resolution"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_panel_lists_visible_non_major_units_without_leader_candidates",
+    "rust_test": "assassin::assassin_lua_tests::test_panel_lists_visible_non_major_units_without_leader_candidates"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_panel_open_close_produce_cancel_refresh_and_inactive_buttons",
+    "rust_test": "assassin::assassin_lua_tests::test_panel_open_close_produce_cancel_refresh_and_inactive_buttons"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_percent_threshold_is_not_inclusive",
+    "rust_test": "assassin::assassin_lua_tests::test_percent_threshold_is_not_inclusive"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_persistent_person_binding_does_not_claim_same_id_replacement_gp",
+    "rust_test": "assassin::assassin_lua_tests::test_persistent_person_binding_does_not_claim_same_id_replacement_gp"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_post_death_snapshot_and_branch_are_frozen",
+    "rust_test": "assassin::assassin_lua_tests::test_post_death_snapshot_and_branch_are_frozen"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_production_and_command_locks_are_independent",
+    "rust_test": "assassin::assassin_lua_tests::test_production_and_command_locks_are_independent"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_recipient_alliance_is_gameplay_and_optional_closeness_does_not_reward_missing_data",
+    "rust_test": "assassin::assassin_lua_tests::test_recipient_alliance_is_gameplay_and_optional_closeness_does_not_reward_missing_data"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_recipient_distance_and_border_can_change_choice_and_ties_use_player_id",
+    "rust_test": "assassin::assassin_lua_tests::test_recipient_distance_and_border_can_change_choice_and_ties_use_player_id"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_recipient_formula_combines_strength_friendship_border_distance_religion_culture",
+    "rust_test": "assassin::assassin_lua_tests::test_recipient_formula_combines_strength_friendship_border_distance_religion_culture"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_recipient_omits_pantheon_and_missing_apis_and_prefers_supplied_culture_over_proxy",
+    "rust_test": "assassin::assassin_lua_tests::test_recipient_omits_pantheon_and_missing_apis_and_prefers_supplied_culture_over_proxy"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_registered_country_name_survives_kin_succession_and_free_city_archive",
+    "rust_test": "assassin::assassin_lua_tests::test_registered_country_name_survives_kin_succession_and_free_city_archive"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_registered_death_overrides_present_gp_governor_or_person",
+    "rust_test": "assassin::assassin_lua_tests::test_registered_death_overrides_present_gp_governor_or_person"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_registered_governor_uses_stable_identity",
+    "rust_test": "assassin::assassin_lua_tests::test_registered_governor_uses_stable_identity"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_relation_penalty_increases_hostility_and_shortens_wait",
+    "rust_test": "assassin::assassin_lua_tests::test_relation_penalty_increases_hostility_and_shortens_wait"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_replacement_unit_with_same_id_and_type_is_not_the_target",
+    "rust_test": "assassin::assassin_lua_tests::test_replacement_unit_with_same_id_and_type_is_not_the_target"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_round_trip_reload_reinitializes_script_without_reroll",
+    "rust_test": "assassin::assassin_lua_tests::test_round_trip_reload_reinitializes_script_without_reroll"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_successor_kin_first_and_single_role_for_gp_and_governor",
+    "rust_test": "assassin::assassin_lua_tests::test_successor_kin_first_and_single_role_for_gp_and_governor"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_test_deadline_hook_is_inert_when_test_mode_is_off",
+    "rust_test": "assassin::assassin_lua_tests::test_test_deadline_hook_is_inert_when_test_mode_is_off"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_test_deadline_hook_selects_clocks_and_never_extends_expired_locks",
+    "rust_test": "assassin::assassin_lua_tests::test_test_deadline_hook_selects_clocks_and_never_extends_expired_locks"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_test_deadlines_survive_recomputation_reload_and_resolve_on_real_turn",
+    "rust_test": "assassin::assassin_lua_tests::test_test_deadlines_survive_recomputation_reload_and_resolve_on_real_turn"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_training_can_extend_again_and_finish_after_elapsed_reduction",
+    "rust_test": "assassin::assassin_lua_tests::test_training_can_extend_again_and_finish_after_elapsed_reduction"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_training_recalculates_current_factors_and_never_rerolls",
+    "rust_test": "assassin::assassin_lua_tests::test_training_recalculates_current_factors_and_never_rerolls"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_training_relation_survives_reload_and_completes_at_reduced_boundary",
+    "rust_test": "assassin::assassin_lua_tests::test_training_relation_survives_reload_and_completes_at_reduced_boundary"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_ui_operation_cannot_supply_forced_outcome",
+    "rust_test": "assassin::assassin_lua_tests::test_ui_operation_cannot_supply_forced_outcome"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_unit_success_and_failure_dispositions",
+    "rust_test": "assassin::assassin_lua_tests::test_unit_success_and_failure_dispositions"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_unplaced_spawn_keeps_training_pending_without_starting_nationwide_lock",
+    "rust_test": "assassin::assassin_lua_tests::test_unplaced_spawn_keeps_training_pending_without_starting_nationwide_lock"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_unregistered_great_person_keeps_original_unit_id_when_archived",
+    "rust_test": "assassin::assassin_lua_tests::test_unregistered_great_person_keeps_original_unit_id_when_archived"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinLuaTests",
+    "test": "test_visibility_checks_do_not_disclose_or_accept_hidden_targets",
+    "rust_test": "assassin::assassin_lua_tests::test_visibility_checks_do_not_disclose_or_accept_hidden_targets"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_data_loads_against_official_schema_after_sengoku",
+    "rust_test": "assassin::assassin_packaging_tests::test_data_loads_against_official_schema_after_sengoku"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_japan_name_and_no_unapproved_cultural_names",
+    "rust_test": "assassin::assassin_packaging_tests::test_japan_name_and_no_unapproved_cultural_names"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_live_scenario_has_three_actual_round_trips_and_boundary_assertions",
+    "rust_test": "assassin::assassin_packaging_tests::test_live_scenario_has_three_actual_round_trips_and_boundary_assertions"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_live_scenario_matches_generator_exactly",
+    "rust_test": "assassin::assassin_packaging_tests::test_live_scenario_matches_generator_exactly"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_mod_scope_files_and_order",
+    "rust_test": "assassin::assassin_packaging_tests::test_mod_scope_files_and_order"
+  },
+  {
+    "source": "tests/test_assassin_lua.py",
+    "class": "AssassinPackagingTests",
+    "test": "test_training_terms_in_all_three_languages",
+    "rust_test": "assassin::assassin_packaging_tests::test_training_terms_in_all_three_languages"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_duration_alone_can_prompt_a_party_after_1573_with_normal_cost_and_power",
+    "rust_test": "court::arbitration_ai_tests::test_duration_alone_can_prompt_a_party_after_1573_with_normal_cost_and_power"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_exhausted_party_requests_pays_and_waits_until_the_following_turn",
+    "rust_test": "court::arbitration_ai_tests::test_exhausted_party_requests_pays_and_waits_until_the_following_turn"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_existing_pending_and_one_per_turn_limit_take_priority_over_ai",
+    "rust_test": "court::arbitration_ai_tests::test_existing_pending_and_one_per_turn_limit_take_priority_over_ai"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_human_shogun_never_automatically_proposes",
+    "rust_test": "court::arbitration_ai_tests::test_human_shogun_never_automatically_proposes"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_insufficient_gold_or_legitimacy_does_not_charge_or_start_an_interval",
+    "rust_test": "court::arbitration_ai_tests::test_insufficient_gold_or_legitimacy_does_not_charge_or_start_an_interval"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_more_exhausted_unaffordable_candidate_does_not_starve_another_party",
+    "rust_test": "court::arbitration_ai_tests::test_more_exhausted_unaffordable_candidate_does_not_starve_another_party"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_party_and_pair_intervals_survive_lua_reload_and_prevent_alternating_requesters",
+    "rust_test": "court::arbitration_ai_tests::test_party_and_pair_intervals_survive_lua_reload_and_prevent_alternating_requesters"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_peace_removes_observations_and_new_wars_start_without_old_losses",
+    "rust_test": "court::arbitration_ai_tests::test_peace_removes_observations_and_new_wars_start_without_old_losses"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_requester_interval_applies_across_different_wars",
+    "rust_test": "court::arbitration_ai_tests::test_requester_interval_applies_across_different_wars"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_shogun_interval_applies_to_other_pairs",
+    "rust_test": "court::arbitration_ai_tests::test_shogun_interval_applies_to_other_pairs"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_shogun_proposes_for_an_ally_and_both_parties_answer",
+    "rust_test": "court::arbitration_ai_tests::test_shogun_proposes_for_an_ally_and_both_parties_answer"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_shogun_proposes_for_the_capital_region_and_for_long_wars",
+    "rust_test": "court::arbitration_ai_tests::test_shogun_proposes_for_the_capital_region_and_for_long_wars"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_shogun_stops_at_the_exact_calendar_cutoff_but_may_request_its_own_war",
+    "rust_test": "court::arbitration_ai_tests::test_shogun_stops_at_the_exact_calendar_cutoff_but_may_request_its_own_war"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_unavailable_weariness_api_uses_duration_and_keeps_coverage_visible",
+    "rust_test": "court::arbitration_ai_tests::test_unavailable_weariness_api_uses_duration_and_keeps_coverage_visible"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_unexhausted_and_human_parties_do_not_request",
+    "rust_test": "court::arbitration_ai_tests::test_unexhausted_and_human_parties_do_not_request"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_weariness_and_low_legitimacy_are_independent_score_components",
+    "rust_test": "court::arbitration_ai_tests::test_weariness_and_low_legitimacy_are_independent_score_components"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationAiTests",
+    "test": "test_weariness_coverage_is_logged_without_a_request",
+    "rust_test": "court::arbitration_ai_tests::test_weariness_coverage_is_logged_without_a_request"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_a_clearly_winning_ai_refuses_and_is_penalized",
+    "rust_test": "court::arbitration_turn_tests::test_a_clearly_winning_ai_refuses_and_is_penalized"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_a_pair_that_made_peace_on_its_own_while_waiting_starts_the_truce",
+    "rust_test": "court::arbitration_turn_tests::test_a_pair_that_made_peace_on_its_own_while_waiting_starts_the_truce"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_a_request_is_void_if_the_war_ended_before_the_ruling",
+    "rust_test": "court::arbitration_turn_tests::test_a_request_is_void_if_the_war_ended_before_the_ruling"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_a_war_on_the_turn_of_the_scripts_peace_is_undone_one_turn_later",
+    "rust_test": "court::arbitration_turn_tests::test_a_war_on_the_turn_of_the_scripts_peace_is_undone_one_turn_later"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_after_1573_ashikaga_survives_but_cannot_call_rulings_for_others",
+    "rust_test": "court::arbitration_turn_tests::test_after_1573_ashikaga_survives_but_cannot_call_rulings_for_others"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_an_ai_below_30_legitimacy_refuses_when_merely_ahead",
+    "rust_test": "court::arbitration_turn_tests::test_an_ai_below_30_legitimacy_refuses_when_merely_ahead"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_ashikaga_calls_a_ceasefire_between_others_with_triple_power_until_1573",
+    "rust_test": "court::arbitration_turn_tests::test_ashikaga_calls_a_ceasefire_between_others_with_triple_power_until_1573"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_every_execute_script_is_recorded_at_entry_even_when_rejected",
+    "rust_test": "court::arbitration_turn_tests::test_every_execute_script_is_recorded_at_entry_even_when_rejected"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_forced_peace_ends_a_war_inside_the_minimum_war_length_at_once",
+    "rust_test": "court::arbitration_turn_tests::test_forced_peace_ends_a_war_inside_the_minimum_war_length_at_once"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_high_and_low_legitimacy_flag_every_city",
+    "rust_test": "court::arbitration_turn_tests::test_high_and_low_legitimacy_flag_every_city"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_human_respondent_answers_or_is_counted_as_refusing",
+    "rust_test": "court::arbitration_turn_tests::test_human_respondent_answers_or_is_counted_as_refusing"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_legitimacy_starts_at_50_or_70_and_earns_one_to_three_per_turn",
+    "rust_test": "court::arbitration_turn_tests::test_legitimacy_starts_at_50_or_70_and_earns_one_to_three_per_turn"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_make_peace_probe_tries_every_variant_and_never_stops",
+    "rust_test": "court::arbitration_turn_tests::test_make_peace_probe_tries_every_variant_and_never_stops"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_muromachi_end_is_1573_month_7_on_the_sengoku_calendar",
+    "rust_test": "court::arbitration_turn_tests::test_muromachi_end_is_1573_month_7_on_the_sengoku_calendar"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_non_party_non_shogun_and_peace_pairs_are_rejected",
+    "rust_test": "court::arbitration_turn_tests::test_non_party_non_shogun_and_peace_pairs_are_rejected"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_party_request_charges_the_cost_and_an_even_ai_accepts_next_turn",
+    "rust_test": "court::arbitration_turn_tests::test_party_request_charges_the_cost_and_an_even_ai_accepts_next_turn"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_refusing_a_shogun_ruling_costs_three_times_as_much",
+    "rust_test": "court::arbitration_turn_tests::test_refusing_a_shogun_ruling_costs_three_times_as_much"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_safety_net_defers_peace_when_the_force_flag_does_nothing",
+    "rust_test": "court::arbitration_turn_tests::test_safety_net_defers_peace_when_the_force_flag_does_nothing"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_safety_net_undoes_a_truce_breach_when_allowed_even_after_the_truce",
+    "rust_test": "court::arbitration_turn_tests::test_safety_net_undoes_a_truce_breach_when_allowed_even_after_the_truce"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_short_gold_or_legitimacy_below_30_rejects_without_charging",
+    "rust_test": "court::arbitration_turn_tests::test_short_gold_or_legitimacy_below_30_rejects_without_charging"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_the_other_party_may_be_the_requester",
+    "rust_test": "court::arbitration_turn_tests::test_the_other_party_may_be_the_requester"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_the_shogun_can_afford_a_ruling_at_a_third_of_the_cost",
+    "rust_test": "court::arbitration_turn_tests::test_the_shogun_can_afford_a_ruling_at_a_third_of_the_cost"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ArbitrationTurnTests",
+    "test": "test_war_during_the_truce_is_undone_and_the_truce_ends_on_time",
+    "rust_test": "court::arbitration_turn_tests::test_war_during_the_truce_is_undone_and_the_truce_ends_on_time"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "LiveScenarioOnStubsTests",
+    "test": "test_human_snapshots_preserve_missing_properties_and_boolean_answers",
+    "rust_test": "court::live_scenario_on_stubs_tests::test_human_snapshots_preserve_missing_properties_and_boolean_answers"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "LiveScenarioOnStubsTests",
+    "test": "test_overlay_buttons_can_open_and_close_from_an_initially_hidden_context",
+    "rust_test": "court::live_scenario_on_stubs_tests::test_overlay_buttons_can_open_and_close_from_an_initially_hidden_context"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "LiveScenarioOnStubsTests",
+    "test": "test_scenario_steps_pass_on_the_stubs",
+    "rust_test": "court::live_scenario_on_stubs_tests::test_scenario_steps_pass_on_the_stubs"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ScopeAndTextTests",
+    "test": "test_every_action_loads_only_on_the_four_banseiki_japan_maps",
+    "rust_test": "court::scope_and_text_tests::test_every_action_loads_only_on_the_four_banseiki_japan_maps"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ScopeAndTextTests",
+    "test": "test_every_text_key_used_by_the_lua_exists_in_three_languages",
+    "rust_test": "court::scope_and_text_tests::test_every_text_key_used_by_the_lua_exists_in_three_languages"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ScopeAndTextTests",
+    "test": "test_the_modifiers_read_the_flags_the_script_writes",
+    "rust_test": "court::scope_and_text_tests::test_the_modifiers_read_the_flags_the_script_writes"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "ScopeAndTextTests",
+    "test": "test_ui_script_compiles",
+    "rust_test": "court::scope_and_text_tests::test_ui_script_compiles"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "SubjugationOrderTests",
+    "test": "test_a_human_joins_through_execute_script_once",
+    "rust_test": "court::subjugation_order_tests::test_a_human_joins_through_execute_script_once"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "SubjugationOrderTests",
+    "test": "test_a_participant_that_takes_a_target_city_is_rewarded",
+    "rust_test": "court::subjugation_order_tests::test_a_participant_that_takes_a_target_city_is_rewarded"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "SubjugationOrderTests",
+    "test": "test_refusing_a_shogun_ruling_orders_30_turns_and_a_new_refusal_never_shortens_it",
+    "rust_test": "court::subjugation_order_tests::test_refusing_a_shogun_ruling_orders_30_turns_and_a_new_refusal_never_shortens_it"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "SubjugationOrderTests",
+    "test": "test_the_refuser_is_the_target_and_an_ai_at_war_with_it_joins_at_once",
+    "rust_test": "court::subjugation_order_tests::test_the_refuser_is_the_target_and_an_ai_at_war_with_it_joins_at_once"
+  },
+  {
+    "source": "tests/test_court_arbitration.py",
+    "class": "SubjugationOrderTests",
+    "test": "test_war_weariness_flag_is_on_the_participants_anchor_city_only_during_the_order",
+    "rust_test": "court::subjugation_order_tests::test_war_weariness_flag_is_on_the_participants_anchor_city_only_during_the_order"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_a_failed_boost_is_left_unrecorded_and_retried_next_turn",
+    "rust_test": "historical::test_a_failed_boost_is_left_unrecorded_and_retried_next_turn"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_advisor_popup_for_each_hotseat_human_on_the_same_turn",
+    "rust_test": "historical::test_advisor_popup_for_each_hotseat_human_on_the_same_turn"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens",
+    "rust_test": "historical::test_advisor_popup_for_the_local_human_on_the_turn_the_event_happens"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_advisor_popup_on_the_year_for_the_boost_and_not_again_on_research",
+    "rust_test": "historical::test_advisor_popup_on_the_year_for_the_boost_and_not_again_on_research"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_advisor_popup_uses_the_generic_name_for_other_houses",
+    "rust_test": "historical::test_advisor_popup_uses_the_generic_name_for_other_houses"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_an_engine_error_in_one_boost_does_not_stop_the_other_factions",
+    "rust_test": "historical::test_an_engine_error_in_one_boost_does_not_stop_the_other_factions"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_any_one_of_the_prerequisites_fires_the_event_early",
+    "rust_test": "historical::test_any_one_of_the_prerequisites_fires_the_event_early"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_calendar_stages_follow_the_speeds_row_order",
+    "rust_test": "historical::test_calendar_stages_follow_the_speeds_row_order"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_events_without_prerequisites_happen_in_their_year_for_their_targets_only",
+    "rust_test": "historical::test_events_without_prerequisites_happen_in_their_year_for_their_targets_only"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_house_specific_name_only_for_its_house",
+    "rust_test": "historical::test_house_specific_name_only_for_its_house"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_houses_rename_only_by_the_succession_civics",
+    "rust_test": "historical::test_houses_rename_only_by_the_succession_civics"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_nagao_becomes_uesugi_only_with_the_succession_civic",
+    "rust_test": "historical::test_nagao_becomes_uesugi_only_with_the_succession_civic"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_no_advisor_popup_without_a_local_player",
+    "rust_test": "historical::test_no_advisor_popup_without_a_local_player"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_no_double_firing_after_a_reload",
+    "rust_test": "historical::test_no_double_firing_after_a_reload"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_oda_rename_stages_keep_the_latest",
+    "rust_test": "historical::test_oda_rename_stages_keep_the_latest"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_resource_events_boost_the_sites_research_and_reveal_nothing",
+    "rust_test": "historical::test_resource_events_boost_the_sites_research_and_reveal_nothing"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_starting_knowledge_fires_no_event_on_turn_1",
+    "rust_test": "historical::test_starting_knowledge_fires_no_event_on_turn_1"
+  },
+  {
+    "source": "tests/test_historical_events_lua.py",
+    "class": "HistoricalEventsTurnTests",
+    "test": "test_teppo_boosts_every_faction_without_the_tech_on_its_due_turn",
+    "rust_test": "historical::test_teppo_boosts_every_faction_without_the_tech_on_its_due_turn"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_civilopedia_parts_receive_house_text_only_for_the_owner",
+    "rust_test": "house::test_civilopedia_parts_receive_house_text_only_for_the_owner"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_engine_built_text_is_switched_for_the_owner",
+    "rust_test": "house::test_engine_built_text_is_switched_for_the_owner"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_historic_moment_descriptions_are_switched",
+    "rust_test": "house::test_historic_moment_descriptions_are_switched"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_install_shadows_the_context_global_without_writing_the_engine_table",
+    "rust_test": "house::test_install_shadows_the_context_global_without_writing_the_engine_table"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_load_screen_without_game_keeps_generic_names",
+    "rust_test": "house::test_load_screen_without_game_keeps_generic_names"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_other_houses_and_observers_keep_generic_names",
+    "rust_test": "house::test_other_houses_and_observers_keep_generic_names"
+  },
+  {
+    "source": "tests/test_house_names_lua.py",
+    "class": "HouseNamesLuaTests",
+    "test": "test_owner_sees_house_names_for_keys_arguments_and_upper_case",
+    "rust_test": "house::test_owner_sees_house_names_for_keys_arguments_and_upper_case"
+  },
+  {
+    "source": "tests/test_japan_1534_relations_lua.py",
+    "class": "StartAllianceEndTests",
+    "test": "test_a_war_started_elsewhere_ends_the_alliance_without_a_second_war_or_peace",
+    "rust_test": "relations::test_a_war_started_elsewhere_ends_the_alliance_without_a_second_war_or_peace"
+  },
+  {
+    "source": "tests/test_japan_1534_relations_lua.py",
+    "class": "StartAllianceEndTests",
+    "test": "test_an_alliance_the_pair_makes_later_is_not_a_start_alliance",
+    "rust_test": "relations::test_an_alliance_the_pair_makes_later_is_not_a_start_alliance"
+  },
+  {
+    "source": "tests/test_japan_1534_relations_lua.py",
+    "class": "StartAllianceEndTests",
+    "test": "test_end_marks_the_pair_ended_and_the_alliance_lapses_at_the_limit",
+    "rust_test": "relations::test_end_marks_the_pair_ended_and_the_alliance_lapses_at_the_limit"
+  },
+  {
+    "source": "tests/test_japan_1534_relations_lua.py",
+    "class": "StartAllianceEndTests",
+    "test": "test_lapsed_start_alliances_are_not_re_made_and_turn_false",
+    "rust_test": "relations::test_lapsed_start_alliances_are_not_re_made_and_turn_false"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_absorption_clears_maximum_fixed_point_pressure_including_fraction",
+    "rust_test": "religion::test_absorption_clears_maximum_fixed_point_pressure_including_fraction"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted",
+    "rust_test": "religion::test_absorption_preserves_unaffiliated_citizens_even_when_row_is_omitted"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_absorption_rejects_unbound_or_foreign_native_target",
+    "rust_test": "religion::test_absorption_rejects_unbound_or_foreign_native_target"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_absorption_requires_own_living_target_and_locks_the_transferred_source",
+    "rust_test": "religion::test_absorption_requires_own_living_target_and_locks_the_transferred_source"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_absorption_rounds_once_worldwide_and_preserves_other_religions",
+    "rust_test": "religion::test_absorption_rounds_once_worldwide_and_preserves_other_religions"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_actual_owned_followers_authorize_absorption_with_zero_manual_count",
+    "rust_test": "religion::test_actual_owned_followers_authorize_absorption_with_zero_manual_count"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_ai_prefers_each_job_branch_and_uses_legal_absorption_or_conceal_fallback",
+    "rust_test": "religion::test_ai_prefers_each_job_branch_and_uses_legal_absorption_or_conceal_fallback"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_all_catalog_and_state_names_have_ja_en_ru_text",
+    "rust_test": "religion::test_all_catalog_and_state_names_have_ja_en_ru_text"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_all_scenario_lua_chunks_compile_including_ui_and_waits",
+    "rust_test": "religion::test_all_scenario_lua_chunks_compile_including_ui_and_waits"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_bound_native_counts_prevent_false_loss_and_revival",
+    "rust_test": "religion::test_bound_native_counts_prevent_false_loss_and_revival"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_bound_revival_creates_one_native_citizen_and_survives_load",
+    "rust_test": "religion::test_bound_revival_creates_one_native_citizen_and_survives_load"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_catalog_has_twenty_placeholder_slots_and_ssot_sources",
+    "rust_test": "religion::test_catalog_has_twenty_placeholder_slots_and_ssot_sources"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_conceal_has_no_yield_and_keeps_material_after_later_paid_revivals",
+    "rust_test": "religion::test_conceal_has_no_yield_and_keeps_material_after_later_paid_revivals"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_diplomatic_restitution_requires_foreign_founder_contact_and_peace",
+    "rust_test": "religion::test_diplomatic_restitution_requires_foreign_founder_contact_and_peace"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_direct_revival_cannot_strand_an_unresolved_discovery",
+    "rust_test": "religion::test_direct_revival_cannot_strand_an_unresolved_discovery"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_discovery_accepts_all_listed_jobs_sites_and_both_item_kinds",
+    "rust_test": "religion::test_discovery_accepts_all_listed_jobs_sites_and_both_item_kinds"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_discovery_transfers_existing_item_and_rejects_wrong_site_and_replays",
+    "rust_test": "religion::test_discovery_transfers_existing_item_and_rejects_wrong_site_and_replays"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_each_of_the_four_revival_sources_survives_load",
+    "rust_test": "religion::test_each_of_the_four_revival_sources_survives_load"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_engine_refusal_and_missing_spawn_leave_pending_and_block_replay",
+    "rust_test": "religion::test_engine_refusal_and_missing_spawn_leave_pending_and_block_replay"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_engine_write_failure_and_export_edits_leave_original_untouched",
+    "rust_test": "religion::test_engine_write_failure_and_export_edits_leave_original_untouched"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_every_ingame_action_requires_banseiki_and_excludes_standard_gs",
+    "rust_test": "religion::test_every_ingame_action_requires_banseiki_and_excludes_standard_gs"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay",
+    "rust_test": "religion::test_every_outcome_applies_the_exact_reward_and_survives_load_without_replay"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_fast_deadlines_are_gated_and_leave_production_values_intact",
+    "rust_test": "religion::test_fast_deadlines_are_gated_and_leave_production_values_intact"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_founder_defeat_keeps_believers_assets_and_other_faction",
+    "rust_test": "religion::test_founder_defeat_keeps_believers_assets_and_other_faction"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_fresh_game_and_script_reload_do_not_write_or_found_anything",
+    "rust_test": "religion::test_fresh_game_and_script_reload_do_not_write_or_found_anything"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_future_or_damaged_save_fails_without_overwrite",
+    "rust_test": "religion::test_future_or_damaged_save_fails_without_overwrite"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_global_last_follower_is_required_for_loss",
+    "rust_test": "religion::test_global_last_follower_is_required_for_loss"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_heresy_requires_400_faith_and_consumes_material",
+    "rust_test": "religion::test_heresy_requires_400_faith_and_consumes_material"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_reward_waits_for_ui_verification_and_survives_pending_save",
+    "rust_test": "religion::test_hero_reward_waits_for_ui_verification_and_survives_pending_save"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_reward_waits_until_recipients_turn",
+    "rust_test": "religion::test_hero_reward_waits_until_recipients_turn"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_timeout_does_not_expire_another_players_inactive_reservation",
+    "rust_test": "religion::test_hero_timeout_does_not_expire_another_players_inactive_reservation"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_verification_accepts_unset_test_flag_in_manual_game",
+    "rust_test": "religion::test_hero_verification_accepts_unset_test_flag_in_manual_game"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_waits_for_replicated_lifespan_property_before_reward",
+    "rust_test": "religion::test_hero_waits_for_replicated_lifespan_property_before_reward"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hero_waits_for_valid_class_without_querying_negative_claim",
+    "rust_test": "religion::test_hero_waits_for_valid_class_without_querying_negative_claim"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_hidden_addin_activates_after_load_and_completes_pending_hero_once",
+    "rust_test": "religion::test_hidden_addin_activates_after_load_and_completes_pending_hero_once"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_holy_site_alone_and_no_source_cannot_revive",
+    "rust_test": "religion::test_holy_site_alone_and_no_source_cannot_revive"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_inexact_engine_conversion_stays_pending_and_never_replays",
+    "rust_test": "religion::test_inexact_engine_conversion_stays_pending_and_never_replays"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_interrupted_hero_reward_cannot_replay_after_load",
+    "rust_test": "religion::test_interrupted_hero_reward_cannot_replay_after_load"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_invalid_inputs_and_world_overflow_do_not_mutate_saved_state",
+    "rust_test": "religion::test_invalid_inputs_and_world_overflow_do_not_mutate_saved_state"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_item_transfer_preserves_identity_kind_and_revival_source",
+    "rust_test": "religion::test_item_transfer_preserves_identity_kind_and_revival_source"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_legacy_v1_choices_never_pay_on_load_or_unlock_used_material",
+    "rust_test": "religion::test_legacy_v1_choices_never_pay_on_load_or_unlock_used_material"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_live_scenario_gameplay_and_external_captures_in_fresh_vms",
+    "rust_test": "religion::test_live_scenario_gameplay_and_external_captures_in_fresh_vms"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_loss_retains_all_assets_and_underground_evidence",
+    "rust_test": "religion::test_loss_retains_all_assets_and_underground_evidence"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_manifest_packages_every_file_and_separates_gameplay",
+    "rust_test": "religion::test_manifest_packages_every_file_and_separates_gameplay"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_manual_new_game_flag_reset_handles_zero_lua_return_values",
+    "rust_test": "religion::test_manual_new_game_flag_reset_handles_zero_lua_return_values"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_mechanism_accepts_a_replaced_religion_catalog",
+    "rust_test": "religion::test_mechanism_accepts_a_replaced_religion_catalog"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_named_rules_and_all_eighty_modifier_definitions_match_official_types",
+    "rust_test": "religion::test_named_rules_and_all_eighty_modifier_definitions_match_official_types"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_native_revival_uses_numeric_religion_order",
+    "rust_test": "religion::test_native_revival_uses_numeric_religion_order"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_non_revival_limit_is_per_player_religion_and_branch",
+    "rust_test": "religion::test_non_revival_limit_is_per_player_religion_and_branch"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_official_hero_requires_mode_origin_building_and_unclaimed_hero",
+    "rust_test": "religion::test_official_hero_requires_mode_origin_building_and_unclaimed_hero"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_restart",
+    "rust_test": "religion::test_religious_alliance_ends_on_diplomatic_end_war_or_defeat_and_does_not_restart"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_removed_discovery_source_prevents_revival_without_marking_resolution",
+    "rust_test": "religion::test_removed_discovery_source_prevents_revival_without_marking_resolution"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material",
+    "rust_test": "religion::test_research_chooses_two_new_eurekas_in_type_order_and_consumes_material"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_research_eurekas_precede_science_that_finishes_a_chosen_tech",
+    "rust_test": "religion::test_research_eurekas_precede_science_that_finishes_a_chosen_tech"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_research_requires_two_distinct_eligible_boosts_before_any_effect",
+    "rust_test": "religion::test_research_requires_two_distinct_eligible_boosts_before_any_effect"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_reservation_write_failure_has_no_engine_effect_and_receipt_failure_cannot_replay",
+    "rust_test": "religion::test_reservation_write_failure_has_no_engine_effect_and_receipt_failure_cannot_replay"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways",
+    "rust_test": "religion::test_restitution_transfers_half_balances_and_prohibits_persecution_both_ways"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_reused_material_removed_ids_and_moved_discoveries_cannot_pay_rewards",
+    "rust_test": "religion::test_reused_material_removed_ids_and_moved_discoveries_cannot_pay_rewards"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_revival_does_not_overwrite_a_slot_created_by_the_faith_callback",
+    "rust_test": "religion::test_revival_does_not_overwrite_a_slot_created_by_the_faith_callback"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_revival_free_slot_respects_the_identifier_length_limit",
+    "rust_test": "religion::test_revival_free_slot_respects_the_identifier_length_limit"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_revival_is_explicit_and_duplicate_revival_is_rejected",
+    "rust_test": "religion::test_revival_is_explicit_and_duplicate_revival_is_rejected"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_revival_picks_a_free_slot_and_preserves_both_religions",
+    "rust_test": "religion::test_revival_picks_a_free_slot_and_preserves_both_religions"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_revival_requires_faith_city_ownership_and_fixed_size",
+    "rust_test": "religion::test_revival_requires_faith_city_ownership_and_fixed_size"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_stale_owned_community_cannot_authorize_absorption",
+    "rust_test": "religion::test_stale_owned_community_cannot_authorize_absorption"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_switching_save_in_same_vm_does_not_use_previous_game_cache",
+    "rust_test": "religion::test_switching_save_in_same_vm_does_not_use_previous_game_cache"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan",
+    "rust_test": "religion::test_timed_out_hero_completes_once_after_engine_publishes_valid_lifespan"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_twenty_religions_do_not_leak_state_across_save_load",
+    "rust_test": "religion::test_twenty_religions_do_not_leak_state_across_save_load"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_underground_believers_need_no_public_facility_or_item",
+    "rust_test": "religion::test_underground_believers_need_no_public_facility_or_item"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_unverified_hero_claim_never_pays_faith",
+    "rust_test": "religion::test_unverified_hero_claim_never_pays_faith"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_vault_and_hero_limits_apply_across_religions_after_load",
+    "rust_test": "religion::test_vault_and_hero_limits_apply_across_religions_after_load"
+  },
+  {
+    "source": "tests/test_religion_persistence.py",
+    "class": "ReligionPersistenceTests",
+    "test": "test_zero_native_absorption_does_not_charge_or_reserve",
+    "rust_test": "religion::test_zero_native_absorption_does_not_charge_or_reserve"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_button_hotkey_auto_end_and_captured_refresh_use_the_saved_ledger",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_button_hotkey_auto_end_and_captured_refresh_use_the_saved_ledger"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_guard_applies_only_to_a_pending_human_on_the_judgement_turn",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_guard_applies_only_to_a_pending_human_on_the_judgement_turn"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_notification_can_replace_an_open_reign_popup",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_notification_can_replace_an_open_reign_popup"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_notifications_for_another_house_or_an_earlier_reign_cannot_open_the_screen"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_official_notifications_keep_their_own_handler",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_official_notifications_keep_their_own_handler"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_screen_once_then_notification_and_end_turn_button_reopen_until_chosen",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_screen_once_then_notification_and_end_turn_button_reopen_until_chosen"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "DarkPolicyNotificationTests",
+    "test": "test_ui_recreated_from_save_does_not_repeat_automatic_choice_but_notification_works",
+    "rust_test": "ages_screens::dark_policy_notification_tests::test_ui_recreated_from_save_does_not_repeat_automatic_choice_but_notification_works"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraCompletePopupTests",
+    "test": "test_the_official_screen_stays_off_with_the_pack_and_on_without",
+    "rust_test": "ages_screens::era_complete_popup_tests::test_the_official_screen_stays_off_with_the_pack_and_on_without"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraIndicatorTests",
+    "test": "test_before_the_ledger_the_official_tooltip_stays",
+    "rust_test": "ages_screens::era_indicator_tests::test_before_the_ledger_the_official_tooltip_stays"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraIndicatorTests",
+    "test": "test_chidai_has_no_countdown",
+    "rust_test": "ages_screens::era_indicator_tests::test_chidai_has_no_countdown"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraIndicatorTests",
+    "test": "test_tenbun_then_koji_with_the_turns_to_the_next_era_name",
+    "rust_test": "ages_screens::era_indicator_tests::test_tenbun_then_koji_with_the_turns_to_the_next_era_name"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraIndicatorTests",
+    "test": "test_the_indicator_writes_nothing",
+    "rust_test": "ages_screens::era_indicator_tests::test_the_indicator_writes_nothing"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_after_koji_history_other_houses_ages_and_the_heroic_label",
+    "rust_test": "ages_screens::era_panel_tests::test_after_koji_history_other_houses_ages_and_the_heroic_label"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_after_the_last_era_name_no_countdown_or_thresholds",
+    "rust_test": "ages_screens::era_panel_tests::test_after_the_last_era_name_no_countdown_or_thresholds"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_before_chidai_the_projection_is_dark_whatever_the_score",
+    "rust_test": "ages_screens::era_panel_tests::test_before_chidai_the_projection_is_dark_whatever_the_score"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_before_the_ledger_the_official_panel_stays",
+    "rust_test": "ages_screens::era_panel_tests::test_before_the_ledger_the_official_panel_stays"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_tenbun_period_shows_the_ledger",
+    "rust_test": "ages_screens::era_panel_tests::test_tenbun_period_shows_the_ledger"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "EraPanelTests",
+    "test": "test_the_panel_writes_nothing",
+    "rust_test": "ages_screens::era_panel_tests::test_the_panel_writes_nothing"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_autoplay_end_shows_it_when_the_turn_begin_did_not",
+    "rust_test": "ages_screens::reign_popup_tests::test_autoplay_end_shows_it_when_the_turn_begin_did_not"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_dark_house_gets_the_policy_button_and_the_choice_after_closing",
+    "rust_test": "ages_screens::reign_popup_tests::test_dark_house_gets_the_policy_button_and_the_choice_after_closing"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_heroic_after_dark_uses_the_heroic_art",
+    "rust_test": "ages_screens::reign_popup_tests::test_heroic_after_dark_uses_the_heroic_art"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_koji_turn_shows_the_house_result_once",
+    "rust_test": "ages_screens::reign_popup_tests::test_koji_turn_shows_the_house_result_once"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_merged_period_names_the_era_it_judged",
+    "rust_test": "ages_screens::reign_popup_tests::test_merged_period_names_the_era_it_judged"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_no_local_player_shows_nothing",
+    "rust_test": "ages_screens::reign_popup_tests::test_no_local_player_shows_nothing"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_not_shown_before_the_first_era_name_change",
+    "rust_test": "ages_screens::reign_popup_tests::test_not_shown_before_the_first_era_name_change"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_the_screen_writes_nothing",
+    "rust_test": "ages_screens::reign_popup_tests::test_the_screen_writes_nothing"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "ReignPopupTests",
+    "test": "test_turn_end_closes_without_opening_the_choice",
+    "rust_test": "ages_screens::reign_popup_tests::test_turn_end_closes_without_opening_the_choice"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "TitleLengthTests",
+    "test": "test_era_name_popup_title_is_two_short_lines",
+    "rust_test": "ages_screens::title_length_tests::test_era_name_popup_title_is_two_short_lines"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "TitleLengthTests",
+    "test": "test_era_score_panel_title_fits_the_header",
+    "rust_test": "ages_screens::title_length_tests::test_era_score_panel_title_fits_the_header"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "WiringTests",
+    "test": "test_notification_extension_does_not_recursively_include_the_official_panel",
+    "rust_test": "ages_screens::wiring_tests::test_notification_extension_does_not_recursively_include_the_official_panel"
+  },
+  {
+    "source": "tests/test_sengoku_ages_screens.py",
+    "class": "WiringTests",
+    "test": "test_ruleset_panel_loads_the_extension_after_the_official_script",
+    "rust_test": "ages_screens::wiring_tests::test_ruleset_panel_loads_the_extension_after_the_official_script"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_every_house_has_a_valid_default_dark_policy",
+    "rust_test": "ages::ages_data_tests::test_every_house_has_a_valid_default_dark_policy"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_every_reign_is_an_engine_era_lasting_its_turns",
+    "rust_test": "ages::ages_data_tests::test_every_reign_is_an_engine_era_lasting_its_turns"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_no_attachment_of_an_era_score_modifier_in_any_table",
+    "rust_test": "ages::ages_data_tests::test_no_attachment_of_an_era_score_modifier_in_any_table"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_official_age_effects_and_age_policies_are_gone",
+    "rust_test": "ages::ages_data_tests::test_official_age_effects_and_age_policies_are_gone"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_official_ages_and_dedications_are_off",
+    "rust_test": "ages::ages_data_tests::test_official_ages_and_dedications_are_off"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_pending_policy_notification_survives_turn_end_without_retaining_ordinary_notices",
+    "rust_test": "ages::ages_data_tests::test_pending_policy_notification_survives_turn_end_without_retaining_ordinary_notices"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_reigns_policies_and_effect_modifiers",
+    "rust_test": "ages::ages_data_tests::test_reigns_policies_and_effect_modifiers"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "AgesDataTests",
+    "test": "test_text_keys_are_translated",
+    "rust_test": "ages::ages_data_tests::test_text_keys_are_translated"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_cleanup_scans_past_official_notifications_and_keeps_other_houses",
+    "rust_test": "ages::dark_policy_screen_tests::test_cleanup_scans_past_official_notifications_and_keeps_other_houses"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_cleanup_waits_for_the_notification_judgement_to_reach_the_ui",
+    "rust_test": "ages::dark_policy_screen_tests::test_cleanup_waits_for_the_notification_judgement_to_reach_the_ui"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice",
+    "rust_test": "ages::dark_policy_screen_tests::test_dismissed_screen_keeps_the_blocker_until_an_accepted_choice"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_later_closes_until_the_notification_and_nothing_is_sent_before_the_turn_is_active",
+    "rust_test": "ages::dark_policy_screen_tests::test_later_closes_until_the_notification_and_nothing_is_sent_before_the_turn_is_active"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_load_keeps_pending_notification_and_does_not_show_the_screen_automatically",
+    "rust_test": "ages::dark_policy_screen_tests::test_load_keeps_pending_notification_and_does_not_show_the_screen_automatically"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_not_shown_for_a_house_that_is_not_dark",
+    "rust_test": "ages::dark_policy_screen_tests::test_not_shown_for_a_house_that_is_not_dark"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_rejected_request_does_not_clear_the_blocker",
+    "rust_test": "ages::dark_policy_screen_tests::test_rejected_request_does_not_clear_the_blocker"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_screen_lists_the_policies_and_a_click_applies_the_choice",
+    "rust_test": "ages::dark_policy_screen_tests::test_screen_lists_the_policies_and_a_click_applies_the_choice"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "DarkPolicyScreenTests",
+    "test": "test_turn_end_closes_and_the_next_turn_cannot_choose_even_if_unchosen",
+    "rust_test": "ages::dark_policy_screen_tests::test_turn_end_closes_and_the_next_turn_cannot_choose_even_if_unchosen"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "KojiDistributionTests",
+    "test": "test_observed_koji_scores_land_mostly_normal",
+    "rust_test": "ages::koji_distribution_tests::test_observed_koji_scores_land_mostly_normal"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_a_pair_that_re_forms_on_the_lapse_turn_scores_in_either_order",
+    "rust_test": "ages::ledger_tests::test_a_pair_that_re_forms_on_the_lapse_turn_scores_in_either_order"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_ai_keeps_its_default_and_only_dark_humans_get_the_reopen_notification",
+    "rust_test": "ages::ledger_tests::test_ai_keeps_its_default_and_only_dark_humans_get_the_reopen_notification"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_alliance_scores_once_per_period_and_same_team_never",
+    "rust_test": "ages::ledger_tests::test_alliance_scores_once_per_period_and_same_team_never"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_capture_classes_home_regain_and_castle",
+    "rust_test": "ages::ledger_tests::test_capture_classes_home_regain_and_castle"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_capture_event_and_turn_start_difference_count_once",
+    "rust_test": "ages::ledger_tests::test_capture_event_and_turn_start_difference_count_once"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_capture_then_raze_keeps_the_points_and_the_fall",
+    "rust_test": "ages::ledger_tests::test_capture_then_raze_keeps_the_points_and_the_fall"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_castle_of_a_non_major_has_no_age_flags",
+    "rust_test": "ages::ledger_tests::test_castle_of_a_non_major_has_no_age_flags"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_castle_through_the_free_cities_keeps_its_history_and_regain_scores",
+    "rust_test": "ages::ledger_tests::test_castle_through_the_free_cities_keeps_its_history_and_regain_scores"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_chidai_makes_every_house_dark_whatever_its_score_and_lasts_to_the_end",
+    "rust_test": "ages::ledger_tests::test_chidai_makes_every_house_dark_whatever_its_score_and_lasts_to_the_end"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_choice_before_the_first_judgement_is_dropped",
+    "rust_test": "ages::ledger_tests::test_choice_before_the_first_judgement_is_dropped"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_choice_survives_load",
+    "rust_test": "ages::ledger_tests::test_choice_survives_load"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_dark_house_choice_applies_its_flags_once_per_reign",
+    "rust_test": "ages::ledger_tests::test_dark_house_choice_applies_its_flags_once_per_reign"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_dark_houses_take_their_own_default_and_unlisted_civs_the_first_priority",
+    "rust_test": "ages::ledger_tests::test_dark_houses_take_their_own_default_and_unlisted_civs_the_first_priority"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_ended_start_alliance_lingers_without_points_then_a_new_alliance_scores",
+    "rust_test": "ages::ledger_tests::test_ended_start_alliance_lingers_without_points_then_a_new_alliance_scores"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_engine_era_change_judges_the_reign_and_the_period_ends_there",
+    "rust_test": "ages::ledger_tests::test_engine_era_change_judges_the_reign_and_the_period_ends_there"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_event_flags_score_once_per_house_and_the_reign_turn_flag_goes_to_the_new_period",
+    "rust_test": "ages::ledger_tests::test_event_flags_score_once_per_house_and_the_reign_turn_flag_goes_to_the_new_period"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_friendship_existing_at_initialization_does_not_score",
+    "rust_test": "ages::ledger_tests::test_friendship_existing_at_initialization_does_not_score"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_friendship_of_the_start_and_of_one_team_never_scores",
+    "rust_test": "ages::ledger_tests::test_friendship_of_the_start_and_of_one_team_never_scores"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_home_taken_from_a_city_state_is_still_a_home",
+    "rust_test": "ages::ledger_tests::test_home_taken_from_a_city_state_is_still_a_home"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_invalid_choices_are_dropped",
+    "rust_test": "ages::ledger_tests::test_invalid_choices_are_dropped"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_load_does_not_count_again",
+    "rust_test": "ages::ledger_tests::test_load_does_not_count_again"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_new_friendship_scores_one_point_each_once_per_period",
+    "rust_test": "ages::ledger_tests::test_new_friendship_scores_one_point_each_once_per_period"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_normal_house_has_no_policy_and_dark_house_flags_every_city",
+    "rust_test": "ages::ledger_tests::test_normal_house_has_no_policy_and_dark_house_flags_every_city"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_projection_for_the_era_score_screen_matches_the_next_judgement",
+    "rust_test": "ages::ledger_tests::test_projection_for_the_era_score_screen_matches_the_next_judgement"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_property_writer_is_idempotent_with_one_anchor_per_house",
+    "rust_test": "ages::ledger_tests::test_property_writer_is_idempotent_with_one_anchor_per_house"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_recaptures_in_one_turn_each_score",
+    "rust_test": "ages::ledger_tests::test_recaptures_in_one_turn_each_score"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_reign_table_from_koji_to_chidai",
+    "rust_test": "ages::ledger_tests::test_reign_table_from_koji_to_chidai"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_reign_turns_at_every_speed_match_the_generator_and_never_share_a_turn",
+    "rust_test": "ages::ledger_tests::test_reign_turns_at_every_speed_match_the_generator_and_never_share_a_turn"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_reign_turns_follow_the_calendar",
+    "rust_test": "ages::ledger_tests::test_reign_turns_follow_the_calendar"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_reigns_are_the_engine_eras_in_order",
+    "rust_test": "ages::ledger_tests::test_reigns_are_the_engine_eras_in_order"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_research_scores_the_difference_but_not_the_knowledge_held_at_initialization",
+    "rust_test": "ages::ledger_tests::test_research_scores_the_difference_but_not_the_knowledge_held_at_initialization"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_settler_start_house_takes_its_first_founded_castle_as_home",
+    "rust_test": "ages::ledger_tests::test_settler_start_house_takes_its_first_founded_castle_as_home"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_silent_owner_change_is_scored_by_the_difference",
+    "rust_test": "ages::ledger_tests::test_silent_owner_change_is_scored_by_the_difference"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first",
+    "rust_test": "ages::ledger_tests::test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_first"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_last",
+    "rust_test": "ages::ledger_tests::test_start_alliance_and_its_lapse_score_nothing_with_the_ledger_last"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_thresholds_follow_the_period_length_cities_and_past_ages",
+    "rust_test": "ages::ledger_tests::test_thresholds_follow_the_period_length_cities_and_past_ages"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_transfer_scores_once_at_the_next_turn_start_not_on_city_built",
+    "rust_test": "ages::ledger_tests::test_transfer_scores_once_at_the_next_turn_start_not_on_city_built"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_unselected_policy_can_be_chosen_after_load_on_the_judgement_turn",
+    "rust_test": "ages::ledger_tests::test_unselected_policy_can_be_chosen_after_load_on_the_judgement_turn"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_unselected_policy_cannot_be_changed_after_the_judgement_turn_even_after_load",
+    "rust_test": "ages::ledger_tests::test_unselected_policy_cannot_be_changed_after_the_judgement_turn_even_after_load"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "LedgerTests",
+    "test": "test_without_the_gameplay_friendship_call_nothing_scores_and_the_log_says_so",
+    "rust_test": "ages::ledger_tests::test_without_the_gameplay_friendship_call_nothing_scores_and_the_log_says_so"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "ReignFilesTests",
+    "test": "test_every_engine_era_lasts_at_least_two_standard_turns_in_order",
+    "rust_test": "ages::reign_files_tests::test_every_engine_era_lasts_at_least_two_standard_turns_in_order"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "ReignFilesTests",
+    "test": "test_generated_reign_files_are_current",
+    "rust_test": "ages::reign_files_tests::test_generated_reign_files_are_current"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "ReignFilesTests",
+    "test": "test_the_calendar_dates_each_engine_era_with_its_reign_at_every_speed",
+    "rust_test": "ages::reign_files_tests::test_the_calendar_dates_each_engine_era_with_its_reign_at_every_speed"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "ShortReignDistributionTests",
+    "test": "test_short_periods_leave_most_houses_normal",
+    "rust_test": "ages::short_reign_distribution_tests::test_short_periods_leave_most_houses_normal"
+  },
+  {
+    "source": "tests/test_sengoku_ages.py",
+    "class": "ShortReignDistributionTests",
+    "test": "test_the_old_rule_gives_back_the_logged_ages",
+    "rust_test": "ages::short_reign_distribution_tests::test_the_old_rule_gives_back_the_logged_ages"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_a_member_leaves_at_once_and_the_rest_stay",
+    "rust_test": "unification::test_a_member_leaves_at_once_and_the_rest_stay"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_a_pact_left_with_one_house_is_dissolved",
+    "rust_test": "unification::test_a_pact_left_with_one_house_is_dissolved"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_a_pact_of_two_dissolves_when_they_go_to_war",
+    "rust_test": "unification::test_a_pact_of_two_dissolves_when_they_go_to_war"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_a_start_alliance_inside_one_pact_is_left_to_the_pact",
+    "rust_test": "unification::test_a_start_alliance_inside_one_pact_is_left_to_the_pact"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_a_start_alliance_tie_goes_to_the_lowest_id",
+    "rust_test": "unification::test_a_start_alliance_tie_goes_to_the_lowest_id"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_ai_does_not_propose_below_the_share_or_without_an_alliance",
+    "rust_test": "unification::test_ai_does_not_propose_below_the_share_or_without_an_alliance"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_ai_does_not_propose_to_a_house_it_is_at_war_with",
+    "rust_test": "unification::test_ai_does_not_propose_to_a_house_it_is_at_war_with"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_ai_joins_only_when_allied_and_the_lead_capital_is_marked_when_the_pact_holds_all",
+    "rust_test": "unification::test_ai_joins_only_when_allied_and_the_lead_capital_is_marked_when_the_pact_holds_all"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated",
+    "rust_test": "unification::test_ai_proposal_to_a_human_waits_for_acceptance_and_is_not_repeated"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_ai_proposes_to_an_allied_ai_when_they_hold_enough_castles",
+    "rust_test": "unification::test_ai_proposes_to_an_allied_ai_when_they_hold_enough_castles"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_an_active_start_alliance_pools_and_its_holder_of_more_castles_leads",
+    "rust_test": "unification::test_an_active_start_alliance_pools_and_its_holder_of_more_castles_leads"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_an_ended_start_alliance_does_not_pool",
+    "rust_test": "unification::test_an_ended_start_alliance_does_not_pool"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact",
+    "rust_test": "unification::test_eliminated_member_castle_taken_by_an_outsider_blocks_the_pact"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win",
+    "rust_test": "unification::test_eliminated_member_drops_out_and_the_rest_of_the_pact_can_still_win"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_home_capitals_count_only_once_every_major_has_founded",
+    "rust_test": "unification::test_home_capitals_count_only_once_every_major_has_founded"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_human_target_must_accept_the_proposer",
+    "rust_test": "unification::test_human_target_must_accept_the_proposer"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_lead_eliminated_passes_the_pact_to_the_member_with_most_castles",
+    "rust_test": "unification::test_lead_eliminated_passes_the_pact_to_the_member_with_most_castles"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_lead_eliminated_tie_goes_to_the_lowest_id_who_can_then_take_members",
+    "rust_test": "unification::test_lead_eliminated_tie_goes_to_the_lowest_id_who_can_then_take_members"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_members_at_war_leave_and_the_lead_stays",
+    "rust_test": "unification::test_members_at_war_leave_and_the_lead_stays"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_one_pact_per_player_and_no_pact_within_a_team",
+    "rust_test": "unification::test_one_pact_per_player_and_no_pact_within_a_team"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_pact_with_no_survivor_is_gone",
+    "rust_test": "unification::test_pact_with_no_survivor_is_gone"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_rebuilt_city_on_a_razed_castle_does_not_block_the_pact",
+    "rust_test": "unification::test_rebuilt_city_on_a_razed_castle_does_not_block_the_pact"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_the_lead_leaving_passes_the_pact_and_a_pact_of_two_dissolves",
+    "rust_test": "unification::test_the_lead_leaving_passes_the_pact_and_a_pact_of_two_dissolves"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_two_warring_members_both_leave",
+    "rust_test": "unification::test_two_warring_members_both_leave"
+  },
+  {
+    "source": "tests/test_unification_pact_lua.py",
+    "class": "UnificationPactTests",
+    "test": "test_without_registered_castles_the_pact_pools_home_capitals",
+    "rust_test": "unification::test_without_registered_castles_the_pact_pools_home_capitals"
+  }
+]
