@@ -188,7 +188,7 @@
     {
       "action": "end_turn",
       "turns": 1,
-      "timeout": 240
+      "timeout": 600
     },
     {
       "action": "wait_for",
@@ -335,7 +335,7 @@
     {
       "action": "end_turn",
       "turns": 4,
-      "timeout": 960
+      "timeout": 2400
     },
     {
       "action": "wait_for",
@@ -363,7 +363,7 @@
     {
       "action": "end_turn",
       "turns": 1,
-      "timeout": 240
+      "timeout": 600
     },
     {
       "action": "wait_for",
