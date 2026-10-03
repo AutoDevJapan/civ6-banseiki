@@ -667,7 +667,7 @@ function B.ProbeCapturedExchange()
         assert(ours==1,"native probe item is no longer unique");
         local item=assert(current:FindItemByID(createdID),
             "native probe item disappeared before cleanup");
-        assert(item==created and item:GetID()==createdID and
+        assert(item:GetID()==createdID and
             item:GetType()==DealItemTypes.CAPTIVE and
             item:GetFromPlayerID()==captor and item:GetToPlayerID()==c.attacker and
             (not ok or item:GetValueType()==d.captive.nameIndex) and

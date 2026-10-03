@@ -645,7 +645,9 @@ fn negative_native_name_index_is_probed_without_sending_or_accepting_a_deal() {
                 return item;
             end,
             FindItemByID=function(_,id)
-                for _,item in ipairs(DEAL_ITEMS) do if item.id==id then return item end end;
+                for _,item in ipairs(DEAL_ITEMS) do if item.id==id then
+                    return setmetatable({}, {__index=item});
+                end end;
             end,
             RemoveItemByID=function(_,id)
                 for index,item in ipairs(DEAL_ITEMS) do if item.id==id then
