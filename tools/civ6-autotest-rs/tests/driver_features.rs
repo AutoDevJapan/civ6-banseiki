@@ -26,6 +26,35 @@ fn turn_backend() -> FakeBackend {
 }
 
 #[test]
+fn test_mod_selection_waits_for_rebuild_without_replaying_an_unknown_mutation() {
+    for (deadline, succeeds) in [(20.0, true), (4.0, false)] {
+        let fake = FakeBackend::new();
+        let timeouts = fake.timeouts.clone();
+        let fake = fake.lua(move |state, code| {
+            assert_eq!(state, "FrontEnd");
+            assert!(code.contains("GameConfiguration.UpdateEnabledMods()"));
+            // The engine acknowledges a database rebuild six seconds later.
+            if *timeouts.lock().unwrap().last().unwrap() < 6.0 {
+                Err(Error::unknown("selection may have changed before timeout"))
+            } else {
+                Ok("".into())
+            }
+        });
+        let mut h = Harness::new(json!({}), fake);
+        let result = h.runner.run_step(&json!({
+            "action":"enable_mods", "ids":["base"], "timeout":deadline
+        }));
+        if succeeds {
+            assert_eq!(result.unwrap(), "enabled/verified base; disabled none");
+        } else {
+            assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+        }
+        assert_eq!(h.calls().len(), 1, "never resend an uncertain selection");
+        assert_eq!(*h.timeouts.lock().unwrap(), [deadline]);
+    }
+}
+
+#[test]
 fn test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline() {
     let step = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":30});
     scenario::validate_scenario(&json!({"name":"slow native mutation","steps":[step]})).unwrap();

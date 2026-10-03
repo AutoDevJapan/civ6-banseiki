@@ -1452,7 +1452,10 @@ impl Runner {
                 let disabled = self.lua(
                     "FrontEnd",
                     &scenario::enable_mods_code(&ids, &strings(&step["disable_ids"])),
-                    self.budget(deadline, 5.0)?,
+                    // Switching the selection rebuilds configuration databases.
+                    // Wait within the scenario's deadline for this one mutation;
+                    // a short query budget can lose its acknowledgment mid-rebuild.
+                    self.remaining(deadline)?,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
