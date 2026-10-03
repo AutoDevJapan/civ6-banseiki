@@ -2,7 +2,7 @@
   "name": "Custom clans: Oda human and Takeda AI",
   "judge_profile": "generic",
   "steps": [
-    {"action": "enable_mods", "ids": ["ba3a1c58-9287-4654-a22f-85f9e6841e9b"]},
+    {"action": "enable_mods", "ids": ["ba3a1c58-9287-4654-a22f-85f9e6841e9b"], "disable_ids": ["c678a216-58ab-4d40-a614-8f309d36ac86"]},
     {"action": "configure", "ruleset": "RULESET_EXPANSION_2", "map_size": "MAPSIZE_SMALL", "speed": "GAMESPEED_STANDARD", "seed": 620929, "players": [
       {"leader": "LEADER_JAC_ODA_NOBUHIDE", "civ": "CIVILIZATION_JAC_ODA", "human": true},
       {"leader": "LEADER_JAC_TAKEDA_NOBUTORA", "civ": "CIVILIZATION_JAC_TAKEDA", "human": false}

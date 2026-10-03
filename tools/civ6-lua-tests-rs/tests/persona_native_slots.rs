@@ -106,6 +106,11 @@ fn test_diagnostic_mods_are_separate_map_scoped_packages() {
             "JAC_Test_NativeSlotOnly.modinfo",
             "8c615430-5a09-4431-877a-bfd03bca9e80",
         ),
+        (
+            "poc/JAC_Test_StaticPersonaGate",
+            "JAC_Test_StaticPersonaGate.modinfo",
+            "c678a216-58ab-4d40-a614-8f309d36ac86",
+        ),
     ] {
         let xml = read_repo(format!("{root}/{manifest}"));
         let document = Document::parse(&xml).unwrap();
