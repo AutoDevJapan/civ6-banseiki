@@ -147,9 +147,11 @@ GameEvents.JAC_BoundaryProgressSpy.Add(function(owner)
         "spy production progress was not prepared or was already added");
     local city = assert(CityManager.GetCity(owner, spyProduction.cityID), "spy production city missing");
     local queue = city:GetBuildQueue();
-    local head = assert(queue:GetAt(0), "native city has no current spy production");
-    local unit = head.UnitType and GameInfo.Units[head.UnitType];
-    assert(unit and unit.UnitType == "UNIT_SPY", "native city is producing a different item");
+    -- The visible UI already independently observed the accepted native queue.
+    -- GetAt is UI-only in live 50; Gameplay performs the mutation and binds the
+    -- actual produced unit afterwards, never treating its request as completion.
+    local unit = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    assert(type(queue.AddProgress) == "function", "native Gameplay production API unavailable");
     local before = {};
     local count = 0;
     for _,candidate in Players[owner]:GetUnits():Members() do

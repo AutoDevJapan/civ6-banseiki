@@ -408,6 +408,33 @@ fn spy_preparation_grants_the_civic_before_requiring_its_native_effect() {
 }
 
 #[test]
+fn gameplay_progress_does_not_require_the_ui_only_queue_getter() {
+    let h = SpyHarness::new();
+    h.event("JAC_BoundarySpawnSpy").unwrap();
+    h.queue("BUILD_SPY");
+    h.frame().unwrap();
+    h.city_queue_event();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "READY_BUILD_SPY");
+    let city: Table = h.global("CONTROL");
+    let queue: Table = city
+        .strict_get::<Function>("GetBuildQueue")
+        .unwrap()
+        .call(city.clone())
+        .unwrap();
+    queue.set("GetAt", mlua::Value::Nil).unwrap();
+    h.event("JAC_BoundaryProgressSpy").unwrap();
+    assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 1);
+    assert_eq!(
+        h.global::<Table>("UNITS")
+            .strict_get::<Table>(0)
+            .unwrap()
+            .raw_len(),
+        0
+    );
+}
+
+#[test]
 fn wrong_spy_civic_or_unaccepted_city_queue_cannot_start_production() {
     let h = SpyHarness::new();
     let units: Table = h.global::<Table>("GameInfo").strict_get("Units").unwrap();
