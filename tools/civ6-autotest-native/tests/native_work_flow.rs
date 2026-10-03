@@ -563,6 +563,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-acquired-result-final.json",
         "absorption-return-boundary.json",
         "absorption-japan.json",
+        "absorption-japan-native.json",
         "absorption-japan-recall-continuation.json",
         "absorption-hero-recall.json",
         "absorption-native-bridge-probe.json",
