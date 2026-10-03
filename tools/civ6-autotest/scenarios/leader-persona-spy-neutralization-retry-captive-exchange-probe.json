@@ -1,0 +1,11 @@
+{
+  "name": "Probe the native captive deal item without submitting a deal",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local d=b.EnemyRetryDiagnosis(); assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and d.mode=='UNAVAILABLE_CAPACITY' and d.outcome=='CAPTURED' and d.capacity==1 and d.occupied==1,'actual failed captive checkpoint differs'); assert(#d.roster.captured==1 and #d.roster.offMap==1 and #d.roster.activeOffMap==0 and d.roster.capturedPlaceholder.offMapIndex==1,'native captive placeholder differs'); local r=b.ProbeCapturedExchange(); assert(r.captor==1 and r.nameIndex==-1 and (r.status=='VALID_ITEM' or r.status=='INVALID_ITEM' or r.status=='NO_ITEM' or r.status=='PENDING_DEAL' or r.status=='AT_WAR'),'native captive exchange probe did not classify the item'); return r.status"},
+    {"action":"exit_to_menu"}
+  ]
+}

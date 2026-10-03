@@ -395,7 +395,7 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
     EnemyReceipt(controller,params,params and params.Action);
     assert(params.Action=="PREPARE_ENEMY" or params.Action=="EVOLVE_ENEMY" or
         params.Action=="CONFIRM_ENEMY" or params.Action=="CAPTURE_ENEMY" or
-        params.Action=="BEGIN_SPY_RETRY",
+        params.Action=="BEGIN_SPY_RETRY" or params.Action=="PROGRESS_CAPACITY",
         "unknown enemy fixture barrier");
     Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",
         {action=params.Action,token=params.Token,turn=params.Turn,attacker=controller});
@@ -511,7 +511,7 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         governorCityID=native.cityID,spent=params.Spent,total=params.Total,
         merit=R.Property(c.leader,"MERIT") or 0,rosterOutcome=params.Outcome,
         captiveCaptor=params.CaptiveCaptor,captiveName=params.CaptiveName,
-        captiveLevel=params.CaptiveLevel,
+        captiveNameIndex=params.CaptiveNameIndex,captiveLevel=params.CaptiveLevel,
         capacity=params.Capacity,occupied=params.Occupied,archivedTurn=Game.GetCurrentGameTurn()};
     local retry={current=2,mode=params.Mode,archive=archive,
         spyID=spy.id,
@@ -532,6 +532,42 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         Game:SetProperty("JAC_BOUNDARY_SPY",{owner=controller,id=params.CurrentID});
     end
     print("JAC_BOUNDARY ENEMY_SPY_RETRY_ARCHIVED "..R.Serialize(retry));
+end);
+
+-- The UI first verifies a normal Government Plaza building BUILD request and
+-- sends only scalar identity through the synchronized Gameplay operation.
+-- Progress is applied once to the real city queue. Only a later UI building
+-- observation and native GetSpyCapacity can establish that a slot was earned.
+GameEvents.JAC_BoundaryProgressCapacityBuilding.Add(function(controller,params)
+    EnemyReceipt(controller,params,"PROGRESS_CAPACITY");
+    local c=EnemyConfig(controller);
+    assert(c.cityID and not Game:GetProperty(RETRY) and
+        params.Capacity==1 and params.Occupied==1 and
+        type(params.CityID)=="number" and type(params.BuildingIndex)=="number" and
+        type(params.BuildingType)=="string",
+        "native captive capacity progress receipt is stale");
+    local row=assert(GameInfo.Buildings[params.BuildingType],
+        "official capacity building definition missing");
+    assert(row.Index==params.BuildingIndex and
+        row.PrereqDistrict=="DISTRICT_GOVERNMENT" and
+        (row.BuildingType=="BUILDING_GOV_TALL" or
+         row.BuildingType=="BUILDING_GOV_CONQUEST" or
+         row.BuildingType=="BUILDING_GOV_WIDE" or
+         row.BuildingType=="BUILDING_GOV_SPIES"),
+        "capacity progress is not an official Government Plaza building");
+    local city=assert(CityManager.GetCity(controller,params.CityID),
+        "owned capacity production city missing");
+    assert(city:GetOwner()==controller,"capacity production city owner changed");
+    local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS") or {steps={}};
+    assert(not progress.steps[row.BuildingType],
+        "capacity building progress was already added once");
+    local queue=city:GetBuildQueue();
+    assert(type(queue.AddProgress)=="function","native city progress API missing");
+    queue:AddProgress(500);
+    progress.steps[row.BuildingType]={token=params.Token,cityID=params.CityID,
+        buildingIndex=row.Index,turn=Game.GetCurrentGameTurn()};
+    Game:SetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS",progress);
+    print("JAC_BOUNDARY CAPACITY_BUILDING_PROGRESS "..R.Serialize(progress));
 end);
 
 GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)

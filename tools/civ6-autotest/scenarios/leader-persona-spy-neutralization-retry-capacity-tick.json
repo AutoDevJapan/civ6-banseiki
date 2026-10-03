@@ -1,0 +1,15 @@
+{
+  "name": "Advance one real turn and read actual Government Plaza building and spy capacity",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS'),'official capacity building progress receipt missing'); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.occupied==1 and p.capacity==1,'native captive capacity already changed'); return p.stage"},
+    {"action":"end_turn","count":1,"timeout":300},
+    {"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); assert(p.occupied==1 and (p.stage=='BUILD_SPIES' or p.stage=='CAPACITY_READY' or p.stage=='EFFECT_PENDING' or p.stage=='PROGRESS_PENDING'),'native capacity route changed unexpectedly: '..p.stage); return p.stage..' capacity='..p.capacity..' occupied='..p.occupied"},
+    {"action":"exit_to_menu"}
+  ]
+}

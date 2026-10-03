@@ -17,7 +17,7 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',
  'JAC_BoundaryEnemyFixtureBarrier','JAC_BoundaryConfirmEnemy',
  'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery',
- 'JAC_BoundaryBeginEnemySpyRetry'}) do GameEvents[k]=event() end
+ 'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryProgressCapacityBuilding'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
  local r={}; for i,row in ipairs(rows) do r[i-1]=row; r[row[key]]=row; if row.Hash then r[row.Hash]=row end end
@@ -41,7 +41,18 @@ GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,Modi
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
 local spyDef={Index=55,Hash=555,UnitType='UNIT_SPY',Name='LOC_UNIT_SPY_NAME',PrereqCivic='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE',Spy=true}
 GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY=spyDef,[55]=spyDef}
-GameInfo.Civics={[spyDef.PrereqCivic]={Index=12}}
+GameInfo.Civics={[spyDef.PrereqCivic]={Index=12},CIVIC_JAC_SENGOKU_DOMAIN_LAW={Index=13}}
+GameInfo.Districts={DISTRICT_GOVERNMENT={DistrictType='DISTRICT_GOVERNMENT',Index=70,Hash=700,
+ PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'}}
+GameInfo.Buildings={}
+for _,row in ipairs({
+ {BuildingType='BUILDING_GOV_TALL',Index=76,Hash=760},
+ {BuildingType='BUILDING_GOV_CONQUEST',Index=77,Hash=770},
+ {BuildingType='BUILDING_GOV_WIDE',Index=78,Hash=780},
+ {BuildingType='BUILDING_GOV_SPIES',Index=79,Hash=790}}) do
+ row.PrereqDistrict='DISTRICT_GOVERNMENT'; row.RequiresPlacement=false
+ GameInfo.Buildings[row.BuildingType]=row; GameInfo.Buildings[row.Index]=row
+end
 GameInfo.GreatPersonIndividuals={[3]={GreatPersonIndividualType='GP_TEST'}}
 GameInfo.Yields=collection({{YieldType='YIELD_GOLD',Index=0},{YieldType='YIELD_FOOD',Index=1}},'YieldType')
 GameInfo.UnitOperations=collection({
@@ -54,7 +65,7 @@ EspionageResultTypes={SUCCESS_UNDETECTED=1,SUCCESS_MUST_ESCAPE=2,FAIL_UNDETECTED
 PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,APPOINT_GOVERNOR=3,
  PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
 CityOperationTypes={BUILD=81,PARAM_UNIT_TYPE='unit',PARAM_INSERT_MODE='insert',
- PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT=7}
+ PARAM_BUILDING_TYPE='building',PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT=7}
 CityProductionDirectives={TRAIN=1}
 local function members(list)
  local i=0; return function() i=i+1; if list[i] then return i,list[i] end end
@@ -67,21 +78,44 @@ function city(id,owner,x,y,name,marker)
  c.GetName=function() return c.name end
  c.GetProperty=function(_,k) if k==SETTLED then return c.marker end end
  c.GetYield=function(_,i) return i==0 and 13.5 or 8.25 end
+ c.GetDistricts=function() return {HasDistrict=function() return false end} end
+ c.GetBuildings=function() return {HasBuilding=function() return false end} end
  CITIES[#CITIES+1]=c; return c
 end
 CONTROL=city(10,0,1,0,'Control',0)
 TARGET=city(11,0,2,0,'Target',1)
 FOREIGN=city(20,1,2,1,'Foreign',0)
-BUILD_HEAD=nil; PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
+BUILD_HEAD=nil; PROGRESS_CALLS=0; CAPACITY_PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
+GOV_DISTRICT_BUILT=false; GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
 CAPTURED={[0]={},[1]={}}
 local queue={
  GetAt=function(_,index) assert(index==0); return BUILD_HEAD end,
- CanProduce=function(_,hash) return hash==555 and CIVIC_COMPLETED and SPY_CAPACITY>0 end,
- AddProgress=function(_,amount) assert(BUILD_HEAD and amount==500); PROGRESS_CALLS=PROGRESS_CALLS+1 end}
+ CanProduce=function(_,hash)
+  if hash==555 then return CIVIC_COMPLETED and SPY_CAPACITY>0 end
+  if hash==760 then return GOV_DISTRICT_BUILT and not GOV_TIER1_BUILT end
+  if hash==790 then return GOV_DISTRICT_BUILT and GOV_TIER1_BUILT and not GOV_SPIES_BUILT end
+  return false
+ end,
+ AddProgress=function(_,amount)
+  assert(BUILD_HEAD and amount==500)
+  if BUILD_HEAD.UnitType then PROGRESS_CALLS=PROGRESS_CALLS+1
+  else CAPACITY_PROGRESS_CALLS=CAPACITY_PROGRESS_CALLS+1 end
+ end}
 CONTROL.GetBuildQueue=function() return queue end
+CONTROL.GetDistricts=function() return {HasDistrict=function(_,index) assert(index==70); return GOV_DISTRICT_BUILT end} end
+CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
+ if index==76 then return GOV_TIER1_BUILT end
+ if index==77 or index==78 then return false end
+ assert(index==79); return GOV_SPIES_BUILT
+ end} end
 function ADVANCE_TURN()
  TURN=TURN+1
- if PROGRESS_CALLS==1 and BUILD_HEAD and PRODUCTION_COMPLETES~=false then
+ if BUILD_HEAD and BUILD_HEAD.BuildingType and CAPACITY_PROGRESS_CALLS>0 and
+  CAPACITY_COMPLETES~=false then
+  if BUILD_HEAD.BuildingType==76 then GOV_TIER1_BUILT=true
+  elseif BUILD_HEAD.BuildingType==79 then GOV_SPIES_BUILT=true; SPY_CAPACITY=SPY_CAPACITY+1 end
+  BUILD_HEAD=nil
+ elseif PROGRESS_CALLS==1 and BUILD_HEAD and BUILD_HEAD.UnitType and PRODUCTION_COMPLETES~=false then
   local spy=makeSpy(0,PRODUCED_SPY_ID or 15); spy.x=CONTROL.x; spy.y=CONTROL.y; spy.finish=0
   BUILD_HEAD=nil
  end
@@ -119,11 +153,14 @@ for _,id in ipairs({0,1,62}) do
   Members=function() local owned={}; for _,c in ipairs(CITIES) do if c.owner==id then owned[#owned+1]=c end end; return members(owned) end,
   GetCapitalCity=function() if id==0 then return CONTROL elseif id==1 then return FOREIGN end end} end
   p.GetUnits=function() return {Members=function() return members(UNITS[id]) end,FindID=function(_,uid) for _,u in ipairs(UNITS[id]) do if u:GetID()==uid then return u end end end} end
- p.GetCulture=function() return {HasCivic=function(_,index) assert(index==12); return CIVIC_COMPLETED end,
+ p.GetCulture=function() return {HasCivic=function(_,index)
+  if index==13 then return GOV_CIVIC_COMPLETED end
+  assert(index==12); return CIVIC_COMPLETED end,
   GetCultureCost=function(_,index) assert(index==12); return 100 end,
   SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true; SPY_CAPACITY=0 end,
   SetCivic=function(_,index,grant) assert(index==12 and grant==true); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end} end
  p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
+  IsAtWarWith=function(_,other) assert(other~=id); return AT_WAR==true end,
   GetSpyCapacity=function() return CIVIC_COMPLETED and SPY_CAPACITY or 0 end,
   GetNumSpiesOffMap=function() return id==0 and #OFF_MAP or 0 end,
   GetNthOffMapSpy=function(_,owner,index) assert(owner==id); return id==0 and OFF_MAP[index+1] or nil end,
@@ -134,12 +171,17 @@ end
 Game.GetPlayers=function() return {Players[0],Players[1]} end
 PlayerManager={GetAliveMajorIDs=function() return {0,1} end,GetFreeCitiesPlayerID=function() return 62 end}
 CityManager={GetCity=function(owner,id) for _,c in ipairs(CITIES) do if c.owner==owner and c.id==id then return c end end end,
- CanStartOperation=function(city,op,params) assert(city==CONTROL and op==CityOperationTypes.BUILD and params.unit==555);
+ CanStartOperation=function(city,op,params) assert(city==CONTROL and op==CityOperationTypes.BUILD and
+  (params.unit==555 or params.building==760 or params.building==790));
   return BUILD_CAN_START~=false,{reason='native build result'} end,
  RequestOperation=function(city,op,params)
-  assert(city==CONTROL and op==CityOperationTypes.BUILD and params.unit==555 and params.insert==7 and params.location==0)
+  assert(city==CONTROL and op==CityOperationTypes.BUILD and
+   (params.unit==555 or params.building==760 or params.building==790) and
+   params.insert==7 and params.location==0)
   BUILD_REQUESTS[#BUILD_REQUESTS+1]={city=city,op=op,params=params,selected=SELECTED_CITY}
-  if BUILD_ACCEPTED~=false then BUILD_HEAD={Directive=CityProductionDirectives.TRAIN,UnitType=55};
+  if BUILD_ACCEPTED~=false then
+   if params.unit then BUILD_HEAD={Directive=CityProductionDirectives.TRAIN,UnitType=55}
+   else BUILD_HEAD={BuildingType=params.building==760 and 76 or 79} end
    fire(Events.CityProductionQueueChanged,0,10) end
  end,
  TransferCityToFreeCities=function(c) assert(c==TARGET); TRANSFERRED=c; c.owner=62; c.marker=0; GOV.assigned=nil; GOV.established=false; EFFECT_TARGET=false end}
@@ -207,9 +249,10 @@ UnitManager={
    local y=REQUEST_EFFECT=='wrong_destination_offmap' and TARGET.y or FOREIGN.y
    local finish=REQUEST_EFFECT=='expired_offmap' and TURN or TURN+3
    local level=REQUEST_EFFECT=='different_level_offmap' and spy.level+1 or spy.level
-   OFF_MAP[1]={Name=name,Level=level,ReturnTurn=finish,XLocation=x,YLocation=y}
+   local slot=(#OFF_MAP==1 and OFF_MAP[1].ReturnTurn==-1) and 2 or 1
+   OFF_MAP[slot]={Name=name,Level=level,ReturnTurn=finish,XLocation=x,YLocation=y}
    if REQUEST_EFFECT=='multi_offmap' then
-    OFF_MAP[2]={Name=spy.name,Level=spy.level,ReturnTurn=TURN+3,XLocation=FOREIGN.x,YLocation=FOREIGN.y}
+    OFF_MAP[slot+1]={Name=spy.name,Level=spy.level,ReturnTurn=TURN+3,XLocation=FOREIGN.x,YLocation=FOREIGN.y}
    end
    for i,unit in ipairs(UNITS[spy.owner]) do if unit==spy then table.remove(UNITS[spy.owner],i); break end end
   elseif REQUEST_EFFECT=='arrive' then spy.x=FOREIGN.x; spy.y=FOREIGN.y; spy.finish=0
@@ -239,8 +282,11 @@ function makeSpy(owner,id)
  UNITS[owner][#UNITS[owner]+1]=spy; return spy
 end
 function ARRIVE_OFFMAP(id)
- assert(#OFF_MAP==1)
- local travelling=OFF_MAP[1]; OFF_MAP={}
+ local slot,travelling
+ for i,record in ipairs(OFF_MAP) do if record.ReturnTurn~=-1 then
+  assert(not slot); slot=i; travelling=record
+ end end
+ assert(slot); table.remove(OFF_MAP,slot)
  local spy=makeSpy(0,id)
  spy.name=travelling.Name=='' and spyDef.Name or travelling.Name; spy.level=travelling.Level
  spy.x=travelling.XLocation; spy.y=travelling.YLocation; spy.finish=0
