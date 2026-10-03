@@ -55,6 +55,7 @@ GameEvents.JAC_TestPersonaTraitGrantPrepare.Add(function(owner)
         "evolution reservation was not saved");
     player:AttachModifierByID(MODIFIER);
     Game:SetProperty(RECEIPT, {owner=owner, source=source, leader=LEADER,
+        preparedTurn=Game.GetCurrentGameTurn(),
         total=governors:GetGovernorPoints(), spent=governors:GetGovernorPointsSpent(),
         beforeTotal=before_total, beforeSpent=before_spent,
         detachKind=type(player.DetachModifierByID),
