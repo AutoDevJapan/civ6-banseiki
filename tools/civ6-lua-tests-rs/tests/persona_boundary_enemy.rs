@@ -190,6 +190,25 @@ fn missing_native_governor_or_unprepared_person_cannot_become_a_target() {
 }
 
 #[test]
+fn restored_native_binding_is_rechecked_without_waiting_for_an_old_reply() {
+    let h = Enemy::new();
+    h.prepare();
+    h.bind();
+    exec(&h.0, &read_repo(VIEW));
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; assert(b.lastAction=='IDLE'); local before=#REQUESTS; assert(b.TryConfirmEnemy()=='NATIVE_BOUND'); assert(b.lastAction=='ALREADY_CONFIRMED_ENEMY' and #REQUESTS==before)");
+    h.run("ENEMY_SPENT=2");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.TryConfirmEnemy()",
+        "saved enemy appointment no longer matches",
+    );
+    h.run("ENEMY_SPENT=1; ENEMY_GOV.assigned=nil");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.TryConfirmEnemy()",
+        "saved enemy appointment no longer matches",
+    );
+}
+
+#[test]
 fn wrong_history_or_event_id_fails_but_success_with_capture_counts() {
     let h = Enemy::new();
     h.prepare();

@@ -315,7 +315,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); local a=b.lastAction; if a=='ERROR_CONFIRM_ENEMY' or a=='UNKNOWN_CONFIRM_ENEMY' or a=='REJECTED_CONFIRM_ENEMY' then error('enemy native confirmation refused: '..a) end; if a=='QUEUED_CONFIRM_ENEMY' or a=='DISPATCHED_CONFIRM_ENEMY' or a=='BARRIER_SENT_CONFIRM_ENEMY' then return false end; return not c.cityID or a=='ACCEPTED_CONFIRM_ENEMY'"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); local a=b.lastAction; if a=='ERROR_CONFIRM_ENEMY' or a=='UNKNOWN_CONFIRM_ENEMY' or a=='REJECTED_CONFIRM_ENEMY' then error('enemy native confirmation refused: '..a) end; if a=='QUEUED_CONFIRM_ENEMY' or a=='DISPATCHED_CONFIRM_ENEMY' or a=='BARRIER_SENT_CONFIRM_ENEMY' then return false end; return not c.cityID or a=='ACCEPTED_CONFIRM_ENEMY' or a=='ALREADY_CONFIRMED_ENEMY'"
       }
     },
     {

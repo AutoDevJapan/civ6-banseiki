@@ -286,8 +286,18 @@ function B.EnemyTarget()
 end
 function B.TryConfirmEnemy()
     local c=EnemyConfig();
-    if c.cityID then return "NATIVE_BOUND"; end
     local s=B.EnemyState();
+    if c.cityID then
+        assert(s.appointed and s.base and s.personOwner==c.owner and
+            s.personaState=="GOVERNOR" and s.nativeType==GameInfo.Governors[
+                GameInfo.JAC_LeaderPersonas[c.leader].GovernorType].Index and
+            s.total>=c.total and s.spent==c.spent+1 and
+            s.cityOwner==c.owner and s.cityID==c.cityID and
+            s.cityX==c.x and s.cityY==c.y,
+            "saved enemy appointment no longer matches the native Governor");
+        B.lastAction="ALREADY_CONFIRMED_ENEMY";
+        return "NATIVE_BOUND";
+    end
     if not (c.evolvedToken and (s.personaState=="EVOLVING" or s.personaState=="GOVERNOR") and
         s.appointed and s.base and s.nativeType==GameInfo.Governors[
         GameInfo.JAC_LeaderPersonas[c.leader].GovernorType].Index and
