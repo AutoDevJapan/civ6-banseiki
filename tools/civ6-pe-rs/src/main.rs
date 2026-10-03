@@ -152,6 +152,42 @@ impl<'a> Pe<'a> {
         }
         Ok(hits)
     }
+
+    fn ascii_rvas(&self, needle: &[u8]) -> Result<Vec<u32>, String> {
+        if needle.is_empty() || !needle.is_ascii() || needle.contains(&0) {
+            return Err("search text must be nonempty ASCII without NUL".into());
+        }
+        let mut hits = Vec::new();
+        for section in &self.sections {
+            let data = at(self.bytes, section.file_offset, section.file_size)?;
+            for (i, candidate) in data.windows(needle.len() + 1).enumerate() {
+                if (i == 0 || data[i - 1] == 0)
+                    && candidate[..needle.len()] == *needle
+                    && candidate[needle.len()] == 0
+                {
+                    hits.push(section.rva + i as u32);
+                }
+            }
+        }
+        Ok(hits)
+    }
+
+    fn rip_lea_refs(&self, target: u32) -> Result<Vec<u32>, String> {
+        let text = self.section(b".text")?;
+        let data = at(self.bytes, text.file_offset, text.file_size)?;
+        let mut hits = Vec::new();
+        for (i, code) in data.windows(7).enumerate() {
+            if !matches!(code[0], 0x48 | 0x4c) || code[1] != 0x8d || code[2] & 0xc7 != 0x05 {
+                continue;
+            }
+            let displacement = i32::from_le_bytes(code[3..7].try_into().unwrap()) as i64;
+            let source = text.rva as i64 + i as i64;
+            if source + 7 + displacement == target as i64 {
+                hits.push(source as u32);
+            }
+        }
+        Ok(hits)
+    }
 }
 
 fn parse_rva(arg: &str) -> Result<u32, String> {
@@ -199,12 +235,46 @@ fn run(path: &Path, targets: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn run_ascii(path: &Path, needle: &str) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let pe = Pe::parse(&bytes)?;
+    println!("image base 0x{:x}; ASCII text {needle:?}", pe.image_base);
+    println!("RIP LEA hits are byte-pattern candidates; verify instruction boundaries with a disassembler.");
+    for rva in pe.ascii_rvas(needle.as_bytes())? {
+        let offset = pe.offset(rva).ok_or("matched string has no file bytes")?;
+        println!("string RVA 0x{rva:x}, file 0x{offset:x}");
+        for source in pe.rip_lea_refs(rva)? {
+            println!("  LEA candidate RVA 0x{source:x}");
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     let mut args = env::args_os().skip(1);
     let Some(path) = args.next() else {
-        eprintln!("usage: civ6-pe <read-only DLL path> <hex RVA> [hex RVA ...]");
+        eprintln!("usage: civ6-pe <read-only DLL path> <hex RVA>... | civ6-pe --ascii-xrefs <read-only DLL path> <ASCII text>");
         std::process::exit(2);
     };
+    if path == "--ascii-xrefs" {
+        let Some(dll) = args.next() else {
+            eprintln!("a DLL path is required");
+            std::process::exit(2);
+        };
+        let Some(needle) = args.next() else {
+            eprintln!("ASCII text is required");
+            std::process::exit(2);
+        };
+        if args.next().is_some() {
+            eprintln!("exactly one ASCII text argument is required");
+            std::process::exit(2);
+        }
+        if let Err(error) = run_ascii(Path::new(&dll), &needle.to_string_lossy()) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let targets: Vec<_> = args.map(|v| v.to_string_lossy().into_owned()).collect();
     if targets.is_empty() {
         eprintln!("at least one RVA is required");
@@ -250,5 +320,43 @@ mod tests {
         assert_eq!(pe.branches_to(0x1000).unwrap(), vec![(0x1010, 0xe8)]);
         assert_eq!(pe.unwind_range(0x1010).unwrap().begin, 0x1000);
         assert_eq!(pe.offset(0x1010), Some(0x210));
+    }
+
+    #[test]
+    fn ascii_xrefs_resolve_section_rva_and_rip_relative_lea() {
+        let mut bytes = vec![0; 0x600];
+        bytes[0..2].copy_from_slice(b"MZ");
+        bytes[0x3c..0x40].copy_from_slice(&0x80_u32.to_le_bytes());
+        bytes[0x80..0x84].copy_from_slice(b"PE\0\0");
+        bytes[0x84..0x86].copy_from_slice(&0x8664_u16.to_le_bytes());
+        bytes[0x86..0x88].copy_from_slice(&3_u16.to_le_bytes());
+        bytes[0x94..0x96].copy_from_slice(&0xf0_u16.to_le_bytes());
+        bytes[0x98..0x9a].copy_from_slice(&0x20b_u16.to_le_bytes());
+        bytes[0xb0..0xb8].copy_from_slice(&0x180000000_u64.to_le_bytes());
+        let sections = 0x188;
+        bytes[sections..sections + 5].copy_from_slice(b".text");
+        bytes[sections + 8..sections + 12].copy_from_slice(&0x100_u32.to_le_bytes());
+        bytes[sections + 12..sections + 16].copy_from_slice(&0x1000_u32.to_le_bytes());
+        bytes[sections + 16..sections + 20].copy_from_slice(&0x100_u32.to_le_bytes());
+        bytes[sections + 20..sections + 24].copy_from_slice(&0x200_u32.to_le_bytes());
+        let pdata = sections + 40;
+        bytes[pdata..pdata + 6].copy_from_slice(b".pdata");
+        bytes[pdata + 8..pdata + 12].copy_from_slice(&12_u32.to_le_bytes());
+        bytes[pdata + 12..pdata + 16].copy_from_slice(&0x2000_u32.to_le_bytes());
+        bytes[pdata + 16..pdata + 20].copy_from_slice(&12_u32.to_le_bytes());
+        bytes[pdata + 20..pdata + 24].copy_from_slice(&0x400_u32.to_le_bytes());
+        let rdata = pdata + 40;
+        bytes[rdata..rdata + 6].copy_from_slice(b".rdata");
+        bytes[rdata + 8..rdata + 12].copy_from_slice(&0x20_u32.to_le_bytes());
+        bytes[rdata + 12..rdata + 16].copy_from_slice(&0x3000_u32.to_le_bytes());
+        bytes[rdata + 16..rdata + 20].copy_from_slice(&0x20_u32.to_le_bytes());
+        bytes[rdata + 20..rdata + 24].copy_from_slice(&0x480_u32.to_le_bytes());
+        bytes[0x220..0x227].copy_from_slice(&[0x4c, 0x8d, 0x0d, 0xd9, 0x1f, 0, 0]);
+        bytes[0x480..0x489].copy_from_slice(b"GetThing\0");
+        let pe = Pe::parse(&bytes).unwrap();
+        assert_eq!(pe.ascii_rvas(b"GetThing").unwrap(), vec![0x3000]);
+        assert_eq!(pe.ascii_rvas(b"Thing").unwrap(), Vec::<u32>::new());
+        assert_eq!(pe.rip_lea_refs(0x3000).unwrap(), vec![0x1020]);
+        assert_eq!(pe.offset(0x3000), Some(0x480));
     }
 }
