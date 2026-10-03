@@ -1,0 +1,44 @@
+{
+  "name": "PR96 artifact and newly created art native MOVE diagnosis (engine unverified)",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": ["dfa0717e-4d0b-4370-b693-27fc6758571b"]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-acquired-carrier-result-absorb-flow-128-75000e4516ef",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer();return p and p>=0 and Players[p] and Players[p]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "-- Diagnostic only: the installed GameCore exports read-only Great Work access, but no known CreateGreatWork binding.\nlocal names={'GetGreatWorks','CreateGreatWork','GetGreatWorkDataFromIndex','GetGreatWorkPlayer','GetGreatPeople'}\nlocal out={}\nfor _,name in ipairs(names) do local ok,value=pcall(function() return Game[name] end);out[#out+1]=name..'='..(ok and type(value) or 'unreadable') end\nlocal city=assert(Players[Game.GetLocalPlayer()]:GetCities():GetCapitalCity())\nfor _,name in ipairs({'CreateGreatWork','CreateGreatWorkInSlot','SetGreatWorkInSlot','GetGreatWorkInSlot'}) do local ok,value=pcall(function() return city:GetBuildings()[name] end);out[#out+1]='CityBuildings.'..name..'='..(ok and type(value) or 'unreadable') end\nprint('[JAC_ARTWORK_CORE_API_DIAG] '..table.concat(out,' '))\nreturn table.concat(out,' ')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "-- Read actual published slots and provenance. This step does not claim MOVE success.\nlocal out={}\nlocal art={GREATWORKOBJECT_SCULPTURE=true,GREATWORKOBJECT_LANDSCAPE=true,GREATWORKOBJECT_PORTRAIT=true,GREATWORKOBJECT_RELIGIOUS=true}\nlocal counts={artifact=0,art=0}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do local player=Players[owner];if player then for _,city in player:GetCities():Members() do local b=city:GetBuildings();for building in GameInfo.Buildings() do if b:HasBuilding(building.Index) then for slot=0,b:GetNumGreatWorkSlots(building.Index)-1 do local index=b:GetGreatWorkInSlot(building.Index,slot);if index and index>=0 then local kind=assert(GameInfo.GreatWorks[b:GetGreatWorkTypeFromIndex(index)]).GreatWorkObjectType;if kind=='GREATWORKOBJECT_ARTIFACT' or art[kind] then local group=kind=='GREATWORKOBJECT_ARTIFACT' and 'artifact' or 'art';counts[group]=counts[group]+1;out[#out+1]={Group=group,Index=index,Owner=owner,City=city:GetID(),Building=building.BuildingType,Slot=slot,Created=b:GetTurnFromIndex(index),Creator=b:GetCreatorNameFromIndex(index),CreatedBy=Game.GetGreatWorkPlayer(index)} end end end end end end end end\nprint('[JAC_ARTWORK_EXISTING_SLOTS] artifact='..counts.artifact..' art='..counts.art)\nfor _,row in ipairs(out) do print('[JAC_ARTWORK_EXISTING_SLOT] group='..row.Group..' index='..row.Index..' owner='..row.Owner..' city='..row.City..' building='..row.Building..' slot='..row.Slot..' turn='..tostring(row.Created)..' creator='..tostring(row.Creator)..' createdBy='..tostring(row.CreatedBy)) end\nreturn 'diagnosis only: artifact='..counts.artifact..' art='..counts.art..'; physical MOVE not yet tested'"
+    }
+  ]
+}

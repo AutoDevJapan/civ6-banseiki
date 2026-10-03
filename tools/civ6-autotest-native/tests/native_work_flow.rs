@@ -610,6 +610,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-freecity-recover-original.json",
         "absorption-native-reverse-carrier-recovery.json",
         "absorption-native-work-probe.json",
+        "absorption-native-artwork-locks.json",
     ] {
         let scenario = native_scenario(name);
         for step in scenario["steps"].as_array().expect("scenario steps") {
