@@ -1,0 +1,38 @@
+{
+  "name": "One real native neutralization recovery turn; resumable",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Recovery",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Recovery"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

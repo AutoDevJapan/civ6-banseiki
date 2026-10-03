@@ -1,0 +1,66 @@
+{
+  "name": "Official human-spy travel to the established enemy persona Governor",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.EnemyProgress()~='SETTLED_INITIAL' then error('enemy Governor must be established before travel') end; return b.CheckEnemy('SETTLED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local target=b.EnemyTarget(); b.Queue('SPY_TRAVEL',target); return 'one official travel request queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_SPY_TRAVEL' or a=='REJECTED_SPY_TRAVEL' or a=='UNKNOWN_SPY_TRAVEL' then error(a) end; return a=='ACCEPTED_SPY_TRAVEL'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SAVE_TRAVEL'); return 'persist accepted travel identity for resume'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SAVE_TRAVEL' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL')~=nil"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

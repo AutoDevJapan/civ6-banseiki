@@ -468,6 +468,7 @@ fn test_native_mission_request_is_not_itself_evidence_of_neutralization() {
     assert!(field::<Option<Table>>(&request, "params").is_none());
     assert_eq!(field::<i64>(&request, "selected"), 15);
     assert_eq!(field::<i64>(&request, "mode"), 3);
+    h.call_global("START_NATIVE", (0, 15, 990));
     h.frame().unwrap();
     h.call_global("ACK_BARRIER", ());
     h.frame().unwrap();

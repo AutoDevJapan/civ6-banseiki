@@ -4,17 +4,52 @@ local R = JAC_PersonaBoundaryRules;
 local B = {};
 ExposedMembers.JAC_PersonaBoundary = B;
 local function Config() return assert(Game:GetProperty("JAC_BOUNDARY_CONFIG"), "fixture not prepared"); end
+local function EnemyConfig()
+    local c=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG"),"enemy fixture not prepared");
+    assert(c.attacker==Game.GetLocalPlayer() and c.owner~=c.attacker and c.source~=c.owner,
+        "enemy fixture actor roles differ");
+    return c;
+end
 local function CityKey(city) return city:GetX() .. "/" .. city:GetY(); end
 local function Log(label, value)
     local text = "JAC_BOUNDARY " .. label .. " " .. R.Serialize(value);
     print(text); return text;
 end
-local ReadSpyRoster;
+local ReadSpyRoster, InTargetCity;
 
 local function Missions(c)
     local result, success = {}, false;
     local targetPlot = Map.GetPlot(c.x, c.y):GetIndex();
     local operation = GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
+    local function Record(attacker,id,mission)
+        if type(mission)~="table" then
+            result[attacker.."/unavailable"]="unknown native mission history value: "..type(mission);
+            return;
+        end
+        local def=GameInfo.UnitOperations[mission.Operation];
+        if def and operation and def.Hash==operation.Hash and mission.PlotIndex==targetPlot and
+            type(mission.CompletionTurn)=="number" and mission.CompletionTurn>=c.armedTurn then
+            result[attacker.."/"..id]={attacker=attacker,id=id,operation=mission.Operation,
+                initial=mission.InitialResult,escape=mission.EscapeResult,
+                turn=mission.CompletionTurn,plot=mission.PlotIndex};
+            -- Initial success still counts if escape later ends in capture/death.
+            if mission.InitialResult==EspionageResultTypes.SUCCESS_UNDETECTED or
+                mission.InitialResult==EspionageResultTypes.SUCCESS_MUST_ESCAPE then success=true; end
+        end
+    end
+    if c.attacker then
+        local event=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
+        if not event then return result,false; end
+        if event.attacker~=c.attacker or type(event.id)~="number" then
+            result["event/unavailable"]="attacker or mission ID differs"; return result,false;
+        end
+        local diplomacy=Players[c.attacker]:GetDiplomacy();
+        local ok,mission=pcall(diplomacy.GetMission,diplomacy,c.attacker,event.id);
+        if not ok then result[c.attacker.."/unavailable"]=tostring(mission);
+        elseif mission==0 then result[c.attacker.."/unavailable"]="event mission absent from native history";
+        else Record(c.attacker,event.id,mission); end
+        return result,success;
+    end
     local ids = PlayerManager.GetAliveMajorIDs(); table.sort(ids);
     for _,attacker in ipairs(ids) do
         local diplomacy = Players[attacker]:GetDiplomacy();
@@ -25,35 +60,22 @@ local function Missions(c)
             local ok, mission = pcall(diplomacy.GetMission, diplomacy, attacker, id);
             if not ok then result[attacker .. "/unavailable"] = tostring(mission); ended=true; break; end
             if mission == 0 then ended=true; break; end
-            if type(mission) ~= "table" then
-                result[attacker .. "/unavailable"]="unknown native mission history value: " .. type(mission);
-                ended=true; break;
-            end
-            local def = GameInfo.UnitOperations[mission.Operation];
-            if def and operation and def.Hash == operation.Hash and mission.PlotIndex == targetPlot and
-                mission.CompletionTurn >= c.armedTurn then
-                result[attacker .. "/" .. id] = {attacker=attacker, id=id, operation=mission.Operation,
-                    initial=mission.InitialResult, escape=mission.EscapeResult,
-                    turn=mission.CompletionTurn, plot=mission.PlotIndex};
-                -- A success that kills/captures the escaping spy can still neutralize
-                -- the governor. Do not use GetMissionOutcomeDetails().Success.
-                if mission.InitialResult == EspionageResultTypes.SUCCESS_UNDETECTED or
-                    mission.InitialResult == EspionageResultTypes.SUCCESS_MUST_ESCAPE then success=true; end
-            end
+            if type(mission)~="table" then Record(attacker,id,mission); ended=true; break; end
+            Record(attacker,id,mission);
         end
         assert(ended, "mission history exceeds the short fixture limit");
     end
     return result, success;
 end
 
-function B.Read()
-    local c = Config();
+local function ReadPersona(c)
     local governor, def, row = R.ResolveGovernor(c.owner, c.leader);
     local assigned = governor:GetAssignedCity();
     local s = {turn=Game.GetCurrentGameTurn(), owner=c.owner, leader=c.leader,
+        attacker=c.attacker,requireSkill=c.requireSkill~=false,controlRequired=c.controlRequired~=false,
         personOwner=R.Property(c.leader,"OWNER"), state=R.Property(c.leader,"STATE"),
         merit=R.Property(c.leader,"MERIT") or 0, skillOwned=R.Property(c.leader,"NODE_"..c.skill) or 0,
-        greatPeople=0, cities={}, unmatchedEffects={}, targetKey=c.x .. "/" .. c.y,
+        greatPeople=0, cities={}, nodesOwned={}, unmatchedEffects={}, targetKey=c.x .. "/" .. c.y,
         fixtureCityID=c.cityID, transfer=c.transfer,
         native={type=governor:GetType(), hash=def.Hash, established=governor:IsEstablished(),
             neutralized=governor:GetNeutralizedTurns(),
@@ -76,7 +98,7 @@ function B.Read()
     end
     for node in GameInfo.JAC_PersonaTreeNodes() do
         if node.LeaderType == c.leader and R.Property(c.leader,"NODE_"..node.NodeType) == 1 then
-            modifiers[node.ModifierId]=true; nodes[#nodes+1]=node;
+            modifiers[node.ModifierId]=true; nodes[#nodes+1]=node; s.nodesOwned[node.NodeType]=1;
         end
     end
     local observed = {};
@@ -140,7 +162,7 @@ function B.Read()
         end
     end
     table.sort(s.unmatchedEffects,function(a,b) return R.Serialize(a)<R.Serialize(b); end);
-    s.gameplay = assert(ExposedMembers.JAC_PersonaBoundaryGameplayRead, "Gameplay observer unavailable")();
+    s.gameplay = assert(ExposedMembers.JAC_PersonaBoundaryGameplayRead, "Gameplay observer unavailable")(c);
     s.freeCitiesOwner = s.gameplay.freeCitiesOwner;
     assert(type(s.freeCitiesOwner) == "number" and s.freeCitiesOwner >= 0,
         "Gameplay free cities owner unavailable");
@@ -156,6 +178,82 @@ function B.Read()
         end
     end
     return s;
+end
+function B.Read() return ReadPersona(Config()); end
+function B.ReadEnemy()
+    local c=EnemyConfig();
+    assert(c.cityID and c.x and c.y,"enemy native Governor target not bound");
+    local s=ReadPersona(c);
+    assert(type(s.gameplay.nodesOwned)=="table","Gameplay skill ownership inventory missing");
+    for node in GameInfo.JAC_PersonaTreeNodes() do if node.LeaderType==c.leader then
+        assert(s.nodesOwned[node.NodeType]==s.gameplay.nodesOwned[node.NodeType],
+            "UI/Gameplay skill ownership differs");
+    end end
+    local governor=R.ResolveGovernor(c.owner,c.leader);
+    s.native.turnsToEstablish=governor:GetTurnsToEstablish();
+    s.native.turnsOnSite=governor:GetTurnsOnSite();
+    assert(type(s.native.turnsToEstablish)=="number" and s.native.turnsToEstablish>0 and
+        type(s.native.turnsOnSite)=="number" and s.native.turnsOnSite>=0,
+        "native Governor establishment clock unavailable");
+    return s;
+end
+function B.CheckEnemy(phase, merit)
+    local s=B.ReadEnemy(); Log("ENEMY_CHECK_"..phase,s);
+    assert(s.native.turnsToEstablish==5,"native five-turn establishment duration changed");
+    R.Check(s,phase,merit); return R.Serialize(s);
+end
+function B.EnemyState()
+    local c=EnemyConfig(); local row=GameInfo.JAC_LeaderPersonas[c.leader];
+    local def=GameInfo.Governors[row.GovernorType];
+    local gs=Players[c.owner]:GetGovernors();
+    local appointed=gs:HasGovernor(def.Hash);
+    local governor=appointed and gs:GetGovernor(def.Hash) or nil;
+    local city=governor and governor:GetAssignedCity() or nil;
+    local state={attacker=c.attacker,defender=c.owner,source=c.source,leader=c.leader,
+        personOwner=R.Property(c.leader,"OWNER"),personaState=R.Property(c.leader,"STATE"),
+        total=gs:GetGovernorPoints(),spent=gs:GetGovernorPointsSpent(),
+        appointed=appointed,nativeType=governor and governor:GetType() or -1,
+        base=governor and governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) or false,
+        cityOwner=city and city:GetOwner() or -1,cityID=city and city:GetID() or -1,
+        neutralized=governor and governor:GetNeutralizedTurns() or 0};
+    Log("ENEMY_STATE",state); return state;
+end
+function B.EnemyTarget()
+    local c=EnemyConfig();
+    assert(c.cityID and c.x and c.y,"enemy Governor target is not bound");
+    local city=assert(CityManager.GetCity(c.owner,c.cityID),"enemy target city missing");
+    assert(city:GetX()==c.x and city:GetY()==c.y,"enemy target city changed");
+    return {owner=c.owner,city=c.cityID};
+end
+function B.TryConfirmEnemy()
+    local c=EnemyConfig();
+    if c.cityID then return "NATIVE_BOUND"; end
+    local s=B.EnemyState();
+    if not (s.appointed and s.base and s.nativeType==GameInfo.Governors[
+        GameInfo.JAC_LeaderPersonas[c.leader].GovernorType].Index and
+        s.total>=c.total and s.spent==c.spent+1 and
+        s.cityOwner==c.owner and s.cityID>=0) then
+        return "WAITING_FOR_NATIVE_APPOINTMENT_AND_ASSIGNMENT";
+    end
+    B.Queue("CONFIRM_ENEMY"); return "CONFIRM_QUEUED";
+end
+function B.TryAdoptEnemySpy()
+    local c=EnemyConfig();
+    local receipt=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+        "saved accepted travel receipt missing");
+    assert(receipt.targetOwner==c.owner and receipt.targetID==c.cityID,
+        "travel target differs from enemy Governor city");
+    local roster=ReadSpyRoster(c.attacker);
+    if #roster.offMap==1 and #roster.map==0 then return "TRAVEL"; end
+    assert(#roster.offMap==0 and #roster.map==1,
+        "arriving spy roster ambiguous or absent");
+    local spy=roster.map[1];
+    assert(spy.name==receipt.name and spy.level==receipt.level and
+        InTargetCity(spy.x,spy.y,c.owner,c.cityID),
+        "native spy did not arrive in the enemy Governor city");
+    local current=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"native spy reference missing");
+    if current.id==spy.id then return "ARRIVED_SAME_ID"; end
+    B.Queue("ADOPT_SPY"); return "ADOPT_QUEUED";
 end
 function B.Record(label) return Log(label, B.Read()); end
 function B.Check(phase, merit)
@@ -212,7 +310,7 @@ ReadSpyRoster=function(owner)
     return roster;
 end
 
-local function InTargetCity(x,y,owner,id)
+InTargetCity=function(x,y,owner,id)
     local plot=Map.GetPlot(x,y);
     local city=plot and Cities.GetPlotPurchaseCity(plot);
     return city and city:GetOwner()==owner and city:GetID()==id or false;
@@ -292,6 +390,186 @@ local spyQueued = {};
 local operationStarts = {};
 local barrierToken = 0;
 B.lastAction = "IDLE";
+local enemyPending, enemyVerification;
+local enemyQueued={};
+B.enemyLast="IDLE";
+local missionEventPending;
+B.enemyMissionStatus="IDLE";
+local missionEndChecks=0;
+function B.EnemyMissionEventReady()
+    if B.enemyMissionStatus=="UNKNOWN" then error("enemy mission event could not be recorded"); end
+    if B.enemyMissionStatus=="OBSERVED" or B.enemyMissionStatus=="SENT" then
+        return Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")~=nil;
+    end
+    if Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION") then return true; end
+    local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
+    if not marker or marker.action~="SPY_MISSION" then return true; end
+    local reference=Game:GetProperty("JAC_BOUNDARY_SPY");
+    local spy=reference and Players[reference.owner]:GetUnits():FindID(reference.id);
+    local mission=GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
+    if spy and (spy:GetSpyOperation()==mission.Index or spy:GetSpyOperation()==mission.Hash) and
+        spy:GetSpyOperationEndTurn()>Game.GetCurrentGameTurn() then
+        missionEndChecks=0; return true;
+    end
+    -- Give the UI completion event several polls to publish. If it never
+    -- arrives, let the scenario save the failed native state before reporting it.
+    missionEndChecks=missionEndChecks+1;
+    return missionEndChecks>=10;
+end
+function B.QueueEnemy(action)
+    assert(action=="APPOINT" or action=="ASSIGN" or action=="REASSIGN",
+        "unknown enemy native operation");
+    assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
+        "another boundary frame request is pending");
+    assert(Players[Game.GetLocalPlayer()]:IsTurnActive(),"enemy request needs the human turn");
+    EnemyConfig();
+    local attempts=Game:GetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS") or {};
+    assert(not attempts[action],"enemy native operation was already attempted before load");
+    assert(not enemyQueued[action],"enemy native operation cannot be replayed");
+    enemyQueued[action]=true;
+    enemyPending={action=action}; B.enemyLast="QUEUED_"..action;
+end
+function B.TryEnemyAssignment()
+    local state=B.EnemyState();
+    if not state.appointed then
+        B.enemyLast="WAITING_NATIVE_ASSIGN"; return B.enemyLast;
+    end
+    if state.cityOwner==state.defender then
+        B.enemyLast="ALREADY_NATIVE_ASSIGNED"; return B.enemyLast;
+    end
+    local attempts=Game:GetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS") or {};
+    if attempts.ASSIGN then
+        B.enemyLast="ASSIGN_ALREADY_ATTEMPTED"; return B.enemyLast;
+    end
+    local c=EnemyConfig(); local row=GameInfo.JAC_LeaderPersonas[c.leader];
+    local def=GameInfo.Governors[row.GovernorType];
+    local city=assert(Players[c.owner]:GetCities():GetCapitalCity(),"enemy capital missing");
+    if not Players[c.owner]:GetGovernors():CanAssignGovernor(def.Hash,city) then
+        B.enemyLast="NATIVE_ASSIGN_UNAVAILABLE";
+        Log("ENEMY_ASSIGN_QUERY",{defender=c.owner,cityID=city:GetID(),canAssign=false});
+        return B.enemyLast;
+    end
+    B.QueueEnemy("ASSIGN"); return B.enemyLast;
+end
+function B.EnemyProgress()
+    local c=EnemyConfig();
+    if not c.cityID then return "WAITING_FOR_NATIVE_ASSIGNMENT"; end
+    local s=B.ReadEnemy();
+    assert(s.native.turnsToEstablish==5,"native five-turn establishment duration changed");
+    if s.native.cityOwner==s.owner and s.native.neutralized==0 then
+        assert((s.native.established and s.native.turnsOnSite>=5) or
+            (not s.native.established and s.native.turnsOnSite<5),
+            "native five-turn establishment boundary disagrees with on-site counter");
+    end
+    local receipt=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
+    local baseline=Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY");
+    if baseline then
+        assert(s.titles.spent==baseline.spent,"official title spending changed during recovery");
+        for node in pairs(baseline.nodesOwned) do
+            assert(s.nodesOwned[node]==1,"purchased native persona skill was lost");
+        end
+        if not s.native.established then
+            local purchased=0;
+            for node in GameInfo.JAC_PersonaTreeNodes() do
+                if node.LeaderType==c.leader and s.nodesOwned[node.NodeType]==1 and
+                    not baseline.nodesOwned[node.NodeType] then
+                    assert(type(node.Cost)=="number" and node.Cost>=0,"native skill cost missing");
+                    purchased=purchased+node.Cost;
+                end
+            end
+            assert(s.merit+purchased==baseline.merit,
+                "persona earned merit while neutralized, recovered or reestablishing");
+        end
+    end
+    local stage;
+    if s.native.neutralized>0 then
+        if not receipt or not s.neutralizationMission then
+            error("native neutralization lacks matching attacker event and successful mission history");
+        end
+        R.Check(s,"NEUTRALIZED");
+        stage="NEUTRALIZED";
+    elseif baseline then
+        local assignment=Game:GetProperty("JAC_BOUNDARY_ENEMY_BARRIER");
+        if not assignment or assignment.action~="REASSIGN" or s.native.cityOwner==-1 then
+            R.Check(s,"RECOVERED"); stage="RECOVERED";
+        elseif s.native.established then
+            R.Check(s,"SETTLED"); stage="SETTLED";
+        else
+            R.Check(s,"ESTABLISHING"); stage="ESTABLISHING";
+        end
+    elseif receipt then
+        stage="FAILED"; -- also covers a successful mission with no native neutralization
+    else
+        local roster=s.spyRoster;
+        if roster and #roster.offMap==1 then stage="TRAVEL";
+        elseif s.spy and s.spy.present and s.spy.operation~=-1 and s.spy.endTurn>s.turn then
+            stage="MISSION";
+        else
+            local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
+            assert(not marker or marker.action~="SPY_MISSION",
+                "native mission ended without the attacker event and matching history");
+            if s.native.established then
+                R.Check(s,"SETTLED"); stage="SETTLED_INITIAL";
+            else
+                R.Check(s,"ESTABLISHING"); stage="ESTABLISHING_INITIAL";
+            end
+        end
+    end
+    Log("ENEMY_PROGRESS",{stage=stage,turn=s.turn,remaining=s.native.neutralized,
+        merit=s.merit,mission=receipt,spy=s.spy});
+    return stage;
+end
+local function DispatchEnemy(action)
+    local c=EnemyConfig(); local row=GameInfo.JAC_LeaderPersonas[c.leader];
+    local def=GameInfo.Governors[row.GovernorType];
+    local player=Players[c.owner]; local gs=player:GetGovernors();
+    local request={action=action,defender=c.owner,spent=gs:GetGovernorPointsSpent(),
+        nativeType=def.Index,stage="DISPATCHED"};
+    if action=="APPOINT" then
+        assert(R.Property(c.leader,"STATE")=="EVOLVING" and not gs:HasGovernor(def.Hash) and
+            gs:GetGovernorPoints()==c.total and request.spent==c.spent and
+            gs:CanEverAppointGovernor(def.Hash),"enemy appointment prerequisites changed");
+        request.sent,request.error=pcall(UI.RequestPlayerOperation,c.owner,
+            PlayerOperations.APPOINT_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index});
+    else
+        local governor=R.ResolveGovernor(c.owner,c.leader);
+        assert(governor:GetNeutralizedTurns()==0,"enemy Governor is neutralized before assignment");
+        local city=action=="REASSIGN" and assert(CityManager.GetCity(c.owner,c.cityID),
+            "original enemy city missing") or assert(player:GetCities():GetCapitalCity(),
+            "enemy capital missing");
+        if action=="REASSIGN" then
+            assert(R.Property(c.leader,"STATE")=="GOVERNOR" and
+                not governor:GetAssignedCity(),"recovery requires unassigned native Governor");
+        end
+        assert(gs:CanAssignGovernor(def.Hash,city),"native enemy assignment unavailable");
+        request.targetID=city:GetID();
+        request.sent,request.error=pcall(UI.RequestPlayerOperation,c.owner,
+            PlayerOperations.ASSIGN_GOVERNOR,
+            {[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,
+             [PlayerOperations.PARAM_PLAYER_ONE]=c.owner,
+             [PlayerOperations.PARAM_CITY_DEST]=request.targetID});
+    end
+    Log("ENEMY_NATIVE_REQUEST",{action=action,attacker=c.attacker,defender=c.owner,
+        sent=request.sent,error=not request.sent and tostring(request.error) or "",
+        spent=request.spent,targetID=request.targetID});
+    return request;
+end
+local function VerifyEnemyRequest(request)
+    local c=EnemyConfig(); local state=B.EnemyState();
+    local accepted=false;
+    if request.action=="APPOINT" then
+        accepted=state.appointed and state.nativeType==request.nativeType and state.base and
+            state.total==c.total and state.spent==request.spent+1;
+    else
+        accepted=state.appointed and state.nativeType==request.nativeType and
+            state.cityOwner==c.owner and state.cityID==request.targetID and
+            state.spent==request.spent;
+    end
+    B.enemyLast=(accepted and "ACCEPTED_" or "REJECTED_")..request.action;
+    Log("ENEMY_NATIVE_ACCEPTANCE",{action=request.action,accepted=accepted,sent=request.sent,
+        error=not request.sent and tostring(request.error) or "",barrier=request.token,
+        state=state});
+end
 function B.SpyPrerequisitesReady()
     local prepared=assert(Game:GetProperty("JAC_BOUNDARY_SPY_PREPARED"), "native spy civic preparation missing");
     local player=Players[Game.GetLocalPlayer()];
@@ -321,9 +599,12 @@ local function SpyBuildReady(owner, cityID)
     return unit and unit.UnitType=="UNIT_SPY" or false;
 end
 function B.Queue(action, params)
-    assert(not pending and not verification and not buildPending, "a boundary frame request is already pending");
+    assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
+        "a boundary frame request is already pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
-    assert(action == "PREPARE" or action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
+    assert(action == "PREPARE" or action == "PREPARE_ENEMY" or action == "CONFIRM_ENEMY" or
+        action == "CAPTURE_ENEMY" or action == "SAVE_TRAVEL" or
+        action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
         action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "BUILD_SPY" or
         action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
         action == "SPY_MISSION", "unknown boundary action");
@@ -340,9 +621,12 @@ local function Submit(command)
     local action, params = command.action, command.params;
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
+    elseif action == "PREPARE_ENEMY" then
+        UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
+            {OnStart="JAC_BoundaryPrepareEnemy"}); return;
     end
-    local c=Config();
-    assert(c.owner == owner, "fixture is owned by another player");
+    local c=Game:GetProperty("JAC_BOUNDARY_CONFIG") or EnemyConfig();
+    assert((c.attacker or c.owner) == owner, "fixture controller differs");
     if action == "EVOLVE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_LeaderPersonaEvolve", Leader=c.leader});
     elseif action == "BUY" then
@@ -355,6 +639,16 @@ local function Submit(command)
         assert(governor:GetNeutralizedTurns() == 0 and Players[owner]:GetGovernors():CanAssignGovernor(def.Hash,city), "native assignment unavailable");
         UI.RequestPlayerOperation(owner,PlayerOperations.ASSIGN_GOVERNOR,
             {[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,[PlayerOperations.PARAM_PLAYER_ONE]=owner,[PlayerOperations.PARAM_CITY_DEST]=c.cityID});
+    elseif action == "CONFIRM_ENEMY" or action == "CAPTURE_ENEMY" then
+        if action=="CAPTURE_ENEMY" then B.CheckEnemy("NEUTRALIZED"); end
+        UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
+            {OnStart=action=="CONFIRM_ENEMY" and "JAC_BoundaryConfirmEnemy" or
+                "JAC_BoundaryCaptureEnemyRecovery"});
+    elseif action == "SAVE_TRAVEL" then
+        local receipt=assert(travelReference,"accepted travel receipt missing");
+        UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
+            {OnStart="JAC_BoundarySaveSpyTravel",OldID=receipt.oldID,Name=receipt.name,
+                Level=receipt.level,TargetOwner=receipt.targetOwner,TargetID=receipt.targetID});
     elseif action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "PROGRESS_SPY" or action == "BIND_SPY" then
         if action == "LOSE_CITY" then B.Check("SETTLED"); end
         local events={LOSE_CITY="JAC_BoundaryLoseCity",SPAWN_SPY="JAC_BoundarySpawnSpy",
@@ -382,14 +676,14 @@ local function Submit(command)
         buildPending={owner=owner,cityID=city:GetID(),seen=false};
         CityManager.RequestOperation(city,CityOperationTypes.BUILD,arguments);
     elseif action == "ADOPT_SPY" then
-        local prior=assert(travelReference, "accepted spy travel reference missing");
+        local prior=assert(travelReference or Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+            "accepted spy travel reference missing");
         local roster=ReadSpyRoster(owner);
         assert(#roster.offMap==0 and #roster.map==1, "arrived native spy roster is ambiguous");
         local arrived=roster.map[1];
         assert(arrived.name==prior.name and arrived.level==prior.level and
             InTargetCity(arrived.x,arrived.y,prior.targetOwner,prior.targetID),
             "arrived native spy does not match the accepted travel");
-        assert(arrived.id~=prior.oldID, "native spy still has its original ID");
         return {action=action,stage="ADOPT_PENDING",before={owner=owner,id=prior.oldID},
             newID=arrived.id,targetOwner=prior.targetOwner,targetID=prior.targetID};
     else
@@ -418,6 +712,11 @@ local function Submit(command)
         else
             local probe=B.Probe(params.owner,params.city);
             assert(probe.canStart and #probe.nativeTarget == 1, "native neutralize operation refused or target governor absent");
+            if c.attacker then
+                assert(params.owner==c.owner and params.city==c.cityID and
+                    probe.nativeTarget[1].type==GameInfo.Governors[GameInfo.JAC_LeaderPersonas[c.leader].GovernorType].Index,
+                    "neutralize target is not the joined enemy persona Governor");
+            end
             local actual=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
             assert(actual and actual:GetOwner()==params.owner and actual:GetID()==params.city, "native spy is not in the target city");
             SelectSpy(spy, InterfaceModeTypes.SPY_CHOOSE_MISSION);
@@ -426,7 +725,8 @@ local function Submit(command)
             local operation=GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
             local cursor=#operationStarts;
             UnitManager.RequestOperation(spy,operation.Hash);
-            return {action=action, before=before, expectedHash=operation.Hash,
+            return {action=action, before=before,targetOwner=params.owner,targetID=params.city,
+                expectedHash=operation.Hash,
                 startCursor=cursor, stage="DISPATCHED"};
         end
     end
@@ -473,7 +773,7 @@ local function VerifySpyRequest(request)
             if unit.id==request.before.id then after=unit; break; end
         end
         nativeOperation=after and NativeOperation(after.operation);
-        accepted=after and nativeOperation and nativeOperation.Hash==request.expectedHash and
+        accepted=acknowledged and after and nativeOperation and nativeOperation.Hash==request.expectedHash and
             after.endTurn>Game.GetCurrentGameTurn() or false;
     end
     local status=accepted and "ACCEPTED" or "REJECTED";
@@ -493,6 +793,59 @@ end
 ContextPtr:SetHide(false);
 ContextPtr:SetUpdate(function()
     if UI.IsGameCoreBusy() then return; end
+    if missionEventPending then
+        local receipt=missionEventPending;
+        if not receipt.sent then
+            receipt.sent=true; B.enemyMissionStatus="SENT";
+            local ok,err=pcall(UI.RequestPlayerOperation,receipt.attacker,
+                PlayerOperations.EXECUTE_SCRIPT,
+                {OnStart="JAC_BoundaryRecordEnemyMission",Attacker=receipt.attacker,
+                 MissionID=receipt.id});
+            if not ok then
+                B.enemyMissionStatus="UNKNOWN";
+                Log("ENEMY_MISSION_RECORD_UNAVAILABLE",tostring(err));
+                missionEventPending=nil;
+            end
+        else
+            local saved=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
+            if saved and saved.attacker==receipt.attacker and saved.id==receipt.id then
+                B.enemyMissionStatus="RECORDED"; missionEventPending=nil;
+            end
+        end
+        return;
+    end
+    if enemyVerification then
+        local request=enemyVerification;
+        if request.stage=="DISPATCHED" then
+            barrierToken=barrierToken+1; request.token=barrierToken; request.stage="BARRIER_SENT";
+            local ok,err=pcall(UI.RequestPlayerOperation,Game.GetLocalPlayer(),
+                PlayerOperations.EXECUTE_SCRIPT,
+                {OnStart="JAC_BoundaryEnemyBarrier",Action=request.action,Token=request.token});
+            B.enemyLast=(ok and "BARRIER_SENT_" or "UNKNOWN_")..request.action;
+            if not ok then
+                Log("ENEMY_BARRIER_UNAVAILABLE",{action=request.action,error=tostring(err)});
+                enemyVerification=nil;
+            end
+            return;
+        end
+        if not request.published then return; end
+        enemyVerification=nil;
+        local ok,err=pcall(VerifyEnemyRequest,request);
+        if not ok then
+            B.enemyLast="UNKNOWN_"..request.action;
+            Log("ENEMY_ACCEPTANCE_UNAVAILABLE",{action=request.action,error=tostring(err)});
+        end
+        return;
+    end
+    if enemyPending then
+        local command=enemyPending; enemyPending=nil;
+        local ok,result=pcall(DispatchEnemy,command.action);
+        B.enemyLast=(ok and "DISPATCHED_" or "ERROR_")..command.action;
+        Log("ENEMY_FRAME_REQUEST",{action=command.action,ok=ok,error=not ok and tostring(result) or ""});
+        if not ok then error(result); end
+        enemyVerification=result;
+        return;
+    end
     if verification then
         local request=verification;
         if request.stage == "ADOPT_PENDING" then
@@ -578,6 +931,14 @@ local function Observe(label)
     if serialized ~= last then last=serialized; Log(label,value); end
 end
 Events.GameCoreEventPublishComplete.Add(function()
+    if enemyVerification and enemyVerification.stage=="BARRIER_SENT" then
+        local marker=Game:GetProperty("JAC_BOUNDARY_ENEMY_BARRIER");
+        if marker and marker.attacker==Game.GetLocalPlayer() and
+            marker.defender==enemyVerification.defender and
+            marker.action==enemyVerification.action and marker.token==enemyVerification.token then
+            enemyVerification.published=true;
+        end
+    end
     if verification and verification.stage=="ADOPT_SENT" then
         local reference=Game:GetProperty("JAC_BOUNDARY_SPY");
         if reference and reference.owner==verification.before.owner and reference.id==verification.newID then
@@ -597,5 +958,20 @@ Events.LoadScreenClose.Add(function() last=nil; Observe("LOAD"); end);
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
     -- The event's player is the attacker, not the governor owner.
     Log("MISSION_EVENT", {attacker=attacker, mission=missionID, turn=Game.GetCurrentGameTurn()});
+    local c=Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG");
+    if c and attacker==c.attacker and c.cityID then
+        local saved=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
+        if saved and saved.attacker==attacker and saved.id==missionID then
+            B.enemyMissionStatus="RECORDED";
+        elseif missionEventPending and missionEventPending.attacker==attacker and
+            missionEventPending.id==missionID then
+            B.enemyMissionStatus="OBSERVED";
+        else
+            assert(not missionEventPending and not saved,
+                "enemy fixture observed conflicting mission completions");
+            missionEventPending={attacker=attacker,id=missionID};
+            B.enemyMissionStatus="OBSERVED";
+        end
+    end
     Observe("MISSION_SNAPSHOT");
 end);

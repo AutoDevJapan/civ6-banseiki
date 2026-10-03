@@ -13,7 +13,9 @@ for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadSc
  'CityProductionQueueChanged','UnitOperationStarted'}) do Events[k]=event() end
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
  'JAC_BoundaryProgressSpy','JAC_BoundaryBindSpy','JAC_BoundarySpyBarrier',
- 'JAC_BoundaryAdoptSpyIdentity'}) do GameEvents[k]=event() end
+ 'JAC_BoundaryAdoptSpyIdentity','JAC_BoundarySaveSpyTravel','JAC_BoundaryPrepareEnemy',
+ 'JAC_BoundaryEnemyBarrier','JAC_BoundaryConfirmEnemy',
+ 'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
  local r={}; for i,row in ipairs(rows) do r[i-1]=row; r[row[key]]=row; if row.Hash then r[row.Hash]=row end end
@@ -47,7 +49,8 @@ UnitOperationTypes={SPY_TRAVEL_NEW_CITY=991,PARAM_X='x',PARAM_Y='y'}
 InterfaceModeTypes={SELECTION=1,SPY_TRAVEL_TO_CITY=2,SPY_CHOOSE_MISSION=3}
 ActivityTypes={ACTIVITY_AWAKE=1}
 EspionageResultTypes={SUCCESS_UNDETECTED=1,SUCCESS_MUST_ESCAPE=2,FAIL_UNDETECTED=3,CAPTURED=4,NO_RESULT=0}
-PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
+PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,APPOINT_GOVERNOR=3,
+ PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
 CityOperationTypes={BUILD=81,PARAM_UNIT_TYPE='unit',PARAM_INSERT_MODE='insert',
  PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT=7}
 CityProductionDirectives={TRAIN=1}

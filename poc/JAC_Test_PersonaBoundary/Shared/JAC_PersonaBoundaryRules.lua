@@ -35,7 +35,8 @@ end
 function R.Check(s, phase, merit)
     assert(s.personOwner == s.owner and s.state == "GOVERNOR" and s.greatPeople == 0,
         "persona identity does not match its native Governor");
-    assert(s.native.base and s.skillOwned == 1, "native base or purchased fixture skill missing");
+    assert(s.native.base and (not s.requireSkill or s.skillOwned == 1),
+        "native base or purchased fixture skill missing");
     assert(s.merit == s.gameplay.merit, "UI/Gameplay merit disagreement");
     assert(type(s.unmatchedEffects)=="table" and not next(s.unmatchedEffects),
         "active native effect has an unmatched city subject");
@@ -52,6 +53,10 @@ function R.Check(s, phase, merit)
     if active or phase == "ESTABLISHING" then
         assert(s.native.cityOwner == s.owner and s.native.cityID == s.target.id,
             "native assignment does not point to the fixture city");
+    elseif phase == "NEUTRALIZED" then
+        assert((s.native.cityOwner == -1 and s.native.cityID == -1) or
+            (s.native.cityOwner == s.owner and s.native.cityID == s.target.id),
+            "neutralized native Governor points to another city");
     else
         assert(s.native.cityOwner == -1 and s.native.cityID == -1,
             "governor must be unassigned; automatic return is not recovery");
@@ -98,6 +103,7 @@ function R.Check(s, phase, merit)
             assert(gameplay.selectors[modifier] == value, "UI/Gameplay skill selector disagreement");
         end
     end
-    assert(count >= 2, "target and control city observations are required");
+    assert(count >= (s.controlRequired and 2 or 1),
+        "target and required control city observations are missing");
     return true;
 end

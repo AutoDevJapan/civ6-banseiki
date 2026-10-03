@@ -66,6 +66,7 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
     const BOUNDARY: &str = "4a72b1c0-958b-4bd5-81e4-a094f86ce643";
     const ABSORPTION: &str = "61320778-2e75-4c11-9009-94101b519aba";
     const STATIC_GATE: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+    const ENEMY_GATE: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
     for name in [
         "leader-persona-15km.json",
         "leader-persona-baseline-15km.json",
@@ -96,6 +97,7 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
                 BOUNDARY.to_owned(),
                 ABSORPTION.to_owned(),
                 STATIC_GATE.to_owned(),
+                ENEMY_GATE.to_owned(),
             ])
             .collect();
         let lua = Lua::new();
@@ -104,7 +106,7 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
             let definition = lua.create_table().unwrap();
             definition.set("Id", id.as_str()).unwrap();
             definition.set("Enabled", true).unwrap();
-            let dependencies = if id == BOUNDARY || id == STATIC_GATE {
+            let dependencies = if id == BOUNDARY || id == STATIC_GATE || id == ENEMY_GATE {
                 vec![PERSONA]
             } else {
                 vec![]
@@ -126,6 +128,8 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
         let mods: Table = lua.globals().get("MODS").unwrap();
         let gate: Table = mods.get(STATIC_GATE).unwrap();
         assert_eq!(gate.get::<bool>("Enabled").unwrap(), false, "{name}");
+        let enemy_gate: Table = mods.get(ENEMY_GATE).unwrap();
+        assert_eq!(enemy_gate.get::<bool>("Enabled").unwrap(), false, "{name}");
         let boundary: Table = mods.get(BOUNDARY).unwrap();
         let expected_boundary = matches!(
             name,

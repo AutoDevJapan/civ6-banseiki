@@ -265,6 +265,7 @@ fn mission_assignment_does_not_claim_governor_neutralization() {
         h.set("REQUEST_EFFECT", effect);
         h.queue("SPY_MISSION");
         h.frame().unwrap();
+        h.call("START_NATIVE", (0, 15, 990));
         h.frame().unwrap();
         h.barrier();
         h.frame().unwrap();
@@ -280,6 +281,21 @@ fn mission_assignment_does_not_claim_governor_neutralization() {
             .contains("neutralization was not observed"));
         assert_eq!(h.requests(), 1);
     }
+}
+
+#[test]
+fn native_mission_needs_operation_started_as_well_as_the_barrier_and_future_end_turn() {
+    let h = SpyHarness::new();
+    h.case("spy", (0, 15));
+    h.case("target_governor", ());
+    h.set("REQUEST_EFFECT", "mission");
+    h.queue("SPY_MISSION");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_SPY_MISSION");
+    assert_eq!(h.requests(), 1);
 }
 
 #[test]

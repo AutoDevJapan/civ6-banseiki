@@ -460,16 +460,15 @@ pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
 // preceding game. Enforce this at the shared selection boundary, so generated
 // and handwritten scenarios have the same isolation without snapshot edits.
 pub const STATIC_PERSONA_GATE_ID: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+pub const ENEMY_PERSONA_GATE_ID: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
 pub fn isolated_disabled_mods(ids: &[String], disabled: &[String]) -> Vec<String> {
     let mut result = disabled.to_vec();
-    if !ids
-        .iter()
-        .any(|id| id.eq_ignore_ascii_case(STATIC_PERSONA_GATE_ID))
-        && !result
-            .iter()
-            .any(|id| id.eq_ignore_ascii_case(STATIC_PERSONA_GATE_ID))
-    {
-        result.push(STATIC_PERSONA_GATE_ID.to_owned());
+    for gate in [STATIC_PERSONA_GATE_ID, ENEMY_PERSONA_GATE_ID] {
+        if !ids.iter().any(|id| id.eq_ignore_ascii_case(gate))
+            && !result.iter().any(|id| id.eq_ignore_ascii_case(gate))
+        {
+            result.push(gate.to_owned());
+        }
     }
     result
 }

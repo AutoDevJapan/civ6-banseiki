@@ -58,6 +58,7 @@
 | [`poc/pr86-native-runtime-probe.md`](poc/pr86-native-runtime-probe.md) | PR86の本体資格関数を変更せずに呼出し元・引数・戻り値を観測するRust debugger、live_chain接続、専用子プロセスでの検査と実機未確認の条件 |
 | [`poc/pr86-boundary-diagnostic.md`](poc/pr86-boundary-diagnostic.md) | PR86の本体中和・未配置回復・都市喪失を観測するテスト専用MOD、独立シナリオと未確定の敵スパイ操作 |
 | [`poc/pr86-boundary-progress.md`](poc/pr86-boundary-progress.md) | 境界診断を実装する担当の検査結果と、実機未観測の項目 |
+| [`poc/pr86-enemy-neutralization.md`](poc/pr86-enemy-neutralization.md) | 人間の本体スパイでAIの正式加入人物Governorを攻撃する、保存再開可能な中和・回復診断と未実機条件 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
 | [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |
 | [`poc/resources.md`](poc/resources.md) | 資源の出現（SSOT 3.2）。戦国ツリー下の技術ゲート、後発地点の Lua API とデータ、独自資源（金・漆）、実機確認項目 |

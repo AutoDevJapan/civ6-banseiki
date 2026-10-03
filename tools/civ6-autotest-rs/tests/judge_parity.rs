@@ -180,9 +180,10 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     assert!(ids.contains("A1FAAB65-5371-4E25-9A46-7522075F865D"));
     assert!(ids.contains("8C615430-5A09-4431-877A-BFD03BCA9E80"));
     assert!(ids.contains("C678A216-58AB-4D40-A614-8F309D36AC86"));
+    assert!(ids.contains("BBA3A0D2-8F08-4715-9263-00A773E6AE86"));
     assert_eq!(
         ids.len(),
-        19,
+        20,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -518,6 +519,16 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "leader-persona-spy-access-15km.json",
                 "leader-persona-spy-production-15km.json",
                 "leader-persona-spy-recovery.json",
+                "leader-persona-spy-neutralization-start-15km.json",
+                "leader-persona-spy-neutralization-native-tick.json",
+                "leader-persona-spy-neutralization-travel.json",
+                "leader-persona-spy-neutralization-travel-tick.json",
+                "leader-persona-spy-neutralization-mission.json",
+                "leader-persona-spy-neutralization-mission-tick.json",
+                "leader-persona-spy-neutralization-recovery.json",
+                "leader-persona-spy-neutralization-recovery-tick.json",
+                "leader-persona-spy-neutralization-reassign.json",
+                "leader-persona-spy-neutralization-reassign-tick.json",
                 "absorption-japan.json",
                 "absorption-hero-recall.json",
                 "absorption-priest-diagnostic.json",
@@ -529,7 +540,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 82);
+    assert_eq!(expected.len(), 92);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

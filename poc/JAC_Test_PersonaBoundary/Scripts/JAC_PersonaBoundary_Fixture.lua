@@ -4,11 +4,14 @@ include("JAC_PersonaBoundaryRules");
 local R = JAC_PersonaBoundaryRules;
 local LEADER = "LEADER_JAC_ODA_NOBUHIDE";
 local CONFIG = "JAC_BOUNDARY_CONFIG";
+local ENEMY_CONFIG = "JAC_BOUNDARY_ENEMY_CONFIG";
+local ENEMY_LEADER = "LEADER_JAC_ASHINA_MORIKIYO";
 local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
 local spyProduction;
 local function Config(owner)
-    local c = assert(Game:GetProperty(CONFIG), "boundary fixture not prepared");
-    assert(c.owner == owner and Players[owner]:IsHuman(), "fixture operation requires its human owner");
+    local c = assert(Game:GetProperty(CONFIG) or Game:GetProperty(ENEMY_CONFIG), "boundary fixture not prepared");
+    assert((c.attacker or c.owner) == owner and Players[owner]:IsHuman(),
+        "fixture operation requires its human controller");
     return c;
 end
 local function GetCities(c)
@@ -25,10 +28,15 @@ local function GetCities(c)
     end
     return cities;
 end
-local function ReadGameplay()
-    local c = assert(Game:GetProperty(CONFIG), "boundary fixture not prepared");
+local function ReadGameplay(c)
+    c = c or assert(Game:GetProperty(CONFIG), "boundary fixture not prepared");
     local result = {merit=R.Property(c.leader, "MERIT") or 0,
-        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(), cities={}};
+        freeCitiesOwner=PlayerManager.GetFreeCitiesPlayerID(), cities={},nodesOwned={}};
+    for node in GameInfo.JAC_PersonaTreeNodes() do
+        if node.LeaderType==c.leader and R.Property(c.leader,"NODE_"..node.NodeType)==1 then
+            result.nodesOwned[node.NodeType]=1;
+        end
+    end
     for key,city in pairs(GetCities(c)) do
         local value = city:GetProperty("JAC_PERSONA_SETTLED_" .. c.leader);
         local data = {id=city:GetID(), owner=city:GetOwner(), settled=value or 0, selectors={}};
@@ -104,7 +112,7 @@ GameEvents.JAC_BoundaryLoseCity.Add(function(owner)
         if candidate:GetX()==c.x and candidate:GetY()==c.y then
             assert(not transferred, "ambiguous native transfer result");
             transferred=candidate;
-        end;
+end;
     end;
     assert(transferred, "native transfer result city missing");
     -- Record native source/result IDs in the same synchronized operation.
@@ -213,6 +221,149 @@ GameEvents.JAC_BoundaryAdoptSpyIdentity.Add(function(owner, params)
         "arrived native spy destination mismatch");
     Game:SetProperty("JAC_BOUNDARY_SPY",{owner=owner,id=spy:GetID()});
     print("JAC_BOUNDARY SPY_REFERENCE_UPDATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
+end);
+
+GameEvents.JAC_BoundarySaveSpyTravel.Add(function(owner,params)
+    Config(owner);
+    local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"native spy reference missing");
+    assert(spy.owner==owner and type(params)=="table" and params.OldID==spy.id and
+        type(params.Name)=="string" and type(params.Level)=="number" and
+        type(params.TargetOwner)=="number" and type(params.TargetID)=="number" and
+        not Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),"invalid or repeated travel receipt");
+    local city=assert(CityManager.GetCity(params.TargetOwner,params.TargetID),"travel target missing");
+    assert(city:GetOwner()~=owner,"travel target is not foreign");
+    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",{oldID=spy.id,name=params.Name,level=params.Level,
+        targetOwner=params.TargetOwner,targetID=params.TargetID,x=city:GetX(),y=city:GetY()});
+end);
+
+local function EnemyController(owner)
+    assert(owner == 0 and Players[owner] and Players[owner]:IsHuman() and Players[owner]:IsAlive(),
+        "enemy fixture requires human controller 0");
+end
+local function EnemyConfig(owner)
+    EnemyController(owner);
+    local c=assert(Game:GetProperty(ENEMY_CONFIG), "enemy fixture not prepared");
+    assert(c.attacker==owner and c.owner==1 and c.source==2 and c.leader==ENEMY_LEADER,
+        "enemy fixture actor identity changed");
+    return c;
+end
+
+-- A separate fixture keeps the earlier human Oda/city-loss experiment intact.
+-- No AI title exists between Join and PrepareEvolution: both run in one
+-- synchronized callback. The static SQL gate is diagnostic, not admission logic.
+GameEvents.JAC_BoundaryPrepareEnemy.Add(function(controller)
+    EnemyController(controller);
+    assert(not Game:GetProperty(CONFIG) and not Game:GetProperty(ENEMY_CONFIG),
+        "enemy experiment requires a fresh game");
+    assert(PlayerConfigurations[1]:GetLeaderTypeName()=="LEADER_JAC_DATE_TANEMUNE" and
+        PlayerConfigurations[2]:GetLeaderTypeName()==ENEMY_LEADER,
+        "expected AI defender 1 and Ashina source 2");
+    local defender=assert(Players[1], "AI defender missing");
+    assert(defender:IsAlive() and not defender:IsHuman() and Players[2]:IsAlive(),
+        "defender/source actor roles differ");
+    local row=assert(GameInfo.JAC_LeaderPersonas[ENEMY_LEADER], "enemy persona missing");
+    assert(row.EvolutionCost==1, "enemy fixture requires cost one");
+    local def=assert(GameInfo.Governors[row.GovernorType], "enemy Governor definition missing");
+    local governors=defender:GetGovernors();
+    assert(not governors:HasGovernor(def.Hash), "unjoined enemy Governor already appointed");
+    assert(governors:CanEverAppointGovernor(def.Hash), "diagnostic Date/Ashina trait gate unavailable");
+    for candidate in GameInfo.JAC_LeaderPersonas() do
+        if candidate.LeaderType~=ENEMY_LEADER then
+            local other=GameInfo.Governors[candidate.GovernorType];
+            assert(other and not governors:CanEverAppointGovernor(other.Hash),
+                "AI defender can appoint another unjoined persona");
+        end
+    end
+    local seam=assert(ExposedMembers.JAC_LeaderPersona, "regular persona seam missing");
+    assert(seam.Join(1,2)=="JOINED", "regular enemy Join failed");
+    assert(R.Property(ENEMY_LEADER,"OWNER")==1 and R.Property(ENEMY_LEADER,"SOURCE")==2 and
+        R.Property(ENEMY_LEADER,"STATE")=="GREAT_PERSON", "joined enemy identity mismatch");
+    local total,spent=governors:GetGovernorPoints(),governors:GetGovernorPointsSpent();
+    if total-spent<1 then
+        local civics={};
+        for title in GameInfo.JAC_PersonaTitleCivics() do civics[#civics+1]=title.CivicType; end
+        table.sort(civics);
+        local granted=false;
+        for _,kind in ipairs(civics) do
+            local civic=GameInfo.Civics[kind];
+            if not defender:GetCulture():HasCivic(civic.Index) then
+                defender:GetCulture():SetCulturalProgress(civic.Index,
+                    defender:GetCulture():GetCultureCost(civic.Index));
+                assert(defender:GetCulture():HasCivic(civic.Index) and
+                    governors:GetGovernorPoints()==total+1 and
+                    governors:GetGovernorPointsSpent()==spent,
+                    "official AI civic failed to grant exactly one title");
+                granted=true; break;
+            end
+        end
+        assert(granted,"AI has no unresearched official title civic");
+    end
+    assert(seam.PrepareEvolution(1,ENEMY_LEADER)=="EVOLVING" and
+        R.Property(ENEMY_LEADER,"STATE")=="EVOLVING", "regular enemy evolution preparation failed");
+    Game:SetProperty(ENEMY_CONFIG,{attacker=controller,owner=1,source=2,leader=ENEMY_LEADER,
+        skill=ENEMY_LEADER.."_SIGNATURE_1",total=governors:GetGovernorPoints(),
+        spent=governors:GetGovernorPointsSpent(),armedTurn=Game.GetCurrentGameTurn(),
+        controlRequired=false,requireSkill=false});
+    print("JAC_BOUNDARY ENEMY_PREPARED "..R.Serialize(Game:GetProperty(ENEMY_CONFIG)));
+end);
+
+GameEvents.JAC_BoundaryEnemyBarrier.Add(function(controller,params)
+    local c=EnemyConfig(controller);
+    assert(type(params)=="table" and type(params.Token)=="number" and
+        (params.Action=="APPOINT" or params.Action=="ASSIGN" or params.Action=="REASSIGN"),
+        "invalid enemy operation barrier");
+    local attempts=Game:GetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS") or {};
+    assert(not attempts[params.Action],"enemy native request already attempted");
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_BARRIER",{attacker=c.attacker,defender=c.owner,
+        action=params.Action,token=params.Token});
+    attempts[params.Action]={turn=Game.GetCurrentGameTurn(),token=params.Token};
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS",attempts);
+end);
+
+GameEvents.JAC_BoundaryConfirmEnemy.Add(function(controller)
+    local c=EnemyConfig(controller);
+    local governor,def=R.ResolveGovernor(c.owner,c.leader);
+    local gs=Players[c.owner]:GetGovernors();
+    assert(governor:GetType()==def.Index and gs:GetGovernorPoints()>=c.total and
+        gs:GetGovernorPointsSpent()==c.spent+1,
+        "official cost-one Governor appointment or native accounting missing");
+    local seam=assert(ExposedMembers.JAC_LeaderPersona,"regular persona seam missing");
+    local result=seam.CompleteEvolution(c.owner,c.leader);
+    assert((result=="EVOLVED" or result=="ALREADY_EVOLVED") and
+        R.Property(c.leader,"STATE")=="GOVERNOR", "regular evolution did not remove the GP");
+    local assigned=assert(governor:GetAssignedCity(),"enemy Governor not natively assigned");
+    assert(assigned:GetOwner()==c.owner,"enemy Governor assigned to another player");
+    c.cityID=assigned:GetID(); c.x=assigned:GetX(); c.y=assigned:GetY();
+    c.armedTurn=Game.GetCurrentGameTurn();
+    Game:SetProperty(ENEMY_CONFIG,c);
+    print("JAC_BOUNDARY ENEMY_NATIVE_BOUND "..R.Serialize(c));
+end);
+
+GameEvents.JAC_BoundaryRecordEnemyMission.Add(function(controller,params)
+    local c=EnemyConfig(controller);
+    assert(c.cityID and type(params)=="table" and params.Attacker==c.attacker and
+        type(params.MissionID)=="number" and params.MissionID>=0 and
+        not Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"), "invalid or repeated enemy mission event");
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_MISSION",{attacker=params.Attacker,
+        id=params.MissionID,turn=Game.GetCurrentGameTurn()});
+end);
+
+GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller)
+    local c=EnemyConfig(controller);
+    assert(c.cityID and not Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY"),
+        "recovery baseline missing target or already recorded");
+    local governor=R.ResolveGovernor(c.owner,c.leader);
+    local remaining=governor:GetNeutralizedTurns();
+    assert(type(remaining)=="number" and remaining>0,"native neutralization required for recovery");
+    local nodes={};
+    for node in GameInfo.JAC_PersonaTreeNodes() do
+        if node.LeaderType==c.leader and R.Property(c.leader,"NODE_"..node.NodeType)==1 then
+            nodes[node.NodeType]=1;
+        end
+    end
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_RECOVERY",{merit=R.Property(c.leader,"MERIT") or 0,
+        nodesOwned=nodes,spent=Players[c.owner]:GetGovernors():GetGovernorPointsSpent(),
+        remaining=remaining,turn=Game.GetCurrentGameTurn()});
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;

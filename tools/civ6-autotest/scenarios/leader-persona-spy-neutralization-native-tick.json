@@ -1,0 +1,66 @@
+{
+  "name": "One real turn toward native AI appointment or five-turn establishment; resumable",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.TryEnemyAssignment()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.enemyLast; if a=='ERROR_ASSIGN' or a=='UNKNOWN_ASSIGN' then error('enemy ASSIGN was not judged: '..a) end; return a=='ACCEPTED_ASSIGN' or a=='REJECTED_ASSIGN' or a=='WAITING_NATIVE_ASSIGN' or a=='ALREADY_NATIVE_ASSIGNED' or a=='ASSIGN_ALREADY_ATTEMPTED' or a=='NATIVE_ASSIGN_UNAVAILABLE'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.TryConfirmEnemy()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); local a=b.lastAction; if a=='ERROR_CONFIRM_ENEMY' then error(a) end; return c.cityID~=nil or (a~='QUEUED_CONFIRM_ENEMY' and a~='SUBMITTED_CONFIRM_ENEMY')"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); if not c.cityID then return 'WAITING_NATIVE' end; return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

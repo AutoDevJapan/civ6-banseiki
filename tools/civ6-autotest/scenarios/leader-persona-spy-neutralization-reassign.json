@@ -1,0 +1,52 @@
+{
+  "name": "Recovered unassigned Governor: one official reassignment attempt",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Recovery",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.EnemyProgress()~='RECOVERED' then error('native Governor not recovered and unassigned') end; return b.CheckEnemy('RECOVERED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.QueueEnemy('REASSIGN'); return 'one official reassign request queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.enemyLast; if a=='ERROR_REASSIGN' or a=='UNKNOWN_REASSIGN' then error(a) end; return a=='ACCEPTED_REASSIGN' or a=='REJECTED_REASSIGN'"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Reassignment"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

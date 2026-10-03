@@ -15,6 +15,7 @@ const TITLE_PROXY_MOD: &str = "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb";
 const NATIVE_SLOTS_MOD: &str = "a1faab65-5371-4e25-9a46-7522075f865d";
 const NATIVE_SLOT_ONLY_MOD: &str = "8c615430-5a09-4431-877a-bfd03bca9e80";
 const STATIC_GATE_MOD: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+const ENEMY_GATE_MOD: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
 const NEW_SCENARIOS: [&str; 7] = [
     "japan-15km-20turn-full-metrics.json",
     "japan-15km-300turn-full-metrics.json",
@@ -81,6 +82,97 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
         .iter()
         .all(|step| !["configure", "start_game", "enable_mods"]
             .contains(&step["action"].as_str().unwrap())));
+}
+
+#[test]
+fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
+    let lua = Lua::new();
+    let names = [
+        "start-15km",
+        "native-tick",
+        "travel",
+        "travel-tick",
+        "mission",
+        "mission-tick",
+        "recovery",
+        "recovery-tick",
+        "reassign",
+        "reassign-tick",
+    ];
+    for suffix in names {
+        let name = format!("leader-persona-spy-neutralization-{suffix}.json");
+        let data = scenario(&name);
+        validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(data["strict_lua_errors"], true, "{name}");
+        let steps = steps(&data);
+        assert!(steps
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "restart_game")));
+        for step in steps {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+        if suffix.ends_with("tick") {
+            assert!(action(&steps[0], "load"), "{name}");
+            assert!(action(steps.last().unwrap(), "exit_to_menu"), "{name}");
+            assert_eq!(
+                steps.iter().filter(|s| action(s, "end_turn")).count(),
+                1,
+                "{name}"
+            );
+            assert_eq!(
+                steps.iter().filter(|s| action(s, "save")).count(),
+                usize::from(suffix == "mission-tick") + 1,
+                "{name}"
+            );
+        }
+    }
+    let start = scenario("leader-persona-spy-neutralization-start-15km.json");
+    let setup = &start["steps"][1]["players"];
+    assert_eq!(setup[0]["human"], true);
+    assert_eq!(setup[1]["leader"], "LEADER_JAC_DATE_TANEMUNE");
+    assert_eq!(setup[2]["leader"], "LEADER_JAC_ASHINA_MORIKIYO");
+    assert!(start["steps"][0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == ENEMY_GATE_MOD));
+    let joined = steps(&start)
+        .iter()
+        .filter_map(embedded_lua)
+        .collect::<Vec<_>>();
+    assert!(joined
+        .iter()
+        .any(|code| code.contains("Queue('PREPARE_ENEMY')")));
+    assert!(joined
+        .iter()
+        .any(|code| code.contains("QueueEnemy('APPOINT')")));
+    assert!(joined.iter().any(|code| code.contains("Queue('BIND_SPY')")));
+    let mission = scenario("leader-persona-spy-neutralization-mission.json");
+    assert_eq!(
+        steps(&mission)
+            .iter()
+            .filter_map(embedded_lua)
+            .filter(|code| code.contains("Queue('SPY_MISSION'"))
+            .count(),
+        1
+    );
+    let recovery = scenario("leader-persona-spy-neutralization-recovery.json");
+    assert_eq!(
+        steps(&recovery)
+            .iter()
+            .filter(|s| s.get("capture_as").is_some())
+            .count(),
+        1
+    );
+    assert_eq!(
+        steps(&recovery)
+            .iter()
+            .filter(|s| s.get("equals_capture").is_some())
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -361,7 +453,7 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
 }
 
 #[test]
-fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundary() {
+fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_boundary() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
     for entry in std::fs::read_dir(folder).unwrap() {
@@ -390,6 +482,15 @@ fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundar
                 &strings("disable_ids"),
             );
             assert!(isolated.iter().any(|id| id == STATIC_GATE_MOD), "{name}");
+            if name == "leader-persona-spy-neutralization-start-15km.json" {
+                assert!(first["ids"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|id| id == ENEMY_GATE_MOD));
+            } else {
+                assert!(isolated.iter().any(|id| id == ENEMY_GATE_MOD), "{name}");
+            }
             assert!(
                 !first["ids"]
                     .as_array()
@@ -400,7 +501,7 @@ fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundar
             );
         }
     }
-    assert_eq!(count, 79);
+    assert_eq!(count, 80);
 }
 
 #[test]
