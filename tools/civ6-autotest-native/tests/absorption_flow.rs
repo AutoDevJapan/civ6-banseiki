@@ -1023,7 +1023,7 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
         local roster=A.GetRoster(1);roster['escrow-hero']=person
         Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
         for i=1,400 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
-        local plan={ID='escrow-retry',From=1,To=2,Mode='MERGER',
+        local plan={ID='escrow-retry',From=1,To=2,Mode='CONQUEST',
           EntryConditionsMet=true,RelationsResolved=true}
         local flow=F.Begin(plan)
         for _,entry in ipairs(flow.Entries) do
@@ -1048,6 +1048,20 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
         assert(HERO_CREATIONS==0 and #RANDOM_CALLS>0)
         ESCROW_ROLLS=#RANDOM_CALLS
         FAIL_CITY=false
+        CURRENT_TURN=10
+        local transfer=CityManager.TransferCity
+        local interrupted=false
+        CityManager.TransferCity=function(city,owner)
+          transfer(city,owner)
+          if city==CITIES[4] and not interrupted then
+            interrupted=true
+            error('interrupted after native Hero origin transfer')
+          end
+        end
+        assert(F.Resolve(2,plan.ID).Phase=='BLOCKED' and CITIES[4]:GetOwner()==2)
+        local origin=A.GetState().Transactions[plan.ID].Cities[1]
+        assert(origin.X==4 and origin.TransferTurn==10,
+          'early Hero origin transfer did not save the actual transfer turn')
         Game.props=A.Rules.Copy(Game.props)
         for owner=0,3 do Players[owner].props=A.Rules.Copy(Players[owner].props) end
         "#,
@@ -1066,6 +1080,7 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
         r#"
         local A=TEST_ABSORPTION
         local F=TEST_FLOW
+        CURRENT_TURN=11
         local result=F.Resolve(2,'escrow-retry')
         assert(result.Phase=='RESULT',tostring(result.Error))
         assert(result.FirstError and result.PreviousError
@@ -1078,6 +1093,15 @@ fn blocked_hero_escrow_resumes_after_reload_without_reroll_or_duplicate() -> mlu
         assert(unit:IsHero() and unit:GetProperty(A.Rules.PERSON_KEY).ID=='escrow-hero'
           and unit.lifespan==17 and unit.charges==2 and unit.renown==13)
         assert(F.Resolve(2,'escrow-retry').Phase=='RESULT' and HERO_CREATIONS==1)
+        assert(CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY).Turn==10
+          and CITIES[8]:GetProperty(A.Rules.GOVERNANCE_KEY).Turn==11,
+          'Hero and ordinary city policy dates differ from physical transfer')
+        for turn=11,14 do CURRENT_TURN=turn;A.ApplyCityFriction();A.ApplyCityFriction() end
+        for _,x in ipairs({4,8}) do
+          local g=CITIES[x]:GetProperty(A.Rules.GOVERNANCE_KEY)
+          assert(g.FrictionApplied==3 and CITIES[x].loyalty==66,
+            'Hero origin delay lost friction or applied it twice')
+        end
         "#,
     )
     .exec()

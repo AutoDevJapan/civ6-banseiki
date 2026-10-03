@@ -1397,6 +1397,22 @@ local function SetHeroSuicide(state, tx, snap, cause, candidate)
   Save(state)
 end
 
+local function TransferAbsorbedCity(state, tx, snap)
+  local city = assert(CityManager.GetCityAt(snap.X, snap.Y), "city disappeared during absorption")
+  assert(city:GetOwner() == tx.From or city:GetOwner() == tx.To, "city belongs to a third faction")
+  if city:GetOwner() == tx.From then
+    -- All absorption paths share the same durable native mutation boundary.
+    -- Refresh only while the donor still owns the city; a call may transfer
+    -- it before raising, so retries must retain this saved date afterwards.
+    snap.TransferTurn = Game.GetCurrentGameTurn()
+    Save(state)
+    CityManager.TransferCity(city, tx.To)
+  end
+  city = assert(CityManager.GetCityAt(snap.X, snap.Y), "transfer removed city")
+  assert(city:GetOwner() == tx.To, "city transfer did not change owner")
+  return city
+end
+
 local function StageHero(state, tx, snap)
   local manager, hero = Heroes(), snap.Hero
   local key = R.UnitKey(tx.From, snap.ID)
@@ -1437,13 +1453,16 @@ local function StageHero(state, tx, snap)
       UnitManager.Kill(old)
       Save(state)
     end
-    local city = assert(CityManager.GetCityAt(hero.Origin.X, hero.Origin.Y), "native Hero origin city disappeared")
-    assert(city:GetOwner() == tx.From or city:GetOwner() == tx.To, "native Hero origin belongs to a third faction")
-    if city:GetOwner() == tx.From then
-      CityManager.TransferCity(city, tx.To) -- City failures remain BLOCKED.
-      Save(state)
-      city = assert(CityManager.GetCityAt(hero.Origin.X, hero.Origin.Y), "native Hero origin transfer removed city")
+    local origin
+    for _, citySnap in ipairs(tx.Cities) do
+      if citySnap.X == hero.Origin.X and citySnap.Y == hero.Origin.Y then
+        assert(not origin, "duplicate native Hero origin city snapshot")
+        origin = citySnap
+      end
     end
+    local city = TransferAbsorbedCity(state, tx,
+      assert(origin, "native Hero origin has no absorption city snapshot"))
+    Save(state)
     if not city:GetBuildings():HasBuilding(hero.OriginBuilding) then
       SetHeroSuicide(state, tx, snap, "ORIGIN_BUILDING_UNAVAILABLE")
       return
@@ -2351,18 +2370,7 @@ local function Execute(state, tx)
     end
   end
   for _, snap in ipairs(tx.Cities) do
-    local city = assert(CityManager.GetCityAt(snap.X, snap.Y), "city disappeared during absorption")
-    assert(city:GetOwner() == tx.From or city:GetOwner() == tx.To, "city belongs to a third faction")
-    if city:GetOwner() == tx.From then
-      -- A failed call can leave the donor as owner or transfer before raising.
-      -- Save this city's attempt before the native boundary and only refresh
-      -- the date while physical ownership still belongs to the donor.
-      snap.TransferTurn = Game.GetCurrentGameTurn()
-      Save(state)
-      CityManager.TransferCity(city, tx.To)
-    end
-    city = assert(CityManager.GetCityAt(snap.X, snap.Y), "transfer removed city")
-    assert(city:GetOwner() == tx.To, "city transfer did not change owner")
+    local city = TransferAbsorbedCity(state, tx, snap)
     WriteProperties(city, snap.TransferredProperties, snap.PropertyKeys)
     local previous = city:GetProperty(R.GOVERNANCE_KEY)
     if not previous or previous.ID ~= tx.ID then
