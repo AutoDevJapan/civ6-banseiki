@@ -354,9 +354,9 @@ function B.TryAdoptEnemySpy()
         "travel target differs from enemy Governor city");
     local roster=ReadSpyRoster(c.attacker);
     Log("ENEMY_SPY_ARRIVAL_ROSTER",{turn=Game.GetCurrentGameTurn(),receipt=receipt,roster=roster});
-    if #roster.offMap==1 and #roster.map==0 then return "TRAVEL"; end
-    if #roster.offMap==0 and #roster.map==0 then return "ARRIVAL_UNOBSERVED"; end
-    assert(#roster.offMap==0 and #roster.map==1,
+    if #roster.activeOffMap==1 and #roster.map==0 then return "TRAVEL"; end
+    if #roster.activeOffMap==0 and #roster.map==0 then return "ARRIVAL_UNOBSERVED"; end
+    assert(#roster.activeOffMap==0 and #roster.map==1,
         "arriving spy roster ambiguous or absent");
     local spy=roster.map[1];
     assert(spy.name==receipt.name and spy.level==receipt.level and
@@ -396,7 +396,7 @@ end
 -- The off-map record exposes Name/Level/ReturnTurn/XLocation/YLocation, not a proven unit ID.
 ReadSpyRoster=function(owner)
     local player=assert(Players[owner], "spy roster owner missing");
-    local roster={map={},offMap={},captured={}};
+    local roster={map={},offMap={},captured={},activeOffMap={}};
     for _,unit in player:GetUnits():Members() do
         local def=GameInfo.Units[unit:GetType()];
         if def and def.Spy then
@@ -429,14 +429,44 @@ ReadSpyRoster=function(owner)
         for i=0,held-1 do
             local captive=assert(diplo:GetNthCapturedSpy(captorID,i),
                 "native captive spy record missing");
-            assert(type(captive.OwningPlayer)=="number" and type(captive.Name)=="string" and
-                type(captive.Level)=="number","native captive spy fields unavailable");
+            assert(type(captive.OwningPlayer)=="number",
+                "native captive owner unavailable");
             if captive.OwningPlayer==owner then
+                assert(type(captive.Name)=="string" and type(captive.Level)=="number" and
+                    type(captive.NameIndex)=="number",
+                    "native captive spy fields unavailable");
                 roster.captured[#roster.captured+1]={captor=captorID,name=captive.Name,
                     level=captive.Level,nameIndex=captive.NameIndex};
             end
         end
     end
+    -- Live 86 exposed the same captive once in the captor's roster and once
+    -- as an off-map sentinel. Retain both raw records, and discount only the
+    -- unique exact sentinel belonging to the unique captive. Real travel has
+    -- a future ReturnTurn and must always count as another operative.
+    if #roster.captured==1 then
+        local captive=roster.captured[1];
+        local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+        local matchIndex, matches=nil,0;
+        for i,record in ipairs(roster.offMap) do
+            local namesMatch=record.name==captive.name or
+                (record.name=="" and captive.name==defaultName) or
+                (captive.name=="" and record.name==defaultName);
+            if record.returnTurn==-1 and record.x==-9999 and record.y==-9999 and
+                namesMatch and record.level==captive.level then
+                matchIndex=i; matches=matches+1;
+            end
+        end
+        if matches==1 then
+            roster.capturedPlaceholder={offMapIndex=matchIndex,captiveIndex=1};
+        end
+    end
+    for i,record in ipairs(roster.offMap) do
+        if not roster.capturedPlaceholder or roster.capturedPlaceholder.offMapIndex~=i then
+            roster.activeOffMap[#roster.activeOffMap+1]=record;
+        end
+    end
+    roster.physicalCount=#roster.map+#roster.activeOffMap+#roster.captured;
     if owner==Game.GetLocalPlayer() and
         (#roster.map>0 or #roster.offMap>0 or #roster.captured>0) then
         -- Any complete nonempty roster snapshot breaks the continuous empty window.
@@ -473,7 +503,7 @@ function B.EnemyRetryDiagnosis()
         "retry requires the actual failed mission with no native neutralization");
     R.Check(s,"SETTLED");
     local roster=assert(s.spyRoster,"native spy roster missing");
-    local occupied=#roster.map+#roster.offMap+#roster.captured;
+    local occupied=roster.physicalCount;
     local capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity();
     assert(type(capacity)=="number" and capacity>=0,
         "native spy capacity unavailable");
@@ -483,18 +513,33 @@ function B.EnemyRetryDiagnosis()
     if emptyRosterObservation and emptyRosterObservation.key~=observationKey then
         emptyRosterObservation=nil;
     end
-    assert(#roster.map<=1 and #roster.offMap<=1 and #roster.captured<=1 and
+    assert(#roster.map<=1 and #roster.activeOffMap<=1 and #roster.captured<=1 and
         occupied<=1,"retry requires an unambiguous original operative roster");
     local result={spyID=reference.id,eventID=event.id,eventTurn=event.turn,
         mission=mission,roster=roster,capacity=capacity,occupied=occupied,
         spent=s.titles.spent,total=s.titles.total,governorType=s.native.type};
-    if #roster.map==1 then
+    if #roster.captured==1 then
+        local captive=roster.captured[1];
+        local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+        assert(not s.spy.present and #roster.map==0 and #roster.activeOffMap==0 and
+            captive.level==travel.level and
+            (captive.name==travel.name or
+             (captive.name=="" and captive.nameIndex==-1 and travel.name==defaultName)),
+            "captured operative differs from the original spy");
+        result.outcome="CAPTURED"; result.captive=captive;
+        if occupied>=capacity then
+            result.mode="UNAVAILABLE_CAPACITY";
+            result.next="native captive exchange or capacity increase, then reread roster";
+        else
+            result.mode="PRODUCE";
+        end
+    elseif #roster.map==1 then
         local unit=roster.map[1];
         assert(unit.name==travel.name,
             "living map spy does not match the original operative");
         result.mode="MAP"; result.outcome="LIVING_MAP"; result.currentID=unit.id;
-    elseif #roster.offMap==1 then
-        local unit=roster.offMap[1];
+    elseif #roster.activeOffMap==1 then
+        local unit=roster.activeOffMap[1];
         assert((unit.name==travel.name or
             (unit.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
             unit.returnTurn>=s.turn,
@@ -503,43 +548,166 @@ function B.EnemyRetryDiagnosis()
         result.returnName=unit.name; result.returnLevel=unit.level;
         result.returnTurn=unit.returnTurn; result.returnX=unit.x; result.returnY=unit.y;
     else
-        local captive=roster.captured[1];
         assert(not s.spy.present,"spy reference is still present despite an empty map roster");
-        if captive then
-            assert(captive.name==travel.name,
-                "captured operative differs from the original spy");
-            result.outcome="CAPTURED";
-            result.captive=captive;
+        -- Arrival may temporarily expose neither a map unit nor an off-map
+        -- record. Require 60 seconds continuously empty in this UI load and
+        -- failed-attempt identity before using native capacity to build.
+        local now=UI.GetElapsedTime();
+        assert(type(now)=="number" and now==now and now>=0 and now<math.huge,
+            "UI observation clock unavailable");
+        if not emptyRosterObservation or now<emptyRosterObservation.last then
+            emptyRosterObservation={key=observationKey,since=now,last=now};
         else
-            -- Arrival may temporarily expose neither a map unit nor an off-map
-            -- record. Require 60 seconds continuously empty in this UI load and
-            -- failed-attempt identity before using native capacity to build.
-            local now=UI.GetElapsedTime();
-            assert(type(now)=="number" and now==now and now>=0 and now<math.huge,
-                "UI observation clock unavailable");
-            if not emptyRosterObservation or now<emptyRosterObservation.last then
-                emptyRosterObservation={key=observationKey,since=now,last=now};
-            else
-                emptyRosterObservation.last=now;
-            end
-            if now-emptyRosterObservation.since<60 then
-                result.mode="OBSERVATION_PENDING";
-                result.outcome="NO_ROSTER_RECORD_YET";
-                Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
-                return result;
-            end
-            result.outcome="GONE_NO_CAPTURE_RECORD";
+            emptyRosterObservation.last=now;
         end
+        if now-emptyRosterObservation.since<60 then
+            result.mode="OBSERVATION_PENDING";
+            result.outcome="NO_ROSTER_RECORD_YET";
+            Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
+            return result;
+        end
+        result.outcome="GONE_NO_CAPTURE_RECORD";
         if occupied>=capacity then
             result.mode="UNAVAILABLE_CAPACITY";
-            result.next=captive and
-                "native captive exchange or capacity increase, then reread roster" or
-                "obtain native spy capacity, then reread roster";
+            result.next="obtain native spy capacity, then reread roster";
         else
             result.mode="PRODUCE";
         end
     end
     Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
+    return result;
+end
+
+-- Mirrors the stock EspionageOverview captive item construction. This only
+-- tests the outgoing working item's native validity; it never opens a
+-- diplomacy session or submits/accepts a deal. A negative NameIndex is passed
+-- through unchanged because its validity has to be decided by the engine.
+function B.ProbeCapturedExchange()
+    local c=EnemyConfig();
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.outcome=="CAPTURED" and d.captive and d.occupied==1,
+        "exchange probe requires the unique original captive");
+    local captor=d.captive.captor;
+    assert(captor~=c.attacker and type(d.captive.nameIndex)=="number",
+        "native captive trade identity unavailable");
+    local manager=assert(DealManager,"native deal manager unavailable");
+    if Players[c.attacker]:GetDiplomacy():IsAtWarWith(captor) then
+        local result={status="AT_WAR",captor=captor,
+            nameIndex=d.captive.nameIndex,capacity=d.capacity,occupied=d.occupied};
+        Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
+        return result;
+    end
+    if manager.HasPendingDeal(c.attacker,captor) then
+        local result={status="PENDING_DEAL",captor=captor,
+            nameIndex=d.captive.nameIndex,capacity=d.capacity,occupied=d.occupied};
+        Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
+        return result;
+    end
+    local ok,status=pcall(function()
+        manager.ClearWorkingDeal(DealDirection.OUTGOING,c.attacker,captor);
+        local deal=assert(manager.GetWorkingDeal(DealDirection.OUTGOING,c.attacker,captor),
+            "native outgoing working deal unavailable");
+        local item=deal:AddItemOfType(DealItemTypes.CAPTIVE,captor);
+        if not item then return "NO_ITEM"; end
+        item:SetValueType(d.captive.nameIndex);
+        if not item:IsValid() then return "INVALID_ITEM"; end
+        item:SetLocked(true);
+        return "VALID_ITEM";
+    end);
+    -- Clear the unsent item on both the valid and invalid paths.
+    manager.ClearWorkingDeal(DealDirection.OUTGOING,c.attacker,captor);
+    if not ok then error(status); end
+    local result={status=status,captor=captor,nameIndex=d.captive.nameIndex,
+        capacity=d.capacity,occupied=d.occupied};
+    Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
+    return result;
+end
+
+-- The cascaded official database has one already used spy-granting Civic and
+-- the Government Plaza Intelligence Agency building. Read the actual city
+-- prerequisites before offering the building path; a captive still uses one
+-- capacity slot throughout this path.
+function B.CaptiveCapacityPlan()
+    local c=EnemyConfig();
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.outcome=="CAPTURED" and d.captive and d.occupied==1,
+        "capacity plan requires the original native captive");
+    local result={capacity=d.capacity,occupied=d.occupied,stage="UNAVAILABLE",
+        cities={}};
+    if d.capacity>1 then
+        result.stage="CAPACITY_READY";
+        Log("ENEMY_CAPTIVE_CAPACITY_PLAN",{plan=result,roster=d.roster});
+        return result;
+    end
+    local building=assert(GameInfo.Buildings["BUILDING_GOV_SPIES"],
+        "official spy capacity building missing");
+    local district=assert(GameInfo.Districts["DISTRICT_GOVERNMENT"],
+        "official Government Plaza missing");
+    assert(building.PrereqDistrict==district.DistrictType,
+        "spy capacity building district prerequisite changed");
+    local culture=Players[c.attacker]:GetCulture();
+    local civic=assert(GameInfo.Civics[district.PrereqCivic],
+        "Government Plaza civic prerequisite missing");
+    result.districtCivic=district.PrereqCivic;
+    result.districtCivicOwned=culture:HasCivic(civic.Index);
+    local tier1={"BUILDING_GOV_TALL","BUILDING_GOV_CONQUEST","BUILDING_GOV_WIDE"};
+    local plazaSeen=false;
+    for _,city in Players[c.attacker]:GetCities():Members() do
+        local districts=assert(city:GetDistricts(),"native city districts unavailable");
+        local buildings=assert(city:GetBuildings(),"native city buildings unavailable");
+        local observed={cityID=city:GetID(),district=districts:HasDistrict(district.Index),
+            tier1={},spyBuilding=buildings:HasBuilding(building.Index)};
+        for _,kind in ipairs(tier1) do
+            local row=assert(GameInfo.Buildings[kind],"official Government Plaza tier-one building missing");
+            observed.tier1[kind]=buildings:HasBuilding(row.Index);
+        end
+        result.cities[#result.cities+1]=observed;
+        if observed.district then
+            assert(not plazaSeen,"native Government Plaza belongs to multiple cities");
+            plazaSeen=true;
+        end
+        if observed.spyBuilding then
+            result.stage="EFFECT_PENDING"; result.cityID=city:GetID();
+        elseif observed.district and result.stage~="EFFECT_PENDING" then
+            local choice,stage;
+            for _,kind in ipairs(tier1) do if observed.tier1[kind] then
+                choice=building; stage="BUILD_SPIES"; break;
+            end end
+            if not choice then
+                local head=city:GetBuildQueue():GetAt(0);
+                for _,kind in ipairs(tier1) do
+                    local row=GameInfo.Buildings[kind];
+                    if head and head.BuildingType==row.Index then
+                        choice=row; stage="BUILD_TIER1"; break;
+                    end
+                end
+            end
+            if not choice then
+                for _,kind in ipairs(tier1) do
+                    local row=GameInfo.Buildings[kind];
+                    local can=city:GetBuildQueue():CanProduce(row.Hash,false,true);
+                    if can then choice=row; stage="BUILD_TIER1"; break; end
+                end
+            end
+            if choice then
+                local head=city:GetBuildQueue():GetAt(0);
+                local queued=head and head.BuildingType==choice.Index;
+                local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
+                local progressed=progress and progress.steps and progress.steps[choice.BuildingType];
+                local can=city:GetBuildQueue():CanProduce(choice.Hash,false,true);
+                if queued and progressed then stage="PROGRESS_PENDING";
+                elseif queued then stage="BUILD_QUEUED";
+                elseif not can then stage="BUILDING_UNAVAILABLE"; end
+                result.stage=stage; result.cityID=city:GetID();
+                result.buildingType=choice.BuildingType;
+            elseif result.stage=="UNAVAILABLE" then result.stage="TIER1_UNAVAILABLE"; end
+        end
+    end
+    if result.stage=="UNAVAILABLE" then
+        result.stage=result.districtCivicOwned and "NEEDS_GOVERNMENT_DISTRICT" or
+            "NEEDS_DOMAIN_LAW";
+    end
+    Log("ENEMY_CAPTIVE_CAPACITY_PLAN",{plan=result,roster=d.roster});
     return result;
 end
 
@@ -553,8 +721,9 @@ function B.RetryLivingSpy()
     local roster=ReadSpyRoster(c.attacker);
     Log("ENEMY_SPY_RETRY_LIVING",{retry=retry,roster=roster});
     assert(#roster.captured==0,"native retry spy became captive; return identity unavailable");
-    if #roster.offMap==1 and #roster.map==0 then
-        local record=roster.offMap[1];
+    assert(roster.physicalCount<=1,"living retry operative roster is ambiguous");
+    if #roster.activeOffMap==1 and #roster.map==0 then
+        local record=roster.activeOffMap[1];
         assert(retry.mode=="RETURN" and
             record.name==retry.returnName and record.level==retry.returnLevel and
             record.returnTurn==retry.returnTurn and
@@ -562,8 +731,8 @@ function B.RetryLivingSpy()
             "native return record changed or belongs to another spy");
         return "OFF_MAP_RETURN";
     end
-    if #roster.map==0 and #roster.offMap==0 then return "ARRIVAL_UNOBSERVED"; end
-    assert(#roster.map==1 and #roster.offMap==0 and #roster.captured==0,
+    if #roster.map==0 and #roster.activeOffMap==0 then return "ARRIVAL_UNOBSERVED"; end
+    assert(#roster.map==1 and #roster.activeOffMap==0 and #roster.captured==0,
         "living retry operative roster is ambiguous");
     local unit=roster.map[1];
     if retry.mode=="RETURN" then
@@ -601,7 +770,8 @@ function B.RetryProducedSpyVisible()
         Game:GetProperty("JAC_BOUNDARY_SPY_PROGRESS"),
         "retry production has not received one native progress request");
     local roster=ReadSpyRoster(Game.GetLocalPlayer());
-    assert(#roster.offMap==0 and #roster.map<=1,
+    assert(#roster.activeOffMap==0 and #roster.map<=1 and
+        roster.physicalCount==#roster.captured+#roster.map,
         "native production roster is ambiguous");
     if retry.spyID then
         assert(#roster.map==1 and roster.map[1].id==retry.spyID,
@@ -690,8 +860,9 @@ function B.Probe(cityOwner, cityID)
     Log("SPY_PROBE", probe); return probe;
 end
 
-local pending, verification, buildPending, travelReference;
+local pending, verification, buildPending, travelReference, capacityBuildReady;
 local spyQueued = {};
+local capacityQueued = {};
 local operationStarts = {};
 local barrierToken = 0;
 local frameSerial, publishEpoch = 0, 0;
@@ -812,7 +983,7 @@ function B.EnemyProgress()
         stage="FAILED"; -- also covers a successful mission with no native neutralization
     else
         local roster=s.spyRoster;
-        if roster and #roster.offMap==1 then stage="TRAVEL";
+        if roster and #roster.activeOffMap==1 then stage="TRAVEL";
         elseif s.spy and s.spy.present and s.spy.operation~=-1 and s.spy.endTurn>s.turn then
             stage="MISSION";
         else
@@ -893,12 +1064,12 @@ function B.SpyPrerequisitesReady()
     assert(player:GetCulture():HasCivic(civic.Index), "native spy prerequisite civic incomplete");
     local capacity=player:GetDiplomacy():GetSpyCapacity();
     local roster=ReadSpyRoster(Game.GetLocalPlayer());
-    local existing=#roster.map+#roster.offMap+#roster.captured;
+    local existing=roster.physicalCount;
     Log("SPY_PRODUCTION_PREREQUISITES", {civic=unit.PrereqCivic, capacity=capacity, existing=existing});
     local retry=Game:GetProperty(RETRY);
     if retry then
         assert(retry.current==2 and retry.mode=="PRODUCE" and retry.archive and
-            #roster.map==0 and #roster.offMap==0 and existing==#roster.captured,
+            #roster.map==0 and #roster.activeOffMap==0 and existing==#roster.captured,
             "retry production requires a proven free native spy slot");
     else
         assert(existing==0, "spy production fixture needs no pre-existing native spies");
@@ -913,6 +1084,12 @@ local function SpyBuildReady(owner, cityID)
     local unit=head and head.UnitType and GameInfo.Units[head.UnitType];
     return unit and unit.UnitType=="UNIT_SPY" or false;
 end
+local function CapacityBuildReady(owner,cityID,buildingType)
+    local city=assert(CityManager.GetCity(owner,cityID),"capacity building city missing");
+    local head=city:GetBuildQueue():GetAt(0);
+    local row=head and head.BuildingType and GameInfo.Buildings[head.BuildingType];
+    return row and row.BuildingType==buildingType or false;
+end
 function B.Queue(action, params)
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "a boundary frame request is already pending");
@@ -922,6 +1099,7 @@ function B.Queue(action, params)
         action == "CAPTURE_ENEMY" or action == "SAVE_TRAVEL" or
         action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
         action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "BUILD_SPY" or
+        action == "BUILD_CAPACITY" or action == "PROGRESS_CAPACITY" or
         action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
         action == "SPY_MISSION" or action == "RETRY_ADOPT", "unknown boundary action");
     local retry=Game:GetProperty(RETRY);
@@ -941,6 +1119,19 @@ function B.Queue(action, params)
         assert(not spyQueued[action], "native spy request cannot be replayed in this session");
         spyQueued[action] = true;
     end
+    if action=="BUILD_CAPACITY" or action=="PROGRESS_CAPACITY" then
+        local plan=B.CaptiveCapacityPlan();
+        assert(plan.buildingType,"native capacity building prerequisite missing");
+        if action=="PROGRESS_CAPACITY" then
+            assert(capacityBuildReady and capacityBuildReady.cityID==plan.cityID and
+                capacityBuildReady.buildingType==plan.buildingType and
+                capacityBuildReady.turn==Game.GetCurrentGameTurn(),
+                "native capacity BUILD acceptance is missing in this UI turn");
+        end
+        local key=action.."/"..plan.buildingType;
+        assert(not capacityQueued[key],"native capacity building request cannot be replayed");
+        capacityQueued[key]=true;
+    end
     pending = {action=action, params=params or {}}; B.lastAction="QUEUED_"..action;
 end
 local function EnemySyncRequest(action,observed)
@@ -954,7 +1145,8 @@ local function EnemySyncRequest(action,observed)
         EVOLVE_ENEMY="JAC_BoundaryEvolveEnemy",
         CONFIRM_ENEMY="JAC_BoundaryConfirmEnemy",
         CAPTURE_ENEMY="JAC_BoundaryCaptureEnemyRecovery",
-        BEGIN_SPY_RETRY="JAC_BoundaryBeginEnemySpyRetry"};
+        BEGIN_SPY_RETRY="JAC_BoundaryBeginEnemySpyRetry",
+        PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding"};
     payload.OnStart=assert(onStart[action],"unknown enemy fixture operation");
     UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,payload);
     Log("ENEMY_SYNC_REQUEST",{action=action,token=payload.Token,
@@ -969,6 +1161,17 @@ local function Submit(command)
     local action, params = command.action, command.params;
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
+    elseif action == "PROGRESS_CAPACITY" then
+        local plan=B.CaptiveCapacityPlan();
+        assert(plan.stage=="BUILD_QUEUED" and plan.cityID and plan.buildingType,
+            "official capacity building is not queued for progress");
+        assert(capacityBuildReady and capacityBuildReady.cityID==plan.cityID and
+            capacityBuildReady.buildingType==plan.buildingType and
+            capacityBuildReady.turn==Game.GetCurrentGameTurn(),
+            "native capacity BUILD acceptance changed before progress");
+        local row=assert(GameInfo.Buildings[plan.buildingType],"native capacity building missing");
+        return EnemySyncRequest(action,{CityID=plan.cityID,BuildingType=plan.buildingType,
+            BuildingIndex=row.Index,Capacity=plan.capacity,Occupied=plan.occupied});
     elseif action == "BEGIN_SPY_RETRY" then
         local d=B.EnemyRetryDiagnosis();
         assert(d.mode=="PRODUCE" or d.mode=="RETURN" or d.mode=="MAP",
@@ -981,6 +1184,7 @@ local function Submit(command)
             GovernorType=d.governorType,Capacity=d.capacity,Occupied=d.occupied,
             CaptiveCaptor=d.captive and d.captive.captor,
             CaptiveName=d.captive and d.captive.name,
+            CaptiveNameIndex=d.captive and d.captive.nameIndex,
             CaptiveLevel=d.captive and d.captive.level,
             ReturnName=d.returnName,ReturnLevel=d.returnLevel,
             ReturnTurn=d.returnTurn,ReturnX=d.returnX,ReturnY=d.returnY});
@@ -1054,11 +1258,38 @@ local function Submit(command)
         assert(canStart, "native spy BUILD operation refused");
         buildPending={owner=owner,cityID=city:GetID(),seen=false};
         CityManager.RequestOperation(city,CityOperationTypes.BUILD,arguments);
+    elseif action == "BUILD_CAPACITY" then
+        local plan=B.CaptiveCapacityPlan();
+        assert((plan.stage=="BUILD_TIER1" or plan.stage=="BUILD_SPIES") and
+            plan.cityID and plan.buildingType,
+            "official capacity building prerequisites are not ready");
+        local city=assert(CityManager.GetCity(owner,plan.cityID),"capacity city missing");
+        local row=assert(GameInfo.Buildings[plan.buildingType],"capacity building missing");
+        assert(not row.RequiresPlacement,"capacity building requires native placement UI");
+        UI.DeselectAllCities(); UI.SelectCity(city);
+        local selected=UI.GetHeadSelectedCity();
+        assert(selected and selected:GetOwner()==owner and selected:GetID()==city:GetID(),
+            "official UI did not select the capacity building city");
+        local canProduce,reasons=city:GetBuildQueue():CanProduce(row.Hash,false,true);
+        Log("CAPACITY_CAN_PRODUCE",{ok=canProduce,reasons=reasons or {},
+            cityID=city:GetID(),buildingType=row.BuildingType});
+        assert(canProduce,"native city refuses capacity building production");
+        local arguments={[CityOperationTypes.PARAM_BUILDING_TYPE]=row.Hash,
+            [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,
+            [CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0};
+        local canStart,result=CityManager.CanStartOperation(city,CityOperationTypes.BUILD,arguments,true);
+        Log("CAPACITY_BUILD_QUERY",{ok=canStart,result=result or {},
+            cityID=city:GetID(),buildingType=row.BuildingType});
+        assert(canStart,"native capacity building BUILD operation refused");
+        buildPending={owner=owner,cityID=city:GetID(),buildingType=row.BuildingType,
+            action="BUILD_CAPACITY",seen=false};
+        CityManager.RequestOperation(city,CityOperationTypes.BUILD,arguments);
     elseif action == "ADOPT_SPY" then
         local prior=assert(travelReference or Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
             "accepted spy travel reference missing");
         local roster=ReadSpyRoster(owner);
-        assert(#roster.offMap==0 and #roster.map==1, "arrived native spy roster is ambiguous");
+        assert(#roster.activeOffMap==0 and #roster.map==1,
+            "arrived native spy roster is ambiguous");
         local arrived=roster.map[1];
         assert(arrived.name==prior.name and arrived.level==prior.level and
             InTargetCity(arrived.x,arrived.y,prior.targetOwner,prior.targetID),
@@ -1086,7 +1317,7 @@ local function Submit(command)
         if action == "SPY_TRAVEL" then
             SelectSpy(spy, InterfaceModeTypes.SPY_TRAVEL_TO_CITY);
             local roster=ReadSpyRoster(owner);
-            assert(#roster.map==1 and roster.map[1].id==spy:GetID() and #roster.offMap==0,
+            assert(#roster.map==1 and roster.map[1].id==spy:GetID() and #roster.activeOffMap==0,
                 "spy travel needs one native map spy and no pre-existing off-map spy");
             local before=SpyState(spy);
             assert(before.operation == -1, "native spy is already assigned before travel");
@@ -1139,8 +1370,8 @@ local function VerifySpyRequest(request)
     end
     if request.action == "SPY_TRAVEL" then
         local source=request.beforeRoster.map[1];
-        if #afterRoster.offMap==1 and #afterRoster.map<=1 then
-            local travelling=afterRoster.offMap[1];
+        if #afterRoster.activeOffMap==1 and #afterRoster.map<=1 then
+            local travelling=afterRoster.activeOffMap[1];
             local mapID=#afterRoster.map==1 and afterRoster.map[1].id or request.before.id;
             -- Unnamed stock spies have the unit's fallback name on the map,
             -- but an empty Name in the engine's off-map record (live 51).
@@ -1153,7 +1384,7 @@ local function VerifySpyRequest(request)
                 travelling.level==source.level and travelling.returnTurn>Game.GetCurrentGameTurn() and
                 travelling.x==request.targetX and travelling.y==request.targetY and
                 InTargetCity(travelling.x,travelling.y,request.targetOwner,request.targetID);
-        elseif #afterRoster.offMap==0 and #afterRoster.map==1 then
+        elseif #afterRoster.activeOffMap==0 and #afterRoster.map==1 then
             local unit=afterRoster.map[1];
             arrived=unit.name==source.name and unit.level==source.level and
                 (unit.x~=source.x or unit.y~=source.y) and
@@ -1278,6 +1509,13 @@ ContextPtr:SetUpdate(function()
                     retry.archive and retry.archive.spyID==request.payload.SpyID and
                     retry.archive.eventID==request.payload.EventID and
                     Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")==nil;
+            elseif request.action=="PROGRESS_CAPACITY" then
+                local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
+                local step=progress and progress.steps and
+                    progress.steps[request.payload.BuildingType];
+                accepted=step and step.token==request.token and
+                    step.cityID==request.payload.CityID and
+                    step.buildingIndex==request.payload.BuildingIndex;
             end
             B.lastAction=(accepted and "ACCEPTED_" or "REJECTED_")..request.action;
             Log("ENEMY_SYNC_ACCEPTANCE",{action=request.action,accepted=accepted,
@@ -1334,16 +1572,25 @@ ContextPtr:SetUpdate(function()
     end
     if buildPending and buildPending.seen then
         local request=buildPending; buildPending=nil;
-        local ok,ready=pcall(SpyBuildReady,request.owner,request.cityID);
-        B.lastAction=(ok and ready and "READY_" or "REJECTED_").."BUILD_SPY";
-        Log("SPY_BUILD_ACCEPTANCE", {ok=ok,ready=ok and ready or false,
-            error=not ok and tostring(ready) or "",cityID=request.cityID});
+        local action=request.action or "BUILD_SPY";
+        local check=action=="BUILD_CAPACITY" and CapacityBuildReady or SpyBuildReady;
+        local ok,ready=pcall(check,request.owner,request.cityID,request.buildingType);
+        if action=="BUILD_CAPACITY" and ok and ready then
+            capacityBuildReady={cityID=request.cityID,buildingType=request.buildingType,
+                turn=Game.GetCurrentGameTurn()};
+        end
+        B.lastAction=(ok and ready and "READY_" or "REJECTED_")..action;
+        Log(action=="BUILD_CAPACITY" and "CAPACITY_BUILD_ACCEPTANCE" or "SPY_BUILD_ACCEPTANCE",
+            {ok=ok,ready=ok and ready or false,error=not ok and tostring(ready) or "",
+             cityID=request.cityID,buildingType=request.buildingType});
         return;
     end
     if not pending then return; end
     local command=pending; pending=nil;
     local ok, result=pcall(Submit, command);
-    if not ok and command.action=="BUILD_SPY" then buildPending=nil; end
+    if not ok and (command.action=="BUILD_SPY" or command.action=="BUILD_CAPACITY") then
+        buildPending=nil;
+    end
     if ok and result then verification=result; end
     B.lastAction=(ok and (result and "DISPATCHED_" or "SUBMITTED_") or "ERROR_")..command.action;
     Log("FRAME_REQUEST", {action=command.action, ok=ok, error=not ok and tostring(result) or ""});
@@ -1390,7 +1637,8 @@ Events.GameCoreEventPublishComplete.Add(function()
         if reference and reference.owner==verification.before.owner and reference.id==verification.newID then
             verification.published=true;
         end
-    elseif verification and verification.stage=="BARRIER_SENT" then
+    elseif verification and verification.kind~="ENEMY_SYNC" and
+        verification.stage=="BARRIER_SENT" then
         local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
         if marker and marker.owner==verification.before.owner and marker.spyID==verification.before.id and
             marker.token==verification.token and marker.action==verification.action then

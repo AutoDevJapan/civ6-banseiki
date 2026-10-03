@@ -213,6 +213,10 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     let lua = Lua::new();
     let names = [
         "retry-diagnose",
+        "retry-captive-exchange-probe",
+        "retry-capacity-plan",
+        "retry-capacity-build",
+        "retry-capacity-tick",
         "retry-prepare",
         "retry-produce",
         "retry-production-tick",
@@ -251,7 +255,45 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             "{name}"
         );
     }
-    assert_eq!(saves, 9);
+    assert_eq!(saves, 11);
+    let probe = scenario("leader-persona-spy-neutralization-retry-captive-exchange-probe.json");
+    let probe_codes: Vec<_> = steps(&probe).iter().filter_map(embedded_lua).collect();
+    assert!(probe_codes
+        .iter()
+        .any(|code| code.contains("ProbeCapturedExchange()")
+            && code.contains("d.occupied==1")
+            && code.contains("r.nameIndex==-1")));
+    assert!(!probe_codes
+        .iter()
+        .any(|code| code.contains("Queue(") || code.contains("RequestSession")));
+    let capacity_plan = scenario("leader-persona-spy-neutralization-retry-capacity-plan.json");
+    let plan_codes: Vec<_> = steps(&capacity_plan)
+        .iter()
+        .filter_map(embedded_lua)
+        .collect();
+    assert!(plan_codes
+        .iter()
+        .any(|code| code.contains("CaptiveCapacityPlan()")));
+    assert!(!plan_codes.iter().any(|code| code.contains("Queue(")));
+    let capacity_build = scenario("leader-persona-spy-neutralization-retry-capacity-build.json");
+    let build_codes: Vec<_> = steps(&capacity_build)
+        .iter()
+        .filter_map(embedded_lua)
+        .collect();
+    let position = |needle: &str| {
+        build_codes
+            .iter()
+            .position(|code| code.contains(needle))
+            .unwrap()
+    };
+    assert!(position("Queue('BUILD_CAPACITY')") < position("Queue('PROGRESS_CAPACITY')"));
+    assert_eq!(
+        build_codes
+            .iter()
+            .filter(|code| code.contains("Queue('PROGRESS_CAPACITY')"))
+            .count(),
+        1
+    );
     let prepare = scenario("leader-persona-spy-neutralization-retry-prepare.json");
     let codes: Vec<_> = steps(&prepare).iter().filter_map(embedded_lua).collect();
     assert!(codes.iter().any(|code| code.contains("d.spyID==655368")
