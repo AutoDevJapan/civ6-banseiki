@@ -401,6 +401,27 @@ fn failed_native_history_and_empty_roster_require_finite_observation_before_retr
 }
 
 #[test]
+fn empty_roster_window_restarts_after_any_nonempty_native_snapshot() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=39; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='UNAVAILABLE_CAPACITY'); CAPTURED[1]={}; ELAPSED=40; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=99.999; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=100; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='PRODUCE'); assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil)");
+}
+
+#[test]
+fn ui_load_resets_empty_window_even_if_the_lua_context_survives() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=55; fire(Events.LoadScreenClose); ELAPSED=60; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=119.999; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=120; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='PRODUCE')");
+}
+
+#[test]
+fn changed_failed_receipt_or_rewound_ui_clock_starts_a_new_empty_window() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=45; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ENEMY_CASES.mission(EspionageResultTypes.FAIL_UNDETECTED,12,1,4); ELAPSED=61; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=120.999; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=121; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='PRODUCE'); ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=59.999; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=60; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='PRODUCE')");
+}
+
+#[test]
 fn preserved_failure_diagnostic_logs_native_history_without_fixture_writes() {
     let h = Enemy::new();
     h.failed();
@@ -462,6 +483,52 @@ fn living_off_map_spy_returns_with_a_new_native_id_without_creating_another_spy(
     h.run("UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; local d=ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis(); assert(d.mode=='RETURN' and d.outcome=='LIVING_OFF_MAP')");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
     h.run("assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); local spy=ARRIVE_OFFMAP(16); assert(spy:GetID()==16 and ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='ADOPTION_REQUIRED'); assert(ExposedMembers.JAC_PersonaBoundary.TryAdoptReturnedSpy()=='ADOPT_QUEUED'); FRAME(); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryAdoptSpyIdentity'); ENEMY_CASES.fireCore('JAC_BoundaryAdoptSpyIdentity',r.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_RETRY_ADOPT'); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='HOME_READY'); assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').spyID==16 and PROGRESS_CALLS==0)");
+}
+
+#[test]
+fn off_map_return_matches_archived_name_level_turn_and_both_coordinates() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='RETURN')");
+    h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+    h.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.returnName=='Spy 15' and r.returnX==CONTROL.x and r.returnY==CONTROL.y and r.returnLevel==1 and r.returnTurn==TURN+2); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name='Other Spy'");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "native return record changed",
+    );
+    h.run("OFF_MAP[1].Name='Spy 15'; OFF_MAP[1].XLocation=TARGET.x");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "native return record changed",
+    );
+    h.run("OFF_MAP[1].XLocation=CONTROL.x; OFF_MAP[1].YLocation=FOREIGN.y");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "native return record changed",
+    );
+    h.run("OFF_MAP[1].YLocation=CONTROL.y; OFF_MAP[2]={Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "living retry operative roster is ambiguous",
+    );
+    h.run("OFF_MAP={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "became captive",
+    );
+}
+
+#[test]
+fn unnamed_default_spy_uses_the_proven_empty_off_map_name_only_at_intake() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; local travel=Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'); travel.name=GameInfo.Units['UNIT_SPY'].Name; Game:SetProperty('JAC_BOUNDARY_SPY_TRAVEL',travel); OFF_MAP={{Name='',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='RETURN')");
+    h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').returnName==''); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name=GameInfo.Units['UNIT_SPY'].Name");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
+        "native return record changed",
+    );
 }
 
 #[test]

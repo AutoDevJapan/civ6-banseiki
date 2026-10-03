@@ -37,6 +37,7 @@ local function Log(label, value)
     print(text); return text;
 end
 local ReadSpyRoster, InTargetCity;
+local emptyRosterObservation;
 
 local function Missions(c)
     local result, success = {}, false;
@@ -436,6 +437,11 @@ ReadSpyRoster=function(owner)
             end
         end
     end
+    if owner==Game.GetLocalPlayer() and
+        (#roster.map>0 or #roster.offMap>0 or #roster.captured>0) then
+        -- Any complete nonempty roster snapshot breaks the continuous empty window.
+        emptyRosterObservation=nil;
+    end
     return roster;
 end
 
@@ -445,7 +451,6 @@ InTargetCity=function(x,y,owner,id)
     return city and city:GetOwner()==owner and city:GetID()==id or false;
 end
 
-local emptyRosterSince;
 function B.EnemyRetryDiagnosis()
     local c=EnemyConfig();
     assert(not Game:GetProperty(RETRY),"finite enemy retry already archived");
@@ -472,6 +477,12 @@ function B.EnemyRetryDiagnosis()
     local capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity();
     assert(type(capacity)=="number" and capacity>=0,
         "native spy capacity unavailable");
+    local observationKey=R.Serialize({config=c,turn=s.turn,event=event,
+        spy=reference,travel=travel,mission=mission,capacity=capacity,
+        titles=s.titles,native=s.native});
+    if emptyRosterObservation and emptyRosterObservation.key~=observationKey then
+        emptyRosterObservation=nil;
+    end
     assert(#roster.map<=1 and #roster.offMap<=1 and #roster.captured<=1 and
         occupied<=1,"retry requires an unambiguous original operative roster");
     local result={spyID=reference.id,eventID=event.id,eventTurn=event.turn,
@@ -501,11 +512,17 @@ function B.EnemyRetryDiagnosis()
             result.captive=captive;
         else
             -- Arrival may temporarily expose neither a map unit nor an off-map
-            -- record. Observe for a minute before using native capacity to build.
+            -- record. Require 60 seconds continuously empty in this UI load and
+            -- failed-attempt identity before using native capacity to build.
             local now=UI.GetElapsedTime();
-            assert(type(now)=="number","UI observation clock unavailable");
-            if not emptyRosterSince then emptyRosterSince=now; end
-            if now-emptyRosterSince<60 then
+            assert(type(now)=="number" and now==now and now>=0 and now<math.huge,
+                "UI observation clock unavailable");
+            if not emptyRosterObservation or now<emptyRosterObservation.last then
+                emptyRosterObservation={key=observationKey,since=now,last=now};
+            else
+                emptyRosterObservation.last=now;
+            end
+            if now-emptyRosterObservation.since<60 then
                 result.mode="OBSERVATION_PENDING";
                 result.outcome="NO_ROSTER_RECORD_YET";
                 Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
@@ -535,9 +552,13 @@ function B.RetryLivingSpy()
     R.Check(state,"SETTLED");
     local roster=ReadSpyRoster(c.attacker);
     Log("ENEMY_SPY_RETRY_LIVING",{retry=retry,roster=roster});
+    assert(#roster.captured==0,"native retry spy became captive; return identity unavailable");
     if #roster.offMap==1 and #roster.map==0 then
-        assert(retry.mode=="RETURN" and roster.offMap[1].level==retry.returnLevel and
-            roster.offMap[1].returnTurn==retry.returnTurn,
+        local record=roster.offMap[1];
+        assert(retry.mode=="RETURN" and
+            record.name==retry.returnName and record.level==retry.returnLevel and
+            record.returnTurn==retry.returnTurn and
+            record.x==retry.returnX and record.y==retry.returnY,
             "native return record changed or belongs to another spy");
         return "OFF_MAP_RETURN";
     end
@@ -1379,7 +1400,11 @@ Events.GameCoreEventPublishComplete.Add(function()
     Observe("PUBLISH");
 end);
 Events.LocalPlayerTurnBegin.Add(function() Observe("TURN"); end);
-Events.LoadScreenClose.Add(function() last=nil; Observe("LOAD"); end);
+Events.LoadScreenClose.Add(function()
+    emptyRosterObservation=nil;
+    last=nil;
+    Observe("LOAD");
+end);
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
     -- The event's player is the attacker, not the governor owner.
     Log("MISSION_EVENT", {attacker=attacker, mission=missionID, turn=Game.GetCurrentGameTurn()});
