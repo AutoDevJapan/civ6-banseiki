@@ -607,8 +607,8 @@ fn japanese_recall_continuation_keeps_every_remaining_original_check() {
     let continued = native_scenario("absorption-japan-recall-continuation.json");
     let original_steps = original["steps"].as_array().expect("original steps");
     let continued_steps = continued["steps"].as_array().expect("continued steps");
-    assert_eq!(original_steps.len(), 127);
-    assert_eq!(continued_steps.len(), 29);
+    assert_eq!(original_steps.len(), 129);
+    assert_eq!(continued_steps.len(), 31);
     assert_eq!(continued_steps[1]["exact_name"], true);
     assert_eq!(continued_steps[2], original_steps[100]);
     assert_eq!(
@@ -624,7 +624,13 @@ fn japanese_recall_continuation_keeps_every_remaining_original_check() {
     let diagnostic = native_scenario("absorption-japan-owner-turn-diagnostic.json");
     let diagnostic_steps = diagnostic["steps"].as_array().expect("diagnostic steps");
     assert_eq!(diagnostic_steps.len(), 19);
-    assert_eq!(&diagnostic_steps[2..], &continued_steps[2..19]);
+    assert_eq!(&diagnostic_steps[2..13], &continued_steps[2..13]);
+    assert_eq!(diagnostic_steps[13], continued_steps[14]);
+    assert_eq!(&diagnostic_steps[14..], &continued_steps[16..21]);
+    let native = native_scenario("absorption-japan-native.json");
+    let native_steps = native["steps"].as_array().expect("native steps");
+    assert_eq!(original_steps[111], native_steps[113]);
+    assert_eq!(original_steps[113], native_steps[116]);
 }
 
 // This fixture tests the scenario's physical oracle, not engine API availability.

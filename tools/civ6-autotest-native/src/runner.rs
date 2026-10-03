@@ -1471,7 +1471,7 @@ mod tests {
                 .unwrap(),
             "Lua 5.1"
         );
-        for (source, count) in [(JAPAN, 127), (HERO, 101), (PRIEST, 13)] {
+        for (source, count) in [(JAPAN, 129), (HERO, 101), (PRIEST, 13)] {
             let s: Value = serde_json::from_str(source).unwrap();
             assert_eq!(s["steps"].as_array().unwrap().len(), count);
             validate(&s).unwrap();
