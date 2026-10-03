@@ -217,6 +217,14 @@ fn missing_arrival_roster_is_unobserved_without_adopting_a_spy() {
 }
 
 #[test]
+fn enemy_observation_is_serialized_inside_its_own_ui_context() {
+    let h = Enemy::new();
+    h.prepare();
+    h.bind();
+    h.run("JAC_PersonaBoundaryRules=nil; local b=ExposedMembers.JAC_PersonaBoundary; local before=#WRITES; local text=b.RecordEnemy('FAILED_MISSION_STATE'); assert(type(text)=='string' and string.find(text,'owner=1',1,true)); assert(#WRITES==before)");
+}
+
+#[test]
 fn wrong_history_or_event_id_fails_but_success_with_capture_counts() {
     let h = Enemy::new();
     h.prepare();

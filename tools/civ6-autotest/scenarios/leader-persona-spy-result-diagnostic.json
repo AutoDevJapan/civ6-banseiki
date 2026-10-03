@@ -22,7 +22,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ReadEnemy(); print('JAC_ENEMY_FAILED_MISSION '..JAC_PersonaBoundaryRules.Serialize(s)); return b.EnemyProgress()"
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; b.RecordEnemy('FAILED_MISSION_STATE'); return b.EnemyProgress()"
     },
     {
       "action": "exit_to_menu"

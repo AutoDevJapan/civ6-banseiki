@@ -222,6 +222,9 @@ function B.CheckEnemy(phase, merit)
     assert(s.native.turnsToEstablish==5,"native five-turn establishment duration changed");
     R.Check(s,phase,merit); return R.Serialize(s);
 end
+function B.RecordEnemy(label)
+    return Log(label, B.ReadEnemy());
+end
 function B.EnemyState()
     local c=EnemyConfig(); local row=GameInfo.JAC_LeaderPersonas[c.leader];
     local def=GameInfo.Governors[row.GovernorType];
