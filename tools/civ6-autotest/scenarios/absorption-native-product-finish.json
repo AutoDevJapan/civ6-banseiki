@@ -1,5 +1,5 @@
 {
-  "name": "Absorption native work saved return finishes with exact world and ledger proof",
+  "name": "Absorption native work final UI publication completes saved return",
   "judge_profile": "generic",
   "steps": [
     {
@@ -20,7 +20,7 @@
     {
       "action": "load",
       "exact_name": true,
-      "name": "JAC-native-product-after-restart-stage-absorb-flow-55-a3d2c319cb72",
+      "name": "JAC-native-product-after-final-resume-absorb-flow-56-a6eab1ff6c70",
       "timeout": 600
     },
     {
