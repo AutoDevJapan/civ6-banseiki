@@ -314,7 +314,9 @@ function B.TryAdoptEnemySpy()
     assert(receipt.targetOwner==c.owner and receipt.targetID==c.cityID,
         "travel target differs from enemy Governor city");
     local roster=ReadSpyRoster(c.attacker);
+    Log("ENEMY_SPY_ARRIVAL_ROSTER",{turn=Game.GetCurrentGameTurn(),receipt=receipt,roster=roster});
     if #roster.offMap==1 and #roster.map==0 then return "TRAVEL"; end
+    if #roster.offMap==0 and #roster.map==0 then return "ARRIVAL_UNOBSERVED"; end
     assert(#roster.offMap==0 and #roster.map==1,
         "arriving spy roster ambiguous or absent");
     local spy=roster.map[1];

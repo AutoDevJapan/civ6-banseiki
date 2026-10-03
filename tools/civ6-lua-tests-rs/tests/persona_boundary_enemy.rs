@@ -209,6 +209,14 @@ fn restored_native_binding_is_rechecked_without_waiting_for_an_old_reply() {
 }
 
 #[test]
+fn missing_arrival_roster_is_unobserved_without_adopting_a_spy() {
+    let h = Enemy::new();
+    h.prepare();
+    h.bind();
+    h.run("Game:SetProperty('JAC_BOUNDARY_SPY_TRAVEL',{targetOwner=1,targetID=20,name='Spy',level=1,oldID=15}); local prior=#REQUESTS; assert(ExposedMembers.JAC_PersonaBoundary.TryAdoptEnemySpy()=='ARRIVAL_UNOBSERVED'); assert(#REQUESTS==prior and Game:GetProperty('JAC_BOUNDARY_SPY')==nil)");
+}
+
+#[test]
 fn wrong_history_or_event_id_fails_but_success_with_capture_counts() {
     let h = Enemy::new();
     h.prepare();
