@@ -560,6 +560,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-acquired-palace-product.json",
         "absorption-native-acquired-carrier-diff.json",
         "absorption-native-acquired-carrier-resume.json",
+        "absorption-native-acquired-result-final.json",
         "absorption-native-bridge-probe.json",
         "absorption-native-ai-same-owner-move.json",
         "absorption-native-ai-carrier-return.json",
@@ -582,6 +583,15 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
     }
     assert!(checked >= 25, "experiment scripts were not collected");
     Ok(())
+}
+
+#[test]
+fn acquired_palace_result_proof_is_identical_after_reload() {
+    let scenario = native_scenario("absorption-native-acquired-palace-product.json");
+    let steps = scenario["steps"].as_array().expect("scenario steps");
+    assert_eq!(steps[10]["action"], "ui_lua");
+    assert_eq!(steps[15]["action"], "ui_lua");
+    assert_eq!(steps[10]["code"], steps[15]["code"]);
 }
 
 // This fixture tests the scenario's physical oracle, not engine API availability.
