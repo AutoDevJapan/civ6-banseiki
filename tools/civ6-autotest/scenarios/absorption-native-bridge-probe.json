@@ -1,5 +1,5 @@
 {
-  "name": "Native original Great Work AI to human to Free Cities Core bridge physical proof",
+  "name": "Native original work bridge after one ordinary turn",
   "judge_profile": "generic",
   "steps": [
     {
@@ -22,6 +22,12 @@
       "exact_name": true,
       "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
       "timeout": 600
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "test_turns": 1,
+      "timeout": 900
     },
     {
       "action": "wait_for",
