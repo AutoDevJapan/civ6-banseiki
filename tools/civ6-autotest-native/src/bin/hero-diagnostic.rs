@@ -84,10 +84,15 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
     let steps = original["steps"]
         .as_array()
         .ok_or("original steps missing")?;
-    if steps.len() != 127
+    if steps.len() != 129
         || steps[0]["action"] != "enable_mods"
-        || steps[111]["action"] != "autoplay"
-        || steps[111]["turns"] != 80
+        || steps[111]["action"] != "ui_lua"
+        || !steps[111]["code"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("reserve fixture faith")
+        || steps[112]["action"] != "autoplay"
+        || steps[112]["turns"] != 80
     {
         return Err("acceptance scenario layout changed; re-evaluate the diagnostic".into());
     }
@@ -117,7 +122,9 @@ fn prepare(original: &Value, save: &str) -> Result<Value, String> {
         }
     }
     out.push(json!({"action":"ui_lua","state_name":"InGame","code":TRACE_START}));
-    out.push(steps[111].clone());
+    // This diagnostic observes spontaneous AI Hero generation during the era
+    // wait, so it deliberately omits the acceptance scenario's faith reserve.
+    out.push(steps[112].clone());
     out.push(json!({"action":"ui_lua","state_name":"InGame","code":TRACE_FINISH}));
     Ok(
         json!({"name":"PR87 Rust diagnostic: observe target AI hero generation and faith across era window; not full acceptance","judge_profile":"generic","steps":out,"test_mode":{"skipped_turns":0,"continuous_performance_valid":false}}),
@@ -186,7 +193,7 @@ mod tests {
         }
         assert_eq!(d["steps"][10]["action"], "wait_for");
         assert_eq!(d["steps"][5], source["steps"][103]);
-        assert_eq!(d["steps"][16], source["steps"][111]);
+        assert_eq!(d["steps"][16], source["steps"][112]);
     }
     #[test]
     fn observation_chunks_compile_without_executing() {
@@ -230,7 +237,7 @@ mod tests {
         ))
         .unwrap();
         assert!(prepare(&source, "../save").is_err());
-        source["steps"][111]["turns"] = json!(79);
+        source["steps"][112]["turns"] = json!(79);
         assert!(prepare(&source, "owned-save").is_err());
     }
 }
