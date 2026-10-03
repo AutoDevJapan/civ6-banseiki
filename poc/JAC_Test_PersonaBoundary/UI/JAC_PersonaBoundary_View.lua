@@ -223,7 +223,11 @@ function B.CheckEnemy(phase, merit)
     R.Check(s,phase,merit); return R.Serialize(s);
 end
 function B.RecordEnemy(label)
-    return Log(label, B.ReadEnemy());
+    local s=B.ReadEnemy();
+    Log(label.."_MISSION",{turn=s.turn,missions=s.missions,success=s.neutralizationMission,
+        native=s.native,spy=s.spy});
+    Log(label.."_ROSTER",s.spyRoster or {});
+    return Log(label, s);
 end
 function B.EnemyState()
     local c=EnemyConfig(); local row=GameInfo.JAC_LeaderPersonas[c.leader];
