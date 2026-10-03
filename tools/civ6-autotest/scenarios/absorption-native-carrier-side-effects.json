@@ -1,0 +1,65 @@
+{
+  "name": "Free Cities carrier state before and after temporary AI custody comparison",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local city=CityManager.GetCityAt(114,45)\nreturn city and city:GetOwner()==62 and city:GetBuildings():HasBuilding(12)\n and city:GetBuildings():GetGreatWorkInSlot(12,0)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal x,y,free,building=114,45,62,12\nlocal city=assert(CityManager.GetCityAt(x,y))\nassert(city:GetOwner()==free and city:GetBuildings():HasBuilding(building),'Free Cities official carrier missing')\nlocal assets=A.CityAssets(city)\nassert(assets.BUILDING_TEMPLE and assets.BUILDING_TEMPLE.Works[0]~=nil,'carrier Temple slot absent')\nassets.BUILDING_TEMPLE.Works[0]=-1 -- only the intended original work differs\nlocal plots={}\nfor i=0,Map.GetPlotCount()-1 do\n local p=Map.GetPlotByIndex(i)\n if Map.GetPlotDistance(x,y,p:GetX(),p:GetY())<=2 then plots[tostring(i)]=p:GetOwner() end\nend\nlocal units={}\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[free] then owners[#owners+1]=free end\nfor _,owner in ipairs(owners) do\n if Players[owner] then for _,unit in Players[owner]:GetUnits():Members() do\n  if unit:GetX()==x and unit:GetY()==y then units[#units+1]={Owner=owner,ID=unit:GetID(),Type=GameInfo.Units[unit:GetType()].UnitType} end\n end end\nend\nlocal result={Owner=city:GetOwner(),X=x,Y=y,Name=city:GetName(),Population=city:GetPopulation(),\n  Assets=assets,Loyalty=A.CityLoyalty(city),Religion=A.CityReligion(city),\n  Faith=city:GetProperty(A.Rules.CITY_FAITH_KEY),Governance=city:GetProperty(A.Rules.GOVERNANCE_KEY),\n  NearbyPlots=plots,UnitsOnCenter=units,FreeCityCount=Players[free]:GetCities():GetCount()}\nprint('[JAC_FREE_CARRIER_SIDE_EFFECT_'..tostring(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE') and 'AFTER' or 'BEFORE')..'] '..A.Canonical(result))\nreturn 'Free Cities carrier baseline comparison recorded'"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-ai-city-mediated-custody-absorb-flow-74-2ad5d4375304",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local city=CityManager.GetCityAt(114,45)\nreturn city and city:GetOwner()==62 and city:GetBuildings():HasBuilding(12)\n and city:GetBuildings():GetGreatWorkInSlot(12,0)==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal x,y,free,building=114,45,62,12\nlocal city=assert(CityManager.GetCityAt(x,y))\nassert(city:GetOwner()==free and city:GetBuildings():HasBuilding(building),'Free Cities official carrier missing')\nlocal assets=A.CityAssets(city)\nassert(assets.BUILDING_TEMPLE and assets.BUILDING_TEMPLE.Works[0]~=nil,'carrier Temple slot absent')\nassets.BUILDING_TEMPLE.Works[0]=-1 -- only the intended original work differs\nlocal plots={}\nfor i=0,Map.GetPlotCount()-1 do\n local p=Map.GetPlotByIndex(i)\n if Map.GetPlotDistance(x,y,p:GetX(),p:GetY())<=2 then plots[tostring(i)]=p:GetOwner() end\nend\nlocal units={}\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[free] then owners[#owners+1]=free end\nfor _,owner in ipairs(owners) do\n if Players[owner] then for _,unit in Players[owner]:GetUnits():Members() do\n  if unit:GetX()==x and unit:GetY()==y then units[#units+1]={Owner=owner,ID=unit:GetID(),Type=GameInfo.Units[unit:GetType()].UnitType} end\n end end\nend\nlocal result={Owner=city:GetOwner(),X=x,Y=y,Name=city:GetName(),Population=city:GetPopulation(),\n  Assets=assets,Loyalty=A.CityLoyalty(city),Religion=A.CityReligion(city),\n  Faith=city:GetProperty(A.Rules.CITY_FAITH_KEY),Governance=city:GetProperty(A.Rules.GOVERNANCE_KEY),\n  NearbyPlots=plots,UnitsOnCenter=units,FreeCityCount=Players[free]:GetCities():GetCount()}\nprint('[JAC_FREE_CARRIER_SIDE_EFFECT_'..tostring(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE') and 'AFTER' or 'BEFORE')..'] '..A.Canonical(result))\nreturn 'Free Cities carrier baseline comparison recorded'"
+    }
+  ]
+}
