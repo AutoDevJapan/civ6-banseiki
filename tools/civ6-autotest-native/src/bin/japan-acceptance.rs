@@ -43,9 +43,11 @@ return 'global era advanced; original fixture funding plus earned income restore
 
 fn prepare(source: &Value) -> Result<Value, String> {
     let original = source["steps"].as_array().ok_or("steps missing")?;
-    if original.len() != 127
-        || original[111]["action"] != "autoplay"
-        || original[111]["turns"] != 80
+    if original.len() != 129
+        || original[111]["code"] != RESERVE
+        || original[112]["action"] != "autoplay"
+        || original[112]["turns"] != 80
+        || original[113]["code"] != RESTORE
     {
         return Err("original acceptance layout changed".into());
     }
@@ -56,9 +58,15 @@ fn prepare(source: &Value) -> Result<Value, String> {
             "InGame",
             "same-era rejection did not report the native era restriction",
         ),
-        (113, "JAC_Absorption_Entry", "A.BeginHeroRecall"),
+        (111, "JAC_Absorption_Entry", "reserve fixture faith"),
         (
-            124,
+            113,
+            "JAC_Absorption_Entry",
+            "original fixture funding plus earned income restored",
+        ),
+        (115, "JAC_Absorption_Entry", "A.BeginHeroRecall"),
+        (
+            126,
             "JAC_Absorption_Entry",
             "RequestVerification('japan-live-absorption')",
         ),
@@ -74,17 +82,7 @@ fn prepare(source: &Value) -> Result<Value, String> {
     }
     let mut steps = Vec::new();
     for (i, s) in original.iter().enumerate() {
-        if i == 111 {
-            steps.push(
-                json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESERVE}),
-            );
-        }
-        if i == 113 {
-            steps.push(
-                json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESTORE}),
-            );
-        }
-        if i == 124 {
+        if i == 126 {
             steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":"local A=assert(JAC_AbsorptionGameplay);A.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS');return 'restore the same registered unit-property inspection after load'"}));
         }
         let mut s = s.clone();
@@ -152,8 +150,8 @@ mod tests {
         let native = prepare(&source).unwrap();
         assert_eq!(native["steps"].as_array().unwrap().len(), 132);
         let mut offset = 0;
-        for i in 0..127 {
-            if i == 111 || i == 113 || i == 124 {
+        for i in 0..129 {
+            if i == 126 {
                 offset += 1;
             }
             let mut expected = source["steps"][i].clone();
@@ -191,7 +189,7 @@ mod tests {
             "../../../civ6-autotest/scenarios/absorption-japan.json"
         ))
         .unwrap();
-        for index in [106, 110, 113, 124] {
+        for index in [106, 110, 111, 113, 115, 126] {
             for (field, value) in [
                 ("code", "return 'different phase'"),
                 ("state_name", "FrontEnd"),
