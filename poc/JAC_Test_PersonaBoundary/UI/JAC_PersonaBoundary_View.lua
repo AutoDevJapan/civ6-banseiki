@@ -578,10 +578,27 @@ function B.EnemyRetryDiagnosis()
     return result;
 end
 
--- Mirrors the stock EspionageOverview captive item construction. This only
--- tests the outgoing working item's native validity; it never opens a
--- diplomacy session or submits/accepts a deal. A negative NameIndex is passed
--- through unchanged because its validity has to be decided by the engine.
+-- Stock DiplomacyDealView uses GetItemCount/Items and item IDs to inspect or
+-- remove individual working-deal entries. Never clear the whole outgoing deal:
+-- HasPendingDeal does not cover a player's unsent offer.
+local function WorkingDealItemIDs(deal)
+    local count=deal:GetItemCount();
+    assert(type(count)=="number" and count>=0 and count<=256 and count%1==0,
+        "native working deal item count unavailable");
+    local ids={};
+    for item in deal:Items() do
+        assert(#ids<count,"native working deal enumeration exceeds item count");
+        local id=item:GetID();
+        assert(type(id)=="number" and id>=0,"native working deal item ID unavailable");
+        ids[#ids+1]=id;
+    end
+    assert(#ids==count,"native working deal item enumeration differs from count");
+    return ids;
+end
+
+-- Probe only a proven-empty native outgoing deal and remove only the item
+-- created here. No session or offer is submitted; the engine decides whether
+-- the actual negative captive NameIndex is valid.
 function B.ProbeCapturedExchange()
     local c=EnemyConfig();
     local d=B.EnemyRetryDiagnosis();
@@ -591,36 +608,83 @@ function B.ProbeCapturedExchange()
     assert(captor~=c.attacker and type(d.captive.nameIndex)=="number",
         "native captive trade identity unavailable");
     local manager=assert(DealManager,"native deal manager unavailable");
-    if Players[c.attacker]:GetDiplomacy():IsAtWarWith(captor) then
-        local result={status="AT_WAR",captor=captor,
-            nameIndex=d.captive.nameIndex,capacity=d.capacity,occupied=d.occupied};
+    local function Report(status,extra)
+        local result={status=status,captor=captor,nameIndex=d.captive.nameIndex,
+            capacity=d.capacity,occupied=d.occupied};
+        if extra then result.detail=extra; end
         Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
         return result;
+    end
+    if Players[c.attacker]:GetDiplomacy():IsAtWarWith(captor) then
+        return Report("AT_WAR");
     end
     if manager.HasPendingDeal(c.attacker,captor) then
-        local result={status="PENDING_DEAL",captor=captor,
-            nameIndex=d.captive.nameIndex,capacity=d.capacity,occupied=d.occupied};
-        Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
-        return result;
+        return Report("PENDING_DEAL");
     end
+    local direction=DealDirection.OUTGOING;
+    local readOK,deal=pcall(manager.GetWorkingDeal,direction,c.attacker,captor);
+    if not readOK or not deal then return Report("WORKING_DEAL_UNAVAILABLE"); end
+    local itemsOK,ids=pcall(WorkingDealItemIDs,deal);
+    if not itemsOK then return Report("WORKING_DEAL_UNREADABLE",tostring(ids)); end
+    if #ids~=0 then return Report("WORKING_DEAL_OCCUPIED",#ids); end
+    if type(deal.FindItemByID)~="function" or type(deal.RemoveItemByID)~="function" then
+        return Report("WORKING_DEAL_UNREADABLE","native item removal unavailable");
+    end
+    -- Repeat the read directly before AddItemOfType. If another UI context
+    -- inserted an item, this invocation leaves that offer untouched.
+    readOK,deal=pcall(manager.GetWorkingDeal,direction,c.attacker,captor);
+    if not readOK or not deal then return Report("WORKING_DEAL_CHANGED"); end
+    itemsOK,ids=pcall(WorkingDealItemIDs,deal);
+    if not itemsOK or #ids~=0 then return Report("WORKING_DEAL_CHANGED"); end
+    local created,createdID;
     local ok,status=pcall(function()
-        manager.ClearWorkingDeal(DealDirection.OUTGOING,c.attacker,captor);
-        local deal=assert(manager.GetWorkingDeal(DealDirection.OUTGOING,c.attacker,captor),
-            "native outgoing working deal unavailable");
-        local item=deal:AddItemOfType(DealItemTypes.CAPTIVE,captor);
-        if not item then return "NO_ITEM"; end
-        item:SetValueType(d.captive.nameIndex);
-        if not item:IsValid() then return "INVALID_ITEM"; end
-        item:SetLocked(true);
-        return "VALID_ITEM";
+        created=deal:AddItemOfType(DealItemTypes.CAPTIVE,captor);
+        if not created then return "NO_ITEM"; end
+        createdID=created:GetID();
+        assert(type(createdID)=="number" and createdID>=0,
+            "native captive deal item ID unavailable");
+        created:SetValueType(d.captive.nameIndex);
+        return created:IsValid() and "VALID_ITEM" or "INVALID_ITEM";
     end);
-    -- Clear the unsent item on both the valid and invalid paths.
-    manager.ClearWorkingDeal(DealDirection.OUTGOING,c.attacker,captor);
+    if not created then
+        local afterOK,after=pcall(manager.GetWorkingDeal,direction,c.attacker,captor);
+        if not afterOK or not after then return Report("WORKING_DEAL_CHANGED"); end
+        local emptyOK,afterIDs=pcall(WorkingDealItemIDs,after);
+        if not emptyOK or #afterIDs~=0 then return Report("WORKING_DEAL_CHANGED"); end
+        if not ok then error(status); end
+        return Report(status);
+    end
+    local cleanOK,cleanStatus=pcall(function()
+        assert(createdID,"native captive deal item identity unavailable");
+        local current=assert(manager.GetWorkingDeal(direction,c.attacker,captor),
+            "native working deal disappeared before item cleanup");
+        local beforeIDs=WorkingDealItemIDs(current);
+        local otherIDs,ours={},0;
+        for _,id in ipairs(beforeIDs) do
+            if id==createdID then ours=ours+1;
+            else otherIDs[#otherIDs+1]=id; end
+        end
+        assert(ours==1,"native probe item is no longer unique");
+        local item=assert(current:FindItemByID(createdID),
+            "native probe item disappeared before cleanup");
+        assert(item==created and item:GetID()==createdID and
+            item:GetType()==DealItemTypes.CAPTIVE and
+            item:GetFromPlayerID()==captor and item:GetToPlayerID()==c.attacker and
+            (not ok or item:GetValueType()==d.captive.nameIndex) and
+            not item:IsLocked(),
+            "native probe item changed before cleanup");
+        assert(current:RemoveItemByID(createdID),"native probe item removal failed");
+        local remaining=manager.GetWorkingDeal(direction,c.attacker,captor);
+        local remainingIDs=remaining and WorkingDealItemIDs(remaining) or {};
+        assert(#remainingIDs==#otherIDs,"unrelated working deal item count changed");
+        for i,id in ipairs(otherIDs) do
+            assert(remainingIDs[i]==id,"unrelated working deal item order changed");
+        end
+        return #otherIDs==0 and status or "WORKING_DEAL_CHANGED";
+    end);
+    if not cleanOK then error("native probe item cleanup unconfirmed: "..tostring(cleanStatus)); end
     if not ok then error(status); end
-    local result={status=status,captor=captor,nameIndex=d.captive.nameIndex,
-        capacity=d.capacity,occupied=d.occupied};
-    Log("ENEMY_CAPTIVE_EXCHANGE_PROBE",{result=result,roster=d.roster});
-    return result;
+    return Report(cleanStatus);
 end
 
 -- The cascaded official database has one already used spy-granting Civic and
@@ -708,6 +772,48 @@ function B.CaptiveCapacityPlan()
             "NEEDS_DOMAIN_LAW";
     end
     Log("ENEMY_CAPTIVE_CAPACITY_PLAN",{plan=result,roster=d.roster});
+    return result;
+end
+
+-- A progress receipt is not a completed building. Read the exact latest
+-- target building and the native capacity after a real turn, with the captive
+-- still present, before a scenario publishes its checkpoint.
+function B.CaptiveCapacityOutcome()
+    local c=EnemyConfig();
+    local progress=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS"),
+        "native capacity building progress receipt missing");
+    local latest=assert(progress.latest,"latest capacity building receipt missing");
+    local step=assert(progress.steps and progress.steps[latest.buildingType],
+        "latest capacity building step missing");
+    assert(step.cityID==latest.cityID and step.buildingIndex==latest.buildingIndex and
+        step.token==latest.token and step.turn==latest.turn,
+        "native capacity building receipt changed");
+    local row=assert(GameInfo.Buildings[latest.buildingType],
+        "native capacity target building missing");
+    assert(row.Index==latest.buildingIndex,
+        "native capacity target building type changed");
+    local city=assert(CityManager.GetCity(c.attacker,latest.cityID),
+        "native capacity production city missing");
+    assert(city:GetOwner()==c.attacker,"native capacity production city owner changed");
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.outcome=="CAPTURED" and d.occupied==1 and #d.roster.captured==1,
+        "original native captive changed during capacity construction");
+    local built=city:GetBuildings():HasBuilding(row.Index);
+    local stage="PROGRESS_PENDING";
+    if row.BuildingType=="BUILDING_GOV_SPIES" then
+        if built then stage=d.capacity==2 and "CAPACITY_READY" or "EFFECT_PENDING"; end
+    else
+        assert(row.BuildingType=="BUILDING_GOV_TALL" or
+            row.BuildingType=="BUILDING_GOV_CONQUEST" or
+            row.BuildingType=="BUILDING_GOV_WIDE",
+            "latest progress is not a Government Plaza prerequisite");
+        if built then stage=d.capacity==1 and "TIER1_BUILT" or "CAPACITY_CHANGED"; end
+    end
+    local result={stage=stage,buildingType=row.BuildingType,cityID=city:GetID(),
+        buildingIndex=row.Index,targetBuilt=built,capacity=d.capacity,
+        occupied=d.occupied,captured=#d.roster.captured,
+        turn=Game.GetCurrentGameTurn(),progressTurn=latest.turn};
+    Log("ENEMY_CAPTIVE_CAPACITY_OUTCOME",{result=result,roster=d.roster});
     return result;
 end
 
@@ -1090,6 +1196,20 @@ local function CapacityBuildReady(owner,cityID,buildingType)
     local row=head and head.BuildingType and GameInfo.Buildings[head.BuildingType];
     return row and row.BuildingType==buildingType or false;
 end
+-- Gameplay GetAt was nil in live 50. Gameplay can call this UI-owned read
+-- bridge immediately before its AddProgress; only scalar queue identity crosses.
+function B.ReadCapacityQueue(owner,cityID)
+    assert(owner==Game.GetLocalPlayer(),"capacity queue reader owner differs");
+    local city=assert(CityManager.GetCity(owner,cityID),"capacity queue city missing");
+    local head=city:GetBuildQueue():GetAt(0);
+    local row=head and head.BuildingType and GameInfo.Buildings[head.BuildingType];
+    local result={owner=city:GetOwner(),cityID=city:GetID(),
+        buildingType=row and row.BuildingType or "",
+        turn=Game.GetCurrentGameTurn(),frame=frameSerial,publishEpoch=publishEpoch};
+    Log("CAPACITY_QUEUE_READ",result);
+    return result;
+end
+ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead=B.ReadCapacityQueue;
 function B.Queue(action, params)
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "a boundary frame request is already pending");
