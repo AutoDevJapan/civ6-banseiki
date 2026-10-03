@@ -7,6 +7,19 @@ pub const EXPECTED_SHA256: &str =
 pub const MAX_SECONDS: u64 = 300;
 pub const MAX_ROWS: usize = 20_000;
 
+/// One parent/child startup contract. The parent stops waiting for ready at
+/// 10 seconds and reserves the remainder of its 20 second absolute deadline
+/// for the child's 6 second restore and verified owned-game closure.
+pub mod startup_contract {
+    use std::time::Duration;
+    pub const TOTAL: Duration = Duration::from_secs(20);
+    pub const PARENT_READY: Duration = Duration::from_secs(10);
+    pub const CHILD_READY: Duration = Duration::from_secs(8);
+    pub const RESTORE: Duration = Duration::from_secs(6);
+    pub const CLOSE_RESERVE: Duration = Duration::from_secs(2);
+    pub const CRITICAL_WAIT: Duration = Duration::from_secs(12);
+}
+
 /// A return address identifies a call site only when its preceding instruction
 /// is a direct E8 call to the observed entry. A tail jump has no new return
 /// address; in that case this returns None rather than inventing a caller.
@@ -78,5 +91,13 @@ mod tests {
         assert_eq!(bool_from_al(0), Some(false));
         assert_eq!(bool_from_al(1), Some(true));
         assert_eq!(bool_from_al(2), None);
+    }
+
+    #[test]
+    fn startup_deadline_reserves_cleanup_and_owned_close() {
+        use startup_contract::*;
+        assert!(CHILD_READY < PARENT_READY);
+        assert!(PARENT_READY + RESTORE + CLOSE_RESERVE <= TOTAL);
+        assert!(CRITICAL_WAIT < TOTAL);
     }
 }

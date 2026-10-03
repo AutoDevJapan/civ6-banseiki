@@ -1,6 +1,10 @@
 //! Windows x64 hardware breakpoint observer. No target memory or executable
 //! bytes are written. The only target changes are per-thread debug registers,
 //! which are snapshotted and restored before detach.
+use crate::startup_contract::{
+    CHILD_READY as ATTACH_READY_BUDGET, CRITICAL_WAIT as CRITICAL_CLOSE_BUDGET,
+    RESTORE as RESTORE_BUDGET,
+};
 use crate::{
     bool_from_al, direct_call_rva, known_path, CAN_APPOINT_RVA, CAN_EVER_RVA, EXPECTED_SHA256,
     MAX_ROWS,
@@ -62,8 +66,6 @@ const THREAD_RIGHTS: u32 = THREAD_GET_CONTEXT
     | THREAD_SUSPEND_RESUME
     | THREAD_QUERY_INFORMATION
     | THREAD_SYNCHRONIZE;
-const RESTORE_BUDGET: Duration = Duration::from_secs(6);
-const CRITICAL_CLOSE_BUDGET: Duration = Duration::from_secs(12);
 
 fn announce_critical_and_wait_for_owned_game(
     game: &Handle,
@@ -1060,7 +1062,7 @@ impl Debugger {
                 // The attach breakpoint is the only point at which ready is sent.
                 break;
             }
-            if started.elapsed() > Duration::from_secs(15) {
+            if started.elapsed() > ATTACH_READY_BUDGET {
                 let cleanup = self.cleanup(None);
                 return Err(format!(
                     "debugger attach handshake timed out; detach: {cleanup:?}"

@@ -20,7 +20,11 @@
 
 ## live_chainからの接続
 
-Rust runnerのシナリオに次を追加できる。observer実行時には`CIV6_LIVE_CHAIN_PID`と`CIV6_LIVE_LOCK_PATH`が必須で、共有ロックの一致がなければ開始しない。`civ6-native-probe.exe`はrunner実行ファイルと同じディレクトリに配置する。開始時はJSONのready応答を最大20秒待ち、停止時はobserverの終了を待って`<name>.jsonl`を回収する。runnerのエラー時とDropでも停止を試みる。`stop`とDropは同じ20秒期限を共有し、終了要求と重大エラーへのゲーム終了要求を重複しない。observer自身もcontrollerの生存を監視する。
+Rust runnerのシナリオに次を追加できる。observer実行時には`CIV6_LIVE_CHAIN_PID`と`CIV6_LIVE_LOCK_PATH`が必須で、共有ロックの一致がなければ開始しない。`civ6-native-probe.exe`はrunner実行ファイルと同じディレクトリに配置する。runnerはゲームのprocess handleを保持し、渡された作成時刻とOSから読み直したFILETIMEを既存runnerと同じ式でUnix時刻へ変換して照合する。許容差は0秒。不一致ならobserverを起動しない。保持した同じPID・FILETIME・実行ファイルパスをobserverの引数と、失敗時の終了対象に使う。
+
+起動前に単一の絶対期限を定める。親の**起動全体は20秒**、ready待ちは最初の10秒、子のattach ready待ちは8秒、復元再試行は6秒、親による同一ゲームの終了要求に最後の2秒を確保する。これらは`civ6-native-probe-rs::startup_contract`の共通定数で管理する。通常の停止はその要求時から別の20秒期限とし、`stop`とDropが共有する。共有ロックの残りが起動20秒に足りなければ起動前に拒否する。readyを得られず停止へ移った場合、遅れて届いたreadyを成功に変えない。
+
+生命周期は`attaching → ready → stopping → detached`を正常経路とする。ready待ち失敗やOS異常は`stopping → critical → target_exited`へ進む。子が終了しても標準出力の終端まで重大エラー通知を読み、JSONL末尾の`stop/detached=true/result=ok`と終了コードを照合できなければ正常終了にしない。期限内にdetachも同一ゲームの終了も確認できない場合は`unresolved`で失敗する。runnerのエラー時とDropも同じ期限を使い、終了要求を重複しない。observer自身もcontrollerの生存を監視する。
 
 復元・detach・thread再開でOSが失敗した場合は、6秒以内で再試行する。復元値を確認できない間は通常detachへ進まない。期限後は`critical_cleanup`をJSONLとcontrollerの標準出力へ通知し、observerはdebuggerに留まって終了イベントを処理する。runnerは同じPID・作成時刻のゲームだけを既存の終了関数で閉じ、試験を失敗として記録する。ゲーム終了の確認を最大12秒待つ。`DebugSetProcessKillOnExit(FALSE)`の初回失敗も、detachを確認するか終了時のkillを無効にできるまで再試行し、どちらもできない場合は同じ重大エラー経路に入る。ゲーム終了まで確認できないOS障害は`critical_cleanup unresolved`で報告し、安全な正常停止とは扱わない。
 
@@ -34,7 +38,7 @@ runnerは開始と停止の対、名前、300秒上限、観測中のゲーム�
 ## 独立検査と限界
 
 - Windowsの専用Rust子プロセスで、入口のRCX/EDX、ALのtrue/false、attach後の新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが同じ関数を実行でき、debug registerがattach前と同値であることを子プロセス側から確かめた。`SetThreadContext`拒否を注入した試験では再試行後の復元と、永続拒否時の重大エラー通知からcontrollerが専用子プロセスを終了する経路を区別した。実Civ6では未検査。
-- runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用observerが停止しない場合も、`stop`とDropの合計待機が単一の期限を超えず、重大エラーが重複しても終了要求が1回であることを確認した。実ゲームのready handshakeと30分leaseは未検査。
+- runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実ゲームのready handshakeと30分leaseは未検査。
 - このworktree専用の`CARGO_TARGET_DIR`で`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`が成功した。Lua 5.1の検査を含み、表示された検査は省略0件だった。最後のprocess-handle権限とDLL debug event handleの修正後に、観測器単体の`--all-targets`も再実行して成功した。
 - `tools/civ6-pe-rs`は別worktreeの読取専用PE調査器で、今回のworktreeにはない。今回のツールは既知の2入口のファイルオフセットを固定してバイト比較するだけで、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移し、この観測器から参照する。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。

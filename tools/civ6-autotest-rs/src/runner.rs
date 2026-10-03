@@ -323,7 +323,13 @@ impl Backend for SystemBackend {
         if self.native_trace.is_some() {
             return Err(Error::scenario("native governor trace already active"));
         }
-        self.live_lease_budget()?;
+        if self.live_lease_budget()?.is_some_and(|remaining| {
+            remaining <= civ6_native_probe_rs::startup_contract::TOTAL.as_secs_f64()
+        }) {
+            return Err(Error::input(
+                "live_chain lease has less than 20 seconds for native observer startup",
+            ));
+        }
         self.require_single_process()?;
         let (pid, start) = self
             .single_process(0.0)?

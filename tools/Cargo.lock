@@ -249,6 +249,7 @@ dependencies = [
  "caseless",
  "chrono",
  "civ6-cli-compat-rs",
+ "civ6-native-probe-rs",
  "civ6-reports-rs",
  "clap",
  "crc32fast",
