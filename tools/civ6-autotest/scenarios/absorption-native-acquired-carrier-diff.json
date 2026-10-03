@@ -24,8 +24,13 @@
       "timeout": 600
     },
     {
-      "action": "pause",
-      "seconds": 5
+      "action": "wait_for",
+      "timeout": 180,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_Absorption\nlocal tx=a and a.GetState().Transactions['native-acquired-palace-route']\nfor _,work in ipairs(tx and tx.NativeWorks or {}) do\n if work.Source.Index==2 then\n  local carrier=work.Carrier\n  local city=carrier and CityManager.GetCityAt(carrier.X,carrier.Y)\n  return carrier and carrier.Phase=='RETURN' and city and city:GetOwner()==carrier.Owner\n   and city:GetBuildings():GetGreatWorkInSlot(carrier.Building,carrier.Slot)==2\n end\nend\nreturn false"
+      }
     },
     {
       "action": "ui_lua",
