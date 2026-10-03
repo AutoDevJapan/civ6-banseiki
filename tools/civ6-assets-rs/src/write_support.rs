@@ -249,7 +249,7 @@ pub fn scenarios(maps: &Path, human_slug: &str) -> Result<Vec<(String, Value)>> 
         );
         let name = format!("JAC-JapanMap-{km}km-01");
         let mut steps = vec![
-            json!({"action":"enable_mods","ids":[BANSEIKI_RULESET_ID,CUSTOM_CIVS_ID,GROWTH_UI_ID,SENGOKU_TREES_ID,MOD_ID],"disable_ids":[BUNDLE0_ID,STATIC_PERSONA_GATE_ID]}),
+            json!({"action":"enable_mods","ids":[BANSEIKI_RULESET_ID,CUSTOM_CIVS_ID,GROWTH_UI_ID,SENGOKU_TREES_ID,MOD_ID],"disable_ids":[STATIC_PERSONA_GATE_ID,BUNDLE0_ID]}),
             json!({"action":"configure","build_setup":true,"ruleset":"RULESET_JAC_BANSEIKI","map_file":format!("{{{MOD_ID}}}Maps/{}",s(&item["file"])),"map_size":"MAPSIZE_HUGE","speed":"GAMESPEED_STANDARD","seed":620929+km,"city_states":0,"players":players}),
             json!({"action":"start_game","timeout":600}),
             json!({"action":"ui_lua","state_name":"InGame","code":start}),
@@ -335,7 +335,7 @@ pub fn resource_scenario(maps: &Path) -> Result<Value> {
         .map(|(i, s)| json!({"leader":s.leader,"civ":s.civ,"human":i==0}))
         .collect();
     Ok(
-        json!({"name":"JAC Japan resources: custom rows, tech gates, improvements, calendar-year site release (15 km, 1534 to 1542)","judge_profile":"generic","steps":[{"action":"enable_mods","ids":[BANSEIKI_RULESET_ID,CUSTOM_CIVS_ID,GROWTH_UI_ID,SENGOKU_TREES_ID,MOD_ID],"disable_ids":[BUNDLE0_ID,STATIC_PERSONA_GATE_ID]},{"action":"configure","build_setup":true,"ruleset":"RULESET_JAC_BANSEIKI","map_file":format!("{{{MOD_ID}}}Maps/{}",s(&item["file"])),"map_size":"MAPSIZE_HUGE","speed":"GAMESPEED_STANDARD","seed":620960,"city_states":0,"players":players},{"action":"start_game","timeout":600},{"action":"wait_for","condition":{"type":"log_line","log":"Lua.log","contains":"[JAC_RESOURCES] loaded"},"timeout":60},{"action":"ui_lua","state_name":"InGame","code":static_code},{"action":"ui_lua","state_name":"InGame","code":release(1534)},{"action":"autoplay","turns":24,"timeout":3600},{"action":"wait_for","condition":{"type":"log_line","log":"Lua.log","contains":"[JAC_RESOURCES] revealed silver-ikuno"},"timeout":30},{"action":"ui_lua","state_name":"InGame","code":release(1542)}]}),
+        json!({"name":"JAC Japan resources: custom rows, tech gates, improvements, calendar-year site release (15 km, 1534 to 1542)","judge_profile":"generic","steps":[{"action":"enable_mods","ids":[BANSEIKI_RULESET_ID,CUSTOM_CIVS_ID,GROWTH_UI_ID,SENGOKU_TREES_ID,MOD_ID],"disable_ids":[STATIC_PERSONA_GATE_ID,BUNDLE0_ID]},{"action":"configure","build_setup":true,"ruleset":"RULESET_JAC_BANSEIKI","map_file":format!("{{{MOD_ID}}}Maps/{}",s(&item["file"])),"map_size":"MAPSIZE_HUGE","speed":"GAMESPEED_STANDARD","seed":620960,"city_states":0,"players":players},{"action":"start_game","timeout":600},{"action":"wait_for","condition":{"type":"log_line","log":"Lua.log","contains":"[JAC_RESOURCES] loaded"},"timeout":60},{"action":"ui_lua","state_name":"InGame","code":static_code},{"action":"ui_lua","state_name":"InGame","code":release(1534)},{"action":"autoplay","turns":24,"timeout":3600},{"action":"wait_for","condition":{"type":"log_line","log":"Lua.log","contains":"[JAC_RESOURCES] revealed silver-ikuno"},"timeout":30},{"action":"ui_lua","state_name":"InGame","code":release(1542)}]}),
     )
 }
 pub fn main_to(maps: &Path, output: &Path, scenarios_dir: &Path) -> Result<()> {
