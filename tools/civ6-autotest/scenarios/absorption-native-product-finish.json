@@ -1,0 +1,51 @@
+{
+  "name": "Absorption native work saved return finishes with exact world and ledger proof",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-after-restart-stage-absorb-flow-55-a3d2c319cb72",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nfor _,city in ipairs(tx.Cities or {}) do\n local live=CityManager.GetCityAt(city.X,city.Y)\n if not live or live:GetOwner()~=tx.To then return false end\n local ok,value=pcall(reads.ReadCity,tx.To,live:GetID(),'LOYALTY')\n if not ok or type(value)~='number' then return false end\nend\nfor _,unit in ipairs(tx.Units or {}) do\n for _,read in pairs(unit.SpreadReads or {}) do\n  if read.AwaitingUI and reads.GetUnitObservation(read.Token)==nil then return false end\n end\nend\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal before=assert(A.GetState().Transactions[id])\nlocal external,ordinary\nfor _,work in ipairs(before.NativeWorks or {}) do if work.Custodian then external=work else ordinary=work end end\nassert(external and external.PhysicalMoved and external.TargetSlot,'saved external work was not physically proved')\nlocal tx=A.Resume(id)\nlocal located=A.NativeWorkLocations(external.Source.Index)\nassert(#located==1,'returned original index missing or duplicated after saved resume')\nlocal w=located[1];local slot=external.TargetSlot\nassert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'returned original left the reserved official slot')\nlocal source=assert(CityManager.GetCityAt(external.Source.X,external.Source.Y))\nassert(source:GetOwner()==tx.To,'old donor city not transferred to absorber')\nlocal assets=A.CityAssets(source)\nassert(assets[external.Source.BuildingType].Works[external.Source.Slot]==-1,'old donor source slot not empty')\nlocal movedCities=0\nfor _,snap in ipairs(tx.Cities or {}) do local city=assert(CityManager.GetCityAt(snap.X,snap.Y));if city:GetOwner()==tx.To then movedCities=movedCities+1 end end\nassert(movedCities==#tx.Cities,'not all old cities moved to absorber')\nif tx.Status=='COMPLETE' then\n assert(A.Verify(id,false),'completed product verification failed')\n local returned=assert(A.GetRoster(external.Custodian)[external.ID])\n assert(returned.NativeWork.Index==w.Index and returned.NativeCustody.Owner==w.Owner and returned.NativeCustody.City==w.CityID and returned.NativeCustody.Building==w.Building and returned.NativeCustody.Slot==w.Slot,'returned work custody ledger differs from official slot')\n if ordinary then local own=A.NativeWorkLocations(ordinary.Source.Index);assert(#own==1 and own[1].Owner==tx.To,'ordinary work lost on city transfer');local record=assert(A.GetRoster(tx.To)[ordinary.ID]);assert(record.NativeCustody.Owner==own[1].Owner and record.NativeCustody.City==own[1].CityID and record.NativeCustody.Building==own[1].Building and record.NativeCustody.Slot==own[1].Slot,'ordinary work ledger differs from official slot') end\nend\nprint('[JAC_NATIVE_PRODUCT_FINISH] status='..tx.Status..' cities='..movedCities..'/'..#tx.Cities..' returnIndex='..w.Index..' destination='..w.Owner..':'..w.CityID..':'..w.Building..':'..w.Slot..' finalUI='..tostring(tx.AwaitingFinalUI))\nreturn 'saved native product absorption status '..tx.Status"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-after-final-resume"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local tx=assert(A.GetState().Transactions['native-product-return-probe']);assert(tx.Status=='COMPLETE','native product absorption still waits after saved resume: '..tostring(tx.Status));assert(A.Verify(tx.ID,false),'completed native product state failed verification');return 'native product absorption complete after save and reload'"
+    }
+  ]
+}
