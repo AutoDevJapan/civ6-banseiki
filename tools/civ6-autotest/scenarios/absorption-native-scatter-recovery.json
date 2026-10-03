@@ -1,0 +1,88 @@
+{
+  "name": "Native scatter world claim and original relic recovery",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-scatter-reward-ready-absorb-flow-82-965040190c0e",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local F=ExposedMembers.JAC_AbsorptionFlow\nlocal w=F and F.GetWorld('native-scatter-flow:native-work:2')\nlocal p=w and w.Site and Map.GetPlotByIndex(w.Site)\nreturn w and w.Status=='WAIT_CLEAR' and p and p:GetImprovementType()==w.Improvement"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal id='native-scatter-flow:native-work:2'\nlocal world=assert(F.GetWorld(id))\nassert(world.Status=='WAIT_CLEAR' and world.Kind=='ITEM' and world.AssetID=='native-work:2','reward state changed')\nlocal plot=assert(Map.GetPlotByIndex(world.Site))\nassert(plot:GetImprovementType()==world.Improvement,'actual reward improvement absent')\nlocal original=A.NativeWorkLocations(2)\nlocal carrier=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nassert(#original==1 and original[1].Owner==carrier.Free and original[1].X==carrier.X and original[1].Y==carrier.Y and original[1].Building==carrier.Building and original[1].Slot==carrier.Slot,'original work not in Free Cities exact carrier')\nlocal target=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')).HumanSlot\nlocal city=assert(CityManager.GetCityAt(target.X,target.Y))\nassert(city:GetOwner()==target.Owner and city:GetID()==target.City and A.CityAssets(city).BUILDING_TEMPLE.Works[target.Slot]==-1,'recovery target changed')\nlocal before={};for _,unit in Players[1]:GetUnits():Members() do before[unit:GetID()]=true end\nUnitManager.InitUnitValidAdjacentHex(1,'UNIT_WARRIOR',plot:GetX(),plot:GetY(),8)\nlocal claimant\nfor _,unit in Players[1]:GetUnits():Members() do if not before[unit:GetID()] and GameInfo.Units[unit:GetType()].UnitType=='UNIT_WARRIOR' then assert(not claimant,'ambiguous reward claimant');claimant=unit end end\nassert(claimant,'reward claimant not created')\nUnitManager.PlaceUnit(claimant,plot:GetX(),plot:GetY())\nassert(claimant:GetX()==plot:GetX() and claimant:GetY()==plot:GetY(),'claimant did not reach site')\nImprovementBuilder.SetImprovementType(plot,-1,-1)\nassert(plot:GetImprovementType()~=world.Improvement,'reward site was not cleared')\nF.Tick()\nworld=assert(F.GetWorld(id))\nassert((world.Status=='CLAIMED' or world.Status=='COMPLETE') and world.Recipient==1,'real site did not trigger product claim: '..tostring(world.Error))\nlocal recovery=assert(A.GetState().Recoveries['recovery:'..id])\nassert(recovery.ID=='native-work:2' and recovery.Owner==1,'recovery intent did not preserve original identity')\nprint('[JAC_NATIVE_SCATTER_CLAIMED] world='..world.Status..' recovery='..recovery.Status..' site='..world.Site)\nreturn 'real claimant cleared site and product recovery started'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-scatter-recovery-started"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local F=ExposedMembers.JAC_AbsorptionFlow\nlocal w=F and F.GetWorld('native-scatter-flow:native-work:2')\nlocal target=Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')\nlocal city=target and CityManager.GetCityAt(target.HumanSlot.X,target.HumanSlot.Y)\nreturn w and w.Status=='COMPLETE' and city and city:GetOwner()==1 and city:GetBuildings():GetGreatWorkInSlot(target.HumanSlot.Building,target.HumanSlot.Slot)==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal id='native-scatter-flow:native-work:2'\nlocal world=assert(F.GetWorld(id))\nassert(world.Status=='COMPLETE' and world.Recipient==1,'world recovery incomplete: '..tostring(world.Error))\nlocal intent=assert(A.GetState().Recoveries['recovery:'..id])\nassert(intent.Status=='COMPLETE' and intent.NativePhysicalMoved and intent.NativeCarrier and intent.NativeCarrier.Phase=='PROVED','native product carrier not physically proved')\nlocal target=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')).HumanSlot\nlocal carrier=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal found=A.NativeWorkLocations(2)\nassert(#found==1 and found[1].Owner==1 and found[1].CityID==target.City and found[1].X==target.X and found[1].Y==target.Y and found[1].Building==target.Building and found[1].Slot==target.Slot,'original index missing from exact human Temple')\nlocal free=assert(CityManager.GetCityAt(carrier.X,carrier.Y))\nassert(free:GetOwner()==carrier.Free and A.CityAssets(free).BUILDING_TEMPLE.Works[carrier.Slot]==-1,'borrowed Free Cities carrier not returned empty')\nlocal original=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')).Source\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(found[1][key]==original[key],'recovered original metadata changed: '..key) end\nassert(A.Rules.Equal(found[1].Effects,original.Effects),'recovered original effects changed')\nlocal item=assert(A.GetRoster(1)['native-work:2'])\nassert(item.Outcome=='RECOVERED' and item.RecoveryToken=='recovery:'..id and item.NativeCustody.Owner==1 and item.NativeCustody.City==target.City and item.NativeCustody.Building==target.Building and item.NativeCustody.Slot==target.Slot,'recovered roster does not match real original')\nlocal before=A.Canonical({World=world,Record=item,Recovery=intent})\nF.Tick()\nassert(A.Canonical({World=F.GetWorld(id),Record=A.GetRoster(1)['native-work:2'],Recovery=A.GetState().Recoveries['recovery:'..id]})==before,'repeated recovery changed completed identity')\nprint('[JAC_NATIVE_SCATTER_RECOVERED] index=2 owner=1 city='..found[1].CityID..' world='..world.Status)\nreturn 'product recovered the original index exactly once through real reward site'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-scatter-recovered"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-native-scatter-recovered",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local F=ExposedMembers.JAC_AbsorptionFlow\nlocal w=F and F.GetWorld('native-scatter-flow:native-work:2')\nlocal target=Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')\nlocal city=target and CityManager.GetCityAt(target.HumanSlot.X,target.HumanSlot.Y)\nreturn w and w.Status=='COMPLETE' and city and city:GetOwner()==1 and city:GetBuildings():GetGreatWorkInSlot(target.HumanSlot.Building,target.HumanSlot.Slot)==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal id='native-scatter-flow:native-work:2'\nlocal world=assert(F.GetWorld(id))\nlocal recovery=assert(A.GetState().Recoveries['recovery:'..id])\nlocal item=assert(A.GetRoster(1)['native-work:2'])\nlocal target=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')).HumanSlot\nlocal work=A.NativeWorkLocations(2)\nassert(world.Status=='COMPLETE' and world.Recipient==1 and recovery.Status=='COMPLETE' and recovery.NativeCarrier.Phase=='PROVED','completed recovery did not survive reload')\nassert(#work==1 and work[1].Owner==1 and work[1].CityID==target.City and work[1].Building==target.Building and work[1].Slot==target.Slot,'original work physical destination changed after reload')\nassert(item.NativeCustody.Owner==work[1].Owner and item.NativeCustody.City==work[1].CityID and item.NativeCustody.Building==work[1].Building and item.NativeCustody.Slot==work[1].Slot,'recovery roster and physical slot differ after reload')\nprint('[JAC_NATIVE_SCATTER_RECOVERY_RELOAD] index=2 city='..work[1].CityID..' status='..world.Status)\nreturn 'same original index and completed world reward survive save and reload'"
+    }
+  ]
+}
