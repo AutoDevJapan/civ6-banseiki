@@ -607,7 +607,14 @@ fn japanese_recall_continuation_keeps_every_remaining_original_check() {
     assert_eq!(original_steps.len(), 127);
     assert_eq!(continued_steps.len(), 29);
     assert_eq!(continued_steps[1]["exact_name"], true);
-    assert_eq!(&continued_steps[2..], &original_steps[100..]);
+    assert_eq!(continued_steps[2], original_steps[100]);
+    assert_eq!(original_steps[101]["equals_capture"], "ABSORPTION_AFTER_AI_TURN");
+    assert_eq!(continued_steps[3]["code"], original_steps[101]["code"]);
+    assert_eq!(
+        continued_steps[3]["capture"],
+        "ABSORPTION_AFTER_AI_TURN_CONTINUATION"
+    );
+    assert_eq!(&continued_steps[4..], &original_steps[102..]);
 }
 
 // This fixture tests the scenario's physical oracle, not engine API availability.
