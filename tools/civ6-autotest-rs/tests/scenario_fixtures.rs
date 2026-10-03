@@ -667,7 +667,11 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             } else {
                 assert!(isolated.iter().any(|id| id == ENEMY_GATE_MOD), "{name}");
             }
-            if name == "leader-persona-trait-grant-15km.json" {
+            if matches!(
+                name.as_str(),
+                "leader-persona-trait-grant-15km.json"
+                    | "leader-persona-trait-grant-native-control-15km.json"
+            ) {
                 assert!(strings("ids").iter().any(|id| id == TRAIT_GRANT_MOD));
             } else {
                 assert!(isolated.iter().any(|id| id == TRAIT_GRANT_MOD), "{name}");
@@ -682,7 +686,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 82);
+    assert_eq!(count, 83);
 }
 
 #[test]

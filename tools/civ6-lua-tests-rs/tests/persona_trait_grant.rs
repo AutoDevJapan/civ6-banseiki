@@ -186,8 +186,10 @@ fn fixture() -> Lua {
 local leader='LEADER_JAC_ASHINA_MORIKIYO'
 ORDER={}; PROPERTIES={}; JOIN_OK=true; POINTS=1; SPENT=0; ATTACHED=0
 Game={GetProperty=function(_,key) return PROPERTIES[key] end,
-      SetProperty=function(_,key,value) PROPERTIES[key]=value end}
-GameEvents={JAC_TestPersonaTraitGrantPrepare={Add=function(f) HANDLER=f end}}
+      SetProperty=function(_,key,value) PROPERTIES[key]=value end,
+      GetCurrentGameTurn=function() return 3 end}
+GameEvents={JAC_TestPersonaTraitGrantPrepare={Add=function(f) HANDLER=f end},
+            JAC_TestPersonaTraitGrantObserve={Add=function(f) OBSERVE=f end}}
 local player={IsHuman=function() return true end, IsAlive=function() return true end,
     GetCulture=function() return {} end,
     GetGovernors=function() return {GetGovernorPoints=function() return POINTS end,
@@ -261,4 +263,26 @@ fn owner_modifier_is_attached_only_after_real_join_and_full_reservation() {
         .unwrap();
     assert_eq!(order, "join");
     assert_eq!(attached, 0);
+}
+
+#[test]
+fn native_request_observation_reads_the_official_account_and_rejects_other_owners() {
+    let lua = fixture();
+    lua.load("fire(0); OBSERVE(0)").exec().unwrap();
+    let (owner, turn, total, spent): (i64, i64, i64, i64) = lua
+        .load("local o=PROPERTIES.JAC_TEST_PERSONA_TRAIT_GRANT_OBSERVATION; return o.owner,o.turn,o.total,o.spent")
+        .strict_eval().unwrap();
+    assert_eq!((owner, turn, total, spent), (0, 3, 1, 0));
+    lua.load("SPENT=1; OBSERVE(0)").exec().unwrap();
+    let spent: i64 = lua
+        .load("return PROPERTIES.JAC_TEST_PERSONA_TRAIT_GRANT_OBSERVATION.spent")
+        .strict_eval()
+        .unwrap();
+    assert_eq!(spent, 1);
+    assert!(lua.load("OBSERVE(2)").exec().is_err());
+    let spent: i64 = lua
+        .load("return PROPERTIES.JAC_TEST_PERSONA_TRAIT_GRANT_OBSERVATION.spent")
+        .strict_eval()
+        .unwrap();
+    assert_eq!(spent, 1);
 }

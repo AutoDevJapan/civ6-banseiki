@@ -62,3 +62,17 @@ GameEvents.JAC_TestPersonaTraitGrantPrepare.Add(function(owner)
     print("JAC_TEST_PERSONA_TRAIT_GRANT attached owner=" .. tostring(owner) ..
         " source=" .. tostring(source) .. " modifier=" .. MODIFIER);
 end);
+
+-- Read the official account after the native request and a complete real turn.
+-- This receipt classifies a probe; it never grants a Governor or spends a title.
+GameEvents.JAC_TestPersonaTraitGrantObserve.Add(function(owner)
+    local receipt = assert(Game:GetProperty(RECEIPT), "prepared trait probe missing");
+    local player = assert(Players[owner], "observation owner missing");
+    assert(owner == receipt.owner and player:IsHuman() and player:IsAlive(),
+        "observation owner differs from the real joining owner");
+    local governors = player:GetGovernors();
+    Game:SetProperty("JAC_TEST_PERSONA_TRAIT_GRANT_OBSERVATION", {
+        owner=owner, turn=Game.GetCurrentGameTurn(),
+        total=governors:GetGovernorPoints(), spent=governors:GetGovernorPointsSpent()
+    });
+end);
