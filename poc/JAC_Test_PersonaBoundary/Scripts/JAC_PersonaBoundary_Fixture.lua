@@ -23,7 +23,12 @@ GameEvents.JAC_BoundaryGameplayApiProbe.Add(function(owner)
     end
     local function raw_member_type(object, key)
         if type(object) ~= "table" then return "not_table"; end
-        return type(rawget(object, key));
+        -- Persistent Gameplay omits rawget in the real game (live 88).
+        -- Lua 5.1 pairs enumerates stored entries without synthesizing __index.
+        for stored_key,value in pairs(object) do
+            if stored_key==key then return type(value); end
+        end
+        return "nil";
     end
     local function metadata(object)
         local ok, mt = pcall(getmetatable, object);

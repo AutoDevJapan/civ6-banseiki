@@ -142,6 +142,9 @@ fn field<T: FromLua>(table: &Table, key: &str) -> T {
 fn persistent_gameplay_api_probe_only_records_published_members() {
     let h = Boundary::new();
     h.fixture();
+    h.0.load("rawget=nil; setmetatable(GameEvents,{__index=function() error('unpublished event lookup') end}); setmetatable(Events,{__index=function() error('unpublished event lookup') end})")
+        .exec()
+        .unwrap();
     h.event("JAC_BoundaryGameplayApiProbe").unwrap();
     let result: String = h.game_property("JAC_BOUNDARY_GAMEPLAY_API_PROBE");
     assert!(result.contains("source=persistent_gameplay|owner=0"));
