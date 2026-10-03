@@ -1007,6 +1007,19 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           'carrier borrowing mutated donor assets before the work MOVE')
         local carrier=assert(pending.NativeWorks[1].Carrier)
         assert(carrier.Phase=='BORROW' and carrier.Route=='TO_FREE')
+        local originalBuildings=CITIES[16].GetBuildings
+        CITIES[16].GetBuildings=function(self)
+          local buildings=originalBuildings(self)
+          buildings.GetGreatWorkInSlot=nil -- borrowed city is absent from the fresh UI cache
+          return buildings
+        end
+        ExposedMembers.JAC_HeroReadAPI.ReadCity=function()
+          error('UI city cache is not ready')
+        end
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and CITIES[16]:GetOwner()==1,
+          'stale borrowed-city cache became a permanent BLOCKED result')
+        CITIES[16].GetBuildings=originalBuildings
+        ExposedMembers.JAC_HeroReadAPI.ReadCity=nil
         assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and TRANSFERS==1)
         PUBLISHED[carrier.BorrowToken]=true
         pending=A.Resume(PLAN.ID)

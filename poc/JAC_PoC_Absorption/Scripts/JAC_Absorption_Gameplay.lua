@@ -1824,8 +1824,15 @@ end
 local function AdvanceNativeCarrier(state, carrier)
   local city = assert(CityManager.GetCityAt(carrier.X, carrier.Y),
     "native Great Work carrier city disappeared")
-  local slotValue = city:GetBuildings():HasBuilding(carrier.Building)
-    and WorkInSlot(city, carrier.Building, carrier.Slot)
+  local slotValue = false
+  if city:GetBuildings():HasBuilding(carrier.Building) then
+    local ok, value = pcall(WorkInSlot, city, carrier.Building, carrier.Slot)
+    if not ok then
+      if tostring(value):find("UI city cache is not ready", 1, true) then return false end
+      error(value)
+    end
+    slotValue = value
+  end
   assert(slotValue ~= nil, "native Great Work carrier building disappeared")
   if carrier.Phase == "BORROW" then
     local expected = carrier.Route == "TO_FREE" and -1 or carrier.Index
