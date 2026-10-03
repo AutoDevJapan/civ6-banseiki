@@ -442,7 +442,7 @@ fn native_matrix_oracle() -> mlua::Result<Lua> {
     lua.load(
         r#"
         ExposedMembers={}
-        Game={GetProperty=function() return {} end,GetLocalPlayer=function() return 1 end}
+        Game={GetProperty=function() return {FreeCity=3} end,GetLocalPlayer=function() return 1 end}
         local function city(owner,id,x)
           local c={owner=owner,id=id,x=x,slots={[1]={[0]=-1,[1]=-1},[2]={[0]=-1,[1]=-1}}}
           function c:GetOwner() return self.owner end
@@ -470,7 +470,7 @@ fn native_matrix_oracle() -> mlua::Result<Lua> {
             return {Members=function() return ipairs(owned) end}
           end}
         end
-        PlayerManager={GetAliveIDs=function() return {1,2} end,GetFreeCitiesPlayerID=function() return 3 end}
+        PlayerManager={GetAliveIDs=function() return {1,2} end}
         CityManager={GetCityAt=function(x,y) return ORACLE_CITIES[x] end}
         GameInfo={
           Buildings=function() local i=0;return function() i=i+1;if i<=2 then return {Index=i} end end end,
@@ -524,6 +524,7 @@ fn native_matrix_requires_unique_exact_index_and_empty_source() -> mlua::Result<
         r#"
         local M=ExposedMembers.JAC_NativeMatrix
         local s,d=ORACLE_SOURCE,ORACLE_DEST
+        assert(PlayerManager.GetFreeCitiesPlayerID==nil,'UI-only oracle gained a Core getter')
         assert(not M.Check('unchanged',0,s,d))
         assert(M.Request('local-official',1,1,0,s,d))
         assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil)

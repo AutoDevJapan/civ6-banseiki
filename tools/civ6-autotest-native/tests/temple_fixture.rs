@@ -214,7 +214,8 @@ fn world() -> mlua::Result<Lua> {
             Members=function() return ipairs({cap,control}) end}
         end},[2]={GetID=function() return 2 end,IsHuman=function() return false end,
           GetCities=function() return {GetCapitalCity=function() return dealTarget end} end}}
-        PlayerManager={GetAliveMajors=function() return {Players[1],Players[2]} end}
+        PlayerManager={GetAliveMajors=function() return {Players[1],Players[2]} end,
+          GetFreeCitiesPlayerID=function() return 3 end}
         function PUBLISH()
           assert(#PENDING==1,'one stage must be requested at a time')
           local r=table.remove(PENDING,1)
@@ -528,6 +529,7 @@ fn gameplay_grant_uses_detached_observation_after_ui_functions_are_removed() -> 
         assert(GRANTED)
         local t=Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE')
         assert(t.Before and next(t.Before)==nil)
+        assert(t.FreeCity==3)
         assert(t.Palace.Owner==1 and t.Palace.City==10 and t.Palace.Building==1)
         assert(t.Fixtures.source.Request.Stage=='Temple')
         "#,
