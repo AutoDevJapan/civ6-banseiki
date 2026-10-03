@@ -1,5 +1,5 @@
 {
-  "name": "JAC native work direct deal proof",
+  "name": "JAC native Great Work official proposed deal proof",
   "judge_profile": "generic",
   "steps": [
     {
@@ -289,6 +289,25 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal city=assert(CityManager.GetCityAt(t.Destination.X,t.Destination.Y))\nassert(city:GetOwner()==t.Target and city:GetID()==t.Destination.ID,\n 'AI target capital changed before Palace grant')\nlocal palace=assert(GameInfo.Buildings.BUILDING_PALACE).Index\nlocal buildings=city:GetBuildings()\nassert(buildings:HasBuilding(palace) and buildings:GetNumGreatWorkSlots(palace)==1 and\n buildings:GetGreatWorkInSlot(palace,0)==-1,\n 'AI target Palace must have exactly one empty slot')\nlocal temple=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('target','ai-palace:before')\nassert(temple.Temple and temple.SlotValue==-1,'AI target Temple slot occupied before Palace grant')\nExposedMembers.JAC_NativeDealTargetPalace={Owner=t.Target,City=city:GetID(),\n X=city:GetX(),Y=city:GetY(),Building=palace,Slot=0}\nreturn 'planned AI target Palace relic so only its Temple relic slot remains empty'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal palace=assert(ExposedMembers.JAC_NativeDealTargetPalace)\nassert(palace.Owner==t.Target and palace.City==t.Destination.ID and\n palace.X==t.Destination.X and palace.Y==t.Destination.Y,\n 'AI Palace observation changed before official grant')\nlocal player=Players[t.Target]\nlocal before={}\nfor _,work in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(t.Target)) do\n before[work.Index]=true\nend\nt.TargetBefore=before\nGame:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\nplayer:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\nreturn 'granted one official relic to AI target with Palace slot first'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal palace=assert(ExposedMembers.JAC_NativeDealTargetPalace)\nlocal city=assert(CityManager.GetCityAt(palace.X,palace.Y))\nassert(city:GetOwner()==t.Target and city:GetID()==palace.City)\nlocal index=city:GetBuildings():GetGreatWorkInSlot(palace.Building,0)\nlocal temple=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('target','ai-palace:publication')\nif not (type(index)=='number' and index>=0 and not t.TargetBefore[index]) then return false end\nassert(temple.Temple and temple.SlotValue==-1,\n 'AI target Temple was filled before donor deal')\nExposedMembers.JAC_NativeDealTargetPalaceIndex=index\nprint('[JAC_NATIVE_DEAL_AI_PALACE] index='..index..' owner='..t.Target..\n ' city='..palace.City..' building='..palace.Building..' slot=0')\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
       "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('source','grant');return 'observed source Temple slot '..tostring(r.SlotValue)"
     },
     {
@@ -336,22 +355,31 @@
     },
     {
       "action": "ui_lua",
-      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));assert(d.Owner==Game.GetLocalPlayer(),'native deal owner must be local');local manager=assert(DealManager,'DealManager is unavailable in UI');local working=manager.GetWorkingDeal and manager.GetWorkingDeal(d.Outgoing,d.Owner,target);local options=manager.GetPossibleDealItems and manager.GetPossibleDealItems(d.Owner,target,d.GreatWork,working);local candidate;for _,entry in ipairs(options or {}) do if entry.ForType==d.Work.Index then candidate=entry end end;print('[JAC_NATIVE_DEAL_API] target='..target..' working='..tostring(working~=nil)..' possible='..tostring(candidate~=nil)..' valid='..tostring(candidate and candidate.IsValid)..' enact='..type(manager.EnactWorkingDeal)..' send='..type(manager.SendWorkingDeal));assert(candidate and candidate.IsValid,'native great work is not a valid deal item');local deal=assert(working,'native working deal missing');local item=assert(deal:AddItemOfType(d.GreatWork,d.Owner));item:SetSubType(d.Work.Type);item:SetValueType(d.Work.Index);local validation=deal:Validate();print('[JAC_NATIVE_DEAL_VALID] result='..tostring(validation)..' isValid='..tostring(deal:IsValid()));assert(deal:IsValid(),'native deal invalid');return 'valid native working deal assembled; inspect dispatch and direct enactment remain separate'",
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));assert(d.Owner==Game.GetLocalPlayer(),'native deal owner must be local');local manager=assert(DealManager,'DealManager is unavailable in UI');local working=manager.GetWorkingDeal and manager.GetWorkingDeal(d.Outgoing,d.Owner,target);local options=manager.GetPossibleDealItems and manager.GetPossibleDealItems(d.Owner,target,d.GreatWork,working);local candidate;for _,entry in ipairs(options or {}) do if entry.ForType==d.Work.Index then candidate=entry end end;print('[JAC_NATIVE_DEAL_API] target='..target..' working='..tostring(working~=nil)..' possible='..tostring(candidate~=nil)..' valid='..tostring(candidate and candidate.IsValid)..' enact='..type(manager.EnactWorkingDeal)..' send='..type(manager.SendWorkingDeal));assert(candidate and candidate.IsValid,'native great work is not a valid deal item');local deal=assert(working,'native working deal missing');local item=assert(deal:AddItemOfType(d.GreatWork,d.Owner));item:SetSubType(d.Work.Type);item:SetValueType(d.Work.Index);local validation=deal:Validate();print('[JAC_NATIVE_DEAL_VALID] result='..tostring(validation)..' isValid='..tostring(deal:IsValid()));assert(deal:IsValid(),'native deal invalid');return 'valid native working deal assembled; official proposal and physical proof follow'",
       "state_name": "InGame"
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));local manager=assert(DealManager);assert(type(manager.SendWorkingDeal)=='function','official UI deal inspection dispatch unavailable');assert(DealProposalAction and DealProposalAction.INSPECT~=nil,'official INSPECT action unavailable');local ok,result=pcall(manager.SendWorkingDeal,DealProposalAction.INSPECT,d.Owner,target);print('[JAC_NATIVE_DEAL_INSPECT_DISPATCH] context=InGame actor='..Game.GetLocalPlayer()..' owner='..d.Owner..' target='..target..' ok='..tostring(ok)..' result='..tostring(result));assert(ok,tostring(result));return 'official INSPECT submitted; inspection is not accepted transfer'"
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData())\nlocal target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'))\nlocal manager=assert(DealManager)\nlocal deal=assert(manager.GetWorkingDeal(d.Outgoing,d.Owner,target))\nassert(deal:IsValid(),'outgoing native work deal invalid before proposal')\nassert(DealProposalAction and DealProposalAction.PROPOSED and\n DealProposalAction.ACCEPTED,'official proposal action IDs missing')\nlocal state={Owner=d.Owner,Target=target,Index=d.Work.Index,Responses={},Events=0}\nExposedMembers.JAC_NativeDealProposalProbe=state\nif Events.DiplomacyIncomingDeal and Events.DiplomacyIncomingDeal.Add then\n Events.DiplomacyIncomingDeal.Add(function(from,to,action)\n  if from==target and to==d.Owner then\n   state.Responses[#state.Responses+1]=action\n   print('[JAC_NATIVE_DEAL_RESPONSE] from='..from..' to='..to..' action='..tostring(action))\n  end\n end)\n state.IncomingEventAvailable=true\nend\nif LuaEvents and LuaEvents.DiploPopup_DealUpdated and LuaEvents.DiploPopup_DealUpdated.Add then\n LuaEvents.DiploPopup_DealUpdated.Add(function(other,action)\n  if other==target then print('[JAC_NATIVE_DEAL_POPUP_UPDATE] action='..tostring(action)) end\n end)\n state.PopupEventAvailable=true\nend\nlocal pending=type(manager.HasPendingDeal)=='function' and manager.HasPendingDeal(d.Owner,target) or nil\nprint('[JAC_NATIVE_DEAL_PROPOSE_BEFORE] pending='..tostring(pending)..' event='..\n tostring(state.IncomingEventAvailable)..' popup='..tostring(state.PopupEventAvailable))\nlocal ok,value=pcall(manager.SendWorkingDeal,DealProposalAction.PROPOSED,d.Owner,target)\nstate.Proposal={OK=ok,Value=tostring(value)}\nprint('[JAC_NATIVE_DEAL_PROPOSED] ok='..tostring(ok)..' value='..tostring(value))\nreturn 'submitted official PROPOSED action; no physical transfer claimed'"
     },
     {
       "action": "pause",
-      "seconds": 1
+      "seconds": 6
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));local manager=assert(DealManager);local locations=ExposedMembers.JAC_NativeDealLocations(d.Work.Index);assert(#locations==1 and locations[1].Owner==d.Owner and locations[1].City==d.Work.City and locations[1].X==d.Work.X and locations[1].Y==d.Work.Y and locations[1].Building==d.Work.Building and locations[1].Slot==d.Work.Slot,'INSPECT unexpectedly changed physical custody');assert(type(manager.EnactWorkingDeal)=='function','direct native deal enactment is unavailable');local deal=assert(manager.GetWorkingDeal(d.Outgoing,d.Owner,target));assert(deal:IsValid(),'native deal invalid after inspection');local ok,result=pcall(manager.EnactWorkingDeal,d.Owner,target);print('[JAC_NATIVE_DEAL_ENACT_DISPATCH] context=InGame actor='..Game.GetLocalPlayer()..' ok='..tostring(ok)..' result='..tostring(result));assert(ok,tostring(result));return 'direct enactment requested; same-index physical transfer remains unproven'"
+      "code": "local s=assert(ExposedMembers.JAC_NativeDealProposalProbe)\nlocal manager=assert(DealManager)\nlocal pending=type(manager.HasPendingDeal)=='function' and manager.HasPendingDeal(s.Owner,s.Target) or nil\nlocal incoming=manager.GetWorkingDeal and manager.GetWorkingDeal(DealDirection.INCOMING,s.Owner,s.Target)\nlocal outgoing=manager.GetWorkingDeal and manager.GetWorkingDeal(DealDirection.OUTGOING,s.Owner,s.Target)\nlocal equalOK,equal=pcall(function() return manager.AreWorkingDealsEqual(s.Owner,s.Target) end)\nlocal action=s.Responses[#s.Responses]\nlocal name='none'\nfor key,value in pairs(DealProposalAction) do if value==action then name=key end end\nprint('[JAC_NATIVE_DEAL_AFTER_PROPOSAL] response='..name..'/'..tostring(action)..\n ' count='..#s.Responses..' pending='..tostring(pending)..\n ' incoming='..tostring(incoming~=nil)..' outgoing='..tostring(outgoing~=nil)..\n ' equalOK='..tostring(equalOK)..' equal='..tostring(equal))\nlocal locations=ExposedMembers.JAC_NativeDealLocations(s.Index)\nassert(#locations==1,'proposal changed native work index count before acceptance')\ns.AlreadyAtTarget=locations[1].Owner==s.Target\ns.LastResponse=action\ns.WorkingEqual=equalOK and equal==true\nreturn 'proposal response='..name..' pending='..tostring(pending)..\n ' workingEqual='..tostring(s.WorkingEqual)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=assert(ExposedMembers.JAC_NativeDealProposalProbe)\nif s.AlreadyAtTarget then return 'proposal already moved the native work; acceptance skipped' end\nlocal action=s.LastResponse\nlocal approved=action==DealProposalAction.ACCEPTED or\n action==DealProposalAction.PROPOSED or action==DealProposalAction.ADJUSTED\nif not approved or not s.WorkingEqual then\n print('[JAC_NATIVE_DEAL_ACCEPT_SKIPPED] response='..tostring(action)..\n  ' equal='..tostring(s.WorkingEqual))\n return 'no equal accepted proposal; physical result remains unproven'\nend\nlocal ok,value=pcall(DealManager.SendWorkingDeal,DealProposalAction.ACCEPTED,s.Owner,s.Target)\ns.Acceptance={OK=ok,Value=tostring(value)}\nprint('[JAC_NATIVE_DEAL_ACCEPTED_DISPATCH] ok='..tostring(ok)..' value='..tostring(value))\nreturn 'submitted official ACCEPTED after equal response; physical result still unproven'"
+    },
+    {
+      "action": "pause",
+      "seconds": 6
     },
     {
       "action": "wait_for",

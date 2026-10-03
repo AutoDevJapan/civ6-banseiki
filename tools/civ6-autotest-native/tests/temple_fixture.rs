@@ -33,6 +33,17 @@ fn deal_script(marker: &str) -> String {
         .to_owned()
 }
 
+fn deal_condition(marker: &str) -> String {
+    serde_json::from_str::<Value>(DEAL_SCENARIO).expect("deal scenario JSON")["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|step| step["condition"]["code"].as_str())
+        .find(|code| code.contains(marker))
+        .unwrap_or_else(|| panic!("missing deal condition: {marker}"))
+        .to_owned()
+}
+
 fn condition(marker: &str) -> String {
     scenario()["steps"]
         .as_array()
@@ -187,6 +198,7 @@ fn world() -> mlua::Result<Lua> {
         cap.purchased={0,1,2,3};control.purchased={10,11}
         cap.built[1]=true;cap.at[0]={1}
         dealTarget.purchased={30,31}
+        dealTarget.built[1]=true;dealTarget.at[30]={1}
         cap.districts={}
         control.districts={DISTRICT(control,11,true)}
         neighbor.districts={DISTRICT(neighbor,2,true)}
@@ -455,7 +467,7 @@ fn deal_temples_wait_for_both_exact_cities_without_ui_state_writes() -> mlua::Re
     .set_environment(core.clone())
     .exec()?;
     lua.load(deal_script("local function requestTemple("))
-        .set_environment(core)
+        .set_environment(core.clone())
         .exec()?;
     lua.load(
         r#"
@@ -478,6 +490,39 @@ fn deal_temples_wait_for_both_exact_cities_without_ui_state_writes() -> mlua::Re
         local target=F.Read('target','ready')
         assert(source.Temple and source.SlotValue==-1 and target.Temple and target.SlotValue==-1)
         assert(#CALLS==6 and CALLS[1].city==CITIES[10] and CALLS[4].city==CITIES[40])
+        "#,
+    )
+    .exec()?;
+    lua.load("Game.SetProperty=nil").exec()?;
+    lua.load(deal_script("planned AI target Palace relic"))
+        .exec()?;
+    lua.load("Game.SetProperty=SAVED_GAME_SETTER").exec()?;
+    lua.load(
+        r#"
+        JAC_AbsorptionGameplay.OwnedGreatWorkSlots=function() return {} end
+        Players[2].AttachModifierByID=function(_,name)
+          assert(name=='GOODY_CULTURE_GRANT_ONE_RELIC' and CITIES[40].palace==-1)
+          CITIES[40].palace=0
+        end
+        "#,
+    )
+    .exec()?;
+    lua.load(deal_script(
+        "granted one official relic to AI target with Palace slot first",
+    ))
+    .set_environment(core)
+    .exec()?;
+    assert!(
+        lua.load(deal_condition("JAC_NATIVE_DEAL_AI_PALACE"))
+            .eval::<bool>()?
+    );
+    lua.load(
+        r#"
+        local t=Game:GetProperty('JAC_NATIVE_DEAL_PROBE')
+        local F=ExposedMembers.JAC_NativeDealTempleFixture
+        assert(next(t.TargetBefore)==nil and CITIES[40].palace==0)
+        assert(ExposedMembers.JAC_NativeDealTargetPalaceIndex==0)
+        assert(ExposedMembers.JAC_NativeDealTempleFixture.Read('target','after-palace').SlotValue==-1)
         PLOTS[31].purchase=CITIES[30]
         local ok,err=pcall(F.Read,'target','wrong-city')
         assert(not ok and tostring(err):find('purchase city changed',1,true))
@@ -620,6 +665,7 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
             "JAC_NativeDealTempleObservation",
             "JAC_NativeDealPalacePlan",
             "JAC_NativeDealFirstGrant",
+            "JAC_NativeDealTargetPalace",
         ],
         &["JAC_NativeDealTempleRequest"],
     );
@@ -627,6 +673,13 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
     let mut scripts = 0;
     let mut requests = 0;
     for (i, step) in steps.iter().enumerate() {
+        assert!(
+            !step["code"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(".EnactWorkingDeal("),
+            "unavailable direct deal enactment cannot be an acceptance path"
+        );
         for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
             .into_iter()
             .flatten()
@@ -658,8 +711,18 @@ fn deal_preparation_keeps_all_six_published_stages_before_grant() -> mlua::Resul
             requests += 1;
         }
     }
-    assert_eq!(scripts, 36, "all deal Lua snippets must compile");
+    assert_eq!(scripts, 40, "all deal Lua snippets must compile");
     assert_eq!(requests, 6, "both capitals need all three stages");
+    assert!(steps.iter().any(|step| {
+        step["code"]
+            .as_str()
+            .is_some_and(|code| code.contains("DealProposalAction.PROPOSED"))
+    }));
+    assert!(steps.iter().any(|step| {
+        step["code"]
+            .as_str()
+            .is_some_and(|code| code.contains("DealProposalAction.ACCEPTED"))
+    }));
     let grant = steps
         .iter()
         .position(|step| {
