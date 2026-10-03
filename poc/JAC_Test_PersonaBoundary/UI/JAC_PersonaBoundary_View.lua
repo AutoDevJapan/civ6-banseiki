@@ -165,7 +165,7 @@ local function LocalSpy()
     local info = assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "native fixture spy not created");
     assert(info.owner == Game.GetLocalPlayer(), "enemy-spy requests have no proven control path");
     local spy = assert(Players[info.owner]:GetUnits():FindID(info.id), "native spy no longer present");
-    local def = GameInfo.Units[spy:GetUnitType()];
+    local def = GameInfo.Units[spy:GetType()];
     assert(spy:GetType() == GameInfo.Units["UNIT_SPY"].Index and def and def.Spy and
         spy:GetOwner() == info.owner, "native spy identity mismatch");
     return spy;

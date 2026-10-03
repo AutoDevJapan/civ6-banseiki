@@ -133,7 +133,7 @@ GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
     -- Keep the native unit ID as the only bridge. The official chooser must
     -- independently recognize this unit as a selectable spy before dispatch.
     print("JAC_BOUNDARY SPY_NATIVE_STATE " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
-        unitType=spy:GetUnitType(),operation=spy:GetSpyOperation(),endTurn=spy:GetSpyOperationEndTurn(),
+        unitType=spy:GetType(),
         x=spy:GetX(),y=spy:GetY()}));
     Game:SetProperty("JAC_BOUNDARY_SPY", {owner=owner, id=spy:GetID()});
     print("JAC_BOUNDARY SPY_CREATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
