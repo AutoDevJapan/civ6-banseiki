@@ -402,7 +402,8 @@ ReadSpyRoster=function(owner)
         local def=GameInfo.Units[unit:GetType()];
         if def and def.Spy then
             local experience=assert(unit:GetExperience(), "native spy experience unavailable");
-            roster.map[#roster.map+1]={id=unit:GetID(),owner=unit:GetOwner(),name=unit:GetName(),
+            roster.map[#roster.map+1]={id=unit:GetID(),owner=unit:GetOwner(),
+                unitType=unit:GetType(),name=unit:GetName(),
                 level=experience:GetLevel(),x=unit:GetX(),y=unit:GetY(),
                 operation=unit:GetSpyOperation(),endTurn=unit:GetSpyOperationEndTurn()};
         end
@@ -536,14 +537,17 @@ function B.EnemyRetryDiagnosis()
         end
     elseif #roster.map==1 then
         local unit=roster.map[1];
-        assert(unit.name==travel.name and unit.level==travel.level,
+        assert(unit.owner==c.attacker and
+            unit.unitType==GameInfo.Units["UNIT_SPY"].Index and
+            unit.name==travel.name and unit.level==travel.level,
             "living map spy does not match the original operative");
         result.mode="MAP"; result.outcome="LIVING_MAP"; result.currentID=unit.id;
     elseif #roster.activeOffMap==1 then
         local unit=roster.activeOffMap[1];
         assert((unit.name==travel.name or
             (unit.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
-            unit.level==travel.level and unit.returnTurn>=s.turn,
+            unit.level==travel.level and unit.returnTurn>s.turn and
+            unit.x>=0 and unit.y>=0 and Map.GetPlot(unit.x,unit.y),
             "off-map native spy differs from the original operative");
         result.mode="RETURN"; result.outcome="LIVING_OFF_MAP";
         result.returnName=unit.name; result.returnLevel=unit.level;
@@ -802,6 +806,7 @@ function B.CaptiveExchangeState()
     assert(marker.spyID==x.spyID and marker.eventID==x.eventID and
         marker.captor==x.captor and marker.nameIndex==x.nameIndex,
         "native captive proposal receipt changed");
+    if x.validationUnknown then return {stage="DEAL_VALIDATION_UNKNOWN"}; end
     if x.invalid then return {stage="DEAL_INVALID"}; end
     if x.response==DealProposalAction.REJECTED then
         return {stage=x.finalSent and "FINAL_REFUSED" or "AI_REFUSED"};
@@ -877,8 +882,19 @@ function B.ProposeCaptiveExchange()
         not Players[x.attacker]:GetDiplomacy():IsAtWarWith(x.captor),
         "native captive proposal became unavailable");
     x.proposed=true;
-    if not deal:Validate() then
+    local valid=DealValidationResult and DealValidationResult.VALID;
+    local ok,result=pcall(deal.Validate,deal);
+    if type(valid)~="number" or not ok or type(result)~="number" then
+        x.validationUnknown=true;
+        Log("ENEMY_CAPTIVE_DEAL_VALIDATION_UNAVAILABLE",{
+            expected=valid,result=ok and result or tostring(result),
+            resultType=type(result)});
+        RemovePreparedCaptiveItem(item,x.captor,x.attacker);
+        return "DEAL_VALIDATION_UNKNOWN";
+    end
+    if result~=valid then
         x.invalid=true;
+        Log("ENEMY_CAPTIVE_DEAL_INVALID",{expected=valid,result=result});
         RemovePreparedCaptiveItem(item,x.captor,x.attacker);
         return "DEAL_INVALID";
     end
@@ -909,7 +925,8 @@ function B.CloseCaptiveExchangeSession()
     assert(stage=="RETURNED_MAP_READY" or stage=="RETURNED_MAP_WAIT_NATIVE" or
         stage=="RETURNED_OFF_MAP" or stage=="AI_REFUSED" or
         stage=="AI_CHANGED_TERMS" or stage=="AI_RESPONSE_UNCLASSIFIED" or
-        stage=="DEAL_INVALID" or stage=="FINAL_REFUSED",
+        stage=="DEAL_INVALID" or stage=="DEAL_VALIDATION_UNKNOWN" or
+        stage=="FINAL_REFUSED",
         "native captive deal is not in a classified terminal state");
     local id=DiplomacyManager.FindOpenSessionID(x.attacker,x.captor);
     if id then DiplomacyManager.CloseSession(id); end
@@ -1096,7 +1113,8 @@ function B.CaptiveCapacityDistrictOutcome()
     local c=EnemyConfig();
     local receipt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS"),
         "native Government Plaza progress receipt missing");
-    assert(receipt.owner==c.attacker and
+    assert(receipt.owner==c.attacker and type(receipt.memberKey)=="number" and
+        type(receipt.acceptedNonce)=="number" and receipt.acceptedNonce>0 and
         receipt.districtIndex==GameInfo.Districts["DISTRICT_GOVERNMENT"].Index,
         "native Government Plaza progress identity changed");
     local city=assert(CityManager.GetCity(c.attacker,receipt.cityID),
@@ -1114,10 +1132,12 @@ function B.CaptiveCapacityDistrictOutcome()
     local districts=city:GetDistricts();
     local built=districts:HasDistrict(receipt.districtIndex,true);
     local atPlot=false;
-    for _,district in districts:Members() do
+    for memberKey,district in districts:Members() do
         if district:GetType()==receipt.districtIndex and
             district:GetX()==receipt.x and district:GetY()==receipt.y then
             assert(not atPlot,"native Government Plaza district duplicated");
+            assert(memberKey==receipt.memberKey,
+                "native Government Plaza district identity changed after progress");
             atPlot=true;
         end
     end
@@ -1125,6 +1145,7 @@ function B.CaptiveCapacityDistrictOutcome()
         built and "DISTRICT_PLOT_MISMATCH" or "PROGRESS_PENDING";
     local result={stage=stage,cityID=city:GetID(),plot=receipt.plot,
         x=receipt.x,y=receipt.y,targetBuilt=built and atPlot,
+        memberKey=receipt.memberKey,acceptedNonce=receipt.acceptedNonce,
         capacity=d.capacity,occupied=d.occupied,captured=#d.roster.captured,
         turn=Game.GetCurrentGameTurn(),progressTurn=receipt.turn};
     Log("ENEMY_CAPTIVE_DISTRICT_OUTCOME",{result=result,roster=d.roster});
@@ -1155,6 +1176,9 @@ function B.RetryLivingSpy()
     assert(#roster.map==1 and #roster.activeOffMap==0 and #roster.captured==0,
         "living retry operative roster is ambiguous");
     local unit=roster.map[1];
+    assert(unit.owner==c.attacker and
+        unit.unitType==GameInfo.Units["UNIT_SPY"].Index,
+        "living retry map spy is not the original native owner and type");
     if retry.mode=="RETURN" then
         local expected=retry.returnName=="" and GameInfo.Units["UNIT_SPY"].Name or
             retry.returnName;
@@ -1516,11 +1540,34 @@ local function CapacityBuildReady(owner,cityID,buildingType)
     local row=head and head.BuildingType and GameInfo.Buildings[head.BuildingType];
     return row and row.BuildingType==buildingType or false;
 end
-local function CapacityDistrictBuildReady(owner,cityID,districtType)
+local function NativePlacedCapacityDistrict(city,districtType)
+    local placed,count=nil,0;
+    for memberKey,instance in city:GetDistricts():Members() do
+        local row=GameInfo.Districts[instance:GetType()];
+        if row and row.DistrictType==districtType then
+            count=count+1;
+            local x,y=instance:GetX(),instance:GetY();
+            local plot=type(x)=="number" and type(y)=="number" and Map.GetPlot(x,y);
+            local purchase=plot and Cities.GetPlotPurchaseCity(plot);
+            if type(memberKey)~="number" or not plot or not purchase or
+                purchase:GetOwner()~=city:GetOwner() or purchase:GetID()~=city:GetID() then
+                return nil;
+            end
+            placed={memberKey=memberKey,plot=plot:GetIndex(),x=x,y=y,
+                districtType=row.DistrictType};
+        end
+    end
+    return count==1 and placed or nil;
+end
+local function CapacityDistrictBuildReady(owner,cityID,districtType,request)
     local city=assert(CityManager.GetCity(owner,cityID),"capacity district city missing");
     local head=city:GetBuildQueue():GetAt(0);
     local row=head and head.DistrictType and GameInfo.Districts[head.DistrictType];
-    return row and row.DistrictType==districtType or false;
+    local placed=NativePlacedCapacityDistrict(city,districtType);
+    local ready=city:GetOwner()==owner and row and row.DistrictType==districtType and
+        placed and placed.plot==request.plot and placed.x==request.x and
+        placed.y==request.y;
+    return ready or false,placed;
 end
 -- Gameplay GetAt was nil in live 50. Gameplay can call this UI-owned read
 -- bridge immediately before its AddProgress; only scalar queue identity crosses.
@@ -1534,6 +1581,22 @@ function B.ReadCapacityQueue(owner,cityID)
         buildingType=row and row.BuildingType or "",
         districtType=district and district.DistrictType or "",
         turn=Game.GetCurrentGameTurn(),frame=frameSerial,publishEpoch=publishEpoch};
+    if district then
+        local placed=NativePlacedCapacityDistrict(city,district.DistrictType);
+        if placed then
+            result.districtPlot=placed.plot;
+            result.districtX=placed.x; result.districtY=placed.y;
+            result.memberKey=placed.memberKey;
+            local accepted=capacityDistrictReady;
+            if accepted and accepted.cityID==cityID and
+                accepted.districtType==district.DistrictType and
+                accepted.plot==placed.plot and accepted.x==placed.x and
+                accepted.y==placed.y and accepted.memberKey==placed.memberKey and
+                accepted.turn==result.turn then
+                result.acceptedNonce=accepted.nonce;
+            end
+        end
+    end
     Log("CAPACITY_QUEUE_READ",result);
     return result;
 end
@@ -1595,6 +1658,11 @@ function B.Queue(action, params)
                 capacityDistrictReady.cityID==plan.cityID and
                 capacityDistrictReady.turn==Game.GetCurrentGameTurn(),
                 "native district BUILD acceptance is missing in this UI turn");
+            local observed=B.ReadCapacityQueue(Game.GetLocalPlayer(),plan.cityID);
+            assert(observed.districtPlot==capacityDistrictReady.plot and
+                observed.memberKey==capacityDistrictReady.memberKey and
+                observed.acceptedNonce==capacityDistrictReady.nonce,
+                "native district placement changed after accepted BUILD");
         else
             assert(plan.stage=="BUILD_DISTRICT" and plan.plot,
                 "native Government Plaza has no proven owned placement");
@@ -1655,11 +1723,17 @@ local function Submit(command)
         assert(plan.stage=="DISTRICT_QUEUED" and plan.cityID==ready.cityID and
             ready.turn==Game.GetCurrentGameTurn(),
             "native Government Plaza queue changed before progress");
+        local observed=B.ReadCapacityQueue(owner,ready.cityID);
+        assert(observed.districtPlot==ready.plot and
+            observed.memberKey==ready.memberKey and
+            observed.acceptedNonce==ready.nonce,
+            "native district placement changed before progress request");
         local district=assert(GameInfo.Districts["DISTRICT_GOVERNMENT"],
             "native Government Plaza definition missing");
         return EnemySyncRequest(action,{CityID=ready.cityID,
             DistrictIndex=district.Index,DistrictType=district.DistrictType,
             PlotIndex=ready.plot,X=ready.x,Y=ready.y,
+            MemberKey=ready.memberKey,AcceptedNonce=ready.nonce,
             Capacity=plan.capacity,Occupied=plan.occupied});
     elseif action == "PROGRESS_CAPACITY" then
         local plan=B.CaptiveCapacityPlan();
@@ -2126,15 +2200,18 @@ ContextPtr:SetUpdate(function()
         local action=request.action or "BUILD_SPY";
         local check=action=="BUILD_CAPACITY" and CapacityBuildReady or
             action=="BUILD_CAPACITY_DISTRICT" and CapacityDistrictBuildReady or SpyBuildReady;
-        local ok,ready=pcall(check,request.owner,request.cityID,
-            request.buildingType or request.districtType);
+        local ok,ready,placed=pcall(check,request.owner,request.cityID,
+            request.buildingType or request.districtType,request);
         if action=="BUILD_CAPACITY" and ok and ready then
             capacityBuildReady={cityID=request.cityID,buildingType=request.buildingType,
                 turn=Game.GetCurrentGameTurn()};
         end
         if action=="BUILD_CAPACITY_DISTRICT" and ok and ready then
+            barrierToken=barrierToken+1;
             capacityDistrictReady={cityID=request.cityID,plot=request.plot,
-                x=request.x,y=request.y,turn=Game.GetCurrentGameTurn()};
+                x=request.x,y=request.y,districtType=request.districtType,
+                memberKey=placed.memberKey,nonce=barrierToken,
+                turn=Game.GetCurrentGameTurn()};
         end
         B.lastAction=(ok and ready and "READY_" or "REJECTED_")..action;
         Log(action=="BUILD_CAPACITY_DISTRICT" and "CAPACITY_DISTRICT_BUILD_ACCEPTANCE" or

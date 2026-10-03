@@ -94,6 +94,7 @@ TARGET=city(11,0,2,0,'Target',1)
 FOREIGN=city(20,1,2,1,'Foreign',0)
 BUILD_HEAD=nil; PROGRESS_CALLS=0; CAPACITY_PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
 GOV_DISTRICT_BUILT=false; GOV_DISTRICT_PLACED=false
+GOV_DISTRICT_X=1; GOV_DISTRICT_Y=1
 GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
 CAPTURED={[0]={},[1]={}}
 local queue={
@@ -120,7 +121,8 @@ CONTROL.GetDistricts=function() return {
  Members=function()
   local rows={}
   if GOV_DISTRICT_PLACED then rows[1]={GetType=function() return 70 end,
-   GetX=function() return 1 end,GetY=function() return 1 end} end
+   GetX=function() return GOV_DISTRICT_X end,
+   GetY=function() return GOV_DISTRICT_Y end} end
   return members(rows)
  end} end
 CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
@@ -151,10 +153,11 @@ for _,c in ipairs(CITIES) do
   GetProperty=function(_,k) if k==NODE then return 1 end end}
 end
 PLOTS['1/1']={GetIndex=function() return 11 end,GetX=function() return 1 end,GetY=function() return 1 end}
+PLOTS['1/2']={GetIndex=function() return 21 end,GetX=function() return 1 end,GetY=function() return 2 end}
 Map={GetPlot=function(x,y) return PLOTS[x..'/'..y] end,
  GetPlotByIndex=function(index) for _,plot in pairs(PLOTS) do if plot:GetIndex()==index then return plot end end end}
 Cities={GetPlotPurchaseCity=function(plot)
- if plot==PLOTS['1/1'] then return CONTROL end
+ if plot==PLOTS['1/1'] or plot==PLOTS['1/2'] then return CONTROL end
  for _,c in ipairs(CITIES) do if Map.GetPlot(c.x,c.y)==plot then return c end end
  end}
 GOV={assigned=TARGET,established=true,neutralized=0,base=true,type=0}

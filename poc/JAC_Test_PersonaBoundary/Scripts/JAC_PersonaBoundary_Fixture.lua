@@ -600,7 +600,9 @@ GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
         params.Capacity==1 and params.Occupied==1 and
         params.DistrictType=="DISTRICT_GOVERNMENT" and
         type(params.CityID)=="number" and type(params.PlotIndex)=="number" and
-        type(params.X)=="number" and type(params.Y)=="number",
+        type(params.X)=="number" and type(params.Y)=="number" and
+        type(params.MemberKey)=="number" and
+        type(params.AcceptedNonce)=="number" and params.AcceptedNonce>0,
         "native Government Plaza progress receipt is stale");
     local district=assert(GameInfo.Districts[params.DistrictType],
         "native Government Plaza definition missing");
@@ -620,6 +622,10 @@ GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
         "UI native Government Plaza queue observation unavailable");
     assert(current.owner==controller and current.cityID==params.CityID and
         current.districtType==params.DistrictType and current.turn==params.Turn and
+        current.districtPlot==params.PlotIndex and
+        current.districtX==params.X and current.districtY==params.Y and
+        current.memberKey==params.MemberKey and
+        current.acceptedNonce==params.AcceptedNonce and
         type(current.frame)=="number" and current.frame>=params.Frame and
         type(current.publishEpoch)=="number" and
         current.publishEpoch>=params.PublishEpoch,
@@ -630,6 +636,7 @@ GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
     Game:SetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS",{
         owner=controller,cityID=city:GetID(),districtIndex=district.Index,
         plot=plot:GetIndex(),x=plot:GetX(),y=plot:GetY(),
+        memberKey=params.MemberKey,acceptedNonce=params.AcceptedNonce,
         token=params.Token,turn=Game.GetCurrentGameTurn()});
 end);
 

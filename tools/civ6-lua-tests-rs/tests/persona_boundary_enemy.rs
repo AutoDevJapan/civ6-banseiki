@@ -91,8 +91,9 @@ impl Enemy {
             DealDirection={OUTGOING=2,INCOMING=3};
             DealItemTypes={CAPTIVE=4};
             DealProposalAction={PENDING=0,PROPOSED=1,ACCEPTED=2,REJECTED=3,ADJUSTED=4};
+            DealValidationResult={VALID=0,INVALID=1};
             OUTGOING={}; INCOMING={}; NEXT_DEAL_ID=1; SENDS={};
-            AI_REPLY='ACCEPT'; ITEM_VALID=true; DEAL_VALID=true; SESSION_ID=nil;
+            AI_REPLY='ACCEPT'; ITEM_VALID=true; DEAL_VALIDATION_RESULT=0; SESSION_ID=nil;
             function makeDealItem(kind,from,to,value,locked)
                 local item={id=NEXT_DEAL_ID,kind=kind,from=from,to=to,value=value,locked=locked or false};
                 NEXT_DEAL_ID=NEXT_DEAL_ID+1;
@@ -128,7 +129,7 @@ impl Enemy {
                         end end;
                         return false;
                     end,
-                    Validate=function() return DEAL_VALID end
+                    Validate=function() return DEAL_VALIDATION_RESULT end
                 };
             end
             OUT_DEAL=makeDeal(OUTGOING); IN_DEAL=makeDeal(INCOMING);
@@ -853,6 +854,46 @@ fn accepted_captive_exchange_can_follow_a_real_off_map_return_without_new_produc
 }
 
 #[test]
+fn returned_captive_requires_the_native_spy_owner_type_future_turn_and_real_coordinates() {
+    let map = Enemy::new();
+    map.captured_deal();
+    map.run(
+        "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
+    );
+    map.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    map.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange(); UNITS[0][1].owner=1");
+    map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState()",
+        "living map spy does not match",
+    );
+    map.run("UNITS[0][1].owner=0; GameInfo.Units[56]={Index=56,Spy=true}; UNITS[0][1].GetType=function() return 56 end");
+    map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState()",
+        "living map spy does not match",
+    );
+
+    let off_map = Enemy::new();
+    off_map.captured_deal();
+    off_map.run("RETURN_OFFMAP=true; ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    off_map.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    off_map.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange(); OFF_MAP[1].ReturnTurn=TURN");
+    off_map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState()",
+        "off-map native spy differs",
+    );
+    off_map.run("OFF_MAP[1].ReturnTurn=TURN+2; OFF_MAP[1].XLocation=-9999");
+    off_map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState()",
+        "off-map native spy differs",
+    );
+    off_map.run("OFF_MAP[1].XLocation=CONTROL.x; OFF_MAP[1].YLocation=-9999");
+    off_map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState()",
+        "off-map native spy differs",
+    );
+}
+
+#[test]
 fn captive_exchange_refusal_or_changed_terms_never_releases_or_accepts_a_spy() {
     for (reply, expected) in [
         ("REJECT", "AI_REFUSED"),
@@ -897,7 +938,27 @@ fn captive_exchange_preserves_an_existing_unsent_deal_and_native_invalid_terms()
         "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
     );
     invalid.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
-    invalid.run("DEAL_VALID=false; assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='DEAL_INVALID'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='DEAL_INVALID' and #OUTGOING==0 and #SENDS==0 and #CAPTURED[1]==1)");
+    invalid.run("DEAL_VALIDATION_RESULT=DealValidationResult.INVALID; assert(DealValidationResult.INVALID~=0); assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='DEAL_INVALID'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='DEAL_INVALID' and #OUTGOING==0 and #SENDS==0 and #CAPTURED[1]==1)");
+
+    for (value, expected) in [
+        ("true", "DEAL_VALIDATION_UNKNOWN"),
+        ("nil", "DEAL_VALIDATION_UNKNOWN"),
+        ("'VALID'", "DEAL_VALIDATION_UNKNOWN"),
+        ("99", "DEAL_INVALID"),
+    ] {
+        let unknown = Enemy::new();
+        unknown.captured_deal();
+        unknown.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+        unknown.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+        unknown.run(&format!("DEAL_VALIDATION_RESULT={value}; local stage=ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); assert(stage=='{expected}' and #SENDS==0 and #OUTGOING==0 and #CAPTURED[1]==1)"));
+    }
+    let no_enum = Enemy::new();
+    no_enum.captured_deal();
+    no_enum.run(
+        "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
+    );
+    no_enum.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    no_enum.run("DealValidationResult=nil; assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='DEAL_VALIDATION_UNKNOWN' and #SENDS==0 and #OUTGOING==0)");
 
     let unavailable = Enemy::new();
     unavailable.captured_deal();
@@ -981,7 +1042,7 @@ fn official_domain_law_and_owned_plot_build_the_government_plaza_before_tier_one
         "PROGRESS_CAPACITY_DISTRICT",
         "JAC_BoundaryProgressCapacityDistrict",
     );
-    h.run("local r=Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS'); assert(r.plot==11 and r.cityID==10 and r.districtIndex==70 and CAPACITY_PROGRESS_CALLS==1 and not GOV_DISTRICT_BUILT); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome().stage=='PROGRESS_PENDING'); ADVANCE_TURN(); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome(); assert(o.stage=='DISTRICT_BUILT' and o.targetBuilt and o.plot==11 and o.turn>o.progressTurn and o.captured==1 and o.capacity==1); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_TIER1')");
+    h.run("local r=Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS'); assert(r.plot==11 and r.cityID==10 and r.districtIndex==70 and r.memberKey==1 and r.acceptedNonce>0 and CAPACITY_PROGRESS_CALLS==1 and not GOV_DISTRICT_BUILT); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome().stage=='PROGRESS_PENDING'); ADVANCE_TURN(); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome(); assert(o.stage=='DISTRICT_BUILT' and o.targetBuilt and o.plot==11 and o.memberKey==r.memberKey and o.acceptedNonce==r.acceptedNonce and o.turn>o.progressTurn and o.captured==1 and o.capacity==1); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_TIER1')");
     h.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
         "stale",
@@ -997,12 +1058,29 @@ fn government_plaza_rejects_foreign_placement_and_stale_native_queue() {
         "ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT')",
         "no proven owned placement",
     );
-    h.run("assert(#BUILD_REQUESTS==0 and CAPACITY_PROGRESS_CALLS==0); CityManager.GetOperationTargets=REAL_TARGETS; ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY_DISTRICT'); ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY_DISTRICT'); FRAME(); BUILD_HEAD={UnitType=55}; assert(ExposedMembers.JAC_PersonaBoundary.ReadCapacityQueue(0,10).districtType=='')");
+    h.run("assert(#BUILD_REQUESTS==0 and CAPACITY_PROGRESS_CALLS==0); CityManager.GetOperationTargets=REAL_TARGETS; ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY_DISTRICT'); ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY_DISTRICT'); FRAME(); GOV_DISTRICT_X=1; GOV_DISTRICT_Y=2; local q=ExposedMembers.JAC_PersonaBoundary.ReadCapacityQueue(0,10); assert(q.districtType=='DISTRICT_GOVERNMENT' and q.districtPlot==21 and q.acceptedNonce==nil)");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
+        "queue changed before progress",
+    );
+    h.run("GOV_DISTRICT_X=1; GOV_DISTRICT_Y=1; local r=REQUESTS[#REQUESTS].params; r.AcceptedNonce=r.AcceptedNonce+1");
     h.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
         "queue changed before progress",
     );
     h.run("assert(CAPACITY_PROGRESS_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS')==nil and #CAPTURED[1]==1)");
+}
+
+#[test]
+fn same_district_type_on_a_different_owned_plot_is_not_accepted_as_the_build_receipt() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_X=1; GOV_DISTRICT_Y=2; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().plot==11); ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='REJECTED_BUILD_CAPACITY_DISTRICT' and BUILD_HEAD.DistrictType==70 and #BUILD_REQUESTS==1)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY_DISTRICT')",
+        "BUILD acceptance is missing",
+    );
+    h.run("assert(CAPACITY_PROGRESS_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS')==nil)");
 }
 
 #[test]
