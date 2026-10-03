@@ -325,11 +325,16 @@ impl Backend for SystemBackend {
         }
         self.live_lease_budget()?;
         self.require_single_process()?;
-        let (pid, _) = self
+        let (pid, start) = self
             .single_process(0.0)?
             .ok_or_else(|| Error::input("Civ6 is absent"))?;
         self.native_trace = Some(crate::native_trace::Session::start(
-            pid, output, name, seconds,
+            pid,
+            start,
+            output,
+            name,
+            seconds,
+            Box::new(crate::restart::terminate_civ_process),
         )?);
         Ok(())
     }
