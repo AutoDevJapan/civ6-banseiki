@@ -35,16 +35,17 @@ use windows_sys::Win32::{
                 EXIT_THREAD_DEBUG_EVENT, LOAD_DLL_DEBUG_EVENT, UNLOAD_DLL_DEBUG_EVENT,
             },
             ToolHelp::{
-                CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, Thread32First,
-                Thread32Next, MODULEENTRY32W, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
-                TH32CS_SNAPTHREAD, THREADENTRY32,
+                CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, Process32FirstW,
+                Process32NextW, Thread32First, Thread32Next, MODULEENTRY32W, PROCESSENTRY32W,
+                TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS, TH32CS_SNAPTHREAD,
+                THREADENTRY32,
             },
         },
         Threading::{
             GetProcessTimes, OpenProcess, OpenThread, QueryFullProcessImageNameW, ResumeThread,
             SuspendThread, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
             PROCESS_SYNCHRONIZE, PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
-            THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
+            THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_SYNCHRONIZE,
         },
     },
 };
@@ -56,8 +57,89 @@ const APPOINT_FILE_OFFSET: usize = 0x2dcc20;
 const DEBUG_CONTEXT: u32 =
     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64 | CONTEXT_INTEGER_AMD64;
 const RF: u32 = 1 << 16;
-const THREAD_RIGHTS: u32 =
-    THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION;
+const THREAD_RIGHTS: u32 = THREAD_GET_CONTEXT
+    | THREAD_SET_CONTEXT
+    | THREAD_SUSPEND_RESUME
+    | THREAD_QUERY_INFORMATION
+    | THREAD_SYNCHRONIZE;
+const RESTORE_BUDGET: Duration = Duration::from_secs(6);
+const CRITICAL_CLOSE_BUDGET: Duration = Duration::from_secs(12);
+
+fn announce_critical_and_wait_for_owned_game(
+    game: &Handle,
+    pid: u32,
+    reason: &str,
+    mut pending: Option<(DEBUG_EVENT, i32)>,
+    debug_attached: bool,
+) -> Result<(), String> {
+    println!(
+        "{}",
+        json!({"critical_cleanup":true,"pid":pid,"reason":reason,"game_close_required":true})
+    );
+    let _ = std::io::stdout().flush();
+    let deadline = Instant::now() + CRITICAL_CLOSE_BUDGET;
+    while Instant::now() < deadline {
+        // The controller can terminate a suspended debuggee, but Windows may
+        // withhold process exit notification until the outstanding debug event
+        // has been continued. Keep the debugger attached and all manually held
+        // threads suspended while draining debug events through process exit.
+        if let Some((event, status)) = pending {
+            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } != 0 {
+                pending = None;
+            } else {
+                thread::sleep(Duration::from_millis(50));
+                continue;
+            }
+        }
+        let mut event = DEBUG_EVENT::default();
+        if debug_attached && unsafe { WaitForDebugEventEx(&mut event, 50) } != 0 {
+            match event.dwDebugEventCode {
+                CREATE_PROCESS_DEBUG_EVENT => {
+                    let h = unsafe { event.u.CreateProcessInfo.hFile };
+                    if !h.is_null() {
+                        unsafe {
+                            CloseHandle(h);
+                        }
+                    }
+                }
+                LOAD_DLL_DEBUG_EVENT => {
+                    let h = unsafe { event.u.LoadDll.hFile };
+                    if !h.is_null() {
+                        unsafe {
+                            CloseHandle(h);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            let status = if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
+                let code = unsafe { event.u.Exception.ExceptionRecord.ExceptionCode };
+                if code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT {
+                    DBG_CONTINUE
+                } else {
+                    DBG_EXCEPTION_NOT_HANDLED
+                }
+            } else {
+                DBG_CONTINUE
+            };
+            let exited = event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT;
+            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
+                pending = Some((event, status));
+                continue;
+            }
+            if exited {
+                return Ok(());
+            }
+        } else {
+            thread::sleep(Duration::from_millis(50));
+        }
+        match alive(game) {
+            Ok(false) => return Ok(()),
+            Ok(true) | Err(_) => {}
+        }
+    }
+    Err(format!("{reason}; critical_cleanup unresolved: controller did not close the owned game within 12 seconds"))
+}
 
 #[derive(Clone, Debug)]
 pub struct ObserverConfig {
@@ -325,6 +407,9 @@ fn verify(config: ObserverConfig) -> Result<Verified, String> {
     if !alive(&controller)? || process_created(&controller)? != config.controller_created {
         return Err("observer controller identity changed".into());
     }
+    if parent_pid(std::process::id())? != config.controller_pid {
+        return Err("observer controller is not the OS parent process".into());
+    }
     let game = exact_process(config.pid, config.created, &config.exe, true)?;
     let module = loaded_module(config.pid, &expected_module)?;
     if sha256(&module.path)? != EXPECTED_SHA256 {
@@ -340,7 +425,7 @@ fn verify(config: ObserverConfig) -> Result<Verified, String> {
     })
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Registers {
     dr: [u64; 4],
     dr6: u64,
@@ -376,6 +461,21 @@ fn set_context(thread: &Handle, c: &CONTEXT) -> Result<(), String> {
     }
     Ok(())
 }
+fn set_debug_registers(
+    thread: &Handle,
+    current: &CONTEXT,
+    original: Registers,
+) -> Result<(), String> {
+    let mut changes = *current;
+    original.write(&mut changes);
+    // Only the debug registers are restored. RIP/RSP, integer registers and
+    // EFlags are read from the live thread and are never rolled back.
+    changes.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
+    if unsafe { SetThreadContext(thread.0, &changes) } == 0 {
+        return Err(win_error("SetThreadContext(debug registers)"));
+    }
+    Ok(())
+}
 fn thread_handle(tid: u32) -> Result<Handle, String> {
     Handle::new(unsafe { OpenThread(THREAD_RIGHTS, 0, tid) }, "OpenThread")
 }
@@ -403,12 +503,42 @@ fn thread_ids(pid: u32) -> Result<BTreeSet<u32>, String> {
     Ok(ids)
 }
 
+fn parent_pid(pid: u32) -> Result<u32, String> {
+    let snapshot = Handle::new(
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) },
+        "process snapshot",
+    )?;
+    let mut entry = PROCESSENTRY32W {
+        dwSize: size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
+        return Err(win_error("Process32FirstW"));
+    }
+    loop {
+        if entry.th32ProcessID == pid {
+            return Ok(entry.th32ParentProcessID);
+        }
+        if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
+            break;
+        }
+    }
+    Err(format!("process {pid} vanished from parent snapshot"))
+}
+
 #[derive(Clone)]
 struct Pending {
     id: u64,
     entry: &'static str,
     return_address: u64,
     expected_rsp: u64,
+}
+fn tail_matches(pending: &[Pending], return_address: u64, expected_rsp: u64) -> bool {
+    pending.iter().any(|p| {
+        p.entry == "can_appoint"
+            && p.return_address == return_address
+            && p.expected_rsp == expected_rsp
+    })
 }
 struct ThreadState {
     handle: Handle,
@@ -418,6 +548,141 @@ struct ThreadState {
 struct Jsonl {
     writer: BufWriter<File>,
     rows: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CleanupPhase {
+    Freeze,
+    Restore,
+    Continue,
+    Detach,
+    Resume,
+    Done,
+}
+trait CleanupOps {
+    fn freeze(&mut self) -> Result<(), String>;
+    fn restore_verified(&mut self) -> Result<(), String>;
+    fn continue_pending(&mut self) -> Result<(), String>;
+    fn detach(&mut self) -> Result<(), String>;
+    fn resume(&mut self) -> Result<(), String>;
+}
+struct CleanupGate {
+    phase: CleanupPhase,
+    deadline: Instant,
+    last_error: String,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AttachAbortOutcome {
+    Detached,
+    GameExited,
+    KillDisabledWithoutDetach,
+    Critical,
+}
+trait AttachAbortOps {
+    fn detach(&mut self) -> bool;
+    fn disable_kill_on_exit(&mut self) -> bool;
+    fn game_alive(&mut self) -> Result<bool, String>;
+}
+struct AttachAbortGate {
+    deadline: Instant,
+    kill_disabled: bool,
+}
+impl AttachAbortGate {
+    fn new() -> Self {
+        Self {
+            deadline: Instant::now() + RESTORE_BUDGET,
+            kill_disabled: false,
+        }
+    }
+    fn step(&mut self, ops: &mut impl AttachAbortOps) -> Option<AttachAbortOutcome> {
+        if ops.detach() {
+            return Some(AttachAbortOutcome::Detached);
+        }
+        if matches!(ops.game_alive(), Ok(false)) {
+            return Some(AttachAbortOutcome::GameExited);
+        }
+        if ops.disable_kill_on_exit() {
+            self.kill_disabled = true;
+        }
+        None
+    }
+    fn drive(&mut self, ops: &mut impl AttachAbortOps) -> AttachAbortOutcome {
+        while Instant::now() < self.deadline {
+            if let Some(outcome) = self.step(ops) {
+                return outcome;
+            }
+            thread::sleep(Duration::from_millis(40));
+        }
+        if self.kill_disabled {
+            AttachAbortOutcome::KillDisabledWithoutDetach
+        } else {
+            AttachAbortOutcome::Critical
+        }
+    }
+}
+struct WinAttachAbort<'a> {
+    pid: u32,
+    game: &'a Handle,
+}
+impl AttachAbortOps for WinAttachAbort<'_> {
+    fn detach(&mut self) -> bool {
+        (unsafe { DebugActiveProcessStop(self.pid) }) != 0
+    }
+    fn disable_kill_on_exit(&mut self) -> bool {
+        (unsafe { DebugSetProcessKillOnExit(0) }) != 0
+    }
+    fn game_alive(&mut self) -> Result<bool, String> {
+        alive(self.game)
+    }
+}
+impl CleanupGate {
+    fn new() -> Self {
+        Self {
+            phase: CleanupPhase::Freeze,
+            deadline: Instant::now() + RESTORE_BUDGET,
+            last_error: String::new(),
+        }
+    }
+    fn step(&mut self, ops: &mut impl CleanupOps) -> Result<bool, String> {
+        let result = match self.phase {
+            CleanupPhase::Freeze => ops.freeze(),
+            CleanupPhase::Restore => ops.restore_verified(),
+            CleanupPhase::Continue => ops.continue_pending(),
+            CleanupPhase::Detach => ops.detach(),
+            CleanupPhase::Resume => ops.resume(),
+            CleanupPhase::Done => return Ok(true),
+        };
+        if let Err(e) = result {
+            if self.phase == CleanupPhase::Restore {
+                self.phase = CleanupPhase::Freeze;
+            }
+            return Err(e);
+        }
+        self.phase = match self.phase {
+            CleanupPhase::Freeze => CleanupPhase::Restore,
+            CleanupPhase::Restore => CleanupPhase::Continue,
+            CleanupPhase::Continue => CleanupPhase::Detach,
+            CleanupPhase::Detach => CleanupPhase::Resume,
+            CleanupPhase::Resume | CleanupPhase::Done => CleanupPhase::Done,
+        };
+        Ok(self.phase == CleanupPhase::Done)
+    }
+    fn drive(&mut self, ops: &mut impl CleanupOps) -> Result<(), String> {
+        while Instant::now() < self.deadline {
+            match self.step(ops) {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => {
+                    self.last_error = e;
+                    thread::sleep(Duration::from_millis(40));
+                }
+            }
+        }
+        Err(format!(
+            "critical_cleanup: {:?} did not finish before the cleanup deadline: {}",
+            self.phase, self.last_error
+        ))
+    }
 }
 impl Jsonl {
     fn new(path: &Path) -> Result<Self, String> {
@@ -445,6 +710,14 @@ struct Debugger {
     module_base: u64,
     module_size: u64,
     threads: BTreeMap<u32, ThreadState>,
+    held: BTreeMap<u32, Handle>,
+    cleanup_event: Option<(DEBUG_EVENT, i32)>,
+    cleanup_gate: Option<CleanupGate>,
+    critical: bool,
+    #[cfg(test)]
+    restore_faults: usize,
+    #[cfg(test)]
+    critical_signal: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     output: Jsonl,
     next_id: u64,
     attached: bool,
@@ -461,14 +734,20 @@ impl Debugger {
         if unsafe { DebugActiveProcess(pid) } == 0 {
             return Err(win_error("DebugActiveProcess"));
         }
-        // Windows requires an active debugger for this call. Keep this as the
-        // first operation after attach and detach immediately if it fails.
+        // The default is kill-on-debugger-exit. If changing it fails, this
+        // thread may leave only after a confirmed detach or owned-game exit.
         if unsafe { DebugSetProcessKillOnExit(0) } == 0 {
             let error = win_error("DebugSetProcessKillOnExit(FALSE)");
-            unsafe {
-                DebugActiveProcessStop(pid);
-            }
-            return Err(error);
+            let outcome = AttachAbortGate::new().drive(&mut WinAttachAbort { pid, game: &game });
+            return Err(match outcome {
+                AttachAbortOutcome::Detached => format!("{error}; debugger detached before exit"),
+                AttachAbortOutcome::GameExited => format!("{error}; owned game already exited"),
+                AttachAbortOutcome::KillDisabledWithoutDetach => format!("{error}; explicit detach was not confirmed, but kill-on-exit is now disabled; no breakpoints were installed"),
+                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true) {
+                    Ok(()) => format!("{error}; critical_cleanup: controller closed the owned game"),
+                    Err(critical) => critical,
+                },
+            });
         }
         Ok(Self {
             pid,
@@ -476,6 +755,14 @@ impl Debugger {
             module_base,
             module_size,
             threads: BTreeMap::new(),
+            held: BTreeMap::new(),
+            cleanup_event: None,
+            cleanup_gate: None,
+            critical: false,
+            #[cfg(test)]
+            restore_faults: 0,
+            #[cfg(test)]
+            critical_signal: None,
             output,
             next_id: 1,
             attached: true,
@@ -543,15 +830,12 @@ impl Debugger {
             let bytes = read_exact::<5>(&self.game, return_address - 5).ok()?;
             direct_call_rva(r, bytes, target_rva)
         });
+        let expected_rsp = c.Rsp.checked_add(8).ok_or("stack pointer overflow")?;
         let tail = entry == "can_ever"
-            && self.threads[&tid]
-                .pending
-                .iter()
-                .any(|p| p.entry == "can_appoint" && p.return_address == return_address);
+            && tail_matches(&self.threads[&tid].pending, return_address, expected_rsp);
         let path = known_path(call_rva, return_rva, tail);
         let id = self.next_id;
         self.next_id += 1;
-        let expected_rsp = c.Rsp.checked_add(8).ok_or("stack pointer overflow")?;
         let state = self
             .threads
             .get_mut(&tid)
@@ -681,78 +965,45 @@ impl Debugger {
         DBG_EXCEPTION_NOT_HANDLED
     }
     fn cleanup(&mut self, pending_event: Option<(&DEBUG_EVENT, i32)>) -> Result<(), String> {
-        if !self.attached {
+        if self.critical {
+            return Err("critical_cleanup: the owned game still requires closure".into());
+        }
+        if !self.attached && self.held.is_empty() {
             return Ok(());
         }
-        // Suspend every thread before restoring registers. Re-enumeration catches
-        // threads created while earlier threads were still running.
-        let mut held: BTreeMap<u32, Handle> = BTreeMap::new();
-        let mut error: Option<String> = None;
-        for _ in 0..16 {
-            let ids = match thread_ids(self.pid) {
-                Ok(v) => v,
-                Err(e) => {
-                    error.get_or_insert(e);
-                    break;
-                }
-            };
-            let additions: Vec<_> = ids
-                .difference(&held.keys().copied().collect())
-                .copied()
-                .collect();
-            if additions.is_empty() {
-                break;
-            }
-            for tid in additions {
-                match thread_handle(tid) {
-                    Ok(h) => {
-                        if unsafe { SuspendThread(h.0) } == u32::MAX {
-                            error.get_or_insert_with(|| win_error("SuspendThread during detach"));
-                        } else {
-                            held.insert(tid, h);
-                        }
-                    }
-                    Err(e) => {
-                        error.get_or_insert(e);
-                    }
-                }
-            }
-        }
-        for (tid, state) in &self.threads {
-            if !held.contains_key(tid) {
-                continue;
-            }
-            match context(&state.handle) {
-                Ok(mut c) => {
-                    state.original.write(&mut c);
-                    if let Err(e) = set_context(&state.handle, &c) {
-                        error.get_or_insert(e);
-                    }
-                }
-                Err(e) => {
-                    error.get_or_insert(e);
-                }
-            }
-        }
         if let Some((event, status)) = pending_event {
-            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
-                error.get_or_insert_with(|| win_error("ContinueDebugEvent before detach"));
+            if self.cleanup_event.is_none() {
+                self.cleanup_event = Some((*event, status));
             }
         }
-        if unsafe { DebugActiveProcessStop(self.pid) } == 0 {
-            error.get_or_insert_with(|| win_error("DebugActiveProcessStop"));
-        } else {
-            self.attached = false;
+        let mut gate = self.cleanup_gate.take().unwrap_or_else(CleanupGate::new);
+        let result = gate.drive(self);
+        self.cleanup_gate = Some(gate);
+        match result {
+            Ok(()) => Ok(()),
+            Err(reason) => self.critical_wait_for_game_close(reason),
         }
-        for h in held.values() {
-            if unsafe { ResumeThread(h.0) } == u32::MAX {
-                error.get_or_insert_with(|| win_error("ResumeThread after detach"));
+    }
+    fn critical_wait_for_game_close(&mut self, reason: String) -> Result<(), String> {
+        self.critical = true;
+        #[cfg(test)]
+        if let Some(signal) = &self.critical_signal {
+            signal.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        let _ = self.output.row(json!({"type":"critical_cleanup","game_pid":self.pid,"reason":reason,"game_close_required":true}));
+        match announce_critical_and_wait_for_owned_game(
+            &self.game,
+            self.pid,
+            &reason,
+            self.cleanup_event.take(),
+            self.attached,
+        ) {
+            Ok(()) => {
+                self.attached = false;
+                self.held.clear();
+                Err(format!("{reason}; the controller closed the owned game"))
             }
-        }
-        if let Some(error) = error {
-            Err(error)
-        } else {
-            Ok(())
+            Err(critical) => Err(critical),
         }
     }
     fn run(
@@ -857,9 +1108,112 @@ impl Debugger {
         }
     }
 }
+impl CleanupOps for Debugger {
+    fn freeze(&mut self) -> Result<(), String> {
+        for _ in 0..64 {
+            let ids = thread_ids(self.pid)?;
+            let additions: Vec<u32> = ids
+                .difference(&self.held.keys().copied().collect())
+                .copied()
+                .collect();
+            if additions.is_empty() {
+                return Ok(());
+            }
+            for tid in additions {
+                let handle = match thread_handle(tid) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        return Err(format!("thread {tid} cannot be opened for cleanup: {e}"))
+                    }
+                };
+                if unsafe { SuspendThread(handle.0) } == u32::MAX {
+                    if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
+                        return Err(format!(
+                            "thread {tid} remains live: {}",
+                            win_error("SuspendThread")
+                        ));
+                    }
+                } else {
+                    self.held.insert(tid, handle);
+                }
+            }
+        }
+        Err("target threads did not reach a stable suspended set".into())
+    }
+    fn restore_verified(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        if self.restore_faults > 0 {
+            self.restore_faults -= 1;
+            return Err("injected SetThreadContext refusal".into());
+        }
+        let ids = thread_ids(self.pid)?;
+        if ids.iter().any(|tid| !self.held.contains_key(tid)) {
+            return Err("a new target thread appeared while restoring debug registers".into());
+        }
+        for (tid, state) in &self.threads {
+            match unsafe { WaitForSingleObject(state.handle.0, 0) } {
+                WAIT_OBJECT_0 => continue,
+                WAIT_TIMEOUT => {}
+                _ => {
+                    return Err(format!(
+                        "cannot check thread {tid} liveness: {}",
+                        win_error("WaitForSingleObject")
+                    ))
+                }
+            }
+            if !self.held.contains_key(tid) {
+                return Err(format!(
+                    "live thread {tid} was not suspended for restoration"
+                ));
+            }
+            let current = context(&state.handle)?;
+            set_debug_registers(&state.handle, &current, state.original)?;
+            let after = context(&state.handle)?;
+            if Registers::from(&after) != state.original {
+                return Err(format!("thread {tid} debug registers did not match the saved values after SetThreadContext"));
+            }
+        }
+        Ok(())
+    }
+    fn continue_pending(&mut self) -> Result<(), String> {
+        if let Some((event, status)) = self.cleanup_event {
+            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
+                return Err(win_error("ContinueDebugEvent before detach"));
+            }
+            self.cleanup_event = None;
+        }
+        Ok(())
+    }
+    fn detach(&mut self) -> Result<(), String> {
+        if !self.attached {
+            return Ok(());
+        }
+        if unsafe { DebugActiveProcessStop(self.pid) } == 0 {
+            return Err(win_error("DebugActiveProcessStop"));
+        }
+        self.attached = false;
+        Ok(())
+    }
+    fn resume(&mut self) -> Result<(), String> {
+        let tids: Vec<u32> = self.held.keys().copied().collect();
+        for tid in tids {
+            let handle = &self.held[&tid];
+            if unsafe { ResumeThread(handle.0) } == u32::MAX {
+                if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
+                    return Err(format!(
+                        "live thread {tid} remains suspended: {}",
+                        win_error("ResumeThread")
+                    ));
+                }
+            }
+            self.held.remove(&tid);
+        }
+        Ok(())
+    }
+}
 impl Drop for Debugger {
     fn drop(&mut self) {
-        if self.attached {
+        if !self.critical && (self.attached || !self.held.is_empty()) {
             let _ = self.cleanup(None);
         }
     }
@@ -1059,7 +1413,13 @@ mod tests {
         }
     }
 
-    fn run_case(timeout: Duration, trigger: bool, fail_guard: bool, fail_recording: bool) {
+    fn run_case(
+        timeout: Duration,
+        trigger: bool,
+        fail_guard: bool,
+        fail_recording: bool,
+        restore_faults: usize,
+    ) {
         let mut child = Fixture::start();
         let probe = process(child.child.id(), true).unwrap();
         let created = process_created(&probe).unwrap();
@@ -1084,6 +1444,7 @@ mod tests {
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
             let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            debugger.restore_faults = restore_faults;
             let result = debugger.run(stop_rx, timeout, || {
                 if fail_in_observer.load(Ordering::SeqCst) {
                     Err("fixture guard lost".into())
@@ -1175,18 +1536,252 @@ mod tests {
 
     #[test]
     fn entry_return_threads_and_normal_detach_restore_registers() {
-        run_case(Duration::from_secs(20), true, false, false);
+        run_case(Duration::from_secs(20), true, false, false, 0);
     }
     #[test]
     fn timeout_detach_preserves_the_child_and_registers() {
-        run_case(Duration::from_millis(500), false, false, false);
+        run_case(Duration::from_millis(500), false, false, false, 0);
     }
     #[test]
     fn failure_detach_preserves_the_child_and_registers() {
-        run_case(Duration::from_secs(20), false, true, false);
+        run_case(Duration::from_secs(20), false, true, false, 0);
     }
     #[test]
     fn recording_failure_detaches_without_killing_the_child() {
-        run_case(Duration::from_secs(20), false, false, true);
+        run_case(Duration::from_secs(20), false, false, true, 0);
+    }
+    #[test]
+    fn one_injected_context_failure_retries_and_restores_the_live_child() {
+        run_case(Duration::from_millis(500), false, false, false, 1);
+    }
+
+    #[derive(Default)]
+    struct FaultCleanup {
+        calls: Vec<&'static str>,
+        freeze_fail: usize,
+        set_fail: usize,
+        readback_fail: usize,
+        detach_fail: usize,
+        resume_fail: usize,
+    }
+    impl CleanupOps for FaultCleanup {
+        fn freeze(&mut self) -> Result<(), String> {
+            self.calls.push("freeze");
+            if self.freeze_fail > 0 {
+                self.freeze_fail -= 1;
+                Err("SuspendThread refused".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn restore_verified(&mut self) -> Result<(), String> {
+            self.calls.push("restore_readback");
+            if self.set_fail > 0 {
+                self.set_fail -= 1;
+                Err("SetThreadContext refused".into())
+            } else if self.readback_fail > 0 {
+                self.readback_fail -= 1;
+                Err("GetThreadContext disagreed".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn continue_pending(&mut self) -> Result<(), String> {
+            self.calls.push("continue");
+            Ok(())
+        }
+        fn detach(&mut self) -> Result<(), String> {
+            self.calls.push("detach");
+            if self.detach_fail > 0 {
+                self.detach_fail -= 1;
+                Err("DebugActiveProcessStop refused".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn resume(&mut self) -> Result<(), String> {
+            self.calls.push("resume");
+            if self.resume_fail > 0 {
+                self.resume_fail -= 1;
+                Err("ResumeThread refused".into())
+            } else {
+                Ok(())
+            }
+        }
+    }
+    #[test]
+    fn os_failures_retry_and_never_detach_before_verified_registers() {
+        let mut os = FaultCleanup {
+            freeze_fail: 1,
+            set_fail: 1,
+            readback_fail: 1,
+            detach_fail: 1,
+            resume_fail: 1,
+            ..Default::default()
+        };
+        let mut gate = CleanupGate::new();
+        gate.drive(&mut os).unwrap();
+        assert_eq!(gate.phase, CleanupPhase::Done);
+        assert_eq!(os.calls.iter().filter(|c| **c == "detach").count(), 2);
+        let first_detach = os.calls.iter().position(|c| *c == "detach").unwrap();
+        assert_eq!(
+            os.calls[..first_detach]
+                .iter()
+                .filter(|c| **c == "restore_readback")
+                .count(),
+            3
+        );
+        assert!(
+            os.calls.iter().rposition(|c| *c == "resume").unwrap()
+                > os.calls.iter().rposition(|c| *c == "detach").unwrap()
+        );
+    }
+    #[test]
+    fn permanent_os_refusal_is_bounded_critical_and_does_not_detach() {
+        for set_failure in [false, true] {
+            let mut os = FaultCleanup::default();
+            if set_failure {
+                os.set_fail = usize::MAX;
+            } else {
+                os.freeze_fail = usize::MAX;
+            }
+            let mut gate = CleanupGate::new();
+            gate.deadline = Instant::now() + Duration::from_millis(90);
+            let error = gate.drive(&mut os).unwrap_err();
+            assert!(error.contains("critical_cleanup"));
+            assert!(!os.calls.contains(&"detach"));
+            assert!(!os.calls.contains(&"resume"));
+        }
+    }
+
+    #[derive(Default)]
+    struct FaultAttach {
+        detach_fail: usize,
+        kill_fail: usize,
+        exited: bool,
+        calls: Vec<&'static str>,
+    }
+    impl AttachAbortOps for FaultAttach {
+        fn detach(&mut self) -> bool {
+            self.calls.push("detach");
+            if self.detach_fail > 0 {
+                self.detach_fail -= 1;
+                false
+            } else {
+                true
+            }
+        }
+        fn disable_kill_on_exit(&mut self) -> bool {
+            self.calls.push("disable_kill");
+            if self.kill_fail > 0 {
+                self.kill_fail -= 1;
+                false
+            } else {
+                true
+            }
+        }
+        fn game_alive(&mut self) -> Result<bool, String> {
+            Ok(!self.exited)
+        }
+    }
+    #[test]
+    fn failed_kill_setting_requires_detach_game_exit_or_critical() {
+        let mut os = FaultAttach {
+            detach_fail: 2,
+            kill_fail: usize::MAX,
+            ..Default::default()
+        };
+        let mut gate = AttachAbortGate::new();
+        assert_eq!(gate.step(&mut os), None);
+        assert_eq!(gate.step(&mut os), None);
+        assert_eq!(gate.step(&mut os), Some(AttachAbortOutcome::Detached));
+        let mut os = FaultAttach {
+            detach_fail: usize::MAX,
+            kill_fail: usize::MAX,
+            ..Default::default()
+        };
+        let mut gate = AttachAbortGate::new();
+        gate.deadline = Instant::now() + Duration::from_millis(90);
+        assert_eq!(gate.drive(&mut os), AttachAbortOutcome::Critical);
+        assert!(os.calls.contains(&"detach"));
+        let mut os = FaultAttach {
+            detach_fail: usize::MAX,
+            ..Default::default()
+        };
+        let mut gate = AttachAbortGate::new();
+        gate.deadline = Instant::now() + Duration::from_millis(90);
+        assert_eq!(
+            gate.drive(&mut os),
+            AttachAbortOutcome::KillDisabledWithoutDetach
+        );
+    }
+    #[test]
+    fn tail_candidate_requires_the_same_stack_frame() {
+        let pending = [Pending {
+            id: 1,
+            entry: "can_appoint",
+            return_address: 0x1234,
+            expected_rsp: 0x2008,
+        }];
+        assert!(tail_matches(&pending, 0x1234, 0x2008));
+        assert!(!tail_matches(&pending, 0x1234, 0x3008));
+        assert!(!tail_matches(&pending, 0x5555, 0x2008));
+    }
+    #[test]
+    fn fixture_parent_pid_is_the_spawning_test_process() {
+        let child = Fixture::start();
+        assert_eq!(parent_pid(child.child.id()).unwrap(), std::process::id());
+    }
+    #[test]
+    fn permanent_context_refusal_reports_critical_until_controller_closes_child() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-critical-test-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let signal = Arc::new(AtomicBool::new(false));
+        let observer_signal = Arc::clone(&signal);
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            debugger.restore_faults = usize::MAX;
+            debugger.critical_signal = Some(observer_signal);
+            let mut gate = CleanupGate::new();
+            gate.deadline = Instant::now() + Duration::from_millis(250);
+            debugger.cleanup_gate = Some(gate);
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (result, debugger.attached, debugger.critical)
+        });
+        let start = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "fixture observer did not become ready"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        stop_tx.send(()).unwrap();
+        while !signal.load(Ordering::SeqCst) {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "critical cleanup was not reported"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        child.child.kill().unwrap(); // The controller closes only its own Rust fixture.
+        child.child.wait().unwrap();
+        let (result, attached, critical) = observer.join().unwrap();
+        assert!(result
+            .unwrap_err()
+            .contains("controller closed the owned game"));
+        assert!(critical);
+        assert!(!attached);
+        drop(child);
+        fs::remove_file(path).unwrap();
     }
 }
