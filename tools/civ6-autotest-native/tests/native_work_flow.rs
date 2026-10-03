@@ -565,6 +565,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-japan.json",
         "absorption-japan-native.json",
         "absorption-japan-recall-continuation.json",
+        "absorption-japan-owner-turn-diagnostic.json",
         "absorption-hero-recall.json",
         "absorption-native-bridge-probe.json",
         "absorption-native-ai-same-owner-move.json",
@@ -619,6 +620,10 @@ fn japanese_recall_continuation_keeps_every_remaining_original_check() {
         "ABSORPTION_AFTER_AI_TURN_CONTINUATION"
     );
     assert_eq!(&continued_steps[4..], &original_steps[102..]);
+    let diagnostic = native_scenario("absorption-japan-owner-turn-diagnostic.json");
+    let diagnostic_steps = diagnostic["steps"].as_array().expect("diagnostic steps");
+    assert_eq!(diagnostic_steps.len(), 19);
+    assert_eq!(&diagnostic_steps[2..], &continued_steps[2..19]);
 }
 
 // This fixture tests the scenario's physical oracle, not engine API availability.
