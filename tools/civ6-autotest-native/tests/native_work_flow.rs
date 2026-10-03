@@ -628,6 +628,49 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
 }
 
 #[test]
+fn artist_activation_waits_for_the_exact_published_unit_and_placement() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["condition"]["code"].as_str())
+        .find(|code| code.contains("LATE_ARTIST_PUBLICATION"))
+        .expect("artist publication gate");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        OWNER=1;X=2;MOVES=0;PERSON=9
+        local unit={GetOwner=function() return OWNER end,GetX=function() return X end,
+          GetY=function() return 8 end,GetType=function() return 3 end,
+          GetMovesRemaining=function() return MOVES end,
+          GetGreatPerson=function() return {GetIndividual=function() return PERSON end} end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end} end}}
+        Game={GetProperty=function(_,key)
+          if key=='JAC_ARTWORK_FRESH_PREP' then return {Owner=1,Unit=77,Individual=9} end
+          assert(key=='JAC_ARTWORK_CASE_PLAN');return {Fixtures={art={Plot=4}}}
+        end}
+        Map={GetPlotByIndex=function(index)
+          assert(index==4);return {GetX=function() return 7 end,GetY=function() return 8 end}
+        end}
+        GameInfo={Units={[3]={BaseMoves=2}}}
+        "#,
+    )
+    .exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "stale placement accepted");
+    lua.load("X=7").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "stale movement accepted");
+    lua.load("MOVES=2;OWNER=2").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "other owner accepted");
+    lua.load("OWNER=1;PERSON=10").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "other individual accepted");
+    lua.load("PERSON=9").exec()?;
+    assert!(lua.load(code).eval::<bool>()?);
+    Ok(())
+}
+
+#[test]
 fn acquired_palace_result_proof_is_identical_after_reload() {
     let scenario = native_scenario("absorption-native-acquired-palace-product.json");
     let steps = scenario["steps"].as_array().expect("scenario steps");
