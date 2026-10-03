@@ -51,6 +51,7 @@ use windows_sys::Win32::{
                 THREADENTRY32,
             },
         },
+        LibraryLoader::{GetModuleHandleW, GetProcAddress},
         Threading::{
             GetProcessIdOfThread, GetProcessTimes, GetThreadId, OpenProcess, OpenThread,
             QueryFullProcessImageNameW, ResumeThread, SuspendThread, WaitForSingleObject,
@@ -119,6 +120,7 @@ fn announce_critical_and_wait_for_owned_game(
     mut pending: Option<(DEBUG_EVENT, i32)>,
     debug_attached: bool,
     close_ack: Option<&AtomicBool>,
+    mut attach_origin: Option<&mut AttachOrigin>,
     already_announced: bool,
 ) -> Result<(), String> {
     if !already_announced {
@@ -171,13 +173,31 @@ fn announce_critical_and_wait_for_owned_game(
                         }
                     }
                 }
+                CREATE_THREAD_DEBUG_EVENT => {
+                    if let Some(origin) = attach_origin.as_deref_mut() {
+                        let start = unsafe { event.u.CreateThread.lpStartAddress }
+                            .map(|f| f as usize as u64);
+                        origin.note_thread_start(event.dwThreadId, start);
+                    }
+                }
+                EXIT_THREAD_DEBUG_EVENT => {
+                    if let Some(origin) = attach_origin.as_deref_mut() {
+                        origin.note_thread_exit(event.dwThreadId);
+                    }
+                }
                 _ => {}
             }
             let status = if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
-                let code = unsafe { event.u.Exception.ExceptionRecord.ExceptionCode };
-                if close_ack.is_some() {
-                    DBG_EXCEPTION_NOT_HANDLED
-                } else if code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT {
+                let info = unsafe { event.u.Exception };
+                let proven = info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT
+                    && attach_origin.as_deref_mut().is_some_and(|origin| {
+                        origin.classify(
+                            event.dwThreadId,
+                            info.ExceptionRecord.ExceptionAddress as u64,
+                            info.dwFirstChance != 0,
+                        ) == BreakpointOrigin::SystemAttach
+                    });
+                if proven {
                     DBG_CONTINUE
                 } else {
                     DBG_EXCEPTION_NOT_HANDLED
@@ -348,7 +368,7 @@ struct Module {
     size: u64,
     path: PathBuf,
 }
-fn loaded_module(pid: u32, expected: &Path) -> Result<Module, String> {
+fn module_named(pid: u32, module_name: &str) -> Result<Module, String> {
     let snapshot = Handle::new(
         unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) },
         "module snapshot",
@@ -362,13 +382,10 @@ fn loaded_module(pid: u32, expected: &Path) -> Result<Module, String> {
     }
     loop {
         let path = wide_path(&entry.szExePath)?;
-        if path.file_name().is_some_and(|n| {
-            n.to_string_lossy()
-                .eq_ignore_ascii_case("GameCore_XP2_FinalRelease.dll")
-        }) {
-            if !same_path(&path, expected) {
-                return Err("loaded GameCore module is at an unexpected path".into());
-            }
+        if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(module_name))
+        {
             return Ok(Module {
                 base: entry.modBaseAddr as u64,
                 size: u64::from(entry.modBaseSize),
@@ -379,7 +396,56 @@ fn loaded_module(pid: u32, expected: &Path) -> Result<Module, String> {
             break;
         }
     }
-    Err("GameCore_XP2_FinalRelease.dll is not loaded".into())
+    Err(format!("{module_name} is not loaded in process {pid}"))
+}
+fn loaded_module(pid: u32, expected: &Path) -> Result<Module, String> {
+    let module = module_named(pid, "GameCore_XP2_FinalRelease.dll")?;
+    if !same_path(&module.path, expected) {
+        return Err("loaded GameCore module is at an unexpected path".into());
+    }
+    Ok(module)
+}
+fn local_export_rva(module: &Module, handle: HANDLE, name: &[u8]) -> Result<u64, String> {
+    let function = unsafe { GetProcAddress(handle, name.as_ptr()) }
+        .ok_or_else(|| format!("ntdll export {} unavailable", String::from_utf8_lossy(name)))?;
+    let address = function as usize as u64;
+    address
+        .checked_sub(module.base)
+        .filter(|rva| *rva < module.size)
+        .ok_or("ntdll export resolved outside its local module".into())
+}
+fn resolve_attach_origin(pid: u32) -> Result<AttachOrigin, String> {
+    let local = module_named(std::process::id(), "ntdll.dll")?;
+    let remote = module_named(pid, "ntdll.dll")?;
+    if !same_path(&local.path, &remote.path) || local.size != remote.size {
+        return Err("local and target 64-bit ntdll module metadata differ".into());
+    }
+    let name: Vec<u16> = "ntdll.dll"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let handle = unsafe { GetModuleHandleW(name.as_ptr()) };
+    if handle.is_null() || handle as u64 != local.base {
+        return Err("local ntdll handle differs from module snapshot".into());
+    }
+    let breakpoint_rva = local_export_rva(&local, handle, b"DbgBreakPoint\0")?;
+    let breakin_rva = local_export_rva(&local, handle, b"DbgUiRemoteBreakin\0")?;
+    if unsafe { std::ptr::read((local.base + breakpoint_rva) as *const u8) } != 0xcc {
+        return Err("local ntdll DbgBreakPoint is not an INT3 instruction".into());
+    }
+    if breakpoint_rva >= remote.size || breakin_rva >= remote.size {
+        return Err("target ntdll export RVA exceeds its module size".into());
+    }
+    Ok(AttachOrigin::new(
+        remote
+            .base
+            .checked_add(breakpoint_rva)
+            .ok_or("ntdll address overflow")?,
+        remote
+            .base
+            .checked_add(breakin_rva)
+            .ok_or("ntdll address overflow")?,
+    ))
 }
 fn sha256(path: &Path) -> Result<String, String> {
     let mut input = File::open(path).map_err(|e| format!("GameCore file unavailable: {e}"))?;
@@ -664,12 +730,56 @@ enum DispatchOutcome {
     Unrelated,
     Ambiguous(&'static str),
 }
-fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
-    if !*initial_seen && first_chance {
-        *initial_seen = true;
-        DBG_CONTINUE
-    } else {
-        DBG_EXCEPTION_NOT_HANDLED
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BreakpointOrigin {
+    SystemAttach,
+    Application,
+}
+#[derive(Clone, Copy, Debug)]
+struct AttachOrigin {
+    breakpoint_address: u64,
+    breakin_start: u64,
+    breakin_thread: Option<u32>,
+    uncertain: bool,
+    accepted: bool,
+}
+impl AttachOrigin {
+    fn new(breakpoint_address: u64, breakin_start: u64) -> Self {
+        Self {
+            breakpoint_address,
+            breakin_start,
+            breakin_thread: None,
+            uncertain: false,
+            accepted: false,
+        }
+    }
+    fn note_thread_start(&mut self, tid: u32, start: Option<u64>) {
+        if self.accepted || start != Some(self.breakin_start) {
+            return;
+        }
+        if self.breakin_thread.is_some() {
+            self.uncertain = true;
+        } else {
+            self.breakin_thread = Some(tid);
+        }
+    }
+    fn note_thread_exit(&mut self, tid: u32) {
+        if !self.accepted && self.breakin_thread == Some(tid) {
+            self.uncertain = true;
+        }
+    }
+    fn classify(&mut self, tid: u32, address: u64, first_chance: bool) -> BreakpointOrigin {
+        if !self.accepted
+            && !self.uncertain
+            && first_chance
+            && self.breakin_thread == Some(tid)
+            && address == self.breakpoint_address
+        {
+            self.accepted = true;
+            BreakpointOrigin::SystemAttach
+        } else {
+            BreakpointOrigin::Application
+        }
     }
 }
 /// The debug event records where Windows reported the exception. DR6 is
@@ -784,6 +894,21 @@ struct LifecycleEvidence {
     exception_events: usize,
     application_exception_events: usize,
     exit_code: Option<u32>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalKind {
+    Attached,
+    Detached,
+    TargetExited,
+}
+impl TerminalKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Attached => "attached_unresolved",
+            Self::Detached => "detached",
+            Self::TargetExited => "target_exited",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -970,9 +1095,10 @@ struct Debugger {
     output: Jsonl,
     next_id: u64,
     attached: bool,
+    terminal: TerminalKind,
     ready: bool,
     attach_ready_deadline: Option<Instant>,
-    initial_breakpoint_seen: bool,
+    attach_origin: AttachOrigin,
     last_attach_breakpoint_owned: bool,
     last_dispatch: DispatchOutcome,
     close_ack: Arc<AtomicBool>,
@@ -986,6 +1112,25 @@ struct Debugger {
     force_initial_breakpoint_late: bool,
 }
 impl Debugger {
+    fn classify_attach_breakpoint(&mut self, tid: u32, address: u64, first_chance: bool) -> bool {
+        let owned = self.attach_origin.classify(tid, address, first_chance)
+            == BreakpointOrigin::SystemAttach;
+        self.last_attach_breakpoint_owned = owned;
+        owned
+    }
+    fn mark_attach_ready(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        if self.force_initial_breakpoint_late {
+            self.attach_ready_deadline = Some(Instant::now() - Duration::from_millis(1));
+        }
+        if self.attach_deadline_expired() {
+            return Err(
+                "initial debugger breakpoint arrived after the attach ready deadline".into(),
+            );
+        }
+        self.ready = true;
+        Ok(())
+    }
     fn stamp(&self, row: &mut Value) {
         row["event_ordinal"] = json!(self.event_ordinal);
         row["elapsed_ms"] = json!(self.attached_at.elapsed().as_millis());
@@ -1010,6 +1155,9 @@ impl Debugger {
         if mode != ProbeMode::Lifecycle {
             return Err("hardware breakpoints are withheld until per-thread exception delivery is proven; use lifecycle mode".into());
         }
+        // Refuse an attach that cannot distinguish the OS breakpoint from an
+        // application's own breakpoint using supported module/thread metadata.
+        let mut attach_origin = resolve_attach_origin(pid)?;
         if unsafe { DebugActiveProcess(pid) } == 0 {
             return Err(win_error("DebugActiveProcess"));
         }
@@ -1022,7 +1170,7 @@ impl Debugger {
                 AttachAbortOutcome::Detached => format!("{error}; debugger detached before exit"),
                 AttachAbortOutcome::GameExited => format!("{error}; owned game already exited"),
                 AttachAbortOutcome::KillDisabledWithoutDetach => format!("{error}; explicit detach was not confirmed, but kill-on-exit is now disabled; no breakpoints were installed"),
-                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true, None, false) {
+                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true, None, Some(&mut attach_origin), false) {
                     Ok(()) => format!("{error}; critical_cleanup: controller closed the owned game"),
                     Err(critical) => critical,
                 },
@@ -1049,9 +1197,10 @@ impl Debugger {
             output,
             next_id: 1,
             attached: true,
+            terminal: TerminalKind::Attached,
             ready: false,
             attach_ready_deadline: None,
-            initial_breakpoint_seen: false,
+            attach_origin,
             last_attach_breakpoint_owned: false,
             last_dispatch: DispatchOutcome::Unrelated,
             close_ack: Arc::new(AtomicBool::new(false)),
@@ -1065,7 +1214,12 @@ impl Debugger {
             force_initial_breakpoint_late: false,
         })
     }
-    fn lifecycle_thread_event(&mut self, tid: u32, source: &'static str) -> Result<(), String> {
+    fn lifecycle_thread_event(
+        &mut self,
+        tid: u32,
+        source: &'static str,
+        start_address: Option<u64>,
+    ) -> Result<(), String> {
         self.lifecycle.thread_events += 1;
         if self.lifecycle.thread_ids.len() < LIFECYCLE_THREAD_ROW_LIMIT {
             self.lifecycle.thread_ids.insert(tid);
@@ -1074,6 +1228,8 @@ impl Debugger {
             return Ok(());
         }
         let mut row = json!({"type":"thread_status","thread_id":tid,"source":source,
+            "start_address_candidate":start_address.map(|v| format!("0x{v:016x}")),
+            "attach_thread_candidate":self.attach_origin.breakin_thread == Some(tid),
             "handle_identity":"unknown","liveness":"unknown","context":"unknown",
             "future_exception_delivery":"unknown"});
         let handle = Handle::new(
@@ -1130,9 +1286,14 @@ impl Debugger {
         self.stamp(&mut row);
         self.output.row(row)
     }
-    fn add_thread(&mut self, tid: u32, source: &'static str) -> Result<(), String> {
+    fn add_thread(
+        &mut self,
+        tid: u32,
+        source: &'static str,
+        start_address: Option<u64>,
+    ) -> Result<(), String> {
         if self.mode == ProbeMode::Lifecycle {
-            return self.lifecycle_thread_event(tid, source);
+            return self.lifecycle_thread_event(tid, source, start_address);
         }
         if self.threads.contains_key(&tid) {
             return Ok(());
@@ -1431,10 +1592,16 @@ impl Debugger {
                         CloseHandle(info.hFile);
                     }
                 }
-                self.add_thread(tid, "create_process_debug_event")?;
+                self.add_thread(tid, "create_process_debug_event", None)?;
             }
-            CREATE_THREAD_DEBUG_EVENT => self.add_thread(tid, "create_thread_debug_event")?,
+            CREATE_THREAD_DEBUG_EVENT => {
+                let start = unsafe { event.u.CreateThread.lpStartAddress };
+                let start = start.map(|f| f as usize as u64);
+                self.attach_origin.note_thread_start(tid, start);
+                self.add_thread(tid, "create_thread_debug_event", start)?;
+            }
             EXIT_THREAD_DEBUG_EVENT => {
+                self.attach_origin.note_thread_exit(tid);
                 self.threads.remove(&tid);
                 if self.mode == ProbeMode::Lifecycle {
                     let code = unsafe { event.u.ExitThread.dwExitCode };
@@ -1452,9 +1619,9 @@ impl Debugger {
                 }
             }
             EXIT_PROCESS_DEBUG_EVENT => {
+                let code = unsafe { event.u.ExitProcess.dwExitCode };
+                self.lifecycle.exit_code = Some(code);
                 if self.mode == ProbeMode::Lifecycle {
-                    let code = unsafe { event.u.ExitProcess.dwExitCode };
-                    self.lifecycle.exit_code = Some(code);
                     let mut row = json!({"type":"process_exit","thread_id":tid,"exit_code":code});
                     self.stamp(&mut row);
                     self.output.row(row)?;
@@ -1471,13 +1638,13 @@ impl Debugger {
                 let code = info.ExceptionRecord.ExceptionCode;
                 if self.mode == ProbeMode::Lifecycle {
                     self.lifecycle.exception_events += 1;
-                    self.lifecycle_thread_event(tid, "exception_debug_event")?;
+                    self.lifecycle_thread_event(tid, "exception_debug_event", None)?;
                     let initial = code == EXCEPTION_BREAKPOINT
-                        && breakpoint_disposition(
-                            &mut self.initial_breakpoint_seen,
+                        && self.classify_attach_breakpoint(
+                            tid,
+                            info.ExceptionRecord.ExceptionAddress as u64,
                             info.dwFirstChance != 0,
-                        ) == DBG_CONTINUE;
-                    self.last_attach_breakpoint_owned = initial;
+                        );
                     if !initial {
                         self.lifecycle.application_exception_events += 1;
                     }
@@ -1485,34 +1652,24 @@ impl Debugger {
                         "thread_id":tid,"code":format!("0x{code:08x}"),
                         "first_chance":info.dwFirstChance != 0,
                         "exception_address":format!("0x{:016x}", info.ExceptionRecord.ExceptionAddress as u64),
-                        "disposition":if initial { "initial_attach_breakpoint" } else { "application_handler" }});
+                        "disposition":if initial { "proven_attach_breakpoint" } else { "application_handler" },
+                        "attach_origin_proven":initial} );
                     self.stamp(&mut row);
                     self.output.row(row)?;
                     if initial {
-                        if self.attach_deadline_expired() {
-                            return Err("initial debugger breakpoint arrived after the attach ready deadline".into());
-                        }
-                        self.ready = true;
+                        self.mark_attach_ready()?;
                         return Ok(DBG_CONTINUE);
                     }
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
                 }
                 if code == EXCEPTION_BREAKPOINT {
-                    let disposition = breakpoint_disposition(
-                        &mut self.initial_breakpoint_seen,
+                    let initial = self.classify_attach_breakpoint(
+                        tid,
+                        info.ExceptionRecord.ExceptionAddress as u64,
                         info.dwFirstChance != 0,
                     );
-                    if disposition == DBG_CONTINUE {
-                        self.last_attach_breakpoint_owned = true;
-                        #[cfg(test)]
-                        if self.force_initial_breakpoint_late {
-                            self.attach_ready_deadline =
-                                Some(Instant::now() - Duration::from_millis(1));
-                        }
-                        if self.attach_deadline_expired() {
-                            return Err("initial debugger breakpoint arrived after the attach ready deadline".into());
-                        }
-                        self.ready = true;
+                    if initial {
+                        self.mark_attach_ready()?;
                         return Ok(DBG_CONTINUE);
                     }
                     let c = self
@@ -1530,7 +1687,7 @@ impl Debugger {
                         "unmatched_breakpoint",
                     )?;
                     self.invalidate_returns_for_exception(tid)?;
-                    return Ok(disposition);
+                    return Ok(DBG_EXCEPTION_NOT_HANDLED);
                 } else if code == EXCEPTION_SINGLE_STEP {
                     let exception_address = info.ExceptionRecord.ExceptionAddress as u64;
                     let first_chance = info.dwFirstChance != 0;
@@ -1750,6 +1907,7 @@ impl Debugger {
             Err(reason) => {
                 if matches!(alive(&self.game), Ok(false)) {
                     self.attached = false;
+                    self.terminal = TerminalKind::TargetExited;
                     self.held.clear();
                     Err(format!("{reason}; target process already exited"))
                 } else {
@@ -1772,10 +1930,12 @@ impl Debugger {
             self.cleanup_event.take(),
             self.attached,
             None,
+            Some(&mut self.attach_origin),
             false,
         ) {
             Ok(()) => {
                 self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
                 self.held.clear();
                 Err(format!("{reason}; the controller closed the owned game"))
             }
@@ -1816,10 +1976,12 @@ impl Debugger {
             self.cleanup_event.take(),
             self.attached,
             Some(&self.close_ack),
+            Some(&mut self.attach_origin),
             true,
         ) {
             Ok(()) => {
                 self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
                 self.held.clear();
                 Err(format!("{message}; controller closed the owned game"))
             }
@@ -1875,6 +2037,7 @@ impl Debugger {
                     ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status);
                 }
                 self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
                 return Err("target process exited during observation".into());
             }
             if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
@@ -1932,6 +2095,7 @@ impl Debugger {
                     ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status);
                 }
                 self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
                 return Err("target process exited during observation".into());
             }
             if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
@@ -2036,6 +2200,7 @@ impl CleanupOps for Debugger {
             return Err(win_error("DebugActiveProcessStop"));
         }
         self.attached = false;
+        self.terminal = TerminalKind::Detached;
         Ok(())
     }
     fn resume(&mut self) -> Result<(), String> {
@@ -2084,7 +2249,10 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
     let mut identity = json!({"type":"identity","game_pid":verified.config.pid,
         "game_created_filetime":verified.config.created,"game_exe":verified.config.exe,
         "module_path":verified.module.path,"module_base":format!("0x{:016x}",verified.module.base),
-        "module_sha256":EXPECTED_SHA256,"abi":"not_observed","mode":mode.label()});
+        "module_sha256":EXPECTED_SHA256,"abi":"not_observed","mode":mode.label(),
+        "attach_breakpoint_address":format!("0x{:016x}", debugger.attach_origin.breakpoint_address),
+        "attach_breakin_start":format!("0x{:016x}", debugger.attach_origin.breakin_start),
+        "attach_origin_source":"local_and_target_ntdll_module_metadata_and_exports"});
     debugger.stamp(&mut identity);
     debugger.output.row(identity)?;
     let (tx, rx) = mpsc::channel();
@@ -2137,7 +2305,12 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         "future_exception_delivery":"unknown"});
     debugger.stamp(&mut summary);
     debugger.output.row(summary)?;
-    let mut stop_row = json!({"type":"stop","detached":!debugger.attached,"result":result.as_ref().map(|_| "ok").unwrap_or("error")});
+    let mut stop_row = json!({"type":"stop",
+        "terminal_kind":debugger.terminal.label(),
+        "detached":debugger.terminal == TerminalKind::Detached,
+        "target_exited":debugger.terminal == TerminalKind::TargetExited,
+        "process_exit_code":debugger.lifecycle.exit_code,
+        "result":result.as_ref().map(|_| "ok").unwrap_or("error")});
     debugger.stamp(&mut stop_row);
     debugger.output.row(stop_row)?;
     result
@@ -2158,7 +2331,8 @@ mod tests {
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
         AddVectoredExceptionHandler, RaiseException, RemoveVectoredExceptionHandler,
-        EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH, EXCEPTION_POINTERS,
+        EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH, EXCEPTION_DEBUG_INFO,
+        EXCEPTION_POINTERS, EXCEPTION_RECORD,
     };
 
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
@@ -2557,6 +2731,24 @@ mod tests {
             let game = process(pid, false).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
+            // Inject only into the dispatcher, before any real OS event. This
+            // is not a child-generated breakpoint and is never continued.
+            let mut app_event = DEBUG_EVENT::default();
+            app_event.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
+            app_event.dwProcessId = pid;
+            app_event.dwThreadId = u32::MAX;
+            let mut record = EXCEPTION_RECORD::default();
+            record.ExceptionCode = EXCEPTION_BREAKPOINT;
+            record.ExceptionAddress = debugger.attach_origin.breakpoint_address as *mut _;
+            app_event.u.Exception = EXCEPTION_DEBUG_INFO {
+                ExceptionRecord: record,
+                dwFirstChance: 1,
+            };
+            assert_eq!(
+                debugger.handle_event(&app_event).unwrap(),
+                DBG_EXCEPTION_NOT_HANDLED
+            );
+            assert!(!debugger.ready);
             let result = debugger.run(stop_rx, Duration::from_secs(10), || {
                 if fail_observer.load(Ordering::SeqCst) {
                     Err("synthetic controller closed".into())
@@ -2569,6 +2761,8 @@ mod tests {
                 debugger.attached,
                 debugger.lifecycle.thread_events,
                 debugger.threads.len(),
+                debugger.attach_origin,
+                debugger.terminal,
             )
         });
         let started = Instant::now();
@@ -2585,13 +2779,15 @@ mod tests {
         } else {
             stop_tx.send(()).unwrap();
         }
-        let (result, attached, thread_events, armed_threads) = observer.join().unwrap();
+        let (result, attached, thread_events, armed_threads, origin, terminal) =
+            observer.join().unwrap();
         if guard_failure {
             assert!(result.unwrap_err().contains("synthetic controller closed"));
         } else {
             assert!(result.is_ok(), "{result:?}");
         }
         assert!(!attached);
+        assert_eq!(terminal, TerminalKind::Detached);
         assert_eq!(armed_threads, 0);
         assert!(thread_events >= 2);
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
@@ -2601,6 +2797,26 @@ mod tests {
             .lines()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect();
+        assert!(origin.accepted);
+        let attach = rows
+            .iter()
+            .find(|row| {
+                row["type"] == "debug_exception" && row["disposition"] == "proven_attach_breakpoint"
+            })
+            .unwrap();
+        assert!(rows.iter().any(|row| row["type"] == "debug_exception"
+            && row["disposition"] == "application_handler"
+            && row["thread_id"] == u32::MAX
+            && row["event_ordinal"].as_u64().unwrap() < attach["event_ordinal"].as_u64().unwrap()));
+        assert_eq!(attach["thread_id"], origin.breakin_thread.unwrap());
+        assert_eq!(
+            attach["exception_address"],
+            format!("0x{:016x}", origin.breakpoint_address)
+        );
+        assert!(rows.iter().any(|row| row["type"] == "thread_status"
+            && row["thread_id"] == origin.breakin_thread.unwrap()
+            && row["start_address_candidate"] == format!("0x{:016x}", origin.breakin_start)
+            && row["attach_thread_candidate"] == true));
         assert!(rows.iter().any(
             |row| row["type"] == "ready" && row["thread_count"].as_u64().is_some_and(|n| n > 0)
         ));
@@ -2656,7 +2872,8 @@ mod tests {
             let game = process(pid, false).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
-            debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (result, debugger.terminal, debugger.lifecycle.exit_code)
         });
         let started = Instant::now();
         while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
@@ -2666,11 +2883,10 @@ mod tests {
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
         child.child.kill().unwrap(); // The controller closes only its synthetic child.
         child.child.wait().unwrap();
-        assert!(observer
-            .join()
-            .unwrap()
-            .unwrap_err()
-            .contains("target process exited"));
+        let (result, terminal, exit_code) = observer.join().unwrap();
+        assert!(result.unwrap_err().contains("target process exited"));
+        assert_eq!(terminal, TerminalKind::TargetExited);
+        assert!(exit_code.is_some());
         let rows: Vec<Value> = fs::read_to_string(&path)
             .unwrap()
             .lines()
@@ -3424,17 +3640,48 @@ mod tests {
         );
     }
     #[test]
-    fn only_the_first_attach_breakpoint_is_consumed() {
-        let mut seen = false;
-        assert_eq!(breakpoint_disposition(&mut seen, true), DBG_CONTINUE);
-        assert!(seen);
+    fn application_breakpoint_before_attach_never_consumes_ready() {
+        let mut origin = AttachOrigin::new(0x1000, 0x2000);
+        origin.note_thread_start(11, Some(0x3000));
         assert_eq!(
-            breakpoint_disposition(&mut seen, true),
-            DBG_EXCEPTION_NOT_HANDLED
+            origin.classify(11, 0x1000, true),
+            BreakpointOrigin::Application
         );
         assert_eq!(
-            breakpoint_disposition(&mut seen, false),
-            DBG_EXCEPTION_NOT_HANDLED
+            origin.classify(11, 0x4000, true),
+            BreakpointOrigin::Application
+        );
+        assert!(!origin.accepted);
+        origin.note_thread_start(22, Some(0x2000));
+        assert_eq!(
+            origin.classify(11, 0x1000, true),
+            BreakpointOrigin::Application
+        );
+        assert_eq!(
+            origin.classify(22, 0x1000, false),
+            BreakpointOrigin::Application
+        );
+        assert_eq!(
+            origin.classify(22, 0x1000, true),
+            BreakpointOrigin::SystemAttach
+        );
+        assert_eq!(
+            origin.classify(22, 0x1000, true),
+            BreakpointOrigin::Application
+        );
+        let mut ambiguous = AttachOrigin::new(0x1000, 0x2000);
+        ambiguous.note_thread_start(22, Some(0x2000));
+        ambiguous.note_thread_start(33, Some(0x2000));
+        assert_eq!(
+            ambiguous.classify(22, 0x1000, true),
+            BreakpointOrigin::Application
+        );
+        let mut exited = AttachOrigin::new(0x1000, 0x2000);
+        exited.note_thread_start(22, Some(0x2000));
+        exited.note_thread_exit(22);
+        assert_eq!(
+            exited.classify(22, 0x1000, true),
+            BreakpointOrigin::Application
         );
     }
     #[test]

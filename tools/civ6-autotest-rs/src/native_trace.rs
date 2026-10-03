@@ -142,6 +142,12 @@ mod platform {
         TargetExited,
         Unresolved,
     }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum TerminalProof {
+        Missing,
+        Detached { observer_ok: bool },
+        TargetExited { exit_code: Option<u32> },
+    }
     enum ObserverMessage {
         Line(String),
         Closed,
@@ -227,7 +233,8 @@ mod platform {
             }
             if row["type"] == "debug_exception"
                 && row["mode"] == "lifecycle"
-                && row["disposition"] == "initial_attach_breakpoint"
+                && row["disposition"] == "proven_attach_breakpoint"
+                && row["attach_origin_proven"] == true
             {
                 initial_breakpoint = true;
             }
@@ -666,24 +673,53 @@ mod platform {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
-        fn terminal_proof(&self) -> Result<(bool, bool)> {
+        fn terminal_proof(&self) -> Result<TerminalProof> {
             let file = match std::fs::File::open(&self.output) {
                 Ok(file) => file,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((false, false)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(TerminalProof::Missing)
+                }
                 Err(e) => return Err(e.into()),
             };
-            let mut last = None;
+            let mut last: Option<Value> = None;
+            let mut process_exit: Option<Option<u32>> = None;
             for line in BufReader::new(file).lines() {
-                last = Some(line?);
+                let Ok(row) = serde_json::from_str::<Value>(&line?) else {
+                    return Ok(TerminalProof::Missing);
+                };
+                if row["type"] == "process_exit" {
+                    process_exit = Some(
+                        row["exit_code"]
+                            .as_u64()
+                            .and_then(|v| u32::try_from(v).ok()),
+                    );
+                }
+                last = Some(row);
             }
-            let Some(last) = last else {
-                return Ok((false, false));
+            let Some(row) = last else {
+                return Ok(TerminalProof::Missing);
             };
-            let Ok(row) = serde_json::from_str::<Value>(&last) else {
-                return Ok((false, false));
-            };
-            let detached = row["type"] == "stop" && row["detached"] == true;
-            Ok((detached, detached && row["result"] == "ok"))
+            if process_exit.is_some()
+                || row["terminal_kind"] == "target_exited"
+                || row["target_exited"] == true
+            {
+                let code = process_exit.flatten().or_else(|| {
+                    row["process_exit_code"]
+                        .as_u64()
+                        .and_then(|v| u32::try_from(v).ok())
+                });
+                return Ok(TerminalProof::TargetExited { exit_code: code });
+            }
+            if row["type"] == "stop"
+                && row["terminal_kind"] == "detached"
+                && row["detached"] == true
+                && row["target_exited"] == false
+            {
+                return Ok(TerminalProof::Detached {
+                    observer_ok: row["result"] == "ok",
+                });
+            }
+            Ok(TerminalProof::Missing)
         }
         fn finished_result(&mut self) -> Result<PathBuf> {
             self.drain_messages()?;
@@ -696,32 +732,48 @@ mod platform {
                 ));
             };
             self.drain_through_output_close()?;
-            let (detached, observer_ok) = self.terminal_proof().unwrap_or((false, false));
+            let proof = self.terminal_proof().unwrap_or(TerminalProof::Missing);
             let exited = self.identity.exited().unwrap_or(false);
-            if detached {
-                self.phase = Phase::Detached;
-            } else if exited {
-                self.phase = Phase::TargetExited;
-            } else {
-                self.close_game_once();
-                let deadline = self.stop_deadline.unwrap_or_else(Instant::now);
-                while Instant::now() < deadline {
-                    if self.identity.exited().unwrap_or(false) {
-                        self.phase = Phase::TargetExited;
-                        break;
+            match proof {
+                TerminalProof::TargetExited { .. } => self.phase = Phase::TargetExited,
+                TerminalProof::Detached { .. } if !exited => self.phase = Phase::Detached,
+                _ if exited => self.phase = Phase::TargetExited,
+                _ => {
+                    self.close_game_once();
+                    let deadline = self.stop_deadline.unwrap_or_else(Instant::now);
+                    while Instant::now() < deadline {
+                        if self.identity.exited().unwrap_or(false) {
+                            self.phase = Phase::TargetExited;
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
                     }
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-                if self.phase != Phase::TargetExited {
-                    self.phase = Phase::Unresolved;
-                    return Err(Error::input("critical_cleanup unresolved: observer exited without confirmed detach or game exit"));
+                    if self.phase != Phase::TargetExited {
+                        self.phase = Phase::Unresolved;
+                        return Err(Error::input("critical_cleanup unresolved: observer exited without confirmed detach or game exit"));
+                    }
                 }
             }
             if let Some(reason) = &self.critical {
+                let exit_note = match proof {
+                    TerminalProof::TargetExited {
+                        exit_code: Some(code),
+                    } => format!("; target exit code 0x{code:08x}"),
+                    _ => String::new(),
+                };
                 return Err(Error::input(format!(
-                    "critical_cleanup: {reason}; owned game close: {}",
+                    "critical_cleanup: {reason}{exit_note}; owned game close: {}",
                     self.close_error.as_deref().unwrap_or("requested")
                 )));
+            }
+            if self.phase == Phase::TargetExited {
+                let code = match proof {
+                    TerminalProof::TargetExited { exit_code } => exit_code
+                        .map(|v| format!("0x{v:08x}"))
+                        .unwrap_or_else(|| "unknown".into()),
+                    _ => "unknown".into(),
+                };
+                return Err(Error::input(format!("native observer target exited during observation (exit code {code}); observer status {status}")));
             }
             if let Some(reason) = &self.failure {
                 return Err(Error::input(format!(
@@ -736,7 +788,7 @@ mod platform {
                     self.output.display()
                 )));
             }
-            if !observer_ok {
+            if !matches!(proof, TerminalProof::Detached { observer_ok: true }) {
                 return Err(Error::input(
                     "observer did not record a successful terminal detach",
                 ));
@@ -745,11 +797,6 @@ mod platform {
                 property_evidence(&self.output)?;
             } else if self.mode == "lifecycle" {
                 lifecycle_evidence(&self.output)?;
-            }
-            if self.phase == Phase::TargetExited {
-                return Err(Error::input(
-                    "owned Civ6 exited before a confirmed normal detach",
-                ));
             }
             if !self.output.is_file() {
                 return Err(Error::input(
@@ -829,7 +876,7 @@ mod platform {
                 serde_json::json!({"type":"thread_status","thread_id":7,
                     "future_exception_delivery":"unknown"}),
                 serde_json::json!({"type":"debug_exception","mode":"lifecycle",
-                    "disposition":"initial_attach_breakpoint"}),
+                    "disposition":"proven_attach_breakpoint","attach_origin_proven":true}),
                 serde_json::json!({"type":"ready","thread_count":1}),
                 serde_json::json!({"type":"lifecycle_summary","mode":"lifecycle",
                     "thread_events":1,"hardware_breakpoints_installed":0,
@@ -1153,24 +1200,32 @@ mod platform {
                 session.identity.pid
             ));
             session.output = path.clone();
-            assert_eq!(session.terminal_proof().unwrap(), (false, false));
+            assert_eq!(session.terminal_proof().unwrap(), TerminalProof::Missing);
             for (row, expected) in [
-                ("{bad json}\n", (false, false)),
+                ("{bad json}\n", TerminalProof::Missing),
                 (
                     "{\"type\":\"stop\",\"detached\":false,\"result\":\"ok\"}\n",
-                    (false, false),
+                    TerminalProof::Missing,
                 ),
                 (
                     "{\"type\":\"entry\",\"detached\":true,\"result\":\"ok\"}\n",
-                    (false, false),
+                    TerminalProof::Missing,
                 ),
                 (
-                    "{\"type\":\"stop\",\"detached\":true,\"result\":\"error\"}\n",
-                    (true, false),
+                    "{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"error\"}\n",
+                    TerminalProof::Detached { observer_ok: false },
                 ),
                 (
-                    "{\"type\":\"stop\",\"detached\":true,\"result\":\"ok\"}\n",
-                    (true, true),
+                    "{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
+                    TerminalProof::Detached { observer_ok: true },
+                ),
+                (
+                    "{\"type\":\"process_exit\",\"exit_code\":0}\n{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
+                    TerminalProof::TargetExited { exit_code: Some(0) },
+                ),
+                (
+                    "{\"type\":\"stop\",\"terminal_kind\":\"target_exited\",\"detached\":false,\"target_exited\":true,\"process_exit_code\":3221225477,\"result\":\"error\"}\n",
+                    TerminalProof::TargetExited { exit_code: Some(3221225477) },
                 ),
             ] {
                 std::fs::write(&path, row).unwrap();
@@ -1192,6 +1247,28 @@ mod platform {
             assert!(error.contains("detach") || error.contains("exited"));
             assert_eq!(session.phase, Phase::TargetExited);
             assert_eq!(closes.load(Ordering::SeqCst), 0);
+        }
+        #[test]
+        fn even_zero_exit_code_cannot_become_a_successful_detach() {
+            for (code, expected) in [(0u32, "0x00000000"), (0xc0000005, "0xc0000005")] {
+                let closes = Arc::new(AtomicUsize::new(0));
+                let (mut session, _tx) = session(None, Arc::clone(&closes));
+                let path = std::env::temp_dir().join(format!(
+                    "pr86-terminal-exit-{}-{}-{code}.jsonl",
+                    std::process::id(),
+                    session.identity.pid
+                ));
+                std::fs::write(&path, format!(
+                    "{{\"type\":\"process_exit\",\"exit_code\":{code}}}\n{{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}}\n"
+                )).unwrap();
+                session.output = path.clone();
+                session.child.wait().unwrap();
+                let error = session.finished_result().unwrap_err().to_string();
+                assert!(error.contains(expected), "{error}");
+                assert_eq!(session.phase, Phase::TargetExited);
+                assert_eq!(closes.load(Ordering::SeqCst), 0);
+                std::fs::remove_file(path).unwrap();
+            }
         }
         #[test]
         fn child_exit_waits_for_late_critical_output_before_terminal_decision() {

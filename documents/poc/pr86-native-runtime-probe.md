@@ -8,7 +8,21 @@
 
 Windows SDKとこの観測器の呼出しを照合すると、attach、イベント待ち、イベント続行は同じスレッドで実行される。SDKのx64 `CONTEXT`は16バイト整列だが、固定された`windows-sys`のRust型は8バイト整列だった。取得・設定の全API呼出しを明示的な16バイト整列領域へ改め、専用子プロセスで検査した。これは実在した実装不備だが、実機53・82の異常終了との因果関係は未証明である。取得flagsはSDK定義に合う。LLVMで固定SHA-256のDLLを逆アセンブルすると`0x15339`、`0x1535E`、`0x15361`、`0x6EDC76`はいずれも命令先頭である。従来の16バイト比較だけでは命令途中を排除できないため、既知の命令先頭バイトもattach前に照合する。`SetThreadContext`成功後のDR0〜DR3とDR7も再読取して一致を要求する。ただし、これらの静的検査と専用Rust子プロセスの結果だけでは、実ゲームの各スレッドが後の例外をデバッガへ届けることは証明できない。公開SDKにその可否を判定するスレッド情報はないため、状態は`unknown`と記録する。
 
-`lifecycle`モードは20秒以内に終了し、debug registerを変更せず、GameCoreのプロセスメモリも読まない。届いたthread、例外、process exitを時刻と順番付きで記録し、元のアプリケーション例外は元のhandlerへ渡す。正常detachでも資格やproperty ABIの証明にはしない。実機用の`governor`・`property`モードはスレッドごとの例外配送を証明できるまで起動前に拒否する。次の親担当の有限実験と一次資料は[観測器README](../../tools/civ6-native-probe-rs/README.md)に記した。
+固定DLLのLLVM逆アセンブルで確認した命令先頭バイトは、`0x15339: 40 38 28`、`0x1535E: FF 50 60`、`0x15361: 48 85 C0`、Player getter `0x6EDC76: 4C 8D 80 28 05 00 00`。GameCoreのSHA-256は `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c` である。Linux・別ビルドの位置へ流用しない。
+
+`lifecycle`モードは20秒以内に終了し、debug registerを変更せず、GameCoreのプロセスメモリも読まない。届いたthread、例外、process exitを時刻と順番付きで記録し、元のアプリケーション例外は元のhandlerへ渡す。正常detachでも資格やproperty ABIの証明にはしない。実機用の`governor`・`property`モードはスレッドごとの例外配送を証明できるまで起動前に拒否する。
+
+実機82の旧`stop/detached=true/result=error`は、終了イベント時に単にattach状態を落とした値で、`DebugActiveProcessStop`の成功ではなかった。新しい`stop`は`terminal_kind=detached`をOSの正常detach成功時だけ、`terminal_kind=target_exited`を`EXIT_PROCESS_DEBUG_EVENT`または対象終了の確認時に記録する。受け取った終了コードを別項目に残し、親も`TargetExited`へ遷移する。コード0でもprocess exitを正常detachへ読み替えない。
+
+OSが送ったattach breakpointは「最初のfirst-chance」という順番だけでは判定しない。親子両プロセスで同じ64ビット`ntdll.dll`のmoduleパスとサイズを確認し、ローカルの`GetProcAddress`で得た`DbgUiRemoteBreakin`と`DbgBreakPoint`のRVAを対象側module baseへ加算する。`CREATE_THREAD_DEBUG_EVENT`の開始位置が前者と一致したthreadから、後者のアドレスでfirst-chanceの`EXCEPTION_BREAKPOINT`を受けた場合だけreadyにする。別thread・別アドレス・二度目・出所不明のbreakpointはアプリのhandlerへ渡す。必要なmodule情報を解決できなければattach前に拒否する。thread開始位置はSDK上の近似値なので、これだけを証拠にせず例外アドレスとthread IDも照合する。根拠はMicrosoftの[DebugActiveProcess](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-debugactiveprocess)、[CREATE_THREAD_DEBUG_INFO](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-create_thread_debug_info)、[GetProcAddress](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress)、[MODULEENTRY32W](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-moduleentry32w)である。
+
+合成Rust子プロセスでは、OSのattach thread開始位置とbreakpoint例外アドレスがそれぞれ対象側`ntdll`の2つのexport RVAに一致した。先行アプリbreakpointの回帰は、実子へattachしたdispatcherへ合成イベントを先に渡し、元handler向けの続行状態とready不成立を確認した。その合成イベントを子プロセス自身が発生させた証明ではない。続く実際のOS attach breakpointでreadyになり、ready後の子プロセス由来の外国例外は元のhandlerへ届いた。
+
+親担当がレビューを通し、新しいrelease版とhelperを配置した後の有限実験は次の1コマンド。7手順のシナリオは実機82と同じ最初のnumber/text property Luaを使い、観測器だけをbreakpointなしに替える。成功はattach・通常Lua・正常detachの証拠に限る。失敗では`process_exit`のコードと受け取った例外行の有無を区別する。
+
+```powershell
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-lifecycle-15km.json --stop-on-failure
+```
 
 ## 初回実機53の失敗と今回の切り分け
 
@@ -57,7 +71,7 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 - Windowsの専用Rust子プロセスで、標準モードの入口・戻り値、新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが実行を続け、debug registerがattach前と同値であることを確かめた。`SetThreadContext`拒否時の再試行と、永続拒否時にcontrollerが同じ子プロセスを閉じる経路も区別した。実際のWindowsハードウェアbreakpointで、テスト用`CONTEXT.Dr6`を0にした所有例外、RIP不一致とcontext取得失敗の保留、別の`SINGLE_STEP`の子側handlerへの引き渡し、期限後のready拒否を検査した。propertyモードでも所有・未所有・曖昧な例外、終了済みthreadと生存threadの後始末を検査する。いずれも修正後の実Civ6成功を示さない。
 - runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実機53のreadyは記録されたが、正常detachと30分leaseの完走は未確認。
-- 実機82後の診断変更を含む全ワークスペース`--all-targets`は、このworktree専用の`tools/target-native-integrate`で103試験群・1530件成功、失敗0・省略0だった。Lua 5.1とWindows実子プロセスの検査を含む。新しい7手順シナリオは`--check`に合格した。実ゲームの起動・attachはこの変更後に行っていない。実機53・82のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
+- attach出所と対象終了の区別を加えた全ワークスペース`--all-targets`は、このworktree専用の`tools/target-native-integrate`で103試験群・1531件成功、失敗0・省略0だった。Lua 5.1とWindows実子プロセスの検査を含む。新しい7手順シナリオは`--check`に合格した。実ゲームの起動・attachはこの変更後に行っていない。実機53・82のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
 - `tools/civ6-pe-rs`はこのworktreeにある。観測器は既知の6停止位置のファイルオフセットを固定してバイト比較し、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移す。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。
 
