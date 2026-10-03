@@ -844,11 +844,14 @@ mod platform {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::os::windows::io::AsHandle;
         use std::sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         };
-        use windows_sys::Win32::System::Threading::{TerminateProcess, PROCESS_TERMINATE};
+        use windows_sys::Win32::System::Threading::TerminateProcess;
+
+        const FIXTURE_READY: &str = "PR86_CRITICAL_FIXTURE_READY";
 
         #[test]
         fn property_trace_requires_named_owner_reads_updates_and_deletes() {
@@ -968,8 +971,16 @@ mod platform {
 
         #[test]
         fn fixture_observer_worker() {
-            if std::env::var_os("PR86_TRACE_STOP_FIXTURE").is_some() {
-                std::thread::sleep(Duration::from_millis(350));
+            match std::env::var("PR86_TRACE_STOP_FIXTURE").as_deref() {
+                Ok("critical") => {
+                    println!("{FIXTURE_READY}");
+                    std::io::stdout().flush().unwrap();
+                    // Stop and close acknowledgements are observer messages, not
+                    // permission for this owned target to exit before its close.
+                    std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink()).unwrap();
+                }
+                Ok("timed") => std::thread::sleep(Duration::from_millis(350)),
+                _ => {}
             }
         }
         fn session(
@@ -989,19 +1000,50 @@ mod platform {
                     "native_trace::platform::tests::fixture_observer_worker",
                     "--nocapture",
                 ])
-                .env("PR86_TRACE_STOP_FIXTURE", "1")
+                .env(
+                    "PR86_TRACE_STOP_FIXTURE",
+                    if terminate_owned_fixture {
+                        "critical"
+                    } else {
+                        "timed"
+                    },
+                )
                 .creation_flags(CREATE_NO_WINDOW)
                 .stdin(Stdio::piped())
-                .stdout(Stdio::null())
+                .stdout(if terminate_owned_fixture {
+                    Stdio::piped()
+                } else {
+                    Stdio::null()
+                })
                 .stderr(Stdio::null())
                 .spawn()
                 .unwrap();
+            if terminate_owned_fixture {
+                let stdout = child.stdout.take().unwrap();
+                let (ready_tx, ready_rx) = mpsc::channel();
+                std::thread::spawn(move || {
+                    let ready = BufReader::new(stdout)
+                        .lines()
+                        .any(|line| line.is_ok_and(|line| line.contains(FIXTURE_READY)));
+                    let _ = ready_tx.send(ready);
+                });
+                if !matches!(ready_rx.recv_timeout(Duration::from_secs(10)), Ok(true)) {
+                    drop(child.stdin.take());
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    panic!("owned critical fixture did not signal readiness");
+                }
+            }
             let stdin = child.stdin.take();
             let (tx, rx) = mpsc::channel();
             let pid = child.id();
             let raw_created = created(child.as_raw_handle() as HANDLE).unwrap();
             let identity = PinnedGameIdentity::pin(pid, restart_unix_start(raw_created)).unwrap();
             let expected_start = identity.restart_start;
+            // A duplicate of the spawned child's handle cannot follow PID reuse.
+            // Session still checks the pinned creation time and image before close.
+            let owned_target =
+                terminate_owned_fixture.then(|| child.as_handle().try_clone_to_owned().unwrap());
             (
                 Session {
                     child,
@@ -1023,17 +1065,18 @@ mod platform {
                         assert_eq!(request_pid, pid);
                         assert_eq!(request_start, expected_start);
                         closes.fetch_add(1, Ordering::SeqCst);
-                        if terminate_owned_fixture {
-                            let raw = unsafe { OpenProcess(PROCESS_TERMINATE, 0, request_pid) };
-                            if raw.is_null() {
-                                return Err(Error::input(
-                                    "cannot open owned Rust fixture for termination",
-                                ));
-                            }
-                            let owned = unsafe { OwnedHandle::from_raw_handle(raw) };
+                        if let Some(owned) = owned_target.as_ref() {
                             if unsafe { TerminateProcess(owned.as_raw_handle() as HANDLE, 1) } == 0
                             {
                                 return Err(Error::input("cannot terminate owned Rust fixture"));
+                            }
+                            if unsafe {
+                                WaitForSingleObject(owned.as_raw_handle() as HANDLE, 2_000)
+                            } != WAIT_OBJECT_0
+                            {
+                                return Err(Error::input(
+                                    "owned Rust fixture exit was not confirmed",
+                                ));
                             }
                         }
                         Ok(())
@@ -1170,6 +1213,11 @@ mod platform {
             );
             session.phase = Phase::Attaching;
             let pid = session.identity.pid;
+            std::thread::sleep(Duration::from_millis(400));
+            assert!(
+                !session.identity.exited().unwrap(),
+                "critical fixture exited without an owned close"
+            );
             let ready_error = session
                 .wait_ready(Instant::now() - Duration::from_millis(1))
                 .unwrap_err();
@@ -1182,6 +1230,7 @@ mod platform {
             assert!(result.to_string().contains("ready handshake timed out"));
             assert_eq!(closes.load(Ordering::SeqCst), 1);
             assert_eq!(session.phase, Phase::TargetExited);
+            assert!(session.identity.exited().unwrap());
         }
         #[test]
         fn critical_just_before_ready_timeout_closes_once_and_fails_startup() {
@@ -1203,6 +1252,7 @@ mod platform {
             assert!(result.to_string().contains("critical_cleanup"));
             assert_eq!(closes.load(Ordering::SeqCst), 1);
             assert_eq!(session.phase, Phase::TargetExited);
+            assert!(session.identity.exited().unwrap());
         }
         #[test]
         fn notification_after_total_deadline_cannot_skip_owned_close() {
