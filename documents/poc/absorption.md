@@ -40,7 +40,7 @@
 | --- | --- | --- |
 | `0bceb5d` | 全workspace | 本担当が1,246件成功、失敗・省略・絞り込み0を確認。`D:/CC/Work/shepherd96-artworks-20261004/workspace-ready-fixed.log` |
 | `0bceb5d` | 吸収専用の全target | 136件成功、失敗・省略・絞り込み0。`native-ready-fixed.log`。画面側で配置と移動力が未公開の場合の負例を含む |
-| `0bceb5d` | 変更36シナリオ | 形式検査と全Lua 5.1構文検査が成功。`scenario-ready-fixed.log`と吸収専用検査。部分指定した構文検査の結果を、全検査の省略なしと混同しない |
+| `0bceb5d`と同一のシナリオ内容 | 変更36シナリオ | 形式検査と全Lua 5.1構文検査が成功。`scenario-ready-fixed.log`と`scenario-lua-all.log`。後者はRustの監査器で各シナリオの操作・待機条件にあるLuaを全件収集した結果で、省略0。部分指定した構文検査の結果を、全検査の省略なしと混同しない |
 
 表の検査対象以降の文書追記を、別の製品候補の実機成功とは扱わない。実機と検査の候補別集計は同じ保存先の`verification.json`に記録した。
 
