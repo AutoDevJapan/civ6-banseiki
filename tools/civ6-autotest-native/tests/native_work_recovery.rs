@@ -755,6 +755,151 @@ fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> ml
 }
 
 #[test]
+fn recovery_does_not_reserve_a_slot_inside_another_borrowed_carrier() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        WORK_CITIES={[16]=true}
+        local state=A.GetState()
+        state.Archive.native.NativeWork=assert(A.OwnedGreatWorkSlots(3)[1])
+        state.Recoveries.busy={ID='other',Owner=2,Status='WAITING_UI',
+          NativeCarrier={Phase='MOVE',X=12,Y=0}}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        local accepted,reason=pcall(recover)
+        assert(not accepted and tostring(reason):find('no compatible empty destination slot',1,true),
+          'borrowed carrier city was offered as recovery destination: '..tostring(reason))
+        local intent=assert(A.GetState().Recoveries['recovery:native'])
+        assert(not intent.NativeTarget and not intent.NativeCarrier and TRANSFERS==0,
+          'conflicting recovery moved a city or reserved its borrowed carrier')
+        local locations=A.NativeWorkLocations(900)
+        assert(#locations==1 and locations[1].Owner==3 and locations[1].X==16,
+          'conflicting recovery changed the original work')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn recovered_original_work_can_be_absorbed_from_its_new_owner() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        WORK_CITIES={[16]=true}
+        local state=A.GetState()
+        state.Archive['native-work:900']=A.Rules.Copy(state.Archive.native)
+        state.Archive['native-work:900'].ID='native-work:900'
+        state.Archive.native=nil
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        Players[2]:SetProperty(A.Rules.ROSTER_KEY,{})
+        local recovered=A.RecoverArchived('native-work:900',2,'recovery:world:900',nil)
+        assert(recovered.Status=='COMPLETE' and
+          A.GetRoster(2)['native-work:900'].RecoveryToken=='recovery:world:900')
+        local rosterIDs={}
+        for id in pairs(A.GetRoster(2)) do rosterIDs[#rosterIDs+1]=id end
+        assert(#rosterIDs==1 and rosterIDs[1]=='native-work:900',
+          'unexpected recipient roster: '..A.Canonical(rosterIDs))
+        Players[2].units={}
+        Players[2].IsHuman=function() return false end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local plan={ID='reabsorb-recovered-native',From=2,To=1,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          Assets={['native-work:900']='TRANSFER'}}
+        local ok,result=pcall(A.Apply,plan)
+        assert(ok,'valid recovered asset blocked during absorption: '..tostring(result))
+        assert(result.Status=='COMPLETE' and CITIES[16]:GetOwner()==1,
+          'recovered original work did not finish its next absorption')
+        local work=A.NativeWorkLocations(900)
+        assert(#work==1 and work[1].Owner==1 and work[1].X==16,
+          'next absorption lost or duplicated recovered original index')
+        assert(A.GetRoster(1)['native-work:900'].RecoveryToken=='recovery:world:900',
+          'recovery identity was dropped in the next absorption')
+        assert(A.GetState().Archive['native-work:900'].Owner==-1,
+          'historical scatter archive was overwritten')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn prepared_return_without_a_slot_reopens_owner_after_recipient_loses_city() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        DealManager={EnactWorkingDeal=function() error('unprepared work was enacted') end,
+          GetWorkingDeal=function() error('unprepared work opened a deal') end,
+          GetPossibleDealItems=function() error('unprepared work queried deal items') end}
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner)
+          assert(owner==3);return {}
+        end
+        GameInfo.GreatWork_ValidSubTypes=function()
+          return function() return nil end
+        end
+        local plan={ID='prepared-return',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,FlowPolicy=true,
+          Leader='RECRUIT',NativeWorks={[900]={Outcome='RETURN',ReturnOwner=3}}}
+        local waiting=A.Apply(plan)
+        assert(waiting.Status=='WAITING_UI' and not waiting.AwaitingPreparation
+          and waiting.NativeWorks[1].TargetSlot==nil and A.CanCancelUnprepared(plan.ID,plan),
+          'native RETURN did not pause after read-only preparation')
+        assert(TRANSFERS==0 and CITIES[4]:GetOwner()==1 and
+          #A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==1)
+        PLAN=plan
+        Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,World={},Flows={
+          [plan.ID]={ID=plan.ID,From=1,To=2,Phase='APPLYING',AppliedPlan=plan,
+            FinalRollsComplete=true,Entries={{ID='native-work:900',Kind='ITEM',
+              SelectedAction='RETURN',FinalOutcome='RETURN',ReturnOwner=3,
+              Rolls={P3_SUCCESS={Used=0}}}}}}})
+        Players[3].cities={}
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local F=assert(JAC_AbsorptionFlowGameplay)
+        local restored=F.Resume(PLAN.ID)
+        assert(restored.Phase=='CHOICE' and restored.FinalRollsComplete
+          and restored.AppliedPlan==nil and restored.Entries[1].ReturnOwnerPending,
+          'prepared return owner loss did not reopen only the destination')
+        assert(restored.Entries[1].FinalOutcome=='RETURN'
+          and restored.Entries[1].Rolls.P3_SUCCESS.Used==0,
+          'prepared return correction rerolled the final result')
+        assert(A.GetState().Transactions[PLAN.ID]==nil and TRANSFERS==0
+          and CITIES[4]:GetOwner()==1 and #A.NativeWorkLocations(900)==1,
+          'prepared cancellation changed donor or original work')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn human_world_reward_accepts_published_native_work_token_after_physical_move() -> mlua::Result<()>
 {
     let lua = setup()?;
@@ -1121,6 +1266,12 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
         assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and ENACT_CALLS==0)
         WORK_CITIES[4],WORK_CITIES[16]=nil,true -- the UI same-owner MOVE's physical effect
         PUBLISHED[carrier.MoveToken]=true
+        PLOTS[17].owner=2
+        local unsafe=pcall(A.Resume,PLAN.ID)
+        assert(not unsafe and TRANSFERS==1 and CITIES[16]:GetOwner()==1
+          and #A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==1,
+          'changed purchased plot was carried back before the original city was protected')
+        PLOTS[17].owner=1
         pending=A.Resume(PLAN.ID)
         carrier=assert(pending.NativeWorks[1].Carrier)
         assert(carrier.Phase=='RETURN' and TRANSFERS==2 and CITIES[16]:GetOwner()==3)

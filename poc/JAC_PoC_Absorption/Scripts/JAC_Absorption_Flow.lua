@@ -578,14 +578,14 @@ function F.Resume(id)
   end
   local tx = A.GetState().Transactions[id]
   if tx and tx.Status == "COMPLETE" then return FinishApply(state, flow, tx) end
-  if not tx or tx.AwaitingPreparation then
-    local invalidReturn = false
-    for _, entry in ipairs(flow.Entries) do
-      if NeedsReturnOwner(flow, entry) and not ValidReturnOwner(flow, entry.ReturnOwner) then
-        invalidReturn = true
-      end
+  local invalidReturn = false
+  for _, entry in ipairs(flow.Entries) do
+    if NeedsReturnOwner(flow, entry) and not ValidReturnOwner(flow, entry.ReturnOwner) then
+      invalidReturn = true
     end
-    if invalidReturn then
+  end
+  if invalidReturn then
+    if not tx or A.CanCancelUnprepared(id, flow.AppliedPlan) then
       A.CancelUnprepared(id, flow.AppliedPlan)
       for _, entry in ipairs(flow.Entries) do
         if NeedsReturnOwner(flow, entry) and not ValidReturnOwner(flow, entry.ReturnOwner) then
@@ -599,6 +599,10 @@ function F.Resume(id)
       Save(state)
       return R.Copy(flow)
     end
+    flow.Phase, flow.Error = "BLOCKED", "return owner disappeared after absorption mutation began"
+    flow.WaitingFor = nil
+    Save(state)
+    return R.Copy(flow)
   end
   local ok, result
   if tx then ok, result = pcall(A.Resume, id)

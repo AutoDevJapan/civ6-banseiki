@@ -399,6 +399,25 @@ local function ReservedNativeCarrierCities(state, excludingTransaction)
   end
   return reserved
 end
+local function RecoveredArchiveOwnedByDonor(state, id, original, donor)
+  local archived = state.Archive[id]
+  if not archived then return true end
+  local token = original and original.RecoveryToken
+  local recovery = token and state.Recoveries and state.Recoveries[token]
+  if not (type(original) == "table" and original.ID == id and original.Owner == donor
+    and recovery and recovery.Status == "COMPLETE" and recovery.ID == id
+    and recovery.Owner == donor and recovery.Record
+    and recovery.Record.RecoveryToken == token and archived.Kind == original.Kind) then
+    return false
+  end
+  if archived.NativeWork then
+    if not original.NativeWork or original.NativeWork.Index ~= archived.NativeWork.Index then
+      return false
+    end
+    SameNativeWorkIdentity(archived.NativeWork, original.NativeWork)
+  end
+  return true
+end
 local NativeWorkAtTarget, NativeWorkAtAbsorber, NativeWorkSourceEmpty
 
 -- Read-only game-core probe. The UI's MOVE_GREAT_WORK request proves only the
@@ -1024,7 +1043,9 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   for _, id in ipairs(R.Keys(tx.SourceRoster)) do
     local asset = tx.SourceRoster[id]
     assert(asset.ID == id and asset.Owner == plan.From, "invalid roster ownership/ID: " .. id)
-    assert(not tx.TargetRoster[id] and not state.Archive[id], "asset ID collision: " .. id)
+    assert(not tx.TargetRoster[id]
+      and RecoveredArchiveOwnedByDonor(state, id, tx.OriginalSourceRoster[id], tx.From),
+      "asset ID collision: " .. id)
     local d = id == leaderID and decision or generatedDecisions[id] or Decision((plan.Assets or {})[id])
     d.Owner = DestinationOwner(asset.Kind, d.Outcome, d, tx)
     if d.Owner >= 0 and d.Owner ~= tx.To then assert(not GetRoster(d.Owner)[id], "returned asset ID collision") end
@@ -1824,6 +1845,15 @@ local function NativeCarrierState(city, carrier)
     UnitsOnCenter = units, PurchasedPlots = plots }
 end
 
+local function AssertNativeCarrierReturnSafe(city, carrier)
+  local current = NativeCarrierState(city, carrier)
+  local before = assert(carrier.Before, "native carrier baseline is missing")
+  assert(R.Equal(current.Assets, before.Assets)
+    and R.Equal(current.UnitsOnCenter, before.UnitsOnCenter)
+    and R.Equal(current.PurchasedPlots, before.PurchasedPlots),
+    "native Great Work carrier gained an unrelated asset, unit, or plot before return")
+end
+
 local function NativeCarrierActorReady()
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
     and GameConfiguration.IsAnyMultiplayer()),
@@ -1905,6 +1935,7 @@ local function AdvanceNativeCarrier(state, carrier)
         "native Great Work MOVE source city disappeared")
       assert(WorkInSlot(source, carrier.MoveSource.Building, carrier.MoveSource.Slot) == -1,
         "native Great Work MOVE source slot was not emptied")
+      AssertNativeCarrierReturnSafe(city, carrier)
       carrier.Phase = "RETURN"
       carrier.ReturnToken = carrier.Token .. ":return"
       Save(state) -- the return intent precedes the city mutation
@@ -1924,6 +1955,7 @@ local function AdvanceNativeCarrier(state, carrier)
     end
     carrier.Phase = "RESTORE"
     carrier.ReturnToken = carrier.Token .. ":restore"
+    AssertNativeCarrierReturnSafe(city, carrier)
     Save(state) -- the empty carrier can be returned without changing the work
     CityManager.TransferCity(city, carrier.Owner)
     return false
@@ -1933,6 +1965,7 @@ local function AdvanceNativeCarrier(state, carrier)
       local locations = NativeWorkLocations(carrier.Index)
       assert(#locations == 1 and SameNativeWorkSlot(locations[1], carrier.MoveSource),
         "native Great Work changed before carrier rollback")
+      AssertNativeCarrierReturnSafe(city, carrier)
       CityManager.TransferCity(city, carrier.Owner)
       return false
     end
@@ -1965,6 +1998,7 @@ local function AdvanceNativeCarrier(state, carrier)
       local locations = NativeWorkLocations(carrier.Index)
       assert(#locations == 1 and SameNativeWorkSlot(locations[1], carrier.MoveTarget),
         "native Great Work left the borrowed carrier route before return")
+      AssertNativeCarrierReturnSafe(city, carrier)
       CityManager.TransferCity(city, carrier.Owner)
       return false
     end
@@ -2409,16 +2443,36 @@ function A.CompleteHeroRecall(id)
   return R.Copy(record)
 end
 
--- Only the read-only UI preparation reservation can be released. A prepared
--- transaction, including one paused before Execute, owns its frozen plan.
+-- A prepared transfer can also be released if it stopped before any native
+-- request, unit staging, or city/property change. Frozen rolls stay in Flow.
+function A.CanCancelUnprepared(id, expectedPlan)
+  local state = State()
+  local tx = state.Transactions[id]
+  if not tx then return true end
+  if tx.Status ~= "WAITING_UI" or not R.Equal(tx.Request, expectedPlan) then return false end
+  if tx.AwaitingPreparation then
+    return next(tx.Units or {}) == nil and next(tx.Adapters or {}) == nil
+  end
+  if tx.UnitMapFrozen or next(tx.UnitMap or {}) or tx.SourceRosterMoved
+    or tx.NativeDealUI or tx.CityLoyaltyPending or tx.AwaitingFinalUI then return false end
+  for _, snap in ipairs(tx.NativeWorks or {}) do
+    if snap.TargetSlot or snap.Carrier or snap.DealSubmitted or snap.PhysicalMoved then return false end
+  end
+  for _, snap in ipairs(tx.Units or {}) do
+    if snap.CandidateID or snap.HeroSpawnIntent or snap.CoreStagedTurn
+      or snap.TransferRestoredTurn or snap.DispositionFrozen or snap.PlacementComplete then return false end
+  end
+  for _, snap in ipairs(tx.Cities or {}) do
+    if snap.TransferredProperties then return false end
+  end
+  return true
+end
 function A.CancelUnprepared(id, expectedPlan)
   local state = State()
   local tx = state.Transactions[id]
   if not tx then return end
-  assert(tx.AwaitingPreparation == true and tx.Status == "WAITING_UI"
-    and R.Equal(tx.Request, expectedPlan), "only matching unprepared absorption can be cancelled")
-  assert(next(tx.Units or {}) == nil and next(tx.Adapters or {}) == nil,
-    "unprepared absorption contains staged mutations")
+  assert(A.CanCancelUnprepared(id, expectedPlan),
+    "only matching mutation-free absorption can be cancelled")
   state.Transactions[id] = nil
   Save(state)
 end
@@ -2660,7 +2714,8 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
     assert(source.BuildingType ~= "BUILDING_PALACE",
       "native recovery Palace carrier has no verified city-preserving route")
     intent.NativeTarget = NativeWorkDestination(owner, source,
-      ReservedNativeSlots(state, owner, nil, token))
+      ReservedNativeSlots(state, owner, nil, token), false,
+      ReservedNativeCarrierCities(state))
     Save(state)
   end
   if intent.NativePhysicalMoved and not intent.NativeCarrier then
