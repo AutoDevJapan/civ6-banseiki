@@ -140,3 +140,11 @@ llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1806
 llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1800152f0 --stop-address=0x18001539b $d
 llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1800be3b9 --stop-address=0x1800be3d4 $d
 ```
+
+## 持続するGameplay APIと所有者別特性付与の実機検証
+
+実機89では、テスト専用`AddGameplayScripts`の同期イベントを公式`EXECUTE_SCRIPT`から呼んだ。9手順と6ログ検査に合格し、`leaderperson-89/steps.jsonl`の8手順目に`source=persistent_gameplay`の結果が残った。本体Gameplayの`Player:AttachModifierByID`、総督の`GetGovernorPoints`と`GetGovernorPointsSpent`は関数だった。一方、同じGameplayコンテキストでは総督の`Appoint`・`Promote`・`Assign`、Playerの`GetTraits`・`GrantTrait`・`AddTrait`、Gameの`RequestPlayerOperation`はnilだった。イベント表の生の要素は見つからなかったが、`__index`から生成されるイベントの有無は判定していない。UIの公式操作APIの有無と混同しない。
+
+実機89の後、`poc/JAC_Test_PersonaTraitGrant`を追加した。これは15kmマップで明示的に有効化するテストMODで、本番の22人のSQLは変更しない。蘆名盛舜1人だけに未割当の専用Traitを設定し、所有者の同期Gameplayが正規Joinと費用全額予約に成功した後、`Player:AttachModifierByID`で`COLLECTION_OWNER`の効果候補を接続する。候補の`EFFECT_GRANT_TRAIT`は公式データの写しに実装例がなく、SQL行が通っても本体の効果handlerが存在する証拠にはならない。偽人事・称号残高・公式総督は書き換えない。
+
+有限の実機シナリオ`tools/civ6-autotest/scenarios/leader-persona-trait-grant-15km.json`は、未加入の22候補と別所有者の資格偽を先に確認する。その後、正規Join・称号1個の全額予約・所有者への効果接続を同期操作で行い、UIから本体`CanEverAppointGovernor`の変化を読む。蘆名盛舜だけ真になれば公式`APPOINT_GOVERNOR`を一度要求し、実Governor・基礎昇進・本体の使用済み称号+1を確認してから通常の進化完了へ進む。効果が存在しない場合は9手順目の30秒以内に失敗し、8手順目の実`CanEver`値を残す。成功しても費用2・3の追加公式昇進、AI側の同経路、消失時の資格閉鎖と保存読込は未証明であり、本番の資格を開かない。親担当がこの作業ツリーをsourceRootとして配置した後の1回の実行は、`D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-trait-grant-15km.json --stop-on-failure`である。

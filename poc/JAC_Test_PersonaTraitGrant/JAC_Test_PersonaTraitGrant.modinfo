@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in GameCore experiment. A successful SQL load does not prove a trait was granted. -->
+<Mod id="2b20f0d9-64cd-42b8-9841-74067419b81e" version="1">
+  <Properties>
+    <Name>JAC TEST ONLY: joined persona trait grant</Name>
+    <Description>Tests a single owner-scoped native Governor trait after real joining and reservation.</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="JAC PoC: Leader Persona" />
+  </Dependencies>
+  <ActionCriteria>
+    <Criteria id="JAC_TraitGrant_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_TraitGrant_Data" criteria="JAC_TraitGrant_15km">
+      <Properties><LoadOrder>410</LoadOrder></Properties>
+      <File>Data/JAC_PersonaTraitGrant.sql</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_TraitGrant_Gameplay" criteria="JAC_TraitGrant_15km">
+      <Properties><LoadOrder>910</LoadOrder></Properties>
+      <File>Scripts/JAC_PersonaTraitGrant_Gameplay.lua</File>
+    </AddGameplayScripts>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_PersonaTraitGrant.sql</File>
+    <File>Scripts/JAC_PersonaTraitGrant_Gameplay.lua</File>
+  </Files>
+</Mod>
