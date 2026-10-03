@@ -3,6 +3,14 @@
 BOUNDARY_CASES = {}
 local C = BOUNDARY_CASES
 
+function C.no_persona_config()
+    local original=Game.GetProperty
+    Game.GetProperty=function(self,key)
+        if key=='JAC_BOUNDARY_CONFIG' then return nil end
+        return original(self,key)
+    end
+end
+
 function C.spy(owner, id)
     makeSpy(owner, id)
     Game:SetProperty('JAC_BOUNDARY_SPY', {owner=owner, id=id})
@@ -12,6 +20,14 @@ function C.spy_home(owner, id)
     local spy=makeSpy(owner, id)
     spy.x=CONTROL.x; spy.y=CONTROL.y
     Game:SetProperty('JAC_BOUNDARY_SPY', {owner=owner, id=id})
+end
+
+function C.production_without_unit()
+    BUILD_QUEUE.AddProgress=function(_,added)
+        assert(added>0 and BUILD_QUEUE.building==555)
+        BUILD_QUEUE.progress=BUILD_QUEUE.progress+added
+        BUILD_QUEUE.building=0
+    end
 end
 
 function C.mission(initial, plot, turn, escape)

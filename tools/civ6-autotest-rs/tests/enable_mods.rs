@@ -72,6 +72,7 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
         "leader-persona-native-eligibility-15km.json",
         "leader-persona-city-loss-15km.json",
         "leader-persona-spy-access-15km.json",
+        "leader-persona-spy-production-15km.json",
     ] {
         let data = support_fixture::scenario(name);
         validate_scenario(&data).unwrap();
@@ -128,7 +129,9 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
         let boundary: Table = mods.get(BOUNDARY).unwrap();
         let expected_boundary = matches!(
             name,
-            "leader-persona-city-loss-15km.json" | "leader-persona-spy-access-15km.json"
+            "leader-persona-city-loss-15km.json"
+                | "leader-persona-spy-access-15km.json"
+                | "leader-persona-spy-production-15km.json"
         );
         assert!(
             matches!(boundary.get::<mlua::Value>("Enabled").unwrap(),

@@ -171,6 +171,29 @@ local function LocalSpy()
     return spy;
 end
 
+function B.SpyProduction()
+    local owner = Game.GetLocalPlayer();
+    local player = assert(Players[owner], "local spy owner missing");
+    local unitType = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    local civic = assert(GameInfo.Civics["CIVIC_DIPLOMATIC_SERVICE"], "native spy civic missing");
+    local capital = assert(player:GetCities():GetCapitalCity(), "native production city missing");
+    local queue = assert(capital:GetBuildQueue(), "native production queue missing");
+    local spies = {};
+    for _,unit in player:GetUnits():Members() do if unit:GetType() == unitType.Index then
+        local city = Cities.GetPlotPurchaseCity(Map.GetPlot(unit:GetX(),unit:GetY()));
+        spies[#spies+1] = {owner=unit:GetOwner(), id=unit:GetID(), x=unit:GetX(), y=unit:GetY(),
+            cityOwner=city and city:GetOwner() or -1, cityID=city and city:GetID() or -1,
+            operation=unit:GetSpyOperation(), endTurn=unit:GetSpyOperationEndTurn()};
+    end end
+    table.sort(spies, function(a,b) return a.id < b.id; end);
+    local result = {owner=owner, civic=player:GetCulture():HasCivic(civic.Index),
+        capacity=player:GetDiplomacy():GetSpyCapacity(), spies=spies,
+        city=capital:GetID(), building=queue:CurrentlyBuilding(),
+        cost=queue:GetUnitCost(unitType.Index), progress=queue:GetUnitProgress(unitType.Index)};
+    Log("SPY_PRODUCTION_ROSTER", result);
+    return result;
+end
+
 local function SpyState(spy)
     return {owner=spy:GetOwner(), id=spy:GetID(), operation=spy:GetSpyOperation(),
         endTurn=spy:GetSpyOperationEndTurn(), x=spy:GetX(), y=spy:GetY(),
@@ -247,8 +270,10 @@ function B.Queue(action, params)
     assert(not pending and not verification, "a boundary frame request is already pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
     assert(action == "PREPARE" or action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
-        action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "SPY_TRAVEL" or action == "SPY_MISSION", "unknown boundary action");
-    if action == "SPY_TRAVEL" or action == "SPY_MISSION" then
+        action == "LOSE_CITY" or action == "SPY_UNLOCK" or action == "SPY_BUILD" or
+        action == "SPY_FINISH" or action == "SPY_TRAVEL" or action == "SPY_MISSION", "unknown boundary action");
+    if action == "SPY_UNLOCK" or action == "SPY_BUILD" or action == "SPY_FINISH" or
+        action == "SPY_TRAVEL" or action == "SPY_MISSION" then
         assert(not spyQueued[action], "native spy request cannot be replayed in this session");
         spyQueued[action] = true;
     end
@@ -261,8 +286,35 @@ local function Submit(command)
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
     end
-    local c=Config();
-    assert(c.owner == owner, "fixture is owned by another player");
+    if action == "SPY_UNLOCK" or action == "SPY_FINISH" then
+        UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT,
+            {OnStart=action == "SPY_UNLOCK" and "JAC_BoundaryUnlockSpy" or "JAC_BoundaryFinishSpy"});
+        return;
+    end
+    if action == "SPY_BUILD" then
+        local state = B.SpyProduction();
+        local unitType = GameInfo.Units["UNIT_SPY"];
+        local city = assert(CityManager.GetCity(owner,state.city), "native production city changed");
+        local queue = city:GetBuildQueue();
+        assert(state.civic and state.capacity > #state.spies, "official spy capacity unavailable");
+        local build = {UnitType=unitType.Hash,
+            MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION};
+        local canProduce, reasons = queue:CanProduce(build, false, true);
+        Log("SPY_BUILD_QUERY", {owner=owner, city=city:GetID(), unit=unitType.Hash,
+            canProduce=canProduce, reasons=reasons or {}, capacity=state.capacity, spies=#state.spies});
+        assert(canProduce, "native production refused UNIT_SPY");
+        -- ProductionPanel.lua:293-301,2885-2898: replace the current slot.
+        local params = {[CityOperationTypes.PARAM_UNIT_TYPE]=unitType.Hash,
+            [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,
+            [CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0};
+        CityManager.RequestOperation(city, CityOperationTypes.BUILD, params);
+        return {action=action, cityOwner=owner, cityID=city:GetID(), building=unitType.Hash};
+    end
+    local c;
+    if action ~= "SPY_TRAVEL" and action ~= "SPY_MISSION" then
+        c=Config();
+        assert(c.owner == owner, "fixture is owned by another player");
+    end
     if action == "EVOLVE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_LeaderPersonaEvolve", Leader=c.leader});
     elseif action == "BUY" then
@@ -275,10 +327,10 @@ local function Submit(command)
         assert(governor:GetNeutralizedTurns() == 0 and Players[owner]:GetGovernors():CanAssignGovernor(def.Hash,city), "native assignment unavailable");
         UI.RequestPlayerOperation(owner,PlayerOperations.ASSIGN_GOVERNOR,
             {[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,[PlayerOperations.PARAM_PLAYER_ONE]=owner,[PlayerOperations.PARAM_CITY_DEST]=c.cityID});
-    elseif action == "LOSE_CITY" or action == "SPAWN_SPY" then
-        if action == "LOSE_CITY" then B.Check("SETTLED"); end
+    elseif action == "LOSE_CITY" then
+        B.Check("SETTLED");
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart=action == "LOSE_CITY" and "JAC_BoundaryLoseCity" or "JAC_BoundarySpawnSpy"});
+            {OnStart="JAC_BoundaryLoseCity"});
     else
         local spy=LocalSpy(); local city=assert(CityManager.GetCity(params.owner,params.city), "spy target missing");
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
@@ -312,6 +364,15 @@ local function Submit(command)
 end
 
 local function VerifySpyRequest(request)
+    if request.action == "SPY_BUILD" then
+        local state = B.SpyProduction();
+        local accepted = state.owner == request.cityOwner and state.city == request.cityID and
+            state.building == request.building;
+        Log("SPY_BUILD_ACCEPTANCE", {accepted=accepted, owner=state.owner,
+            city=state.city, building=state.building, expected=request.building,
+            capacity=state.capacity, spies=state.spies});
+        return accepted;
+    end
     local spy=LocalSpy();
     local after=SpyState(spy);
     local nativeOperation=GameInfo.UnitOperations[after.operation];

@@ -10,7 +10,7 @@ function include() end
 function event() local e={}; e.Add=function(f) e[#e+1]=f end; return e end
 Events,GameEvents={},{}
 for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted'}) do Events[k]=event() end
-for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy'}) do GameEvents[k]=event() end
+for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundaryUnlockSpy','JAC_BoundaryFinishSpy'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
  local r={}; for i,row in ipairs(rows) do r[i-1]=row; r[row[key]]=row; if row.Hash then r[row.Hash]=row end end
@@ -32,7 +32,8 @@ GameInfo.GovernorPromotions={BASE_TEST={Hash=7000}}
 GameInfo.JAC_PersonaSkills=collection({{LeaderType=LEADER,ModifierId=BASE}},'ModifierId')
 GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,ModifierId=NODE,CategoryType='ADMIN',RouteType='SIGNATURE'}},'NodeType')
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
-GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55,Spy=true},[55]={Index=55,Spy=true}}
+GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55,Hash=555,Spy=true},[55]={Index=55,Hash=555,Spy=true}}
+GameInfo.Civics={CIVIC_DIPLOMATIC_SERVICE={Index=7,CivicType='CIVIC_DIPLOMATIC_SERVICE'}}
 GameInfo.GreatPersonIndividuals={[3]={GreatPersonIndividualType='GP_TEST'}}
 GameInfo.Yields=collection({{YieldType='YIELD_GOLD',Index=0},{YieldType='YIELD_FOOD',Index=1}},'YieldType')
 GameInfo.UnitOperations=collection({
@@ -43,6 +44,9 @@ InterfaceModeTypes={SELECTION=1,SPY_TRAVEL_TO_CITY=2,SPY_CHOOSE_MISSION=3}
 ActivityTypes={ACTIVITY_AWAKE=1}
 EspionageResultTypes={SUCCESS_UNDETECTED=1,SUCCESS_MUST_ESCAPE=2,FAIL_UNDETECTED=3,CAPTURED=4,NO_RESULT=0}
 PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
+CityOperationTypes={BUILD=3,PARAM_UNIT_TYPE='unit',PARAM_INSERT_MODE='insert',
+ PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT='replace'}
+MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
 local function members(list)
  local i=0; return function() i=i+1; if list[i] then return i,list[i] end end
 end
@@ -59,6 +63,24 @@ end
 CONTROL=city(10,0,1,0,'Control',0)
 TARGET=city(11,0,2,0,'Target',1)
 FOREIGN=city(20,1,2,1,'Foreign',0)
+SPY_CIVIC=false; SPY_CAPACITY=0; BUILD_ACCEPT=true; CAN_PRODUCE=true
+BUILD_QUEUE={building=0,cost=225,progress=0}
+BUILD_QUEUE.CurrentlyBuilding=function() return BUILD_QUEUE.building end
+BUILD_QUEUE.GetUnitCost=function(_,index) assert(index==55); return BUILD_QUEUE.cost end
+BUILD_QUEUE.GetUnitProgress=function(_,index) assert(index==55); return BUILD_QUEUE.progress end
+BUILD_QUEUE.CanProduce=function(_,params,exclude,results)
+ assert(params.UnitType==555 and params.MilitaryFormationType==0 and exclude==false and results==true)
+ return SPY_CIVIC and SPY_CAPACITY>#UNITS[0] and CAN_PRODUCE,{reason='native capacity'}
+end
+BUILD_QUEUE.AddProgress=function(_,added)
+ assert(BUILD_QUEUE.building==555 and added>0)
+ BUILD_QUEUE.progress=BUILD_QUEUE.progress+added
+ if BUILD_QUEUE.progress>=BUILD_QUEUE.cost then
+  BUILD_QUEUE.building=0
+  local spy=makeSpy(0,15); spy.x=CONTROL.x; spy.y=CONTROL.y
+ end
+end
+CONTROL.GetBuildQueue=function() return BUILD_QUEUE end
 PLOTS={}
 for _,c in ipairs(CITIES) do
  local index=c.x+c.y*10
@@ -90,11 +112,23 @@ for _,id in ipairs({0,1,62}) do
   Members=function() local owned={}; for _,c in ipairs(CITIES) do if c.owner==id then owned[#owned+1]=c end end; return members(owned) end,
   GetCapitalCity=function() if id==0 then return CONTROL elseif id==1 then return FOREIGN end end} end
  p.GetUnits=function() return {Members=function() return members(UNITS[id]) end,FindID=function(_,uid) for _,u in ipairs(UNITS[id]) do if u:GetID()==uid then return u end end end} end
- p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end} end
+ p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
+  GetSpyCapacity=function() return id==0 and SPY_CAPACITY or 0 end} end
+ p.GetCulture=function() return {HasCivic=function(_,index) assert(index==7); return SPY_CIVIC end,
+  GetCultureCost=function(_,index) assert(index==7); return 540 end,
+  SetCulturalProgress=function(_,index,amount)
+   assert(index==7 and amount==540); SPY_CIVIC=true; SPY_CAPACITY=1
+  end} end
  Players[id]=p
 end
 PlayerManager={GetAliveMajorIDs=function() return {0,1} end,GetFreeCitiesPlayerID=function() return 62 end}
+CITY_REQUESTS={}
 CityManager={GetCity=function(owner,id) for _,c in ipairs(CITIES) do if c.owner==owner and c.id==id then return c end end end,
+ RequestOperation=function(c,op,params)
+  CITY_REQUESTS[#CITY_REQUESTS+1]={city=c,op=op,params=params}
+  assert(c==CONTROL and op==3 and params.unit==555 and params.insert=='replace' and params.location==0)
+  if BUILD_ACCEPT then BUILD_QUEUE.building=555 end
+ end,
  TransferCityToFreeCities=function(c) assert(c==TARGET); TRANSFERRED=c; c.owner=62; c.marker=0; GOV.assigned=nil; GOV.established=false; EFFECT_TARGET=false end}
 EFFECT_TARGET=true
 GameEffects={GetModifiers=function() return {100,101,102} end,
@@ -137,11 +171,9 @@ UnitManager={
  GetTimeToComplete=function(index) assert(index==0); return 8 end,
  GetResultProbability=function() return {ESPIONAGE_SUCCESS_UNDETECTED=.25,ESPIONAGE_SUCCESS_MUST_ESCAPE=.20} end,
  GetTravelTime=function() return 3 end,GetEstablishInCityTime=function() return 4 end,
- InitUnitValidAdjacentHex=function(owner,typ,x,y,radius)
-  assert(typ=='UNIT_SPY' and owner==0 and x==1 and y==0 and radius==1); makeSpy(owner,15)
- end}
+ }
 function makeSpy(owner,id)
- local spy={x=2,y=1,op=-1,finish=TURN,owner=owner,id=id}
+ local spy={x=2,y=1,op=-1,finish=0,owner=owner,id=id}
  spy.GetID=function() return spy.id end; spy.GetOwner=function() return spy.owner end
  spy.GetType=function() return 55 end; spy.GetUnitType=function() return 55 end
  spy.IsReadyToMove=function() return SPY_READY~=false end

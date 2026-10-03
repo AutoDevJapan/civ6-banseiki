@@ -114,29 +114,51 @@ GameEvents.JAC_BoundaryLoseCity.Add(function(owner)
     print("JAC_BOUNDARY TRANSFER_RETURN " .. R.Serialize(ReadGameplay()));
 end);
 
-GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
-    local c = Config(owner);
-    assert(not Game:GetProperty("JAC_BOUNDARY_SPY"), "fixture spy already created");
-    local player = Players[owner];
-    local capital = player:GetCities():GetCapitalCity();
+GameEvents.JAC_BoundaryUnlockSpy.Add(function(owner)
+    local player = assert(Players[owner], "spy owner missing");
+    assert(player:IsHuman() and player:IsAlive(), "spy fixture requires a living human owner");
+    local culture = player:GetCulture();
+    local civic = assert(GameInfo.Civics["CIVIC_DIPLOMATIC_SERVICE"], "native spy civic missing");
+    if not culture:HasCivic(civic.Index) then
+        -- Base/Assets/Gameplay/Data/Civics.xml grants a spy slot for this civic.
+        -- Progress is the native completion path used by the test-only fixture.
+        culture:SetCulturalProgress(civic.Index, culture:GetCultureCost(civic.Index));
+    end
+    assert(culture:HasCivic(civic.Index), "native spy civic did not complete");
+    print("JAC_BOUNDARY SPY_CIVIC_COMPLETED " .. R.Serialize({owner=owner,
+        civic=civic.CivicType, capacity=Players[owner]:GetDiplomacy():GetSpyCapacity()}));
+end);
+
+GameEvents.JAC_BoundaryFinishSpy.Add(function(owner)
+    local player = assert(Players[owner], "spy owner missing");
+    assert(player:IsHuman() and player:IsAlive(), "spy fixture requires a living human owner");
+    assert(not Game:GetProperty("JAC_BOUNDARY_SPY"), "fixture spy already recorded");
+    local capital = assert(player:GetCities():GetCapitalCity(), "production city missing");
+    local unitType = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    local queue = assert(capital:GetBuildQueue(), "native production queue missing");
+    assert(queue:CurrentlyBuilding() == unitType.Hash, "native spy build was not accepted");
+    local cost, progress = queue:GetUnitCost(unitType.Index), queue:GetUnitProgress(unitType.Index);
+    assert(type(cost) == "number" and cost > 0 and type(progress) == "number" and progress < cost,
+        "native spy production cost/progress invalid");
     local before = {};
     for _,unit in player:GetUnits():Members() do before[unit:GetID()] = true; end
-    -- Generic Gameplay native creation: NubiaScenario.lua:144. No inferred return value.
-    UnitManager.InitUnitValidAdjacentHex(owner, "UNIT_SPY", capital:GetX(), capital:GetY(), 1);
+    -- Debug/City.ltp:103-107 advances the current native build queue.
+    -- The queued item came from ProductionPanel.lua:293-301, not InitUnit.
+    local added = math.ceil(cost - progress) + 1;
+    print("JAC_BOUNDARY SPY_PRODUCTION_PROGRESS " .. R.Serialize({owner=owner,
+        city=capital:GetID(), building=queue:CurrentlyBuilding(), cost=cost, progress=progress, added=added}));
+    queue:AddProgress(added);
     local spy;
     for _,unit in player:GetUnits():Members() do
-        if not before[unit:GetID()] and unit:GetType() == GameInfo.Units["UNIT_SPY"].Index then
-            assert(not spy, "multiple new native spies"); spy = unit;
+        if not before[unit:GetID()] and unit:GetType() == unitType.Index then
+            assert(not spy, "multiple newly produced native spies"); spy = unit;
         end
     end
-    assert(spy, "native spy creation failed");
-    -- Keep the native unit ID as the only bridge. The official chooser must
-    -- independently recognize this unit as a selectable spy before dispatch.
-    print("JAC_BOUNDARY SPY_NATIVE_STATE " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
-        unitType=spy:GetType(),
+    assert(spy, "native production did not add exactly one spy to the owner roster");
+    print("JAC_BOUNDARY SPY_PRODUCED " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
+        unitType=spy:GetType(),sourceCity=capital:GetID(),sourceX=capital:GetX(),sourceY=capital:GetY(),
         x=spy:GetX(),y=spy:GetY()}));
     Game:SetProperty("JAC_BOUNDARY_SPY", {owner=owner, id=spy:GetID()});
-    print("JAC_BOUNDARY SPY_CREATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;

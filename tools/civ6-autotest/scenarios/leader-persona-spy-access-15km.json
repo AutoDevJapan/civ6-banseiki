@@ -363,7 +363,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SPAWN_SPY'); return 'queued for an ordinary UI frame'"
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SPY_UNLOCK'); return 'official spy civic queued for an ordinary UI frame'"
     },
     {
       "action": "wait_for",
@@ -371,7 +371,49 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPAWN_SPY' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_SPAWN_SPY'"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_UNLOCK' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_SPY_UNLOCK'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local s=ExposedMembers.JAC_PersonaBoundary.SpyProduction(); return s.civic and s.capacity>#s.spies"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SPY_BUILD'); return 'official city production queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_BUILD' or b.lastAction=='REJECTED_SPY_BUILD' then error('native spy production was not accepted: '..b.lastAction) end; return b.lastAction=='ACCEPTED_SPY_BUILD'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.SpyProduction()"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SPY_FINISH'); return 'official production progress queued for synchronized Gameplay'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_FINISH' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_SPY_FINISH'"
       }
     },
     {
@@ -382,6 +424,11 @@
         "state_name": "InGame",
         "code": "return Game:GetProperty('JAC_BOUNDARY_SPY')~=nil"
       }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.SpyProduction(); local info=Game:GetProperty('JAC_BOUNDARY_SPY'); if not info or #s.spies~=1 or s.spies[1].id~=info.id or s.spies[1].cityOwner~=Game.GetLocalPlayer() then error('official production spy roster mismatch') end; return b.SpyProduction()"
     },
     {
       "action": "ui_lua",

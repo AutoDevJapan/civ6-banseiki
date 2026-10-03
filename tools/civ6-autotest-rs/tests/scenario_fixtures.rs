@@ -50,6 +50,7 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
     for name in [
         "leader-persona-city-loss-15km.json",
         "leader-persona-spy-access-15km.json",
+        "leader-persona-spy-production-15km.json",
         "leader-persona-spy-recovery.json",
     ] {
         let data = scenario(name);
@@ -80,6 +81,32 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
         .iter()
         .all(|step| !["configure", "start_game", "enable_mods"]
             .contains(&step["action"].as_str().unwrap())));
+}
+
+#[test]
+fn produced_spy_comparison_uses_native_build_and_a_short_acceptance_barrier() {
+    let data = scenario("leader-persona-spy-production-15km.json");
+    let steps = steps(&data);
+    assert_eq!(steps.len(), 19);
+    assert!(!steps.iter().any(|step| action(step, "end_turn")));
+    let codes: Vec<_> = steps.iter().filter_map(embedded_lua).collect();
+    let index = |needle: &str| {
+        codes
+            .iter()
+            .position(|source| source.contains(needle))
+            .unwrap_or_else(|| panic!("missing native spy step: {needle}"))
+    };
+    assert!(index("Queue('SPY_UNLOCK')") < index("s.civic and s.capacity>#s.spies"));
+    assert!(index("Queue('SPY_BUILD')") < index("ACCEPTED_SPY_BUILD"));
+    assert!(index("ACCEPTED_SPY_BUILD") < index("Queue('SPY_FINISH')"));
+    assert!(index("JAC_BOUNDARY_SPY')~=nil") < index("Queue('SPY_TRAVEL'"));
+    assert!(index("Queue('SPY_TRAVEL'") < index("ACCEPTED_SPY_TRAVEL"));
+    assert!(codes
+        .iter()
+        .all(|source| !source.contains("Queue('PREPARE')")
+            && !source.contains("Queue('EVOLVE')")
+            && !source.contains("Queue('ASSIGN')")
+            && !source.contains("Queue('BUY')")));
 }
 
 #[test]
@@ -370,7 +397,7 @@ fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundar
             );
         }
     }
-    assert_eq!(count, 78);
+    assert_eq!(count, 79);
 }
 
 #[test]

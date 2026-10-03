@@ -591,7 +591,12 @@ fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
     );
     h.check("LOST", Some(12));
     assert_eq!(h.writes(), ["JAC_BOUNDARY_CONFIG"]);
-    h.event("JAC_BoundarySpawnSpy").unwrap();
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    assert_eq!(h.global::<i64>("SPY_CAPACITY"), 1);
+    h.global::<Table>("BUILD_QUEUE")
+        .set("building", 555)
+        .unwrap();
+    h.event("JAC_BoundaryFinishSpy").unwrap();
     assert_eq!(
         field::<i64>(&h.game_property::<Table>("JAC_BOUNDARY_SPY"), "id"),
         15

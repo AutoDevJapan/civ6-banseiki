@@ -21,6 +21,10 @@ impl SpyHarness {
         );
         exec(
             &lua,
+            &read_repo("poc/JAC_Test_PersonaBoundary/Scripts/JAC_PersonaBoundary_Fixture.lua"),
+        );
+        exec(
+            &lua,
             &read_repo("poc/JAC_Test_PersonaBoundary/UI/JAC_PersonaBoundary_View.lua"),
         );
         Self(lua)
@@ -70,6 +74,181 @@ impl SpyHarness {
     fn requests(&self) -> usize {
         self.global::<Table>("UNIT_REQUESTS").raw_len()
     }
+
+    fn event(&self, name: &str) -> mlua::Result<()> {
+        let events: Table = self.global("GameEvents");
+        let event: Table = events.strict_get(name).unwrap();
+        self.global::<Function>("fire").call((event, 0))
+    }
+
+    fn production(&self) -> Table {
+        self.b()
+            .strict_get::<Function>("SpyProduction")
+            .unwrap()
+            .call(())
+            .unwrap()
+    }
+}
+
+#[test]
+fn official_build_is_accepted_before_progress_and_registers_only_new_native_spy() {
+    let h = SpyHarness::new();
+    h.case("no_persona_config", ());
+    assert_eq!(h.production().strict_get::<i64>("capacity").unwrap(), 0);
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_UNLOCK", Option::<Table>::None))
+        .unwrap();
+    h.frame().unwrap();
+    let requests: Table = h.global("REQUESTS");
+    assert_eq!(requests.raw_len(), 1);
+    let unlock: Table = requests.strict_get(1).unwrap();
+    let params: Table = unlock.strict_get("params").unwrap();
+    assert_eq!(
+        params.strict_get::<String>("OnStart").unwrap(),
+        "JAC_BoundaryUnlockSpy"
+    );
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    let unlocked = h.production();
+    assert!(unlocked.strict_get::<bool>("civic").unwrap());
+    assert_eq!(unlocked.strict_get::<i64>("capacity").unwrap(), 1);
+    assert_eq!(unlocked.strict_get::<Table>("spies").unwrap().raw_len(), 0);
+
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_BUILD", Option::<Table>::None))
+        .unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "DISPATCHED_SPY_BUILD");
+    let city_requests: Table = h.global("CITY_REQUESTS");
+    assert_eq!(city_requests.raw_len(), 1);
+    let build: Table = city_requests.strict_get(1).unwrap();
+    assert_eq!(build.strict_get::<i64>("op").unwrap(), 3);
+    let params: Table = build.strict_get("params").unwrap();
+    assert_eq!(params.strict_get::<i64>("unit").unwrap(), 555);
+    assert_eq!(params.strict_get::<String>("insert").unwrap(), "replace");
+    assert_eq!(params.strict_get::<i64>("location").unwrap(), 0);
+    h.set("BUSY", true);
+    h.frame().unwrap();
+    assert_eq!(h.action(), "DISPATCHED_SPY_BUILD");
+    h.set("BUSY", false);
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_SPY_BUILD");
+    assert_eq!(h.production().strict_get::<i64>("building").unwrap(), 555);
+
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_FINISH", Option::<Table>::None))
+        .unwrap();
+    h.frame().unwrap();
+    assert_eq!(requests.raw_len(), 2);
+    let finish: Table = requests.strict_get(2).unwrap();
+    let params: Table = finish.strict_get("params").unwrap();
+    assert_eq!(
+        params.strict_get::<String>("OnStart").unwrap(),
+        "JAC_BoundaryFinishSpy"
+    );
+    h.event("JAC_BoundaryFinishSpy").unwrap();
+    let logs: Vec<String> = h
+        .global::<Table>("LOGS")
+        .sequence_values()
+        .collect::<mlua::Result<_>>()
+        .unwrap();
+    assert!(logs.iter().any(|line| line.contains("SPY_PRODUCED")
+        && line.contains("sourceCity=10")
+        && line.contains("id=15")));
+    let roster: Table = h.production().strict_get("spies").unwrap();
+    assert_eq!(roster.raw_len(), 1);
+    let spy: Table = roster.strict_get(1).unwrap();
+    assert_eq!(spy.strict_get::<i64>("id").unwrap(), 15);
+    assert_eq!(spy.strict_get::<i64>("cityID").unwrap(), 10);
+    assert_eq!(spy.strict_get::<i64>("operation").unwrap(), -1);
+    assert_eq!(spy.strict_get::<i64>("endTurn").unwrap(), 0);
+    let game: Table = h.global("Game");
+    let info: Table = game
+        .strict_get::<Function>("GetProperty")
+        .unwrap()
+        .call((game, "JAC_BOUNDARY_SPY"))
+        .unwrap();
+    assert_eq!(info.strict_get::<i64>("id").unwrap(), 15);
+    let writes: Table = h.global("WRITES");
+    assert_eq!(writes.raw_len(), 1);
+    assert_eq!(writes.strict_get::<String>(1).unwrap(), "JAC_BOUNDARY_SPY");
+    h.set("REQUEST_EFFECT", "travel");
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
+    assert_eq!(h.requests(), 1);
+}
+
+#[test]
+fn production_refusal_and_unobserved_completion_cannot_be_reported_as_a_spy() {
+    let h = SpyHarness::new();
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_BUILD", Option::<Table>::None))
+        .unwrap();
+    let error = h.frame().expect_err("no capacity must refuse before BUILD");
+    assert!(error.to_string().contains("capacity unavailable"));
+    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 0);
+
+    let h = SpyHarness::new();
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    h.set("CAN_PRODUCE", false);
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_BUILD", Option::<Table>::None))
+        .unwrap();
+    let error = h
+        .frame()
+        .expect_err("native production refusal must stop BUILD");
+    assert!(error.to_string().contains("production refused"));
+    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 0);
+
+    let h = SpyHarness::new();
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    h.set("BUILD_ACCEPT", false);
+    h.b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_BUILD", Option::<Table>::None))
+        .unwrap();
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_SPY_BUILD");
+    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 1);
+    let error = h
+        .b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_BUILD", Option::<Table>::None))
+        .expect_err("unknown native result must not replay");
+    assert!(error.to_string().contains("cannot be replayed"));
+
+    let h = SpyHarness::new();
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    h.global::<Table>("BUILD_QUEUE")
+        .set("building", 555)
+        .unwrap();
+    h.case("production_without_unit", ());
+    let error = h
+        .event("JAC_BoundaryFinishSpy")
+        .expect_err("progress without a new roster member must refuse");
+    assert!(error.to_string().contains("did not add exactly one spy"));
+    assert_eq!(
+        h.production()
+            .strict_get::<Table>("spies")
+            .unwrap()
+            .raw_len(),
+        0
+    );
+    assert_eq!(h.global::<Table>("WRITES").raw_len(), 0);
 }
 
 #[test]
