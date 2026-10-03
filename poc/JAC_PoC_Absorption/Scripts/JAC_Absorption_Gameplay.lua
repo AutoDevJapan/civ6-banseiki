@@ -893,12 +893,14 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     assert(#locations == 1 and SameNativeWorkSlot(locations[1], work),
       "native Great Work is not unique at the donor source: " .. id)
     local custodian
+    local nativeDealReady = DealManager and type(DealManager.EnactWorkingDeal) == "function"
+      and type(DealManager.GetWorkingDeal) == "function"
+      and type(DealManager.GetPossibleDealItems) == "function"
     if destination ~= tx.To then
-      assert(DealManager and type(DealManager.EnactWorkingDeal) == "function"
-        and type(DealManager.GetWorkingDeal) == "function"
-        and type(DealManager.GetPossibleDealItems) == "function",
-        "native Great Work Core deal API unavailable before city transfer: " .. id)
+      assert(nativeDealReady, "native Great Work Core deal API unavailable before city transfer: " .. id)
       custodian = NativeWorkCustodian(destination)
+    elseif work.BuildingType == "BUILDING_PALACE" and nativeDealReady then
+      custodian = tx.To -- escrow before the engine can replace the old capital's Palace
     end
     local asset = tx.SourceRoster[id] or { ID = id, Kind = "ITEM", Owner = tx.From }
     assert(asset.Kind == "ITEM" and asset.Owner == tx.From
@@ -1422,7 +1424,7 @@ local function MovedAssets(tx, normalCommitted)
       if native.Custodian then
         assert(native.PhysicalMoved, "external native work has not moved before roster update")
         physical = NativeWorkAtTarget(native)
-      elseif normalCommitted then
+      elseif normalCommitted or tx.SourceRosterMoved then
         physical = NativeWorkAtAbsorber(tx, native)
       else
         record.NativeWork.Owner = tx.To -- projection for the pre-transfer conflict check

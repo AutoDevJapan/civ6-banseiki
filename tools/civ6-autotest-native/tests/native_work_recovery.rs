@@ -120,10 +120,104 @@ fn ordinary_city_transfer_requires_one_original_work_in_its_saved_slot() -> mlua
           and record.NativeCustody.Building==1 and record.NativeCustody.Slot==0
           and record.City.Owner==2 and record.City.X==4,
           'ordinary native transfer retained its previous custody location')
+        local rosterBefore=A.Canonical(A.GetRoster(2))
+        local interrupted=A.GetState()
+        interrupted.Transactions[PLAN.ID].Status='BLOCKED'
+        interrupted.Transactions[PLAN.ID].Error='interrupted after roster commit'
+        Game:SetProperty(A.Rules.STATE_KEY,interrupted)
+        assert(A.Resume(PLAN.ID).Status=='COMPLETE',
+          'saved final verification could not resume a committed native roster')
+        assert(A.Canonical(A.GetRoster(2))==rosterBefore and #A.NativeWorkLocations(900)==1,
+          'saved final verification changed the native work or roster')
         WORK_CITIES={[12]=true}
         local same,why=pcall(A.Verify,PLAN.ID,false)
         assert(not same and tostring(why):find('changed its saved physical slot',1,true),
           'later-turn verification accepted the original work in another city')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn palace_work_uses_a_verified_deal_before_its_city_can_change_owner() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        local palace={Index=1,BuildingType='BUILDING_PALACE'}
+        GameInfo.Buildings=setmetatable({BUILDING_PALACE=palace,[1]=palace},
+          {__call=function()
+            local read=false;return function()
+              if not read then read=true;return palace end
+            end
+          end})
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local read=false;return function()
+            if not read then read=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+        DealDirection={OUTGOING=1}
+        DealItemTypes={GREATWORK=2}
+        local deal={items={}}
+        function deal:GetItemCount() return #self.items end
+        function deal:AddItemOfType(kind,from)
+          assert(kind==2 and from==1)
+          local item={}
+          function item:SetSubType(value) assert(value==4) end
+          function item:SetValueType(value) assert(value==900) end
+          self.items[#self.items+1]=item
+          return item
+        end
+        function deal:Validate() return 1 end
+        function deal:IsValid() return #self.items==1 end
+        TRANSFERS=0
+        ENACT_CALLS=0
+        DealManager={
+          GetWorkingDeal=function(direction,from,to)
+            assert(direction==1 and from==1 and to==2);return deal
+          end,
+          GetPossibleDealItems=function(from,to,kind,working)
+            assert(from==1 and to==2 and kind==2 and working==deal)
+            return {{ForType=900,IsValid=true}}
+          end,
+          EnactWorkingDeal=function(from,to)
+            assert(from==1 and to==2 and WORK_CITIES[4] and not WORK_CITIES[12])
+            assert(TRANSFERS==0 and CITIES[4]:GetOwner()==1,
+              'donor Palace city changed before its work was moved')
+            ENACT_CALLS=ENACT_CALLS+1
+            WORK_CITIES[4],WORK_CITIES[12]=nil,true
+            return 1
+          end}
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local plan={ID='native-palace-escrow',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT'}
+        local first=A.Apply(plan)
+        assert(first.Status=='WAITING_UI' and ENACT_CALLS==1 and TRANSFERS==0)
+        local snap=assert(first.NativeWorks[1])
+        assert(snap.Source.BuildingType=='BUILDING_PALACE' and snap.Custodian==2
+          and snap.TargetSlot.City==CITIES[12]:GetID() and snap.DealSubmitted)
+        local complete=A.Resume(plan.ID)
+        assert(complete.Status=='COMPLETE' and ENACT_CALLS==1)
+        assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
+        local record=assert(A.GetRoster(2)['native-work:900'])
+        assert(record.NativeWork.Index==900 and record.NativeCustody.Owner==2
+          and record.NativeCustody.City==CITIES[12]:GetID()
+          and record.NativeCustody.Building==1 and record.NativeCustody.Slot==0)
+        assert(A.Verify(plan.ID,true))
         "#,
     )
     .exec()
