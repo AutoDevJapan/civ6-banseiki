@@ -114,7 +114,8 @@ for _,id in ipairs({0,1,62}) do
   p.GetUnits=function() return {Members=function() return members(UNITS[id]) end,FindID=function(_,uid) for _,u in ipairs(UNITS[id]) do if u:GetID()==uid then return u end end end} end
  p.GetCulture=function() return {HasCivic=function(_,index) assert(index==12); return CIVIC_COMPLETED end,
   GetCultureCost=function(_,index) assert(index==12); return 100 end,
-  SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true end} end
+  SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true; SPY_CAPACITY=0 end,
+  SetCivic=function(_,index,grant) assert(index==12 and grant==true); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end} end
  p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
   GetSpyCapacity=function() return CIVIC_COMPLETED and SPY_CAPACITY or 0 end,
   GetNumSpiesOffMap=function() return id==0 and #OFF_MAP or 0 end,

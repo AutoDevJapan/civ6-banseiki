@@ -125,7 +125,10 @@ GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
     local civic = assert(GameInfo.Civics[SPY_CIVIC], "native spy civic missing");
     local culture = player:GetCulture();
     if not culture:HasCivic(civic.Index) then
-        culture:SetCulturalProgress(civic.Index, culture:GetCultureCost(civic.Index));
+        -- Official Debug/Player.ltp:190-201 grants civics with SetCivic(..., true).
+        -- Completing progress alone did not grant the native spy slot in live 48.
+        assert(type(culture.SetCivic) == "function", "native civic grant API unavailable");
+        culture:SetCivic(civic.Index, true);
     end
     assert(culture:HasCivic(civic.Index), "native spy civic was not completed");
     local capital = assert(player:GetCities():GetCapitalCity(), "spy production capital missing");

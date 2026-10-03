@@ -397,6 +397,17 @@ fn spy_capacity_and_native_build_refusal_prevent_progress() {
 }
 
 #[test]
+fn spy_preparation_grants_the_civic_before_requiring_its_native_effect() {
+    let h = SpyHarness::new();
+    h.event("JAC_BoundarySpawnSpy").unwrap();
+    assert!(h.global::<bool>("CIVIC_COMPLETED"));
+    assert_eq!(h.global::<i64>("CIVIC_GRANT_CALLS"), 1);
+    h.queue("BUILD_SPY");
+    h.frame().unwrap();
+    assert_eq!(h.global::<Table>("BUILD_REQUESTS").raw_len(), 1);
+}
+
+#[test]
 fn wrong_spy_civic_or_unaccepted_city_queue_cannot_start_production() {
     let h = SpyHarness::new();
     let units: Table = h.global::<Table>("GameInfo").strict_get("Units").unwrap();
