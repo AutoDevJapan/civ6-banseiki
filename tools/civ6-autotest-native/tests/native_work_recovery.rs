@@ -224,6 +224,148 @@ fn palace_work_uses_a_verified_deal_before_its_city_can_change_owner() -> mlua::
 }
 
 #[test]
+fn two_original_works_to_one_custodian_clear_only_the_completed_first_item() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        SECOND_SOURCE=true
+        SECOND_TARGET=false
+        local sourceBuildings=CITIES[8].GetBuildings
+        CITIES[8].GetBuildings=function(self)
+          local b=sourceBuildings(self)
+          local old=b.GetGreatWorkInSlot
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==0 then return SECOND_SOURCE and 901 or -1 end
+            return old(obj,building,slot)
+          end
+          return b
+        end
+        local targetBuildings=CITIES[12].GetBuildings
+        CITIES[12].GetBuildings=function(self)
+          local b=targetBuildings(self)
+          local oldSlots=b.GetNumGreatWorkSlots
+          local oldWork=b.GetGreatWorkInSlot
+          b.GetNumGreatWorkSlots=function(obj,building)
+            if building==1 then return 2 end
+            return oldSlots(obj,building)
+          end
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==1 then return SECOND_TARGET and 901 or -1 end
+            return oldWork(obj,building,slot)
+          end
+          return b
+        end
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local read=false;return function()
+            if not read then read=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          local slots={}
+          for slot=0,1 do
+            local empty=slot==0 and not WORK_CITIES[12] or slot==1 and not SECOND_TARGET
+            if empty then slots[#slots+1]={Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,
+              Building=1,Slot=slot,SlotType='GREATWORKSLOT_RELIC'} end
+          end
+          return slots
+        end
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+        DealDirection={OUTGOING=1}
+        DealItemTypes={GREATWORK=2}
+        local deal={items={}}
+        function deal:GetItemCount() return #self.items end
+        function deal:AddItemOfType(kind,from)
+          assert(kind==2 and from==1)
+          local item={}
+          function item:SetSubType(value) assert(value==4) end
+          function item:SetValueType(value) self.value=value end
+          function item:GetValueType() return self.value end
+          self.items[#self.items+1]=item
+          return item
+        end
+        function deal:FindItemsByType(kind,subtype,from)
+          assert(kind==2 and subtype==4 and from==1)
+          return self.items
+        end
+        function deal:Validate() return 1 end
+        function deal:IsValid() return #self.items==1 end
+        ENACT_CALLS,CLEAR_CALLS=0,0
+        DealManager={
+          GetWorkingDeal=function(direction,from,to)
+            assert(direction==1 and from==1 and to==2);return deal
+          end,
+          GetPossibleDealItems=function(from,to,kind,working)
+            assert(from==1 and to==2 and kind==2 and working==deal)
+            local possible={}
+            if WORK_CITIES[4] then possible[#possible+1]={ForType=900,IsValid=true} end
+            if SECOND_SOURCE then possible[#possible+1]={ForType=901,IsValid=true} end
+            return possible
+          end,
+          ClearWorkingDeal=function(direction,from,to)
+            assert(direction==1 and from==1 and to==2 and #deal.items==1
+              and deal.items[1]:GetValueType()==900 and not WORK_CITIES[4],
+              'an unrelated or unmoved working item was cleared')
+            CLEAR_CALLS=CLEAR_CALLS+1
+            deal.items={}
+          end,
+          EnactWorkingDeal=function(from,to)
+            assert(from==1 and to==2 and #deal.items==1 and TRANSFERS==0,
+              'native works were not moved before donor cities')
+            local index=deal.items[1]:GetValueType()
+            ENACT_CALLS=ENACT_CALLS+1
+            if index==900 then
+              assert(WORK_CITIES[4] and not WORK_CITIES[12])
+              WORK_CITIES[4],WORK_CITIES[12]=nil,true
+            elseif index==901 then
+              assert(SECOND_SOURCE and not SECOND_TARGET)
+              SECOND_SOURCE,SECOND_TARGET=false,true
+            else error('unplanned native work index') end
+            return 1
+          end}
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local plan={ID='two-native-works',From=1,To=3,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2},
+            [901]={Outcome='RETURN',ReturnOwner=2}}}
+        assert(A.Apply(plan).Status=='WAITING_UI' and ENACT_CALLS==1 and CLEAR_CALLS==0)
+        deal.items[1].value=777
+        local accepted,reason=pcall(A.Resume,plan.ID)
+        assert(not accepted and tostring(reason):find('working deal differs from saved intent',1,true),
+          'unrelated working item was treated as the completed first work')
+        assert(CLEAR_CALLS==0 and ENACT_CALLS==1 and TRANSFERS==0,
+          'unrelated working item was cleared or donor cities were changed')
+        deal.items[1].value=900
+        assert(A.Resume(plan.ID).Status=='WAITING_UI' and ENACT_CALLS==2 and CLEAR_CALLS==1,
+          'second work did not clear exactly the first completed item')
+        local done=A.Resume(plan.ID)
+        assert(done.Status=='COMPLETE' and ENACT_CALLS==2 and CLEAR_CALLS==1)
+        assert(CITIES[4]:GetOwner()==3 and CITIES[8]:GetOwner()==3)
+        local first=A.NativeWorkLocations(900)
+        local second=A.NativeWorkLocations(901)
+        assert(#first==1 and #second==1 and first[1].Owner==2 and second[1].Owner==2
+          and first[1].CityID==CITIES[12]:GetID() and second[1].CityID==CITIES[12]:GetID()
+          and first[1].Slot==0 and second[1].Slot==1)
+        assert(A.GetRoster(2)['native-work:900'].NativeCustody.Slot==0
+          and A.GetRoster(2)['native-work:901'].NativeCustody.Slot==1)
+        assert(A.Verify(plan.ID,true))
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry()
 -> mlua::Result<()> {
     let lua = setup()?;

@@ -1683,31 +1683,52 @@ NativeWorkSourceEmpty = function(tx, snap)
   end
 end
 
-local function BuildNativeWorkDeal(from, to, index, subtype)
+local function BuildNativeWorkDeal(from, to, index, subtype, priorWorks)
   assert(DealManager and type(DealManager.EnactWorkingDeal) == "function",
     "native Great Work Core deal enactment unavailable")
   local working = assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING, from, to),
     "native Great Work working deal unavailable")
   local count = working:GetItemCount()
   assert(count == 0 or count == 1, "native Great Work working deal contains another item")
-  if count == 0 then
-    local available = DealManager.GetPossibleDealItems(from, to, DealItemTypes.GREATWORK, working)
-    local candidate
-    for _, possible in ipairs(available or {}) do
-      if possible.ForType == index then candidate = possible end
-    end
-    assert(candidate and candidate.IsValid, "native Great Work is not a valid deal item")
-    local item = assert(working:AddItemOfType(DealItemTypes.GREATWORK, from),
-      "native Great Work deal item could not be added")
-    item:SetSubType(subtype)
-    item:SetValueType(index)
-  else
+  if count == 1 then
     assert(type(working.FindItemsByType) == "function",
       "native Great Work existing deal item cannot be identified")
-    local items = working:FindItemsByType(DealItemTypes.GREATWORK, subtype, from)
-    assert(items and #items == 1 and items[1]:GetValueType() == index,
-      "native Great Work working deal differs from saved intent")
+    local current = working:FindItemsByType(DealItemTypes.GREATWORK, subtype, from)
+    if current and #current == 1 and current[1]:GetValueType() == index then
+      working:Validate()
+      assert(working:IsValid(), "native Great Work deal did not validate")
+      return working -- a saved intent may have stopped before its native call
+    end
+    local previous
+    for _, snap in ipairs(priorWorks or {}) do
+      if snap.PhysicalMoved and snap.Custodian == to then
+        local definition = assert(GameInfo.GreatWorks[snap.Source.GreatWorkType],
+          "previous native Great Work type unavailable")
+        local items = working:FindItemsByType(DealItemTypes.GREATWORK, definition.Index, from)
+        if items and #items == 1 and items[1]:GetValueType() == snap.Source.Index then
+          previous = snap
+        end
+      end
+    end
+    assert(previous, "native Great Work working deal differs from saved intent")
+    assert(type(DealManager.ClearWorkingDeal) == "function",
+      "completed native Great Work working item cannot be cleared")
+    DealManager.ClearWorkingDeal(DealDirection.OUTGOING, from, to)
+    working = assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING, from, to),
+      "native Great Work working deal unavailable after clearing its completed item")
+    assert(working:GetItemCount() == 0,
+      "completed native Great Work item remained in the working deal")
   end
+  local available = DealManager.GetPossibleDealItems(from, to, DealItemTypes.GREATWORK, working)
+  local candidate
+  for _, possible in ipairs(available or {}) do
+    if possible.ForType == index then candidate = possible end
+  end
+  assert(candidate and candidate.IsValid, "native Great Work is not a valid deal item")
+  local item = assert(working:AddItemOfType(DealItemTypes.GREATWORK, from),
+    "native Great Work deal item could not be added")
+  item:SetSubType(subtype)
+  item:SetValueType(index)
   working:Validate()
   assert(working:IsValid(), "native Great Work deal did not validate")
   return working
@@ -1769,7 +1790,7 @@ local function MoveNativeWorks(state, tx)
           local definition = assert(GameInfo.GreatWorks[snap.Source.GreatWorkType],
             "native Great Work type unavailable for deal")
           BuildNativeWorkDeal(tx.From, snap.Custodian,
-            snap.Source.Index, definition.Index)
+            snap.Source.Index, definition.Index, tx.NativeWorks)
           snap.DealSubmitted = true
           snap.DealAttempts = (snap.DealAttempts or 0) + 1
           tx.NativeDealUI = { Token = tx.ID .. ":native:" .. snap.Source.Index .. ":" .. snap.DealAttempts,
