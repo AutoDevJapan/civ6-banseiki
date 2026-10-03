@@ -566,6 +566,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-japan-native.json",
         "absorption-japan-recall-continuation.json",
         "absorption-japan-owner-turn-diagnostic.json",
+        "absorption-japan-owner-turn-isolated.json",
         "absorption-hero-recall.json",
         "absorption-native-bridge-probe.json",
         "absorption-native-ai-same-owner-move.json",
