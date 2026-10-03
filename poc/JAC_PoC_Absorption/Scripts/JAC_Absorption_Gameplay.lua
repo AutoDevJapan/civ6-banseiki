@@ -1867,6 +1867,14 @@ local function AssertNativeCarrierReturnSafe(city, carrier)
     and R.Equal(current.PurchasedPlots, before.PurchasedPlots),
     "native Great Work carrier gained an unrelated asset, unit, or plot before return")
 end
+local function AssertNativeCarrierRestored(city, carrier, phase)
+  local current = NativeCarrierState(city, carrier)
+  for _, key in ipairs({ "Name", "Population", "Assets", "Religion", "Loyalty",
+    "Faith", "Governance", "UnitsOnCenter", "PurchasedPlots" }) do
+    assert(R.Equal(current[key], carrier.Before[key]),
+      "native Great Work carrier city changed during " .. phase .. ": " .. key)
+  end
+end
 
 local function NativeCarrierActorReady()
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
@@ -2001,8 +2009,7 @@ local function AdvanceNativeCarrier(state, carrier)
         and WorkInSlot(city, carrier.Building, carrier.Slot) == carrier.Index,
         "native Great Work left its Free Cities carrier during rollback")
     end
-    assert(R.Equal(NativeCarrierState(city, carrier), carrier.Before),
-      "native Great Work carrier city changed during rollback")
+    AssertNativeCarrierRestored(city, carrier, "rollback")
     carrier.Phase = "RESTORED"
     Save(state)
     error("native Great Work MOVE did not move the original index; carrier restored")
@@ -2031,8 +2038,7 @@ local function AdvanceNativeCarrier(state, carrier)
     assert(WorkInSlot(city, carrier.Building, carrier.Slot)
       == (carrier.Route == "FROM_FREE" and -1 or carrier.Index),
       "native Great Work carrier return slot changed")
-    assert(R.Equal(NativeCarrierState(city, carrier), carrier.Before),
-      "native Great Work carrier city changed during custody")
+    AssertNativeCarrierRestored(city, carrier, "custody")
     carrier.Phase = "PROVED"
     Save(state)
     return true
