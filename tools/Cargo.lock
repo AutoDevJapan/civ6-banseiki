@@ -320,6 +320,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "civ6-native-probe-rs"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+ "windows-sys",
+]
+
+[[package]]
 name = "civ6-pe-rs"
 version = "0.1.0"
 

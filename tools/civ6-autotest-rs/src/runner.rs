@@ -85,6 +85,14 @@ pub trait Backend: Send {
     fn single_process(&mut self, _settle: f64) -> Result<Option<(u32, f64)>> {
         Err(Error::input("backend has no Civ VI process"))
     }
+    fn start_native_trace(&mut self, _output: &Path, _name: &str, _seconds: u64) -> Result<()> {
+        Err(Error::input(
+            "backend cannot start native governor observation",
+        ))
+    }
+    fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -153,6 +161,53 @@ pub trait Backend: Send {
     }
 }
 
+#[cfg(test)]
+mod native_trace_step_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    struct TraceBackend(Arc<Mutex<Vec<String>>>);
+    impl Backend for TraceBackend {
+        fn start_native_trace(&mut self, _: &Path, name: &str, seconds: u64) -> Result<()> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("start:{name}:{seconds}"));
+            Ok(())
+        }
+        fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
+            self.0.lock().unwrap().push("stop".into());
+            Ok(Some(PathBuf::from("fixture.jsonl")))
+        }
+    }
+
+    #[test]
+    fn runner_dispatches_start_and_stop_with_an_artifact() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-trace-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(TraceBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        let detail = runner
+            .run_step(
+                &json!({"action":"start_native_governor_trace","name":"governor","max_seconds":25}),
+            )
+            .unwrap();
+        assert!(detail.contains("governor.jsonl"));
+        let detail = runner
+            .run_step(&json!({"action":"stop_native_governor_trace"}))
+            .unwrap();
+        assert!(detail.contains("fixture.jsonl"));
+        assert_eq!(*calls.lock().unwrap(), ["start:governor:25", "stop"]);
+    }
+}
+
 #[derive(Default)]
 pub struct SystemBackend {
     client: Option<crate::tuner::TunerClient>,
@@ -160,6 +215,7 @@ pub struct SystemBackend {
     launch_floor: Option<f64>,
     startup_pin: Option<crate::startup::PinnedGame>,
     diagnostic_session: crate::startup::DiagnosticSession,
+    native_trace: Option<crate::native_trace::Session>,
 }
 impl Backend for SystemBackend {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
@@ -262,6 +318,26 @@ impl Backend for SystemBackend {
     }
     fn single_process(&mut self, settle: f64) -> Result<Option<(u32, f64)>> {
         crate::restart::single_civ_process(settle)
+    }
+    fn start_native_trace(&mut self, output: &Path, name: &str, seconds: u64) -> Result<()> {
+        if self.native_trace.is_some() {
+            return Err(Error::scenario("native governor trace already active"));
+        }
+        self.live_lease_budget()?;
+        self.require_single_process()?;
+        let (pid, _) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("Civ6 is absent"))?;
+        self.native_trace = Some(crate::native_trace::Session::start(
+            pid, output, name, seconds,
+        )?);
+        Ok(())
+    }
+    fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
+        match self.native_trace.take() {
+            Some(mut trace) => trace.stop().map(Some),
+            None => Ok(None),
+        }
     }
     fn memory(&mut self, pid: u32) -> Result<Value> {
         metrics::process_memory(pid)
@@ -1453,6 +1529,29 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "start_native_governor_trace" => {
+                self.remaining(deadline)?;
+                self.backend.start_native_trace(
+                    &self.output,
+                    text(step, "name"),
+                    step["max_seconds"].as_u64().unwrap(),
+                )?;
+                Ok(format!(
+                    "native governor observer ready; artifact {}.jsonl",
+                    text(step, "name")
+                ))
+            }
+            "stop_native_governor_trace" => {
+                self.remaining(deadline)?;
+                let artifact = self
+                    .backend
+                    .stop_native_trace()?
+                    .ok_or_else(|| Error::scenario("native governor trace was not active"))?;
+                Ok(format!(
+                    "native governor observer detached; artifact {}",
+                    artifact.display()
+                ))
+            }
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
@@ -2318,7 +2417,7 @@ impl Runner {
         fs::create_dir(&self.output)?;
         self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
         let mut interruption = None;
-        let code = match self.run_inner() {
+        let mut code = match self.run_inner() {
             Ok(v) => v,
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
@@ -2332,6 +2431,14 @@ impl Runner {
                 1
             }
         };
+        // Also runs on a failed step. Session::Drop is the last fallback when
+        // an early return or unwind skips this result path.
+        if let Err(e) = self.backend.stop_native_trace() {
+            code = 1;
+            self.result_passed = false;
+            self.failure = Some(format!("native governor observer cleanup: {e}"));
+            println!("Native governor observer cleanup failed: {e}");
+        }
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());
         }

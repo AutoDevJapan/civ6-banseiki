@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 14] = [
+pub const ACTIONS: [&str; 16] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -19,6 +19,8 @@ pub const ACTIONS: [&str; 14] = [
     "wait_for",
     "pause",
     "manual",
+    "start_native_governor_trace",
+    "stop_native_governor_trace",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -88,6 +90,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         .as_array()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::scenario("Scenario needs a nonempty steps array"))?;
+    let mut trace_open = false;
+    let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -103,7 +107,52 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
+            "start_native_governor_trace" => {
+                if trace_open {
+                    return Err(fail("native governor trace is already active".into()));
+                }
+                if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
+                    return Err(fail("trace name must be a safe artifact basename".into()));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_owned()) {
+                    return Err(fail("trace name must be unique within the scenario".into()));
+                }
+                if !step["max_seconds"]
+                    .as_u64()
+                    .is_some_and(|n| (1..=300).contains(&n))
+                {
+                    return Err(fail("max_seconds must be 1..300".into()));
+                }
+                if step
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .any(|k| !["action", "name", "max_seconds", "timeout"].contains(&k.as_str()))
+                {
+                    return Err(fail("unexpected trace start field".into()));
+                }
+                trace_open = true;
+            }
+            "stop_native_governor_trace" => {
+                if !trace_open {
+                    return Err(fail("native governor trace is not active".into()));
+                }
+                if step
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .any(|k| !["action", "timeout"].contains(&k.as_str()))
+                {
+                    return Err(fail("unexpected trace stop field".into()));
+                }
+                trace_open = false;
+            }
             "restart_game" => {
+                if trace_open {
+                    return Err(fail(
+                        "stop native governor trace before restarting Civ6".into(),
+                    ));
+                }
                 if step
                     .as_object()
                     .unwrap()
@@ -317,6 +366,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         {
             return Err(fail("timeout must be a finite positive number".into()));
         }
+    }
+    if trace_open {
+        return Err(Error::scenario("native governor trace has no stop step"));
     }
     Ok(())
 }
@@ -559,3 +611,40 @@ if not ok then
   error(failure)
 end
 return table.concat(disabled, ', ')"###;
+
+#[cfg(test)]
+mod native_trace_tests {
+    use super::*;
+    #[test]
+    fn native_trace_steps_are_bounded_and_paired() {
+        let start = json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":300});
+        let stop = json!({"action":"stop_native_governor_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"trace contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![stop.clone()])).is_err());
+        assert!(
+            validate_scenario(&scenario(vec![start.clone(), start.clone(), stop.clone()])).is_err()
+        );
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"restart_game"}),
+            stop.clone()
+        ]))
+        .is_err());
+        for bad in [0, 301] {
+            let mut step = start.clone();
+            step["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![step, stop.clone()])).is_err());
+        }
+        let mut bad = start;
+        bad["name"] = json!("../outside");
+        assert!(validate_scenario(&scenario(vec![bad, stop])).is_err());
+        let again = json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":1});
+        assert!(validate_scenario(&scenario(vec![
+            json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":1}),
+            json!({"action":"stop_native_governor_trace"}), again,
+            json!({"action":"stop_native_governor_trace"})
+        ])).is_err());
+    }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "civ6-native-probe-rs"
+version = "0.1.0"
+edition.workspace = true
+
+[[bin]]
+name = "civ6-native-probe"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Kernel", "Win32_System_Threading"] }

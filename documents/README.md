@@ -55,6 +55,7 @@
 | [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
 | [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |
 | [`poc/pr86-native-admission.md`](poc/pr86-native-admission.md) | PR86の加入人物と本体任命資格の静的解析、Rust読取ツール、未実証のengine拡張契約と次の実機順序 |
+| [`poc/pr86-native-runtime-probe.md`](poc/pr86-native-runtime-probe.md) | PR86の本体資格関数を変更せずに呼出し元・引数・戻り値を観測するRust debugger、live_chain接続、専用子プロセスでの検査と実機未確認の条件 |
 | [`poc/pr86-boundary-diagnostic.md`](poc/pr86-boundary-diagnostic.md) | PR86の本体中和・未配置回復・都市喪失を観測するテスト専用MOD、独立シナリオと未確定の敵スパイ操作 |
 | [`poc/pr86-boundary-progress.md`](poc/pr86-boundary-progress.md) | 境界診断を実装する担当の検査結果と、実機未観測の項目 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
