@@ -124,6 +124,8 @@ GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
     assert(unit.PrereqCivic == SPY_CIVIC, "native spy civic differs from the Sengoku gate");
     local civic = assert(GameInfo.Civics[SPY_CIVIC], "native spy civic missing");
     local culture = player:GetCulture();
+    print("JAC_BOUNDARY SPY_CIVIC_BEFORE " .. R.Serialize({index=civic.Index,hash=civic.Hash,
+        value=culture:HasCivic(civic.Index),valueType=type(culture:HasCivic(civic.Index))}));
     if not culture:HasCivic(civic.Index) then
         -- Official Debug/Player.ltp:190-201 grants civics with SetCivic(..., true).
         -- Completing progress alone did not grant the native spy slot in live 48.
@@ -131,6 +133,8 @@ GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
         culture:SetCivic(civic.Index, true);
     end
     assert(culture:HasCivic(civic.Index), "native spy civic was not completed");
+    print("JAC_BOUNDARY SPY_CIVIC_AFTER " .. R.Serialize({index=civic.Index,hash=civic.Hash,
+        value=culture:HasCivic(civic.Index),valueType=type(culture:HasCivic(civic.Index))}));
     local capital = assert(player:GetCities():GetCapitalCity(), "spy production capital missing");
     spyProduction = {owner=owner, cityID=capital:GetID(), progressed=false};
     Game:SetProperty("JAC_BOUNDARY_SPY_PREPARED", {owner=owner, cityID=capital:GetID()});

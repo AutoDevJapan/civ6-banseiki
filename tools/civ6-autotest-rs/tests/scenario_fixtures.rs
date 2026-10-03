@@ -367,7 +367,10 @@ fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundar
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.ends_with(".json") || name == "leader-persona-static-gate-15km.json" {
+        if !name.ends_with(".json")
+            || name == "leader-persona-static-gate-15km.json"
+            || name == "leader-persona-native-trace-15km.json"
+        {
             continue;
         }
         let data = scenario(&name);
@@ -398,6 +401,46 @@ fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundar
         }
     }
     assert_eq!(count, 79);
+}
+
+#[test]
+fn native_trace_separates_ui_ai_and_refused_official_request_without_changing_qualification() {
+    let data = scenario("leader-persona-native-trace-15km.json");
+    civ6_autotest_rs::scenario::validate_scenario(&data).unwrap();
+    let s = steps(&data);
+    let names: Vec<_> = s
+        .iter()
+        .filter(|step| action(step, "start_native_governor_trace"))
+        .map(|step| step["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "eligibility-ui",
+            "eligibility-ai",
+            "eligibility-official-request"
+        ]
+    );
+    assert_eq!(
+        s.iter()
+            .filter(|step| action(step, "stop_native_governor_trace"))
+            .count(),
+        3
+    );
+    assert_eq!(s.iter().filter(|step| action(step, "end_turn")).count(), 1);
+    assert_eq!(
+        s.iter()
+            .filter(|step| step["code"].as_str() == Some("return JAC_StaticGate.Queue('APPOINT')"))
+            .count(),
+        1
+    );
+    let final_code = code(s.last().unwrap());
+    assert!(final_code.contains("DIAGNOSTIC ONLY"));
+    assert!(final_code.contains("not g:HasGovernor(def.Hash)"));
+    assert!(final_code.contains("g:GetGovernorPointsSpent()==saved.spent"));
+    assert!(final_code.contains("JAC_STATIC_GATE_BARRIER"));
+    assert!(!final_code.contains("SetProperty"));
+    assert!(!final_code.contains("RequestPlayerOperation"));
 }
 
 #[test]

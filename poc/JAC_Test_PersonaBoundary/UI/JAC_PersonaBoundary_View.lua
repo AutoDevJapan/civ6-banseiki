@@ -298,6 +298,9 @@ function B.SpyPrerequisitesReady()
     assert(prepared.owner == Game.GetLocalPlayer(), "native spy production owner mismatch");
     local unit=assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
     local civic=assert(GameInfo.Civics[unit.PrereqCivic], "native spy civic missing");
+    Log("SPY_CIVIC_CACHE", {index=civic.Index,hash=civic.Hash,
+        value=player:GetCulture():HasCivic(civic.Index),valueType=type(player:GetCulture():HasCivic(civic.Index)),
+        capacity=player:GetDiplomacy():GetSpyCapacity()});
     assert(player:GetCulture():HasCivic(civic.Index), "native spy prerequisite civic incomplete");
     local capacity=player:GetDiplomacy():GetSpyCapacity();
     local existing=0;

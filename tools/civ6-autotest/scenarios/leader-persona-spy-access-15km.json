@@ -384,6 +384,11 @@
       }
     },
     {
+      "turns": 1,
+      "action": "end_turn",
+      "timeout": 600
+    },
+    {
       "action": "ui_lua",
       "state_name": "InGame",
       "code": "local b=ExposedMembers.JAC_PersonaBoundary; b.SpyPrerequisitesReady(); b.Queue('BUILD_SPY'); return 'native city BUILD request queued once'"

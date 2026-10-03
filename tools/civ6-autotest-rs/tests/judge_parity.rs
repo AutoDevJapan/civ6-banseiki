@@ -513,6 +513,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "leader-persona-native-slots-activation-15km.json",
                 "leader-persona-native-slot-ai-only-15km.json",
                 "leader-persona-static-gate-15km.json",
+                "leader-persona-native-trace-15km.json",
                 "leader-persona-city-loss-15km.json",
                 "leader-persona-spy-access-15km.json",
                 "leader-persona-spy-production-15km.json",
@@ -528,7 +529,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 81);
+    assert_eq!(expected.len(), 82);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
