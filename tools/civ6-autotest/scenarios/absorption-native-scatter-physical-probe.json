@@ -1,0 +1,102 @@
+{
+  "name": "Absorption scatter physical UI and Core locations after blocked first publication",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-scatter-choice-absorb-flow-67-354c2a149d41",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "return JAC_AbsorptionFlow_UI~=nil and not Controls.OpenButton:IsHidden() and ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer())~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(panel.Open() and not Controls.Panel:IsHidden(),'human native scatter choice panel did not open')\nlocal first=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer()))\nassert(first.ID=='native-scatter-flow' and first.Phase=='CHOICE','wrong pending native scatter flow')\nlocal sent={}\nlocal function nextChoice()\n local flow=ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer())\n if not flow or flow.Phase~='CHOICE' then return end\n for _,entry in ipairs(flow.Entries or {}) do\n  if not entry.EscapeOutcome and not entry.SelectedAction then\n   if sent[entry.ID] then return end\n   assert(panel.SelectEntry(entry.ID),'could not select '..entry.ID)\n   local action=entry.Kind=='UNIT' and 'INCORPORATE'\n     or entry.Kind=='PERSON' and 'RECRUIT'\n     or entry.Kind=='HERO' and 'RECONTRACT'\n     or entry.Kind=='GREAT_PERSON' and 'RECRUIT'\n     or entry.Kind=='ITEM' and 'TRANSFER'\n     or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'\n   assert(panel.ChooseAction(action),'real UI rejected '..entry.ID..'/'..action)\n   sent[entry.ID]=true\n   return\n  end\n end\nend\nEvents.GameCoreEventPublishComplete.Add(nextChoice)\nnextChoice()\nreturn 'human native scatter selections started through the real panel'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local flow=assert(JAC_AbsorptionFlowGameplay).Get('native-scatter-flow')\nif not flow or flow.Phase~='CHOICE' then return false end\nfor _,entry in ipairs(flow.Entries or {}) do\n if not entry.EscapeOutcome and not entry.SelectedAction then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal F=assert(JAC_AbsorptionFlowGameplay)\nlocal flow=assert(F.Get('native-scatter-flow'))\nlocal baseline=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW'))\nassert(flow.Phase=='CHOICE' and flow.Phase1Complete,'scatter choice phase changed before confirmation')\nlocal n=0\nfor _,entry in ipairs(flow.Entries or {}) do\n if entry.ID=='native-work:'..baseline.WorkIndex then\n  n=n+1\n  assert(entry.EscapeOutcome=='SCATTER' and not entry.SelectedAction,'escaped original work was chosen again')\n  assert(A.Rules.Equal(entry.Rolls,baseline.Rolls),'original work was rerolled')\n elseif not entry.EscapeOutcome then assert(entry.SelectedAction,'surviving asset lacks a UI choice') end\nend\nassert(n==1,'original work missing or duplicated in saved Flow')\nassert(#A.NativeWorkLocations(baseline.WorkIndex)==1,'choice phase moved original work early')\nreturn 'all surviving assets selected and scattered work roll unchanged'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),'scatter confirmation control not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human clicked the real scatter Flow confirm control'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local id='native-scatter-flow'\nlocal flow=ExposedMembers.JAC_AbsorptionFlow and ExposedMembers.JAC_AbsorptionFlow.Get(id)\nlocal state=ExposedMembers.JAC_Absorption and ExposedMembers.JAC_Absorption.GetState()\nlocal tx=state and state.Transactions[id]\nif not flow then return false end\nif flow.Phase=='BLOCKED' or flow.Phase=='RESULT' then return true end\nif not tx then return false end\nif tx.NativeDealUI and tx.NativeDealUI.Index==2 then return true end\nfor _,work in ipairs(tx.NativeWorks or {}) do if work.Source.Index==2 and work.PhysicalMoved then return true end end\nreturn false"
+      }
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal flow=assert(ExposedMembers.JAC_AbsorptionFlow).Get('native-scatter-flow')\nlocal state=assert(ExposedMembers.JAC_Absorption).GetState()\nlocal tx=state.Transactions['native-scatter-flow']\nlocal source=CityManager.GetCityAt(plan.Work.X,plan.Work.Y)\nlocal target=CityManager.GetCityAt(plan.X,plan.Y)\nlocal sourceIndex=source and source:GetBuildings():HasBuilding(plan.Work.Building)\n  and source:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot) or -1\nlocal targetIndex=target and target:GetBuildings():HasBuilding(plan.Building)\n  and target:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot) or -1\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[plan.Free] then owners[#owners+1]=plan.Free end\nlocal found={}\nfor _,owner in ipairs(owners) do\n local player=Players[owner]\n if player then for _,city in player:GetCities():Members() do\n  local buildings=city:GetBuildings()\n  for def in GameInfo.Buildings() do\n   if buildings:HasBuilding(def.Index) then\n    for slot=0,buildings:GetNumGreatWorkSlots(def.Index)-1 do\n     if buildings:GetGreatWorkInSlot(def.Index,slot)==plan.WorkIndex then\n      found[#found+1]={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot}\n     end\n    end\n   end\n  end\n end end\nend\nExposedMembers.JAC_ScatterPhysicalScanCount=(ExposedMembers.JAC_ScatterPhysicalScanCount or 0)+1\nlocal result={Count=#found,Found=found,SourceIndex=sourceIndex,SourceOwner=source and source:GetOwner(),\n TargetIndex=targetIndex,TargetOwner=target and target:GetOwner(),FlowPhase=flow and flow.Phase,\n FlowError=flow and flow.Error,TxStatus=tx and tx.Status,DealSubmitted=tx and tx.NativeWorks and tx.NativeWorks[1] and tx.NativeWorks[1].DealSubmitted}\nExposedMembers.JAC_ScatterPhysicalSnapshot=result\nprint('[JAC_SCATTER_UI_PHYSICAL_'..ExposedMembers.JAC_ScatterPhysicalScanCount..'] '..assert(ExposedMembers.JAC_Absorption).Canonical(result))\nreturn 'physical scan '..ExposedMembers.JAC_ScatterPhysicalScanCount..' found='..#found..' source='..tostring(sourceIndex)..' FreeCity='..tostring(targetIndex)"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal flow=assert(ExposedMembers.JAC_AbsorptionFlow).Get('native-scatter-flow')\nlocal state=assert(ExposedMembers.JAC_Absorption).GetState()\nlocal tx=state.Transactions['native-scatter-flow']\nlocal source=CityManager.GetCityAt(plan.Work.X,plan.Work.Y)\nlocal target=CityManager.GetCityAt(plan.X,plan.Y)\nlocal sourceIndex=source and source:GetBuildings():HasBuilding(plan.Work.Building)\n  and source:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot) or -1\nlocal targetIndex=target and target:GetBuildings():HasBuilding(plan.Building)\n  and target:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot) or -1\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[plan.Free] then owners[#owners+1]=plan.Free end\nlocal found={}\nfor _,owner in ipairs(owners) do\n local player=Players[owner]\n if player then for _,city in player:GetCities():Members() do\n  local buildings=city:GetBuildings()\n  for def in GameInfo.Buildings() do\n   if buildings:HasBuilding(def.Index) then\n    for slot=0,buildings:GetNumGreatWorkSlots(def.Index)-1 do\n     if buildings:GetGreatWorkInSlot(def.Index,slot)==plan.WorkIndex then\n      found[#found+1]={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot}\n     end\n    end\n   end\n  end\n end end\nend\nExposedMembers.JAC_ScatterPhysicalScanCount=(ExposedMembers.JAC_ScatterPhysicalScanCount or 0)+1\nlocal result={Count=#found,Found=found,SourceIndex=sourceIndex,SourceOwner=source and source:GetOwner(),\n TargetIndex=targetIndex,TargetOwner=target and target:GetOwner(),FlowPhase=flow and flow.Phase,\n FlowError=flow and flow.Error,TxStatus=tx and tx.Status,DealSubmitted=tx and tx.NativeWorks and tx.NativeWorks[1] and tx.NativeWorks[1].DealSubmitted}\nExposedMembers.JAC_ScatterPhysicalSnapshot=result\nprint('[JAC_SCATTER_UI_PHYSICAL_'..ExposedMembers.JAC_ScatterPhysicalScanCount..'] '..assert(ExposedMembers.JAC_Absorption).Canonical(result))\nreturn 'physical scan '..ExposedMembers.JAC_ScatterPhysicalScanCount..' found='..#found..' source='..tostring(sourceIndex)..' FreeCity='..tostring(targetIndex)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal F=assert(JAC_AbsorptionFlowGameplay)\nlocal snap=assert(ExposedMembers.JAC_ScatterPhysicalSnapshot)\nlocal tx=A.GetState().Transactions['native-scatter-flow']\nlocal ok,locations=pcall(A.NativeWorkLocations,2)\nlocal result={UI=snap,CoreOK=ok,CoreCount=ok and #locations or nil,\n CoreError=not ok and tostring(locations) or nil,CoreLocations=ok and locations or nil,\n Flow=F.Get('native-scatter-flow'),TxStatus=tx and tx.Status,\n NativeDealUI=tx and tx.NativeDealUI}\nprint('[JAC_SCATTER_CORE_PHYSICAL] '..A.Canonical(result))\nreturn 'Core and UI physical comparison recorded without another mutation'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-scatter-after-physical-diagnostic"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal snap=assert(ExposedMembers.JAC_ScatterPhysicalSnapshot)\nassert(snap.Count==1 and snap.TargetIndex==plan.WorkIndex and snap.SourceIndex==-1,'original work is not uniquely held in the exact Free Cities Temple')\nlocal work=snap.Found[1]\nassert(work.Owner==plan.Free and work.City==plan.ID and work.X==plan.X and work.Y==plan.Y\n and work.Building==plan.Building and work.Slot==plan.Slot,'original work moved to another slot')\nreturn 'physical scatter to the exact Free Cities Temple observed; product completion remains separate'"
+    }
+  ]
+}
