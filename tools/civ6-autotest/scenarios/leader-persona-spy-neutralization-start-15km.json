@@ -320,7 +320,9 @@
     },
     {
       "action": "save",
-      "name": "JAC-Enemy-Neutralization"
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
     },
     {
       "action": "ui_lua",

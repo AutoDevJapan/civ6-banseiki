@@ -1,6 +1,6 @@
 use crate::tuner::state_name_eq;
 use crate::{
-    judge, metrics, scenario,
+    checkpoint, judge, metrics, scenario,
     time::{Clock, SystemClock},
     Error, ErrorKind, Result,
 };
@@ -466,6 +466,8 @@ pub struct Runner {
     pub failure: Option<String>,
     pub lua_captures: BTreeMap<String, String>,
     pub ruleset: Option<String>,
+    checkpoint_run_id: String,
+    checkpoint_sequence: u64,
     pub backend: Box<dyn Backend>,
     pub clock: Arc<dyn Clock>,
 }
@@ -514,6 +516,8 @@ impl Runner {
             failure: None,
             lua_captures: BTreeMap::new(),
             ruleset: None,
+            checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
+            checkpoint_sequence: 0,
             backend,
             clock,
         }
@@ -1467,6 +1471,37 @@ impl Runner {
         );
         Ok(format!("{}-{}", &name[..name.len().min(67)], &suffix[..12]))
     }
+    fn checkpoint_logical(&self, step: &Value) -> Result<String> {
+        if step["exact_name"] != true {
+            return Err(Error::scenario("checkpoint requires exact_name: true"));
+        }
+        let logical = text(step, "name");
+        checkpoint::manifest_path(&self.saves, logical)?;
+        Ok(logical.to_owned())
+    }
+    fn next_checkpoint_save_name(&mut self, logical: &str) -> Result<String> {
+        let suffix_len = 1 + self.checkpoint_run_id.len() + 1 + 16;
+        for _ in 0..1000 {
+            self.checkpoint_sequence = self
+                .checkpoint_sequence
+                .checked_add(1)
+                .ok_or_else(|| Error::scenario("Checkpoint save sequence exhausted"))?;
+            let name = format!(
+                "{}-{}-{:016x}",
+                &logical[..logical.len().min(80 - suffix_len)],
+                self.checkpoint_run_id,
+                self.checkpoint_sequence
+            );
+            match fs::symlink_metadata(self.save_path(&name)) {
+                Ok(_) => continue,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(name),
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Err(Error::scenario(
+            "Could not allocate a new checkpoint save name",
+        ))
+    }
     pub fn check_start_turn(&mut self, deadline: f64) -> Result<()> {
         if self.ruleset.as_deref() != Some(scenario::BANSEIKI_RULESET) {
             return Ok(());
@@ -1773,7 +1808,16 @@ impl Runner {
         }
     }
     fn save_step(&mut self, step: &Value, deadline: f64) -> Result<String> {
-        let name = self.save_name(step)?;
+        let logical = if step["checkpoint"] == true {
+            Some(self.checkpoint_logical(step)?)
+        } else {
+            None
+        };
+        let name = if let Some(logical) = &logical {
+            self.next_checkpoint_save_name(logical)?
+        } else {
+            self.save_name(step)?
+        };
         let target = self.save_path(&name);
         if target.exists() {
             return Err(Error::scenario(format!(
@@ -1809,6 +1853,9 @@ impl Runner {
             )));
         }
         self.remaining(deadline)?;
+        if let Some(logical) = &logical {
+            checkpoint::publish(&self.saves, logical, &name)?;
+        }
         if recorded {
             self.save_load_metrics.set_test_mode(self.test_mode);
             let row = self.save_load_metrics.record(
@@ -1828,7 +1875,11 @@ impl Runner {
         Ok(target.display().to_string())
     }
     fn load_step(&mut self, step: &Value, timeout: f64, deadline: f64) -> Result<String> {
-        let name = self.save_name(step)?;
+        let name = if step["checkpoint"] == true {
+            checkpoint::resolve(&self.saves, &self.checkpoint_logical(step)?)?
+        } else {
+            self.save_name(step)?
+        };
         let path = self.save_path(&name);
         if !path.is_file() {
             return Err(Error::scenario(format!(

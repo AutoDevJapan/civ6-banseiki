@@ -87,6 +87,7 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
 #[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
+    let mut checkpoint_count = 0;
     let names = [
         "start-15km",
         "native-tick",
@@ -105,6 +106,15 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
         validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(data["strict_lua_errors"], true, "{name}");
         let steps = steps(&data);
+        for step in steps
+            .iter()
+            .filter(|step| action(step, "save") || action(step, "load"))
+        {
+            checkpoint_count += 1;
+            assert_eq!(step["name"], "JAC-Enemy-Neutralization", "{name}");
+            assert_eq!(step["exact_name"], true, "{name}");
+            assert_eq!(step["checkpoint"], true, "{name}");
+        }
         assert!(steps
             .iter()
             .all(|step| !action(step, "autoplay") && !action(step, "restart_game")));
@@ -195,6 +205,7 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
             .count(),
         1
     );
+    assert_eq!(checkpoint_count, 21);
 }
 
 #[test]

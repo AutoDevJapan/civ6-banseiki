@@ -6,6 +6,8 @@
     {
       "action": "load",
       "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
       "timeout": 300
     },
     {
@@ -52,7 +54,9 @@
     },
     {
       "action": "save",
-      "name": "JAC-Enemy-Neutralization"
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
     },
     {
       "action": "ui_lua",

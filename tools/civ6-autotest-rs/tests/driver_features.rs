@@ -1,9 +1,16 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error, ErrorKind};
+use civ6_autotest_rs::{
+    checkpoint, judge,
+    runner::{AutoplayOptions, LOADSCREEN_READY},
+    scenario, Error, ErrorKind,
+};
 use serde_json::json;
 use std::{
     collections::VecDeque,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use support_driver::{FakeBackend, Harness, ManualClock};
@@ -542,6 +549,222 @@ fn test_output_scoped_save_name_and_exact_name() {
     assert!(a.calls().is_empty());
 }
 
+const CHECKPOINT: &str = "JAC-Enemy-Neutralization";
+
+fn checkpoint_step(action: &str) -> serde_json::Value {
+    json!({"action":action,"name":CHECKPOINT,"exact_name":true,"checkpoint":true,"timeout":20})
+}
+
+fn checkpoint_backend(saves: PathBuf, logs: PathBuf, fail_save: bool) -> FakeBackend {
+    FakeBackend::new().lua(move |_, code| {
+        if code.contains("Network.SaveGame") {
+            assert!(code.contains("Events.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)"));
+            if fail_save {
+                return Err(Error::lua("native save failed"));
+            }
+            let name = code
+                .split("Name=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            fs::write(saves.join(format!("{name}.Civ6Save")), b"native save").unwrap();
+        }
+        if code.contains("Network.LoadGame") {
+            let mut file = OpenOptions::new()
+                .append(true)
+                .open(logs.join("Lua.log"))
+                .unwrap();
+            writeln!(file, "{LOADSCREEN_READY}").unwrap();
+        }
+        Ok("true".into())
+    })
+}
+
+fn install_checkpoint_backend(h: &mut Harness, fail_save: bool) {
+    let fake = checkpoint_backend(h.runner.saves.clone(), h.runner.logs.clone(), fail_save);
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+}
+
+fn prepare_checkpoint_load(h: &mut Harness) {
+    fs::write(h.runner.logs.join("Lua.log"), b"").unwrap();
+    h.runner.baseline = Some(judge::snapshot_logs(&h.runner.logs).unwrap());
+}
+
+fn saved_name(result: &str) -> String {
+    Path::new(result)
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn checkpoint_resume_across_outputs_keeps_each_native_save() {
+    let mut first = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut first, false);
+    let saves = first.runner.saves.clone();
+    let a = saved_name(&first.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_eq!(checkpoint::resolve(&saves, CHECKPOINT).unwrap(), a);
+    assert_eq!(first.count_code("Network.SaveGame"), 1);
+    assert_eq!(first.count_code("JAC_AUTOTEST_SAVE_DONE == true"), 1);
+
+    let mut second = Harness::new(json!({}), FakeBackend::new());
+    assert_ne!(first.runner.output, second.runner.output);
+    second.runner.saves = saves.clone();
+    install_checkpoint_backend(&mut second, false);
+    prepare_checkpoint_load(&mut second);
+    second.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert_eq!(second.count_code("Network.LoadGame"), 1);
+    assert!(second
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{a}\""))));
+    let b = saved_name(&second.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_ne!(a, b);
+    assert_eq!(checkpoint::resolve(&saves, CHECKPOINT).unwrap(), b);
+    assert_eq!(
+        fs::read(saves.join(format!("{a}.Civ6Save"))).unwrap(),
+        b"native save"
+    );
+    assert_eq!(
+        fs::read(saves.join(format!("{b}.Civ6Save"))).unwrap(),
+        b"native save"
+    );
+
+    let mut third = Harness::new(json!({}), FakeBackend::new());
+    third.runner.saves = saves;
+    install_checkpoint_backend(&mut third, false);
+    prepare_checkpoint_load(&mut third);
+    third.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert!(third
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{b}\""))));
+}
+
+#[test]
+fn checkpoint_two_saves_in_one_session_use_distinct_physical_names() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    let second = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_ne!(first, second);
+    assert!(h.runner.save_path(&first).is_file());
+    assert!(h.runner.save_path(&second).is_file());
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        second
+    );
+    assert_eq!(h.count_code("Network.SaveGame"), 2);
+}
+
+#[test]
+fn checkpoint_failed_native_save_does_not_advance_pointer() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    install_checkpoint_backend(&mut h, true);
+    assert!(h
+        .runner
+        .run_step(&checkpoint_step("save"))
+        .unwrap_err()
+        .to_string()
+        .contains("native save failed"));
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        first
+    );
+    assert!(h.runner.save_path(&first).is_file());
+}
+
+#[test]
+fn checkpoint_empty_save_after_savecomplete_does_not_advance_pointer() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    let saves = h.runner.saves.clone();
+    let fake = FakeBackend::new().lua(move |_, code| {
+        if code.contains("Network.SaveGame") {
+            let name = code
+                .split("Name=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            fs::write(saves.join(format!("{name}.Civ6Save")), b"").unwrap();
+        }
+        Ok("true".into())
+    });
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+    let error = h.runner.run_step(&checkpoint_step("save")).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("SaveComplete fired but save not found"));
+    assert_eq!(h.count_code("Network.SaveGame"), 1);
+    assert_eq!(h.count_code("JAC_AUTOTEST_SAVE_DONE == true"), 1);
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn checkpoint_legacy_seed_loads_and_invalid_manifest_never_falls_back() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    fs::write(h.runner.save_path(CHECKPOINT), b"actual 55 seed").unwrap();
+    install_checkpoint_backend(&mut h, false);
+    prepare_checkpoint_load(&mut h);
+    h.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert!(h
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{CHECKPOINT}\""))));
+
+    let manifest = checkpoint::manifest_path(&h.runner.saves, CHECKPOINT).unwrap();
+    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    let cases = [
+        ("not json".to_owned(), "Invalid checkpoint manifest"),
+        (
+            format!(r#"{{"version":2,"logical":"{CHECKPOINT}","physical":"{CHECKPOINT}"}}"#),
+            "version",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"../outside"}}"#),
+            "basename",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"missing"}}"#),
+            "missing",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"empty"}}"#),
+            "empty",
+        ),
+    ];
+    fs::write(h.runner.save_path("empty"), b"").unwrap();
+    for (contents, expected) in cases {
+        fs::write(&manifest, contents).unwrap();
+        let before = h.count_code("Network.LoadGame");
+        let error = h.runner.run_step(&checkpoint_step("load")).unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        assert_eq!(h.count_code("Network.LoadGame"), before);
+    }
+    fs::remove_file(&manifest).unwrap();
+    fs::write(h.runner.save_path(CHECKPOINT), b"").unwrap();
+    assert!(h
+        .runner
+        .run_step(&checkpoint_step("load"))
+        .unwrap_err()
+        .to_string()
+        .contains("empty"));
+}
+
 #[test]
 fn test_save_dismisses_blocking_advisor_before_saving() {
     let target = Arc::new(Mutex::new(None::<std::path::PathBuf>));
@@ -603,6 +826,20 @@ fn test_flag_validation() {
         .unwrap_err()
         .to_string()
         .contains("exact_name"));
+    for action in ["save", "load"] {
+        for checkpoint in [json!(1), json!("true")] {
+            data = json!({"name":"flag","steps":[{"action":action,"name":"x","exact_name":true,"checkpoint":checkpoint}]});
+            assert!(scenario::validate_scenario(&data)
+                .unwrap_err()
+                .to_string()
+                .contains("checkpoint"));
+        }
+        data = json!({"name":"flag","steps":[{"action":action,"name":"x","checkpoint":true}]});
+        assert!(scenario::validate_scenario(&data)
+            .unwrap_err()
+            .to_string()
+            .contains("checkpoint requires exact_name"));
+    }
 }
 
 #[test]

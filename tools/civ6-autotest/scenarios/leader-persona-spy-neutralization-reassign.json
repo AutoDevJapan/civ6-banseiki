@@ -5,7 +5,9 @@
   "steps": [
     {
       "action": "load",
-      "name": "JAC-Enemy-Recovery",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
       "timeout": 300
     },
     {
@@ -38,7 +40,9 @@
     },
     {
       "action": "save",
-      "name": "JAC-Enemy-Reassignment"
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
     },
     {
       "action": "ui_lua",

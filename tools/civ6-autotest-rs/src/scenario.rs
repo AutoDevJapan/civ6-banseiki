@@ -303,7 +303,10 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
                     return Err(fail("invalid save name".into()));
                 }
-                bool_flags(&["exact_name", "metrics"])?;
+                bool_flags(&["exact_name", "metrics", "checkpoint"])?;
+                if step["checkpoint"] == true && step["exact_name"] != true {
+                    return Err(fail("checkpoint requires exact_name: true".into()));
+                }
             }
             "wait_for" => {
                 let c = &step["condition"];
