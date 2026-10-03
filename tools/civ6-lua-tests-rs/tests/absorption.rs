@@ -766,7 +766,9 @@ fn package_manifest() {
     assert_eq!(
         files,
         string_set([
+            "Config/JAC_Absorption_ArtifactTest.xml",
             "Data/JAC_Absorption.sql",
+            "Data/JAC_Absorption_ArtifactTest.sql",
             "Text/JAC_Absorption_Text.xml",
             "Scripts/JAC_Absorption_Rules.lua",
             "Scripts/JAC_Absorption_Gameplay.lua",
@@ -797,6 +799,78 @@ fn package_manifest() {
     assert_eq!(
         node(root, "ActionCriteria/Criteria/RuleSetInUse").text(),
         Some("RULESET_JAC_BANSEIKI")
+    );
+    let test_action = node(root, "InGameActions")
+        .children()
+        .find(|n| n.attribute("id") == Some("JAC_Absorption_ArtifactTest_Data"))
+        .unwrap();
+    assert_eq!(
+        test_action.attribute("criteria"),
+        Some("JAC_Absorption_ArtifactTest")
+    );
+    assert_eq!(
+        node(test_action, "File").text(),
+        Some("Data/JAC_Absorption_ArtifactTest.sql")
+    );
+    assert_eq!(
+        node(test_action, "Properties/LoadOrder").text(),
+        Some("301")
+    );
+    let criteria = node(root, "ActionCriteria")
+        .children()
+        .find(|n| n.attribute("id") == Some("JAC_Absorption_ArtifactTest"))
+        .unwrap();
+    assert_eq!(
+        node(criteria, "RuleSetInUse").text(),
+        Some("RULESET_JAC_BANSEIKI")
+    );
+    let flag = node(criteria, "ConfigurationValueMatches");
+    assert_eq!(node(flag, "Group").text(), Some("Game"));
+    assert_eq!(
+        node(flag, "ConfigurationId").text(),
+        Some("JAC_ABSORPTION_ARTIFACT_TEST")
+    );
+    assert_eq!(node(flag, "Value").text(), Some("1"));
+    let config_source = read_repo(format!("{MOD}/Config/JAC_Absorption_ArtifactTest.xml"));
+    let config = roxmltree::Document::parse(&config_source).unwrap();
+    let parameter = node(config.root_element(), "Parameters/Row");
+    assert_eq!(parameter.attribute("ConfigurationGroup"), Some("Game"));
+    assert_eq!(
+        parameter.attribute("ConfigurationId"),
+        Some("JAC_ABSORPTION_ARTIFACT_TEST")
+    );
+    assert_eq!(parameter.attribute("DefaultValue"), Some("0"));
+    assert_eq!(parameter.attribute("Visible"), Some("0"));
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY, CanTrain INTEGER, PrereqCivic TEXT);
+      INSERT INTO Units VALUES('UNIT_ARCHAEOLOGIST',0,'CIVIC_ORIGINAL'),('UNIT_MISSIONARY',0,NULL),('UNIT_WARRIOR',1,NULL);").unwrap();
+    conn.execute_batch(&read_repo(format!(
+        "{MOD}/Data/JAC_Absorption_ArtifactTest.sql"
+    )))
+    .unwrap();
+    let values: Vec<(String, i64)> = conn
+        .prepare("SELECT UnitType,CanTrain FROM Units ORDER BY UnitType")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        values,
+        vec![
+            ("UNIT_ARCHAEOLOGIST".into(), 1),
+            ("UNIT_MISSIONARY".into(), 0),
+            ("UNIT_WARRIOR".into(), 1)
+        ]
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT PrereqCivic FROM Units WHERE UnitType='UNIT_ARCHAEOLOGIST'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        "CIVIC_ORIGINAL"
     );
 }
 fn package_text() {
