@@ -628,6 +628,53 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
 }
 
 #[test]
+fn artist_activation_uses_the_published_command_hash_without_an_enum_alias() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|code| code.contains("JAC_ARTWORK_ACTIVATE_CHECK"))
+        .expect("artist activation");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local unit={GetGreatPerson=function() return {
+          GetIndividual=function() return 9 end,GetActionCharges=function() return 0 end} end,
+          GetMovesRemaining=function() return 4 end,
+          GetX=function() return 7 end,GetY=function() return 8 end}
+        Game={GetProperty=function() return {Owner=1,Unit=77,Individual=9,Turn=1} end,
+          GetCurrentGameTurn=function() return 1 end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end} end}}
+        GameInfo={GreatPersonIndividuals={[9]={GreatPersonIndividualType='ARTIST'}},
+          GreatWorks=function() return function() return nil end end,
+          UnitCommands={UNITCOMMAND_ACTIVATE_GREAT_PERSON={Hash=123456}}}
+        UnitCommandTypes={};UnitOperationResults={FAILURE_REASONS=2}
+        Locale={Lookup=function(value) return value end}
+        CAN_ACTIVATE=true;REQUESTS=0;CHECKS=0
+        UnitManager={CanStartCommand=function(u,hash,loose,results)
+          assert(u==unit and hash==123456,'wrong activation command');CHECKS=CHECKS+1
+          return CAN_ACTIVATE, {[2]={'REJECTED'}} end,
+          RequestCommand=function(u,hash)
+            assert(u==unit and hash==123456,'wrong request command');REQUESTS=REQUESTS+1 end}
+        "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert_eq!(lua.globals().get::<i64>("CHECKS")?, 2);
+    lua.load("CAN_ACTIVATE=false;REQUESTS=0").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "rejected activation dispatched"
+    );
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    Ok(())
+}
+
+#[test]
 fn artist_activation_waits_for_the_exact_published_unit_and_placement() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artwork-locks.json");
     let code = scenario["steps"]
