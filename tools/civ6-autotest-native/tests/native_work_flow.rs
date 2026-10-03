@@ -630,6 +630,121 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
 }
 
 #[test]
+fn artwork_targets_are_the_two_prepared_museums() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|code| code.contains("local M={Cases={}"))
+        .expect("artwork oracle");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        ExposedMembers={};OCCUPIED=-1
+        Game={GetProperty=function() return {Fixtures={art={City=10},art_target={City=20}}} end}
+        local function rows(list)
+          local n=0;return function() n=n+1;return list[n] end
+        end
+        GameInfo={GreatWork_ValidSubTypes=function() return rows({
+          {GreatWorkObjectType='ART',GreatWorkSlotType='ART_SLOT'}}) end,
+          GreatWorkSlotTypes={[1]={GreatWorkSlotType='ART_SLOT'}},
+          Buildings=function() return rows({{Index=23,BuildingType='BUILDING_MUSEUM_ART'},
+            {Index=24,BuildingType='OTHER_COMPATIBLE_BUILDING'}}) end}
+        local function city(id)
+          return {GetOwner=function() return 1 end,GetID=function() return id end,
+            GetX=function() return id end,GetY=function() return 0 end,
+            GetBuildings=function() return {HasBuilding=function() return true end,
+              IsPillaged=function() return false end,GetNumGreatWorkSlots=function() return 1 end,
+              GetGreatWorkSlotType=function() return 1 end,
+              GetGreatWorkInSlot=function() return id==OCCUPIED and 99 or -1 end} end}
+        end
+        Players={[1]={GetCities=function() return {Members=function()
+          return ipairs({city(5),city(10),city(20)}) end} end}}
+        Events={GreatWorkMoved={Add=function() end}}
+    "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    lua.load(
+        r#"
+        local M=ExposedMembers.JAC_ArtworkMoveOracle
+        local fresh=M.Target({Owner=1,City=10,X=10,Y=0,Building=23,Slot=0},'ART','art_fresh')
+        assert(fresh.City==20 and fresh.Building==23)
+        local aged=M.Target({Owner=1,City=20,X=20,Y=0,Building=23,Slot=0},'ART','art_aged')
+        assert(aged.City==10 and aged.Building==23)
+        OCCUPIED=20
+        assert(not pcall(M.Target,{Owner=1,City=10,X=10,Y=0,Building=23,Slot=0},'ART','art_fresh'))
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
+fn artifact_effect_changes_fail_before_save_and_after_reload() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let scripts: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .collect();
+    let before = scripts
+        .iter()
+        .find(|s| s.contains("persisted before MOVE"))
+        .expect("before proof");
+    let after = scripts
+        .iter()
+        .find(|s| s.contains("effects persisted after MOVE"))
+        .expect("after proof");
+    let reload = scripts
+        .iter()
+        .find(|s| s.contains("JAC_ARTIFACT_FULL_RELOAD_PROOF"))
+        .expect("reload proof");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local props={JAC_ARTWORK_CASE_PLAN={Fixtures={artifact_source={City=10}}}}
+        Game={GetLocalPlayer=function() return 1 end,GetProperty=function(_,k) return props[k] end,
+          SetProperty=function(_,k,v) props[k]=v end}
+        EFFECTS={'CULTURE 2','TOURISM 3'}
+        local function work(city)
+          return {Index=4,Owner=1,CityID=city,X=city,Y=0,Building=24,
+            BuildingType='BUILDING_MUSEUM_ARTIFACT',Slot=0,GreatWorkType='GW',
+            ObjectType='GREATWORKOBJECT_ARTIFACT',Name='Name',CreatorName='Creator',
+            TurnCreated=1,CreatedByPlayer=1,Effects=EFFECTS}
+        end
+        local function copy(t)
+          if type(t)~='table' then return t end
+          local result={};for k,v in pairs(t) do result[k]=copy(v) end;return result
+        end
+        JAC_AbsorptionGameplay={OwnedGreatWorkSlots=function() return {work(10)} end,
+          NativeWorkLocations=function() return {work(20)} end,
+          Rules={Copy=copy,Equal=function(a,b) return table.concat(a,'|')==table.concat(b,'|') end}}
+        ExposedMembers={JAC_ArtworkEvidence={artifact_full_empty={Index=4,Moved=true,
+          RequestOnly=false,GlobalCount=1,Target={Owner=1,City=20,X=20,Y=0,Building=24,Slot=0}}}}
+    "#,
+    )
+    .exec()?;
+    lua.load(*before).exec()?;
+    lua.load(*after).exec()?;
+    lua.load(*reload).exec()?;
+    lua.load("EFFECTS={'CULTURE 99','TOURISM 3'}").exec()?;
+    for code in [*after, *reload] {
+        assert!(
+            lua.load(code)
+                .exec()
+                .expect_err("changed effects accepted")
+                .to_string()
+                .contains("artifact effects changed")
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn excavation_checks_use_operation_parameters_before_visibility_flags() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artifact-full.json");
     let codes: Vec<_> = scenario["steps"]
