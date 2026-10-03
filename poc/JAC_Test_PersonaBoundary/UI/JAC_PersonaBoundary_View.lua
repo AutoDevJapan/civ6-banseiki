@@ -165,8 +165,38 @@ local function LocalSpy()
     local info = assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "native fixture spy not created");
     assert(info.owner == Game.GetLocalPlayer(), "enemy-spy requests have no proven control path");
     local spy = assert(Players[info.owner]:GetUnits():FindID(info.id), "native spy no longer present");
-    assert(spy:GetType() == GameInfo.Units["UNIT_SPY"].Index and spy:GetOwner() == info.owner, "native spy identity mismatch");
+    local def = GameInfo.Units[spy:GetUnitType()];
+    assert(spy:GetType() == GameInfo.Units["UNIT_SPY"].Index and def and def.Spy and
+        spy:GetOwner() == info.owner, "native spy identity mismatch");
     return spy;
+end
+
+local function SpyState(spy)
+    return {owner=spy:GetOwner(), id=spy:GetID(), operation=spy:GetSpyOperation(),
+        endTurn=spy:GetSpyOperationEndTurn(), x=spy:GetX(), y=spy:GetY(),
+        turn=Game.GetCurrentGameTurn()};
+end
+
+local function SelectSpy(spy, mode)
+    -- Official UnitPanel.lua:4091-4096 selects the actual unit. EspionageChooser.lua:630-643
+    -- reads the head selection and 738-765 chooses the espionage interface mode.
+    assert(spy:IsReadyToMove() and UnitManager.GetActivityType(spy) == ActivityTypes.ACTIVITY_AWAKE,
+        "native spy is not awake and ready for the chooser");
+    if mode == InterfaceModeTypes.SPY_TRAVEL_TO_CITY then
+        local origin=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
+        assert(origin and origin:GetOwner()==spy:GetOwner(),
+            "native spy is not in a home city for the travel chooser");
+    end
+    UI.DeselectAllUnits(); UI.DeselectAllCities(); UI.SelectUnit(spy);
+    local selected = UI.GetHeadSelectedUnit();
+    assert(selected and selected:GetOwner() == spy:GetOwner() and selected:GetID() == spy:GetID(),
+        "official UI did not select the fixture spy");
+    UI.SetInterfaceMode(mode);
+    selected = UI.GetHeadSelectedUnit();
+    assert(UI.GetInterfaceMode() == mode and selected and
+        selected:GetOwner() == spy:GetOwner() and selected:GetID() == spy:GetID(),
+        "official espionage mode lost the selected spy");
+    Log("SPY_UI_READY", {owner=selected:GetOwner(), id=selected:GetID(), mode=UI.GetInterfaceMode()});
 end
 function B.FindSpyDestination()
     local spy=LocalSpy();
@@ -210,13 +240,18 @@ function B.Probe(cityOwner, cityID)
     Log("SPY_PROBE", probe); return probe;
 end
 
-local pending;
+local pending, verification;
+local spyQueued = {};
 B.lastAction = "IDLE";
 function B.Queue(action, params)
-    assert(not pending, "a boundary frame request is already pending");
+    assert(not pending and not verification, "a boundary frame request is already pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
     assert(action == "PREPARE" or action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
         action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "SPY_TRAVEL" or action == "SPY_MISSION", "unknown boundary action");
+    if action == "SPY_TRAVEL" or action == "SPY_MISSION" then
+        assert(not spyQueued[action], "native spy request cannot be replayed in this session");
+        spyQueued[action] = true;
+    end
     pending = {action=action, params=params or {}}; B.lastAction="QUEUED_"..action;
 end
 local function Submit(command)
@@ -249,27 +284,72 @@ local function Submit(command)
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
         local plot=Map.GetPlot(city:GetX(),city:GetY());
         if action == "SPY_TRAVEL" then
+            SelectSpy(spy, InterfaceModeTypes.SPY_TRAVEL_TO_CITY);
+            local before=SpyState(spy);
+            assert(before.operation == -1, "native spy is already assigned before travel");
             local arguments={[UnitOperationTypes.PARAM_X]=city:GetX(),[UnitOperationTypes.PARAM_Y]=city:GetY()};
             local ok, result=UnitManager.CanStartOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,plot,arguments);
             Log("SPY_TRAVEL_QUERY", {ok=ok, result=result or {}});
             assert(ok, "native spy travel refused");
             UnitManager.RequestOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,arguments);
+            -- EspionageChooser.lua:615-618 returns to selection after the single request.
+            UI.SetInterfaceMode(InterfaceModeTypes.SELECTION);
+            return {action=action, before=before, targetOwner=params.owner, targetID=params.city,
+                targetX=city:GetX(), targetY=city:GetY()};
         else
             local probe=B.Probe(params.owner,params.city);
             assert(probe.canStart and #probe.nativeTarget == 1, "native neutralize operation refused or target governor absent");
             local actual=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
             assert(actual and actual:GetOwner()==params.owner and actual:GetID()==params.city, "native spy is not in the target city");
-            UnitManager.RequestOperation(spy,GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"].Hash);
+            SelectSpy(spy, InterfaceModeTypes.SPY_CHOOSE_MISSION);
+            local before=SpyState(spy);
+            assert(before.operation == -1, "native spy is already assigned before mission");
+            local operation=GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
+            UnitManager.RequestOperation(spy,operation.Hash);
+            return {action=action, before=before, expectedOperation=operation.Index};
         end
     end
 end
 
+local function VerifySpyRequest(request)
+    local spy=LocalSpy();
+    local after=SpyState(spy);
+    local nativeOperation=GameInfo.UnitOperations[after.operation];
+    local active=after.operation ~= -1 and nativeOperation ~= nil and after.endTurn > after.turn;
+    local arrived=false;
+    if request.action == "SPY_TRAVEL" and (after.x ~= request.before.x or after.y ~= request.before.y) then
+        local city=Cities.GetPlotPurchaseCity(Map.GetPlot(after.x,after.y));
+        arrived=city and city:GetOwner()==request.targetOwner and city:GetID()==request.targetID or false;
+    end
+    local accepted;
+    if request.action == "SPY_TRAVEL" then
+        -- EspionageOverview.lua:659-677 treats -1 as awaiting assignment.
+        -- A returned RequestOperation with -1/endTurn 0 is an early refusal.
+        accepted=(after.operation ~= -1 or after.endTurn ~= 0) and (active or arrived);
+    else
+        accepted=active and after.operation == request.expectedOperation;
+    end
+    Log("SPY_ACCEPTANCE", {action=request.action, accepted=accepted, before=request.before,
+        after=after, nativeOperation=nativeOperation and nativeOperation.OperationType or "",
+        arrived=arrived, targetOwner=request.targetOwner, targetID=request.targetID});
+    return accepted;
+end
+
 ContextPtr:SetHide(false);
 ContextPtr:SetUpdate(function()
-    if not pending or UI.IsGameCoreBusy() then return; end
+    if UI.IsGameCoreBusy() then return; end
+    if verification then
+        local request=verification; verification=nil;
+        local ok, accepted=pcall(VerifySpyRequest, request);
+        B.lastAction=(ok and accepted and "ACCEPTED_" or "REJECTED_")..request.action;
+        if not ok then Log("SPY_ACCEPTANCE_UNAVAILABLE", {action=request.action, error=tostring(accepted)}); end
+        return;
+    end
+    if not pending then return; end
     local command=pending; pending=nil;
     local ok, result=pcall(Submit, command);
-    B.lastAction=(ok and "SUBMITTED_" or "ERROR_")..command.action;
+    if ok and result then verification=result; end
+    B.lastAction=(ok and (result and "DISPATCHED_" or "SUBMITTED_") or "ERROR_")..command.action;
     Log("FRAME_REQUEST", {action=command.action, ok=ok, error=not ok and tostring(result) or ""});
     if not ok then error(result); end -- no replay of an operation after an unknown result
 end);

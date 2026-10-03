@@ -1,5 +1,5 @@
 {
-  "name": "Native spy creation/foreign travel/query only; incoming persona-neutralization control is unresolved",
+  "name": "Native spy travel acceptance; incoming persona-neutralization control is unresolved",
   "judge_profile": "generic",
   "strict_lua_errors": true,
   "steps": [
@@ -386,7 +386,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local target=b.FindSpyDestination(); BOUNDARY_FOREIGN_OWNER=target.owner; BOUNDARY_FOREIGN_CITY=target.city; b.Probe(target.owner,target.city); b.Queue('SPY_TRAVEL',target); return 'native-eligible foreign travel queued; this is not persona neutralization'"
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local target=b.FindSpyDestination(); b.Probe(target.owner,target.city); b.Queue('SPY_TRAVEL',target); return 'foreign travel queued for one official UI dispatch'"
     },
     {
       "action": "wait_for",
@@ -394,133 +394,13 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_TRAVEL' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_SPY_TRAVEL'"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_TRAVEL' or b.lastAction=='REJECTED_SPY_TRAVEL' then error('native spy travel was not accepted: '..b.lastAction) end; return b.lastAction=='ACCEPTED_SPY_TRAVEL'"
       }
     },
     {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_1')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_2')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_3')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_4')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_5')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_6')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_7')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_8')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_9')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_10')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_11')"
-    },
-    {
-      "action": "end_turn",
-      "turns": 1,
-      "timeout": 600
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('NATIVE_SPY_TRAVEL_12')"
-    },
-    {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "code": "local info=Game:GetProperty('JAC_BOUNDARY_SPY'); local spy=Players[info.owner]:GetUnits():FindID(info.id); if not spy then error('native travelling spy has not returned to the unit collection') end; local city=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY())); if not city or city:GetOwner()~=BOUNDARY_FOREIGN_OWNER or city:GetID()~=BOUNDARY_FOREIGN_CITY or spy:GetSpyOperationEndTurn()>Game.GetCurrentGameTurn() then error('native foreign travel/establishment not complete within 12 turns') end; ExposedMembers.JAC_PersonaBoundary.Probe(city:GetOwner(),city:GetID()); return ExposedMembers.JAC_PersonaBoundary.Record('TRAVEL_QUERY_ONLY_NO_NEUTRALIZATION_CLAIM')"
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('TRAVEL_ACCEPTED_NO_NEUTRALIZATION_CLAIM')"
     }
   ]
 }

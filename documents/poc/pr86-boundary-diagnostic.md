@@ -13,12 +13,12 @@
 | シナリオ | 確かめること | 実機の状態 |
 |---|---|---|
 | `leader-persona-city-loss-15km.json`（54手順） | 織田信秀を正規加入・費用1で進化、非首都へ配置、5ターン定着、実ターンの功績で固有技能を取得。本体で自由都市へ移し、旧都市と残った都市の効果・功績停止、保存読込の一致を検査する | leaderperson-41で起動を含む55手順成功、ログ判定6件成功。実ターンを省略していない |
-| `leader-persona-spy-access-15km.json`（67手順） | 同じ人物fixtureに本体スパイを作り、本体が派遣を許す外国都市を選択し、通常のUI frameから派遣。12実ターン以内の到着・定着期限と公式中和の可否、失敗理由、所要時間・成功確率を記録する | 実機42は67/68手順で失敗。派遣可否が真でも12実ターン後に任務が始まらなかった。人物中和の成功ではない |
+| `leader-persona-spy-access-15km.json`（43手順） | 同じ人物fixtureに本体スパイを作り、外国都市を選ぶ。公式UIでスパイを選択し、派遣モードを確認して一度だけ要求する。同期後最初の非busy frameで本体任務・終了ターン・所在を読み、受理されなければ直ちに失敗する | 改訂版は未実機。旧67手順版の実機42は67/68手順で失敗し、12実ターン後も任務が始まらなかった。人物中和の成功ではない |
 | `leader-persona-spy-recovery.json`（50手順） | **既に本体中和を観測したfixtureからだけ**継続。中和中に保存し、同ターンの読込結果を照合。残存期間を毎ターン読み、回復後未配置、再配置後0〜4ターンの無効、5ターン後の再発効を検査する | 前提の実中和と敵スパイ操作が未確定。単独で新ゲームを開始しない |
 
 独立fixtureは既存の日本15kmマップと22勢力を使う。対象都市は人間の勢力の非首都、比較対象は首都と他の自都市である。人物所有者・偉人生成・称号獲得・進化・技能取得は既存の正式処理を通す。功績、人物状態、活動不能期間、都市の所有者をPropertyへ書いて結果を作らない。診断用の設定と作成したスパイIDだけを、同期したGameplay操作から保存する。
 
-加入・進化・技能取得の要求、総督配置、スパイ派遣と任務開始は、テストMODの`ContextPtr:SetUpdate`から一度だけ送る。FireTunerは待ち行列へ要求を置く入口に限る。結果不明・拒否・例外の操作を自動で再送しない。人間以外のスパイの要求は明示的に拒否する。
+加入・進化・技能取得の要求、総督配置、スパイ派遣と任務開始は、テストMODの`ContextPtr:SetUpdate`から一度だけ送る。スパイ要求は本体の選択ユニットIDと諜報モードを照合してから送り、次の非busy frameで本体状態を読む。要求が戻っただけでは受理としない。FireTunerは待ち行列へ要求を置く入口に限る。結果不明・拒否・例外の操作を自動で再送しない。人間以外のスパイの要求は明示的に拒否する。
 
 ## 同時に記録する一次観測
 
@@ -45,8 +45,8 @@
 | 操作・観測 | 一次根拠と適用範囲 |
 |---|---|
 | 本体による都市喪失 | `G/Debug/City.ltp:275–278`は選択した都市を`CityManager.TransferCityToFreeCities(pCity)`へ渡す。診断はこの本体移管を同期Gameplayから呼び、所有者が`PlayerManager.GetFreeCitiesPlayerID()`に変わったことを別に読む。既存暗殺者のGameplay使用例もあるが、この人物総督の喪失を成功と推定する根拠にはしない |
-| スパイ生成 | `G/DLC/NubiaScenario/Scripts/NubiaScenario.lua:144`に汎用の`UnitManager.InitUnitValidAdjacentHex`がある。fixtureは型を`UNIT_SPY`として生成し、生成前後の本体ユニット一覧から実体を同定する。返り値を仮定しない。スパイ型での実行は未実機 |
-| スパイ派遣 | `G/Base/Assets/UI/Choosers/EspionageChooser.lua:605–618`はX/Y付きの`SPY_TRAVEL_NEW_CITY`を問い合わせ、同じ引数で要求する。旅行時間と定着時間は404–405、450–451行の本体getterを使う |
+| スパイ生成 | `G/DLC/NubiaScenario/Scripts/NubiaScenario.lua:144`に汎用の`UnitManager.InitUnitValidAdjacentHex`がある。fixtureは型を`UNIT_SPY`として生成し、生成前後の本体ユニット一覧から実体を同定する。実機42では生成されたが、正式な諜報任務として扱われた証拠はない。`G/Base/Assets/UI/Panels/ProductionPanel.lua:293–301,423–434`には本体の生産・購入経路がある。生成方式に原因があると確定した場合の候補とし、資格・資源条件を飛ばす架空のAPIは使わない |
+| スパイ派遣 | `G/Base/Assets/UI/Panels/UnitPanel.lua:4091–4096`は`UI.SelectUnit`で本体ユニットを選択する。`G/Base/Assets/UI/Choosers/EspionageChooser.lua:630–643,738–765`は選択中のスパイが起きていて、自国都市にいる場合に`SPY_TRAVEL_TO_CITY`を選ぶ。同605–618行はX/Y付きの`SPY_TRAVEL_NEW_CITY`を問い合わせ、同じ引数で一度要求して選択モードへ戻す。同`G/Base/Assets/UI/PartialScreens/EspionageOverview.lua:659–677`では任務`-1`は割当待ち。fixtureは次の非busy frameで任務・終了ターン・所在を読み、`-1`/終了ターン0を受理としない |
 | 中和任務の可否と開始 | 同Chooserの234行で`UnitManager.CanStartOperation(spy, operation.Hash, cityPlot, false, true)`。`G/Base/Assets/UI/Popups/EspionagePopup.lua:474`で`UnitManager.RequestOperation(spy, operation.Hash)`。fixtureも通常のUI frameからこの要求を送る |
 | 期間と確率 | `G/DLC/Expansion2/Data/Expansion1_UnitOperations.xml:12`は中和任務8ターン。`G/Base/Assets/UI/EspionageSupport.lua:27–42`は実所要時間と確率を本体から読む。fixtureは確率・任務期間を書き換えない |
 | 任務履歴 | `G/Base/Assets/UI/Popups/EspionagePopup.lua:376–383,624`の完了イベントと履歴取得。`G/Base/Assets/UI/PartialScreens/EspionageOverview.lua:279`の`CompletionTurn`。敵側の履歴が読めない場合は「取得不能」を記録し、中和の照合に成功した扱いにしない |

@@ -336,7 +336,7 @@ fn test_native_state_is_read_again_after_context_reload() {
 #[test]
 fn test_native_spy_travel_is_sent_once_from_an_ordinary_frame() {
     let h = Boundary::new();
-    h.case("spy", (0, 15));
+    h.case("spy_home", (0, 15));
     h.queue("SPY_TRAVEL", 1, 20);
     assert_eq!(h.global::<Table>("UNIT_REQUESTS").raw_len(), 0);
     h.set("BUSY", true);
@@ -351,18 +351,36 @@ fn test_native_spy_travel_is_sent_once_from_an_ordinary_frame() {
         (
             field::<i64>(&request, "op"),
             field::<i64>(&params, "x"),
-            field::<i64>(&params, "y")
+            field::<i64>(&params, "y"),
+            field::<i64>(&request, "selected"),
+            field::<i64>(&request, "mode")
         ),
-        (991, 2, 1)
+        (991, 2, 1, 15, 2)
     );
+    assert_eq!(
+        field::<String>(&h.b(), "lastAction"),
+        "DISPATCHED_SPY_TRAVEL"
+    );
+    assert_eq!(h.global::<i64>("MODE"), 1);
     h.frame().unwrap();
+    assert_eq!(field::<String>(&h.b(), "lastAction"), "REJECTED_SPY_TRAVEL");
     assert_eq!(requests.raw_len(), 1);
+    let params = h.0.create_table().unwrap();
+    params.set("owner", 1).unwrap();
+    params.set("city", 20).unwrap();
+    let error = h
+        .b()
+        .strict_get::<Function>("Queue")
+        .unwrap()
+        .call::<()>(("SPY_TRAVEL", params))
+        .expect_err("rejected native request must not be replayed");
+    assert!(error.to_string().contains("cannot be replayed"), "{error}");
 }
 
 #[test]
 fn test_foreign_destination_is_selected_by_native_travel_eligibility() {
     let h = Boundary::new();
-    h.case("spy", (0, 15));
+    h.case("spy_home", (0, 15));
     let destination = strict_table_call(
         &h.b().strict_get::<Function>("FindSpyDestination").unwrap(),
         (),
@@ -442,7 +460,13 @@ fn test_native_mission_request_is_not_itself_evidence_of_neutralization() {
     let request: Table = requests.strict_get(1).unwrap();
     assert_eq!(field::<i64>(&request, "op"), 990);
     assert!(field::<Option<Table>>(&request, "params").is_none());
+    assert_eq!(field::<i64>(&request, "selected"), 15);
+    assert_eq!(field::<i64>(&request, "mode"), 3);
     h.frame().unwrap();
+    assert_eq!(
+        field::<String>(&h.b(), "lastAction"),
+        "REJECTED_SPY_MISSION"
+    );
     assert_eq!(requests.raw_len(), 1);
     assert_eq!(
         field::<i64>(&field::<Table>(&h.read(), "native"), "neutralized"),

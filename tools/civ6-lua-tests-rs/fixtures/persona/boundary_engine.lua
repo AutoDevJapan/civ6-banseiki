@@ -32,11 +32,15 @@ GameInfo.GovernorPromotions={BASE_TEST={Hash=7000}}
 GameInfo.JAC_PersonaSkills=collection({{LeaderType=LEADER,ModifierId=BASE}},'ModifierId')
 GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,ModifierId=NODE,CategoryType='ADMIN',RouteType='SIGNATURE'}},'NodeType')
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
-GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55}}
+GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55,Spy=true},[55]={Index=55,Spy=true}}
 GameInfo.GreatPersonIndividuals={[3]={GreatPersonIndividualType='GP_TEST'}}
 GameInfo.Yields=collection({{YieldType='YIELD_GOLD',Index=0},{YieldType='YIELD_FOOD',Index=1}},'YieldType')
-GameInfo.UnitOperations=collection({{OperationType='UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR',Hash=990,Index=0}},'OperationType')
+GameInfo.UnitOperations=collection({
+ {OperationType='UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR',Hash=990,Index=0},
+ {OperationType='UNITOPERATION_SPY_TRAVEL_NEW_CITY',Hash=991,Index=1}},'OperationType')
 UnitOperationTypes={SPY_TRAVEL_NEW_CITY=991,PARAM_X='x',PARAM_Y='y'}
+InterfaceModeTypes={SELECTION=1,SPY_TRAVEL_TO_CITY=2,SPY_CHOOSE_MISSION=3}
+ActivityTypes={ACTIVITY_AWAKE=1}
 EspionageResultTypes={SUCCESS_UNDETECTED=1,SUCCESS_MUST_ESCAPE=2,FAIL_UNDETECTED=3,CAPTURED=4,NO_RESULT=0}
 PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
 local function members(list)
@@ -109,12 +113,27 @@ ExposedMembers.JAC_PersonaBoundaryGameplayRead=function()
  return result
 end
 ContextPtr={SetHide=function() end,SetUpdate=function(_,fn) FRAME=fn end}
+MODE=InterfaceModeTypes.SELECTION
 UI={IsGameCoreBusy=function() return BUSY or false end,
- RequestPlayerOperation=function(owner,op,params) REQUESTS[#REQUESTS+1]={owner=owner,op=op,params=params} end}
+ RequestPlayerOperation=function(owner,op,params) REQUESTS[#REQUESTS+1]={owner=owner,op=op,params=params} end,
+ DeselectAllUnits=function() SELECTED=nil end,DeselectAllCities=function() end,
+ SelectUnit=function(spy) if not SELECT_FAIL then SELECTED=spy end end,
+ GetHeadSelectedUnit=function() return SELECTED end,
+ SetInterfaceMode=function(mode) if not MODE_FAIL then MODE=mode end end,
+ GetInterfaceMode=function() return MODE end}
 CAN_START=true
 UnitManager={
  CanStartOperation=function(spy,op,plot,a,b) QUERY={spy=spy,op=op,plot=plot,a=a,b=b}; return CAN_START,{failure={'native reason'}} end,
- RequestOperation=function(spy,op,params) UNIT_REQUESTS[#UNIT_REQUESTS+1]={spy=spy,op=op,params=params} end,
+ RequestOperation=function(spy,op,params)
+  UNIT_REQUESTS[#UNIT_REQUESTS+1]={spy=spy,op=op,params=params,
+   selected=SELECTED and SELECTED:GetID() or -1,mode=MODE}
+  if REQUEST_EFFECT=='travel' then spy.op=1; spy.finish=TURN+3
+  elseif REQUEST_EFFECT=='arrive' then spy.x=FOREIGN.x; spy.y=FOREIGN.y; spy.finish=TURN+3
+  elseif REQUEST_EFFECT=='wrong_arrive' then spy.x=TARGET.x; spy.y=TARGET.y; spy.finish=TURN+3
+  elseif REQUEST_EFFECT=='empty_arrive' then spy.x=FOREIGN.x; spy.y=FOREIGN.y; spy.finish=0
+  elseif REQUEST_EFFECT=='mission' then spy.op=0; spy.finish=TURN+8 end
+ end,
+ GetActivityType=function() return ActivityTypes.ACTIVITY_AWAKE end,
  GetTimeToComplete=function(index) assert(index==0); return 8 end,
  GetResultProbability=function() return {ESPIONAGE_SUCCESS_UNDETECTED=.25,ESPIONAGE_SUCCESS_MUST_ESCAPE=.20} end,
  GetTravelTime=function() return 3 end,GetEstablishInCityTime=function() return 4 end,
@@ -124,7 +143,9 @@ UnitManager={
 function makeSpy(owner,id)
  local spy={x=2,y=1,op=-1,finish=TURN,owner=owner,id=id}
  spy.GetID=function() return spy.id end; spy.GetOwner=function() return spy.owner end
- spy.GetType=function() return 55 end; spy.GetX=function() return spy.x end; spy.GetY=function() return spy.y end
+ spy.GetType=function() return 55 end; spy.GetUnitType=function() return 55 end
+ spy.IsReadyToMove=function() return SPY_READY~=false end
+ spy.GetX=function() return spy.x end; spy.GetY=function() return spy.y end
  spy.GetSpyOperation=function() return spy.op end; spy.GetSpyOperationEndTurn=function() return spy.finish end
  UNITS[owner][#UNITS[owner]+1]=spy; return spy
 end

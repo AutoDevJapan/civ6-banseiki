@@ -8,6 +8,12 @@ function C.spy(owner, id)
     Game:SetProperty('JAC_BOUNDARY_SPY', {owner=owner, id=id})
 end
 
+function C.spy_home(owner, id)
+    local spy=makeSpy(owner, id)
+    spy.x=CONTROL.x; spy.y=CONTROL.y
+    Game:SetProperty('JAC_BOUNDARY_SPY', {owner=owner, id=id})
+end
+
 function C.mission(initial, plot, turn, escape)
     HISTORY[1][0] = {Operation=0, PlotIndex=plot, CompletionTurn=turn,
         InitialResult=initial, EscapeResult=escape}
