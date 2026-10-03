@@ -321,7 +321,8 @@ local function NativeWorkCustodian(destination)
   return free
 end
 
-local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, reservedCities)
+local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, reservedCities,
+    avoidCapital)
   assert(type(source.ObjectType) == "string" and source.ObjectType ~= "",
     "native Great Work object type unavailable")
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -336,6 +337,7 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
   end
   local occupiedCities = {}
   local movableBuildings = {}
+  local capital = avoidCapital and Players[owner]:GetCities():GetCapitalCity()
   if emptyCityOnly then
     for _, work in ipairs(A.OwnedGreatWorkSlots(owner)) do
       occupiedCities[work.X .. ":" .. work.Y] = true
@@ -348,6 +350,7 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
     local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
     if not reserved[key] and not occupiedCities[slot.X .. ":" .. slot.Y]
       and not (reservedCities and reservedCities[slot.X .. ":" .. slot.Y])
+      and not (capital and slot.X == capital:GetX() and slot.Y == capital:GetY())
       and (not emptyCityOnly or movableBuildings[slot.Building]) then
       local city = CityManager.GetCityAt(slot.X, slot.Y)
       assert(city and city:GetOwner() == owner and city:GetID() == slot.City
@@ -388,7 +391,8 @@ local function ReservedNativeCarrierCities(state, excludingTransaction)
   for id, tx in pairs(state.Transactions or {}) do
     if id ~= excludingTransaction and tx.Status ~= "COMPLETE" then
       for _, work in ipairs(tx.NativeWorks or {}) do
-        if work.Destination and work.Destination < 0 then
+        if work.Destination and work.Destination < 0
+          or work.NativeRoute == "CARRIER" then
           Add(work.Carrier or work.TargetSlot)
         end
       end
@@ -417,6 +421,12 @@ local function RecoveredArchiveOwnedByDonor(state, id, original, donor)
     SameNativeWorkIdentity(archived.NativeWork, original.NativeWork)
   end
   return true
+end
+local function NeedsNativeCarrier(source, tracked, donor, destination, custodian)
+  return custodian and (destination < 0
+    or (tracked and tracked.NativeOwnerMoves or 0) > 0
+    or source.BuildingType == "BUILDING_PALACE"
+      and source.CreatedByPlayer ~= donor)
 end
 local NativeWorkAtTarget, NativeWorkAtAbsorber, NativeWorkSourceEmpty
 
@@ -976,6 +986,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
       "native Great Work roster identity mismatch: " .. id)
     if asset.NativeWork then SameNativeWorkIdentity(asset.NativeWork, work) end
+    local carrierRoute = NeedsNativeCarrier(work, asset, tx.From, destination, custodian)
     asset.NativeWork, asset.Type = R.Copy(work), work.ObjectType or "NATIVE_GREAT_WORK"
     asset.Name = asset.Name or work.Name or work.GreatWorkType or id
     asset.City = { Owner = tx.From, X = work.X, Y = work.Y }
@@ -985,7 +996,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     generatedDecisions[id] = decision
     tx.NativeWorks[#tx.NativeWorks + 1] = { ID = id, Source = R.Copy(work),
       Outcome = decision.Outcome, Destination = destination,
-      Custodian = custodian }
+      Custodian = custodian, NativeRoute = carrierRoute and "CARRIER" or "CORE" }
   end
   for id, asset in pairs(tx.SourceRoster) do
     assert(not asset.NativeWork or seenNative[id],
@@ -1502,6 +1513,9 @@ local function MovedAssets(tx, normalCommitted)
       end
       if physical then
         record.NativeWork = R.Copy(physical)
+        if record.Owner ~= tx.From then
+          record.NativeOwnerMoves = (tx.SourceRoster[id].NativeOwnerMoves or 0) + 1
+        end
         record.NativeCustody = { Owner = physical.Owner, City = physical.CityID,
           X = physical.X, Y = physical.Y, Building = physical.Building, Slot = physical.Slot }
         record.City = { Owner = physical.Owner, X = physical.X, Y = physical.Y }
@@ -1885,7 +1899,7 @@ local function AdvanceNativeCarrier(state, carrier)
   end
   assert(slotValue ~= nil, "native Great Work carrier building disappeared")
   if carrier.Phase == "BORROW" then
-    local expected = carrier.Route == "TO_FREE" and -1 or carrier.Index
+    local expected = carrier.Route == "FROM_FREE" and carrier.Index or -1
     assert(slotValue == expected, "native Great Work carrier changed before borrowing")
     if city:GetOwner() == carrier.Owner then
       if not NativeCarrierActorReady() then return false end
@@ -1907,7 +1921,7 @@ local function AdvanceNativeCarrier(state, carrier)
     if not reads or not reads.GetObservation
       or not reads.GetObservation(carrier.BorrowToken) then return false end
     carrier.BorrowedCity = city:GetID()
-    if carrier.Route == "TO_FREE" then
+    if carrier.Route ~= "FROM_FREE" then
       carrier.MoveSource = { Owner = carrier.Source.Owner, City = carrier.Source.CityID,
         X = carrier.Source.X, Y = carrier.Source.Y,
         Building = carrier.Source.Building, Slot = carrier.Source.Slot }
@@ -1944,7 +1958,7 @@ local function AdvanceNativeCarrier(state, carrier)
     end
     assert(SameNativeWorkSlot(locations[1], carrier.MoveSource)
       and WorkInSlot(city, carrier.Building, carrier.Slot)
-        == (carrier.Route == "TO_FREE" and -1 or carrier.Index),
+        == (carrier.Route == "FROM_FREE" and carrier.Index or -1),
       "native Great Work MOVE landed in an unexpected slot")
     if not observed.Unchanged then return false end
     if carrier.MoveAttempt < 2 then
@@ -1977,7 +1991,7 @@ local function AdvanceNativeCarrier(state, carrier)
     local locations = NativeWorkLocations(carrier.Index)
     assert(#locations == 1, "native Great Work changed during carrier rollback")
     SameNativeWorkIdentity(carrier.Source, locations[1])
-    if carrier.Route == "TO_FREE" then
+    if carrier.Route ~= "FROM_FREE" then
       assert(SameNativeWorkSlot(locations[1], carrier.Source)
         and WorkInSlot(city, carrier.Building, carrier.Slot) == -1,
         "native Great Work or empty carrier changed during rollback")
@@ -2011,11 +2025,11 @@ local function AdvanceNativeCarrier(state, carrier)
     local locations = NativeWorkLocations(carrier.Index)
     assert(#locations == 1, "native Great Work carrier return index is missing or duplicated")
     SameNativeWorkIdentity(carrier.Source, locations[1])
-    local expected = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+    local expected = carrier.Route == "FROM_FREE" and carrier.Target or carrier.FinalSlot
     assert(SameNativeWorkSlot(locations[1], expected),
       "native Great Work missed its final reserved carrier route slot")
     assert(WorkInSlot(city, carrier.Building, carrier.Slot)
-      == (carrier.Route == "TO_FREE" and carrier.Index or -1),
+      == (carrier.Route == "FROM_FREE" and -1 or carrier.Index),
       "native Great Work carrier return slot changed")
     assert(R.Equal(NativeCarrierState(city, carrier), carrier.Before),
       "native Great Work carrier city changed during custody")
@@ -2025,7 +2039,7 @@ local function AdvanceNativeCarrier(state, carrier)
   end
   assert(carrier.Phase == "PROVED", "native Great Work carrier route needs review")
   local locations = NativeWorkLocations(carrier.Index)
-  local expected = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+  local expected = carrier.Route == "FROM_FREE" and carrier.Target or carrier.FinalSlot
   assert(#locations == 1 and SameNativeWorkSlot(locations[1], expected),
     "proved native Great Work carrier route changed")
   SameNativeWorkIdentity(carrier.Source, locations[1])
@@ -2045,13 +2059,27 @@ local function NativeCarrierUIStale(err)
 end
 
 local function MoveNativeWorks(state, tx)
+  for _, snap in ipairs(tx.NativeWorks or {}) do
+    if not snap.NativeRoute then
+      if snap.DealSubmitted or snap.PhysicalMoved then
+        snap.NativeRoute = snap.Carrier and "CARRIER" or "CORE"
+      else
+        snap.NativeRoute = NeedsNativeCarrier(snap.Source, tx.SourceRoster[snap.ID],
+          tx.From, snap.Destination, snap.Custodian) and "CARRIER" or "CORE"
+        if snap.NativeRoute == "CARRIER" and snap.Destination >= 0
+          and not snap.Carrier then snap.TargetSlot = nil end
+      end
+      Save(state) -- old saved plans choose the route before a native mutation
+    end
+  end
   local reserved = {}
   local reservedCities = ReservedNativeCarrierCities(state, tx.ID)
   for _, pending in ipairs(tx.NativeWorks or {}) do
     if pending.TargetSlot then
       local slot = pending.TargetSlot
       reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
-      if pending.Destination and pending.Destination < 0 then
+      if pending.Destination and pending.Destination < 0
+        or pending.NativeRoute == "CARRIER" then
         reservedCities[slot.X .. ":" .. slot.Y] = true
       end
     end
@@ -2065,9 +2093,14 @@ local function MoveNativeWorks(state, tx)
         end
         local targetReserved = ReservedNativeSlots(state, snap.Custodian, tx.ID)
         for key in pairs(reserved) do targetReserved[key] = true end
+        local useCarrier = snap.Destination < 0 or snap.NativeRoute == "CARRIER"
+        if useCarrier and snap.Destination >= 0
+          and player:GetCities():GetCount() < 2 then
+          error("JAC_ABSORPTION_WAITING_UI", 0)
+        end
         local ok, destination = pcall(NativeWorkDestination,
-          snap.Custodian, snap.Source, targetReserved, snap.Destination < 0,
-          reservedCities)
+          snap.Custodian, snap.Source, targetReserved, useCarrier,
+          reservedCities, useCarrier and snap.Destination >= 0)
         if not ok then
           if tostring(destination) == "JAC_ABSORPTION_WAITING_UI"
             or tostring(destination):find("no compatible empty destination slot", 1, true) then
@@ -2078,10 +2111,10 @@ local function MoveNativeWorks(state, tx)
         snap.TargetSlot = destination
         local slot = destination
         reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
-        if snap.Destination < 0 then reservedCities[slot.X .. ":" .. slot.Y] = true end
+        if useCarrier then reservedCities[slot.X .. ":" .. slot.Y] = true end
         Save(state)
       end
-      if snap.Destination < 0 then
+      if snap.Destination < 0 or snap.NativeRoute == "CARRIER" then
         assert(not snap.PhysicalMoved or snap.Carrier,
           "native scattered work has no verified carrier history")
         if not snap.Carrier then
@@ -2095,7 +2128,8 @@ local function MoveNativeWorks(state, tx)
             assert(other.X ~= slot.X or other.Y ~= slot.Y,
               "native Great Work carrier city holds another original work")
           end
-          snap.Carrier = { Route = "TO_FREE", Phase = "BORROW", Index = snap.Source.Index,
+          snap.Carrier = { Route = snap.Destination < 0 and "TO_FREE" or "TO_OWNER",
+            Phase = "BORROW", Index = snap.Source.Index,
             Source = R.Copy(snap.Source), Owner = snap.Custodian, Borrower = tx.From,
             OriginalCity = city:GetID(), X = slot.X, Y = slot.Y,
             Building = slot.Building, Slot = slot.Slot,
@@ -2808,6 +2842,7 @@ function A.RecoverArchived(id, owner, token, original)
     if record.NativeWork then
       local work = RecoveredNativeWork(record.NativeWork, owner)
       record.NativeWork = R.Copy(work)
+      record.NativeOwnerMoves = (archived.NativeOwnerMoves or 0) + 1
       record.City = { Owner = owner, X = work.X, Y = work.Y }
       record.NativeCustody = { Owner = owner, City = work.CityID,
         X = work.X, Y = work.Y, Building = work.Building, Slot = work.Slot }

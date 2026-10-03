@@ -557,6 +557,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-scatter-physical-probe.json",
         "absorption-native-scatter-reward-site.json",
         "absorption-native-scatter-recovery.json",
+        "absorption-native-acquired-palace-product.json",
         "absorption-native-bridge-probe.json",
         "absorption-native-ai-same-owner-move.json",
         "absorption-native-ai-carrier-return.json",

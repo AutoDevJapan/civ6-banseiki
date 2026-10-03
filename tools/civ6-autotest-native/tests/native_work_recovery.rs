@@ -163,6 +163,10 @@ fn palace_work_uses_a_verified_deal_before_its_city_can_change_owner() -> mlua::
           end})
         GameInfo.GreatWorks[4].Index=4
         GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        local readWork=ExposedMembers.JAC_HeroReadAPI.ReadNativeWork
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function(...)
+          local result=readWork(...);result.CreatedByPlayer=1;return result
+        end
         GameInfo.GreatWork_ValidSubTypes=function()
           local read=false;return function()
             if not read then read=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
@@ -894,6 +898,139 @@ fn prepared_return_without_a_slot_reopens_owner_after_recipient_loses_city() -> 
         assert(A.GetState().Transactions[PLAN.ID]==nil and TRANSFERS==0
           and CITIES[4]:GetOwner()==1 and #A.NativeWorkLocations(900)==1,
           'prepared cancellation changed donor or original work')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        local original=assert(A.OwnedGreatWorkSlots(1)[1])
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{['native-work:900']={
+          ID='native-work:900',Kind='ITEM',Owner=1,Outcome='RETURN',
+          NativeOwnerMoves=1,NativeWork=A.Rules.Copy(original)}})
+        local state=A.GetState();state.Archive.native=nil
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        PUBLISHED={}
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token)
+          if PUBLISHED[token] then return {Published=true} end
+        end
+        DealManager={GetWorkingDeal=function() error('unsafe Core working deal opened') end,
+          GetPossibleDealItems=function() error('unsafe Core deal queried') end,
+          EnactWorkingDeal=function() error('unsafe Core deal enacted') end}
+        TRANSFERS=0
+        local plan={ID='returned-by-carrier',From=1,To=0,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          Assets={['native-work:900']={Outcome='RETURN',ReturnOwner=2}},
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+        local pending=A.Apply(plan)
+        local carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(pending.Status=='WAITING_UI' and carrier.Route=='TO_OWNER'
+          and carrier.Phase=='BORROW' and pending.NativeWorks[1].NativeRoute=='CARRIER'
+          and TRANSFERS==1 and CITIES[16]:GetOwner()==1,
+          'previously moved work was not routed through an empty recipient city')
+        assert(A.Resume(plan.ID).Status=='WAITING_UI' and TRANSFERS==1)
+        PUBLISHED[carrier.BorrowToken]=true
+        pending=A.Resume(plan.ID)
+        carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='MOVE' and carrier.MoveTarget.Owner==1
+          and carrier.MoveTarget.City==CITIES[16]:GetID())
+        WORK_CITIES[4],WORK_CITIES[16]=nil,true
+        PUBLISHED[carrier.MoveToken]=true
+        pending=A.Resume(plan.ID)
+        carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='RETURN' and TRANSFERS==2 and CITIES[16]:GetOwner()==2)
+        PUBLISHED[carrier.ReturnToken]=true
+        local completed=A.Resume(plan.ID)
+        assert(completed.Status=='COMPLETE' and CITIES[4]:GetOwner()==0
+          and CITIES[8]:GetOwner()==0,'donor absorption did not complete after carrier proof')
+        local work=A.NativeWorkLocations(900)
+        assert(#work==1 and work[1].Owner==2 and work[1].CityID==CITIES[16]:GetID()
+          and work[1].X==16 and work[1].Building==1 and work[1].Slot==0,
+          'returned original work missed exact recipient slot')
+        local returned=assert(A.GetRoster(2)['native-work:900'])
+        assert(returned.NativeOwnerMoves==2 and returned.Outcome=='RETURN'
+          and returned.NativeCustody.City==work[1].CityID,
+          'return history or custody does not match the physical original')
+        assert(A.Verify(plan.ID,true))
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn acquired_palace_work_avoids_the_known_destructive_core_return() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        CITIES[4].palace=true
+        local originalBuildings=CITIES[4].GetBuildings
+        CITIES[4].GetBuildings=function(self)
+          local buildings=originalBuildings(self)
+          buildings.GetGreatWorkInSlot=function(_,building)
+            if building==0 then return WORK_CITIES[4] and 900 or -1 end
+            return -1
+          end
+          return buildings
+        end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner)
+          assert(owner==2)
+          return {{Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        DealManager={GetWorkingDeal=function() error('acquired Palace Core deal opened') end,
+          GetPossibleDealItems=function() error('acquired Palace Core deal queried') end,
+          EnactWorkingDeal=function() error('acquired Palace work destroyed by Core deal') end}
+        TRANSFERS=0
+        local plan={ID='acquired-palace-return',From=1,To=0,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+        local pending=A.Apply(plan)
+        assert(pending.Status=='WAITING_UI' and pending.NativeWorks[1].NativeRoute=='CARRIER'
+          and pending.NativeWorks[1].Source.BuildingType=='BUILDING_PALACE'
+          and pending.NativeWorks[1].Source.CreatedByPlayer==0
+          and pending.NativeWorks[1].Carrier.Route=='TO_OWNER'
+          and TRANSFERS==1 and CITIES[16]:GetOwner()==1 and CITIES[4]:GetOwner()==1,
+          'acquired Palace work entered a destructive cross-owner Core return')
+        assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==1,
+          'carrier setup lost acquired Palace original')
         "#,
     )
     .exec()
