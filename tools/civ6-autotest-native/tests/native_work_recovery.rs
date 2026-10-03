@@ -5,6 +5,13 @@ fn load(lua: &Lua, name: &str) -> mlua::Result<()> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../poc/JAC_PoC_Absorption/Scripts")
         .join(name);
+    let path = if name == "JAC_Absorption_Gameplay.lua" {
+        std::env::var_os("JAC_FLOW_GAMEPLAY_SOURCE")
+            .map(PathBuf::from)
+            .unwrap_or(path)
+    } else {
+        path
+    };
     lua.load(fs::read_to_string(path).map_err(mlua::Error::external)?)
         .set_name(name)
         .exec()
@@ -381,8 +388,8 @@ fn two_original_works_to_one_custodian_clear_only_the_completed_first_item() -> 
 }
 
 #[test]
-fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry()
--> mlua::Result<()> {
+fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry(
+) -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
         r#"
@@ -518,6 +525,107 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
         assert(returned.City.Owner==3 and returned.City.X==16 and returned.City.Y==0)
         assert(A.Verify(PLAN.ID,true))
         "#,
+    )
+    .exec()
+}
+
+#[test]
+fn long_native_slot_wait_starts_full_conquest_friction_at_city_transfer() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        UNIT(2,203,'UNIT_WARRIOR',12) -- an ordinary destination can keep its center unit
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        SLOT_READY=false
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          if not SLOT_READY then return {} end
+          return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+        DealDirection={OUTGOING=1};DealItemTypes={GREATWORK=2}
+        local deal={items={}}
+        function deal:GetItemCount() return #self.items end
+        function deal:AddItemOfType(kind,owner)
+          assert(kind==2 and owner==1)
+          local item={}
+          function item:SetSubType(value) assert(value==4) end
+          function item:SetValueType(value) assert(value==900) end
+          self.items[#self.items+1]=item;return item
+        end
+        function deal:Validate() return 1 end
+        function deal:IsValid() return #self.items==1 end
+        DealManager={
+          GetWorkingDeal=function(direction,from,to)
+            assert(direction==1 and from==1 and to==2);return deal
+          end,
+          GetPossibleDealItems=function(from,to,kind,working)
+            assert(from==1 and to==2 and kind==2 and working==deal)
+            return {{ForType=900,IsValid=true}}
+          end,
+          EnactWorkingDeal=function(from,to)
+            assert(from==1 and to==2 and WORK_CITIES[4] and not WORK_CITIES[12])
+            WORK_CITIES[4],WORK_CITIES[12]=nil,true
+            return 1
+          end}
+        local plan={ID='delayed-native-policy',From=1,To=0,Mode='CONQUEST',
+          FlowPolicy=true,EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+        local tx=A.Apply(plan)
+        assert(tx.Status=='WAITING_UI' and tx.Turn==5 and not tx.NativeWorks[1].TargetSlot)
+        for turn=6,9 do
+          CURRENT_TURN=turn
+          tx=A.Resume(plan.ID)
+          assert(tx.Status=='WAITING_UI' and CITIES[4]:GetOwner()==1
+            and CITIES[8]:GetOwner()==1 and #A.NativeWorkLocations(900)==1)
+        end
+        SLOT_READY=true;CURRENT_TURN=10
+        assert(A.Resume(plan.ID).Status=='WAITING_UI' and CITIES[4]:GetOwner()==1)
+        tx=A.Resume(plan.ID)
+        assert(tx.Status=='COMPLETE' and CITIES[4]:GetOwner()==0
+          and CITIES[8]:GetOwner()==0 and #A.NativeWorkLocations(900)==1
+          and A.NativeWorkLocations(900)[1].Owner==2)
+        for _,x in ipairs({4,8}) do
+          local g=assert(CITIES[x]:GetProperty(A.Rules.GOVERNANCE_KEY))
+          assert(g.Turn==10 and g.ImmediateApplied and g.FrictionTurns==3
+            and g.FrictionApplied==0 and CITIES[x].loyalty==72,
+            'native staging consumed the city friction duration before transfer')
+        end
+        Game.props=A.Rules.Copy(Game.props)
+        for _,x in ipairs({4,8}) do CITIES[x].props=A.Rules.Copy(CITIES[x].props) end
+    "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        local A=JAC_AbsorptionGameplay
+        for turn=11,15 do
+          CURRENT_TURN=turn
+          A.ApplyCityFriction();A.ApplyCityFriction()
+        end
+        for _,x in ipairs({4,8}) do
+          local g=CITIES[x]:GetProperty(A.Rules.GOVERNANCE_KEY)
+          assert(g.Turn==10 and g.FrictionApplied==3 and g.LastFrictionTurn==13
+            and CITIES[x].loyalty==66,
+            'delayed city did not receive exactly three post-transfer turns')
+        end
+    "#,
     )
     .exec()
 }
@@ -724,6 +832,94 @@ fn simultaneous_scatter_flows_do_not_borrow_two_slots_in_the_same_free_city() ->
           and #A.NativeWorkLocations(900)==1,
           'second Flow mutated its donor or the carrier before a separate city was available')
         "#,
+    )
+    .exec()
+}
+
+fn occupied_carrier_candidates(occupy_second: bool) -> mlua::Result<Lua> {
+    let lua = setup()?;
+    lua.globals().set("OCCUPY_SECOND", occupy_second)?;
+    lua.load(
+        r#"
+        CITY(2,18)
+        local buildings=CITIES[18].GetBuildings
+        CITIES[18].GetBuildings=function(self)
+          local result=buildings(self)
+          result.GetGreatWorkInSlot=function() return -1 end
+          return result
+        end
+        UNIT(2,201,'UNIT_WARRIOR',16) -- foreign-to-donor unit on first city center
+        if OCCUPY_SECOND then UNIT(2,202,'UNIT_WARRIOR',18) end
+        Players[1].units={}
+        local original=assert(A.OwnedGreatWorkSlots(1)[1])
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{['native-work:900']={
+          ID='native-work:900',Kind='ITEM',Owner=1,Outcome='RETURN',
+          NativeOwnerMoves=1,NativeWork=A.Rules.Copy(original)}})
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+              SlotType='GREATWORKSLOT_RELIC'},
+            {Owner=2,City=CITIES[18]:GetID(),X=18,Y=0,Building=1,Slot=0,
+              SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=false
+        DealManager={GetWorkingDeal=function() error('Core deal was selected') end,
+          GetPossibleDealItems=function() error('Core deal was queried') end,
+          EnactWorkingDeal=function() error('Core deal was enacted') end}
+        TRANSFERS=0
+        PLAN={ID='occupied-carrier-center',From=1,To=0,Mode='MERGER',
+          FlowPolicy=true,EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+    "#,
+    )
+    .exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn borrowed_carrier_skips_occupied_centers_and_waits_without_an_empty_city() -> mlua::Result<()> {
+    let lua = occupied_carrier_candidates(false)?;
+    lua.load(
+        r#"
+        local tx=A.Apply(PLAN)
+        local snap=assert(tx.NativeWorks[1])
+        assert(tx.Status=='WAITING_UI' and snap.NativeRoute=='CARRIER'
+          and snap.TargetSlot and snap.TargetSlot.X==18 and snap.Carrier
+          and snap.Carrier.Phase=='BORROW' and not snap.Carrier.BorrowIssued,
+          'the occupied first carrier stopped selection before the valid second city')
+        assert(TRANSFERS==0 and CITIES[4]:GetOwner()==1
+          and CITIES[16]:GetOwner()==2 and CITIES[18]:GetOwner()==2
+          and #A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==1)
+    "#,
+    )
+    .exec()?;
+
+    let lua = occupied_carrier_candidates(true)?;
+    lua.load(
+        r#"
+        local tx=A.Apply(PLAN)
+        assert(tx.Status=='WAITING_UI' and not tx.NativeWorks[1].TargetSlot
+          and not tx.NativeWorks[1].Carrier,
+          'no vacant city center must leave a saved, retryable wait')
+        assert(TRANSFERS==0 and KILLS==0 and CITIES[4]:GetOwner()==1
+          and CITIES[8]:GetOwner()==1 and CITIES[16]:GetOwner()==2
+          and CITIES[18]:GetOwner()==2 and #A.NativeWorkLocations(900)==1
+          and A.NativeWorkLocations(900)[1].Owner==1,
+          'the wait changed an original work or donor city')
+    "#,
     )
     .exec()
 }

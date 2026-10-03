@@ -22,6 +22,29 @@ local function Units(owner)
   table.sort(list, function(a, b) return a:GetID() < b:GetID() end)
   return list
 end
+
+local function UnitsOnCityCenter(x, y, extraOwner)
+  local owners, seen, found = {}, {}, {}
+  for _, owner in ipairs(PlayerManager.GetAliveIDs()) do
+    if not seen[owner] then owners[#owners + 1], seen[owner] = owner, true end
+  end
+  if not seen[extraOwner] then owners[#owners + 1] = extraOwner end
+  for _, owner in ipairs(owners) do
+    if Players[owner] then
+      for _, unit in ipairs(Units(owner)) do
+        if unit:GetX() == x and unit:GetY() == y then
+          found[#found + 1] = { Owner = owner, ID = unit:GetID(),
+            Type = GameInfo.Units[unit:GetType()].UnitType }
+        end
+      end
+    end
+  end
+  table.sort(found, function(a, b)
+    if a.Owner ~= b.Owner then return a.Owner < b.Owner end
+    return a.ID < b.ID
+  end)
+  return found
+end
 local function Properties(object, keys)
   local result = {}
   for _, key in ipairs(R.Keys(keys)) do result[key] = R.Copy(object:GetProperty(key)) end
@@ -362,6 +385,8 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
       and not (reservedCities and reservedCities[slot.X .. ":" .. slot.Y])
       and not (capital and slot.X == capital:GetX() and slot.Y == capital:GetY())
       and not (avoidCapital and city and ActiveNativeCarrierFriction(city))
+      and (not (emptyCityOnly or avoidCapital)
+        or #UnitsOnCityCenter(slot.X, slot.Y, owner) == 0)
       and (not emptyCityOnly or movableBuildings[slot.Building]) then
       assert(city and city:GetOwner() == owner and city:GetID() == slot.City
         and slot.Owner == owner, "native Great Work destination city changed")
@@ -1863,26 +1888,7 @@ local function NativeCarrierState(city, carrier)
   assert(reads and reads.ReadCarrierPlots,
     "native carrier purchased plots cannot be observed")
   local plots = reads.ReadCarrierPlots(city:GetOwner(), city:GetID())
-  local units = {}
-  local owners, seen = {}, {}
-  for _, owner in ipairs(PlayerManager.GetAliveIDs()) do
-    if not seen[owner] then owners[#owners + 1], seen[owner] = owner, true end
-  end
-  if not seen[carrier.Owner] then owners[#owners + 1] = carrier.Owner end
-  for _, owner in ipairs(owners) do
-    if Players[owner] then
-      for _, unit in ipairs(Units(owner)) do
-        if unit:GetX() == carrier.X and unit:GetY() == carrier.Y then
-          units[#units + 1] = { Owner = owner, ID = unit:GetID(),
-            Type = GameInfo.Units[unit:GetType()].UnitType }
-        end
-      end
-    end
-  end
-  table.sort(units, function(a, b)
-    if a.Owner ~= b.Owner then return a.Owner < b.Owner end
-    return a.ID < b.ID
-  end)
+  local units = UnitsOnCityCenter(carrier.X, carrier.Y, carrier.Owner)
   return { Name = city:GetName(), Population = city:GetPopulation(),
     Assets = assets, Religion = Religion(city), Loyalty = A.CityLoyalty(city),
     Faith = R.Copy(city:GetProperty(R.CITY_FAITH_KEY)),
@@ -2347,14 +2353,23 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Cities) do
     local city = assert(CityManager.GetCityAt(snap.X, snap.Y), "city disappeared during absorption")
     assert(city:GetOwner() == tx.From or city:GetOwner() == tx.To, "city belongs to a third faction")
-    if city:GetOwner() == tx.From then CityManager.TransferCity(city, tx.To) end
+    if city:GetOwner() == tx.From then
+      -- A failed call can leave the donor as owner or transfer before raising.
+      -- Save this city's attempt before the native boundary and only refresh
+      -- the date while physical ownership still belongs to the donor.
+      snap.TransferTurn = Game.GetCurrentGameTurn()
+      Save(state)
+      CityManager.TransferCity(city, tx.To)
+    end
     city = assert(CityManager.GetCityAt(snap.X, snap.Y), "transfer removed city")
+    assert(city:GetOwner() == tx.To, "city transfer did not change owner")
     WriteProperties(city, snap.TransferredProperties, snap.PropertyKeys)
     local previous = city:GetProperty(R.GOVERNANCE_KEY)
     if not previous or previous.ID ~= tx.ID then
       local policy = tx.Request.FlowPolicy and assert(R.CITY_POLICY[tx.Mode], "unknown city policy")
         or { Immediate = 0, Friction = 0, Turns = 0 }
-      city:SetProperty(R.GOVERNANCE_KEY, { ID = tx.ID, From = tx.From, To = tx.To, Turn = tx.Turn,
+      city:SetProperty(R.GOVERNANCE_KEY, { ID = tx.ID, From = tx.From, To = tx.To,
+        Turn = snap.TransferTurn or tx.Turn,
         Mode = tx.Mode, LoyaltyDelta = policy.Immediate, FrictionPerTurn = policy.Friction,
         FrictionTurns = policy.Turns, FrictionApplied = 0,
         ImmediateApplied = policy.Immediate == 0, BalancePending = true, Previous = R.Copy(snap.Governance) })

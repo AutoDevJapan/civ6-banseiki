@@ -552,6 +552,111 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
 }
 
 #[test]
+fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        PLAN.Mode='CONQUEST';PLAN.FlowPolicy=true
+        FAIL_CITY=true
+        assert(not pcall(A.Apply,PLAN) and CITIES[4]:GetOwner()==1)
+        CURRENT_TURN=9
+        assert(not pcall(A.Resume,PLAN.ID) and CITIES[4]:GetOwner()==1,
+          'failed-before-mutation transfer changed its owner')
+        local transfer=CityManager.TransferCity
+        local failAfter=true
+        CityManager.TransferCity=function(city,owner)
+          if city==CITIES[4] and failAfter then
+            failAfter=false
+            transfer(city,owner)
+            error('interrupted after the first native city transfer')
+          end
+          return transfer(city,owner)
+        end
+        CURRENT_TURN=10;FAIL_CITY=false
+        assert(not pcall(A.Resume,PLAN.ID) and CITIES[4]:GetOwner()==2
+          and CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY)==nil)
+        local first=assert(A.GetState().Transactions[PLAN.ID].Cities[1])
+        assert(first.X==4 and first.TransferTurn==10,
+          'the transfer boundary was not saved before the native call')
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        CURRENT_TURN=11;FAIL_CITY=true
+        assert(not pcall(A.Resume,PLAN.ID) and CITIES[8]:GetOwner()==1)
+        local g=assert(CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY))
+        assert(g.Turn==10 and g.ImmediateApplied and g.FrictionApplied==0,
+          'the first city lost its actual transfer date after reload')
+        A.ApplyCityFriction()
+        assert(CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY).FrictionApplied==1)
+        local saved=A.GetState()
+        saved.Transactions[PLAN.ID].Cities[1].TransferTurn=nil
+        Game:SetProperty(A.Rules.STATE_KEY,saved) -- a pre-fix save already has city governance
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        CURRENT_TURN=12;FAIL_CITY=false
+        local set=CITIES[8].SetProperty
+        local failSetter=true
+        CITIES[8].SetProperty=function(self,key,value)
+          if key==A.Rules.GOVERNANCE_KEY and value and value.ID==PLAN.ID and failSetter then
+            failSetter=false;error('governance setter interrupted')
+          end
+          return set(self,key,value)
+        end
+        assert(not pcall(A.Resume,PLAN.ID) and CITIES[8]:GetOwner()==2
+          and CITIES[8]:GetProperty(A.Rules.GOVERNANCE_KEY)==nil)
+        assert(A.GetState().Transactions[PLAN.ID].Cities[2].TransferTurn==12,
+          'second city transfer date was not saved before its interrupted setter')
+        A.ApplyCityFriction()
+        assert(CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY).FrictionApplied==2)
+        Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        CURRENT_TURN=13
+        assert(A.Resume(PLAN.ID).Status=='COMPLETE')
+        local first=CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY)
+        local second=CITIES[8]:GetProperty(A.Rules.GOVERNANCE_KEY)
+        assert(first.Turn==10 and second.Turn==12,
+          'reload or delayed setter reset a transferred city duration')
+        for turn=13,16 do CURRENT_TURN=turn;A.ApplyCityFriction();A.ApplyCityFriction() end
+        first=CITIES[4]:GetProperty(A.Rules.GOVERNANCE_KEY)
+        second=CITIES[8]:GetProperty(A.Rules.GOVERNANCE_KEY)
+        assert(first.FrictionApplied==3 and first.LastFrictionTurn==13
+          and second.FrictionApplied==3 and second.LastFrictionTurn==15)
+        assert(CITIES[4].loyalty==66 and CITIES[8].loyalty==66,
+          'each city did not receive exactly three full friction turns')
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(
@@ -766,8 +871,8 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
 }
 
 #[test]
-fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world()
--> mlua::Result<()> {
+fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
         r#"
@@ -1179,8 +1284,8 @@ fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
-fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected()
--> mlua::Result<()> {
+fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1349,8 +1454,8 @@ fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua:
 }
 
 #[test]
-fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
--> mlua::Result<()> {
+fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1580,9 +1685,7 @@ fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event()
     ))
     .map_err(mlua::Error::external)?;
     assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
-    assert!(
-        manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
-    );
+    assert!(manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
