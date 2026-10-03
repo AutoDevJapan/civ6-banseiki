@@ -442,6 +442,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-ai-carrier-return.json",
         "absorption-native-carrier-side-effects.json",
         "absorption-native-cross-owner-freecity.json",
+        "absorption-native-freecity-recover-original.json",
         "absorption-native-work-probe.json",
     ] {
         let scenario = native_scenario(name);
