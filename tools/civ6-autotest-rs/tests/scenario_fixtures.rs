@@ -294,6 +294,40 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             .count(),
         1
     );
+    let capacity_tick = scenario("leader-persona-spy-neutralization-retry-capacity-tick.json");
+    let tick_steps = steps(&capacity_tick);
+    let turn = tick_steps
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    let confirmed = tick_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step).is_some_and(|code| {
+                    code.contains("o.targetBuilt")
+                        && code.contains("o.stage=='TIER1_BUILT'")
+                        && code.contains("o.stage=='CAPACITY_READY' and o.capacity==2")
+                        && code.contains("o.captured==1")
+                })
+        })
+        .unwrap();
+    let save = tick_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(turn < confirmed && confirmed < save);
+    assert!(tick_steps[turn + 1..confirmed].iter().any(|step| {
+        action(step, "wait_for")
+            && step["timeout"]
+                .as_u64()
+                .is_some_and(|seconds| seconds <= 120)
+            && embedded_lua(step).is_some_and(|code| {
+                code.contains("CaptiveCapacityOutcome()")
+                    && code.contains("o.stage=='TIER1_BUILT'")
+                    && code.contains("o.stage=='CAPACITY_READY'")
+            })
+    }));
     let prepare = scenario("leader-persona-spy-neutralization-retry-prepare.json");
     let codes: Vec<_> = steps(&prepare).iter().filter_map(embedded_lua).collect();
     assert!(codes.iter().any(|code| code.contains("d.spyID==655368")

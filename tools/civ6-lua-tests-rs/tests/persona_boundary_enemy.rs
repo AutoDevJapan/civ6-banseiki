@@ -597,47 +597,126 @@ fn captive_sentinel_never_hides_two_real_spies_or_an_unrelated_record() {
 fn negative_native_name_index_is_probed_without_sending_or_accepting_a_deal() {
     let h = Enemy::new();
     h.failed();
-    h.run(r#"
+    h.run(
+        r#"
         UNITS[0]={};
         local travel=Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL');
         travel.name=GameInfo.Units['UNIT_SPY'].Name;
         CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1}};
         OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}};
         DealDirection={OUTGOING=2}; DealItemTypes={CAPTIVE=4};
-        CLEARS=0; LOCKS=0; ITEM_VALID=false; PENDING_DEAL=false; ITEM_AVAILABLE=true;
+        DEAL_ITEMS={}; NEXT_ITEM_ID=1; ADD_CALLS=0; REMOVED_IDS={};
+        ITEM_VALID=false; PENDING_DEAL=false; ITEM_AVAILABLE=true;
+        function makeDealItem(id,kind,from,to)
+            local item={id=id,kind=kind,from=from,to=to,value=-999};
+            item.GetID=function() return item.id end;
+            item.GetType=function() return item.kind end;
+            item.GetFromPlayerID=function() return item.from end;
+            item.GetToPlayerID=function() return item.to end;
+            item.GetValueType=function() return item.value end;
+            item.IsLocked=function() return false end;
+            item.SetValueType=function(_,value)
+                if FAIL_SET then error('native value set failed') end;
+                assert(value==-1); item.value=value; PROBED_VALUE=value;
+            end;
+            item.IsValid=function()
+                if RACE_DURING_VALID then
+                    RACE_DURING_VALID=false;
+                    DEAL_ITEMS[#DEAL_ITEMS+1]=makeDealItem(900,99,0,1);
+                    DEAL_ITEMS[#DEAL_ITEMS+1]=makeDealItem(902,99,0,1);
+                end;
+                return ITEM_VALID;
+            end;
+            item.SetLocked=function() error('probe must not lock a working item') end;
+            return item;
+        end
+        WORKING_DEAL={
+            GetItemCount=function() return #DEAL_ITEMS end,
+            Items=function()
+                local index=0;
+                return function() index=index+1; return DEAL_ITEMS[index] end;
+            end,
+            AddItemOfType=function(_,kind,captor)
+                assert(kind==4 and captor==1); ADD_CALLS=ADD_CALLS+1;
+                if not ITEM_AVAILABLE then return nil end;
+                local item=makeDealItem(NEXT_ITEM_ID,kind,captor,0);
+                NEXT_ITEM_ID=NEXT_ITEM_ID+1;
+                DEAL_ITEMS[#DEAL_ITEMS+1]=item;
+                return item;
+            end,
+            FindItemByID=function(_,id)
+                for _,item in ipairs(DEAL_ITEMS) do if item.id==id then return item end end;
+            end,
+            RemoveItemByID=function(_,id)
+                for index,item in ipairs(DEAL_ITEMS) do if item.id==id then
+                    REMOVED_IDS[#REMOVED_IDS+1]=id;
+                    table.remove(DEAL_ITEMS,index); return true;
+                end end;
+                return false;
+            end
+        };
+        READS=0;
         DealManager={
             HasPendingDeal=function(a,b) assert(a==0 and b==1); return PENDING_DEAL end,
-            ClearWorkingDeal=function(direction,a,b)
-                assert(direction==2 and a==0 and b==1); CLEARS=CLEARS+1
-            end,
+            ClearWorkingDeal=function() error('must preserve unsent working deals') end,
             GetWorkingDeal=function(direction,a,b)
                 assert(direction==2 and a==0 and b==1);
-                return {AddItemOfType=function(_,kind,captor)
-                    assert(kind==4 and captor==1);
-                    if not ITEM_AVAILABLE then return nil end;
-                    return {SetValueType=function(_,value) assert(value==-1); PROBED_VALUE=value end,
-                        IsValid=function() return ITEM_VALID end,
-                        SetLocked=function(_,locked) assert(locked); LOCKS=LOCKS+1 end}
-                end}
+                READS=READS+1;
+                if NO_WORKING_DEAL then return nil end;
+                if RACE_BEFORE_ADD and READS==2 then
+                    DEAL_ITEMS[#DEAL_ITEMS+1]=makeDealItem(901,99,0,1);
+                end;
+                return WORKING_DEAL;
             end
         };
         local before=#WRITES;
+        local user=makeDealItem(800,99,0,1);
+        local second=makeDealItem(801,99,1,0);
+        DEAL_ITEMS={user,second};
         local r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
-        assert(r.status=='INVALID_ITEM' and r.nameIndex==-1 and CLEARS==2 and LOCKS==0 and PROBED_VALUE==-1);
+        assert(r.status=='WORKING_DEAL_OCCUPIED' and r.detail==2);
+        assert(#DEAL_ITEMS==2 and DEAL_ITEMS[1]==user and DEAL_ITEMS[2]==second
+            and ADD_CALLS==0 and #REMOVED_IDS==0);
+        DEAL_ITEMS={}; NO_WORKING_DEAL=true;
+        r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
+        assert(r.status=='WORKING_DEAL_UNAVAILABLE' and ADD_CALLS==0 and #REMOVED_IDS==0);
+        NO_WORKING_DEAL=false;
+        local items=WORKING_DEAL.Items; WORKING_DEAL.Items=nil;
+        r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
+        assert(r.status=='WORKING_DEAL_UNREADABLE' and ADD_CALLS==0 and #DEAL_ITEMS==0);
+        WORKING_DEAL.Items=items; READS=0; RACE_BEFORE_ADD=true;
+        r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
+        assert(r.status=='WORKING_DEAL_CHANGED' and #DEAL_ITEMS==1 and DEAL_ITEMS[1].id==901);
+        assert(ADD_CALLS==0 and #REMOVED_IDS==0);
+        RACE_BEFORE_ADD=false; READS=0; DEAL_ITEMS={};
+        local r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
+        assert(r.status=='INVALID_ITEM' and r.nameIndex==-1 and PROBED_VALUE==-1);
+        assert(#DEAL_ITEMS==0 and #REMOVED_IDS==1 and REMOVED_IDS[1]==1);
         assert(#WRITES==before and #CAPTURED[1]==1 and #OFF_MAP==1);
         ITEM_VALID=true;
         r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
-        assert(r.status=='VALID_ITEM' and CLEARS==4 and LOCKS==1 and #WRITES==before);
+        assert(r.status=='VALID_ITEM' and #DEAL_ITEMS==0 and #REMOVED_IDS==2 and #WRITES==before);
         ITEM_AVAILABLE=false;
         r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
-        assert(r.status=='NO_ITEM' and CLEARS==6 and #WRITES==before);
+        assert(r.status=='NO_ITEM' and #DEAL_ITEMS==0 and #REMOVED_IDS==2 and #WRITES==before);
+        ITEM_AVAILABLE=true; RACE_DURING_VALID=true;
+        r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
+        assert(r.status=='WORKING_DEAL_CHANGED' and #DEAL_ITEMS==2 and
+            DEAL_ITEMS[1].id==900 and DEAL_ITEMS[2].id==902);
+        assert(#REMOVED_IDS==3 and REMOVED_IDS[3]==3 and #WRITES==before);
+        DEAL_ITEMS={}; FAIL_SET=true;
+        local ok,err=pcall(ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange);
+        assert(not ok and string.find(tostring(err),'native value set failed',1,true));
+        assert(#DEAL_ITEMS==0 and #REMOVED_IDS==4 and #WRITES==before);
+        FAIL_SET=false;
         PENDING_DEAL=true;
         r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
-        assert(r.status=='PENDING_DEAL' and CLEARS==6 and #WRITES==before);
+        assert(r.status=='PENDING_DEAL' and #DEAL_ITEMS==0 and #WRITES==before);
         AT_WAR=true;
         r=ExposedMembers.JAC_PersonaBoundary.ProbeCapturedExchange();
-        assert(r.status=='AT_WAR' and CLEARS==6 and #WRITES==before);
-    "#);
+        assert(r.status=='AT_WAR' and #DEAL_ITEMS==0 and #WRITES==before);
+    "#,
+    );
 }
 
 #[test]
@@ -663,17 +742,29 @@ fn government_plaza_capacity_uses_native_build_then_core_progress_then_real_turn
     h.run("BUILD_HEAD=nil");
     h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY' and BUILD_REQUESTS[#BUILD_REQUESTS].params.building==760 and BUILD_REQUESTS[#BUILD_REQUESTS].selected==CONTROL); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_QUEUED' and CAPACITY_PROGRESS_CALLS==0)");
     h.sync("PROGRESS_CAPACITY", "JAC_BoundaryProgressCapacityBuilding");
-    h.run("assert(CAPACITY_PROGRESS_CALLS==1 and SPY_CAPACITY==1 and not GOV_TIER1_BUILT and #CAPTURED[1]==1 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').steps.BUILDING_GOV_TALL.cityID==10)");
+    h.run("assert(CAPACITY_PROGRESS_CALLS==1 and SPY_CAPACITY==1 and not GOV_TIER1_BUILT and #CAPTURED[1]==1 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').steps.BUILDING_GOV_TALL.cityID==10); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); assert(o.stage=='PROGRESS_PENDING' and not o.targetBuilt and o.buildingType=='BUILDING_GOV_TALL')");
     h.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityBuilding',REQUESTS[#REQUESTS].params)",
         "already added once",
     );
-    h.run("ADVANCE_TURN(); assert(GOV_TIER1_BUILT and not GOV_SPIES_BUILT and SPY_CAPACITY==1); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='BUILD_SPIES' and p.buildingType=='BUILDING_GOV_SPIES')");
+    h.run("CAPACITY_COMPLETES=false; ADVANCE_TURN(); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome().stage=='PROGRESS_PENDING'); CAPACITY_COMPLETES=true; ADVANCE_TURN(); assert(GOV_TIER1_BUILT and not GOV_SPIES_BUILT and SPY_CAPACITY==1); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); assert(o.stage=='TIER1_BUILT' and o.targetBuilt and o.capacity==1 and o.turn>o.progressTurn); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='BUILD_SPIES' and p.buildingType=='BUILDING_GOV_SPIES')");
     h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY' and BUILD_REQUESTS[#BUILD_REQUESTS].params.building==790); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_QUEUED')");
     h.sync("PROGRESS_CAPACITY", "JAC_BoundaryProgressCapacityBuilding");
-    h.run("assert(CAPACITY_PROGRESS_CALLS==2 and SPY_CAPACITY==1 and not GOV_SPIES_BUILT and #CAPTURED[1]==1); ADVANCE_TURN(); assert(GOV_SPIES_BUILT and SPY_CAPACITY==2); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='CAPACITY_READY' and p.capacity==2 and p.occupied==1 and #CAPTURED[1]==1)");
+    h.run("assert(CAPACITY_PROGRESS_CALLS==2 and SPY_CAPACITY==1 and not GOV_SPIES_BUILT and #CAPTURED[1]==1); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome().stage=='PROGRESS_PENDING'); ADVANCE_TURN(); assert(GOV_SPIES_BUILT and SPY_CAPACITY==2); SPY_CAPACITY=1; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome().stage=='EFFECT_PENDING'); SPY_CAPACITY=2; local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); assert(o.stage=='CAPACITY_READY' and o.targetBuilt and o.capacity==2 and o.captured==1 and o.turn>o.progressTurn); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='CAPACITY_READY' and p.capacity==2 and p.occupied==1 and #CAPTURED[1]==1)");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
     h.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.mode=='PRODUCE' and r.archive.capacity==2 and r.archive.occupied==1 and r.archive.captiveNameIndex==7 and r.archive.eventID==0 and r.archive.spyID==15); assert(HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED and #CAPTURED[1]==1)");
+}
+
+#[test]
+fn capacity_progress_rechecks_the_ui_native_queue_before_core_add_progress() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_BUILT=true; ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY'); ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryProgressCapacityBuilding'); BUILD_HEAD={UnitType=55}; assert(ExposedMembers.JAC_PersonaBoundary.ReadCapacityQueue(0,10).buildingType=='')");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityBuilding',REQUESTS[#REQUESTS].params)",
+        "queue changed before progress",
+    );
+    h.run("assert(CAPACITY_PROGRESS_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil and #CAPTURED[1]==1)");
 }
 
 #[test]

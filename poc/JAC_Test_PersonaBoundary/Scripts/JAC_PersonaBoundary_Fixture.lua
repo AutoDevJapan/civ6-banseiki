@@ -561,11 +561,23 @@ GameEvents.JAC_BoundaryProgressCapacityBuilding.Add(function(controller,params)
     local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS") or {steps={}};
     assert(not progress.steps[row.BuildingType],
         "capacity building progress was already added once");
+    local read=assert(ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead,
+        "UI native capacity queue reader unavailable");
+    local current=assert(read(controller,params.CityID),
+        "UI native capacity queue observation unavailable");
+    assert(type(current)=="table" and current.owner==controller and
+        current.cityID==params.CityID and current.buildingType==row.BuildingType and
+        current.turn==params.Turn and type(current.frame)=="number" and
+        current.frame>=params.Frame and type(current.publishEpoch)=="number" and
+        current.publishEpoch>=params.PublishEpoch,
+        "native capacity building queue changed before progress");
     local queue=city:GetBuildQueue();
     assert(type(queue.AddProgress)=="function","native city progress API missing");
     queue:AddProgress(500);
     progress.steps[row.BuildingType]={token=params.Token,cityID=params.CityID,
         buildingIndex=row.Index,turn=Game.GetCurrentGameTurn()};
+    progress.latest={buildingType=row.BuildingType,cityID=params.CityID,
+        buildingIndex=row.Index,token=params.Token,turn=Game.GetCurrentGameTurn()};
     Game:SetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS",progress);
     print("JAC_BOUNDARY CAPACITY_BUILDING_PROGRESS "..R.Serialize(progress));
 end);
