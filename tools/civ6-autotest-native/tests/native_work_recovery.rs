@@ -322,7 +322,8 @@ fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> ml
 }
 
 #[test]
-fn human_world_reward_accepts_published_native_work_token_after_physical_move() -> mlua::Result<()> {
+fn human_world_reward_accepts_published_native_work_token_after_physical_move() -> mlua::Result<()>
+{
     let lua = setup()?;
     lua.load(
         r#"
