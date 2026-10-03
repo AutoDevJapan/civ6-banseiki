@@ -449,7 +449,14 @@ local function VerifySpyRequest(request)
         if #afterRoster.offMap==1 and #afterRoster.map<=1 then
             local travelling=afterRoster.offMap[1];
             local mapID=#afterRoster.map==1 and afterRoster.map[1].id or request.before.id;
-            accepted=mapID==request.before.id and travelling.name==source.name and
+            -- Unnamed stock spies have the unit's fallback name on the map,
+            -- but an empty Name in the engine's off-map record (live 51).
+            -- Accept that representation only when the one pre-existing spy
+            -- vanished and exactly one matching travel record replaced it.
+            local matchingName=travelling.name==source.name or
+                (travelling.name=="" and #afterRoster.map==0 and
+                 source.name==GameInfo.Units["UNIT_SPY"].Name);
+            accepted=mapID==request.before.id and matchingName and
                 travelling.level==source.level and travelling.returnTurn>Game.GetCurrentGameTurn() and
                 travelling.x==request.targetX and travelling.y==request.targetY and
                 InTargetCity(travelling.x,travelling.y,request.targetOwner,request.targetID);

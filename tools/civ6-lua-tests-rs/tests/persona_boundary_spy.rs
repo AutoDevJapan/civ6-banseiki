@@ -195,6 +195,40 @@ fn travel_requires_matching_native_roster_destination_and_future_return() {
 }
 
 #[test]
+fn unnamed_stock_spy_matches_an_empty_offmap_name_only_for_the_unique_travel() {
+    for (name, expected) in [
+        ("LOC_UNIT_SPY_NAME", "ACCEPTED_SPY_TRAVEL"),
+        ("An independently named spy", "REJECTED_SPY_TRAVEL"),
+    ] {
+        let h = SpyHarness::new();
+        let units: Table = h.global::<Table>("GameInfo").strict_get("Units").unwrap();
+        units
+            .strict_get::<Table>("UNIT_SPY")
+            .unwrap()
+            .set("Name", "LOC_UNIT_SPY_NAME")
+            .unwrap();
+        h.case("spy_home", (0, 15));
+        let spy: Table = h
+            .global::<Table>("UNITS")
+            .strict_get::<Table>(0)
+            .unwrap()
+            .strict_get(1)
+            .unwrap();
+        spy.set("name", name).unwrap();
+        h.set("REQUEST_EFFECT", "travel");
+        h.queue("SPY_TRAVEL");
+        h.frame().unwrap();
+        let offmap: Table = h.global::<Table>("OFF_MAP").strict_get(1).unwrap();
+        offmap.set("Name", "").unwrap();
+        h.frame().unwrap();
+        h.barrier();
+        h.frame().unwrap();
+        assert_eq!(h.action(), expected);
+        assert_eq!(h.requests(), 1);
+    }
+}
+
+#[test]
 fn spy_selection_mode_and_readiness_are_checked_before_dispatch() {
     for flag in ["SELECT_FAIL", "MODE_FAIL", "SPY_READY"] {
         let h = SpyHarness::new();
