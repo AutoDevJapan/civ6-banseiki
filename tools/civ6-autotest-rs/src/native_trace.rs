@@ -603,6 +603,7 @@ mod platform {
             atomic::{AtomicUsize, Ordering},
             Arc,
         };
+        use windows_sys::Win32::System::Threading::{TerminateProcess, PROCESS_TERMINATE};
 
         #[test]
         fn fixture_observer_worker() {
@@ -613,6 +614,13 @@ mod platform {
         fn session(
             deadline: Option<Instant>,
             closes: Arc<AtomicUsize>,
+        ) -> (Session, mpsc::Sender<ObserverMessage>) {
+            session_with_close(deadline, closes, false)
+        }
+        fn session_with_close(
+            deadline: Option<Instant>,
+            closes: Arc<AtomicUsize>,
+            terminate_owned_fixture: bool,
         ) -> (Session, mpsc::Sender<ObserverMessage>) {
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .args([
@@ -653,6 +661,19 @@ mod platform {
                         assert_eq!(request_pid, pid);
                         assert_eq!(request_start, expected_start);
                         closes.fetch_add(1, Ordering::SeqCst);
+                        if terminate_owned_fixture {
+                            let raw = unsafe { OpenProcess(PROCESS_TERMINATE, 0, request_pid) };
+                            if raw.is_null() {
+                                return Err(Error::input(
+                                    "cannot open owned Rust fixture for termination",
+                                ));
+                            }
+                            let owned = unsafe { OwnedHandle::from_raw_handle(raw) };
+                            if unsafe { TerminateProcess(owned.as_raw_handle() as HANDLE, 1) } == 0
+                            {
+                                return Err(Error::input("cannot terminate owned Rust fixture"));
+                            }
+                        }
                         Ok(())
                     }),
                 },
@@ -780,9 +801,10 @@ mod platform {
         #[test]
         fn critical_just_after_ready_timeout_is_still_consumed_once() {
             let closes = Arc::new(AtomicUsize::new(0));
-            let (mut session, tx) = session(
+            let (mut session, tx) = session_with_close(
                 Some(Instant::now() + Duration::from_millis(500)),
                 Arc::clone(&closes),
+                true,
             );
             session.phase = Phase::Attaching;
             let pid = session.identity.pid;
@@ -805,9 +827,10 @@ mod platform {
         #[test]
         fn critical_just_before_ready_timeout_closes_once_and_fails_startup() {
             let closes = Arc::new(AtomicUsize::new(0));
-            let (mut session, tx) = session(
+            let (mut session, tx) = session_with_close(
                 Some(Instant::now() + Duration::from_millis(500)),
                 Arc::clone(&closes),
+                true,
             );
             session.phase = Phase::Attaching;
             let pid = session.identity.pid;

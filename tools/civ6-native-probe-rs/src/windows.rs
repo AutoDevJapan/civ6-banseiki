@@ -504,6 +504,24 @@ fn thread_ids(pid: u32) -> Result<BTreeSet<u32>, String> {
     }
     Ok(ids)
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SuspendFailureState {
+    Gone,
+    TargetExited,
+    Unsignaled,
+    Unknown,
+}
+fn suspend_failure_state(thread_wait: u32, listed: bool, game_wait: u32) -> SuspendFailureState {
+    if thread_wait == WAIT_OBJECT_0 || !listed {
+        SuspendFailureState::Gone
+    } else if game_wait == WAIT_OBJECT_0 {
+        SuspendFailureState::TargetExited
+    } else if thread_wait == WAIT_TIMEOUT && game_wait == WAIT_TIMEOUT {
+        SuspendFailureState::Unsignaled
+    } else {
+        SuspendFailureState::Unknown
+    }
+}
 
 fn parent_pid(pid: u32) -> Result<u32, String> {
     let snapshot = Handle::new(
@@ -547,6 +565,42 @@ struct ThreadState {
     original: Registers,
     pending: Vec<Pending>,
 }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OwnedTrap {
+    CanEver,
+    CanAppoint,
+    Return,
+    Unknown,
+}
+fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
+    if !*initial_seen && first_chance {
+        *initial_seen = true;
+        DBG_CONTINUE
+    } else {
+        DBG_EXCEPTION_NOT_HANDLED
+    }
+}
+/// The debug event records where Windows reported the exception. DR6 is
+/// useful diagnostic evidence, but it is not a prerequisite for recognizing
+/// an address at which this debugger installed a hardware breakpoint.
+fn classify_single_step(
+    pending: &[Pending],
+    base: u64,
+    exception_address: u64,
+    rip: u64,
+) -> OwnedTrap {
+    let at = |address: u64| exception_address == address || rip == address;
+    if at(base + CAN_EVER_RVA) {
+        return OwnedTrap::CanEver;
+    }
+    if at(base + CAN_APPOINT_RVA) {
+        return OwnedTrap::CanAppoint;
+    }
+    if pending.iter().any(|p| at(p.return_address)) {
+        return OwnedTrap::Return;
+    }
+    OwnedTrap::Unknown
+}
 struct Jsonl {
     writer: BufWriter<File>,
     rows: usize,
@@ -562,6 +616,9 @@ enum CleanupPhase {
     Done,
 }
 trait CleanupOps {
+    fn game_exited(&mut self) -> bool {
+        false
+    }
     fn freeze(&mut self) -> Result<(), String>;
     fn restore_verified(&mut self) -> Result<(), String>;
     fn continue_pending(&mut self) -> Result<(), String>;
@@ -671,6 +728,9 @@ impl CleanupGate {
     }
     fn drive(&mut self, ops: &mut impl CleanupOps) -> Result<(), String> {
         while Instant::now() < self.deadline {
+            if ops.game_exited() {
+                return Err("target_exited_during_cleanup".into());
+            }
             match self.step(ops) {
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
@@ -724,6 +784,11 @@ struct Debugger {
     next_id: u64,
     attached: bool,
     ready: bool,
+    initial_breakpoint_seen: bool,
+    last_attach_breakpoint_owned: bool,
+    last_single_step_owned: bool,
+    #[cfg(test)]
+    mask_observed_dr6: bool,
 }
 impl Debugger {
     fn attach(
@@ -769,6 +834,11 @@ impl Debugger {
             next_id: 1,
             attached: true,
             ready: false,
+            initial_breakpoint_seen: false,
+            last_attach_breakpoint_owned: false,
+            last_single_step_owned: false,
+            #[cfg(test)]
+            mask_observed_dr6: false,
         })
     }
     fn add_thread(&mut self, tid: u32) -> Result<(), String> {
@@ -889,7 +959,30 @@ impl Debugger {
         }
         Ok(())
     }
+    fn log_single_step(
+        &mut self,
+        tid: u32,
+        code: i32,
+        first_chance: bool,
+        exception_address: u64,
+        context: Option<&CONTEXT>,
+        observed_dr6: Option<u64>,
+        owned: bool,
+        reason: &str,
+    ) -> Result<(), String> {
+        self.output.row(json!({
+            "type":"debug_exception", "thread_id":tid,
+            "code":format!("0x{:08x}", code as u32), "first_chance":first_chance,
+            "exception_address":format!("0x{exception_address:016x}"),
+            "rip":context.map(|c| format!("0x{:016x}",c.Rip)),
+            "dr6":observed_dr6.map(|v| format!("0x{v:016x}")),
+            "dr7":context.map(|c| format!("0x{:016x}",c.Dr7)),
+            "owned_breakpoint":owned, "reason":reason,
+        }))
+    }
     fn handle_event(&mut self, event: &DEBUG_EVENT) -> Result<i32, String> {
+        self.last_attach_breakpoint_owned = false;
+        self.last_single_step_owned = false;
         let tid = event.dwThreadId;
         match event.dwDebugEventCode {
             CREATE_PROCESS_DEBUG_EVENT => {
@@ -922,25 +1015,145 @@ impl Debugger {
             EXCEPTION_DEBUG_EVENT => {
                 let info = unsafe { event.u.Exception };
                 let code = info.ExceptionRecord.ExceptionCode;
-                if code == EXCEPTION_BREAKPOINT && !self.ready && info.dwFirstChance != 0 {
-                    self.ready = true;
-                } else if code == EXCEPTION_SINGLE_STEP {
-                    let state = self
+                if code == EXCEPTION_BREAKPOINT {
+                    let disposition = breakpoint_disposition(
+                        &mut self.initial_breakpoint_seen,
+                        info.dwFirstChance != 0,
+                    );
+                    if disposition == DBG_CONTINUE {
+                        self.last_attach_breakpoint_owned = true;
+                        self.ready = true;
+                        return Ok(DBG_CONTINUE);
+                    }
+                    let c = self
                         .threads
                         .get(&tid)
-                        .ok_or("single-step thread was not registered")?;
-                    let mut c = context(&state.handle)?;
-                    let hit = c.Dr6 & 0xf;
-                    if hit & 1 != 0 && c.Rip == self.module_base + CAN_EVER_RVA {
-                        self.entry(tid, &mut c, "can_ever", CAN_EVER_RVA)?;
-                    } else if hit & 2 != 0 && c.Rip == self.module_base + CAN_APPOINT_RVA {
-                        self.entry(tid, &mut c, "can_appoint", CAN_APPOINT_RVA)?;
-                    } else if hit & 0xc != 0
-                        && state.pending.iter().any(|p| p.return_address == c.Rip)
-                    {
-                        self.returned(tid, &mut c)?;
-                    } else {
+                        .and_then(|state| context(&state.handle).ok());
+                    self.log_single_step(
+                        tid,
+                        code,
+                        info.dwFirstChance != 0,
+                        info.ExceptionRecord.ExceptionAddress as u64,
+                        c.as_ref(),
+                        c.as_ref().map(|v| v.Dr6),
+                        false,
+                        "unmatched_breakpoint",
+                    )?;
+                    return Ok(disposition);
+                } else if code == EXCEPTION_SINGLE_STEP {
+                    let exception_address = info.ExceptionRecord.ExceptionAddress as u64;
+                    let first_chance = info.dwFirstChance != 0;
+                    let Some(state) = self.threads.get(&tid) else {
+                        self.log_single_step(
+                            tid,
+                            code,
+                            first_chance,
+                            exception_address,
+                            None,
+                            None,
+                            false,
+                            "thread_not_registered",
+                        )?;
                         return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                    };
+                    let mut c = match context(&state.handle) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            let owned = classify_single_step(
+                                &state.pending,
+                                self.module_base,
+                                exception_address,
+                                0,
+                            ) != OwnedTrap::Unknown;
+                            self.last_single_step_owned = owned;
+                            self.log_single_step(
+                                tid,
+                                code,
+                                first_chance,
+                                exception_address,
+                                None,
+                                None,
+                                owned,
+                                "context_unavailable",
+                            )?;
+                            return Err(format!("GetThreadContext at single-step: {e}"));
+                        }
+                    };
+                    #[cfg(test)]
+                    let observed_dr6 = if self.mask_observed_dr6 { 0 } else { c.Dr6 };
+                    #[cfg(not(test))]
+                    let observed_dr6 = c.Dr6;
+                    let trap = classify_single_step(
+                        &state.pending,
+                        self.module_base,
+                        exception_address,
+                        c.Rip,
+                    );
+                    self.last_single_step_owned = trap != OwnedTrap::Unknown;
+                    if trap == OwnedTrap::Unknown {
+                        self.log_single_step(
+                            tid,
+                            code,
+                            first_chance,
+                            exception_address,
+                            Some(&c),
+                            Some(observed_dr6),
+                            false,
+                            "unmatched_single_step",
+                        )?;
+                        return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                    }
+                    let expected = match trap {
+                        OwnedTrap::CanEver => self.module_base + CAN_EVER_RVA,
+                        OwnedTrap::CanAppoint => self.module_base + CAN_APPOINT_RVA,
+                        OwnedTrap::Return => state
+                            .pending
+                            .iter()
+                            .find(|p| {
+                                p.return_address == exception_address || p.return_address == c.Rip
+                            })
+                            .map(|p| p.return_address)
+                            .ok_or("owned return site disappeared")?,
+                        OwnedTrap::Unknown => unreachable!(),
+                    };
+                    if c.Rip != expected {
+                        self.log_single_step(
+                            tid,
+                            code,
+                            first_chance,
+                            exception_address,
+                            Some(&c),
+                            Some(observed_dr6),
+                            true,
+                            "owned_address_context_rip_mismatch",
+                        )?;
+                        return Err(format!("owned hardware breakpoint at 0x{expected:x} has context RIP 0x{:x}; refusing to interpret ABI",c.Rip));
+                    }
+                    let expected_bit = match trap {
+                        OwnedTrap::CanEver => 1,
+                        OwnedTrap::CanAppoint => 2,
+                        OwnedTrap::Return => 0xc,
+                        OwnedTrap::Unknown => 0,
+                    };
+                    if observed_dr6 & expected_bit == 0 {
+                        self.log_single_step(
+                            tid,
+                            code,
+                            first_chance,
+                            exception_address,
+                            Some(&c),
+                            Some(observed_dr6),
+                            true,
+                            "owned_address_without_dr6_status",
+                        )?;
+                    }
+                    match trap {
+                        OwnedTrap::CanEver => self.entry(tid, &mut c, "can_ever", CAN_EVER_RVA)?,
+                        OwnedTrap::CanAppoint => {
+                            self.entry(tid, &mut c, "can_appoint", CAN_APPOINT_RVA)?
+                        }
+                        OwnedTrap::Return => self.returned(tid, &mut c)?,
+                        OwnedTrap::Unknown => unreachable!(),
                     }
                 } else {
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
@@ -955,14 +1168,19 @@ impl Debugger {
             return DBG_CONTINUE;
         }
         let info = unsafe { event.u.Exception };
-        if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT && !self.ready {
-            return DBG_CONTINUE;
+        if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT {
+            return if self.last_attach_breakpoint_owned {
+                DBG_CONTINUE
+            } else {
+                DBG_EXCEPTION_NOT_HANDLED
+            };
         }
-        // A return trap may already have been removed from `pending` before
-        // JSONL writing fails. Pass one single-step exception as handled while
-        // restoring all breakpoints, rather than crashing the target on stop.
         if info.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP {
-            return DBG_CONTINUE;
+            return if self.last_single_step_owned {
+                DBG_CONTINUE
+            } else {
+                DBG_EXCEPTION_NOT_HANDLED
+            };
         }
         DBG_EXCEPTION_NOT_HANDLED
     }
@@ -983,7 +1201,15 @@ impl Debugger {
         self.cleanup_gate = Some(gate);
         match result {
             Ok(()) => Ok(()),
-            Err(reason) => self.critical_wait_for_game_close(reason),
+            Err(reason) => {
+                if matches!(alive(&self.game), Ok(false)) {
+                    self.attached = false;
+                    self.held.clear();
+                    Err(format!("{reason}; target process already exited"))
+                } else {
+                    self.critical_wait_for_game_close(reason)
+                }
+            }
         }
     }
     fn critical_wait_for_game_close(&mut self, reason: String) -> Result<(), String> {
@@ -1111,6 +1337,9 @@ impl Debugger {
     }
 }
 impl CleanupOps for Debugger {
+    fn game_exited(&mut self) -> bool {
+        matches!(alive(&self.game), Ok(false))
+    }
     fn freeze(&mut self) -> Result<(), String> {
         for _ in 0..64 {
             let ids = thread_ids(self.pid)?;
@@ -1125,15 +1354,22 @@ impl CleanupOps for Debugger {
                 let handle = match thread_handle(tid) {
                     Ok(h) => h,
                     Err(e) => {
-                        return Err(format!("thread {tid} cannot be opened for cleanup: {e}"))
+                        if !thread_ids(self.pid)?.contains(&tid) {
+                            continue;
+                        }
+                        return Err(format!("thread {tid} cannot be opened for cleanup: {e}"));
                     }
                 };
                 if unsafe { SuspendThread(handle.0) } == u32::MAX {
-                    if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
-                        return Err(format!(
-                            "thread {tid} remains live: {}",
-                            win_error("SuspendThread")
-                        ));
+                    let suspend_error = win_error("SuspendThread");
+                    let thread_wait = unsafe { WaitForSingleObject(handle.0, 0) };
+                    let listed = thread_ids(self.pid)?.contains(&tid);
+                    let game_wait = unsafe { WaitForSingleObject(self.game.0, 0) };
+                    match suspend_failure_state(thread_wait, listed, game_wait) {
+                        SuspendFailureState::Gone => continue,
+                        SuspendFailureState::TargetExited => return Err(format!("target exited while suspending thread {tid}: {suspend_error}")),
+                        SuspendFailureState::Unsignaled => return Err(format!("thread {tid} was listed and unsignaled when suspension failed: {suspend_error}")),
+                        SuspendFailureState::Unknown => return Err(format!("thread {tid} liveness was unconfirmed after suspension failure (thread wait {thread_wait}, game wait {game_wait}): {suspend_error}")),
                     }
                 } else {
                     self.held.insert(tid, handle);
@@ -1282,6 +1518,22 @@ mod tests {
             Arc,
         },
     };
+    use windows_sys::Win32::System::Diagnostics::Debug::{
+        AddVectoredExceptionHandler, RaiseException, RemoveVectoredExceptionHandler,
+        EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH, EXCEPTION_POINTERS,
+    };
+
+    static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
+    unsafe extern "system" fn unknown_step_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
+        if !info.is_null() {
+            let code = unsafe { (*(*info).ExceptionRecord).ExceptionCode };
+            if code == EXCEPTION_SINGLE_STEP {
+                UNKNOWN_STEP_HANDLED.store(true, Ordering::SeqCst);
+                return EXCEPTION_CONTINUE_EXECUTION;
+            }
+        }
+        EXCEPTION_CONTINUE_SEARCH
+    }
 
     #[inline(never)]
     extern "C" fn fixture_target(this: u64, governor: u32) -> u8 {
@@ -1340,6 +1592,17 @@ mod tests {
                     let b = thread::spawn(|| fixture_target(0x1234, 8));
                     println!("PROBE_OUT:M{}{}", a.join().unwrap(), b.join().unwrap());
                 }
+                "U" => {
+                    UNKNOWN_STEP_HANDLED.store(false, Ordering::SeqCst);
+                    let handler =
+                        unsafe { AddVectoredExceptionHandler(1, Some(unknown_step_handler)) };
+                    assert!(!handler.is_null());
+                    unsafe {
+                        RaiseException(EXCEPTION_SINGLE_STEP as u32, 0, 0, std::ptr::null());
+                    }
+                    assert_ne!(unsafe { RemoveVectoredExceptionHandler(handler) }, 0);
+                    println!("PROBE_OUT:U{}", UNKNOWN_STEP_HANDLED.load(Ordering::SeqCst));
+                }
                 "R" => println!("PROBE_REG:{}", child_registers(main_tid, false)),
                 "X" => break,
                 _ => panic!("invalid fixture command"),
@@ -1396,11 +1659,16 @@ mod tests {
             self.input.flush().unwrap();
             loop {
                 let mut line = String::new();
-                assert_ne!(
-                    self.output.read_line(&mut line).unwrap(),
-                    0,
-                    "fixture child exited during {cmd}"
-                );
+                if self.output.read_line(&mut line).unwrap() == 0 {
+                    let status = self.child.try_wait().unwrap();
+                    let mut stderr = String::new();
+                    if status.is_some() {
+                        if let Some(pipe) = self.child.stderr.as_mut() {
+                            let _ = pipe.read_to_string(&mut stderr);
+                        }
+                    }
+                    panic!("fixture child exited during {cmd}: {status:?}; stderr={stderr}");
+                }
                 if let Some(rest) = line.trim().strip_prefix(prefix) {
                     return rest.to_string();
                 }
@@ -1421,6 +1689,7 @@ mod tests {
         fail_guard: bool,
         fail_recording: bool,
         restore_faults: usize,
+        mask_dr6: bool,
     ) {
         let mut child = Fixture::start();
         let probe = process(child.child.id(), true).unwrap();
@@ -1447,6 +1716,7 @@ mod tests {
             let game = process(pid, true).unwrap();
             let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
             debugger.restore_faults = restore_faults;
+            debugger.mask_observed_dr6 = mask_dr6;
             let result = debugger.run(stop_rx, timeout, || {
                 if fail_in_observer.load(Ordering::SeqCst) {
                     Err("fixture guard lost".into())
@@ -1521,6 +1791,16 @@ mod tests {
                 .map(|r| r["thread_id"].as_u64().unwrap())
                 .collect();
             assert!(tids.len() >= 2, "new threads were not traced: {rows:?}");
+            if mask_dr6 {
+                assert!(
+                    rows.iter().any(|r| r["type"] == "debug_exception"
+                        && r["code"] == "0x80000004"
+                        && r["dr6"] == "0x0000000000000000"
+                        && r["exception_address"] == format!("0x{:016x}", child.entry)
+                        && r["owned_breakpoint"] == true),
+                    "missing sanitized-DR6 diagnostic: {rows:?}"
+                );
+            }
         }
         assert_eq!(
             child.command("R", "PROBE_REG:"),
@@ -1538,28 +1818,79 @@ mod tests {
 
     #[test]
     fn entry_return_threads_and_normal_detach_restore_registers() {
-        run_case(Duration::from_secs(20), true, false, false, 0);
+        run_case(Duration::from_secs(20), true, false, false, 0, false);
     }
     #[test]
     fn timeout_detach_preserves_the_child_and_registers() {
-        run_case(Duration::from_millis(500), false, false, false, 0);
+        run_case(Duration::from_millis(500), false, false, false, 0, false);
     }
     #[test]
     fn failure_detach_preserves_the_child_and_registers() {
-        run_case(Duration::from_secs(20), false, true, false, 0);
+        run_case(Duration::from_secs(20), false, true, false, 0, false);
     }
     #[test]
     fn recording_failure_detaches_without_killing_the_child() {
-        run_case(Duration::from_secs(20), false, false, true, 0);
+        run_case(Duration::from_secs(20), false, false, true, 0, false);
     }
     #[test]
     fn one_injected_context_failure_retries_and_restores_the_live_child() {
-        run_case(Duration::from_millis(500), false, false, false, 1);
+        run_case(Duration::from_millis(500), false, false, false, 1, false);
+    }
+    #[test]
+    fn real_windows_hardware_exception_survives_sanitized_dr6_view() {
+        // The old dispatcher required DR6.B0 and would forward this real
+        // STATUS_SINGLE_STEP to the child, which has no handler for it.
+        run_case(Duration::from_secs(20), true, false, false, 0, true);
+    }
+    #[test]
+    fn unrelated_real_single_step_reaches_the_child_exception_handler() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-unowned-step-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "fixture debugger did not become ready"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(child.command("U", "PROBE_OUT:"), "Utrue");
+        stop_tx.send(()).unwrap();
+        observer.join().unwrap().unwrap();
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|s| serde_json::from_str(s).unwrap())
+            .collect();
+        assert!(rows.iter().any(|r| r["type"] == "debug_exception"
+            && r["code"] == "0x80000004"
+            && r["first_chance"] == true
+            && r["rip"].is_string()
+            && r["dr6"].is_string()
+            && r["dr7"].is_string()
+            && r["owned_breakpoint"] == false));
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        drop(child);
+        fs::remove_file(path).unwrap();
     }
 
     #[derive(Default)]
     struct FaultCleanup {
         calls: Vec<&'static str>,
+        target_exited: bool,
         freeze_fail: usize,
         set_fail: usize,
         readback_fail: usize,
@@ -1567,6 +1898,9 @@ mod tests {
         resume_fail: usize,
     }
     impl CleanupOps for FaultCleanup {
+        fn game_exited(&mut self) -> bool {
+            self.target_exited
+        }
         fn freeze(&mut self) -> Result<(), String> {
             self.calls.push("freeze");
             if self.freeze_fail > 0 {
@@ -1655,6 +1989,56 @@ mod tests {
             assert!(!os.calls.contains(&"resume"));
         }
     }
+    #[test]
+    fn suspend_failure_does_not_call_unknown_liveness_alive() {
+        assert_eq!(
+            suspend_failure_state(WAIT_OBJECT_0, true, WAIT_TIMEOUT),
+            SuspendFailureState::Gone
+        );
+        assert_eq!(
+            suspend_failure_state(WAIT_TIMEOUT, false, WAIT_TIMEOUT),
+            SuspendFailureState::Gone
+        );
+        assert_eq!(
+            suspend_failure_state(WAIT_TIMEOUT, true, WAIT_OBJECT_0),
+            SuspendFailureState::TargetExited
+        );
+        assert_eq!(
+            suspend_failure_state(WAIT_TIMEOUT, true, WAIT_TIMEOUT),
+            SuspendFailureState::Unsignaled
+        );
+        assert_eq!(
+            suspend_failure_state(u32::MAX, true, WAIT_TIMEOUT),
+            SuspendFailureState::Unknown
+        );
+        let mut os = FaultCleanup {
+            target_exited: true,
+            ..Default::default()
+        };
+        let error = CleanupGate::new().drive(&mut os).unwrap_err();
+        assert!(error.contains("target_exited_during_cleanup"));
+        assert!(!os.calls.contains(&"detach"));
+    }
+    #[test]
+    fn exited_windows_thread_handle_is_not_reported_live_after_suspend_failure() {
+        let (tid_tx, tid_rx) = mpsc::channel();
+        let (exit_tx, exit_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let tid = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+            tid_tx.send(tid).unwrap();
+            exit_rx.recv().unwrap();
+        });
+        let tid = tid_rx.recv().unwrap();
+        let pinned = thread_handle(tid).unwrap();
+        exit_tx.send(()).unwrap();
+        worker.join().unwrap();
+        let wait = unsafe { WaitForSingleObject(pinned.0, 0) };
+        assert_eq!(wait, WAIT_OBJECT_0);
+        assert_eq!(
+            suspend_failure_state(wait, true, WAIT_TIMEOUT),
+            SuspendFailureState::Gone
+        );
+    }
 
     #[derive(Default)]
     struct FaultAttach {
@@ -1728,6 +2112,46 @@ mod tests {
         assert!(tail_matches(&pending, 0x1234, 0x2008));
         assert!(!tail_matches(&pending, 0x1234, 0x3008));
         assert!(!tail_matches(&pending, 0x5555, 0x2008));
+    }
+    #[test]
+    fn exception_address_identifies_our_breakpoint_when_reported_rip_differs() {
+        let base = 0x1a49b0000;
+        assert_eq!(
+            classify_single_step(&[], base, base + CAN_EVER_RVA, base + CAN_EVER_RVA + 1),
+            OwnedTrap::CanEver
+        );
+        assert_eq!(
+            classify_single_step(&[], base, base + CAN_APPOINT_RVA, 0),
+            OwnedTrap::CanAppoint
+        );
+        assert_eq!(
+            classify_single_step(&[], base, base + 0x1234, base + 0x1235),
+            OwnedTrap::Unknown
+        );
+        let pending = [Pending {
+            id: 2,
+            entry: "can_ever",
+            return_address: base + 0x2500,
+            expected_rsp: 0x1008,
+        }];
+        assert_eq!(
+            classify_single_step(&pending, base, base + 0x2500, base + 0x2501),
+            OwnedTrap::Return
+        );
+    }
+    #[test]
+    fn only_the_first_attach_breakpoint_is_consumed() {
+        let mut seen = false;
+        assert_eq!(breakpoint_disposition(&mut seen, true), DBG_CONTINUE);
+        assert!(seen);
+        assert_eq!(
+            breakpoint_disposition(&mut seen, true),
+            DBG_EXCEPTION_NOT_HANDLED
+        );
+        assert_eq!(
+            breakpoint_disposition(&mut seen, false),
+            DBG_EXCEPTION_NOT_HANDLED
+        );
     }
     #[test]
     fn fixture_parent_pid_is_the_spawning_test_process() {
