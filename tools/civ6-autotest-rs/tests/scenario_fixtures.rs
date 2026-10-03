@@ -14,6 +14,7 @@ const PROBE_MOD: &str = "57a3af09-fb38-41da-b367-818de11a995c";
 const TITLE_PROXY_MOD: &str = "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb";
 const NATIVE_SLOTS_MOD: &str = "a1faab65-5371-4e25-9a46-7522075f865d";
 const NATIVE_SLOT_ONLY_MOD: &str = "8c615430-5a09-4431-877a-bfd03bca9e80";
+const STATIC_GATE_MOD: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
 const NEW_SCENARIOS: [&str; 7] = [
     "japan-15km-20turn-full-metrics.json",
     "japan-15km-300turn-full-metrics.json",
@@ -225,6 +226,55 @@ fn code_if_ui(step: &Value) -> Option<&str> {
 }
 
 #[test]
+fn persona_static_gate_diagnostic_separates_ai_boundary_and_one_official_request() {
+    let data = scenario("leader-persona-static-gate-15km.json");
+    validate_scenario(&data).unwrap();
+    let steps = steps(&data);
+    assert_eq!(steps.len(), 17);
+    assert_eq!(data["strict_lua_errors"], true);
+    assert!(steps[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == STATIC_GATE_MOD));
+    for other in [TITLE_PROXY_MOD, NATIVE_SLOTS_MOD, NATIVE_SLOT_ONLY_MOD] {
+        assert!(steps[0]["disable_ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == other));
+    }
+    assert_eq!(code(&steps[3]), "return JAC_StaticGate.AssertClosed(false)");
+    assert_eq!(code(&steps[8]), "return JAC_StaticGate.AssertAI()");
+    assert!(code(&steps[11]).contains("JAC_StaticGate.Ready()"));
+    assert_eq!(code(&steps[12]), "return JAC_StaticGate.Queue('APPOINT')");
+    assert_eq!(code(&steps[16]), "return JAC_StaticGate.Outcome()");
+    assert_eq!(
+        steps.iter().filter(|step| action(step, "end_turn")).count(),
+        1
+    );
+    assert_eq!(steps[6]["turns"], 1);
+    assert!(steps[6]["timeout"].as_u64().unwrap() >= 240);
+    assert!(steps
+        .iter()
+        .all(|step| !action(step, "autoplay") && !action(step, "save")));
+    assert_eq!(
+        steps
+            .iter()
+            .filter_map(code_if_ui)
+            .filter(|code| code.contains("Queue('APPOINT')"))
+            .count(),
+        1
+    );
+    let lua = Lua::new();
+    for step in steps {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
 fn persona_native_turn_observations_allow_the_15km_map_to_finish() {
     // Real turns on this map can take about 150 seconds. Native settlement
     // observations require every requested turn, rather than simulated markers.
@@ -238,6 +288,7 @@ fn persona_native_turn_observations_allow_the_15km_map_to_finish() {
         "leader-persona-native-slots-15km.json",
         "leader-persona-native-slots-activation-15km.json",
         "leader-persona-native-slot-ai-only-15km.json",
+        "leader-persona-static-gate-15km.json",
     ] {
         let data = scenario(name);
         let turns: Vec<_> = steps(&data)
@@ -274,12 +325,48 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
             disabled.iter().any(|id| id == NATIVE_SLOT_ONLY_MOD),
             "{name}"
         );
+        assert!(disabled.iter().any(|id| id == STATIC_GATE_MOD), "{name}");
         assert!(!enabled.iter().any(|id| id == NATIVE_SLOTS_MOD), "{name}");
         if name != "leader-persona-title-proxy-15km.json" {
             assert!(disabled.iter().any(|id| id == TITLE_PROXY_MOD), "{name}");
             assert!(!enabled.iter().any(|id| id == TITLE_PROXY_MOD), "{name}");
         }
     }
+}
+
+#[test]
+fn every_other_new_game_explicitly_disables_the_static_gate() {
+    let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
+    let mut count = 0;
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.ends_with(".json") || name == "leader-persona-static-gate-15km.json" {
+            continue;
+        }
+        let data = scenario(&name);
+        let first = &steps(&data)[0];
+        if action(first, "enable_mods") {
+            count += 1;
+            assert!(
+                first["disable_ids"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|id| id == STATIC_GATE_MOD),
+                "{name}"
+            );
+            assert!(
+                !first["ids"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|id| id == STATIC_GATE_MOD),
+                "{name}"
+            );
+        }
+    }
+    assert_eq!(count, 78);
 }
 
 #[test]

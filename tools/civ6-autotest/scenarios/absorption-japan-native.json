@@ -4,7 +4,7 @@
   "steps": [
     {
       "action": "enable_mods",
-      "disable_ids": [
+      "disable_ids": ["c678a216-58ab-4d40-a614-8f309d36ac86",
         "dfa0717e-4d0b-4370-b693-27fc6758571b"
       ],
       "ids": [
