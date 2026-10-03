@@ -83,7 +83,7 @@ fn run(_: &[String]) -> Result<(), String> {
 }
 
 fn usage() -> &'static str {
-    "usage (Windows x86-64 only): civ6-native-probe observe --pid PID --created FILETIME --exe FULL_PATH --chain-pid PID --lock civ6.lock --controller-pid PID --controller-created FILETIME --output trace.jsonl --max-seconds 1..300 --mode governor|property"
+    "usage (Windows x86-64 only): civ6-native-probe observe --pid PID --created FILETIME --exe FULL_PATH --chain-pid PID --lock civ6.lock --controller-pid PID --controller-created FILETIME --output trace.jsonl --max-seconds 1..20 --mode lifecycle"
 }
 
 fn main() {

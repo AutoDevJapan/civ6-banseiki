@@ -52,9 +52,10 @@ use windows_sys::Win32::{
             },
         },
         Threading::{
-            GetProcessTimes, OpenProcess, OpenThread, QueryFullProcessImageNameW, ResumeThread,
-            SuspendThread, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
-            PROCESS_SYNCHRONIZE, PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
+            GetProcessIdOfThread, GetProcessTimes, GetThreadId, OpenProcess, OpenThread,
+            QueryFullProcessImageNameW, ResumeThread, SuspendThread, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_VM_READ,
+            THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_QUERY_LIMITED_INFORMATION,
             THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_SYNCHRONIZE,
         },
     },
@@ -67,16 +68,49 @@ const PLAYER_GETTER_RVA: u64 = 0x6e_dc76;
 const PROPERTY_NAME_RVA: u64 = 0x1_5339;
 const PROPERTY_BEFORE_RVA: u64 = 0x1_535e;
 const PROPERTY_AFTER_RVA: u64 = 0x1_5361;
+// Exact instruction starts from LLVM disassembly of EXPECTED_SHA256. A byte
+// match starting in the middle of an instruction is not an executable site.
+const PINNED_BREAKPOINT_SITES: [(u64, usize, &[u8]); 6] = [
+    (
+        CAN_EVER_RVA,
+        EVER_FILE_OFFSET,
+        &[0x48, 0x89, 0x5c, 0x24, 0x08],
+    ),
+    (
+        CAN_APPOINT_RVA,
+        APPOINT_FILE_OFFSET,
+        &[0x48, 0x89, 0x5c, 0x24, 0x08],
+    ),
+    (
+        PLAYER_GETTER_RVA,
+        0x6ed076,
+        &[0x4c, 0x8d, 0x80, 0x28, 0x05, 0x00, 0x00],
+    ),
+    (PROPERTY_NAME_RVA, 0x14739, &[0x40, 0x38, 0x28]),
+    (PROPERTY_BEFORE_RVA, 0x1475e, &[0xff, 0x50, 0x60]),
+    (PROPERTY_AFTER_RVA, 0x14761, &[0x48, 0x85, 0xc0]),
+];
+fn is_pinned_instruction_start(rva: u64, bytes: &[u8]) -> bool {
+    PINNED_BREAKPOINT_SITES
+        .iter()
+        .find(|(site, _, _)| *site == rva)
+        .is_some_and(|(_, _, instruction)| bytes.starts_with(instruction))
+}
 const ACCESSOR_NUMBER: &str = "JAC_ACCESSOR_853_NUMBER";
 const ACCESSOR_TEXT: &str = "JAC_ACCESSOR_853_TEXT";
 const DEBUG_CONTEXT: u32 =
     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64 | CONTEXT_INTEGER_AMD64;
+// The Windows SDK declares AMD64 CONTEXT with DECLSPEC_ALIGN(16), while the
+// windows-sys binding's bare CONTEXT has 8-byte Rust alignment.
+#[repr(C, align(16))]
+struct AlignedContext(CONTEXT);
 const RF: u32 = 1 << 16;
 const THREAD_RIGHTS: u32 = THREAD_GET_CONTEXT
     | THREAD_SET_CONTEXT
     | THREAD_SUSPEND_RESUME
     | THREAD_QUERY_INFORMATION
     | THREAD_SYNCHRONIZE;
+const LIFECYCLE_THREAD_ROW_LIMIT: usize = 1024;
 
 fn announce_critical_and_wait_for_owned_game(
     game: &Handle,
@@ -395,14 +429,7 @@ impl MemoryRead for RemoteMemory<'_> {
 fn verify_entry_bytes(game: &Handle, module: &Module) -> Result<(), String> {
     let mut file = File::open(&module.path).map_err(|e| e.to_string())?;
     use std::io::{Seek, SeekFrom};
-    for (rva, offset) in [
-        (CAN_EVER_RVA, EVER_FILE_OFFSET),
-        (CAN_APPOINT_RVA, APPOINT_FILE_OFFSET),
-        (PLAYER_GETTER_RVA, 0x6ed076),
-        (PROPERTY_NAME_RVA, 0x14739),
-        (PROPERTY_BEFORE_RVA, 0x1475e),
-        (PROPERTY_AFTER_RVA, 0x14761),
-    ] {
+    for (rva, offset, _) in PINNED_BREAKPOINT_SITES {
         if rva + 16 > module.size {
             return Err("GameCore module too small for target RVA".into());
         }
@@ -410,6 +437,11 @@ fn verify_entry_bytes(game: &Handle, module: &Module) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         let mut disk = [0u8; 16];
         file.read_exact(&mut disk).map_err(|e| e.to_string())?;
+        if !is_pinned_instruction_start(rva, &disk) {
+            return Err(format!(
+                "GameCore RVA 0x{rva:x} is not the pinned instruction start"
+            ));
+        }
         if read_exact::<16>(game, module.base + rva)? != disk {
             return Err(format!(
                 "GameCore instruction bytes differ at RVA 0x{rva:x}"
@@ -426,9 +458,12 @@ struct Verified {
     module: Module,
     config: ObserverConfig,
 }
-fn verify(config: ObserverConfig) -> Result<Verified, String> {
+fn verify(config: ObserverConfig, mode: ProbeMode) -> Result<Verified, String> {
     if !(1..=crate::MAX_SECONDS).contains(&config.seconds) {
         return Err("native trace duration must be 1..300 seconds".into());
+    }
+    if mode == ProbeMode::Lifecycle && config.seconds > crate::MAX_LIFECYCLE_SECONDS {
+        return Err("lifecycle observation is limited to 20 seconds".into());
     }
     if config.pid == config.chain_pid
         || config.pid == config.controller_pid
@@ -449,12 +484,19 @@ fn verify(config: ObserverConfig) -> Result<Verified, String> {
     if parent_pid(std::process::id())? != config.controller_pid {
         return Err("observer controller is not the OS parent process".into());
     }
-    let game = exact_process(config.pid, config.created, &config.exe, true)?;
+    let game = exact_process(
+        config.pid,
+        config.created,
+        &config.exe,
+        mode != ProbeMode::Lifecycle,
+    )?;
     let module = loaded_module(config.pid, &expected_module)?;
     if sha256(&module.path)? != EXPECTED_SHA256 {
         return Err("GameCore SHA-256 differs from PR86 pinned build".into());
     }
-    verify_entry_bytes(&game, &module)?;
+    if mode != ProbeMode::Lifecycle {
+        verify_entry_bytes(&game, &module)?;
+    }
     Ok(Verified {
         game,
         chain,
@@ -485,32 +527,45 @@ impl Registers {
     }
 }
 fn context(thread: &Handle) -> Result<CONTEXT, String> {
-    let mut c: CONTEXT = unsafe { zeroed() };
-    c.ContextFlags = DEBUG_CONTEXT;
-    if unsafe { GetThreadContext(thread.0, &mut c) } == 0 {
+    let mut c = AlignedContext(unsafe { zeroed() });
+    c.0.ContextFlags = DEBUG_CONTEXT;
+    if unsafe { GetThreadContext(thread.0, &mut c.0) } == 0 {
         return Err(win_error("GetThreadContext"));
     }
-    Ok(c)
+    Ok(c.0)
 }
 fn set_context(thread: &Handle, c: &CONTEXT) -> Result<(), String> {
-    let mut changes = *c;
-    changes.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64;
-    if unsafe { SetThreadContext(thread.0, &changes) } == 0 {
+    let mut changes = AlignedContext(*c);
+    changes.0.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64;
+    if unsafe { SetThreadContext(thread.0, &changes.0) } == 0 {
         return Err(win_error("SetThreadContext"));
     }
     Ok(())
+}
+fn installed_sites_match_context(sites: &[Option<u64>; 4], c: &CONTEXT) -> bool {
+    let actual = [c.Dr0, c.Dr1, c.Dr2, c.Dr3];
+    sites.iter().enumerate().all(|(slot, site)| {
+        let enabled = c.Dr7 & (3u64 << (slot * 2));
+        let condition = c.Dr7 & (0xfu64 << (16 + slot * 4));
+        match site {
+            Some(address) => {
+                actual[slot] == *address && enabled == (1u64 << (slot * 2)) && condition == 0
+            }
+            None => actual[slot] == 0 && enabled == 0,
+        }
+    })
 }
 fn set_debug_registers(
     thread: &Handle,
     current: &CONTEXT,
     original: Registers,
 ) -> Result<(), String> {
-    let mut changes = *current;
-    original.write(&mut changes);
+    let mut changes = AlignedContext(*current);
+    original.write(&mut changes.0);
     // Only the debug registers are restored. RIP/RSP, integer registers and
     // EFlags are read from the live thread and are never rolled back.
-    changes.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
-    if unsafe { SetThreadContext(thread.0, &changes) } == 0 {
+    changes.0.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
+    if unsafe { SetThreadContext(thread.0, &changes.0) } == 0 {
         return Err(win_error("SetThreadContext(debug registers)"));
     }
     Ok(())
@@ -679,19 +734,22 @@ fn classify_single_step(
 enum ProbeMode {
     Governor,
     Property,
+    Lifecycle,
 }
 impl ProbeMode {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
             "governor" => Ok(Self::Governor),
             "property" => Ok(Self::Property),
-            _ => Err("--mode must be governor or property".into()),
+            "lifecycle" => Ok(Self::Lifecycle),
+            _ => Err("--mode must be governor, property or lifecycle".into()),
         }
     }
     fn label(self) -> &'static str {
         match self {
             Self::Governor => "governor",
             Self::Property => "property",
+            Self::Lifecycle => "lifecycle",
         }
     }
     fn fixed_sites(self, base: u64) -> [Option<u64>; 4] {
@@ -708,12 +766,24 @@ impl ProbeMode {
                 Some(base + PROPERTY_AFTER_RVA),
                 Some(base + PROPERTY_NAME_RVA),
             ],
+            Self::Lifecycle => [None; 4],
         }
     }
 }
 struct Jsonl {
     writer: BufWriter<File>,
     rows: usize,
+}
+
+#[derive(Default)]
+struct LifecycleEvidence {
+    thread_events: usize,
+    thread_ids: BTreeSet<u32>,
+    context_reads: usize,
+    unknown_thread_status: usize,
+    exception_events: usize,
+    application_exception_events: usize,
+    exit_code: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -882,6 +952,9 @@ struct Debugger {
     module_base: u64,
     module_size: u64,
     mode: ProbeMode,
+    attached_at: Instant,
+    event_ordinal: u64,
+    lifecycle: LifecycleEvidence,
     threads: BTreeMap<u32, ThreadState>,
     // Only threads whose debug registers we changed need suspension. Reuse
     // their already opened handles; reopening can be denied later even while
@@ -913,6 +986,14 @@ struct Debugger {
     force_initial_breakpoint_late: bool,
 }
 impl Debugger {
+    fn stamp(&self, row: &mut Value) {
+        row["event_ordinal"] = json!(self.event_ordinal);
+        row["elapsed_ms"] = json!(self.attached_at.elapsed().as_millis());
+        row["observed_unix_ms"] = json!(SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|elapsed| u64::try_from(elapsed.as_millis()).ok()));
+    }
     fn attach_deadline_expired(&self) -> bool {
         self.attach_ready_deadline
             .is_some_and(|deadline| Instant::now() >= deadline)
@@ -925,6 +1006,10 @@ impl Debugger {
         output: Jsonl,
         mode: ProbeMode,
     ) -> Result<Self, String> {
+        #[cfg(not(test))]
+        if mode != ProbeMode::Lifecycle {
+            return Err("hardware breakpoints are withheld until per-thread exception delivery is proven; use lifecycle mode".into());
+        }
         if unsafe { DebugActiveProcess(pid) } == 0 {
             return Err(win_error("DebugActiveProcess"));
         }
@@ -949,6 +1034,9 @@ impl Debugger {
             module_base,
             module_size,
             mode,
+            attached_at: Instant::now(),
+            event_ordinal: 0,
+            lifecycle: LifecycleEvidence::default(),
             threads: BTreeMap::new(),
             held: BTreeSet::new(),
             cleanup_event: None,
@@ -977,7 +1065,75 @@ impl Debugger {
             force_initial_breakpoint_late: false,
         })
     }
-    fn add_thread(&mut self, tid: u32) -> Result<(), String> {
+    fn lifecycle_thread_event(&mut self, tid: u32, source: &'static str) -> Result<(), String> {
+        self.lifecycle.thread_events += 1;
+        if self.lifecycle.thread_ids.len() < LIFECYCLE_THREAD_ROW_LIMIT {
+            self.lifecycle.thread_ids.insert(tid);
+        }
+        if self.lifecycle.thread_events > LIFECYCLE_THREAD_ROW_LIMIT {
+            return Ok(());
+        }
+        let mut row = json!({"type":"thread_status","thread_id":tid,"source":source,
+            "handle_identity":"unknown","liveness":"unknown","context":"unknown",
+            "future_exception_delivery":"unknown"});
+        let handle = Handle::new(
+            unsafe {
+                OpenThread(
+                    THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION | THREAD_SYNCHRONIZE,
+                    0,
+                    tid,
+                )
+            },
+            "OpenThread(read-only lifecycle)",
+        );
+        match handle {
+            Err(error) => {
+                row["error"] = json!(error);
+                self.lifecycle.unknown_thread_status += 1;
+            }
+            Ok(handle) => {
+                let actual_tid = unsafe { GetThreadId(handle.0) };
+                let owner_pid = unsafe { GetProcessIdOfThread(handle.0) };
+                row["owner_pid"] = json!(owner_pid);
+                let identity_matched = actual_tid == tid && owner_pid == self.pid;
+                row["handle_identity"] = json!(if identity_matched {
+                    "matched"
+                } else {
+                    "unknown"
+                });
+                let wait = unsafe { WaitForSingleObject(handle.0, 0) };
+                row["liveness"] = json!(match wait {
+                    WAIT_TIMEOUT => "unsignaled",
+                    WAIT_OBJECT_0 => "exited",
+                    _ => "unknown",
+                });
+                if identity_matched && wait == WAIT_TIMEOUT {
+                    match context(&handle) {
+                        Ok(c) => {
+                            row["context"] = json!("read_at_debug_event");
+                            row["rip"] = json!(format!("0x{:016x}", c.Rip));
+                            row["dr"] = json!([c.Dr0, c.Dr1, c.Dr2, c.Dr3]);
+                            row["dr6"] = json!(format!("0x{:016x}", c.Dr6));
+                            row["dr7"] = json!(format!("0x{:016x}", c.Dr7));
+                            self.lifecycle.context_reads += 1;
+                        }
+                        Err(error) => {
+                            row["error"] = json!(error);
+                            self.lifecycle.unknown_thread_status += 1;
+                        }
+                    }
+                } else {
+                    self.lifecycle.unknown_thread_status += 1;
+                }
+            }
+        }
+        self.stamp(&mut row);
+        self.output.row(row)
+    }
+    fn add_thread(&mut self, tid: u32, source: &'static str) -> Result<(), String> {
+        if self.mode == ProbeMode::Lifecycle {
+            return self.lifecycle_thread_event(tid, source);
+        }
         if self.threads.contains_key(&tid) {
             return Ok(());
         }
@@ -1001,6 +1157,7 @@ impl Debugger {
                 c.Dr2 = self.module_base + PROPERTY_AFTER_RVA;
                 c.Dr3 = self.module_base + PROPERTY_NAME_RVA;
             }
+            ProbeMode::Lifecycle => unreachable!("lifecycle never writes debug registers"),
         }
         c.Dr6 &= !0xf;
         c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16))
@@ -1025,6 +1182,12 @@ impl Debugger {
             },
         );
         set_context(&self.threads[&tid].handle, &c)?;
+        let after = context(&self.threads[&tid].handle)?;
+        if !installed_sites_match_context(&armed_sites, &after) {
+            return Err(format!(
+                "thread {tid} hardware breakpoints differed after SetThreadContext"
+            ));
+        }
         Ok(())
     }
     fn refresh_returns(state: &mut ThreadState, c: &mut CONTEXT) -> Result<(), String> {
@@ -1256,6 +1419,7 @@ impl Debugger {
         self.output.row(event)
     }
     fn handle_event(&mut self, event: &DEBUG_EVENT) -> Result<i32, String> {
+        self.event_ordinal += 1;
         self.last_attach_breakpoint_owned = false;
         self.last_dispatch = DispatchOutcome::Unrelated;
         let tid = event.dwThreadId;
@@ -1267,11 +1431,17 @@ impl Debugger {
                         CloseHandle(info.hFile);
                     }
                 }
-                self.add_thread(tid)?;
+                self.add_thread(tid, "create_process_debug_event")?;
             }
-            CREATE_THREAD_DEBUG_EVENT => self.add_thread(tid)?,
+            CREATE_THREAD_DEBUG_EVENT => self.add_thread(tid, "create_thread_debug_event")?,
             EXIT_THREAD_DEBUG_EVENT => {
                 self.threads.remove(&tid);
+                if self.mode == ProbeMode::Lifecycle {
+                    let code = unsafe { event.u.ExitThread.dwExitCode };
+                    let mut row = json!({"type":"thread_exit","thread_id":tid,"exit_code":code});
+                    self.stamp(&mut row);
+                    self.output.row(row)?;
+                }
             }
             LOAD_DLL_DEBUG_EVENT => {
                 let info = unsafe { event.u.LoadDll };
@@ -1281,7 +1451,16 @@ impl Debugger {
                     }
                 }
             }
-            EXIT_PROCESS_DEBUG_EVENT => return Ok(DBG_CONTINUE),
+            EXIT_PROCESS_DEBUG_EVENT => {
+                if self.mode == ProbeMode::Lifecycle {
+                    let code = unsafe { event.u.ExitProcess.dwExitCode };
+                    self.lifecycle.exit_code = Some(code);
+                    let mut row = json!({"type":"process_exit","thread_id":tid,"exit_code":code});
+                    self.stamp(&mut row);
+                    self.output.row(row)?;
+                }
+                return Ok(DBG_CONTINUE);
+            }
             UNLOAD_DLL_DEBUG_EVENT => {
                 if unsafe { event.u.UnloadDll.lpBaseOfDll } as u64 == self.module_base {
                     return Err("observed GameCore module unloaded".into());
@@ -1290,6 +1469,34 @@ impl Debugger {
             EXCEPTION_DEBUG_EVENT => {
                 let info = unsafe { event.u.Exception };
                 let code = info.ExceptionRecord.ExceptionCode;
+                if self.mode == ProbeMode::Lifecycle {
+                    self.lifecycle.exception_events += 1;
+                    self.lifecycle_thread_event(tid, "exception_debug_event")?;
+                    let initial = code == EXCEPTION_BREAKPOINT
+                        && breakpoint_disposition(
+                            &mut self.initial_breakpoint_seen,
+                            info.dwFirstChance != 0,
+                        ) == DBG_CONTINUE;
+                    self.last_attach_breakpoint_owned = initial;
+                    if !initial {
+                        self.lifecycle.application_exception_events += 1;
+                    }
+                    let mut row = json!({"type":"debug_exception","mode":"lifecycle",
+                        "thread_id":tid,"code":format!("0x{code:08x}"),
+                        "first_chance":info.dwFirstChance != 0,
+                        "exception_address":format!("0x{:016x}", info.ExceptionRecord.ExceptionAddress as u64),
+                        "disposition":if initial { "initial_attach_breakpoint" } else { "application_handler" }});
+                    self.stamp(&mut row);
+                    self.output.row(row)?;
+                    if initial {
+                        if self.attach_deadline_expired() {
+                            return Err("initial debugger breakpoint arrived after the attach ready deadline".into());
+                        }
+                        self.ready = true;
+                        return Ok(DBG_CONTINUE);
+                    }
+                    return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                }
                 if code == EXCEPTION_BREAKPOINT {
                     let disposition = breakpoint_disposition(
                         &mut self.initial_breakpoint_seen,
@@ -1680,8 +1887,9 @@ impl Debugger {
                     let cleanup = self.cleanup(None);
                     return Err(format!("debugger attach handshake expired before ready notification; detach: {cleanup:?}"));
                 }
-                self.output
-                    .row(json!({"type":"ready","thread_count":self.threads.len()}))?;
+                let mut row = json!({"type":"ready","thread_count":if self.mode == ProbeMode::Lifecycle {self.lifecycle.thread_ids.len()} else {self.threads.len()}});
+                self.stamp(&mut row);
+                self.output.row(row)?;
                 println!("{}", json!({"ready":true,"pid":self.pid}));
                 std::io::stdout().flush().map_err(|e| e.to_string())?;
                 self.ready = false;
@@ -1739,6 +1947,9 @@ impl CleanupOps for Debugger {
         matches!(alive(&self.game), Ok(false))
     }
     fn freeze(&mut self) -> Result<(), String> {
+        if self.mode == ProbeMode::Lifecycle {
+            return Ok(());
+        }
         for _ in 0..64 {
             let ids = thread_ids(self.pid)?;
             let additions: Vec<u32> = ids
@@ -1773,6 +1984,9 @@ impl CleanupOps for Debugger {
         Err("target threads did not reach a stable suspended set".into())
     }
     fn restore_verified(&mut self) -> Result<(), String> {
+        if self.mode == ProbeMode::Lifecycle {
+            return Ok(());
+        }
         #[cfg(test)]
         if self.restore_faults > 0 {
             self.restore_faults -= 1;
@@ -1825,6 +2039,9 @@ impl CleanupOps for Debugger {
         Ok(())
     }
     fn resume(&mut self) -> Result<(), String> {
+        if self.mode == ProbeMode::Lifecycle {
+            return Ok(());
+        }
         let tids: Vec<u32> = self.held.iter().copied().collect();
         for tid in tids {
             let handle = &self.threads[&tid].handle;
@@ -1851,7 +2068,10 @@ impl Drop for Debugger {
 
 pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
     let mode = ProbeMode::parse(&config.mode)?;
-    let verified = verify(config)?;
+    if mode != ProbeMode::Lifecycle {
+        return Err("hardware breakpoints are withheld until per-thread exception delivery is proven; use lifecycle mode".into());
+    }
+    let verified = verify(config, mode)?;
     let output = Jsonl::new(&verified.config.output)?;
     let mut debugger = Debugger::attach(
         verified.config.pid,
@@ -1861,12 +2081,12 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         output,
         mode,
     )?;
-    debugger
-        .output
-        .row(json!({"type":"identity","game_pid":verified.config.pid,
+    let mut identity = json!({"type":"identity","game_pid":verified.config.pid,
         "game_created_filetime":verified.config.created,"game_exe":verified.config.exe,
         "module_path":verified.module.path,"module_base":format!("0x{:016x}",verified.module.base),
-        "module_sha256":EXPECTED_SHA256,"abi":"candidate_only","mode":mode.label()}))?;
+        "module_sha256":EXPECTED_SHA256,"abi":"not_observed","mode":mode.label()});
+    debugger.stamp(&mut identity);
+    debugger.output.row(identity)?;
     let (tx, rx) = mpsc::channel();
     let close_ack = Arc::clone(&debugger.close_ack);
     thread::spawn(move || {
@@ -1904,7 +2124,22 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         Ok(())
     };
     let result = debugger.run(rx, Duration::from_secs(verified.config.seconds), guard);
-    debugger.output.row(json!({"type":"stop","detached":!debugger.attached,"result":result.as_ref().map(|_| "ok").unwrap_or("error")}))?;
+    let mut summary = json!({"type":"lifecycle_summary","mode":"lifecycle",
+        "thread_events":debugger.lifecycle.thread_events,
+        "unique_thread_ids_seen":debugger.lifecycle.thread_ids.len(),
+        "thread_status_rows_truncated":debugger.lifecycle.thread_events > LIFECYCLE_THREAD_ROW_LIMIT,
+        "context_reads_at_debug_events":debugger.lifecycle.context_reads,
+        "unknown_thread_status":debugger.lifecycle.unknown_thread_status,
+        "exception_events":debugger.lifecycle.exception_events,
+        "application_exception_events":debugger.lifecycle.application_exception_events,
+        "process_exit_code":debugger.lifecycle.exit_code,
+        "hardware_breakpoints_installed":0,"debug_register_writes":0,
+        "future_exception_delivery":"unknown"});
+    debugger.stamp(&mut summary);
+    debugger.output.row(summary)?;
+    let mut stop_row = json!({"type":"stop","detached":!debugger.attached,"result":result.as_ref().map(|_| "ok").unwrap_or("error")});
+    debugger.stamp(&mut stop_row);
+    debugger.output.row(stop_row)?;
     result
 }
 
@@ -1929,24 +2164,71 @@ mod tests {
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
 
     #[test]
+    fn pinned_instruction_starts_and_context_layout_are_checked_before_attach() {
+        assert_eq!(std::mem::align_of::<CONTEXT>(), 8);
+        assert_eq!(std::mem::align_of::<AlignedContext>(), 16);
+        let context = AlignedContext(unsafe { zeroed() });
+        assert_eq!((&context.0 as *const CONTEXT as usize) % 16, 0);
+        assert_eq!(PROPERTY_NAME_RVA, 0x15339); // Actual82 failure RVA is our Dr3 site.
+        assert_eq!(PROPERTY_BEFORE_RVA + 3, PROPERTY_AFTER_RVA);
+        for (rva, _, instruction) in PINNED_BREAKPOINT_SITES {
+            assert!(is_pinned_instruction_start(rva, instruction));
+            assert!(!is_pinned_instruction_start(rva + 1, instruction));
+            assert!(!is_pinned_instruction_start(rva, &instruction[1..]));
+        }
+        let sites = ProbeMode::Property.fixed_sites(0x180000000);
+        let mut c: CONTEXT = unsafe { zeroed() };
+        [c.Dr0, c.Dr1, c.Dr2, c.Dr3] = sites.map(|site| site.unwrap());
+        c.Dr7 = 0x55;
+        assert!(installed_sites_match_context(&sites, &c));
+        c.Dr3 += 1;
+        assert!(!installed_sites_match_context(&sites, &c));
+        c.Dr3 -= 1;
+        c.Dr7 = 0x15;
+        assert!(!installed_sites_match_context(&sites, &c));
+    }
+
+    #[test]
     fn wrong_same_named_dx11_image_is_rejected_before_process_or_game_access() {
         let wrong = Path::new(GAME_ROOT).join("Other/CivilizationVI.exe");
-        let result = verify(ObserverConfig {
-            pid: 1001,
-            created: 1,
-            exe: wrong,
-            chain_pid: 1002,
-            lock: PathBuf::from("D:/CC/Tools/civ6-live/civ6.lock"),
-            controller_pid: 1003,
-            controller_created: 1,
-            output: PathBuf::from("never-written.jsonl"),
-            seconds: 1,
-            mode: "governor".into(),
-        });
+        let result = verify(
+            ObserverConfig {
+                pid: 1001,
+                created: 1,
+                exe: wrong,
+                chain_pid: 1002,
+                lock: PathBuf::from("D:/CC/Tools/civ6-live/civ6.lock"),
+                controller_pid: 1003,
+                controller_created: 1,
+                output: PathBuf::from("never-written.jsonl"),
+                seconds: 1,
+                mode: "governor".into(),
+            },
+            ProbeMode::Governor,
+        );
         assert_eq!(
             result.err().unwrap(),
             "target is not the exact Steam DX11 Civ6 executable"
         );
+    }
+    #[test]
+    fn live_hardware_modes_are_rejected_before_attach_or_process_access() {
+        for mode in ["governor", "property"] {
+            let error = run_observer(ObserverConfig {
+                pid: 1001,
+                created: 1,
+                exe: PathBuf::from("never-opened.exe"),
+                chain_pid: 1002,
+                lock: PathBuf::from("never-opened.lock"),
+                controller_pid: 1003,
+                controller_created: 1,
+                output: PathBuf::from("never-written.jsonl"),
+                seconds: 1,
+                mode: mode.into(),
+            })
+            .unwrap_err();
+            assert!(error.contains("withheld"));
+        }
     }
     unsafe extern "system" fn unknown_step_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
         if !info.is_null() {
@@ -2254,6 +2536,156 @@ mod tests {
             getter_threads.len() >= 2,
             "exited worker threads were not observed"
         );
+        fs::remove_file(path).unwrap();
+    }
+
+    fn lifecycle_child_case(guard_failure: bool) {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-lifecycle-{}-{pid}-{}.jsonl",
+            std::process::id(),
+            guard_failure
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - PLAYER_GETTER_RVA;
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let fail = Arc::new(AtomicBool::new(false));
+        let fail_observer = Arc::clone(&fail);
+        let observer = thread::spawn(move || {
+            let game = process(pid, false).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || {
+                if fail_observer.load(Ordering::SeqCst) {
+                    Err("synthetic controller closed".into())
+                } else {
+                    Ok(())
+                }
+            });
+            (
+                result,
+                debugger.attached,
+                debugger.lifecycle.thread_events,
+                debugger.threads.len(),
+            )
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        assert_eq!(child.command("U", "PROBE_OUT:"), "Utrue");
+        assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
+        if guard_failure {
+            fail.store(true, Ordering::SeqCst);
+        } else {
+            stop_tx.send(()).unwrap();
+        }
+        let (result, attached, thread_events, armed_threads) = observer.join().unwrap();
+        if guard_failure {
+            assert!(result.unwrap_err().contains("synthetic controller closed"));
+        } else {
+            assert!(result.is_ok(), "{result:?}");
+        }
+        assert!(!attached);
+        assert_eq!(armed_threads, 0);
+        assert!(thread_events >= 2);
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(rows.iter().any(
+            |row| row["type"] == "ready" && row["thread_count"].as_u64().is_some_and(|n| n > 0)
+        ));
+        let ready = rows.iter().find(|row| row["type"] == "ready").unwrap();
+        let step = rows
+            .iter()
+            .find(|row| {
+                row["type"] == "debug_exception"
+                    && row["code"] == "0x80000004"
+                    && row["disposition"] == "application_handler"
+            })
+            .unwrap();
+        assert!(step["event_ordinal"].as_u64().unwrap() > ready["event_ordinal"].as_u64().unwrap());
+        assert!(step["observed_unix_ms"].as_u64().is_some());
+        assert!(rows
+            .iter()
+            .any(|row| row["type"] == "thread_status"
+                && row["future_exception_delivery"] == "unknown"));
+        assert!(rows.iter().any(|row| row["type"] == "thread_status"
+            && row["handle_identity"] == "matched"
+            && row["owner_pid"] == pid));
+        assert!(!rows.iter().any(|row| matches!(
+            row["type"].as_str(),
+            Some("entry" | "return" | "player_getter" | "property_after")
+        )));
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn lifecycle_stop_keeps_debug_registers_unchanged_and_forwards_foreign_step() {
+        lifecycle_child_case(false);
+    }
+
+    #[test]
+    fn lifecycle_controller_error_detaches_without_debug_register_writes() {
+        lifecycle_child_case(true);
+    }
+
+    #[test]
+    fn lifecycle_parent_close_reports_exit_without_inventing_an_exception() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-lifecycle-exit-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - PLAYER_GETTER_RVA;
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, false).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
+            debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        child.child.kill().unwrap(); // The controller closes only its synthetic child.
+        child.child.wait().unwrap();
+        assert!(observer
+            .join()
+            .unwrap()
+            .unwrap_err()
+            .contains("target process exited"));
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let ready = rows.iter().find(|row| row["type"] == "ready").unwrap();
+        let exit = rows
+            .iter()
+            .find(|row| row["type"] == "process_exit" && row["exit_code"].as_u64().is_some())
+            .unwrap();
+        assert!(exit["event_ordinal"].as_u64().unwrap() > ready["event_ordinal"].as_u64().unwrap());
+        assert!(!rows
+            .iter()
+            .any(|row| row["type"] == "debug_exception" && row["code"] == "0x80000004"));
+        drop(child);
         fs::remove_file(path).unwrap();
     }
 

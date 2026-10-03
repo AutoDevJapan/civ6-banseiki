@@ -5,6 +5,7 @@ pub const CAN_APPOINT_RVA: u64 = 0x2d_d820;
 pub const EXPECTED_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const MAX_SECONDS: u64 = 300;
+pub const MAX_LIFECYCLE_SECONDS: u64 = 20;
 pub const MAX_ROWS: usize = 20_000;
 pub const GAME_ROOT: &str =
     "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";

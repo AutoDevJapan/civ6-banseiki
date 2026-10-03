@@ -115,15 +115,17 @@ llvm-objdump -d --no-show-raw-insn --start-address=0x1804a80ea --stop-address=0x
 
 既存の `civ6-native-probe-rs` に所有者ポインタ・ID・Player propertyインターフェースの読取を追加した。静的な実命令 `0x2DDDEC/0x2DDDFD` と `0x6EDC76` を根拠に、synthetic Windows子プロセスで `+0x70`、`+0xD8`、`+0x528` を読み、Playerオブジェクトの入替え後に古いポインタを再使用しない試験を通した。シナリオが指定する `mode=property` では、`0x6EDC76`、文字列キー `0x15339`、property getter前後 `0x1535E/0x15361` の4点だけをhardware breakpointで観測する。試験用の2キーに限り、同一スレッドのPlayer getterからproperty getterまで一致した場合に戻りポインタの先頭16 byteを記録する。値のタグ・長さ・所有権や別スレッドからの安全性はまだ不明であり、16 byteを数値や文字列と断定しない。RVAとfile offsetは `civ6-pe-rs`、命令境界はLLVMで照合した。観測器のcleanupは登録済みthreadの元handleだけを再利用し、debug registerを変更していないthreadを停止対象から外した。これは実機53の `SuspendThread: Access is denied` に対する候補修正で、実機での解消は未確認である。
 
-親担当がこのブランチを実機実行器へ取り込んだ後の**次の1コマンド**は次のとおり。`live_chain` が共有ロック、起動、attach、停止を管理する。こちらのwriterは実機へ接続しない。
+実機82では固定GameCoreのproperty停止位置 `0x15339` で `SINGLE_STEP` 異常終了が記録された。旧観測器は初回attach breakpointを`ready`に変換しており、後続のproperty・例外行はない。実機53の `0x2DDDD0` も当時の停止位置であり、同じ種類の失敗が続いた。原因が分かるまで実機向けhardware breakpointを停止し、attachのみの`lifecycle`モードで切り分ける。元の9手順property ABIシナリオは証跡として残し、そのまま再実行しない。
+
+親担当がレビュー後に新しいrelease版観測器を配置した場合の**次の1コマンド**は次のとおり。`live_chain` が共有ロック、起動、attach、停止を管理する。こちらのwriterは実機へ接続しない。
 
 ```powershell
-D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-property-abi-15km.json --stop-on-failure
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-lifecycle-15km.json --stop-on-failure
 ```
 
-シナリオ `tools/civ6-autotest/scenarios/leader-persona-property-abi-15km.json` は9手順。実ゲームの `GameInfo` から22人のIndexを出し、試験用のPlayer数値・文字列をGameplayで設定・読取・更新・削除し、公式 `CanEver` の484組もLua側で照合する。実行器は開始時にidentityのmodeを照合し、停止後に正常detach、所有者0、2種類の異なるkey ID、初期・更新・削除の値ポインタと先頭16 byteの変化を検査する。どれか欠測なら失敗する。得られた同一Playerのポインタ、getter返値、スレッドと順序を比較し、型と寿命が確定してからruntime adapterと本体判定の上書きを接続する。保存直後とロード直後、AI実手番での読取順、費用2/3途中のASSIGN拒否、スパイ中和・回復は残る実機Mustである。
+新シナリオ `tools/civ6-autotest/scenarios/leader-persona-lifecycle-15km.json` は7手順。実機82と同じ設定と最初の数値・文字列property Luaを使い、観測器だけをbreakpointなしに変える。20秒以内にdebug event、thread状態、process exitを記録し、通常detachを検査する。観測器はGameCoreのプロセスメモリや値の先頭16 byteを読まない。正常終了もproperty ABIや資格の合格ではない。詳細は[観測器の実験手順](../../tools/civ6-native-probe-rs/README.md)にある。保存直後とロード直後、AI実手番での読取順、費用2/3途中のASSIGN拒否、スパイ中和・回復は残る実機Mustである。
 
-取込候補単体は `tools/target-admission-bridge` で103試験群・1501件、統合コミット `f3cd5e4` までのこのworktreeでは103試験群・1516件成功していた。今回のレビュー修正後は `tools/target-native-integrate` で `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets -q` を実行し、103試験群・1522件成功、失敗0・省略0を確認した。Lua 5.1の73人物ケース、SQLの22件gate、Windowsの専用子プロセスでの同名別パス拒否・例外後の戻り枠再利用・所有判定・thread復元を含む。Rustの整形検査と差分の空白検査も通った。実機でのproperty ABIとnative adapterは未証明・未接続のままである。共有Git indexへの書込みは親担当が行う。
+取込候補単体は103試験群・1501件、統合コミット `f3cd5e4` までは103試験群・1516件、次のレビュー修正後は103試験群・1522件成功していた。実機82後の診断変更を含む今回の `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets -q` は、このworktree専用の `tools/target-native-integrate` で103試験群・1530件成功、失敗0・省略0だった。Lua 5.1の73人物ケース、SQLの22件gate、Windows専用Rust子プロセスでのno-breakpoint正常停止・親側終了・外国例外の引渡し・DR値維持を含む。整形と差分の空白検査、新しい7手順シナリオの`--check`も通った。実機でのproperty ABIとnative adapterは未証明・未接続のままである。共有Git indexへの書込みは親担当が行う。
 
 統合前の実機55では、敵AI1の費用1について実Great Personと公式称号1、予約後の本体任命・配置、使用済み称号1、進化完了時の偉人消失まで確認した。実機61では定着、63ではスパイの派遣受理まで進んだ。これは敵側の試験経路の証跡であり、今回の静的閉鎖gateで加入後の資格が開く証明ではない。実機56の後続ロードは保存名の書換えで失敗した。親側の新checkpoint修正と実機確認は今回の観測器修正の合格に含めない。未加入21AIを含む全113ケース、費用2/3の追加昇進、資格の本体adapterと戻り値への接続、propertyの型・寿命・スレッド安全性、配置拒否、保存・読込、複数端末、スパイ中和と回復はMustとして残る。
 

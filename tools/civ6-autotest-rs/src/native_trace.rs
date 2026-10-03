@@ -214,6 +214,59 @@ mod platform {
         Ok(())
     }
 
+    fn lifecycle_evidence(path: &Path) -> Result<()> {
+        let file = std::fs::File::open(path)?;
+        let mut identity = false;
+        let mut initial_breakpoint = false;
+        let mut ready = false;
+        let mut summary = None;
+        for line in BufReader::new(file).lines() {
+            let row: Value = serde_json::from_str(&line?)?;
+            if row["type"] == "identity" && row["mode"] == "lifecycle" {
+                identity = true;
+            }
+            if row["type"] == "debug_exception"
+                && row["mode"] == "lifecycle"
+                && row["disposition"] == "initial_attach_breakpoint"
+            {
+                initial_breakpoint = true;
+            }
+            if row["type"] == "ready" {
+                ready = true;
+            }
+            if row["type"].as_str().is_some_and(|kind| {
+                matches!(kind, "entry" | "return" | "player_getter")
+                    || kind.starts_with("property_")
+            }) {
+                return Err(Error::input("lifecycle trace contains an ABI observation"));
+            }
+            if row["type"] == "lifecycle_summary" {
+                summary = Some(row);
+            }
+        }
+        let Some(row) = summary else {
+            return Err(Error::input("lifecycle trace lacks a terminal summary"));
+        };
+        if !identity
+            || !initial_breakpoint
+            || !ready
+            || row["mode"] != "lifecycle"
+            || row["hardware_breakpoints_installed"] != 0
+            || row["debug_register_writes"] != 0
+            || row["future_exception_delivery"] != "unknown"
+            || !row["thread_events"].as_u64().is_some_and(|count| count > 0)
+            || !row["exception_events"]
+                .as_u64()
+                .is_some_and(|count| count > 0)
+            || !row["application_exception_events"].as_u64().is_some()
+        {
+            return Err(Error::input(
+                "lifecycle trace does not prove a no-breakpoint run",
+            ));
+        }
+        Ok(())
+    }
+
     fn trace_mode_matches(path: &Path, mode: &str) -> bool {
         std::fs::File::open(path)
             .ok()
@@ -254,9 +307,17 @@ mod platform {
             mode: &str,
             close_owned_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
-            if !matches!(mode, "governor" | "property") {
+            if !matches!(mode, "governor" | "property" | "lifecycle") {
                 return Err(Error::input(
-                    "native trace mode must be governor or property",
+                    "native trace mode must be governor, property or lifecycle",
+                ));
+            }
+            if mode != "lifecycle" {
+                return Err(Error::input("hardware breakpoint observation is withheld until per-thread exception delivery is proven; use lifecycle mode"));
+            }
+            if !(1..=civ6_native_probe_rs::MAX_LIFECYCLE_SECONDS).contains(&seconds) {
+                return Err(Error::input(
+                    "lifecycle observation must last 1..20 seconds",
                 ));
             }
             let started = Instant::now();
@@ -682,6 +743,8 @@ mod platform {
             }
             if self.mode == "property" {
                 property_evidence(&self.output)?;
+            } else if self.mode == "lifecycle" {
+                lifecycle_evidence(&self.output)?;
             }
             if self.phase == Phase::TargetExited {
                 return Err(Error::input(
@@ -755,6 +818,67 @@ mod platform {
             rows.pop(); // missing text deletion
             write(&rows);
             assert!(property_evidence(&path).is_err());
+        }
+
+        #[test]
+        fn lifecycle_trace_requires_zero_breakpoint_changes_and_an_explicit_summary() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("lifecycle.jsonl");
+            let mut rows = vec![
+                serde_json::json!({"type":"identity","mode":"lifecycle"}),
+                serde_json::json!({"type":"thread_status","thread_id":7,
+                    "future_exception_delivery":"unknown"}),
+                serde_json::json!({"type":"debug_exception","mode":"lifecycle",
+                    "disposition":"initial_attach_breakpoint"}),
+                serde_json::json!({"type":"ready","thread_count":1}),
+                serde_json::json!({"type":"lifecycle_summary","mode":"lifecycle",
+                    "thread_events":1,"hardware_breakpoints_installed":0,
+                    "debug_register_writes":0,"exception_events":1,
+                    "application_exception_events":0,"future_exception_delivery":"unknown"}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n",
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert!(lifecycle_evidence(&path).is_ok());
+            rows[4]["debug_register_writes"] = serde_json::json!(1);
+            write(&rows);
+            assert!(lifecycle_evidence(&path).is_err());
+            rows[4]["debug_register_writes"] = serde_json::json!(0);
+            rows.push(serde_json::json!({"type":"property_after"}));
+            write(&rows);
+            assert!(lifecycle_evidence(&path).is_err());
+            rows.pop();
+            rows.pop();
+            write(&rows);
+            assert!(lifecycle_evidence(&path).is_err());
+        }
+
+        #[test]
+        fn hardware_modes_fail_before_any_observer_or_game_access() {
+            for mode in ["governor", "property"] {
+                let error = Session::start(
+                    999,
+                    0.0,
+                    Path::new("."),
+                    "none",
+                    1,
+                    mode,
+                    Box::new(|_, _| Ok(())),
+                )
+                .err()
+                .unwrap()
+                .to_string();
+                assert!(error.contains("withheld"));
+            }
         }
 
         #[test]

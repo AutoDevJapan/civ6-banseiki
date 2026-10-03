@@ -1,6 +1,14 @@
 # PR86: 本体任命資格の実行時観測器
 
-本体資格を変更せず、標準モードでは`CanEver`と`CanAppoint`相当の入口を観測し、propertyモードではPlayerの所有者候補と試験用property getterを観測する。**初回実機53は失敗した。今回の例外分類とpropertyモードの統合後は実Civ6へ再attachしていない。** 専用Rust子プロセスの合格を、加入資格の修正やAIの任命成立へ読み替えない。
+本体資格を変更しない観測器である。**実機53と82はいずれもゲーム側の`SINGLE_STEP`異常終了で失敗した。** 実機82の`0x15339`はpropertyモードのDr3停止位置そのもので、観測器には対応する例外行がない。原因を確定するまで本物のゲームにhardware breakpointを設定せず、`lifecycle`モードでattachそのものと後続の例外配送を分けて調べる。専用Rust子プロセスの合格を、実ゲームでの修正や加入資格の成立へ読み替えない。
+
+## 実機82を受けた診断順序
+
+`leaderperson-82/accessor-number-text.jsonl`には固定DX11実行ファイル、固定SHA-256のGameCore、146 threadのready、その後の`stop/detached=true/result=error`だけがある。GameCore内の`entry`、property、例外行はない。2026-10-03 23:22:09.130 JSTのWindows Application Error 1000はPID 138120、`0x80000004`、GameCore RVA `0x15339`を報告した。これは`PROPERTY_NAME_RVA`であり、`0x1535E/0x15361`に加えた4点目のproperty停止位置である。実機53のRVA `0x2DDDD0`も当時の停止位置だった。両回ともRIP・DR6の実値や、デバッガへ例外が届かなかった理由は未確定である。
+
+Windows SDKとこの観測器の呼出しを照合すると、attach、イベント待ち、イベント続行は同じスレッドで実行される。SDKのx64 `CONTEXT`は16バイト整列だが、固定された`windows-sys`のRust型は8バイト整列だった。取得・設定の全API呼出しを明示的な16バイト整列領域へ改め、専用子プロセスで検査した。これは実在した実装不備だが、実機53・82の異常終了との因果関係は未証明である。取得flagsはSDK定義に合う。LLVMで固定SHA-256のDLLを逆アセンブルすると`0x15339`、`0x1535E`、`0x15361`、`0x6EDC76`はいずれも命令先頭である。従来の16バイト比較だけでは命令途中を排除できないため、既知の命令先頭バイトもattach前に照合する。`SetThreadContext`成功後のDR0〜DR3とDR7も再読取して一致を要求する。ただし、これらの静的検査と専用Rust子プロセスの結果だけでは、実ゲームの各スレッドが後の例外をデバッガへ届けることは証明できない。公開SDKにその可否を判定するスレッド情報はないため、状態は`unknown`と記録する。
+
+`lifecycle`モードは20秒以内に終了し、debug registerを変更せず、GameCoreのプロセスメモリも読まない。届いたthread、例外、process exitを時刻と順番付きで記録し、元のアプリケーション例外は元のhandlerへ渡す。正常detachでも資格やproperty ABIの証明にはしない。実機用の`governor`・`property`モードはスレッドごとの例外配送を証明できるまで起動前に拒否する。次の親担当の有限実験と一次資料は[観測器README](../../tools/civ6-native-probe-rs/README.md)に記した。
 
 ## 初回実機53の失敗と今回の切り分け
 
@@ -39,17 +47,17 @@ Rust runnerのシナリオに次を追加できる。observer実行時には`CIV
 復元・detach・thread再開でOSが失敗した場合は、6秒以内で再試行する。復元値を確認できない間は通常detachへ進まない。期限後は`critical_cleanup`をJSONLとcontrollerの標準出力へ通知し、observerはdebuggerに留まって終了イベントを処理する。runnerは同じPID・作成時刻のゲームだけを既存の終了関数で閉じ、試験を失敗として記録する。ゲーム終了の確認を最大12秒待つ。`DebugSetProcessKillOnExit(FALSE)`の初回失敗も、detachを確認するか終了時のkillを無効にできるまで再試行し、どちらもできない場合は同じ重大エラー経路に入る。ゲーム終了まで確認できないOS障害は`critical_cleanup unresolved`で報告し、安全な正常停止とは扱わない。
 
 ```json
-{"action":"start_native_governor_trace","name":"pr86-ai-turn","max_seconds":300}
+{"action":"start_native_governor_trace","name":"lifecycle-no-bp","mode":"lifecycle","max_seconds":20}
 {"action":"stop_native_governor_trace"}
 ```
 
-runnerは開始と停止の対、名前、300秒上限、観測中のゲーム再起動禁止を検証する。親の実機シナリオでは、静的gateの484組、21AIの最初の実手番、正式Join前後の公式要求とUI getterの区間を分けて使う。observerが存在するだけでは実Civ6を起動しない。
+runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中のゲーム再起動禁止を検証する。次の実験は既存propertyシナリオと同じ最初のLua操作をbreakpointなしで実行する。従来の484組・AI手番・公式要求のhardware breakpoint観測は再開条件を満たすまで実機へ適用しない。observerが存在するだけでは実Civ6を起動しない。
 
 ## 独立検査と限界
 
 - Windowsの専用Rust子プロセスで、標準モードの入口・戻り値、新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが実行を続け、debug registerがattach前と同値であることを確かめた。`SetThreadContext`拒否時の再試行と、永続拒否時にcontrollerが同じ子プロセスを閉じる経路も区別した。実際のWindowsハードウェアbreakpointで、テスト用`CONTEXT.Dr6`を0にした所有例外、RIP不一致とcontext取得失敗の保留、別の`SINGLE_STEP`の子側handlerへの引き渡し、期限後のready拒否を検査した。propertyモードでも所有・未所有・曖昧な例外、終了済みthreadと生存threadの後始末を検査する。いずれも修正後の実Civ6成功を示さない。
 - runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実機53のreadyは記録されたが、正常detachと30分leaseの完走は未確認。
-- 今回のレビュー修正後、このworktree専用の`tools/target-native-integrate`で全ワークスペースの`--all-targets`を実行し、103試験群・1522件成功、失敗0・省略0を確認した。Lua 5.1とWindows実子プロセスの検査を含む。実ゲームの起動・attachはしていない。実機53のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
+- 実機82後の診断変更を含む全ワークスペース`--all-targets`は、このworktree専用の`tools/target-native-integrate`で103試験群・1530件成功、失敗0・省略0だった。Lua 5.1とWindows実子プロセスの検査を含む。新しい7手順シナリオは`--check`に合格した。実ゲームの起動・attachはこの変更後に行っていない。実機53・82のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
 - `tools/civ6-pe-rs`はこのworktreeにある。観測器は既知の6停止位置のファイルオフセットを固定してバイト比較し、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移す。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。
 

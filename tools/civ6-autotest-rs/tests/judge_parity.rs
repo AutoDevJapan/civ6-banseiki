@@ -547,7 +547,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         .filter(|name| name.ends_with(".json"))
         .collect();
     // Preserve the historical 92-scenario inventory. Task853 adds finite
-    // read-only diagnostics without rewriting that baseline.
+    // diagnostics and retry stages without rewriting that baseline.
     assert_eq!(expected.difference(&actual).count(), 0);
     assert_eq!(
         actual
@@ -566,6 +566,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-neutralization-retry-native-ready-tick.json".to_string(),
             "leader-persona-spy-neutralization-retry-living-read.json".to_string(),
             "leader-persona-spy-neutralization-retry-adopt.json".to_string(),
+            "leader-persona-lifecycle-15km.json".to_string(),
         ])
     );
     for name in &actual {

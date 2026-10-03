@@ -560,6 +560,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             || name == "leader-persona-static-gate-15km.json"
             || name == "leader-persona-native-trace-15km.json"
             || name == "leader-persona-property-abi-15km.json"
+            || name == "leader-persona-lifecycle-15km.json"
         {
             continue;
         }
@@ -646,6 +647,28 @@ fn property_abi_probe_is_a_single_scoped_read_only_diagnostic() {
     assert!(code.contains("JAC_ACCESSOR_853_TEXT"));
     assert!(!code.contains("ChangeGovernorPoints"));
     assert!(!code.contains("JAC_PERSONA_"));
+}
+
+#[test]
+fn no_breakpoint_baseline_reuses_the_failed_property_lua_with_a_bounded_observer() {
+    let original = scenario("leader-persona-property-abi-15km.json");
+    let diagnostic = scenario("leader-persona-lifecycle-15km.json");
+    let source = steps(&original);
+    let target = steps(&diagnostic);
+    assert_eq!(target.len(), 7);
+    assert_eq!(&target[..4], &source[..4]);
+    assert_eq!(target[4]["action"], "start_native_governor_trace");
+    assert_eq!(target[4]["mode"], "lifecycle");
+    assert_eq!(target[4]["max_seconds"], 20);
+    assert_eq!(target[5], source[5]);
+    assert_eq!(target[6]["action"], "stop_native_governor_trace");
+    assert_eq!(
+        target
+            .iter()
+            .filter(|step| action(step, "start_native_governor_trace"))
+            .count(),
+        1
+    );
 }
 
 #[test]
