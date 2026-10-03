@@ -904,6 +904,85 @@ fn prepared_return_without_a_slot_reopens_owner_after_recipient_loses_city() -> 
 }
 
 #[test]
+fn reserved_return_carrier_can_reselect_owner_only_before_city_borrow() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{['native-work:900']={
+          ID='native-work:900',Kind='ITEM',Owner=1,Outcome='RETURN',
+          NativeOwnerMoves=1,NativeWork=assert(A.OwnedGreatWorkSlots(1)[1])}})
+        local state=A.GetState();state.Archive.native=nil
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner)
+          assert(owner==2)
+          return {{Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=false
+        DealManager={GetWorkingDeal=function() error('no Core deal permitted') end,
+          GetPossibleDealItems=function() error('no Core deal permitted') end,
+          EnactWorkingDeal=function() error('no Core deal permitted') end}
+        TRANSFERS=0
+        local plan={ID='reserved-return',From=1,To=0,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,FlowPolicy=true,
+          Leader='RECRUIT',Assets={['native-work:900']={Outcome='RETURN',ReturnOwner=2}},
+          NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+        local waiting=A.Apply(plan)
+        local snap=assert(waiting.NativeWorks[1])
+        assert(waiting.Status=='WAITING_UI' and snap.TargetSlot and snap.Carrier
+          and snap.Carrier.Phase=='BORROW' and snap.Carrier.BorrowIssued==false
+          and A.CanCancelUnprepared(plan.ID,plan) and TRANSFERS==0,
+          'saved reservation or unissued borrow was treated as a city mutation')
+        local stale=A.GetState()
+        stale.Transactions[plan.ID].NativeWorks[1].Carrier.BorrowIssued=true
+        Game:SetProperty(A.Rules.STATE_KEY,stale)
+        assert(not A.CanCancelUnprepared(plan.ID,plan),
+          'issued city borrow was cancellable even though its outcome is unknown')
+        stale.Transactions[plan.ID].NativeWorks[1].Carrier.BorrowIssued=false
+        Game:SetProperty(A.Rules.STATE_KEY,stale)
+        PLAN=plan
+        Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,World={},Flows={
+          [plan.ID]={ID=plan.ID,From=1,To=0,Phase='APPLYING',AppliedPlan=plan,
+            FinalRollsComplete=true,Entries={{ID='native-work:900',Kind='ITEM',
+              SelectedAction='RETURN',FinalOutcome='RETURN',ReturnOwner=2,
+              Rolls={P3_SUCCESS={Used=0}}}}}}})
+        Players[2].cities={}
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local flow=assert(JAC_AbsorptionFlowGameplay).Resume(PLAN.ID)
+        assert(flow.Phase=='CHOICE' and flow.FinalRollsComplete
+          and flow.Entries[1].ReturnOwnerPending and flow.AppliedPlan==nil,
+          'unborrowed reserved city prevented owner-only correction')
+        assert(flow.Entries[1].FinalOutcome=='RETURN'
+          and flow.Entries[1].Rolls.P3_SUCCESS.Used==0,
+          'recipient correction changed the saved final outcome')
+        assert(A.GetState().Transactions[PLAN.ID]==nil and TRANSFERS==0
+          and CITIES[4]:GetOwner()==1 and #A.NativeWorkLocations(900)==1,
+          'owner correction lost the original work or moved a city')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
@@ -970,6 +1049,8 @@ fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -
           and carrier.Phase=='BORROW' and pending.NativeWorks[1].NativeRoute=='CARRIER'
           and TRANSFERS==1 and CITIES[16]:GetOwner()==1,
           'previously moved work was not routed through an empty recipient city')
+        assert(carrier.BorrowIssued and not A.CanCancelUnprepared(plan.ID,plan),
+          'borrowed recipient city could be released as an untouched reservation')
         assert(A.Resume(plan.ID).Status=='WAITING_UI' and TRANSFERS==1)
         PUBLISHED[carrier.BorrowToken]=true
         pending=A.Resume(plan.ID)

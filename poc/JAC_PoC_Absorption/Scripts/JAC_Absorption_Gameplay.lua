@@ -1943,6 +1943,7 @@ local function AdvanceNativeCarrier(state, carrier)
       carrier.Before = NativeCarrierState(city, carrier)
       assert(#carrier.Before.UnitsOnCenter == 0,
         "native Great Work carrier city has a unit on its center")
+      carrier.BorrowIssued = true
       Save(state)
       CityManager.TransferCity(city, carrier.Borrower)
       return false
@@ -2161,7 +2162,7 @@ local function MoveNativeWorks(state, tx)
               "native Great Work carrier city holds another original work")
           end
           snap.Carrier = { Route = snap.Destination < 0 and "TO_FREE" or "TO_OWNER",
-            Phase = "BORROW", Index = snap.Source.Index,
+            Phase = "BORROW", BorrowIssued = false, Index = snap.Source.Index,
             Source = R.Copy(snap.Source), Owner = snap.Custodian, Borrower = tx.From,
             OriginalCity = city:GetID(), X = slot.X, Y = slot.Y,
             Building = slot.Building, Slot = slot.Slot,
@@ -2522,7 +2523,17 @@ function A.CanCancelUnprepared(id, expectedPlan)
   if tx.UnitMapFrozen or next(tx.UnitMap or {}) or tx.SourceRosterMoved
     or tx.NativeDealUI or tx.CityLoyaltyPending or tx.AwaitingFinalUI then return false end
   for _, snap in ipairs(tx.NativeWorks or {}) do
-    if snap.TargetSlot or snap.Carrier or snap.DealSubmitted or snap.PhysicalMoved then return false end
+    if snap.DealSubmitted or snap.PhysicalMoved then return false end
+    if snap.Carrier then
+      local carrier = snap.Carrier
+      if carrier.Phase ~= "BORROW" or carrier.BorrowIssued ~= false then return false end
+      local city = CityManager.GetCityAt(carrier.X, carrier.Y)
+      if not city or city:GetOwner() ~= carrier.Owner
+        or city:GetID() ~= carrier.OriginalCity then return false end
+    end
+    local ok, found = pcall(NativeWorkLocations, snap.Source.Index)
+    if not ok or #found ~= 1 or not SameNativeWorkSlot(found[1], snap.Source)
+      or not pcall(SameNativeWorkIdentity, snap.Source, found[1]) then return false end
   end
   for _, snap in ipairs(tx.Units or {}) do
     if snap.CandidateID or snap.HeroSpawnIntent or snap.CoreStagedTurn
@@ -2800,7 +2811,8 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
       assert(other.Index == source.Index or other.X ~= source.X or other.Y ~= source.Y,
         "native recovery carrier city holds another work")
     end
-    intent.NativeCarrier = { Route = "FROM_FREE", Phase = "BORROW", Index = source.Index,
+    intent.NativeCarrier = { Route = "FROM_FREE", Phase = "BORROW", BorrowIssued = false,
+      Index = source.Index,
       Source = R.Copy(source), Target = R.Copy(intent.NativeTarget),
       Owner = source.Owner, Borrower = owner, OriginalCity = source.CityID,
       X = source.X, Y = source.Y, Building = source.Building, Slot = source.Slot,
