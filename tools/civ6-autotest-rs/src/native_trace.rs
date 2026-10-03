@@ -913,11 +913,10 @@ mod platform {
         #[test]
         fn exited_target_without_detach_proof_is_never_success() {
             let closes = Arc::new(AtomicUsize::new(0));
-            let (mut session, _tx) = session(
-                Some(Instant::now() + Duration::from_millis(600)),
-                Arc::clone(&closes),
-            );
-            std::thread::sleep(Duration::from_millis(380));
+            let (mut session, _tx) = session(None, Arc::clone(&closes));
+            session.child.wait().unwrap();
+            assert!(session.identity.exited().unwrap());
+            session.stop_deadline = Some(Instant::now() + Duration::from_secs(2));
             let error = session.finished_result().unwrap_err().to_string();
             assert!(error.contains("detach") || error.contains("exited"));
             assert_eq!(session.phase, Phase::TargetExited);
@@ -926,18 +925,17 @@ mod platform {
         #[test]
         fn child_exit_waits_for_late_critical_output_before_terminal_decision() {
             let closes = Arc::new(AtomicUsize::new(0));
-            let (mut session, tx) = session(
-                Some(Instant::now() + Duration::from_millis(850)),
-                Arc::clone(&closes),
-            );
+            let (mut session, tx) = session(None, Arc::clone(&closes));
             session.reader_closed = false;
             let pid = session.identity.pid;
+            session.child.wait().unwrap();
+            assert!(session.identity.exited().unwrap());
+            session.stop_deadline = Some(Instant::now() + Duration::from_secs(2));
             std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(410));
+                std::thread::sleep(Duration::from_millis(30));
                 let _ = tx.send(ObserverMessage::Line(serde_json::json!({"critical_cleanup":true,"pid":pid,"reason":"late output after child exit"}).to_string()));
                 let _ = tx.send(ObserverMessage::Closed);
             });
-            std::thread::sleep(Duration::from_millis(380));
             let error = session.finished_result().unwrap_err().to_string();
             assert!(error.contains("late output after child exit"));
             assert_eq!(session.phase, Phase::TargetExited);
