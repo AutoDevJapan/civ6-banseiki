@@ -118,9 +118,12 @@ GameEvents.JAC_BoundaryUnlockSpy.Add(function(owner)
     local player = assert(Players[owner], "spy owner missing");
     assert(player:IsHuman() and player:IsAlive(), "spy fixture requires a living human owner");
     local culture = player:GetCulture();
-    local civic = assert(GameInfo.Civics["CIVIC_DIPLOMATIC_SERVICE"], "native spy civic missing");
+    local spy = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    local civic = assert(GameInfo.Civics[assert(spy.PrereqCivic, "native spy prerequisite missing")],
+        "native spy civic missing");
     if not culture:HasCivic(civic.Index) then
-        -- Base/Assets/Gameplay/Data/Civics.xml grants a spy slot for this civic.
+        -- Sengoku Unlocks/Cascade move both UNIT_SPY and CIVIC_GRANT_SPY to
+        -- the configured espionage civic. Read the loaded unit definition.
         -- Progress is the native completion path used by the test-only fixture.
         culture:SetCulturalProgress(civic.Index, culture:GetCultureCost(civic.Index));
     end

@@ -175,7 +175,8 @@ function B.SpyProduction()
     local owner = Game.GetLocalPlayer();
     local player = assert(Players[owner], "local spy owner missing");
     local unitType = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
-    local civic = assert(GameInfo.Civics["CIVIC_DIPLOMATIC_SERVICE"], "native spy civic missing");
+    local civic = assert(GameInfo.Civics[assert(unitType.PrereqCivic, "native spy prerequisite missing")],
+        "native spy civic missing");
     local capital = assert(player:GetCities():GetCapitalCity(), "native production city missing");
     local queue = assert(capital:GetBuildQueue(), "native production queue missing");
     local spies = {};
@@ -186,7 +187,7 @@ function B.SpyProduction()
             operation=unit:GetSpyOperation(), endTurn=unit:GetSpyOperationEndTurn()};
     end end
     table.sort(spies, function(a,b) return a.id < b.id; end);
-    local result = {owner=owner, civic=player:GetCulture():HasCivic(civic.Index),
+    local result = {owner=owner, civic=player:GetCulture():HasCivic(civic.Index), civicType=civic.CivicType,
         capacity=player:GetDiplomacy():GetSpyCapacity(), spies=spies,
         city=capital:GetID(), building=queue:CurrentlyBuilding(),
         cost=queue:GetUnitCost(unitType.Index), progress=queue:GetUnitProgress(unitType.Index)};

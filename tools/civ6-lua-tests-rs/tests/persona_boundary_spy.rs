@@ -91,6 +91,24 @@ impl SpyHarness {
 }
 
 #[test]
+fn configured_spy_prerequisite_works_without_the_legacy_civic() {
+    let h = SpyHarness::new();
+    let info: Table = h.global("GameInfo");
+    info.strict_get::<Table>("Civics")
+        .unwrap()
+        .set("CIVIC_DIPLOMATIC_SERVICE", mlua::Value::Nil)
+        .unwrap();
+    h.event("JAC_BoundaryUnlockSpy").unwrap();
+    let state = h.production();
+    assert!(state.strict_get::<bool>("civic").unwrap());
+    assert_eq!(state.strict_get::<i64>("capacity").unwrap(), 1);
+    assert_eq!(
+        state.strict_get::<String>("civicType").unwrap(),
+        "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE"
+    );
+}
+
+#[test]
 fn official_build_is_accepted_before_progress_and_registers_only_new_native_spy() {
     let h = SpyHarness::new();
     h.case("no_persona_config", ());

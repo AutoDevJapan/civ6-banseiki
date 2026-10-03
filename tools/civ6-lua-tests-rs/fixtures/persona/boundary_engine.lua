@@ -32,8 +32,10 @@ GameInfo.GovernorPromotions={BASE_TEST={Hash=7000}}
 GameInfo.JAC_PersonaSkills=collection({{LeaderType=LEADER,ModifierId=BASE}},'ModifierId')
 GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,ModifierId=NODE,CategoryType='ADMIN',RouteType='SIGNATURE'}},'NodeType')
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
-GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55,Hash=555,Spy=true},[55]={Index=55,Hash=555,Spy=true}}
-GameInfo.Civics={CIVIC_DIPLOMATIC_SERVICE={Index=7,CivicType='CIVIC_DIPLOMATIC_SERVICE'}}
+GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY={Index=55,Hash=555,Spy=true,
+ PrereqCivic='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE'},[55]={Index=55,Hash=555,Spy=true}}
+GameInfo.Civics={CIVIC_DIPLOMATIC_SERVICE={Index=8,CivicType='CIVIC_DIPLOMATIC_SERVICE'},
+ CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE={Index=7,CivicType='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE'}}
 GameInfo.GreatPersonIndividuals={[3]={GreatPersonIndividualType='GP_TEST'}}
 GameInfo.Yields=collection({{YieldType='YIELD_GOLD',Index=0},{YieldType='YIELD_FOOD',Index=1}},'YieldType')
 GameInfo.UnitOperations=collection({
