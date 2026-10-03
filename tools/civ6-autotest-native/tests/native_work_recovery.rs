@@ -960,7 +960,11 @@ fn reserved_return_carrier_can_reselect_owner_only_before_city_borrow() -> mlua:
             FinalRollsComplete=true,Entries={{ID='native-work:900',Kind='ITEM',
               SelectedAction='RETURN',FinalOutcome='RETURN',ReturnOwner=2,
               Rolls={P3_SUCCESS={Used=0}}}}}}})
-        Players[2].cities={}
+        CityManager.TransferCity(CITIES[16],3)
+        CityManager.TransferCity(CITIES[12],3)
+        EXTERNAL_TRANSFERS=TRANSFERS
+        assert(Players[2]:GetCities():GetCount()==0 and CITIES[16]:GetOwner()==3,
+          'recipient cities were not actually lost to another owner')
         "#,
     )
     .exec()?;
@@ -974,7 +978,8 @@ fn reserved_return_carrier_can_reselect_owner_only_before_city_borrow() -> mlua:
         assert(flow.Entries[1].FinalOutcome=='RETURN'
           and flow.Entries[1].Rolls.P3_SUCCESS.Used==0,
           'recipient correction changed the saved final outcome')
-        assert(A.GetState().Transactions[PLAN.ID]==nil and TRANSFERS==0
+        assert(A.GetState().Transactions[PLAN.ID]==nil and TRANSFERS==EXTERNAL_TRANSFERS
+          and CITIES[16]:GetOwner()==3 and CITIES[12]:GetOwner()==3
           and CITIES[4]:GetOwner()==1 and #A.NativeWorkLocations(900)==1,
           'owner correction lost the original work or moved a city')
         "#,

@@ -2527,9 +2527,8 @@ function A.CanCancelUnprepared(id, expectedPlan)
     if snap.Carrier then
       local carrier = snap.Carrier
       if carrier.Phase ~= "BORROW" or carrier.BorrowIssued ~= false then return false end
-      local city = CityManager.GetCityAt(carrier.X, carrier.Y)
-      if not city or city:GetOwner() ~= carrier.Owner
-        or city:GetID() ~= carrier.OriginalCity then return false end
+      -- An unissued borrow cannot have changed this city. Its owner and ID may
+      -- already differ precisely because the return recipient lost the city.
     end
     local ok, found = pcall(NativeWorkLocations, snap.Source.Index)
     if not ok or #found ~= 1 or not SameNativeWorkSlot(found[1], snap.Source)
