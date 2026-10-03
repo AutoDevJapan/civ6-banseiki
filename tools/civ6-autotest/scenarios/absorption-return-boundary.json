@@ -302,7 +302,12 @@
       "state_name": "JAC_Absorption_Entry"
     },
     {
-      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and not Controls.Panel:IsHidden(),'human choice panel hidden')\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),\n  'real confirmation control not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human clicked the real confirm control to resolve saved choices'",
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nassert(type(reads.GetObservation)=='function','UI observation reader absent')\nassert(not ExposedMembers.JAC_ReturnBoundaryOriginalObservation,'source gate already installed')\nExposedMembers.JAC_ReturnBoundaryOriginalObservation=reads.GetObservation\nreads.GetObservation=function(token)\n if type(token)=='string' and token:find(expected.ID..':source-ready:',1,true) then return nil end\n return ExposedMembers.JAC_ReturnBoundaryOriginalObservation(token)\nend\nreturn 'withheld the saved source-ready publication until return recipient changes'"
+    },
+    {
+     "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and not Controls.Panel:IsHidden(),'human choice panel hidden')\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),\n  'real confirmation control not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human clicked the real confirm control to resolve saved choices'",
       "state_name": "JAC_AbsorptionFlow",
       "action": "ui_lua"
     },
@@ -323,7 +328,12 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal flow=assert(F.Resume(snapshot.ID))\nassert(flow.Phase=='CHOICE' and flow.FinalRollsComplete and flow.AppliedPlan==nil,\n 'unprepared return did not reopen only destination selection')\nassert(A.GetState().Transactions[snapshot.ID]==nil,\n 'unprepared transaction reservation was not released')\nassert(Players[flow.From]:GetCities():GetCount()==snapshot.FromCities and\n Players[flow.To]:GetCities():GetCount()==snapshot.ToCities,\n 'reopening return destination changed source or absorber cities')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'final random draw or outcome changed')\n if entry.ID==snapshot.Asset then\n  assert(entry.ReturnOwnerPending==true and entry.SelectedAction==nil and entry.ReturnOwner==nil,\n   'lost return owner was not offered for reselection')\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'another settled choice was cleared')\n end\nend\nreturn 'only the invalid return owner reopened; frozen rolls and all other choices retained'"
+     "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal flow=assert(F.Resume(snapshot.ID))\nassert(flow.Phase=='CHOICE' and flow.FinalRollsComplete and flow.AppliedPlan==nil,\n 'unprepared return did not reopen only destination selection')\nassert(A.GetState().Transactions[snapshot.ID]==nil,\n 'unprepared transaction reservation was not released')\nassert(Players[flow.From]:GetCities():GetCount()==snapshot.FromCities and\n Players[flow.To]:GetCities():GetCount()==snapshot.ToCities,\n 'reopening return destination changed source or absorber cities')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'final random draw or outcome changed')\n if entry.ID==snapshot.Asset then\n  assert(entry.ReturnOwnerPending==true and entry.SelectedAction==nil and entry.ReturnOwner==nil,\n   'lost return owner was not offered for reselection')\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'another settled choice was cleared')\n end\nend\nreturn 'only the invalid return owner reopened; frozen rolls and all other choices retained'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local reads=assert(ExposedMembers.JAC_HeroReadAPI)\nlocal original=assert(ExposedMembers.JAC_ReturnBoundaryOriginalObservation)\nreads.GetObservation=original\nExposedMembers.JAC_ReturnBoundaryOriginalObservation=nil\nreturn 'restored native source observation after safe destination correction'"
     },
     {
       "action": "wait_for",
